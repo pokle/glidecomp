@@ -121,6 +121,17 @@ export default defineConfig(async () => {
     test: {
       setupFiles: ["./test/apply-migrations.ts"],
       include: ["test/**/*.test.ts"],
+      // Every test here boots workerd and most of them score REAL tracks (the
+      // bundled Corryong task 1, 32 IGCs), so vitest's 5s default left no
+      // headroom: the slowest test already sits at ~3.9s on an idle dev machine
+      // and CI runs the suite 2-3x slower (190s of test time on the runner vs
+      // 94s locally). The result was a ~50% flake rate on master and every
+      // branch, landing on whichever heavy test the runner happened to starve —
+      // scoring.test.ts one run, track-quality.test.ts the next. Not a mask: a
+      // genuine hang still fails the job inside its ~90s wall clock. auth-api's
+      // config hit the same wall and raised it to 15s; this suite is heavier.
+      testTimeout: 30000,
+      hookTimeout: 30000,
     },
   };
 });
