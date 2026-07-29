@@ -1,8 +1,19 @@
 # Authentication
 
-> **Status:** Implemented. See [auth.md](./auth.md) for the current architecture and setup.
+> **Status:** Superseded — frozen historical design doc, kept for the reasoning
+> only. For what actually runs, see [auth.md](./auth.md).
 >
-> The spec below is an early design doc — some details (e.g. email-based login) were not implemented. Google OAuth via Better Auth is the actual implementation.
+> The text below is the original sketch and is **not** a description of the
+> shipped system. Two notes for anyone reading it against the code:
+>
+> - **Email login shipped, but differently.** The magic-link idea here became a
+>   passwordless **6-digit email OTP** (Better Auth's `emailOTP` plugin,
+>   10-minute codes, rate-limited on three layers) alongside Google OAuth — not
+>   a login link valid for an hour. See
+>   [2026-07-14-email-otp-signin-plan.md](./2026-07-14-email-otp-signin-plan.md).
+> - **"The session token lasts forever" is superseded.** Sessions are 60-day
+>   rolling, refreshed at most daily: active users stay signed in indefinitely,
+>   idle sessions expire after 60 days.
 
 # Roles
 

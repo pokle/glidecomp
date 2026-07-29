@@ -339,8 +339,15 @@ Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for
 | True MacCready speed-to-fly discipline | No glider polar data; proxy ships now (#9) | Polar database per glider class |
 | Consistency & long game (rank variance, throwaway-task profile, skill trajectory, behavioural fingerprint radar) | Cross-comp per-pilot identity + history needed | Pilot identity across comps + stored per-task metric results |
 | Task debrief surface (per pilot per task: annotated timeline, personal waterfall narrative) | UI/UX surface; out of scope this round | SPA task-page integration of `FieldAnalysisReport` |
-| Site guide & pilot report card surfaces | Cross-comp + UI | Both of the above |
+| Site guide & **cross-comp pilot profile** surfaces | Cross-comp + UI | Both of the above |
 | Horserace as a visual animation | CLI is text; the table ships now (#21) | UI surface (would make a great task-page feature) |
+
+*Naming note:* that deferred row originally read "pilot report card". It is a
+**cross-comp pilot profile** — a pilot's behavioural history across every comp
+they've flown. It is not the per-task GAP explainer at
+`/comp/:id/task/:id/pilot/:id`, which has since shipped and is what "report
+card" now means in this codebase (see
+[docs/2026-07-28-report-card-improvements.md](2026-07-28-report-card-improvements.md)).
 
 ## Verification
 

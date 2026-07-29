@@ -18,18 +18,18 @@ Production: https://glidecomp.com
 │  Vanilla-TS entries        /analysis (map app), /replay (3D)     │
 │                                                                  │
 │  Pages Functions           functions/api/* → service-binding     │
-│                            proxies to the Workers below          │
-└─────────┬───────────────────────┬──────────────────────┬─────────┘
-          │ /api/auth/*           │ /api/comp|user|u|    │ /api/airscore/*
-          │                       │ admin/*              │
-          ▼                       ▼                      ▼
+│                            proxies to auth-api & competition-api │
+└─────────┬───────────────────────┬────────────────────────────────┘
+          │ /api/auth/*           │ /api/comp|user|u|admin/*
+          │                       │                    zone route:
+          ▼                       ▼                  /api/airscore/*
 ┌──────────────────┐   ┌────────────────────┐   ┌──────────────────┐
 │     auth-api     │◀──│  competition-api   │──▶│   airscore-api   │
 │   Better Auth    │   │  comps · tasks ·   │   │  caching proxy   │
 │  Google OAuth,   │   │  pilots · tracks · │   │  for AirScore    │
-│  API keys        │   │  scores · user     │   │  (KV cache) →    │
-└────────┬─────────┘   │  files · audit     │   │ xc.highcloud.net │
-         │             └───┬────────┬───┬───┘   └──────────────────┘
+│  email OTP,      │   │  scores · user     │   │  (KV cache) →    │
+│  API keys        │   │  files · audit     │   │ xc.highcloud.net │
+└────────┬─────────┘   └───┬────────┬───┬───┘   └──────────────────┘
          │                 │        │   │
          ▼                 ▼        ▼   ▼
    ┌─────────────────────────┐   ┌────┐ ┌──────────────────────┐
@@ -49,7 +49,7 @@ One Pages project (`glidecomp`, output `web/frontend/dist`) with three kinds of 
 - **SSR public comp pages** — the five public competition pages (`/comp`, `/comp/:id`, waypoints, task, pilot) are server-rendered by the Pages Function `functions/comp/[[path]].ts`, which renders the same React tree the SPA hydrates (this is the SEO strategy). Shipped 2026-07-09; full design in [docs/2026-07-06-ssr-public-pages-plan.md](2026-07-06-ssr-public-pages-plan.md).
 - **Vanilla-TS Vite entries** — the analysis page (`src/analysis/`, an imperative map app) and the 3D replay (`src/replay/`, three.js + Mapbox) are separate entries from the SPA.
 
-Local dev (`bun run dev`) runs the three Workers under wrangler plus Vite and `astro dev` together; the Vite dev server proxies `/api/*` to the local Workers and the static routes to Astro, so everything is seamless on `:3000`.
+Local dev (`bun run dev`) runs all the Workers in one wrangler session plus Vite and `astro dev` together; the Vite dev server proxies `/api/*` to the dev-router on `:8790` and the static routes to Astro, so everything is seamless on `:3000`.
 
 ### Analysis Engine (`web/engine`)
 
@@ -57,12 +57,12 @@ Pure TypeScript library with no DOM dependencies, consumed by the browser, the W
 
 ### Workers
 
-Three Workers under `web/workers/`, all deployed on routes of the `glidecomp.com` zone.
+Four Workers under `web/workers/`. Three are deployed on routes of the `glidecomp.com` zone; the fourth (`dev-router`) is local-dev-only and never deployed.
 
 **auth-api** — authentication, built on [Better Auth](https://better-auth.com) (Hono + Kysely over D1).
 
-- Route `glidecomp.com/api/auth/*`; bindings: the shared D1 database, the `glidecomp` R2 bucket.
-- Google OAuth is the only production sign-in method (with the `oAuthProxy` plugin so preview deployments can complete the flow). Email+password / `dev-login` exist only in local dev.
+- Route `glidecomp.com/api/auth/*`; bindings: the shared D1 database, the `glidecomp` R2 bucket, and the Cloudflare Email Sending binding (`EMAIL`) that delivers sign-in codes.
+- Two production sign-in methods: **Google OAuth** (with the `oAuthProxy` plugin so preview deployments can complete the flow) and **passwordless email OTP** (Better Auth's `emailOTP` plugin — 6-digit codes, 10-minute expiry, hashed at rest, rate-limited per code / per IP / per address). Only email+password and the `dev-login` endpoint are dev-gated. Sessions are 60-day rolling, refreshed at most daily.
 - API keys via the Better Auth `apiKey` plugin (prefix `glc_`, rate-limited, usable wherever a session cookie is).
 - Custom endpoints beyond the Better Auth handler: `GET /api/auth/me`, `POST /api/auth/set-username`, user preferences routes, and `POST /api/auth/delete-account` — which purges every R2 object under `u/{userId}/` and then deletes the `user` row, cascading to sessions, accounts, preferences, user tracks/tasks/annotations (see [docs/database.md](database.md)).
 
@@ -75,7 +75,13 @@ Three Workers under `web/workers/`, all deployed on routes of the `glidecomp.com
 
 **airscore-api** — a read-only caching proxy for the external AirScore server (`xc.highcloud.net`), used to import tasks and tracks.
 
-- Route `glidecomp.com/api/airscore/*`; KV-cached responses (task TTL 1 h, track TTL 24 h); transforms AirScore data into GlideComp format. Internal cache stats/clear endpoints are reachable only via competition-api's service binding (super-admin cache page). See [docs/airscore-api-worker-spec.md](airscore-api-worker-spec.md).
+- Route `glidecomp.com/api/airscore/*`; KV-cached responses (task TTL 1 h, track TTL 24 h); transforms AirScore data into GlideComp format. Unlike the other two it has **no** Pages Function proxy and no binding in the root `wrangler.toml` — competition-api reaches it over a service binding (for the super-admin cache page's `/internal/cache/*` endpoints), and browser traffic depends entirely on the zone route. See [docs/airscore-api-worker-spec.md](airscore-api-worker-spec.md).
+
+**dev-router** — a dev-only fourth Worker (`web/workers/dev-router/`), never deployed.
+
+- Owns the single exposed local port (**8790**) and dispatches `/api/*` to its three siblings over the same service bindings the Pages Functions use.
+- It exists because all four Workers run in ONE `wrangler dev` session (`bun run dev:workers` → `web/scripts/dev-workers.sh`, where dev-router is the *primary* `-c` config): auth-api and competition-api share one D1 SQLite file, and two Miniflare processes writing it raced into `D1_ERROR: internal error` (issue #477). Multi-config `wrangler dev` exposes only the primary's port, hence the router.
+- A routing change therefore lands in three places at once: `functions/api/`, `dev-router/src/index.ts` (pinned by its unit test), and the Vite proxy.
 
 ### API Routing
 
@@ -84,17 +90,22 @@ Three Workers under `web/workers/`, all deployed on routes of the `glidecomp.com
 1. **Worker routes** on the `glidecomp.com` zone (declared in each worker's `wrangler.toml`) serve production traffic directly.
 2. **Pages Functions proxies** (`functions/api/{auth,comp,user,u,admin}/[[path]].ts`) forward requests over service bindings (`AUTH_API`, `COMPETITION_API` in the root `wrangler.toml`). This makes the API work on every Pages deployment — including `*.glidecomp.pages.dev` previews that the zone routes don't cover.
 
-In local dev the Vite server proxies `/api/*` to the wrangler dev ports instead.
+There is **no** `functions/api/airscore/` proxy and no `AIRSCORE_API` binding on Pages, so `/api/airscore/*` is only served where the zone route applies — it is unavailable from `*.glidecomp.pages.dev` branch previews and from `bun run preview:container`. Known gap; one proxy file fixes both.
+
+Beyond the API proxies, `functions/` also holds `comp/[[path]].ts` (the SSR renderer for the public comp pages), `civl-rankings.csv.ts` and `sitemap.xml.ts` (both non-HTML public URLs), and `_middleware.ts` (the 301 that dedupes the `glidecomp.pages.dev` production alias onto `glidecomp.com`).
+
+In local dev there are no Pages Functions: the Vite server proxies `/api/*` to the dev-router on :8790 instead, and mirrors the handful of Function-only URLs (e.g. `scores.csv`) with its own middleware.
 
 ### Data Layer
 
 #### D1 (single shared database)
 
-One database, `taskscore-auth`, bound by both auth-api and competition-api; migrations live in `web/db/migrations/` and are shared by both workers. Table groups:
+One database, `taskscore-auth`, bound by both auth-api and competition-api; migrations live in `web/db/migrations/` and are shared by both workers (latest: `0025_pilot_ranking.sql`). Table groups:
 
-- **Auth (Better Auth):** `user`, `session`, `account`, `verification`, `apikey`
-- **Competition:** `pilot` (per-user pilot profile), `comp`, `comp_admin`, `comp_pilot` (`pilot_id` nullable for pre-registration; linked later by CIVL ID), `task`, `task_class`, `task_track` (one IGC per task+pilot, with penalty fields), `task_pilot_status`, `audit_log`
-- **Score cache:** `task_scores` (materialized stale-first score rows), `track_analysis` (per-track cached analyses)
+- **Auth (Better Auth):** `user`, `session`, `account`, `verification`, `apikey`, `rateLimit` (0017 — the D1-backed request limiter, because in-memory counters reset with every workerd isolate)
+- **Competition:** `pilot` (per-user pilot profile), `comp`, `comp_admin`, `comp_pilot` (`pilot_id` nullable for pre-registration; linked later by CIVL ID), `comp_waypoints` (0015 — the comp's region waypoint file), `task`, `task_class`, `task_track` (one IGC per task+pilot, with penalty fields and `quality_override` from 0024, the organiser's per-track override of a track-quality verdict), `task_manual_flight` (0014 — supersede-not-delete manual flight reports for track-less pilots), `task_pilot_status`, `audit_log`
+- **Derived, stale-first:** `task_scores` (materialized score rows), `task_field_analysis` (0019 — the behavioural-metric reports; lazily revalidated, never computed on the cold path), `track_analysis` (per-track cached analyses), `task_weather` (0023 — cached provider answers)
+- **Rankings:** `pilot_ranking` (0025 — the FAI/CIVL monthly world ranking, deliberately standalone: no FK to `pilot`/`comp_pilot`, no reader, no UI yet. See [docs/civl-rankings.md](civl-rankings.md))
 - **User files:** `user_preferences`, `user_track`, `user_task` (XCTSK JSON stored inline in D1 — tiny, and row-level transactions make account deletion trivial), `user_annotation`
 
 #### R2 (bucket `glidecomp`)
@@ -113,6 +124,11 @@ Two namespaces: the airscore-api response cache, and competition-api's cache for
 #### Score storage (stale-first)
 
 Task scores are materialized rows in D1 (`task_scores`): **reads never compute, writes do**. A score-affecting mutation bumps `inputs_rev` (instantly marking the row stale) and schedules background revalidation; freshness is derived (`computed_rev === inputs_rev` and matching engine version), so deploying a new scoring-engine version rolls every row stale without a migration. A lease lock makes revalidation exactly-once under concurrency. Full design: [docs/score-caching-stale-first-plan.md](score-caching-stale-first-plan.md).
+
+Two more stores follow the same stale-first shape with deliberate departures:
+
+- **`task_field_analysis`** — one `bumpScoreInputs()` marks it stale alongside `task_scores`, but revalidation is **lazy** (triggered by a read, not the mutation — it's expensive and few people read it) and the cold path never computes synchronously: it returns `pending`, schedules, and the UI polls.
+- **`task_weather`** — invalidated **by query key, not `inputs_rev`**. Weather is a function of a place and a past interval, and a past interval's weather never changes, so there is deliberately no bump at the mutation sites; move the route or the date and the engine's `weatherQueryKey` stops matching the stored row. Provisional answers re-fetch on a TTL, failures back off, and — as with field analysis — a page render never waits on the third-party fetch.
 
 #### Audit log
 

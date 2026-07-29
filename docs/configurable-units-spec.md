@@ -38,20 +38,23 @@ This feature allows users to configure display units for various measurements in
 
 ### Command Menu Integration
 
-A "Configure units..." menu item is available under the "Settings" group in the command dialog (Cmd+K):
+A "Settings..." menu item (`menu-configure-settings`) is available under the "Settings" group in the command dialog (Cmd+K):
 
 ```
 ─────────────────────────────────────
 Settings
 ─────────────────────────────────────
-⚙  Configure units...
+🏆  Competition Settings...
+⚙  Settings...
 ```
 
-Keywords for search: `units configure settings speed altitude distance climb rate vario`
+Keywords for search: `units configure settings speed altitude distance climb rate vario thresholds detection thermal glide circle`
 
-### Units Configuration Dialog
+The neighbouring "Competition Settings..." item (`menu-competition-settings`) is a separate dialog for the GAP scoring parameters — nothing to do with display units.
 
-Clicking "Configure units..." opens a modal dialog with dropdown selects for each unit type:
+### Settings Dialog
+
+Clicking "Settings..." opens the `#settings-dialog` modal. Units are one collapsible section of it; the same dialog also carries the event-detection thresholds (Thermal Detection, Glide Detection, Vario Extremes, Takeoff / Landing, Circle Detection). The Units section has a dropdown select for each unit type:
 
 - **Speed**: km/h, mph, knots
 - **Altitude**: meters (m), feet (ft)
@@ -185,8 +188,8 @@ The interface remains unchanged for consuming code.
 ### Manual Testing Checklist
 
 1. Open command menu (Cmd+K)
-2. Search "units" - verify "Configure units..." appears
-3. Open the units dialog
+2. Search "units" - verify "Settings..." appears
+3. Open the settings dialog and expand the Units section
 4. Change each unit type and click Save
 5. Verify all displayed values update immediately:
    - Event panel entries

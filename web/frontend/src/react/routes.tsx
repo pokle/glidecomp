@@ -137,9 +137,10 @@ export function AppRoutes() {
               with a chapter per task NESTED UNDER IT — the per-task page is a
               drill-down of the comp report, not a leaf of the task page, so
               "up one level" lands back in the report where the other tasks are.
-              Admin-gated by the API and deliberately NOT server-rendered —
-              functions/comp/[[path]].ts has no ROUTES entry for these, so a hard
-              reload falls through to the plain SPA shell (with noindex). */}
+              PUBLIC and server-rendered since July 2026 — both have ROUTES
+              entries in functions/comp/[[path]].ts, and a cold report renders
+              its pending notice server-side (noindex) while the client polls.
+              A hidden `test` comp still 404s for non-admins. */}
           <Route path="/comp/:compId/analysis" element={<CompFieldAnalysis />} />
           <Route
             path="/comp/:compId/analysis/task/:taskId"
