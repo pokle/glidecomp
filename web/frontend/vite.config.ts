@@ -383,6 +383,16 @@ export default defineConfig({
     // web/scripts/dev-workers.sh for why there is only one target now.
     proxy: {
       '/api': { target: DEV_API_ORIGIN, changeOrigin: true },
+      // /civl-rankings.csv is a Pages Function in production
+      // (functions/civl-rankings.csv.ts), and Pages Functions don't run under
+      // `bun run dev`. Rewriting to the worker path it forwards to keeps the
+      // one public URL working in dev too, so verifying an import doesn't
+      // require a `wrangler pages dev` build.
+      '/civl-rankings.csv': {
+        target: DEV_API_ORIGIN,
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\//, '/api/'),
+      },
     },
   },
 });

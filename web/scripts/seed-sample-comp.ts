@@ -62,8 +62,6 @@ import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync, existsSy
 import { resolve, join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
-import { spawnSync, spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import {
   andoyerDistance,
   calculateBearingRadians,
@@ -93,8 +91,16 @@ import {
   taskSeedName,
   trackLessPilotKey,
 } from './lib/seed-identity';
+import {
+  REPO_ROOT,
+  isTransientWranglerError,
+  parseWranglerJson,
+  q,
+  tomlValue as readTomlValue,
+  wrangler,
+  wranglerAsync,
+} from './lib/wrangler-d1';
 
-const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 /** Comp-folder root — override with GLIDECOMP_COMPS_DIR to seed from a
  * checkout of pokle/glidecomp-archive (the history back-catalogue). */
 const COMPS_ROOT = process.env.GLIDECOMP_COMPS_DIR
@@ -148,20 +154,12 @@ const R2_CONCURRENCY = 8;
 
 // --- worker config (single source of truth for the storage bindings) -------
 
-/**
- * Pull a string value out of a `[[header]]` table in the worker's wrangler.toml
- * (e.g. the D1 `database_id` or the R2 `bucket_name`). Miniflare keys the local
- * D1 sqlite file by the *database_id*, not the name, so the in-process store
- * must read the very same id wrangler/`bun run dev` use — hardcoding would
- * silently write to a different file than the app reads.
- */
-const WRANGLER_TOML = readFileSync(join(REPO_ROOT, WRANGLER_CONFIG_PATH), 'utf-8');
-function tomlValue(header: string, key: string): string {
-  const block = WRANGLER_TOML.match(new RegExp(`\\[\\[${header}\\]\\]([\\s\\S]*?)(?=\\n\\[|$)`))?.[1] ?? '';
-  const m = block.match(new RegExp(`${key}\\s*=\\s*"([^"]+)"`));
-  if (!m) throw new Error(`wrangler.toml: [[${header}]] ${key} not found`);
-  return m[1];
-}
+// Bindings are read out of the worker's own wrangler.toml rather than
+// hardcoded: Miniflare keys the local D1 sqlite file by the *database_id*, so
+// the in-process store must use the very same id wrangler/`bun run dev` use or
+// it silently writes to a different file than the app reads.
+const tomlValue = (header: string, key: string) =>
+  readTomlValue(WRANGLER_CONFIG_PATH, header, key);
 const D1_BINDING = tomlValue('d1_databases', 'binding');
 const D1_DATABASE_ID = tomlValue('d1_databases', 'database_id');
 const DB_NAME = tomlValue('d1_databases', 'database_name');
@@ -262,102 +260,6 @@ async function createLocalStore(): Promise<SeedStore> {
 
 // -- remote backend: wrangler CLI against real Cloudflare D1 + R2 -------------
 
-const WRANGLER_MAX_ATTEMPTS = 5;
-
-/** Exponential backoff, capped: 1s, 2s, 4s, 8s, 15s… */
-function backoffMs(attempt: number): number {
-  return Math.min(1000 * 2 ** (attempt - 1), 15_000);
-}
-
-/**
- * Whether a failed wrangler invocation looks like a transient Cloudflare/network
- * hiccup — a 5xx, a 429, an "internal error" (D1/R2 both surface CF error 10001
- * "We encountered an internal error. Please try again."), or a dropped socket —
- * as opposed to a deterministic failure (bad SQL, a UNIQUE violation) that would
- * fail identically forever. Matched on textual markers rather than a bare status
- * number so a key/path segment like `.../t/500/…` can't masquerade as a 500.
- */
-function isTransientWranglerError(msg: string): boolean {
-  const m = msg.toLowerCase();
-  return (
-    m.includes('internal error') ||
-    m.includes('internal server error') ||
-    m.includes('try again') ||
-    m.includes('service unavailable') ||
-    m.includes('too many requests') ||
-    m.includes('rate limit') ||
-    /\b(5\d\d|429)\s*:/.test(m) || // "- 500: Internal Server Error", "429: …"
-    /etimedout|econnreset|eai_again|enotfound|socket hang up|fetch failed|network error/.test(m)
-  );
-}
-
-/** Block the calling thread for `ms` (sync backoff, so the sync D1 path can wait). */
-function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-function warnRetry(args: string[], attempt: number, msg: string): void {
-  const firstLine = (msg.split('\n').find((l) => l.trim()) ?? msg).trim();
-  console.warn(
-    `  ⚠ wrangler ${args.slice(0, 3).join(' ')} failed (attempt ${attempt}/${WRANGLER_MAX_ATTEMPTS}), ` +
-      `retrying in ${backoffMs(attempt) / 1000}s: ${firstLine}`,
-  );
-}
-
-function wrangler(args: string[]): string {
-  for (let attempt = 1; ; attempt++) {
-    const res = spawnSync('bunx', ['wrangler', ...args], {
-      cwd: REPO_ROOT,
-      encoding: 'utf-8',
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    if (res.status === 0) return res.stdout;
-    const msg = res.stderr || res.stdout;
-    if (attempt >= WRANGLER_MAX_ATTEMPTS || !isTransientWranglerError(msg)) {
-      throw new Error(`wrangler ${args.join(' ')} failed:\n${msg}`);
-    }
-    warnRetry(args, attempt, msg);
-    sleepSync(backoffMs(attempt));
-  }
-}
-
-/** Async wrangler invocation, so independent R2 calls can run concurrently. */
-async function wranglerAsync(args: string[]): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      await new Promise<void>((res, rej) => {
-        const child = spawn('bunx', ['wrangler', ...args], { cwd: REPO_ROOT });
-        let stderr = '';
-        let stdout = '';
-        child.stdout?.on('data', (d) => (stdout += d));
-        child.stderr?.on('data', (d) => (stderr += d));
-        child.on('error', rej);
-        child.on('close', (code) =>
-          code === 0 ? res() : rej(new Error(`wrangler ${args.join(' ')} failed:\n${stderr || stdout}`)),
-        );
-      });
-      return;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (attempt >= WRANGLER_MAX_ATTEMPTS || !isTransientWranglerError(msg)) throw err;
-      warnRetry(args, attempt, msg);
-      await new Promise((r) => setTimeout(r, backoffMs(attempt)));
-    }
-  }
-}
-
-/**
- * Extract wrangler's JSON payload from stdout. On `--remote`, wrangler decorates
- * stdout with progress lines ("├ Checking if file needs uploading", spinner
- * frames, "🌀 Uploading …") before the JSON array, so the whole string isn't
- * valid JSON — slice from the first `[`. (Warnings/banners go to stderr, which
- * `wrangler()` discards, so they never reach here.)
- */
-function parseWranglerJson(out: string): Array<{ results: Record<string, unknown>[] }> {
-  const start = out.indexOf('[');
-  if (start === -1) throw new Error(`Unexpected wrangler output (no JSON found):\n${out}`);
-  return JSON.parse(out.slice(start));
-}
 
 function createRemoteStore(): SeedStore {
   // One scratch dir for the SQL/R2 payload temp files this backend feeds to the
@@ -398,13 +300,6 @@ function createRemoteStore(): SeedStore {
       rmSync(scratch, { recursive: true, force: true });
     },
   };
-}
-
-/** Single-quote a value for SQL, escaping embedded quotes. NULL passes through. */
-function q(v: string | number | null): string {
-  if (v === null) return 'NULL';
-  if (typeof v === 'number') return String(v);
-  return `'${v.replace(/'/g, "''")}'`;
 }
 
 // --- read the sample source ------------------------------------------------

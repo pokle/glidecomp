@@ -19,6 +19,7 @@ import { userFilesRoutes } from "./routes/user-files";
 import { visualizationRoutes } from "./routes/visualization";
 import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
+import { civlRankingsRoutes } from "./routes/civl-rankings";
 
 type Variables = {
   user: AuthUser;
@@ -105,7 +106,8 @@ const routes = app
   .route("/", auditRoutes)
   .route("/", userFilesRoutes)
   .route("/", adminRoutes)
-  .route("/", cacheRoutes);
+  .route("/", cacheRoutes)
+  .route("/", civlRankingsRoutes);
 
 export type AppType = typeof routes;
 

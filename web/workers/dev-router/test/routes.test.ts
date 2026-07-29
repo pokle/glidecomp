@@ -58,6 +58,9 @@ describe("dev-router dispatch", () => {
     ["/api/u/some-pilot/task/abc", "COMPETITION_API"],
     // competition-api — admin
     ["/api/admin/cache", "COMPETITION_API"],
+    // competition-api — the CIVL rankings dump behind /civl-rankings.csv.
+    // A whole path, not a prefix, and the only entry with a dot in it.
+    ["/api/civl-rankings.csv", "COMPETITION_API"],
     // airscore-api
     ["/api/airscore/task/1/2", "AIRSCORE_API"],
   ];
