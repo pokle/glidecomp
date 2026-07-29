@@ -29,10 +29,10 @@
  */
 import type { ScoreDistributionChart } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
-import { linearScale } from "./scale";
+import { linearScale, niceTicks } from "./scale";
 
 const W = 520;
-const H = 100;
+const H = 108;
 const MARGIN = { right: 14, left: 14 };
 /** The lane the dots sit on. */
 const LANE_Y = 58;
@@ -50,6 +50,15 @@ const DOT_R = 3;
 const LABEL_ROWS = [26, 12];
 /** Rough label width for collision testing, at the 10px label size. */
 const labelWidth = (t: string) => t.length * 5.4;
+/** Tick labels sit on their own row, clear of the axis title below them —
+ *  with several ticks across the axis, a centred title on the same row
+ *  collides with whichever tick lands mid-scale. */
+const TICK_LABEL_Y = 76;
+const AXIS_TITLE_Y = 94;
+/** How many round ticks to aim for. The field spans tens of kilometres, so
+ *  the two ends alone leave a reader with no way to place a dot between
+ *  them; niceTicks turns that span into round numbers they can count on. */
+const TICK_TARGET = 5;
 
 export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) {
   const { points, markers, xLabel, caption } = chart;
@@ -62,7 +71,11 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
   // minimum-distance threshold off the left edge.
   const x = linearScale([0, xMax || 1], [plot.left + DOT_R, plot.right - DOT_R]);
 
-  const km = (m: number) => `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+  // Round kilometre ticks across the whole axis. niceTicks clamps inside the
+  // domain, so the rightmost tick sits at or below the best distance flown —
+  // the exact figure is in the row's prose above, and an unrounded end label
+  // would compete with the markers for the same corner.
+  const ticks = niceTicks([0, xMax || 1], TICK_TARGET);
 
   // Lay the marker labels out, most important first, dropping each to the next
   // row when it would overprint one already placed. Centred and clamped by its
@@ -166,27 +179,38 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
             />
           ))}
 
-        {/* Axis ends only: the markers already label everything that has a
-            meaning, and intermediate ticks would compete with them. */}
+        {/* Round intermediate ticks: distance is the one axis here a reader
+            wants to measure against, and 0-and-max alone gives them nothing
+            to place a dot by. The unit goes in the title rather than on every
+            tick, which would repeat "km" five times across a 520-wide strip. */}
         <g aria-hidden className="text-[10px] text-muted-foreground">
-          <text x={plot.left} y={LANE_Y + 26} className="fill-current">
-            0
-          </text>
-          <text
-            x={plot.right}
-            y={LANE_Y + 26}
-            textAnchor="end"
-            className="fill-current"
-          >
-            {km(xMax)}
-          </text>
+          {ticks.map((t) => (
+            <g key={t}>
+              <line
+                x1={x(t)}
+                x2={x(t)}
+                y1={LANE_Y + 8}
+                y2={LANE_Y + 12}
+                className="stroke-border"
+                strokeWidth={1}
+              />
+              <text
+                x={x(t)}
+                y={TICK_LABEL_Y}
+                textAnchor="middle"
+                className="fill-current"
+              >
+                {Math.round(t / 1000)}
+              </text>
+            </g>
+          ))}
           <text
             x={(plot.left + plot.right) / 2}
-            y={LANE_Y + 26}
+            y={AXIS_TITLE_Y}
             textAnchor="middle"
             className="fill-current"
           >
-            {xLabel}
+            {xLabel} (km)
           </text>
         </g>
       </svg>
