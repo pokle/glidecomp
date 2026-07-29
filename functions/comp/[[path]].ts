@@ -28,6 +28,7 @@ import {
   NotFoundError,
   type FetchFn,
 } from "../../web/frontend/src/react/loaders";
+import { buildScoresCsv, scoresCsvFilename } from "../../web/frontend/src/scores-csv";
 import {
   idFromSegment,
   compPath,
@@ -383,6 +384,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return shellWithNoindex(env, url, 200);
   }
 
+  // The scores page's CSV twin — a real URL, not a client-side blob, so it can
+  // be linked, curl'd and pulled into a spreadsheet (Google Sheets IMPORTDATA).
+  const csvMatch = path.match(SCORES_CSV_PATTERN);
+  if (csvMatch) return scoresCsv(env, csvMatch[1], cookie, url.origin);
+
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
   // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster,
   // the old task-analysis redirect) were already handled above via
@@ -392,10 +398,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // + noindex, rather than the old soft-200 that made junk URLs look valid.
   if (!match || !match.m) return notFoundShell(env, url);
 
-  // Forward the cookie so the API answers exactly as it would for this visitor
-  // (admins see their test comps; everyone else gets the public view / 404).
-  const fetcher: FetchFn = (p, init) =>
-    env.COMPETITION_API.fetch(new Request(`https://comp.internal${p}`, mergeCookie(init, cookie)));
+  const fetcher = compFetcher(env, cookie);
 
   // In flight alongside the loader — the render needs both, and neither
   // depends on the other. An anonymous visitor resolves to null for free.
@@ -448,6 +451,82 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     },
   });
 };
+
+// ── scores CSV ───────────────────────────────────────────────────────────────
+
+/** `/comp/<slug>-<id>/scores.csv` — the scores page's downloadable twin. */
+const SCORES_CSV_PATTERN = /^\/comp\/([^/]+)\/scores\.csv$/;
+
+/**
+ * Serve the whole competition's scores as one long CSV (one row per pilot per
+ * task — see scores-csv.ts for why that shape). Built from the same loader the
+ * scores page renders from, so the file can never disagree with the page.
+ *
+ * A URL rather than a client-built blob because that is what makes it useful
+ * beyond a download: Google Sheets' IMPORTDATA reads it live, and it works with
+ * JS off. The visitor's cookie is forwarded like everywhere else here, so an
+ * admin can export a `test` comp and everyone else gets its 404. Never
+ * indexed — it is the page's data, and the page is the indexable form.
+ *
+ * The file's link columns are absolute against THIS request's origin, so an
+ * export taken from a preview deployment links back into that deployment
+ * rather than quietly sending the reader to production.
+ */
+async function scoresCsv(
+  env: Env,
+  segment: string,
+  cookie: string | null,
+  origin: string
+): Promise<Response> {
+  const compId = idFromSegment(segment);
+  let data: Awaited<ReturnType<typeof loadCompScores>>;
+  try {
+    data = await loadCompScores(compFetcher(env, cookie), compId);
+  } catch (err) {
+    if (err instanceof NotFoundError) return csvError(404, "Competition not found");
+    console.error("scores CSV error for", compId, err);
+    return csvError(503, "Scores are unavailable right now — please try again");
+  }
+
+  // No scored task yet → the header row alone. An empty export is a truthful
+  // answer; an error would make a legitimate URL look broken.
+  const csv = buildScoresCsv(data.scores ?? { comp_id: compId, tasks: [], standings: [] }, {
+    compName: data.comp.name,
+    origin,
+  });
+  return new Response(csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${scoresCsvFilename(data.comp.name)}"`,
+      "X-Robots-Tag": "noindex",
+      "Cache-Control": pageCacheControl(
+        cookie,
+        data.scores
+          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+          : undefined
+      ),
+    },
+  });
+}
+
+function csvError(status: number, message: string): Response {
+  return new Response(`${message}\n`, {
+    status,
+    headers: { "Content-Type": "text/plain; charset=utf-8", "X-Robots-Tag": "noindex" },
+  });
+}
+
+/**
+ * A FetchFn onto the competition-api service binding that forwards the
+ * visitor's cookie, so the API answers exactly as it would for them (admins
+ * see their test comps; everyone else gets the public view / 404).
+ */
+function compFetcher(env: Env, cookie: string | null): FetchFn {
+  return (p, init) =>
+    env.COMPETITION_API.fetch(
+      new Request(`https://comp.internal${p}`, mergeCookie(init, cookie))
+    );
+}
 
 /**
  * Cache-Control for a rendered SSR page. Cookie-forwarded renders are
