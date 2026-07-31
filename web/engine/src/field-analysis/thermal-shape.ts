@@ -113,9 +113,10 @@ export interface ThermalLean {
 }
 
 export interface ThermalWindEstimate {
-  /** Mean wind speed (m/s) over the climb's circles. */
+  /** Median magnitude of the per-circle estimates (m/s) — see
+   * averageCircleWinds for why speed is not the vector mean's length. */
   speed: number;
-  /** Direction the wind blows FROM (deg). */
+  /** Direction the wind blows FROM (deg), from the vector mean. */
   direction: number;
   samples: number;
 }
@@ -708,26 +709,37 @@ function fitLean(bands: ThermalShapeBand[], samples: ThermalSample[]): ThermalLe
   };
 }
 
-/** Vector-average of the circles' wind estimates (both estimator methods). */
+/**
+ * Combine the circles' wind estimates (both estimator methods).
+ *
+ * Direction comes from the VECTOR mean, where the scatter of individual
+ * estimates cancels. Speed comes from the MEDIAN of the estimate magnitudes:
+ * a vector mean's length collapses toward zero as directions scatter, so it
+ * answers "how consistent were the estimates", not "how strong was the wind"
+ * — measured 5 km/h against a modelled 20 km/h on a day the directions
+ * agreed to a degree was this bias, not a calm.
+ */
 function averageCircleWinds(circles: CircleSegment[]): ThermalWindEstimate | null {
   let u = 0;
   let v = 0;
-  let n = 0;
+  const speeds: number[] = [];
   for (const c of circles) {
     for (const w of [c.windFromGroundSpeed, c.windFromCenterDrift]) {
       if (!w) continue;
       const rad = (w.direction * Math.PI) / 180;
       u += w.speed * Math.sin(rad);
       v += w.speed * Math.cos(rad);
-      n++;
+      speeds.push(w.speed);
     }
   }
-  if (n === 0) return null;
-  u /= n;
-  v /= n;
-  const speed = Math.hypot(u, v);
-  const direction = ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
-  return { speed, direction, samples: n };
+  if (speeds.length === 0) return null;
+  speeds.sort((a, b) => a - b);
+  const direction = ((Math.atan2(u / speeds.length, v / speeds.length) * 180) / Math.PI + 360) % 360;
+  return {
+    speed: quantileSorted(speeds, 0.5),
+    direction,
+    samples: speeds.length,
+  };
 }
 
 /**
