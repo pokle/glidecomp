@@ -79,19 +79,19 @@ describe("captionText", () => {
   });
   it("says why no curve is drawn when ρ is within noise", () => {
     const text = captionText(metric("higher", -0.2, "within noise"), 0);
-    expect(text).toContain("No trend curve is drawn");
+    expect(text).toContain("There is no trend curve");
     expect(text).toContain("does not clear the noise floor");
   });
   it("says why no curve is drawn when n is too small", () => {
     expect(captionText(metric("higher", -0.9, "n too small"), 0)).toContain(
-      "too few pilots to fit one that would mean anything"
+      "Too few pilots have a value to fit one that means anything"
     );
   });
   it("stays silent about the curve when one is drawn for a real correlation", () => {
     // A trend was fitted and passed in — no "no curve" apology anywhere.
     expect(
       captionText(metric("higher", -0.6), 0, [], { startRank: 3, endRank: 17 })
-    ).not.toContain("No trend curve");
+    ).not.toContain("no trend curve");
   });
   it("names top-ranked pilots among the excluded", () => {
     // The Corryong 2026 T1 case: gaggle.departure_winrate null for the #1

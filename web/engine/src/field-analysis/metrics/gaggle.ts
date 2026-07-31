@@ -49,10 +49,11 @@ const affinity: MetricComputer = {
   family: 'gaggle',
   direction: 'neutral',
   explanation:
-    'Whether the pilot raced with company or went it alone. Share of their flying time after ' +
-    'the start spent inside a detected gaggle — clustered with at least one other racing pilot ' +
-    'on the shared time grid. No expected direction: a gaggle multiplies your search power, but ' +
-    'it also drags you along at its own pace. The correlation sign says which happened here.',
+    'Whether the pilot raced with other pilots or alone. The value is the share of their flying ' +
+    'time after the start inside a detected gaggle, that is, clustered with one other racing ' +
+    'pilot or more on the shared time grid. There is no expected direction. A gaggle increases ' +
+    'the power to search for lift, but it also holds a pilot to its own speed. The sign of the ' +
+    'correlation says which of the two occurred here.',
   compute(field: FieldContext): MetricOutput {
     const { grid, gaggles } = field;
 
@@ -110,11 +111,12 @@ const markerUsage: MetricComputer = {
   family: 'gaggle',
   direction: 'neutral',
   explanation:
-    'How much of the pilot’s lift was found for them. Share of their climbs after the start ' +
-    'where another pilot was already established — at least 30 s in, and still climbing — in ' +
-    "the same thermal when they arrived. High means they mostly climb on other pilots' markers; " +
-    'low means they find their own air. No expected direction: using markers is free ' +
-    'information, but it puts you where the last pilot was, not where the next climb is.',
+    'How much of the lift of the pilot another pilot found first. The value is the share of ' +
+    'their climbs after the start where another pilot was already established in the same ' +
+    'thermal when they arrived. Established means 30 s or more into the climb, and still ' +
+    "climbing. A high value means they mostly climb on the markers of other pilots. A low value " +
+    'means they find their own air. There is no expected direction. A marker is free ' +
+    'information, but it puts a pilot where the last climb was, and not where the next one is.',
   compute(field: FieldContext): MetricOutput {
     const uses = field.pilots.map(() => 0);
     const marked = field.pilots.map(() => 0);
@@ -163,10 +165,11 @@ const departureWinrate: MetricComputer = {
   // First two sentences verbatim per the plan — this metric must be
   // self-explanatory; the third states who counts as a stayer.
   explanation:
-    'When a pilot leaves a gaggle that keeps flying, did leaving pay off? We compare the ' +
-    "leaver's arrival at the next turnpoint against the median arrival of the pilots who " +
-    'stayed. Win rate > 50% means their departures beat the gaggle. Only pilots still in the ' +
-    'gaggle after the split who reached that turnpoint after it count as stayers.',
+    'When a pilot leaves a gaggle that continues to fly, did the departure pay off? We compare ' +
+    'the arrival of the pilot who left at the next turnpoint against the median arrival of the ' +
+    'pilots who stayed. A win rate of more than 50% means their departures beat the gaggle. A ' +
+    'pilot counts as a pilot who stayed only if they were still in the gaggle after the split, ' +
+    'and reached that turnpoint after it.',
   compute(field: FieldContext): MetricOutput {
     const { grid } = field;
     const wins = field.pilots.map(() => 0);

@@ -374,7 +374,7 @@ export function TaskFieldAnalysis() {
         { method: "POST", credentials: "include" }
       );
       if (res.ok) {
-        toast.success("Recomputing — reload in a moment to see the new analysis");
+        toast.success("Recomputing. Reload the page in a moment to see the new analysis.");
       } else {
         toast.error("Could not trigger a recompute");
       }
@@ -414,8 +414,8 @@ export function TaskFieldAnalysis() {
         <Alert className="mt-4">
           <AlertTitle>Not available</AlertTitle>
           <AlertDescription>
-            This field analysis isn't available — it may be part of a
-            competition that hasn't been published.
+            This field analysis is not available. It is possibly part of a
+            competition that is not published.
           </AlertDescription>
         </Alert>
       </div>
@@ -457,8 +457,8 @@ export function TaskFieldAnalysis() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">{heading}</h1>
           <p className="text-sm text-muted-foreground">
-            How the field actually flew this task, and which behaviours
-            separated it.
+            How the field flew this task, and which behaviours separated
+            it.
           </p>
         </div>
         {/* Pure navigation/actions — meaningless on paper. */}
@@ -495,8 +495,9 @@ export function TaskFieldAnalysis() {
             <TaskDiagram task={task.xctsk} size="md" className="shrink-0" />
           </div>
           <figcaption className="mt-1 text-center text-xs text-muted-foreground">
-            The optimised route, flown in the direction of the arrows. Radii,
-            leg distances and start times are on the task page.
+            The optimised route. Pilots fly it in the direction of the
+            arrows. The radii, the leg distances and the start times are on the
+            task page.
           </figcaption>
         </figure>
       ) : null}

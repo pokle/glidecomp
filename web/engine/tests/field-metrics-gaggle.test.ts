@@ -232,10 +232,11 @@ describe('gaggle.departure_winrate', () => {
   it('prints the mandated self-explanatory method text verbatim', () => {
     const metric = GAGGLE_METRICS.find((m) => m.id === 'gaggle.departure_winrate')!;
     expect(metric.explanation).toBe(
-      'When a pilot leaves a gaggle that keeps flying, did leaving pay off? We compare the ' +
-        "leaver's arrival at the next turnpoint against the median arrival of the pilots who " +
-        'stayed. Win rate > 50% means their departures beat the gaggle. Only pilots still in ' +
-        'the gaggle after the split who reached that turnpoint after it count as stayers.',
+      'When a pilot leaves a gaggle that continues to fly, did the departure pay off? We compare ' +
+        'the arrival of the pilot who left at the next turnpoint against the median arrival of the ' +
+        'pilots who stayed. A win rate of more than 50% means their departures beat the gaggle. A ' +
+        'pilot counts as a pilot who stayed only if they were still in the gaggle after the split, ' +
+        'and reached that turnpoint after it.',
     );
   });
 

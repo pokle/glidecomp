@@ -212,11 +212,12 @@ function hintFor(direction: MetricDirection, deviation: number): SignatureHint |
 }
 
 const EXPLANATION =
-  'Pilots are grouped by flying style, not by score: every behavioural metric is rank-transformed ' +
-  'to a within-field percentile, pilots are compared by the mean percentile gap over the metrics ' +
-  'both have (missing values are never imputed), and Ward-linkage agglomeration forms the groups, ' +
-  'with the number of groups chosen by the best mean silhouette. Each group is annotated with the ' +
-  'GAP-rank spread of its members — where a style did and did not pay.';
+  'GlideComp groups the pilots by flying style, and not by score. It transforms the rank of every ' +
+  'behavioural metric to a percentile inside the field. It then compares two pilots by the mean ' +
+  'percentile gap over the metrics that both pilots have, and never fills in a missing value. ' +
+  'Ward-linkage agglomeration forms the groups, and the best mean silhouette selects the number ' +
+  'of groups. Each group carries the spread of the GAP ranks of its members, which shows where a ' +
+  'style paid and where it did not.';
 
 /** Behavioural metrics with enough data to shape a distance. */
 function usableMetrics(report: FieldAnalysisReport): MetricReport[] {
