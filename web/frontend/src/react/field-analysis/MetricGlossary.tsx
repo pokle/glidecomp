@@ -35,7 +35,7 @@ export function glossaryEntryId(metricId: string): string {
 
 export function MetricGlossary({
   entries,
-  intro = "How every metric on this page is measured. On screen, the ⓘ next to a metric opens the same description in place; in print, this section is the reference for all of them.",
+  intro = "How GlideComp measures every metric on this page. On screen, the ⓘ beside a metric opens the same description in place. On paper, this section is the reference for all of them.",
   nested = false,
 }: {
   entries: GlossaryEntry[];

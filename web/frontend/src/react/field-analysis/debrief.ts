@@ -76,8 +76,8 @@ export function debriefSentence(f: DebriefFinding): string {
     ? "they went with worse ranks"
     : "they went with better ranks";
   return (
-    `${f.label}: ${today} (ρ = ${f.rho.toFixed(2)}, n = ${f.n}) — ` +
-    `the opposite of this comp's other tasks, where ${usually} on all ` +
-    `${f.otherCount} informative days.`
+    `${f.label}: ${today} (ρ = ${f.rho.toFixed(2)}, n = ${f.n}). ` +
+    `This is the opposite of the other tasks in this competition, where ` +
+    `${usually} on all ${f.otherCount} informative days.`
   );
 }

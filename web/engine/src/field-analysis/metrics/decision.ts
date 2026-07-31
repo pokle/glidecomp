@@ -160,11 +160,12 @@ const altitudeFloor: MetricComputer = {
   family: 'decision',
   direction: 'higher',
   explanation:
-    'How much height the pilot still has in hand at the moment they commit to a climb — racing ' +
-    "with margin, or scratching. Finds each pilot's altitude minima after the start " +
-    '(30 s-smoothed, at least 100 m below the surrounding maxima) — the points where they ' +
-    "stopped descending and committed — and reports the median as a percentage of the day's " +
-    'working band, where 0% is the field floor and 100% its ceiling.',
+    'How much height the pilot still has when they commit to a climb. A high value is a race ' +
+    'with height in reserve, and a low value is a search for lift close to the ground. We find ' +
+    "each pilot's altitude minima after the start, smoothed over 30 s, and at least 100 m below " +
+    'the maxima around them. Those are the points where the pilot stopped the descent and ' +
+    "committed. The value is the median, as a percentage of the day's working band, where 0% " +
+    'is the floor of the field and 100% is its ceiling.',
   compute(field: FieldContext): MetricOutput {
     const perPilot = field.pilots.map((p): PilotMetricValue => {
       if (p.sssMs === null) return na(p);
@@ -195,10 +196,11 @@ const lowSaves: MetricComputer = {
   family: 'decision',
   direction: 'neutral',
   explanation:
-    'How many times the pilot got low and dug their way back out. Counts climbs after the ' +
-    'start entered below 15% of the working band that went on to gain at least 300 m — genuine ' +
-    'low saves. Zero is a real score, not a missing one: it means the pilot never got that low. ' +
-    'No expected direction — the correlation sign says whether digging out or staying high pays.',
+    'How many times the pilot got low and climbed out again. We count the climbs after the ' +
+    'start that the pilot entered below 15% of the working band, and that then gained 300 m or ' +
+    'more. Those are true low saves. Zero is a real value, and not a missing one: it means the ' +
+    'pilot never got that low. There is no expected direction. The sign of the correlation says ' +
+    'whether a climb-out or a flight that stays high pays.',
   compute(field: FieldContext): MetricOutput {
     const { floorMeters, spanMeters, bandFraction } = field.workingBand;
     const entryThreshold = floorMeters + LOW_SAVE_ENTRY_BAND_FRACTION * spanMeters;
@@ -233,12 +235,13 @@ const kmBetweenClimbs: MetricComputer = {
   family: 'decision',
   direction: 'higher',
   explanation:
-    'How far the pilot gets down the course before having to stop and circle again — the plain ' +
-    'reading of how often they stop. Scored flown distance ÷ the number of thermals taken after ' +
-    'the start, so 3 km means three kilometres of course covered for every climb taken. Needs ' +
-    "at least 20 km flown. Each pilot's note adds their mean climb percentile within shared " +
-    'thermals, so few stops can be read together with climb strength — long legs between weak ' +
-    'climbs is a different day from long legs between strong ones.',
+    'How far the pilot gets down the course before they must stop and circle again. This is the ' +
+    'direct reading of how often they stop. The value is the scored flown distance divided by ' +
+    'the number of thermals taken after the start, so 3 km means three kilometres of course for ' +
+    "each climb. The pilot must fly 20 km or more. The note of each pilot adds their mean climb "
+    + 'percentile inside shared thermals, so you can read the number of stops together with the ' +
+    'climb strength. Long legs between weak climbs is a different day from long legs between ' +
+    'strong ones.',
   compute(field: FieldContext): MetricOutput {
     const pctByPilot = sharedClimbPercentiles(field);
     const perPilot = field.pilots.map((p): PilotMetricValue => {
@@ -275,10 +278,11 @@ const searchFraction: MetricComputer = {
   family: 'decision',
   direction: 'lower',
   explanation:
-    'Time that goes neither into climbing nor into moving down the course — the hunting, ' +
-    'scratching and dithering in between. Share of speed-section time (start to ESS, or ' +
-    'landing) spent neither climbing in a thermal nor gliding with real net speed. Lower means ' +
-    'less time leaks away between climbs.',
+    'Time that goes into neither a climb nor progress down the course. This is the time spent ' +
+    'to find lift, to stay up, and to decide what to do next. The value is the share of the ' +
+    'speed-section time, from the start to ESS or to the landing, in which the pilot neither ' +
+    'climbed in a thermal nor glided with real net speed. A lower value means less time lost ' +
+    'between climbs.',
   compute(field: FieldContext): MetricOutput {
     const shares: { climb: number; glide: number; search: number }[] = [];
     const perPilot = field.pilots.map((p): PilotMetricValue => {

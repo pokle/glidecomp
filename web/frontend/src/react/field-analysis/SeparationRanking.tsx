@@ -154,7 +154,7 @@ export function SeparationRanking({
   if (ranked.length === 0 && outcomeRanked.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No metric produced a correlation — the field is too small, or too few
+        No metric produced a correlation. The field is too small, or too few
         pilots had a usable value.
       </p>
     );
@@ -194,7 +194,7 @@ export function SeparationRanking({
 
       {ranked.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No behaviour produced a correlation — the field is too small, or too
+          No behaviour produced a correlation. The field is too small, or too
           few pilots had a usable value.
         </p>
       ) : (
@@ -273,11 +273,12 @@ export function SeparationRanking({
         <div className="space-y-2 pt-2">
           <h3 className="text-base font-semibold">Outcome checks</h3>
           <p className="text-sm text-muted-foreground">
-            These are not behaviours — they measure the result itself (time
-            behind the leader, race time lost), so of course they follow the
-            placings. They are here as a check on the analysis: a weak pattern
-            in this table means something is off in the numbers, not in anyone's
-            flying. Their per-pilot tables stay in the Race craft section below.
+            These are not behaviours. They measure the result itself, for
+            example the time behind the leader and the race time lost, so they
+            always follow the places. They are here as a check on the analysis.
+            A weak pattern in this table means that something is wrong in the
+            numbers, and not in the flying of any pilot. Their per-pilot tables
+            stay in the Race craft section below.
           </p>
           <RankingTable
             ranked={outcomeRanked}

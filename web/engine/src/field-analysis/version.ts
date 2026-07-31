@@ -175,4 +175,14 @@
 //     stored reports so they gain the windows on their next lazy
 //     revalidation, and a v16 row renders with the circling window alone
 //     until it does.
-export const FIELD_ANALYSIS_VERSION = 17;
+// v18: six metric LABELS rewritten to name the quantity the number is, rather
+//     than to ask a question about it or to describe the behaviour in a
+//     gerund clause — climb.time_to_core, climb.exit_decay,
+//     climb.departure_band, glide.speed, glide.ld_vs_field and
+//     glide.dolphin_fraction. Part of the Simplified Technical English pass
+//     over the field analysis; the method text of every metric was rewritten
+//     in the same change, but explanations are read live from the registry
+//     and only labels are stored on the row. No metric value changed; the
+//     bump rolls stored reports onto the new labels on their next lazy
+//     revalidation, exactly as v3 and v15 did.
+export const FIELD_ANALYSIS_VERSION = 18;

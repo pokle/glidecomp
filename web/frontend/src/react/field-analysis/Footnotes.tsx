@@ -92,8 +92,8 @@ export function ExcludedPilots({
         ))}
       </ul>
       <p className="text-muted-foreground">
-        Correlations are measured against the published ranks, which include
-        these pilots; their behaviour simply cannot be measured without a
+        The correlations are measured against the published ranks, and those
+        ranks include these pilots. Their behaviour cannot be measured without a
         tracklog.
       </p>
     </Footnote>
@@ -113,11 +113,11 @@ export function MethodNote({ gridStepSeconds }: { gridStepSeconds: number }) {
   return (
     <Footnote id={METHOD_NOTE_ID} title="How the field is compared">
       <p>
-        Anything comparing pilots to each other — gaggles, shared thermals, who
-        was where at the same moment — is measured on one shared clock: every
-        track is resampled onto a common {gridStepSeconds}-second grid, so two
-        pilots are only ever compared at the same instant, whatever rate their
-        instruments logged at.
+        Everything that compares pilots to each other uses one shared clock.
+        That includes gaggles, shared thermals, and the position of each pilot
+        at the same moment. GlideComp resamples every track onto a common{" "}
+        {gridStepSeconds}-second grid. Two pilots are therefore always compared
+        at the same instant, whatever rate their instruments logged at.
       </p>
     </Footnote>
   );

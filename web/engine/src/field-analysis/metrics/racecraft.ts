@@ -123,11 +123,11 @@ const startDelay: MetricComputer = {
   family: 'racecraft',
   direction: 'lower',
   explanation:
-    'Every second between the gate opening and actually crossing the start line is a second ' +
-    'given away for nothing. Seconds from the start gate taken (or the pilot’s own crossing on ' +
-    'elapsed-time tasks, where the delay is 0 by definition) to the scored SSS crossing. The ' +
-    'start table adds crossing altitude and how far behind the leading already-started pilot ' +
-    'each start was.',
+    'Every second between the opening of the gate and the crossing of the start line is a ' +
+    'second lost for nothing. The value is the seconds from the start gate taken to the scored ' +
+    'SSS crossing. On an elapsed-time task, the pilot’s own crossing is the reference, so the ' +
+    'delay is 0 by definition. The start table adds the crossing altitude, and the distance ' +
+    'behind the leading pilot who had already started.',
   compute(field): MetricOutput {
     const sssIdx = getEffectiveSSSIndex(field.task);
     const nextIdx = sssIdx >= 0 && sssIdx + 1 < field.task.turnpoints.length ? sssIdx + 1 : -1;
@@ -216,11 +216,12 @@ const legTimeLost: MetricComputer = {
   direction: 'lower',
   outcome: true,
   explanation:
-    'For each completed speed-section leg, the pilot’s leg time is compared with the mean of the ' +
-    'top-10 (by rank) pilots who completed that leg; only losses count, and the losses are summed. ' +
-    'Summed leg times are race time and the reference is defined by rank, so this tracks the ' +
-    'outcome by construction — read the waterfall table (every leg against the task winner) for ' +
-    'the diagnostic, not the correlation for a finding.',
+    'For each completed speed-section leg, we compare the leg time of the pilot with the mean ' +
+    'of the top 10 pilots by rank who completed that leg. Only the losses count, and we add ' +
+    'them together. The sum of the leg times is the race time, and the rank defines the ' +
+    'reference, so this metric follows the result by construction. Read the waterfall table, ' +
+    'which shows every leg against the task winner, for the diagnosis. Do not read the ' +
+    'correlation as a finding.',
   compute(field): MetricOutput {
     const sssIdx = getEffectiveSSSIndex(field.task);
     const essIdx = getEffectiveESSIndex(field.task);
@@ -307,10 +308,11 @@ const legTimeLost: MetricComputer = {
       ],
       rows,
       footnotes: [
-        'Cells: this pilot’s leg time minus the winner’s (+ = slower than the winner, − = faster); ' +
-          '— = leg not completed by pilot or winner.',
-        `The scalar metric instead sums losses vs the mean of the top ${top.length} pilots who ` +
-          'completed each leg (legs flown faster than that reference contribute 0).',
+        'Each cell is the leg time of this pilot minus the leg time of the winner. A + value is ' +
+          'slower than the winner, and a − value is faster. A — means that the pilot or the ' +
+          'winner did not complete the leg.',
+        `The scalar metric instead adds the losses against the mean of the top ${top.length} ` +
+          'pilots who completed each leg. A leg flown faster than that reference contributes 0.',
       ],
     };
 
@@ -349,9 +351,10 @@ const timeBehind: MetricComputer = {
   direction: 'lower',
   outcome: true,
   explanation:
-    'At each speed-section turnpoint, elapsed race time (reaching minus own start) is compared with ' +
-    'the fastest pilot to that turnpoint; the scalar is minutes behind at ESS. Expected to track ' +
-    'final rank almost perfectly — this metric is the eval’s sanity check.',
+    'At each speed-section turnpoint, we compare the elapsed race time of the pilot, which is ' +
+    'the reaching time minus their own start, with the fastest pilot to that turnpoint. The ' +
+    'value is the minutes behind at ESS. It follows the final rank almost exactly, because this ' +
+    'metric is the sanity check of the evaluation.',
   compute(field): MetricOutput {
     const sssIdx = getEffectiveSSSIndex(field.task);
     const essIdx = getEffectiveESSIndex(field.task);
@@ -415,8 +418,8 @@ const timeBehind: MetricComputer = {
       ],
       rows,
       footnotes: [
-        'Elapsed race time (from each pilot’s own start) minus the fastest elapsed time to that ' +
-          'turnpoint; — = turnpoint not reached.',
+        'The elapsed race time, from the pilot’s own start, minus the fastest elapsed time to ' +
+          'that turnpoint. A — means that the pilot did not reach the turnpoint.',
       ],
     };
 
@@ -453,10 +456,11 @@ const essMargin: MetricComputer = {
   family: 'racecraft',
   direction: 'lower',
   explanation:
-    'Height still in hand at ESS that the pilot no longer needed — altitude they could have ' +
-    'traded for speed and did not. Altitude at ESS minus the altitude needed to glide to goal ' +
-    'at the sport’s standard glide ratio, 5.0 for HG and 4.0 for PG per S7F §12.3.6. A big ' +
-    'positive margin means arriving too high; near zero means the final glide was flown tight.',
+    'Height still available at ESS that the pilot no longer needed. That altitude was available ' +
+    'for more speed, and the pilot did not use it. The value is the altitude at ESS minus the altitude ' +
+    'needed to glide to goal at the standard glide ratio of the sport, which is 5.0 for HG and ' +
+    '4.0 for PG (S7F §12.3.6). A large positive margin means the pilot arrived too high. A ' +
+    'margin near zero means they flew the final glide with little height to spare.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);
     const goalWp = goalIdx >= 0 ? field.task.turnpoints[goalIdx].waypoint : null;
@@ -511,12 +515,13 @@ const finalGlideInit: MetricComputer = {
   family: 'racecraft',
   direction: 'neutral',
   explanation:
-    'How optimistic the pilot was about their final glide — leaving the last climb at exactly ' +
-    'the right height is where tasks are won and thrown away. At the pilot’s last climb before ' +
-    'ESS (or landing), the distance to goal divided by their height above goal: the glide ratio ' +
-    'they committed to. 8 means they left needing 8:1 to make goal. Only counted when that ' +
-    'climb ended within 1.5× the final leg’s distance of goal. No expected direction: pushing ' +
-    'on a marginal glide wins if it connects and loses if it does not.',
+    'How optimistic the pilot was about their final glide. A pilot wins or loses a task by the ' +
+    'height at which they leave the last climb. At the last climb of the pilot before ESS, or ' +
+    'before the landing, we divide the distance to goal by their height above goal. That is the ' +
+    'glide ratio they committed to. 8 means they left and needed 8:1 to make goal. The value ' +
+    'counts only when that climb ended within 1.5 times the distance of the final leg from ' +
+    'goal. There is no expected direction: a marginal glide wins if it connects, and loses if ' +
+    'it does not.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);
     const goalWp = goalIdx >= 0 ? field.task.turnpoints[goalIdx].waypoint : null;
