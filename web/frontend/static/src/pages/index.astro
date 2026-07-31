@@ -99,7 +99,7 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
         <figure class="shot shot-hero">
           <Picture
             src={pilotExplain}
-            alt="A whole pilot score page in GlideComp, scaled down: the flight's start-cylinder crossings and turnpoints beside a map of the task, then the day's validity, then distance, time, leading and arrival points each broken out with their arithmetic, down to the total"
+            alt="A whole pilot report card in GlideComp, scaled down: the flight's start-cylinder crossings and turnpoints beside a map of the task, then the day's validity, then distance, time, leading and arrival points each broken out with their arithmetic, down to the total"
             widths={widthsFor(pilotExplain, HERO_WIDTHS)}
             sizes={HERO_SIZES}
             formats={["avif"]}
@@ -302,9 +302,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
               </div>
               <figcaption class="chart-note">
                 <strong>What the wind did on each leg.</strong>
-                The pale bar is when the field flew the leg; the solid band
-                inside it is the circling the wind was estimated from — on a
-                leg everyone glided, that's a sliver of it.
+                The pale bar is the time when the field flew the leg. The
+                solid band inside it is the circling that the wind was
+                estimated from. On a leg that everyone glided, that band is
+                very small.
               </figcaption>
             </figure>
           </section>
@@ -438,9 +439,9 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           <div class="faq-answer">
             <p>
               A browser. Sign in, create the competition, add a task, and
-              share the link. Pilots upload their IGC tracks and scoring
-              happens automatically — there's no software to install and no
-              spreadsheet to maintain.
+              share the link. Pilots upload their IGC tracks, and GlideComp
+              scores them automatically. There is no software to install and
+              no spreadsheet to maintain.
             </p>
           </div>
         </div>
@@ -451,10 +452,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              With the GAP formulas used in FAI competition — distance, time
-              and leading points — set to the official defaults for new
-              comps, with the advanced parameters available when you need
-              them. There's also a simpler open-distance format for club XC
+              With the GAP formulas that FAI competitions use: distance, time
+              and leading points. A new competition gets the official
+              defaults, and you can change the advanced parameters when you
+              need to. There is also an open-distance format for club XC
               days. The <a href="/scoring">scoring guide</a> explains both in
               detail.
             </p>
@@ -467,14 +468,14 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Where your day went, compared against everyone who flew the same
+              Where your day went, against every pilot who flew the same
               task. GlideComp measures each pilot's climbing, gliding,
               decision-making, gaggle flying and race craft from the track
-              logs, then ranks those measures by how strongly they separated
-              the field — so the report leads with what mattered on the day
-              rather than a wall of numbers. Read it beside your own score
-              explanation and you have something concrete to work on before
-              the next comp.
+              logs. It then ranks those measures by how strongly they
+              separated the field, so the report starts with what was
+              important on the day. Read it beside your own report card, and
+              you have something specific to work on before the next
+              competition.
             </p>
           </div>
         </div>
@@ -485,11 +486,11 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Anyone following the competition. A track submitted for scoring
-              becomes part of the public record of that task — that's what
-              makes the comparison possible, and it's the same deal every
-              pilot in the field takes. Flights you analyse privately, outside
-              a competition, stay yours.
+              Anyone who follows the competition. A track submitted for
+              scoring becomes part of the public record of that task. That
+              record is what makes the comparison possible, and every pilot in
+              the field accepts the same terms. A flight that you analyse
+              privately, outside a competition, stays yours.
             </p>
           </div>
         </div>
@@ -500,10 +501,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Not to follow along — competitions, tasks and scores are public
-              pages. Submitting a track takes a quick sign-in — with Google
-              or a one-time code emailed to you — and
-              organisers can always upload tracks on a pilot's behalf.
+              Not to follow a competition, because competitions, tasks and
+              scores are public pages. To submit a track, sign in with Google
+              or with a one-time code sent to your email. An organiser can
+              also upload tracks for a pilot.
             </p>
           </div>
         </div>
@@ -514,9 +515,9 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Yes. Tasks import and export as .xctsk, waypoints download in
-              standard formats, and pilots can scan a QR code to load the
-              task or waypoints straight into XCTrack, Flyskyhy, SeeYou
+              Yes. Tasks import and export as .xctsk, and waypoints download
+              in standard formats. Pilots can scan a QR code to load the task
+              or the waypoints directly into XCTrack, Flyskyhy, SeeYou
               Navigator and most other flight apps. Any instrument that
               produces an IGC file works for scoring.
             </p>
@@ -529,10 +530,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Apply a penalty with a reason and scores recompute immediately.
-              Every change that could move a score — penalties, re-uploads,
-              task edits — is recorded in a public audit log, so pilots never
-              have to wonder why the numbers changed.
+              Apply a penalty with a reason, and the scores recompute
+              immediately. A public audit log records every change that can
+              move a score: penalties, re-uploads and task edits. Pilots can
+              therefore always see why the numbers changed.
             </p>
           </div>
         </div>
@@ -543,8 +544,8 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              GlideComp is free to use, and sponsored by Tushar Pokle. It's an
-              open project — the source is on
+              GlideComp is free to use, and Tushar Pokle sponsors it. It is an
+              open project, and the source is on
               <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </p>
           </div>
