@@ -12,6 +12,7 @@
  * resources bound to one context) and rebuilds them, re-applying all view state.
  */
 
+import type { ThermalShapeSummary } from '@glidecomp/engine';
 import { loadTracks, loadTracksBundle, type LoadedTracks } from './track-data';
 import { detectGaggles, gagglesAt, type GaggleParams, type GaggleResult } from './gaggles';
 import { FlightScene, type ColorMode, type MarkerSample } from './flight-scene';
@@ -115,6 +116,10 @@ export class ReplayViewer {
   private followGaggleId = -1;
   private gaggleVisible = true;
   private gaggleHighlight = -1;
+  /** Reconstructed thermal columns (arrive on their own fetch after load). */
+  private thermalShapes: ThermalShapeSummary[] = [];
+  private thermalsVisible = true;
+  private thermalHighlight = -1;
 
   // picking
   private pointer = { x: 0, y: 0, inside: false };
@@ -274,6 +279,11 @@ export class ReplayViewer {
     this.visibility.forEach((v, i) => this.scene.setVisible(i, v));
     this.scene.setGaggleVisible(this.gaggleVisible);
     this.scene.setGaggleHighlight(this.gaggleHighlight);
+    if (this.thermalShapes.length > 0) {
+      this.scene.setThermals(this.thermalShapes);
+      this.scene.setThermalsVisible(this.thermalsVisible);
+      this.scene.setThermalHighlight(this.thermalHighlight);
+    }
     this.scene.setTime(this.time);
   }
 
@@ -525,6 +535,52 @@ export class ReplayViewer {
   setGaggleHighlight(id: number): void {
     this.gaggleHighlight = id;
     this.scene.setGaggleHighlight(id);
+  }
+
+  /**
+   * Supply the reconstructed thermal shapes (fetched from the task's
+   * field-analysis report after load) and build the column layer.
+   */
+  setThermalShapes(shapes: ThermalShapeSummary[]): void {
+    this.thermalShapes = shapes;
+    if (!this.scene || this.switching) return;
+    this.scene.setThermals(shapes);
+    this.scene.setThermalsVisible(this.thermalsVisible);
+    this.scene.setThermalHighlight(this.thermalHighlight);
+  }
+
+  /** Show/hide the reconstructed thermal columns. */
+  setThermalsVisible(visible: boolean): void {
+    this.thermalsVisible = visible;
+    this.scene.setThermalsVisible(visible);
+  }
+
+  /** Emphasise one thermal column (others dimmed); -1 clears. */
+  setThermalHighlight(id: number): void {
+    this.thermalHighlight = id;
+    this.scene.setThermalHighlight(id);
+  }
+
+  /**
+   * Frame one thermal column: look at its mid-height centre from the south,
+   * zoomed so the whole column (with margin) fits. Clears any active follow —
+   * a follow would immediately steal the camera back.
+   */
+  frameThermal(id: number): void {
+    const c = this.scene.thermalCentre(id);
+    if (!c || this.switching) return;
+    this.setFollow(-1);
+    const heightM = Math.max((c.topBase - c.yBase) * this.vScale, 500);
+    const spanM = Math.max(heightM * 1.5, c.radius * 6, 1500);
+    const h = this.container.clientHeight || 600;
+    this.backend.flyTo({
+      x: c.x,
+      y: ((c.yBase + c.topBase) / 2) * this.vScale,
+      z: c.z,
+      bearingDeg: 0,
+      pitchDeg: 65,
+      mpp: spanM / h,
+    });
   }
 
   /** Re-run detection with new params (dev tuning) and rebuild the blob layer. */

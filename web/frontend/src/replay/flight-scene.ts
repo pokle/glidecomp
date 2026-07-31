@@ -19,9 +19,11 @@
  */
 
 import * as THREE from 'three';
+import type { ThermalShapeSummary } from '@glidecomp/engine';
 import { samplePilot, type LoadedTracks } from './track-data';
 import { type GaggleResult } from './gaggles';
 import { GaggleLayer } from './gaggle-layer';
+import { ThermalLayer } from './thermal-layer';
 import { formatAltitude } from '../analysis/units-browser';
 
 export type ColorMode = 'pilot' | 'altitude' | 'vario' | 'speed' | 'glide';
@@ -112,6 +114,10 @@ export class FlightScene {
   // each frame from live member samples (see GaggleLayer).
   private gaggles?: GaggleResult;
   private gaggleLayer?: GaggleLayer;
+
+  // reconstructed thermal columns (see ThermalLayer); data arrives after the
+  // scene builds (independent fetch), so the layer is added via setThermals.
+  private thermalLayer?: ThermalLayer;
 
   /** Turnpoint ground labels, kept so refreshTurnpointLabels() can re-bake them. */
   private tpLabels: THREE.Mesh[] = [];
@@ -595,6 +601,34 @@ export class FlightScene {
     this.gaggleLayer?.setHighlight(id);
   }
 
+  /** Build (or replace) the reconstructed-thermal layer. */
+  setThermals(shapes: ThermalShapeSummary[]): void {
+    if (this.thermalLayer) {
+      this.group.remove(this.thermalLayer.group);
+      this.thermalLayer.dispose();
+      this.thermalLayer = undefined;
+    }
+    if (shapes.length === 0) return;
+    this.thermalLayer = new ThermalLayer(shapes, this.tracks.manifest, this.light);
+    this.thermalLayer.setVScale(this.vScale);
+    this.group.add(this.thermalLayer.group);
+  }
+
+  /** Show/hide the thermal columns. */
+  setThermalsVisible(visible: boolean): void {
+    this.thermalLayer?.setVisible(visible);
+  }
+
+  /** Emphasise one thermal column (others dimmed); -1 clears. */
+  setThermalHighlight(id: number): void {
+    this.thermalLayer?.setHighlight(id);
+  }
+
+  /** Column centre for camera framing (un-exaggerated y), or null. */
+  thermalCentre(id: number): { x: number; z: number; yBase: number; topBase: number; radius: number } | null {
+    return this.thermalLayer?.centreOf(id) ?? null;
+  }
+
   // --- per-frame -----------------------------------------------------------
 
   setTime(t: number): void {
@@ -647,6 +681,7 @@ export class FlightScene {
     this.markers.instanceMatrix.needsUpdate = true;
     if (this.markerOutlines) this.markerOutlines.instanceMatrix.needsUpdate = true;
     this.gaggleLayer?.update(t, this.samplesOut);
+    this.thermalLayer?.update(t);
     return this.samplesOut;
   }
 
@@ -656,6 +691,7 @@ export class FlightScene {
     this.vScale = v;
     this.trailMat.uniforms.uVScale.value = v;
     this.applyWallScale();
+    this.thermalLayer?.setVScale(v);
   }
 
   setColorMode(mode: ColorMode): void {
@@ -696,6 +732,7 @@ export class FlightScene {
       else m?.dispose();
     };
     this.gaggleLayer?.dispose();
+    this.thermalLayer?.dispose();
     this.group.traverse(free);
     this.markers.geometry.dispose();
     (this.markers.material as THREE.Material).dispose();

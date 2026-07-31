@@ -363,6 +363,26 @@
         </section>
 
         <!-- ===== Gaggles ===== -->
+        <!-- Reconstructed thermal columns: hidden until the task's
+             field-analysis report answers with shapes (sample mode and
+             thermal-less tasks never show it). -->
+        <section id="thermalPanelWrap" class="hidden space-y-2 border-t border-slate-700/60 pt-5">
+          <div class="flex items-center gap-2">
+            <h3 class="flex-1 text-[11px] uppercase tracking-wide text-violet-300 font-semibold">Thermals</h3>
+            <button id="thermalToggle" class="text-[11px] text-violet-300 hover:underline" title="Show/hide the reconstructed thermal columns">hide</button>
+          </div>
+          <select id="thermalSelect" class="w-full rounded-md bg-slate-800/60 px-2 py-1.5 text-xs text-slate-200 border border-slate-700/60">
+            <option value="-1">All thermals (fade with the clock)</option>
+          </select>
+          <p class="text-[10px] leading-snug text-slate-400">
+            Ring stacks are the day's thermals, reconstructed from every pilot's
+            track: one ring per 100 m band at the measured core and working
+            radius, so a leaning stack is a leaning thermal. Diamonds are
+            separate feeders before they merged. Pick one to fly to it and jump
+            the clock to when the field climbed it.
+          </p>
+        </section>
+
         <section id="gagglePanelWrap" class="space-y-2 border-t border-slate-700/60 pt-5">
           <div class="flex items-center gap-2">
             <h3 class="flex-1 text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Gaggles</h3>
