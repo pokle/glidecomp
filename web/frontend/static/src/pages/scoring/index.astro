@@ -19,9 +19,10 @@ import BackLink from "../../components/BackLink.astro";
       <section class="mb-10">
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Every GlideComp competition is scored with one of two formats, chosen by the
-            organiser in the competition settings. Pick a format below to read how it works in
-            detail.
+            Every GlideComp competition uses one of two scoring formats. The organiser selects
+            the format in the competition settings. Select a format below to read how it works.
+            The last two pages describe the checks that GlideComp makes on each tracklog before
+            it scores.
           </p>
         </div>
       </section>
@@ -52,10 +53,11 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          The standard CIVL scoring used at most paragliding and hang gliding competitions.
+          The standard CIVL scoring, used at most paragliding and hang gliding competitions.
           Pilots race a set course through turnpoints to a goal. A perfect task day is worth 1000
-          points, shared between distance, time, leading and arrival based on how each pilot
-          performed relative to the field. Best for tasks with a defined route and goal.
+          points. GAP shares those points between distance, time, leading and arrival, by how
+          each pilot performed against the field. Use GAP for a task with a defined route and
+          goal.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how GAP works
@@ -105,11 +107,11 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          Everyone launches from the same spot and flies as far as they can, with no set goal.
-          Each task has a single take-off turnpoint, and your score is simply the metres of open
-          distance flown — the straight-line distance from the point you leave the take-off
-          cylinder to the furthest point you reached. Best for free-distance and record-style
-          days.
+          All pilots launch from the same place and fly as far as they can. There is no set goal.
+          Each task has one take-off turnpoint. Your score is the metres of open distance you
+          flew. That is the straight-line distance from the point where you leave the take-off
+          cylinder, to the furthest point you reached. Use open distance for free-distance and
+          record-style days.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how open distance works
@@ -159,11 +161,11 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          Flight recorders occasionally log altitudes no glider could fly — GPS dropouts and
-          multipath spikes. Before analysis, GlideComp repairs these by cross-checking the GPS
-          altitude against the barometric channel, with physical plausibility limits as the
-          fallback. Every repair is disclosed on the pilot's score page; positions, times and
-          the original file are never altered.
+          A flight recorder sometimes logs an altitude that no glider can fly. GPS dropouts and
+          multipath spikes cause these errors. Before the analysis, GlideComp repairs them: it
+          compares the GPS altitude against the barometric channel, and uses physical
+          plausibility limits when there is no barometer. The pilot's report card shows every
+          repair. GlideComp never changes positions, times or the original file.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how data cleaning works
@@ -213,11 +215,11 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          Sometimes the wrong file gets uploaded — a flight from another day, or another site.
-          GlideComp checks every tracklog against the task it was submitted to and withholds
-          one that cannot be that flight, rather than scoring it as though it were. Softer
-          observations are only flagged and never change a score, and the scorekeeper can
-          overrule any verdict.
+          A pilot sometimes uploads the wrong file: a flight from another day, or from another
+          site. GlideComp compares every tracklog against the task it was submitted to. It
+          withholds a tracklog that cannot be that flight, instead of scoring it. Softer
+          observations are only flagged, and never change a score. The scorekeeper can overrule
+          every verdict.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how track validity works
