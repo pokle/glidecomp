@@ -66,6 +66,26 @@ your head** (the slug truncates mid-token; see
 
 These are the standing imperatives. Each links to the reference that explains it.
 
+### Writing
+
+- **Australian English spelling in all prose.** `-ise`/`-isation` (organise,
+  optimised, analyse, recognise), `-our` (colour, behaviour, favour), `-re`
+  (metre, centre), `-ogue` (catalogue), `defence`, `licence` (noun) /
+  `license` (verb), `travelled`, `modelling`. This covers everything a person
+  reads: UI copy, error and toast messages, page content, `docs/`, code
+  comments, commit messages and PR bodies.
+  - **This deliberately overrides ASD-STE100 Rule 1.14**, which mandates
+    American spelling. The rest of the standard's writing rules still apply to
+    documentation — see the `simple-english` skill — but spelling is ours.
+  - **Never respell code.** Identifiers, CSS/Tailwind classes (`items-center`),
+    DOM and CSS properties (`behavior`, `color`), JSON/DB field names, API
+    routes, npm packages, and third-party names (Mapbox, AirScore, `optimizer`)
+    keep their original spelling. A rename there is a code change, not a
+    spelling fix, and mostly breaks things. When a UI label is generated from
+    such a name, respell the label, not the name.
+  - Quoted external text — FAI/CIVL spec wording, error strings from other
+    tools — is reproduced verbatim, whatever it spells.
+
 ### Correctness and transparency
 
 - **Decisions MUST be explainable.** Return explanations for scoring decisions
