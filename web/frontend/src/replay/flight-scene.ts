@@ -24,6 +24,7 @@ import { samplePilot, type LoadedTracks } from './track-data';
 import { type GaggleResult } from './gaggles';
 import { GaggleLayer } from './gaggle-layer';
 import { ThermalLayer } from './thermal-layer';
+import { clipToTask } from './scene-bounds';
 import { formatAltitude } from '../analysis/units-browser';
 
 export type ColorMode = 'pilot' | 'altitude' | 'vario' | 'speed' | 'glide';
@@ -240,9 +241,10 @@ export class FlightScene {
       if (pos[i + 2] < minZ) minZ = pos[i + 2];
       if (pos[i + 2] > maxZ) maxZ = pos[i + 2];
     }
-    Object.assign(this.bbox, { minX, maxX, minZ, maxZ });
-    this.extentXZ = Math.max(maxX - minX, maxZ - minZ, 1000);
-    this.center.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
+    const b = clipToTask({ minX, maxX, minZ, maxZ }, this.tracks.manifest.task);
+    Object.assign(this.bbox, b);
+    this.extentXZ = Math.max(b.maxX - b.minX, b.maxZ - b.minZ, 1000);
+    this.center.set((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2);
   }
 
   /**
