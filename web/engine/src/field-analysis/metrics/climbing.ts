@@ -124,7 +124,7 @@ function timeToCoreSeconds(fixes: IGCFix[], seg: ThermalSegment): number | null 
 
 const timeToCore: MetricComputer = {
   id: 'climb.time_to_core',
-  label: 'Time to find the core of a thermal',
+  label: 'Time to core thermals',
   shortLabel: 'Core s',
   unit: 's',
   family: 'climbing',
@@ -178,16 +178,16 @@ function exitDecayRate(fixes: IGCFix[], seg: ThermalSegment): number | null {
 
 const exitDecay: MetricComputer = {
   id: 'climb.exit_decay',
-  label: 'Leaving good lift vs milking it until it dies',
+  label: 'Climb rate at thermal exit',
   shortLabel: 'LeaveRate',
   unit: 'm/s',
   family: 'climbing',
   direction: 'neutral',
   explanation:
-    'The climb rate that the pilot left. For each thermal of 90 s or more, we take the climb ' +
-    'rate over its final 30 s, which is the "give-up rate". The value is the median. A high ' +
-    'value means they leave lift that still works. A low value means they stay in a climb until ' +
-    'nothing is left. This is an absolute rate, so read it against the day: compare it with the ' +
+    'The median climb rate that the pilot left thermals at. For each thermal of 90 s or more, we take the climb ' +
+    'rate over its final 30 s. A high value means they leave lift that still works. ' +
+    'A low value means they stay in a climb until nothing is left. ' +
+    'This is an absolute rate, so read it against the day: compare it with the ' +
     'median climb in "How strong the day’s climbs were". A pilot who leaves at 1.5 m/s leaves a ' +
     'good climb on a 1 m/s day, and takes the worst lift available on a 4 m/s day. There is no ' +
     'expected direction. The sign of the correlation says which behaviour paid on this task.',
@@ -316,7 +316,7 @@ const ON_COURSE_FIX_STRIDE = 5;
 
 const departureBand: MetricComputer = {
   id: 'climb.departure_band',
-  label: 'How high in the day’s band each climb was topped out',
+  label: 'How much of the thermal the pilot climbed before leaving it',
   shortLabel: 'TopOut%',
   unit: 'pct',
   family: 'climbing',

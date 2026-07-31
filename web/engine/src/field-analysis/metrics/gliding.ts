@@ -140,13 +140,13 @@ function smoothedAltitudes(
 
 const glideSpeed: MetricComputer = {
   id: 'glide.speed',
-  label: 'Gliding speed between climbs',
+  label: 'Glide speed between climbs',
   shortLabel: 'GlideSpd',
   unit: 'km/h',
   family: 'gliding',
   direction: 'higher',
   explanation:
-    'How fast the pilot moves down the course when they do not circle. The value is the '
+    'How fast the pilot moves down the course when they are on a glide. The value is the '
     + 'duration-weighted mean ground speed over every glide after the start, which is the glide '
     + 'distance divided by the glide time. A higher value means more ground covered in each '
     + 'minute between climbs.',
@@ -185,7 +185,7 @@ const glideSpeed: MetricComputer = {
 
 const glideLdVsField: MetricComputer = {
   id: 'glide.ld_vs_field',
-  label: 'Gliding further per metre lost than the rest of the field',
+  label: 'Glide L/D against the field median',
   shortLabel: 'GlideL/D',
   unit: 'ratio',
   family: 'gliding',
@@ -367,14 +367,14 @@ const glideExtraDistance: MetricComputer = {
 
 const glideDolphinFraction: MetricComputer = {
   id: 'glide.dolphin_fraction',
-  label: 'Gliding through lift instead of stopping to circle',
+  label: 'Share of the height gain made outside thermals',
   shortLabel: 'Dolphin%',
   unit: 'pct',
   family: 'gliding',
   direction: 'neutral',
   explanation:
-    'Dolphin flying: how much of the height that the pilot gained came while they flew on, and '
-    + 'not from a stop to turn. The value is the share of the altitude gain after the start, '
+    'Dolphin flying: how much of the height that the pilot gained came outside of circling. '
+    + 'The value is the share of the altitude gain after the start, '
     + 'smoothed over 10 s, that the pilot made outside a detected thermal. There is no expected '
     + 'direction. The sign of the correlation shows whether dolphin flying paid on this day.',
   compute(field) {
