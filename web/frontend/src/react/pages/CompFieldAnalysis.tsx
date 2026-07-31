@@ -242,7 +242,7 @@ export function CompFieldAnalysis() {
           <AlertDescription>
             {status === "error"
               ? "Please try again in a moment."
-              : "This competition's field analysis isn't available — it may not be published yet."}
+              : "The field analysis of this competition is not available. The competition is possibly not published yet."}
           </AlertDescription>
         </Alert>
       </div>
@@ -279,8 +279,8 @@ export function CompFieldAnalysis() {
             {data.total_task_count === 1 ? "" : "s"} not analysed yet
           </AlertTitle>
           <AlertDescription>
-            They're being computed in the background and are left out of the
-            figures below; this page refreshes itself as they land.
+            GlideComp is computing them in the background, and the figures below
+            leave them out. This page refreshes itself as each one arrives.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -338,13 +338,14 @@ export function CompFieldAnalysis() {
               Which behaviours went with better results, across tasks
             </h2>
             <p className="text-sm text-muted-foreground">
-              A behaviour that holds its sign and size across every task is
-              telling you about flying. One that swings between tasks is telling
-              you about the weather on those days. Rank 1 is best, so a
-              behaviour where more is better shows a <strong>negative</strong> ρ
-              — bars left of centre. Each row reads left to right: how the
-              behaviour averaged over the tasks, whether it held day to day,
-              how it looks against the overall standings, then task by task.
+              A behaviour that keeps its sign and its size across every task
+              tells you about flying. A behaviour that changes between tasks
+              tells you about the weather on those days. Rank 1 is the best
+              rank, so a behaviour where more is better shows a{" "}
+              <strong>negative</strong> ρ, and its bar is left of centre. Read
+              each row from left to right: the average of the behaviour over the
+              tasks, whether it held from day to day, how it looks against the
+              overall standings, and then each task.
             </p>
             <SeparationTable
               metrics={rankedMetrics}
@@ -354,36 +355,38 @@ export function CompFieldAnalysis() {
               fieldSize={active.aggregate.pilots.length}
             />
             <p className="text-xs text-muted-foreground">
-              <strong>Across tasks</strong> is the average of the per-task
-              coefficients (n-weighted, signs kept) and the order of the table:
-              a behaviour that pulled the same way every day leads, because days
-              that pull opposite ways cancel each other there.{" "}
-              <strong>Day to day</strong> reads only the tasks whose coefficient
-              cleared its own noise floor — the solid bars; a{" "}
-              <strong>hollow bar</strong> is a day whose coefficient could be
-              chance. Depending on the day is a finding, not a defect.{" "}
-              <strong>Against comp standings</strong> is a separate reading:
-              each pilot's own average for that behaviour over the whole
-              competition, correlated against their overall placing. The verdict
-              and the pilot count belong to that one.
+              <strong>Across tasks</strong> is the average of the coefficients
+              of each task, weighted by n, with the signs kept. It is also the
+              order of the table. A behaviour that pulled the same way every day
+              comes first, because days that pull opposite ways cancel each
+              other there. <strong>Day to day</strong> reads only the tasks
+              whose coefficient cleared its own noise floor, which are the solid
+              bars. A <strong>hollow bar</strong> is a day whose coefficient can
+              be chance. A behaviour that depends on the day is a finding, not a
+              fault. <strong>Against comp standings</strong> is a separate
+              reading. It takes the average of each pilot for that behaviour
+              over the whole competition, and correlates it against their
+              overall place. The verdict and the pilot count belong to that
+              reading.
             </p>
             <VerdictLegend />
             {uncorrelated.length > 0 ? (
               <p className="text-xs text-muted-foreground">
                 {uncorrelated.length} more metric
-                {uncorrelated.length === 1 ? "" : "s"} describe the day rather
-                than a pilot (the wind, how strong the climbs were), so there is
-                no per-pilot value to correlate and no row here — they are in the
-                glossary below, and on each task's own analysis.
+                {uncorrelated.length === 1 ? "" : "s"} describe the day and not
+                a pilot, for example the wind and the strength of the climbs.
+                They have no value for each pilot to correlate, so they have no
+                row here. They are in the glossary below, and on the analysis of
+                each task.
               </p>
             ) : null}
 
             <div className="space-y-3 pt-2">
               <h3 className="text-base font-semibold">Consistency map</h3>
               <p className="text-sm text-muted-foreground">
-                The same table as a picture: how much each behaviour separated
-                the field per day (across) against how consistently it pulled
-                one way (up).
+                The same table as a picture. It plots how much each behaviour
+                separated the field on each day (across) against how
+                consistently that behaviour pulled one way (up).
               </p>
               <ConsistencyMap metrics={rankedMetrics} />
             </div>
@@ -392,10 +395,10 @@ export function CompFieldAnalysis() {
               <div className="space-y-3 pt-2">
                 <h3 className="text-base font-semibold">Outcome checks</h3>
                 <p className="text-sm text-muted-foreground">
-                  These are not behaviours — they measure the result itself, so
-                  of course they follow the placings. They are here as a check
-                  on the analysis: a weak pattern means something is off in the
-                  numbers, not in anyone's flying.
+                  These are not behaviours. They measure the result itself, so
+                  they always follow the places. They are here as a check on the
+                  analysis. A weak pattern means that something is wrong in the
+                  numbers, and not in the flying of any pilot.
                 </p>
                 <SeparationTable
                   metrics={outcomeMetrics}
@@ -443,15 +446,15 @@ export function CompFieldAnalysis() {
               (and the printed reference). */}
           <MetricGlossary
             entries={glossaryEntries}
-            intro="How every metric named above is measured. These are the engine's current method descriptions; each task's own report carries the same prose next to its numbers."
+            intro="How GlideComp measures every metric named above. These are the current method descriptions of the engine. The report of each task carries the same text beside its numbers."
           />
         </div>
       ) : (
         <Alert className="mt-6">
           <AlertTitle>Nothing to aggregate yet</AlertTitle>
           <AlertDescription>
-            No task in this competition has a stored field analysis. Open a
-            task's field analysis to have one computed.
+            No task in this competition has a stored field analysis. To
+            compute one, open the field analysis of a task.
           </AlertDescription>
         </Alert>
       )}

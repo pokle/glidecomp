@@ -134,8 +134,8 @@ export function captionText(
   } else if (c && (c.verdict === "within noise" || c.verdict === "n too small")) {
     parts.push(
       c.verdict === "n too small"
-        ? "No trend curve is drawn — too few pilots to fit one that would mean anything."
-        : "No trend curve is drawn — ρ does not clear the noise floor, so any curve would be following luck."
+        ? "There is no trend curve. Too few pilots have a value to fit one that means anything."
+        : "There is no trend curve. ρ does not clear the noise floor, so a curve here follows luck."
     );
   }
   if (excluded > 0) {
