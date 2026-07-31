@@ -193,7 +193,7 @@ Conventions: **post-SSS** = at/after `sssMs` (never started → null unless stat
 
 ### P3 decision-making — `metrics/decision.ts`
 
-12. **`decision.altitude_floor`** (pct, higher) — Post-SSS local minima of 30 s-smoothed altitude with ≥ 100 m prominence; value = median as band % (null if < 2 minima).
+12. **`decision.altitude_floor`** (pct, neutral; was `higher`) — Lowest fix between each consecutive PAIR of post-SSS thermals, keeping gaps that descended ≥ 100 m from the previous climb's exit; value = median as band % (null if < 2 such descents). Was 30 s-smoothed local minima with ≥ 100 m prominence until v19: the name said "between climbs" while the sweep read the altitude trace alone, and over the archive the two agree (Spearman 0.87) and separate identically (median |ρ| 0.43 vs 0.40) — so the pair walk is the same finding with the exclusions (first run-out, final glide, sled) made structural. Direction dropped to neutral because only 69% of archived tasks take the assumed sign.
 13. **`decision.low_saves`** (count, neutral) — Post-SSS thermal with `entryAltitude` < floor + 0.15·span AND gain ≥ 300 m. Value = count (0 is valid for started pilots); `note` = deepest save.
 14. **`decision.km_between_climbs`** (km, higher; was `decision.climbs_per_100km`, count/100 km, lower) — Post-SSS thermal count ÷ (flownDistance/100 km); null if < 20 km. `note`: pilot's mean shared-climb percentile, so the report shows "few stops AND strong climbs".
 15. **`decision.search_fraction`** (pct, lower) — 100·search/(climb+glide+search) within the speed section. `fieldSummary`: field median/p25/p75 for all three phase shares.

@@ -185,4 +185,33 @@
 //     and only labels are stored on the row. No metric value changed; the
 //     bump rolls stored reports onto the new labels on their next lazy
 //     revalidation, exactly as v3 and v15 did.
-export const FIELD_ANALYSIS_VERSION = 18;
+// v19: decision.altitude_floor is named, explained AND computed as the same
+//     thing. It was labelled "How high the pilot commits to the next climb"
+//     (Commit%) and explained as the height still in hand "at the moment they
+//     commit to a climb", but the computation never looked at a climb: it swept
+//     the 30 s-smoothed altitude trace for local minima with 100 m of
+//     prominence either side. It is now "How low the pilot gets between climbs"
+//     (Floor%), and it walks each consecutive PAIR of post-start climbs and
+//     takes the lowest fix between them, keeping gaps that descended ≥ 100 m.
+//     "Between climbs" is the loop bound rather than a property the prominence
+//     sweep happened to produce, so the run out to the first climb, the glide to
+//     goal and a sled run are excluded because nothing was climbed after them —
+//     no smoothing, no prominence, and the reported low is a real fix altitude
+//     instead of a 30 s mean that flattens a deep save upward.
+//     Audited over the whole archive (184 tasks, 4,762 pilot-tasks). The two
+//     definitions agree closely — Spearman 0.87 on pilot ordering, median 40.6%
+//     of band against 38.2% — and separate the leaderboard equally: median |ρ|
+//     0.43 against 0.40, stronger on 51% of tasks, a coin flip. The change is
+//     made for explainability, not for signal. Coverage rises to 85.0% of
+//     started pilots from 83.7%, but shifts WHICH pilots qualify: three climbs
+//     are needed for two gaps where two dips used to do.
+//     Direction also drops from 'higher' to 'neutral', the v9 treatment: over
+//     147 archived tasks only 69% of ρ take the assumed sign, 16 are
+//     wrong-signed at |ρ| ≥ 0.3, and two of those are large fields where it is
+//     emphatic — Bright 2023 open T3 (85 pilots, ρ +0.73, top ten at 33% of
+//     band against the bottom ten at 78%) and Bright 2024 open T2 (95 pilots,
+//     ρ +0.52). Whether height in reserve pays is a property of the day, so the
+//     sign is the finding, not a failure to match a prior.
+//     Values move, so the bump rolls stored reports onto the new label,
+//     direction and numbers on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 19;

@@ -66,15 +66,17 @@ function noteFor(field: FieldContext, id: string, name: string): string | undefi
 }
 
 /**
- * A wavy altitude profile with two prominent (600 m) dips down to `base`,
- * ending in a climb so both minima have a confirmed rise after them.
+ * Three climbs separated by two 600 m descents to `base` — so the metric sees
+ * two gaps BETWEEN climbs, each bottoming out at `base`.
  */
-function twoDipFixes(base: number): IGCFix[] {
+function threeClimbFixes(base: number): IGCFix[] {
   return [
     ...straightFixes(0, 240, 0, base + 600, 12, -2.5), // descend to base
-    ...straightFixes(250, 240, 3000, base, 12, 2.5), // climb back out
-    ...straightFixes(500, 240, 6000, base + 600, 12, -2.5), // descend again
-    ...straightFixes(750, 240, 9000, base, 12, 2.5), // climb out
+    ...straightFixes(250, 240, 3000, base, 12, 2.5), // climb 1 → base + 600
+    ...straightFixes(500, 240, 6000, base + 600, 12, -2.5), // descend to base
+    ...straightFixes(750, 240, 9000, base, 12, 2.5), // climb 2 → base + 600
+    ...straightFixes(1000, 240, 12000, base + 600, 12, -2.5), // descend to base
+    ...straightFixes(1250, 240, 15000, base, 12, 2.5), // climb 3 → base + 600
   ];
 }
 
@@ -84,34 +86,66 @@ function twoDipFixes(base: number): IGCFix[] {
 
 describe('decision.altitude_floor', () => {
   const field = makeTestField([
-    { name: 'hi', fixes: twoDipFixes(1300), turnpointResult: startedAt(0) },
-    { name: 'lo', fixes: twoDipFixes(1000), turnpointResult: startedAt(0) },
-    // Started but only ONE prominent dip (down once, up once) → < 2 minima.
+    { name: 'hi', fixes: threeClimbFixes(1300), turnpointResult: startedAt(0) },
+    { name: 'lo', fixes: threeClimbFixes(1000), turnpointResult: startedAt(0) },
+    // Started, but two climbs leave only ONE gap between climbs → < 2 descents.
     {
-      name: 'onedip',
+      name: 'onegap',
       fixes: [
         ...straightFixes(0, 240, 0, 1600, 12, -2.5),
         ...straightFixes(250, 240, 3000, 1000, 12, 2.5),
+        ...straightFixes(500, 240, 6000, 1600, 12, -2.5),
+        ...straightFixes(750, 240, 9000, 1000, 12, 2.5),
       ],
       turnpointResult: startedAt(0),
     },
     // Never started → null regardless of profile.
-    { name: 'ns', fixes: twoDipFixes(1000) },
+    { name: 'ns', fixes: threeClimbFixes(1000) },
   ]);
 
-  it('reports the median dip altitude as a band percentage, higher for the pilot who stays higher', () => {
+  it('reports the median between-climb low as a band percentage, higher for the pilot who stays higher', () => {
     const hi = valueFor(field, 'decision.altitude_floor', 'hi');
     const lo = valueFor(field, 'decision.altitude_floor', 'lo');
     expect(hi).not.toBeNull();
     expect(lo).not.toBeNull();
     expect(Number.isFinite(hi!)).toBe(true);
     expect(hi!).toBeGreaterThan(lo!);
-    expect(noteFor(field, 'decision.altitude_floor', 'hi')).toContain('dips');
+    expect(noteFor(field, 'decision.altitude_floor', 'hi')).toContain('descents');
   });
 
-  it('is null for a never-started pilot and for fewer than 2 prominent minima', () => {
+  it('is null for a never-started pilot and for fewer than 2 between-climb descents', () => {
     expect(valueFor(field, 'decision.altitude_floor', 'ns')).toBeNull();
-    expect(valueFor(field, 'decision.altitude_floor', 'onedip')).toBeNull();
+    expect(valueFor(field, 'decision.altitude_floor', 'onegap')).toBeNull();
+  });
+
+  it('ignores the final glide: a descent with no climb after it is not getting low', () => {
+    // Three climbs whose gaps bottom out at 1,600 m, then a long glide to the
+    // deck. Only a definition that requires a climb on BOTH sides keeps the
+    // reading high — measuring dips in the altitude trace would let the final
+    // 1,400 m descent drag the median down.
+    const deckedField = makeTestField([
+      { name: 'ref', fixes: threeClimbFixes(1000), turnpointResult: startedAt(0) },
+      {
+        name: 'decked',
+        fixes: [
+          ...straightFixes(0, 200, 0, 2000, 12, -2), // 2000 → 1600
+          ...straightFixes(210, 200, 1200, 1600, 12, 2), // climb 1 → 2000
+          ...straightFixes(420, 200, 2400, 2000, 12, -2), // 2000 → 1600
+          ...straightFixes(630, 200, 3600, 1600, 12, 2), // climb 2 → 2000
+          ...straightFixes(840, 200, 4800, 2000, 12, -2), // 2000 → 1600
+          ...straightFixes(1050, 200, 6000, 1600, 12, 2), // climb 3 → 2000
+          ...straightFixes(1260, 700, 7200, 2000, 12, -2), // final glide → 600
+        ],
+        turnpointResult: startedAt(0),
+      },
+    ]);
+    const decked = valueFor(deckedField, 'decision.altitude_floor', 'decked');
+    expect(decked).not.toBeNull();
+    const bandPctOf = (alt: number) => 100 * deckedField.workingBand.bandFraction(alt);
+    // Sits at the 1,600 m gaps, nowhere near the 600 m the pilot landed from.
+    expect(decked!).toBeGreaterThan(bandPctOf(1500));
+    expect(decked!).toBeLessThan(bandPctOf(1800));
+    expect(noteFor(deckedField, 'decision.altitude_floor', 'decked')).toContain('2 descents');
   });
 
   it('covers every pilot exactly once', () => {
