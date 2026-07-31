@@ -565,13 +565,21 @@ export class ReplayViewer {
    * Frame one thermal column: look at its mid-height centre from the south,
    * zoomed so the whole column (with margin) fits. Clears any active follow —
    * a follow would immediately steal the camera back.
+   *
+   * The zoom also floors on the pilot marker's world size. A column is a
+   * kilometre or two across and a marker is a fixed fraction of the WHOLE
+   * task, so on a big task the two are the same order: frame the column
+   * tightly and the camera ends up amongst the markers, where the nearest
+   * pilot's cone covers the frame in flat colour and the column is not
+   * visible at all. Better a slightly wider shot that shows the thermal
+   * than a close-up of the inside of a cone.
    */
   frameThermal(id: number): void {
     const c = this.scene.thermalCentre(id);
     if (!c || this.switching) return;
     this.setFollow(-1);
     const heightM = Math.max((c.topBase - c.yBase) * this.vScale, 500);
-    const spanM = Math.max(heightM * 1.5, c.radius * 6, 1500);
+    const spanM = Math.max(heightM * 1.5, c.radius * 6, this.scene.markerSpan * 6, 1500);
     const h = this.container.clientHeight || 600;
     this.backend.flyTo({
       x: c.x,

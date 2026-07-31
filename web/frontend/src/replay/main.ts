@@ -27,6 +27,7 @@ import {
 import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { GLIDE_HI, GLIDE_LO, SPEED_MAX, SPEED_MIN, VARIO_MAX } from './flight-scene';
 import { GaggleUI } from './gaggle-ui';
+import { parseThermalParam } from './thermal-link';
 import type { GaggleResult } from './gaggles';
 import { requiredGlideToTarget, type TrackManifest, type ThermalShapeSummary } from '@glidecomp/engine';
 
@@ -719,8 +720,10 @@ async function main(): Promise<void> {
     });
 
     // ?thermal= deep link (from the analysis page's "watch this thermal").
-    const linked = Number(new URLSearchParams(location.search).get('thermal'));
-    if (Number.isFinite(linked) && shapes.some((s) => s.id === linked)) {
+    // No param means no deep link — see parseThermalParam for why that needs
+    // saying out loud.
+    const linked = parseThermalParam(location.search);
+    if (linked !== null && shapes.some((s) => s.id === linked)) {
       select.value = String(linked);
       selectThermal(linked, true);
     }
