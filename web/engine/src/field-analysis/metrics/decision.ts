@@ -10,7 +10,7 @@
  * 12–15). Metrics only read the FieldContext — no detectors are re-run.
  */
 
-import { fixAltitude as altOf, type IGCFix } from '../../igc-parser';
+import { fixAltitude as altOf } from '../../igc-parser';
 import type {
   FieldContext,
   MetricComputer,
@@ -22,10 +22,8 @@ import { mean, median, percentile } from '../stats';
 
 // --- Tunables (named constants so the explanations stay honest) -------------
 
-/** Rolling-mean window for the altitude-floor minima search. */
-const SMOOTH_WINDOW_MS = 30_000;
-/** A local minimum must sit at least this far below its neighbouring maxima. */
-const MIN_PROMINENCE_METERS = 100;
+/** A gap between two climbs must descend this far to count as getting low. */
+const MIN_DESCENT_METERS = 100;
 /** A low save starts below floor + this fraction of the working-band span. */
 const LOW_SAVE_ENTRY_BAND_FRACTION = 0.15;
 /** …and must go on to gain at least this much. */
@@ -38,82 +36,6 @@ const MIN_FLOWN_DISTANCE_METERS = 20_000;
 /** A null (not-applicable) per-pilot value. */
 function na(p: PilotAnalysisContext): PilotMetricValue {
   return { trackFile: p.trackFile, value: null };
-}
-
-/**
- * First fix index in [takeoffIndex, landingIndex] at/after `ms`, or null when
- * the pilot's flight ends before it.
- */
-function firstIndexAtOrAfter(p: PilotAnalysisContext, ms: number): number | null {
-  for (let i = p.takeoffIndex; i <= p.landingIndex && i < p.fixes.length; i++) {
-    if (p.fixes[i].time.getTime() >= ms) return i;
-  }
-  return null;
-}
-
-/**
- * Centred rolling-mean altitude over fixes[startIndex..endIndex] with a
- * `windowMs` time window. Two-pointer sweep — O(n).
- */
-function smoothedAltitudes(
-  fixes: IGCFix[],
-  startIndex: number,
-  endIndex: number,
-  windowMs: number,
-): number[] {
-  const n = endIndex - startIndex + 1;
-  const out = new Array<number>(n);
-  const half = windowMs / 2;
-  let lo = startIndex; // first fix inside the window
-  let hi = startIndex; // first fix PAST the window
-  let sum = 0;
-  for (let i = startIndex; i <= endIndex; i++) {
-    const t = fixes[i].time.getTime();
-    while (hi <= endIndex && fixes[hi].time.getTime() <= t + half) {
-      sum += altOf(fixes[hi]);
-      hi++;
-    }
-    while (lo < hi && fixes[lo].time.getTime() < t - half) {
-      sum -= altOf(fixes[lo]);
-      lo++;
-    }
-    out[i - startIndex] = sum / (hi - lo);
-  }
-  return out;
-}
-
-/**
- * Local minima of `values` with at least `prominence` of both preceding drop
- * and following rise — a simple alternating-extrema sweep. A minimum only
- * counts once the series has fallen ≥ `prominence` from the previous maximum
- * AND risen ≥ `prominence` afterwards, so endpoints (e.g. the final descent
- * to landing) never qualify. Kept simple and explainable by design.
- */
-function prominentMinima(values: number[], prominence: number): number[] {
-  const minima: number[] = [];
-  if (values.length === 0) return minima;
-  let descending = false;
-  let extreme = values[0]; // running max while ascending, running min while descending
-  for (let i = 1; i < values.length; i++) {
-    const v = values[i];
-    if (descending) {
-      if (v < extreme) {
-        extreme = v;
-      } else if (v - extreme >= prominence) {
-        minima.push(extreme); // confirmed: fell ≥ prominence in, rose ≥ prominence out
-        descending = false;
-        extreme = v;
-      }
-    } else {
-      if (v > extreme) {
-        extreme = v;
-      } else if (extreme - v >= prominence) {
-        descending = true;
-        extreme = v;
-      }
-    }
-  }
-  return minima;
 }
 
 /**
@@ -150,35 +72,68 @@ function postSssThermals(p: PilotAnalysisContext) {
   });
 }
 
+/**
+ * The lowest altitude between each consecutive pair of post-start climbs,
+ * keeping only gaps that descended ≥ `minDescent` from the previous climb's
+ * exit — a 40 m top-up between two climbs is not the pilot getting low.
+ *
+ * Walking thermal PAIRS is what makes "between climbs" structural rather than
+ * incidental: the run out to the first climb, the final glide, and a sled run
+ * are all excluded because they have no climb on both sides, with no threshold
+ * doing the excluding. It also needs no smoothing — the minimum of a real fix
+ * range is the altitude the pilot actually reached, so a deep save is not
+ * flattened up into the surrounding air.
+ */
+function betweenClimbLows(p: PilotAnalysisContext, minDescent: number): number[] {
+  const climbs = postSssThermals(p);
+  const lows: number[] = [];
+  for (let i = 0; i + 1 < climbs.length; i++) {
+    const from = climbs[i].endIndex;
+    const to = climbs[i + 1].startIndex;
+    if (to <= from) continue;
+    let low = Infinity;
+    for (let j = from; j <= to; j++) low = Math.min(low, altOf(p.fixes[j]));
+    if (climbs[i].endAltitude - low >= minDescent) lows.push(low);
+  }
+  return lows;
+}
+
 // --- Metric 12: decision.altitude_floor -------------------------------------
 
 const altitudeFloor: MetricComputer = {
   id: 'decision.altitude_floor',
-  label: 'How high the pilot commits to the next climb',
-  shortLabel: 'Commit%',
+  label: 'How low the pilot gets between climbs',
+  shortLabel: 'Floor%',
   unit: 'pct',
   family: 'decision',
-  direction: 'higher',
+  direction: 'neutral',
   explanation:
-    'How much height the pilot still has in hand at the moment they commit to a climb — racing ' +
-    "with margin, or scratching. Finds each pilot's altitude minima after the start " +
-    '(30 s-smoothed, at least 100 m below the surrounding maxima) — the points where they ' +
-    "stopped descending and committed — and reports the median as a percentage of the day's " +
-    'working band, where 0% is the field floor and 100% its ceiling.',
+    'How low the pilot lets themselves get before gaining height again. Takes every pair of ' +
+    'climbs the pilot took after the start and finds the lowest point between them, keeping ' +
+    'the gaps that descended at least 100 m — a top-up between two climbs is not getting low. ' +
+    'A sled run and the glide to goal are never counted, because nothing was climbed after ' +
+    "them. Reports the median of those low points as a percentage of the day's working band, " +
+    "where 0% is where the lowest tenth of the field's climbs started and 100% where the " +
+    'highest tenth topped out, so a negative reading means lower than almost anyone else went. ' +
+    'Needs at least two such descents. No expected direction — over the archive the pilots who ' +
+    'stayed high won some days and finished last on others, so the correlation sign is the ' +
+    'finding.',
   compute(field: FieldContext): MetricOutput {
     const perPilot = field.pilots.map((p): PilotMetricValue => {
       if (p.sssMs === null) return na(p);
-      const start = firstIndexAtOrAfter(p, p.sssMs);
-      if (start === null || start >= p.landingIndex) return na(p);
-      const smoothed = smoothedAltitudes(p.fixes, start, p.landingIndex, SMOOTH_WINDOW_MS);
-      const minima = prominentMinima(smoothed, MIN_PROMINENCE_METERS);
-      if (minima.length < 2) return na(p);
-      const bandPcts = minima.map((m) => 100 * field.workingBand.bandFraction(m));
+      // Everything up to landing, not up to ESS (unlike search_fraction below):
+      // a gap needs a climb on both sides, so the glide from ESS to goal and the
+      // descent to land are excluded by construction rather than by a window.
+      // A pilot who misses ESS is then measured exactly like one who makes it —
+      // and they are the pilot this question is most often asked about.
+      const lows = betweenClimbLows(p, MIN_DESCENT_METERS);
+      if (lows.length < 2) return na(p);
+      const bandPcts = lows.map((m) => 100 * field.workingBand.bandFraction(m));
       const lowest = Math.min(...bandPcts);
       return {
         trackFile: p.trackFile,
         value: median(bandPcts),
-        note: `${minima.length} dips, lowest ${Math.round(lowest)}% of band`,
+        note: `${lows.length} descents, lowest ${Math.round(lowest)}% of band`,
       };
     });
     return { perPilot };

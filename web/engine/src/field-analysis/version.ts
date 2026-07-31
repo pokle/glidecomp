@@ -175,4 +175,42 @@
 //     stored reports so they gain the windows on their next lazy
 //     revalidation, and a v16 row renders with the circling window alone
 //     until it does.
-export const FIELD_ANALYSIS_VERSION = 17;
+// v18: decision.altitude_floor is named and explained as what it measures. It
+//     was "How high the pilot commits to the next climb" (Commit%) explaining
+//     "height still in hand at the moment they commit to a climb" — but the
+//     computation never looks at a thermal: it takes the bottom of every
+//     100 m-prominent dip in the 30 s-smoothed altitude trace. It is now "How
+//     low the pilot gets between climbs" (Floor%), and the explanation states
+//     the band's real endpoints (p10 of the field's thermal entries, p90 of its
+//     exits) so a negative reading is expected rather than alarming — over the
+//     archive 2.3% of scored pilots sit below 0% and 12% of individual dips do.
+//     The dip↔thermal claim is now hedged to match the audit: 99% of dips fall
+//     inside a thermal or within 90 s of one, so "almost always" is true and
+//     "requires one" is not. Its direction also drops from 'higher' to
+//     'neutral', the v9 treatment: over 147 archived tasks only 69% of ρ take
+//     the assumed sign, 16 are wrong-signed at |ρ| ≥ 0.3, and two of those are
+//     large fields where it is emphatic — Bright 2023 open T3 (85 pilots,
+//     ρ +0.73, top ten at 33% of band against the bottom ten at 78%) and
+//     Bright 2024 open T2 (95 pilots, ρ +0.52). Whether height in hand pays is
+//     a property of the day, so the sign is the finding, not a failure to match
+//     a prior. No metric value changed; the bump rolls stored reports onto the
+//     new label/explanation/direction on their next lazy revalidation.
+// v19: decision.altitude_floor is computed the way its name reads. It walked
+//     the 30 s-smoothed altitude trace for local minima with 100 m of
+//     prominence either side; it now takes each consecutive PAIR of post-start
+//     climbs and reports the lowest fix between them, keeping gaps that
+//     descended ≥ 100 m. Same question, structural answer: "between climbs" is
+//     now the loop bound rather than a property the prominence sweep happened
+//     to produce, so the run out to the first climb, the glide to goal and a
+//     sled run are excluded because nothing was climbed after them — no
+//     smoothing, no prominence, and the reported low is a real fix altitude
+//     instead of a 30 s mean that flattens a deep save upward.
+//     Measured over the archive (184 tasks, 4,762 pilot-tasks) the two agree
+//     closely — Spearman 0.87 on pilot ordering, median 40.6% of band against
+//     38.2% — and separate the leaderboard equally: median |ρ| 0.43 against
+//     0.40, stronger on 51% of tasks, a coin flip. This is a change made for
+//     explainability, not for signal. Coverage rises to 85.0% of started
+//     pilots from 83.7%, but shifts WHICH pilots qualify: three climbs are
+//     needed for two gaps where two dips used to do. Values move, so the bump
+//     rolls stored reports on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 19;
