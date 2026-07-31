@@ -25,6 +25,15 @@ mode = "smart"
 [limits]
 cpu_ms = 30000
 
+# Search-index maintenance (src/search-index.ts). Hourly: drain the reindex
+# queue that mutations left behind. Nightly: also sweep for documents that are
+# missing or were written by an older document builder. Both are backstops —
+# the index is normally current within the request that changed it. The
+# nightly expression is repeated as NIGHTLY_SWEEP_CRON in src/index.ts, which
+# is how the handler tells the two apart.
+[triggers]
+crons = ["19 * * * *", "43 3 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "taskscore-auth"

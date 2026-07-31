@@ -108,6 +108,11 @@ export function compAnalysisPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/analysis`;
 }
 
+/** The roster. Where a matched pilot who has not flown a task yet is found. */
+export function compPilotsPath(id: string, name?: string | null): string {
+  return `${compPath(id, name)}/pilots`;
+}
+
 export function taskPath(
   compId: string,
   compName: string | null | undefined,

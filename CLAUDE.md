@@ -134,6 +134,23 @@ These are the standing imperatives. Each links to the reference that explains it
   - **A 4xx is a real answer** and must NOT be retried (`/api/auth/me` answers
     429 for a rate-limited API key).
   - Coverage: `e2e/transient-api-failure.spec.ts`.
+- **The search index maintains itself — do NOT add a call site for it.**
+  `GET /api/comp/search` answers over an FTS5 index of competitions, tasks
+  (including their routes' turnpoints) and pilots
+  ([docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md)). Unlike
+  `audit()` and `bumpAndRevalidateScores()`, which every handler must remember
+  to call, the documents derive from columns the database watches itself:
+  triggers in migration 0026 queue the changed keys and
+  `web/workers/competition-api/src/search-index.ts` drains that queue from one
+  middleware, the search endpoint, a cron and an admin button. A new mutating
+  route needs nothing.
+  - What DOES need a change: adding a column to a document (extend the trigger's
+    `UPDATE OF` list, and bump `SEARCH_DOC_REV` so the nightly sweep reindexes
+    what is behind), and anything that could name a competition it was not given
+    the id of — visibility is `visibleCompsFilter()` in `src/comp-visibility.ts`,
+    and a search must never be how someone discovers a hidden `test` comp.
+  - A competition's waypoint set is deliberately not indexed: the task's frozen
+    `xctsk` is what it flew.
 - **A dead link is a searchable one.** Public URLs are `${slug}-${id}` segments
   (`lib/slug.ts`): the id is the identity, but the slug is a readable copy of the
   name and survives whatever happened to the id. A 404 under `/comp` does not
@@ -306,6 +323,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | SSR'd public comp pages + `scores.csv` | [docs/ssr.md](docs/ssr.md) |
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
+| Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |
 | Track data quality | [docs/track-quality.md](docs/track-quality.md) |
 | Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
 | CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |
