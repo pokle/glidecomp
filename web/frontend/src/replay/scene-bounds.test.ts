@@ -44,6 +44,36 @@ describe('clipToTask', () => {
     expect(clipToTask(b, { turnpoints: [] })).toEqual(b);
   });
 
+  it('does not collapse the scene onto a task box that is really a point', () => {
+    // One turnpoint of no radius, and several on the same spot: the box has no
+    // size, so the pad has none either. Clipping to it would put every bound
+    // on that point and leave the whole field off-frame — worse than the fault
+    // being guarded against, so the tracks win instead.
+    const field: SceneBounds = { minX: -20_000, maxX: 20_000, minZ: -20_000, maxZ: 20_000 };
+    expect(clipToTask(field, { turnpoints: [{ x: 0, z: 0, radius: 0 }] })).toEqual(field);
+    expect(
+      clipToTask(field, {
+        turnpoints: [
+          { x: 500, z: 500, radius: 100 },
+          { x: 500, z: 500, radius: 100 },
+        ],
+      }),
+    ).toEqual(field);
+  });
+
+  it('still clips against a small but real task', () => {
+    // A 4 km box is well under a normal task and still far more trustworthy
+    // than a track in another country, so it must not be waved through.
+    const tiny: TaskBoundsSource = {
+      turnpoints: [
+        { x: 0, z: 0, radius: 400 },
+        { x: 3_200, z: 0, radius: 400 },
+      ],
+    };
+    const clipped = clipToTask({ minX: -9e9, maxX: 9e9, minZ: -9e9, maxZ: 9e9 }, tiny);
+    expect(clipped.maxX - clipped.minX).toBe(8_000); // 4 km box + 2 km either side
+  });
+
   it('ignores turnpoints carrying unusable coordinates', () => {
     const withJunk: TaskBoundsSource = {
       turnpoints: [

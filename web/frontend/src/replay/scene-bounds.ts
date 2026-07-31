@@ -44,21 +44,42 @@ export interface TaskBoundsSource {
 const TASK_BOX_SLACK = 0.5;
 
 /**
+ * The smallest task box worth clipping against, metres. Below this the box is
+ * a point rather than a task — one turnpoint of no radius, or several on the
+ * same spot — and the tracks are the better authority. Matches the floor
+ * FlightScene puts under extentXZ.
+ */
+const MIN_TASK_BOX_M = 1000;
+
+/**
  * Track bounds, clipped to the task's turnpoint box grown by TASK_BOX_SLACK.
  *
- * Returns `track` unchanged when the task has no turnpoints to measure
- * against (free-flight replays, and the 0-turnpoint tasks the manifest
- * documents), which is the old behaviour and the best available.
+ * Returns `track` unchanged when there is no usable task box to measure
+ * against — no turnpoints (free-flight replays, and the 0-turnpoint tasks the
+ * manifest documents), or a box too small to be a task. That is the old
+ * behaviour: no protection, but no harm either, and the bundle no longer
+ * carries the withheld tracks that were the worst source of both.
  */
 export function clipToTask(track: SceneBounds, task?: TaskBoundsSource): SceneBounds {
   const box = taskBox(task);
   if (!box) return track;
 
-  // Grow the task box by a share of its LONGEST side, so the slack is the
-  // same distance on both axes. Growing each axis by its own length would
-  // give a narrow task almost no room across its short side, which is
-  // exactly where a land-out sits.
-  const pad = Math.max(box.maxX - box.minX, box.maxZ - box.minZ) * TASK_BOX_SLACK;
+  // The longest side is the task's own size, and everything below is measured
+  // against it.
+  const size = Math.max(box.maxX - box.minX, box.maxZ - box.minZ);
+
+  // A box too small to be a task tells us nothing to clip against — one
+  // turnpoint of no radius, or several on the same spot. Clipping to it would
+  // collapse the scene onto that point and leave the field off-frame, which
+  // is a worse failure than the one this guards. MIN_TASK_BOX_M matches the
+  // floor FlightScene already puts under extentXZ.
+  if (size < MIN_TASK_BOX_M) return track;
+
+  // Grow the box by a share of that longest side, so the slack is the same
+  // distance on both axes. Growing each axis by its own length would give a
+  // narrow task almost no room across its short side, which is exactly where
+  // a land-out sits.
+  const pad = size * TASK_BOX_SLACK;
   return {
     minX: Math.max(track.minX, box.minX - pad),
     maxX: Math.min(track.maxX, box.maxX + pad),
