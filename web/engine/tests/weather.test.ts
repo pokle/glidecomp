@@ -18,6 +18,7 @@ import {
   taskElevationM,
   weatherQueryForTask,
   weatherQueryKey,
+  windAtHeight,
   type TaskWeather,
   type WeatherFetchFn,
   type WeatherProvider,
@@ -165,6 +166,43 @@ describe('flyingHeightLevel', () => {
     expect(flyingHeightLevel(partial, 100)?.pressureHpa).toBe(850);
     const none = levels.map((l) => ({ ...l, windSpeedKmh: null, windDirectionDeg: null }));
     expect(flyingHeightLevel(none, 100)).toBeNull();
+  });
+});
+
+describe('windAtHeight', () => {
+  const levels = [
+    { pressureHpa: 950, heightM: 500, windSpeedKmh: 20, windDirectionDeg: 90, temperatureC: 21 },
+    { pressureHpa: 900, heightM: 1000, windSpeedKmh: 40, windDirectionDeg: 90, temperatureC: 18 },
+    { pressureHpa: 850, heightM: 1500, windSpeedKmh: 40, windDirectionDeg: 180, temperatureC: 14 },
+  ];
+
+  it('interpolates speed linearly between same-direction levels', () => {
+    const w = windAtHeight(levels, 750);
+    expect(w).not.toBeNull();
+    expect(w!.speedKmh).toBeCloseTo(30, 5);
+    expect(w!.directionDeg).toBeCloseTo(90, 5);
+  });
+
+  it('interpolates as vectors, not as raw direction angles', () => {
+    // Halfway between 40 km/h from 090 and 40 km/h from 180: the mean VECTOR
+    // is from 135 at 40·cos(45°) ≈ 28.3 km/h — not 40 km/h.
+    const w = windAtHeight(levels, 1250);
+    expect(w!.directionDeg).toBeCloseTo(135, 5);
+    expect(w!.speedKmh).toBeCloseTo(40 * Math.cos(Math.PI / 4), 3);
+  });
+
+  it('clamps to the column ends rather than extrapolating', () => {
+    expect(windAtHeight(levels, 100)!.speedKmh).toBeCloseTo(20, 5);
+    expect(windAtHeight(levels, 4000)!.directionDeg).toBeCloseTo(180, 5);
+  });
+
+  it('ignores windless levels and answers null when none carry wind', () => {
+    const partial = [
+      { ...levels[0], windSpeedKmh: null, windDirectionDeg: null },
+      levels[1],
+    ];
+    expect(windAtHeight(partial, 100)!.speedKmh).toBeCloseTo(40, 5);
+    expect(windAtHeight([{ ...levels[0], windSpeedKmh: null, windDirectionDeg: null }], 500)).toBeNull();
   });
 });
 
