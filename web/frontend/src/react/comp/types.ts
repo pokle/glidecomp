@@ -382,13 +382,20 @@ const FETCH_RETRY_DELAY_MS = 400;
  * "Competition not found", so a blip on the way to the API was reported to
  * the user as a missing competition — and stayed that way, since nothing
  * re-fetches.
+ *
+ * `signal` is for callers that supersede their own requests — the search box
+ * types a new query over an old one. An abort is a decision, not a blip, so it
+ * ends the retries immediately instead of costing three attempts and two
+ * delays before the caller throws the answer away regardless.
  */
 export async function fetchWithRetry<T extends { ok: boolean; status: number }>(
-  fetcher: () => Promise<T>
+  fetcher: () => Promise<T>,
+  options: { signal?: AbortSignal } = {}
 ): Promise<T> {
   let lastRes: T | undefined;
   let lastErr: unknown;
   for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
+    if (options.signal?.aborted) throw options.signal.reason;
     if (attempt > 0) {
       await new Promise((resolve) => setTimeout(resolve, FETCH_RETRY_DELAY_MS));
     }
@@ -397,6 +404,7 @@ export async function fetchWithRetry<T extends { ok: boolean; status: number }>(
       if (res.ok || res.status === 404) return res;
       lastRes = res;
     } catch (err) {
+      if (options.signal?.aborted) throw err;
       lastErr = err;
     }
   }

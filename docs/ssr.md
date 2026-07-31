@@ -31,6 +31,14 @@ admin-only `/comp/:id/pilots` roster editor, and the superseded
 `/comp/:id/task/:id/analysis` URL, which the SPA redirects and so must reach the
 shell rather than 404.
 
+One query string is checked alongside them: `/comp?q=…` — a search on the
+competitions page ([site search](2026-08-01-site-search.md)) — also gets the
+noindex shell. The results come from `/api/comp/search` client-side, so there is
+nothing to server-render, a search-results URL is not one a crawler should keep,
+and a shell with no `__SSR_DATA__` means the client creates a fresh root instead
+of hydrating markup the search is about to replace. The bare `/comp` is
+unaffected.
+
 `public/_routes.json` hands `/comp*` and `/sitemap.xml` to Functions. The old
 `/comp* → /app` `_redirects` lines are gone.
 

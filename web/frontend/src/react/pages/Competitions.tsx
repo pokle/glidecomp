@@ -1,12 +1,26 @@
 /**
- * Competition list + create dialog. Built on the RAC kit (src/react/rac/) as
- * part of the RAC exploration — see docs/2026-07-18-rac-adoption-guide.md.
- * The filter is client-side over the already-loaded list (a SearchField, not a
- * backend query): the comp count is manageable today; server-side filtering is
- * a later problem (~1,000+ comps).
+ * Competition list + create dialog + site search. Built on the RAC kit
+ * (src/react/rac/) — see docs/2026-07-18-rac-adoption-guide.md.
+ *
+ * The one box does two different jobs, and the boundary between them is the
+ * number of characters typed:
+ *
+ * - **Under two characters** it filters the list already on the page, which is
+ *   instant and needs no network. This is also the state the page is rendered
+ *   in on the server, so an empty query hydrates against identical markup.
+ * - **From two characters** it searches the whole site — competitions, tasks,
+ *   their routes and pilots — via GET /api/comp/search, and the flat list is
+ *   replaced by the comp → task → pilot hierarchy the matches live in. That is
+ *   how "elliot KANGCK" finds the tasks that fly through both turnpoints
+ *   without anyone naming the competition.
+ *
+ * The query is mirrored into `?q=` so a search is a link someone can send. The
+ * SSR Pages Function serves that URL as the plain shell (noindex): search
+ * results are fetched client-side, and the list below is hidden while they
+ * show, so there is nothing for the server to render either way.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Link as AriaLink, useFilter } from "react-aria-components";
 import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
@@ -30,6 +44,8 @@ import {
 } from "../lib/format";
 import { useInitialData } from "../lib/initial-data";
 import { compPath } from "../lib/slug";
+import { SearchResults } from "../search/SearchResults";
+import { MIN_SEARCH_CHARS, useSiteSearch } from "../search/use-site-search";
 import type { CompListEntry, CompetitionsLoaderData } from "../loaders";
 
 type Comp = CompListEntry;
@@ -44,8 +60,24 @@ export function Competitions() {
   const [comps, setComps] = useState<Comp[] | null>(initial?.comps ?? null);
   const [loadError, setLoadError] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  // Seeded from the URL during render, not in an effect: the server renders
+  // this same location, so both sides start with the same query and the same
+  // decision about which of the two views to show.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const { contains } = useFilter({ sensitivity: "base" });
+
+  const searchState = useSiteSearch(query);
+  const searching = query.trim().length >= MIN_SEARCH_CHARS;
+
+  /** Keep `?q=` in step so a search can be linked, without stacking history. */
+  function handleQueryChange(next: string) {
+    setQuery(next);
+    const params = new URLSearchParams(searchParams);
+    if (next.trim()) params.set("q", next);
+    else params.delete("q");
+    setSearchParams(params, { replace: true });
+  }
 
   useEffect(() => {
     document.title = "GlideComp - Competitions";
@@ -78,11 +110,12 @@ export function Competitions() {
         ? comps.filter((c) => !c.test)
         : comps;
 
-  // Client-side filter: every query word must match somewhere in the comp's
-  // name or its meta line (wing / scoring format / classes), so "pg gap" or
-  // "corryong 2026" both narrow as expected. Matching is locale-aware and
-  // accent/case-insensitive (useFilter sensitivity "base"). An empty query
-  // renders the full list — which keeps the SSR markup identical at hydration.
+  // Client-side filter for the short-query case: every query word must match
+  // somewhere in the comp's name or its meta line (wing / scoring format /
+  // classes). Matching is locale-aware and accent/case-insensitive (useFilter
+  // sensitivity "base"). An empty query renders the full list — which keeps
+  // the SSR markup identical at hydration. From MIN_SEARCH_CHARS up, the
+  // server-side search replaces this view entirely.
   const words = useMemo(() => query.trim().split(/\s+/).filter(Boolean), [query]);
   const filteredComps =
     visibleComps === null || words.length === 0
@@ -101,11 +134,11 @@ export function Competitions() {
     <section>
       <div className="flex flex-wrap items-center gap-3">
         <SearchField
-          aria-label="Filter competitions"
-          placeholder="Filter competitions…"
+          aria-label="Search competitions, tasks, pilots and turnpoints"
+          placeholder="Search comps, tasks, pilots, turnpoints…"
           value={query}
-          onChange={setQuery}
-          className="w-full max-w-xs"
+          onChange={handleQueryChange}
+          className="w-full max-w-sm"
         />
         <span className="ml-auto">
           {user ? (
@@ -120,14 +153,17 @@ export function Competitions() {
         </span>
       </div>
 
-      {/* Announce filter results to screen readers as the list narrows. */}
+      {/* Announce filter results to screen readers as the list narrows. The
+          search view has its own live region — see SearchResults. */}
       <p role="status" className="sr-only">
-        {words.length > 0 && filteredComps !== null && visibleComps !== null
+        {!searching && words.length > 0 && filteredComps !== null && visibleComps !== null
           ? `${filteredComps.length} of ${visibleComps.length} competitions shown`
           : ""}
       </p>
 
-      {loadError ? (
+      {searching ? (
+        <SearchResults state={searchState} query={query} />
+      ) : loadError ? (
         <p role="alert" className="mt-4">
           Failed to load competitions. Please reload the page.
         </p>

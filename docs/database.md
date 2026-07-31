@@ -91,6 +91,7 @@ after the initial schema.
 | Auth (Better Auth) | `user`, `session`, `account`, `verification`, `apikey` (0002), `rateLimit` (0017 — the D1-backed request limiter; in-memory counters reset with every workerd isolate) |
 | Competition | `pilot`, `comp`, `comp_admin`, `comp_pilot`, `comp_waypoints` (0015), `task`, `task_class`, `task_track`, `task_manual_flight` (0014), `task_pilot_status` (0006), `audit_log` (0005) |
 | Derived, stale-first | `task_scores` (0012), `track_analysis` (0012), `task_field_analysis` (0019), `task_weather` (0023) |
+| Derived, trigger-fed | `search_doc` + `search_fts` + `search_dirty` (0026) — the site search index. The only derived store that maintains itself: SQL triggers queue the changed keys, so no route handler calls it. See [2026-08-01-site-search.md](2026-08-01-site-search.md) |
 | Rankings | `pilot_ranking` (0025) — the FAI/CIVL monthly world ranking; deliberately standalone, no FK to `pilot`/`comp_pilot`. See [civl-rankings.md](civl-rankings.md) |
 | User files | `user_preferences` (0007), `user_track`, `user_task`, `user_annotation` (0008) |
 
@@ -119,3 +120,4 @@ of the notable ones.
 | `0023_task_weather` | Cached task weather, invalidated by query key rather than `inputs_rev` |
 | `0024_track_quality_override` | The organiser's per-track override of a track-quality verdict (S7A §4.4.6) |
 | `0025_pilot_ranking` | CIVL world rankings import |
+| `0026_search_index` | FTS5 site search over comps, tasks (with their routes) and pilots, kept current by triggers |
