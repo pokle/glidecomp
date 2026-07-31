@@ -14,7 +14,12 @@
 
 import { packTracksFromIgc, type GAPParameters, type PilotIgc } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
-import { mapWithConcurrency, mergeStoredGapParamsJson } from "./scoring";
+import {
+  hardFindingTitles,
+  mapWithConcurrency,
+  mergeStoredGapParamsJson,
+  resolveTaskScoringConfig,
+} from "./scoring";
 
 /** How many tracks to fetch from R2 at once. The pack step already holds every
  * decompressed IGC in memory simultaneously, so fetching concurrently doesn't
@@ -28,6 +33,14 @@ const TRACK_FETCH_CONCURRENCY = 10;
  * changes — the comp timezone is baked into the manifest, so an organizer
  * override must invalidate the bundle too. Mirrors the score cache key but
  * with its own prefix/version.
+ *
+ * The data-quality verdict is an input too, now that a HARD failure keeps a
+ * track out of the bundle — and neither half of it moves the rest of the key
+ * on its own. A verdict is computed LATER than the upload that it judges, so
+ * `uploaded_at` is unchanged when a track first becomes withheld; and an
+ * organiser reinstating one (S7A §4.4.6) touches only `quality_override`.
+ * Both are folded in, so a bundle can never outlive the verdict it was packed
+ * under.
  */
 export async function compute3dvisCacheKey(
   taskId: number,
@@ -44,15 +57,33 @@ export async function compute3dvisCacheKey(
 
   const tracks = await db
     .prepare(
-      `SELECT task_track_id, uploaded_at FROM task_track WHERE task_id = ? ORDER BY task_track_id`
+      `SELECT task_track_id, uploaded_at, quality_override
+         FROM task_track WHERE task_id = ? ORDER BY task_track_id`
     )
     .bind(taskId)
-    .all<{ task_track_id: number; uploaded_at: string }>();
+    .all<{ task_track_id: number; uploaded_at: string; quality_override: number | null }>();
+
+  // The stored HARD/soft verdict per track. Hashing the whole report is the
+  // cheap way to be exactly right: any change to any finding moves the key,
+  // and nothing has to know which fields the bundle happens to read.
+  const verdicts = await db
+    .prepare(
+      `SELECT ta.task_track_id, ta.payload_json
+         FROM track_analysis ta
+         JOIN task_track tt ON tt.task_track_id = ta.task_track_id
+        WHERE tt.task_id = ? AND ta.variant = 'quality'
+        ORDER BY ta.task_track_id`
+    )
+    .bind(taskId)
+    .all<{ task_track_id: number; payload_json: string }>();
 
   const stateString = [
     task?.xctsk ?? "",
     task?.timezone ?? "",
-    ...tracks.results.map((t) => `${t.task_track_id}:${t.uploaded_at}`),
+    ...tracks.results.map(
+      (t) => `${t.task_track_id}:${t.uploaded_at}:${t.quality_override ?? 0}`
+    ),
+    ...verdicts.results.map((v) => `q${v.task_track_id}:${v.payload_json}`),
   ].join("|");
 
   const hashBuffer = await crypto.subtle.digest(
@@ -68,7 +99,9 @@ export async function compute3dvisCacheKey(
   // v3: gained per-pilot turnpoint reach times, turnpoint altitudes and
   // task.sssIndex (required-glide readout) — each prefix bump invalidates
   // bundles packed before the fields existed.
-  return `3dvis:v3:${taskId}:${hex}`;
+  // v4: tracks withheld by a HARD data-quality check are no longer packed, so
+  // every bundle cut before this still carries them.
+  return `3dvis:v4:${taskId}:${hex}`;
 }
 
 /**
@@ -121,7 +154,9 @@ export async function buildTask3dvisBundle(
   const tTracksStart = performance.now();
   const tracks = await db
     .prepare(
-      `SELECT tt.igc_filename,
+      `SELECT tt.task_track_id,
+              tt.igc_filename,
+              tt.quality_override,
               cp.comp_pilot_id,
               cp.registered_pilot_name AS pilot_name,
               cp.registered_pilot_civl_id AS civl_id
@@ -132,7 +167,9 @@ export async function buildTask3dvisBundle(
     )
     .bind(taskId)
     .all<{
+      task_track_id: number;
       igc_filename: string;
+      quality_override: number | null;
       comp_pilot_id: number;
       pilot_name: string;
       civl_id: string | null;
@@ -141,11 +178,39 @@ export async function buildTask3dvisBundle(
     `[3dvis] task ${taskId}: found ${tracks.results.length} track rows in ${(performance.now() - tTracksStart).toFixed(0)}ms`
   );
 
+  // A track a HARD data-quality check withheld is not this flight (S7A
+  // §4.4.2 — wrong day, wrong place), so it must not be drawn any more than
+  // it may be scored. Scoring and field analysis have always dropped these;
+  // the replay did not, and one such track is enough to ruin the whole
+  // picture: it enters the packed bounds like any other, and a file from
+  // another country put a task's scene extent at 2,225 km against a real
+  // field of 28 km, collapsing all 48 pilots into five pixels.
+  //
+  // The verdicts come from the same D1-only store scoring seeds (no R2 read
+  // here), and carry the same two rules: an organiser's `quality_override`
+  // reinstates the track (§4.4.6), and a track with NO stored verdict is
+  // UNKNOWN, never assumed bad — it stays in, exactly as partitionByQuality
+  // keeps it in the scored set.
+  const quality = (await resolveTaskScoringConfig(taskId, db)).quality;
+  const withheld: { name: string; reasons: string[] }[] = [];
+  const drawable = tracks.results.filter((track) => {
+    const report = quality.byTrackId.get(track.task_track_id);
+    if (!report?.hardFailed || track.quality_override) return true;
+    withheld.push({ name: track.pilot_name, reasons: hardFindingTitles(report) });
+    return false;
+  });
+  if (withheld.length > 0) {
+    console.log(
+      `[3dvis] task ${taskId}: withheld ${withheld.length} track(s) on data quality — ` +
+        withheld.map((w) => `${w.name} (${w.reasons.join("; ")})`).join(", ")
+    );
+  }
+
   // Fetch + decompress IGC files with bounded concurrency (same pattern as the
   // scoring path) — cold-path time is dominated by R2 round trips, not CPU.
   const tFetchStart = performance.now();
   const fetched = await mapWithConcurrency(
-    tracks.results,
+    drawable,
     TRACK_FETCH_CONCURRENCY,
     async (track): Promise<PilotIgc | null> => {
       const tTrackStart = performance.now();
@@ -170,7 +235,7 @@ export async function buildTask3dvisBundle(
   );
   const pilots: PilotIgc[] = fetched.filter((p): p is PilotIgc => p !== null);
   console.log(
-    `[3dvis] task ${taskId}: fetched ${pilots.length}/${tracks.results.length} tracks from R2 ` +
+    `[3dvis] task ${taskId}: fetched ${pilots.length}/${drawable.length} tracks from R2 ` +
       `in ${(performance.now() - tFetchStart).toFixed(0)}ms total`
   );
 
