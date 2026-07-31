@@ -307,6 +307,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
 | Track data quality | [docs/track-quality.md](docs/track-quality.md) |
+| Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
 | CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |
 | RAC component kit conventions | [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md) |
 | Accessibility standard | [docs/accessibility-standard.md](docs/accessibility-standard.md) |

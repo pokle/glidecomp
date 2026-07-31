@@ -28,7 +28,7 @@ import { MAP_STYLES, DEFAULT_MAP_STYLE } from './map-styles';
 import { GLIDE_HI, GLIDE_LO, SPEED_MAX, SPEED_MIN, VARIO_MAX } from './flight-scene';
 import { GaggleUI } from './gaggle-ui';
 import type { GaggleResult } from './gaggles';
-import { requiredGlideToTarget, type TrackManifest } from '@glidecomp/engine';
+import { requiredGlideToTarget, type TrackManifest, type ThermalShapeSummary } from '@glidecomp/engine';
 
 /**
  * The replay data now comes from the competition-api Worker as a single packed
@@ -43,6 +43,47 @@ function bundleUrl(): string {
   return comp && task
     ? `/api/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}/3dvis`
     : '/api/comp/sample-3dvis';
+}
+
+/**
+ * The reconstructed thermal shapes for this task, from the stored
+ * field-analysis report — the same single source of truth the analysis page
+ * renders, so the replay can never disagree with it about where a thermal
+ * was. Multi-class tasks answer with one report per class; the largest class
+ * carries the field the bundle mostly shows.
+ *
+ * The store is stale-first and never computes on the request path: a cold
+ * task answers `pending` while a background compute runs, so retry a few
+ * times before giving up. Null = nothing to draw (sample mode, no report,
+ * or a pre-v20 report still revalidating) — the Thermals section stays
+ * hidden and the replay is exactly what it was before this feature.
+ */
+async function fetchThermalShapes(): Promise<ThermalShapeSummary[] | null> {
+  const q = new URLSearchParams(location.search);
+  const comp = q.get('comp');
+  const task = q.get('task');
+  if (!comp || !task) return null;
+  const url = `/api/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}/field-analysis`;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        pending: boolean;
+        classes: { report: { pilots: unknown[]; thermals?: { shapes: ThermalShapeSummary[] } } }[];
+      };
+      if (!data.pending) {
+        const biggest = [...data.classes].sort(
+          (a, b) => b.report.pilots.length - a.report.pilots.length,
+        )[0];
+        return biggest?.report.thermals?.shapes ?? null;
+      }
+    } catch {
+      return null; // network trouble: the overlay is optional, never retry-storm
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  return null;
 }
 
 /**
@@ -630,6 +671,60 @@ async function main(): Promise<void> {
     viewer.setGaggleVisible(gaggleShown);
     $('gaggleToggle').textContent = gaggleShown ? 'hide' : 'show';
   });
+
+  // --- reconstructed thermal columns (fetched after load, never blocking) ---
+  void (async () => {
+    const shapes = await fetchThermalShapes();
+    if (!shapes || shapes.length === 0) return;
+    viewer.setThermalShapes(shapes);
+
+    const wrap = $('thermalPanelWrap');
+    wrap.classList.remove('hidden');
+    const select = $<HTMLSelectElement>('thermalSelect');
+    for (const s of shapes) {
+      const opt = document.createElement('option');
+      const altLo = Math.round(s.bands[0].altMin);
+      const altHi = Math.round(s.bands[s.bands.length - 1].altMax);
+      opt.value = String(s.id);
+      opt.textContent = `${clockLocal(s.startMs / 1000, tz).slice(0, 5)} · ${s.pilotCount} pilots · ${altLo}–${altHi} m`;
+      select.appendChild(opt);
+    }
+
+    /** Highlight + frame one column and jump the clock into its window. */
+    const selectThermal = (id: number, jumpClock: boolean): void => {
+      viewer.setThermalHighlight(id);
+      const shape = shapes.find((s) => s.id === id);
+      if (id >= 0 && shape) {
+        viewer.frameThermal(id);
+        if (jumpClock) {
+          viewer.setPlaying(false);
+          viewer.setTime(Math.max(0, shape.startMs / 1000 - manifest.t0 + 60));
+        }
+      }
+      // Keep the link shareable: the selection IS the deep link.
+      const q = new URLSearchParams(location.search);
+      if (id >= 0) q.set('thermal', String(id));
+      else q.delete('thermal');
+      history.replaceState(null, '', `${location.pathname}?${q.toString()}`);
+    };
+
+    select.addEventListener('change', () => selectThermal(Number(select.value), true));
+
+    let thermalsShown = true;
+    $('thermalToggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      thermalsShown = !thermalsShown;
+      viewer.setThermalsVisible(thermalsShown);
+      $('thermalToggle').textContent = thermalsShown ? 'hide' : 'show';
+    });
+
+    // ?thermal= deep link (from the analysis page's "watch this thermal").
+    const linked = Number(new URLSearchParams(location.search).get('thermal'));
+    if (Number.isFinite(linked) && shapes.some((s) => s.id === linked)) {
+      select.value = String(linked);
+      selectThermal(linked, true);
+    }
+  })();
 
   // "active now" filter for the panel list
   let activeOnly = false;

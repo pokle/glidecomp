@@ -180,6 +180,14 @@ export class AbstractBackend implements Backend {
     this.initialView = view;
   }
 
+  /** Jump the mounted camera to a pose (thermal deep link / drawer). */
+  flyTo(view: ViewState): void {
+    this.followPilot = -1;
+    this.followPos = null;
+    this.viewAnim = null;
+    this.applyView(view);
+  }
+
   getViewState(): ViewState {
     const offset = this.v.subVectors(this.camera.position, this.controls.target);
     const r = offset.length();

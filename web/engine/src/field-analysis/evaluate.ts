@@ -11,12 +11,14 @@
 import { spearman, spearmanNoiseFloor } from './stats';
 import { ALL_METRICS } from './registry';
 import type { FlightPhase } from './phase-partition';
+import { extractThermalShapes, summariseThermalShape } from './thermal-shape';
 import type {
   CorrelationVerdict,
   FieldAnalysisBasis,
   FieldAnalysisReport,
   FieldContext,
   FieldAirtimeSplit,
+  FieldThermalsSummary,
   MetricComputer,
   MetricCorrelation,
   MetricOutput,
@@ -82,7 +84,58 @@ export function evaluateField(
     };
   });
 
-  return { basis: buildBasis(field), pilots, metrics: reports };
+  const thermals = buildThermals(field);
+  return {
+    basis: buildBasis(field),
+    pilots,
+    metrics: reports,
+    ...(thermals ? { thermals } : {}),
+  };
+}
+
+/** Most shapes one stored report carries; keeps the gzipped blob bounded. */
+export const MAX_THERMAL_SHAPES = 40;
+
+/**
+ * Reconstruct the task's shared thermals as shape summaries (point clouds
+ * stripped — the 3D replay draws the pilots' actual trails instead).
+ *
+ * Only multi-pilot shapes with ≥ 3 bands qualify: one pilot's climb has no
+ * cross-pilot structure, and under three bands there is no axis to measure.
+ * When more qualify than the cap allows, the least-shared are dropped and
+ * `totalShapeCount` records what existed — a consumer must say "top N of M",
+ * never present the cap as the census.
+ *
+ * Failure here degrades to an absent field rather than killing the report,
+ * matching the per-metric error handling above.
+ */
+function buildThermals(field: FieldContext): FieldThermalsSummary | undefined {
+  try {
+    const shapes = extractThermalShapes(
+      field.pilots.map((p) => ({
+        fixes: p.fixes,
+        thermals: p.thermals,
+        circles: p.circles.circles,
+        label: p.pilotName,
+      })),
+    ).filter((s) => s.pilotCount >= 2 && s.bands.length >= 3);
+    if (shapes.length === 0) return undefined;
+
+    let kept = shapes;
+    if (shapes.length > MAX_THERMAL_SHAPES) {
+      const byPilots = [...shapes].sort(
+        (a, b) => b.pilotCount - a.pilotCount || b.samples.length - a.samples.length,
+      );
+      const keep = new Set(byPilots.slice(0, MAX_THERMAL_SHAPES).map((s) => s.id));
+      kept = shapes.filter((s) => keep.has(s.id));
+    }
+    return {
+      shapes: kept.map(summariseThermalShape),
+      totalShapeCount: shapes.length,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /**

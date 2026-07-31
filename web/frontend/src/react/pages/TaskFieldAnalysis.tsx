@@ -64,6 +64,7 @@ import {
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import { StyleClusters } from "../field-analysis/StyleClusters";
+import { ThermalsPanel } from "../field-analysis/thermals/ThermalsPanel";
 import { displayReport } from "../field-analysis/units";
 import { useTaskWeather } from "../weather/use-task-weather";
 import { DayProfilePanel } from "../field-analysis/charts/day-profile/DayProfilePanel";
@@ -295,6 +296,11 @@ export function TaskFieldAnalysis() {
     weatherPending ||
     weather.data?.weather != null;
 
+  // Reconstructed thermals: absent on reports stored before v20 (served
+  // stale while they revalidate) and on tasks where no thermal was shared
+  // by two pilots — the section renders only when there is one to show.
+  const hasThermalsSection = (report?.thermals?.shapes.length ?? 0) > 0;
+
   // Family expansion is page state (not Disclosure-internal) so the TOC can
   // open a collapsed family before scrolling to it. Until the user touches
   // one, expansion follows the top-3 default; a class switch resets to it.
@@ -324,6 +330,9 @@ export function TaskFieldAnalysis() {
       // Same conditionality as the debrief: only when the section rendered.
       ...(hasWeatherSection
         ? [{ id: "weather-heading", label: "What the weather did" }]
+        : []),
+      ...(hasThermalsSection
+        ? [{ id: "thermals-heading", label: "The day's thermals" }]
         : []),
       { id: "separation-heading", label: "Which behaviours went with better results" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
@@ -363,7 +372,7 @@ export function TaskFieldAnalysis() {
       { id: METHOD_NOTE_ID, label: "How the field is compared", depth: 1 },
       { id: "glossary-heading", label: "Metric glossary", depth: 1 },
     ];
-  }, [active, grouped, topFamilies, hasDebrief, hasWeatherSection]);
+  }, [active, grouped, topFamilies, hasDebrief, hasWeatherSection, hasThermalsSection]);
 
   async function handleRefresh() {
     if (!compId || !taskId) return;
@@ -588,6 +597,29 @@ export function TaskFieldAnalysis() {
                   compTimezone={comp?.timezone ?? null}
                   weather={weather.data?.weather ?? null}
                   weatherPending={weatherPending}
+                />
+              </section>
+            ) : null}
+
+            {/* After the weather, before the metrics: the thermals ARE the
+                day, reconstructed — where the lift sat, which way it leaned,
+                which side worked. Grounding, like the weather section, for
+                everything the metrics then claim about how pilots used it. */}
+            {hasThermalsSection && report.thermals ? (
+              <section aria-labelledby="thermals-heading" className="space-y-3">
+                <h2 id="thermals-heading" className="scroll-mt-20 text-lg font-semibold">
+                  The day's thermals
+                </h2>
+                <ThermalsPanel
+                  thermals={report.thermals}
+                  compTimezone={comp?.timezone ?? null}
+                  weather={weather.data?.weather ?? null}
+                  weatherPending={weatherPending}
+                  replayHrefFor={(thermalId) =>
+                    compId && taskId
+                      ? `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}&thermal=${thermalId}`
+                      : null
+                  }
                 />
               </section>
             ) : null}

@@ -214,4 +214,10 @@
 //     sign is the finding, not a failure to match a prior.
 //     Values move, so the bump rolls stored reports onto the new label,
 //     direction and numbers on their next lazy revalidation.
-export const FIELD_ANALYSIS_VERSION = 19;
+// v20: the report gains an optional `thermals` field — shape summaries of the
+//     task's shared thermals (altitude-banded cores, radii, sector lift roses,
+//     sub-cores, lean and track-measured wind; point clouds stripped), from
+//     field-analysis/thermal-shape.ts. Purely additive: no metric moves. The
+//     bump rolls stored reports so they gain the field on their next lazy
+//     revalidation instead of appearing thermal-less forever.
+export const FIELD_ANALYSIS_VERSION = 20;
