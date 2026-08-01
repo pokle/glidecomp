@@ -66,6 +66,21 @@ comp-level and per-task `gap_params`.
 
 Pass one or more slugs to seed just those: `bun run seed big-chip kosci-loop`.
 
+### A task that was set but never flown
+
+A manifest lists the tasks the source published, and AirScore publishes a day it
+called off the same as one it scored: a route, zero results, zero day quality.
+Such a folder holds a `task.xctsk` and no IGC at all (Dalby Big Air 2022 T6, both
+classes — the last day of that comp). There is nothing to seed for it, so the
+task is named on stdout and left out rather than aborting the comp:
+
+```
+  open/Task 6 (2022-04-09): no tracklogs — not flown, skipped
+```
+
+Skipped, not silently dropped: an empty folder is far more likely to be a task
+whose download failed than a real cancellation, and the line is how you tell.
+
 ### Manifest fields
 
 | Field | Meaning |
