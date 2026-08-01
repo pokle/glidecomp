@@ -93,6 +93,12 @@
     }
     #menuPanel.open { transform: translateX(0); }
 
+    /* Collapsed timeline (#timelineCollapse in main.ts): the panel chrome and
+       every control marked .tl-chrome hide, leaving just the scrubber bar and
+       the reopen chevron floating over the scene. */
+    #timeline.collapsed { background: transparent; border-color: transparent; backdrop-filter: none; box-shadow: none; padding: 0; }
+    #timeline.collapsed .tl-chrome { display: none; }
+
     @media (max-width: 767px) {
       /* The timeline scrubber is the primary touch target — give it a much
          taller hit area and a bigger thumb so fingers don't miss it. */
@@ -416,12 +422,11 @@
       </div>
     </aside>
 
-    <!-- bottom-left: scale bar + compass (desktop only — saves space on phones) -->
-    <div class="absolute left-3 bottom-24 z-20 hidden md:flex items-end gap-3">
-      <div class="rounded-md panel px-2 py-1.5">
-        <div id="scaleBar" class="h-1.5 bg-slate-200 rounded-sm" style="width: 80px;"></div>
-        <div id="scaleLabel" class="mt-1 text-[10px] text-slate-300 text-center">—</div>
-      </div>
+    <!-- top-right, under the hamburger: compass with the scale bar tucked
+         beneath it against the edge (desktop only — saves space on phones).
+         Deliberately not near the bottom timeline panel, whose height varies
+         (gaggle ribbon) and was covering them. -->
+    <div class="absolute right-3 top-20 z-20 hidden md:flex flex-col items-end gap-2">
       <button id="compassBtn" class="rounded-full panel w-12 h-12 relative grid place-items-center cursor-pointer hover:bg-slate-700/40 transition-colors" title="Click to face north">
         <svg id="compass" viewBox="0 0 40 40" class="w-9 h-9">
           <g id="compassRot">
@@ -431,13 +436,24 @@
           <text x="20" y="11" text-anchor="middle" font-size="7" fill="#e2e8f0" font-weight="700">N</text>
         </svg>
       </button>
+      <div class="rounded-md panel px-2 py-1.5">
+        <div id="scaleBar" class="h-1.5 bg-slate-200 rounded-sm" style="width: 80px;"></div>
+        <div id="scaleLabel" class="mt-1 text-[10px] text-slate-300 text-center">—</div>
+      </div>
     </div>
 
-    <!-- bottom: timeline -->
-    <div class="absolute inset-x-3 bottom-3 z-20 rounded-lg panel px-4 py-3 shadow-xl">
+    <!-- bottom: timeline (collapsible — the ▾ chevron reduces it to the bare
+         scrubber bar so more of the scene shows through) -->
+    <div id="timeline" class="absolute inset-x-3 bottom-3 z-20 rounded-lg panel px-4 py-3 shadow-xl">
+      <!-- collapse to the bare scrubber bar. Floats above the panel's right
+           edge — outside the controls row so phones don't overflow — and stays
+           put when collapsed as the way to reopen. -->
+      <button id="timelineCollapse" aria-label="Hide playback controls" aria-expanded="true" aria-controls="timeline"
+        class="absolute bottom-full right-0 mb-2 grid place-items-center w-8 h-8 rounded-md panel text-slate-300 hover:bg-slate-700/40 text-base leading-none transition-colors shadow-lg"
+        title="Hide playback controls">▾</button>
       <!-- keyboard shortcuts popover (toggled by the ⌨ button; main.ts wires it) -->
       <div id="kbdPanel" aria-label="Keyboard shortcuts"
-        class="absolute bottom-full right-0 mb-2 hidden w-72 rounded-lg panel px-4 py-3 text-xs shadow-xl">
+        class="tl-chrome absolute bottom-full right-0 mb-2 hidden w-72 rounded-lg panel px-4 py-3 text-xs shadow-xl">
         <div class="mb-2 text-[11px] uppercase tracking-wide text-lime-400 font-semibold">Keyboard shortcuts</div>
         <dl class="space-y-1.5 text-slate-300">
           <div class="flex items-center justify-between gap-4">
@@ -467,20 +483,20 @@
         </dl>
       </div>
       <!-- gaggle ribbon, inset to line up with the scrubber track (desktop only) -->
-      <div class="mb-2 hidden md:block" style="margin-left: 144px; margin-right: 76px;">
+      <div class="tl-chrome mb-2 hidden md:block" style="margin-left: 144px; margin-right: 76px;">
         <div id="gaggleRibbon" class="relative"></div>
       </div>
       <div class="flex items-center gap-3">
         <button id="playPause"
-          class="shrink-0 rounded-full bg-lime-500 hover:bg-lime-400 text-slate-900 w-10 h-10 grid place-items-center font-bold transition-colors"
+          class="tl-chrome shrink-0 rounded-full bg-lime-500 hover:bg-lime-400 text-slate-900 w-10 h-10 grid place-items-center font-bold transition-colors"
           aria-label="Play/pause">▶</button>
-        <div class="shrink-0 w-20 text-center">
+        <div class="tl-chrome shrink-0 w-20 text-center">
           <div id="clock" class="text-sm font-mono tabular-nums leading-none">00:00:00</div>
           <div id="clockZone" class="text-[10px] text-slate-500 leading-none mt-0.5">local</div>
         </div>
-        <input id="scrubber" type="range" min="0" max="1000" step="1" value="0" class="flex-1">
+        <input id="scrubber" type="range" min="0" max="1000" step="1" value="0" class="flex-1" aria-label="Timeline">
         <select id="speed"
-          class="shrink-0 rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
+          class="tl-chrome shrink-0 rounded-md bg-slate-800 border border-slate-600 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-lime-400">
           <option value="1">1×</option>
           <option value="4">4×</option>
           <option value="16" selected>16×</option>
@@ -489,7 +505,7 @@
         </select>
         <!-- shortcuts only matter with a physical keyboard — hidden on phones -->
         <button id="kbdToggle" aria-label="Keyboard shortcuts" aria-expanded="false" aria-controls="kbdPanel"
-          class="hidden md:grid shrink-0 place-items-center w-8 h-8 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-base leading-none transition-colors"
+          class="tl-chrome hidden md:grid shrink-0 place-items-center w-8 h-8 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-base leading-none transition-colors"
           title="Keyboard shortcuts">&#x2328;&#xFE0E;</button>
       </div>
     </div>

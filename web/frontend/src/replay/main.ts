@@ -405,6 +405,36 @@ async function main(): Promise<void> {
     if (e.key === 'Escape') setKbdOpen(false);
   });
 
+  // --- timeline collapse: down to the bare scrubber bar, no panel ---
+  // The chevron stays visible as the way back; playback still works via Space
+  // and clicking the canvas. Persisted locally, like the callout position.
+  const timeline = $('timeline');
+  const tlCollapse = $('timelineCollapse');
+  const TIMELINE_COLLAPSED_KEY = 'replay.timelineCollapsed';
+  function setTimelineCollapsed(collapsed: boolean): void {
+    timeline.classList.toggle('collapsed', collapsed);
+    tlCollapse.textContent = collapsed ? '▴' : '▾';
+    const label = collapsed ? 'Show playback controls' : 'Hide playback controls';
+    tlCollapse.title = label;
+    tlCollapse.setAttribute('aria-label', label);
+    tlCollapse.setAttribute('aria-expanded', String(!collapsed));
+    if (collapsed) setKbdOpen(false); // its ⌨ toggle just went away with the panel
+  }
+  tlCollapse.addEventListener('click', () => {
+    const collapsed = !timeline.classList.contains('collapsed');
+    setTimelineCollapsed(collapsed);
+    try {
+      localStorage.setItem(TIMELINE_COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch {
+      /* storage unavailable (private mode) — the choice just won't persist */
+    }
+  });
+  try {
+    if (localStorage.getItem(TIMELINE_COLLAPSED_KEY) === '1') setTimelineCollapsed(true);
+  } catch {
+    /* storage unavailable — keep the panel expanded */
+  }
+
   // --- view controls ---
   $<HTMLSelectElement>('colorMode').addEventListener('change', (e) => {
     const mode = (e.target as HTMLSelectElement).value as ColorMode;
