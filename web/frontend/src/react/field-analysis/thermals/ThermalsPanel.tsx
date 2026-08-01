@@ -17,6 +17,7 @@
  * the prediction for the measurement (docs/weather.md).
  */
 import { useMemo, useState } from "react";
+import { InfoIcon } from "lucide-react";
 import { windAtHeight } from "@glidecomp/engine";
 import type {
   TaskWeather,
@@ -25,6 +26,7 @@ import type {
   WeatherHour,
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
+import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { formatTimeOfDay } from "../../lib/time";
 import { formatAltitude, useUnits } from "../../lib/units";
@@ -98,6 +100,16 @@ function modelWindFor(
   };
 }
 
+/** A climb value with its sign always shown: sink already carries "-".
+ * A negative that rounds to zero shows "+0.0", never "-0.0". */
+function signedClimb(ms: number, climbText: (ms: number) => string): string {
+  const text = climbText(ms);
+  if (text.startsWith("-")) {
+    return parseFloat(text) === 0 ? `+${text.slice(1)}` : text;
+  }
+  return `+${text}`;
+}
+
 /** Sample-weighted mean climb over a shape's bands (m/s). */
 function meanClimb(shape: ThermalShapeSummary): number {
   let v = 0;
@@ -135,7 +147,7 @@ const ROSE_R = 132;
 /**
  * Top-down view of the thermal about its own core. Wedge length is RELATIVE
  * climb by sector (the shape of the lift), the dashed ring is the measured
- * working radius and the faint ring the flown extent (both in metres, to the
+ * working radius and the dotted ring the flown extent (both in metres, to the
  * same scale as the feeder diamonds). Solid arrow: track-measured wind.
  * Dashed arrow: the model's wind — a model run, not an observation.
  */
@@ -218,7 +230,7 @@ function ThermalRose({
       </g>
       {/* Working radius + flown extent, in metres. */}
       <g aria-hidden fill="none">
-        <circle cx={c} cy={c} r={extent / metresPerPx} className="stroke-border" strokeDasharray="2 4" />
+        <circle cx={c} cy={c} r={extent / metresPerPx} className="stroke-muted-foreground/50" strokeDasharray="2 4" />
         <circle cx={c} cy={c} r={coreRadius / metresPerPx} className="stroke-muted-foreground/70" strokeDasharray="5 3" />
         <circle cx={c} cy={c} r={2.5} className="fill-muted-foreground" />
       </g>
@@ -252,6 +264,89 @@ function ThermalRose({
         {model ? windArrow(model.mean.directionDeg, true, "model") : null}
       </g>
     </svg>
+  );
+}
+
+/**
+ * The ⓘ legend on the rose: every mark named, each with its own glyph drawn
+ * in the same classes the rose uses, so the swatch always matches the chart.
+ * A popover rather than a tooltip for the usual reason (rac/popover.tsx):
+ * seven lines of prose need time, and touch users never see hover.
+ */
+function RoseLegend() {
+  const glyph = (children: React.ReactNode) => (
+    <svg viewBox="0 0 20 14" aria-hidden className="mt-0.5 h-3.5 w-5 shrink-0">
+      {children}
+    </svg>
+  );
+  const rows: { glyph: React.ReactNode; text: string }[] = [
+    {
+      glyph: glyph(<path d="M3,12 L17,12 A14,14 0 0 0 12.9,2.1 Z" className="fill-chart-3/40" />),
+      text: "Wedges: relative climb by side of the core — longer means stronger lift on that side (blue marks sink).",
+    },
+    {
+      glyph: glyph(
+        <circle cx={10} cy={7} r={5.5} fill="none" strokeDasharray="5 3" className="stroke-muted-foreground/70" />
+      ),
+      text: "Dashed ring: the measured working radius, in metres.",
+    },
+    {
+      glyph: glyph(
+        <circle cx={10} cy={7} r={5.5} fill="none" strokeDasharray="2 4" className="stroke-muted-foreground/50" />
+      ),
+      text: "Dotted ring: the widest the field ranged in this thermal.",
+    },
+    {
+      glyph: glyph(<circle cx={10} cy={7} r={2.5} className="fill-muted-foreground" />),
+      text: "Centre dot: the core, seen from above — bands are re-centred, so lean and drift are already taken out.",
+    },
+    {
+      glyph: glyph(
+        <g fill="none" strokeWidth={1.6} className="stroke-foreground/80">
+          <path d="M2,7 L15,7" />
+          <path d="M15,7 L11,4 M15,7 L11,10" />
+        </g>
+      ),
+      text: "Solid arrow: wind measured from the pilots' circles, entering from the side it blows from.",
+    },
+    {
+      glyph: glyph(
+        <g fill="none" strokeWidth={1.6} className="stroke-muted-foreground">
+          <path d="M2,7 L15,7" strokeDasharray="4 3" />
+          <path d="M15,7 L11,4 M15,7 L11,10" />
+        </g>
+      ),
+      text: "Dashed arrow: the weather model's wind — a model run, not an observation.",
+    },
+    {
+      glyph: glyph(<rect x={7} y={4} width={6} height={6} transform="rotate(45 10 7)" className="fill-chart-4" />),
+      text: "Diamonds: separate feeder cores in a band before they merged.",
+    },
+  ];
+  return (
+    <PopoverTrigger>
+      <Button
+        variant="ghost"
+        size="icon"
+        // size-6 (24px), the accessibility standard's §4.5 pointer-target
+        // floor (WCAG 2.5.8).
+        className="size-6 text-muted-foreground print:hidden"
+        aria-label="What the thermal rose shows"
+      >
+        <InfoIcon aria-hidden className="size-3.5" />
+      </Button>
+      <Popover>
+        <p className="font-medium">Reading the rose</p>
+        <ul className="mt-2 space-y-1.5">
+          {rows.map((r, i) => (
+            <li key={i} className="flex gap-2">
+              {r.glyph}
+              <span className="text-xs">{r.text}</span>
+            </li>
+          ))}
+        </ul>
+      </Popover>
+    </PopoverTrigger>
   );
 }
 
@@ -415,7 +510,12 @@ export function ThermalsPanel({
           {selected.pilotCount} pilots, {selected.useCount} climbs
         </h3>
         <div className="mt-3 grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-          <ThermalRose shape={selected} model={model} climbFactor={climb.factor} climbUnit={climb.unit} />
+          <div className="relative w-full max-w-80 self-start">
+            <ThermalRose shape={selected} model={model} climbFactor={climb.factor} climbUnit={climb.unit} />
+            <div className="absolute right-0 top-0">
+              <RoseLegend />
+            </div>
+          </div>
           <div className="space-y-3 text-sm">
             <ul className="space-y-2">
               {selected.wind ? (
@@ -481,13 +581,66 @@ export function ThermalsPanel({
             {replayHref ? (
               <a
                 href={replayHref}
+                // A new tab, deliberately: coming back from the replay does
+                // not restore the scroll position in this long page.
+                target="_blank"
+                rel="noopener"
                 className="inline-block text-sm underline underline-offset-4 hover:text-foreground"
               >
                 Watch this thermal in the 3D replay
+                <span className="sr-only"> (opens in a new tab)</span>
               </a>
             ) : null}
           </div>
         </div>
+
+        {/* Per-pilot climb ranges — only in reports stored since
+            FIELD_ANALYSIS_VERSION 21; older payloads simply lack the field
+            and the table stays hidden rather than failing. */}
+        {selected.pilotClimbs && selected.pilotClimbs.length === selected.pilots.length ? (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm text-muted-foreground">
+              Pilots in this thermal (climb rates)
+            </summary>
+            <div className="mt-2 overflow-x-auto">
+              <Table aria-label="Pilots in this thermal, climb rates" className="min-w-[28rem] text-xs">
+                <TableHeader>
+                  <Column isRowHeader>Pilot</Column>
+                  <Column>Min</Column>
+                  <Column>Median</Column>
+                  <Column>Max</Column>
+                </TableHeader>
+                <TableBody>
+                  {selected.pilots
+                    .map((name, i) => ({ name, i, climb: selected.pilotClimbs![i] }))
+                    .sort((a, b) => b.climb.medianVario - a.climb.medianVario)
+                    .map(({ name, i, climb }) => (
+                      <Row key={i}>
+                        <Cell>{name}</Cell>
+                        {climb.samples === 0 ? (
+                          <>
+                            <Cell>—</Cell>
+                            <Cell>—</Cell>
+                            <Cell>—</Cell>
+                          </>
+                        ) : (
+                          <>
+                            <Cell>{signedClimb(climb.minVario, climbText)}</Cell>
+                            <Cell>{signedClimb(climb.medianVario, climbText)}</Cell>
+                            <Cell>{signedClimb(climb.maxVario, climbText)}</Cell>
+                          </>
+                        )}
+                      </Row>
+                    ))}
+                </TableBody>
+              </Table>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Each pilot's slowest, typical and best climb over their own vario samples in this
+              thermal — a negative minimum means they touched sink inside it.
+            </p>
+          </details>
+        ) : null}
 
         <details className="mt-4">
           <summary className="cursor-pointer text-sm text-muted-foreground">
@@ -544,7 +697,7 @@ export function ThermalsPanel({
         100 m altitude bands; a band's core is the lift-weighted centre of its fixes, so the
         rose and the sector readings are already normalised for the thermal's lean and drift.
         Wedge length is relative climb by side of the core; the dashed ring is the measured
-        working radius and the faint ring the widest the field ranged. The solid arrow is the
+        working radius and the dotted ring the widest the field ranged. The solid arrow is the
         wind measured from the pilots' circles; the dashed arrow is the weather model's wind
         for the same place, time and altitudes — a model run, not an observation.
         {weather?.source ? ` Model: ${weather.source.attribution} (${weather.source.model}).` : ""}

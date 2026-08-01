@@ -38,6 +38,10 @@ clustering (`shared-thermals.ts`) and the circle detector.
    **wind** (per-circle estimates: direction from the vector mean, speed from
    the median magnitude — a vector mean's length collapses with scatter and
    would misreport a windy day as calm), and the **strongest side**.
+6. Per pilot: `pilotClimbs` (added in `FIELD_ANALYSIS_VERSION` 21) —
+   min/median/max of that pilot's smoothed vario samples in the thermal,
+   parallel to `pilots`. Optional in the type, so payloads stored before the
+   bump still parse; a UI hides the table rather than failing.
 
 ## Storage and surfaces
 
@@ -47,8 +51,8 @@ clustering (`shared-thermals.ts`) and the circle detector.
   Added in `FIELD_ANALYSIS_VERSION` 20; stale-first storage, ETag, SSR seed
   and invalidation all ride the existing `task_field_analysis` machinery.
 - **Task analysis page** (`/comp/:id/analysis/task/:id`): "The day's thermals"
-  section — census table, top-down lift rose, readouts, climb profile, band
-  table. The model-wind cross-check comes from the task's weather column
+  section — census table, top-down lift rose (with an ⓘ legend popover),
+  readouts, climb profile, per-pilot climb table and band table. The model-wind cross-check comes from the task's weather column
   (independent request, `windAtHeight` interpolation) and is always drawn
   dashed and credited as a model run, never blended with the measurement.
 - **3D replay** (`/replay?comp=&task=`): `ThermalLayer` draws each thermal as

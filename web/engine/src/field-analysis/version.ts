@@ -220,4 +220,9 @@
 //     field-analysis/thermal-shape.ts. Purely additive: no metric moves. The
 //     bump rolls stored reports so they gain the field on their next lazy
 //     revalidation instead of appearing thermal-less forever.
-export const FIELD_ANALYSIS_VERSION = 20;
+// v21: each thermal shape summary gains an optional `pilotClimbs` array —
+//     min/median/max of each pilot's smoothed vario samples in that thermal,
+//     parallel to `pilots`. Purely additive: no metric moves. The bump rolls
+//     stored reports so the thermals section can show its per-pilot climb
+//     table after the next lazy revalidation instead of never.
+export const FIELD_ANALYSIS_VERSION = 21;
