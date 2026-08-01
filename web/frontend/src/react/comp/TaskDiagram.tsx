@@ -26,6 +26,8 @@
 import { useMemo, useRef, useState } from "react";
 import type { XCTask } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
+import { useUnits } from "../lib/units";
+import { unitDisplay } from "../field-analysis/units";
 import {
   buildTaskDiagram,
   describeTaskRoute,
@@ -125,6 +127,18 @@ export interface TaskDiagramProps {
   onTurnpointSelect?: (turnpoint: TaskDiagramTurnpoint) => void;
   /** Turnpoint index to draw raised, for highlighting driven from outside. */
   highlightIndex?: number | null;
+  /**
+   * The day's wind, drawn as a corner arrow so the route can be read against
+   * it. Only on the labelled presets (`md`/`lg`) — at glyph size it would be
+   * one more scribble. Optional and arriving late: the weather is a separate
+   * client fetch, so the diagram is complete without it.
+   *
+   * The DIAGRAM gets the vector, not per-leg components: on a geographic
+   * drawing you compare the arrow with the legs by eye, which is the thing a
+   * map-like view is uniquely good at. The per-leg head/cross/tail numbers
+   * belong on the strip, where every leg is already a separate row.
+   */
+  wind?: { fromDeg: number; speedKmh: number } | null;
 }
 
 export function TaskDiagram({
@@ -136,6 +150,7 @@ export function TaskDiagram({
   onTurnpointHover,
   onTurnpointSelect,
   highlightIndex = null,
+  wind = null,
 }: TaskDiagramProps) {
   const preset = PRESETS[size];
   const [hovered, setHovered] = useState<number | null>(null);
@@ -278,6 +293,11 @@ export function TaskDiagram({
         ))}
       </g>
 
+      {/* The day's wind, top-left, so the route can be read against it. */}
+      {wind && labelFontSize > 0 ? (
+        <WindRose wind={wind} fontSize={labelFontSize} />
+      ) : null}
+
       {/* Names. Painted over the geometry with a background-coloured halo so a
           label crossing a cylinder arc stays readable. */}
       {layout.labels.map((textLabel) => (
@@ -334,6 +354,88 @@ export function TaskDiagram({
         </g>
       ) : null}
     </svg>
+  );
+}
+
+/**
+ * The wind, drawn where it can be compared with the legs.
+ *
+ * The arrow points the way the wind BLOWS (downwind), which is how a flow
+ * arrow is read — but "from 230°" is written beside it, because the arrow
+ * convention is exactly the thing people get backwards and a met direction is
+ * always a from-direction. Belt and braces on purpose: a pilot misreading the
+ * wind by 180° is not a cosmetic error.
+ */
+function WindRose({
+  wind,
+  fontSize,
+}: {
+  wind: { fromDeg: number; speedKmh: number };
+  fontSize: number;
+}) {
+  const r = fontSize * 1.15;
+  const cx = fontSize * 1.6;
+  const cy = fontSize * 1.6;
+  // SVG rotate(0) points the glyph up = north. The arrow is drawn pointing up
+  // and rotated to the DOWNWIND heading (from + 180).
+  const downwind = (wind.fromDeg + 180) % 360;
+  return (
+    <g aria-hidden="true">
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="var(--background)"
+        fillOpacity={0.75}
+        stroke="currentColor"
+        strokeOpacity={0.25}
+        strokeWidth={0.75}
+      />
+      <g
+        transform={`translate(${cx} ${cy}) rotate(${Math.round(downwind)})`}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path
+          d={`M0 ${round2(r * 0.65)} L0 ${round2(-r * 0.65)} M${round2(-r * 0.32)} ${round2(-r * 0.25)} L0 ${round2(-r * 0.65)} L${round2(r * 0.32)} ${round2(-r * 0.25)}`}
+        />
+      </g>
+      <WindRoseLabel wind={wind} x={cx + r + fontSize * 0.45} y={cy + fontSize * 0.36} fontSize={fontSize} />
+    </g>
+  );
+}
+
+/** The rose's reading, in the viewer's speed unit. */
+function WindRoseLabel({
+  wind,
+  x,
+  y,
+  fontSize,
+}: {
+  wind: { fromDeg: number; speedKmh: number };
+  x: number;
+  y: number;
+  fontSize: number;
+}) {
+  const speed = unitDisplay("km/h", useUnits());
+  return (
+    <text
+      x={round2(x)}
+      y={round2(y)}
+      fontSize={round2(fontSize * 0.92)}
+      className="fill-current tabular-nums"
+      style={{
+        paintOrder: "stroke",
+        stroke: "var(--background)",
+        strokeWidth: fontSize * 0.3,
+        strokeLinejoin: "round",
+      }}
+    >
+      {`${Math.round(wind.speedKmh * speed.factor)} ${speed.unit} from ${Math.round(wind.fromDeg)}°`}
+    </text>
   );
 }
 

@@ -97,8 +97,12 @@ describe("GET /api/admin/cache/stats", () => {
     )!;
     expect(airscoreNs.item_count).toBe(3);
 
+    // Seeding a comp with a routed task also indexes it for search.
+    const searchNs = data.namespaces.find((ns) => ns.name === "Search index (D1)")!;
+    expect(searchNs.item_count).toBeGreaterThanOrEqual(1);
+
     expect(data.total_items).toBe(
-      scoreStore.item_count + kvNs.item_count + airscoreNs.item_count
+      scoreStore.item_count + searchNs.item_count + kvNs.item_count + airscoreNs.item_count
     );
     // Sanity: the stale row we seeded is the one counted.
     const row = await env.DB.prepare(

@@ -12,7 +12,7 @@ perfectly good kit member when there's no behaviour to own (`rac/badge.tsx`,
 live in `src/react/vendor/`: today the `input-otp` sign-in field and the
 `sonner` toaster.
 
-Read the **gotchas** section before touching kit code — nineteen of them, each
+Read the **gotchas** section before touching kit code — twenty of them, each
 one something that cost real debugging. The rest of this doc is history: how
 the migration went, what was decided and why. It is worth keeping because the
 reasoning still applies to new UI.
@@ -181,7 +181,8 @@ instance only exists a tick after mount, so gate anything that drives it on
   markup; the kit pieces it uses are rac), `components/PageToc.tsx` (rac
   Select for the mobile section jump), `components/Timestamp.tsx` (rac
   Tooltip), and `rac/tree.tsx` in `pages/Dashboard.tsx` (the flights Tree —
-  the rest of the Dashboard is still ui/).
+  the rest of the Dashboard followed in the 2026-07-27 waves; it is now rac
+  tabs/meter/button/tooltip throughout).
   And — 2026-07-21 — the waypoints page: `pages/CompWaypoints.tsx` (RAC
   buttons/FileTrigger/ToggleButton, read-only RAC table for non-admins;
   the editable grid became an **inline Tabulator grid**
@@ -192,15 +193,18 @@ instance only exists a tick after mount, so gate anything that drives it on
   now RAC ModalOverlay/Modal/Dialog primitives, so focus trap/restore, Esc
   and scroll-locking come from react-aria).
   Note that dialogs like SubmitTrackDialog/AddWaypointDialog are **shared** —
-  unconverted pages (CompWaypoints) already render these RAC components today;
+  which is why they could be converted ahead of every page that renders them:
   RAC components work fine outside converted pages (`RacRouterProvider` is
   global in `Shell`, so `href`-based client routing just works).
-- **Not converted:** see the conversion map at the end of this doc. Tabulator
-  remains in the comp-page pilots dialog **by design** (see the Tabulator
-  policy at the top — it is kept, not pending). The ui/ (shadcn) kit stays
-  for unconverted pages.
-- The date/time pickers (`ui/date-picker.tsx`) were already RAC and are used
-  as-is by both kits.
+- **Nothing is left unconverted** — the six waves finished on 2026-07-27 and
+  `src/react/ui/` is gone. For where each kind of code lives now, see
+  [Where the UI lives](#where-the-ui-lives-2026-07-27-post-migration) at the
+  end of this doc. Tabulator remains in the comp-page pilots dialog and the
+  waypoints admin grid **by design** (see the Tabulator policy at the top —
+  it is kept, not pending).
+- The date/time pickers were already RAC before the migration and moved across
+  unchanged; they live at `rac/date-picker.tsx` (lazy-loaded via
+  `date-picker.impl.tsx` so they stay out of the SSR bundle).
 
 ## Loading and in-flight states (2026-07-27)
 
@@ -483,6 +487,20 @@ Points worth knowing before you reach for one:
     label. If the hint is the only name the control has, it belongs in the
     accessible name (`aria-label`), and if it's prose, use `rac/popover` —
     tooltips are hover-only and dismiss before a sentence can be read.
+
+20. **An external URL in a RAC `href` is mangled by the router bridge.**
+    `RacRouterProvider` hands RAC react-router's `useHref`, and RAC writes
+    whatever comes back into the anchor — so `useHref("https://sheets.new")`
+    resolved that against the current path and rendered
+    `/comp/<comp>/scores/https:/sheets.new`. A 404 nobody sees until they click
+    it, because the anchor *looks* fine in the source. `rac/router.tsx` now
+    passes anything with a scheme (`https:`, `mailto:`, `tel:`) or a
+    protocol-relative `//` straight through, on both the `useHref` and
+    `navigate` sides, so a RAC `Link` / `LinkButton` / `MenuItem` may hold an
+    external href like any other. If you see a route that has swallowed a URL,
+    this is why. (Plain `<a>` elements were never affected — the provider only
+    touches RAC's own components, which is why the app's other outbound links
+    survived.)
 
 ## Verification playbook (all part of "done" for RAC work)
 

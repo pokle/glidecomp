@@ -1,6 +1,14 @@
 # Email OTP sign-in — plan
 
-*2026-07-14*
+*2026-07-14. Status: ✅ Shipped.* Email OTP is a live sign-in method:
+`web/workers/auth-api/src/otp-email.ts` sends through the Cloudflare Email
+Service `send_email` binding declared in that worker's `wrangler.toml`,
+`src/auth.ts` mounts the Better Auth `emailOTP` plugin, `src/rate-limit.ts` +
+migration `web/db/migrations/0017_rate_limit.sql` carry the throttle, and the
+UI is `web/frontend/src/react/pages/SignIn.tsx` over the
+`web/frontend/src/react/vendor/input-otp.tsx` field. Covered by
+`e2e/email-otp-signin.spec.ts` and the `web/workers/auth-api/test/`
+unit suites `otp-email.test.ts` and `email-otp.test.ts`.
 
 ## Goal
 
@@ -284,9 +292,14 @@ button are untouched.
 
 ## Implementation order
 
-1. Migration `0017_rate_limit.sql`; wrangler `send_email` binding + `AuthEnv`.
-2. `otp-email.ts` + auth.ts changes (plugin, session, rateLimit) + per-email
-   throttle + dev OTP helper. Unit tests.
-3. Dashboard: verify sender domain (manual, can proceed in parallel).
-4. `/signin` page + client plugin + call-site swap + `input-otp` component.
-5. E2E spec; a11y checklist pass; preview-deploy manual test with real email.
+All steps are complete — the flow is live in production.
+
+1. ✅ Migration `0017_rate_limit.sql`; wrangler `send_email` binding + `AuthEnv`.
+2. ✅ `otp-email.ts` + auth.ts changes (plugin, session, rateLimit) + per-email
+   throttle + dev OTP helper. Unit tests (`test/otp-email.test.ts`,
+   `test/email-otp.test.ts`).
+3. ✅ Dashboard: verify sender domain (manual, can proceed in parallel).
+4. ✅ `/signin` page + client plugin + call-site swap + `input-otp` component
+   (`src/react/pages/SignIn.tsx`, `src/react/vendor/input-otp.tsx`).
+5. ✅ E2E spec (`e2e/email-otp-signin.spec.ts`); a11y checklist pass;
+   preview-deploy manual test with real email.

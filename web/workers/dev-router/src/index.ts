@@ -48,6 +48,10 @@ const ROUTES: Array<[string, keyof Env]> = [
   ["/api/auth", "AUTH_API"],
   ["/api/airscore", "AIRSCORE_API"],
   ["/api/comp", "COMPETITION_API"],
+  // Backs the root-level /civl-rankings.csv download. In production a Pages
+  // Function forwards to this path over the service binding; in dev the Vite
+  // proxy rewrites the root URL to it (see vite.config.ts).
+  ["/api/civl-rankings.csv", "COMPETITION_API"],
   ["/api/user", "COMPETITION_API"],
   ["/api/u", "COMPETITION_API"],
   ["/api/admin", "COMPETITION_API"],

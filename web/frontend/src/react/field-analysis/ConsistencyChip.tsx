@@ -40,7 +40,7 @@ function ariaText(m: CompMetricAggregate): string {
   const s = m.signSummary;
   const informative = s.negative + s.positive;
   if (informative === 0) {
-    return "no clear task: no task's correlation cleared its noise floor";
+    return "no clear task: the correlation of no task cleared its noise floor";
   }
   const neg = `larger values went with better ranks on ${s.negative}`;
   const pos = `worse ranks on ${s.positive}`;
@@ -48,7 +48,7 @@ function ariaText(m: CompMetricAggregate): string {
     case "split":
       return `depended on the day: ${neg} of ${informative} tasks that cleared their noise floor and ${pos}`;
     case "quiet":
-      return `one clear task only: ${neg} and ${pos} — one task cleared its noise floor, too few to read a direction from`;
+      return `one clear task only: ${neg} and ${pos}. One task cleared its noise floor, which is too few to read a direction from`;
     default:
       return `${consistencyWords(m.consistency, informative)}: ${neg} and ${pos} of ${informative} tasks that cleared their noise floor`;
   }

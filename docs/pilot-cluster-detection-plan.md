@@ -305,28 +305,47 @@ Run via `bun run test` (engine + typecheck).
 
 | Phase | Deliverable | Done when |
 |---|---|---|
-| **0 — Spike** | Runtime clustering at load + simplest overlay (ground ring per active cluster) | Start gaggle + a mid-course gaggle visibly captured on the sample |
-| **1 — Engine** | `cluster-detector.ts` (`clusterFrame`, `detectGaggles`) + tests, exported from `index.ts` | `bun run test` green; episodes match the spike visually |
-| **2 — In-scene viz** | `gaggle-layer.ts`: translucent hull blob + count label + stable colour + fade in/out, vScale-correct, both backends | Scrubbing shows blobs form/grow/dissolve; Playwright screenshot confirms |
-| **3 — UI** | Timeline ribbon + gaggle panel + toggle + click-to-seek/follow + dev sliders | Can find every gaggle from the ribbon and jump to it |
+| **0 — Spike** | Runtime clustering at load + simplest overlay (ground ring per active cluster) | ✅ Superseded by phases 1–3 below. |
+| **1 — Engine** | `cluster-detector.ts` (`clusterFrame`, `detectGaggles`) + tests, exported from `index.ts` | ✅ Shipped: `web/engine/src/cluster-detector.ts` + `web/engine/tests/cluster-detector.test.ts`. |
+| **2 — In-scene viz** | `gaggle-layer.ts`: translucent hull blob + count label + stable colour + fade in/out, vScale-correct, both backends | ✅ Shipped: `web/frontend/src/replay/gaggle-layer.ts` (rounded convex hull) + `gaggle-hull.ts` (+ `gaggle-hull.test.ts`). |
+| **3 — UI** | Timeline ribbon + gaggle panel + toggle + click-to-seek/follow + dev sliders | ✅ Shipped: `web/frontend/src/replay/gaggle-ui.ts` — "the timeline ribbon under the scrubber and the collapsible gaggle panel". |
 | **4 — Polish / port** | Move packing into the competition-api Worker; serve a single bundle per comp task; seed the sample as a real DB competition | ✅ Worker serves `GET /api/comp/.../3dvis` (+ `sample-3dvis`); `bun run seed` (idempotent) loads the sample comp; page loads via `loadBundle`. See docs/3d-flight-replay-notes.md §8. |
 
 ---
 
-## 9. Open decisions (recommended defaults in **bold**)
+## 9. Open decisions (recommended defaults in **bold**) — all settled
+
+Recorded as shipped; the bold text is the original recommendation, the
+✅ line is what the code actually does.
 
 1. **Definition of "together":** 3D gates (horizontal + vertical) **[recommended]**
    vs horizontal-only. Vertical gate avoids calling a high pilot and a low pilot
    "together" just because they share a map pixel.
+   - ✅ **As recommended.** `DEFAULT_GAGGLE_PARAMS` keeps both gates
+     (`horizontalRadius: 400`, `verticalBand: 300`).
 2. **Minimum gaggle size:** **3** (a genuine gaggle) vs 2 ("flying together").
+   - ✅ **Shipped as 2, NOT the bold recommendation of 3.** `minPilots: 2` in
+     `cluster-detector.ts` — "some of the most instructive gaggles are a pair
+     working together", and going that low is safe because the pre-start
+     loiter is excluded separately via the `startCylinder` option on
+     `detectGaggles`. (This also reconciles the doc with its own head note at
+     the top of the file, which already recorded the shipped value of 2.)
+     A `stickyFactor: 1.6` hysteresis field was added at the same time — not
+     an option this list anticipated.
 3. **Compute timing:** **runtime at load now** (fast iteration) → bake into
    manifest/Worker later.
+   - ✅ **As recommended, and still runtime.** `web/frontend/src/replay/
+     gaggles.ts`: "Runs at load time, so tuning a threshold is just a page
+     reload." Nothing is baked into the manifest yet.
 4. **Primary visual:** **translucent convex-hull blob + count label, plus the
    timeline ribbon** vs lighter-weight options (centroid sphere, member halos).
+   - ✅ **As recommended.** `gaggle-layer.ts` draws a rounded convex hull;
+     `gaggle-ui.ts` draws the ribbon.
 5. **Clustering method:** **single-linkage union-find** to start → DBSCAN if
    chaining appears during calibration.
-
-None of these block Phase 0; they're calibrated against the sample during it.
+   - ✅ **Single-linkage union-find, still.** DBSCAN was never needed —
+     `cluster-detector.ts` documents "per-frame spatial clustering —
+     single-linkage union-find".
 
 ---
 
@@ -346,7 +365,9 @@ None of these block Phase 0; they're calibrated against the sample during it.
 
 ## 11. Known follow-ups
 
-- **Revisit `nearTurnpoint` labels (Phase 3).** Some episode labels read wrong —
+- **Revisit `nearTurnpoint` labels (still open).** Phase 3 has since shipped
+  without this, so it is loose follow-up work rather than part of a phase.
+  Some episode labels read wrong —
   e.g. an early-course gaggle near CUDGWE/TINTAL is tagged "near NCORGL". The
   detector picks the turnpoint nearest the episode centroid at its *midpoint*,
   which can land on a geometrically-close-but-wrong TP (and a long episode's

@@ -39,7 +39,9 @@ describe("debriefFindings", () => {
     expect(findings.length).toBe(1);
     expect(findings[0].higherBetterToday).toBe(false);
     expect(findings[0].otherCount).toBe(2);
-    expect(debriefSentence(findings[0])).toContain("opposite of this comp's other tasks");
+    expect(debriefSentence(findings[0])).toContain(
+      "the opposite of the other tasks in this competition",
+    );
   });
 
   it("stays silent when today's coefficient is within noise", () => {

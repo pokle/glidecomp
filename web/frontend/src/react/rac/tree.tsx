@@ -1,7 +1,17 @@
 /**
  * React Aria Components Tree — hierarchical rows with expand/collapse and
- * full keyboard navigation (Up/Down move rows, Left/Right collapse/expand,
- * Tab reaches a row's focusable children such as inline links).
+ * full keyboard navigation.
+ *
+ * It is a `treegrid`, and that decides the keyboard contract: the whole tree
+ * is ONE tab stop, Up/Down move between rows, and a row's own focusable
+ * children (inline links, the route glyph on the comp page) are reached with
+ * Right/Left, not with Tab — Tab leaves the tree entirely. That is RAC's
+ * `keyboardNavigationBehavior: 'arrow'`, which Tree hard-codes and does not
+ * expose as a prop, so it is the contract here whether or not a consumer
+ * wants it. Two consequences worth knowing before putting a control in a row:
+ * pressing it focuses the ROW rather than the control, and focus returning
+ * from a dialog it opened lands on the row too (react-aria pulls focus back
+ * to the focused row whenever focus re-enters the collection).
  *
  * First consumer: the Dashboard's Competition flights section, which groups
  * flights under their competition. RAC renders every item as a sibling

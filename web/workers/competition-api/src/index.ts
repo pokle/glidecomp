@@ -5,6 +5,8 @@ import { MAX_BODY_BYTES } from "./igc-validation";
 import type { Env, AuthUser } from "./env";
 import { compRoutes } from "./routes/comp";
 import { lookupRoutes } from "./routes/lookup";
+import { searchRoutes } from "./routes/search";
+import { drainSearchIndex, sweepSearchIndex } from "./search-index";
 import { taskRoutes } from "./routes/task";
 import { waypointsRoutes } from "./routes/waypoints";
 import { igcRoutes } from "./routes/igc";
@@ -19,6 +21,7 @@ import { userFilesRoutes } from "./routes/user-files";
 import { visualizationRoutes } from "./routes/visualization";
 import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
+import { civlRankingsRoutes } from "./routes/civl-rankings";
 
 type Variables = {
   user: AuthUser;
@@ -87,6 +90,32 @@ app.onError((err, c) => {
   return c.json({ error: message }, 500);
 });
 
+/** Reindex passes run after a mutation (40 documents each). */
+const DRAIN_PASSES_PER_MUTATION = 2;
+/** Reindex passes run per cron tick — the backstop, so it may work harder. */
+const DRAIN_PASSES_PER_CRON = 50;
+/** The cron that looks for documents nothing marked dirty. Must match the
+ *  second entry of `crons` in wrangler.toml. */
+const NIGHTLY_SWEEP_CRON = "43 3 * * *";
+
+// Keep the search index in step with the write that just happened.
+//
+// Unlike audit() and bumpAndRevalidateScores(), which every mutating handler
+// must remember to call, search documents derive from columns the database
+// can watch itself: triggers (migration 0026) queue the keys, and this drains
+// the queue once per mutation. One place instead of twenty-eight, and a
+// handler added next year is indexed without anyone remembering it.
+//
+// Awaited rather than deferred, so a competition created by a request is
+// findable by the request after it. The cost is one SELECT against a table
+// that is almost always empty.
+app.use("*", async (c, next) => {
+  await next();
+  const method = c.req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return;
+  await drainSearchIndex(c.env.DB, DRAIN_PASSES_PER_MUTATION);
+});
+
 // Mount routes — igcRoutes first to avoid potential conflicts
 const routes = app
   .route("/", igcRoutes)
@@ -94,8 +123,10 @@ const routes = app
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", manualFlightRoutes)
-  // Ahead of compRoutes: /api/comp/lookup must win over /api/comp/:comp_id.
+  // Ahead of compRoutes: /api/comp/lookup and /api/comp/search must win over
+  // /api/comp/:comp_id.
   .route("/", lookupRoutes)
+  .route("/", searchRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", waypointsRoutes)
@@ -105,10 +136,33 @@ const routes = app
   .route("/", auditRoutes)
   .route("/", userFilesRoutes)
   .route("/", adminRoutes)
-  .route("/", cacheRoutes);
+  .route("/", cacheRoutes)
+  .route("/", civlRankingsRoutes);
 
 export type AppType = typeof routes;
 
 export default {
   fetch: app.fetch,
-};
+
+  /**
+   * The search index's backstops (see ./search-index.ts).
+   *
+   * Hourly: drain whatever the mutation middleware left behind — a bulk pilot
+   * import queues more keys than one request should spend time on.
+   *
+   * Nightly: also sweep for documents that are missing or were written by an
+   * older builder. The triggers cannot miss a change, but a deploy that
+   * changes what a document contains leaves every existing row describing the
+   * old shape, and this is what makes that heal on its own.
+   */
+  async scheduled(controller, env: Env, _ctx) {
+    let swept = 0;
+    if (controller.cron === NIGHTLY_SWEEP_CRON) {
+      swept = await sweepSearchIndex(env.DB);
+    }
+    const drained = await drainSearchIndex(env.DB, DRAIN_PASSES_PER_CRON);
+    console.log(
+      `[search] cron ${controller.cron}: ${swept} documents swept, ${drained} rebuilt`
+    );
+  },
+} satisfies ExportedHandler<Env>;

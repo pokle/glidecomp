@@ -19,9 +19,12 @@
  */
 
 import * as THREE from 'three';
+import type { ThermalShapeSummary } from '@glidecomp/engine';
 import { samplePilot, type LoadedTracks } from './track-data';
 import { type GaggleResult } from './gaggles';
 import { GaggleLayer } from './gaggle-layer';
+import { ThermalLayer } from './thermal-layer';
+import { clipToTask } from './scene-bounds';
 import { formatAltitude } from '../analysis/units-browser';
 
 export type ColorMode = 'pilot' | 'altitude' | 'vario' | 'speed' | 'glide';
@@ -40,6 +43,9 @@ const WALL_HEIGHT = 1400; // metres, task-cylinder walls (pre vertical exaggerat
 // Above every depthTest:false ground overlay (task rings/line/chevrons/labels max
 // out at 5, gaggle layer at 7) so live pilot markers are never swallowed by them.
 const MARKER_RENDER_ORDER = 10;
+// Pilot marker cone radius as a fraction of the task extent. Fixed world size,
+// so it reads at the whole-task framing the replay opens on; see markerSpan.
+const MARKER_SIZE_FRAC = 0.012;
 
 /** Vertical-speed colour mode saturates at ±this many m/s. */
 export const VARIO_MAX = 4;
@@ -112,6 +118,10 @@ export class FlightScene {
   // each frame from live member samples (see GaggleLayer).
   private gaggles?: GaggleResult;
   private gaggleLayer?: GaggleLayer;
+
+  // reconstructed thermal columns (see ThermalLayer); data arrives after the
+  // scene builds (independent fetch), so the layer is added via setThermals.
+  private thermalLayer?: ThermalLayer;
 
   /** Turnpoint ground labels, kept so refreshTurnpointLabels() can re-bake them. */
   private tpLabels: THREE.Mesh[] = [];
@@ -231,14 +241,27 @@ export class FlightScene {
       if (pos[i + 2] < minZ) minZ = pos[i + 2];
       if (pos[i + 2] > maxZ) maxZ = pos[i + 2];
     }
-    Object.assign(this.bbox, { minX, maxX, minZ, maxZ });
-    this.extentXZ = Math.max(maxX - minX, maxZ - minZ, 1000);
-    this.center.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
+    const b = clipToTask({ minX, maxX, minZ, maxZ }, this.tracks.manifest.task);
+    Object.assign(this.bbox, b);
+    this.extentXZ = Math.max(b.maxX - b.minX, b.maxZ - b.minZ, 1000);
+    this.center.set((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2);
+  }
+
+  /**
+   * The pilot marker's longest world dimension (metres, pre-exaggeration).
+   *
+   * Markers are sized against the WHOLE task and never scale with camera
+   * distance, so on a 60 km task one cone is ~1.3 km long. Anything that
+   * frames a small feature has to floor its zoom on this, or the nearest
+   * pilot becomes a wall of colour across the frame.
+   */
+  get markerSpan(): number {
+    return this.extentXZ * MARKER_SIZE_FRAC * 1.8;
   }
 
   private buildMarkers(): void {
     const n = this.nPilots;
-    const size = this.extentXZ * 0.012;
+    const size = this.extentXZ * MARKER_SIZE_FRAC;
     const geom = new THREE.ConeGeometry(size * 0.5, size * 1.8, 10);
     // transparent (at full opacity) so this joins the transparent render queue,
     // where MARKER_RENDER_ORDER lets it paint over the depthTest:false ground
@@ -595,6 +618,34 @@ export class FlightScene {
     this.gaggleLayer?.setHighlight(id);
   }
 
+  /** Build (or replace) the reconstructed-thermal layer. */
+  setThermals(shapes: ThermalShapeSummary[]): void {
+    if (this.thermalLayer) {
+      this.group.remove(this.thermalLayer.group);
+      this.thermalLayer.dispose();
+      this.thermalLayer = undefined;
+    }
+    if (shapes.length === 0) return;
+    this.thermalLayer = new ThermalLayer(shapes, this.tracks.manifest, this.light);
+    this.thermalLayer.setVScale(this.vScale);
+    this.group.add(this.thermalLayer.group);
+  }
+
+  /** Show/hide the thermal columns. */
+  setThermalsVisible(visible: boolean): void {
+    this.thermalLayer?.setVisible(visible);
+  }
+
+  /** Emphasise one thermal column (others dimmed); -1 clears. */
+  setThermalHighlight(id: number): void {
+    this.thermalLayer?.setHighlight(id);
+  }
+
+  /** Column centre for camera framing (un-exaggerated y), or null. */
+  thermalCentre(id: number): { x: number; z: number; yBase: number; topBase: number; radius: number } | null {
+    return this.thermalLayer?.centreOf(id) ?? null;
+  }
+
   // --- per-frame -----------------------------------------------------------
 
   setTime(t: number): void {
@@ -647,6 +698,7 @@ export class FlightScene {
     this.markers.instanceMatrix.needsUpdate = true;
     if (this.markerOutlines) this.markerOutlines.instanceMatrix.needsUpdate = true;
     this.gaggleLayer?.update(t, this.samplesOut);
+    this.thermalLayer?.update(t);
     return this.samplesOut;
   }
 
@@ -656,6 +708,7 @@ export class FlightScene {
     this.vScale = v;
     this.trailMat.uniforms.uVScale.value = v;
     this.applyWallScale();
+    this.thermalLayer?.setVScale(v);
   }
 
   setColorMode(mode: ColorMode): void {
@@ -696,6 +749,7 @@ export class FlightScene {
       else m?.dispose();
     };
     this.gaggleLayer?.dispose();
+    this.thermalLayer?.dispose();
     this.group.traverse(free);
     this.markers.geometry.dispose();
     (this.markers.material as THREE.Material).dispose();

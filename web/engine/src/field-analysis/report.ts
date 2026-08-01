@@ -20,6 +20,7 @@ import type {
   CompAggregateReport,
   CompMetricAggregate,
   FieldAnalysisReport,
+  FieldThermalsSummary,
   MetricReport,
   ReportCell,
   ReportTable,
@@ -227,8 +228,77 @@ export function renderFieldReport(
   lines.push('', heading('Pilot style clusters (who flew alike)', '-'));
   lines.push(...renderStyleClusters(clusterPilotStyles(report)));
 
+  if (report.thermals) {
+    lines.push('', heading('Reconstructed thermals (multi-pilot, chronological)', '-'));
+    lines.push(...renderThermals(report.thermals, timeZone));
+  }
+
   lines.push('');
   return lines.join('\n');
+}
+
+/**
+ * One row per reconstructed thermal. Compact by design: the full band detail
+ * lives in the web UI; here the reader wants the census and the headline
+ * measurements (climb, lean vs wind, strongest side).
+ */
+function renderThermals(thermals: FieldThermalsSummary, timeZone?: string): string[] {
+  const { shapes, totalShapeCount } = thermals;
+  const lines: string[] = [];
+  if (shapes.length < totalShapeCount) {
+    lines.push(
+      `Top ${shapes.length} of ${totalShapeCount} multi-pilot thermals (by pilot count).`,
+    );
+  }
+  const rows = shapes.map((s) => {
+    const bands = s.bands;
+    const altLo = bands[0].altMin;
+    const altHi = bands[bands.length - 1].altMax;
+    const weighted = bands.reduce(
+      (acc, b) => ({ v: acc.v + b.meanVario * b.sampleCount, n: acc.n + b.sampleCount }),
+      { v: 0, n: 0 },
+    );
+    const lean = s.lean
+      ? `${s.lean.tiltDeg.toFixed(0)}° to ${Math.round(s.lean.bearing)}°${s.lean.confounded ? '*' : ''}`
+      : '—';
+    const wind = s.wind
+      ? `${s.wind.speed.toFixed(1)} m/s @ ${Math.round(s.wind.direction)}°`
+      : '—';
+    const side = s.strongestSide
+      ? `${Math.round(s.strongestSide.bearing)}° (+${s.strongestSide.meanVario.toFixed(1)})`
+      : '—';
+    return [
+      { t: new Date(s.startMs).toISOString() },
+      String(s.pilotCount),
+      `${Math.round(altLo)}–${Math.round(altHi)} m`,
+      weighted.n > 0 ? `+${(weighted.v / weighted.n).toFixed(1)}` : '—',
+      lean,
+      wind,
+      side,
+    ];
+  });
+  lines.push(
+    ...renderTable(
+      {
+        title: 'Thermals',
+        columns: [
+          { header: 'Start', align: 'left' },
+          { header: 'Pilots', align: 'right' },
+          { header: 'Altitude', align: 'right' },
+          { header: 'Climb', align: 'right' },
+          { header: 'Lean', align: 'right' },
+          { header: 'Wind (tracks)', align: 'right' },
+          { header: 'Best side', align: 'right' },
+        ],
+        rows,
+      },
+      timeZone,
+    ),
+  );
+  if (shapes.some((s) => s.lean?.confounded)) {
+    lines.push('* the field climbed as one wave, so lean cannot be told from drift');
+  }
+  return lines;
 }
 
 /** A rank statistic for display: whole ranks stay whole, an even-count
@@ -249,10 +319,11 @@ function renderStyleClusters(sc: StyleClusterReport | null): string[] {
       `${sc.k} groups (mean silhouette ${sc.meanSilhouette.toFixed(2)}, k searched ${sc.kMin}–${sc.kMax}).`,
   );
   lines.push(
-    'Method: within-field percentile per metric, Gower distance over the metrics both pilots have',
-    '(nothing imputed), Ward-linkage tree cut at the best-silhouette k. Groups are STYLE, the rank',
-    'spread beside each is where that style did and did not pay. Silhouette ≈ 0 means the group',
-    'boundaries are soft; nearer 1 means tight, well-separated groups.',
+    'Method: a within-field percentile for each metric, then the Gower distance over the metrics',
+    'that both pilots have, with nothing filled in, then a Ward-linkage tree cut at the k with the',
+    'best silhouette. The groups are STYLE. The rank spread beside each group is where that style',
+    'paid and where it did not. A silhouette near 0 means the group boundaries are soft. A value',
+    'nearer 1 means tight, well-separated groups.',
   );
   for (const c of sc.clusters) {
     lines.push(
@@ -346,10 +417,11 @@ function renderCorrelationTable(report: FieldAnalysisReport): string[] {
         footnotes: [
           'Rank 1 is best, so a well-behaved "higher" metric shows NEGATIVE ρ and a "lower" metric positive ρ.',
           'For "neutral" metrics the sign itself is the finding.',
-          'Verdicts: strong |ρ| ≥ 0.5, moderate ≥ 0.3, weak below — only after clearing the α = 0.05',
-          `noise floor for that n ("within noise" otherwise); verdicts need n ≥ ${MIN_CORRELATION_N}.`,
-          'With this many metrics ranked on one task, the top rows are partly luck — trust the',
-          'metrics that repeat across tasks (whole-comp report).',
+          'Verdicts: strong is |ρ| ≥ 0.5, moderate is ≥ 0.3, and weak is less than that. A metric',
+          'gets a verdict only after it clears the α = 0.05 noise floor for that n, and it reads',
+          `"within noise" if it does not. A verdict also needs n ≥ ${MIN_CORRELATION_N}.`,
+          'This task ranks many metrics, so the top rows are partly luck. Trust the metrics that',
+          'repeat across tasks, in the whole-competition report.',
         ],
       }),
     );
@@ -421,8 +493,9 @@ export function renderCompReport(report: CompAggregateReport): string {
       'the two means the payoff depended on the day.',
       'signs counts tasks whose |ρ| cleared their noise floor: − = larger value went with better',
       'ranks. A split is a finding (day-dependent payoff), not a defect.',
-      'Verdicts: strong |ρ| ≥ 0.5, moderate ≥ 0.3, weak below — only after clearing the α = 0.05',
-      'noise floor for that n ("within noise" otherwise).',
+      'Verdicts: strong is |ρ| ≥ 0.5, moderate is ≥ 0.3, and weak is less than that. A metric gets',
+      'a verdict only after it clears the α = 0.05 noise floor for that n, and it reads "within',
+      'noise" if it does not.',
     ],
   };
   lines.push('', ...renderTable(separation));

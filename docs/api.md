@@ -77,6 +77,7 @@ curl https://glidecomp.com/api/comp
 
 Returns public competitions from the last 24 months, newest first. If you send a
 key, competitions you administer are merged in with `"is_admin": true`.
+`category` is `"hg"` (hang gliding) or `"pg"` (paragliding).
 
 ```json
 {
@@ -84,7 +85,7 @@ key, competitions you administer are merged in with `"is_admin": true`.
     {
       "comp_id": "compa",
       "name": "Corryong Cup 2026",
-      "category": "paragliding",
+      "category": "pg",
       "scoring_format": "gap",
       "first_task_date": "2026-01-04",
       "last_task_date": "2026-01-10",
@@ -159,6 +160,70 @@ curl https://glidecomp.com/api/comp/compa/pilot
 
 Returns pilots registered in the comp. Personal contact fields (email, phone)
 are redacted unless your key belongs to an admin of that competition.
+
+### Task weather
+
+```bash
+curl https://glidecomp.com/api/comp/compa/task/taska/weather
+```
+
+The modelled weather for the task's route and date — winds, thermal top, and
+whatever else the source carries — each answer stamped with the provider and
+whether it is a record or a forecast. Answers are cached; a task nobody has
+opened yet returns a `pending` marker rather than blocking on the provider, so
+poll if you get one.
+
+### Task field analysis
+
+```bash
+curl https://glidecomp.com/api/comp/compa/task/taska/field-analysis
+```
+
+```bash
+curl https://glidecomp.com/api/comp/compa/field-analysis
+```
+
+Per-pilot behavioural metrics across the whole field (climbing, gliding,
+decision-making, gaggle, race craft, day profile), ranked by their Spearman
+correlation against GAP rank; the comp-level URL aggregates the per-task
+reports. Expensive to compute, so a cold report returns `pending` and is
+scheduled — poll until it lands.
+
+### Competition waypoints
+
+```bash
+curl https://glidecomp.com/api/comp/compa/waypoints
+```
+
+```bash
+curl https://glidecomp.com/api/comp/compa/waypoints/gpx
+```
+
+The comp's region waypoints. The `:format` segment is one of `seeyou-cup`,
+`gpx`, `compegps`, `ozi`, `fs-geo`, `fs-utm`, `kml`, `csv` — anything else is
+`404`. Add `…/task/taska/waypoints/:format` for just the waypoints one task
+uses (that one also accepts `xctsk`).
+
+### Finding a comp, task or pilot by name
+
+```bash
+curl 'https://glidecomp.com/api/comp/lookup?comp_q=corryong'
+```
+
+A capped name search over comps, tasks and pilots, returning ids and names.
+It's what the "did you mean…" repair on a dead `/comp` URL runs on. Accepts
+`comp_q`, `task_q` and `pilot_q`.
+
+### CIVL world rankings
+
+```bash
+curl 'https://glidecomp.com/civl-rankings.csv?slug=hang-gliding-class-1-xc'
+```
+
+Note the site root, not `/api/` — this one is meant to be opened in a browser.
+It returns the FAI/CIVL monthly world ranking as imported by GlideComp, as CSV:
+latest month only, all ten disciplines unless you narrow it with `?slug=`.
+Every row is a copy of a public CIVL list.
 
 ## Writing: submitting a track
 

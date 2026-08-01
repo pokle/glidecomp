@@ -35,6 +35,7 @@ export {
   lclHeightAglM,
   levelNearestHeight,
   pressureToHeightM,
+  windAtHeight,
 } from "./derive";
 export {
   DEFAULT_WEATHER_PROVIDERS,

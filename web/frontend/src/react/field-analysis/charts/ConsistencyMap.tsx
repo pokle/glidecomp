@@ -80,9 +80,10 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
   );
 
   const caption =
-    "Dots on the diagonal separate the field the same way every task; dots far " +
-    "below it are strong per day but flip direction — the payoff depended on the " +
-    "day. The table's Across tasks column is the up axis to the exact value.";
+    "A dot on the diagonal separates the field the same way in every task. A dot " +
+    "far below the diagonal is strong on each day, but changes direction, so the " +
+    "payoff depended on the day. The Across tasks column of the table gives the " +
+    "exact value of the up axis.";
 
   return (
     <figure className="max-w-xl space-y-1">

@@ -7,9 +7,10 @@
  * rest of the app; the interaction layer (dialogs, tables, fields, menus) is
  * RAC. See the PR/issue discussion before extending the pattern elsewhere.
  *
- * Everyone sees a read-only Turnpoints listing; admins additionally get the
- * route editor dialog (comp/RouteEditorDialog) covering turnpoints, start
- * gates, goal, and .xctsk / XContest import-export (#270).
+ * Everyone sees a read-only "Route" section (summary, diagram, task strip and
+ * turnpoint listing); admins additionally get the route editor dialog
+ * (comp/RouteEditorDialog) covering turnpoints, start gates, goal, and
+ * .xctsk / XContest import-export (#270).
  */
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -42,10 +43,12 @@ import {
 } from "../lib/time";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { useAdminView, useUser } from "../lib/user";
+import { useAdminView, useGoToSignIn, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
 import { WeatherSection } from "../weather/WeatherSection";
+import { useTaskWeather } from "../weather/use-task-weather";
+import { taskWindFromWeather, type TaskWind } from "../comp/task-wind";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskResults } from "../comp/TaskResults";
 import { CompNameProvider } from "../comp/comp-name-context";
@@ -53,8 +56,9 @@ import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
+import { TaskStrip } from "../comp/TaskStrip";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
-import { useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
+import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
   fetchWithRetry,
   isPastCloseDate,
@@ -76,6 +80,7 @@ export function TaskDetail() {
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
+  const goToSignIn = useGoToSignIn();
   // Gate the ICU zone abbreviation in SSR-rendered instants (the stop notice
   // below) until mounted, so the server markup and first client render agree.
   const mounted = useMounted();
@@ -99,6 +104,7 @@ export function TaskDetail() {
   const [replayAvailable, setReplayAvailable] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
 
   useEffect(() => {
     // Clear any previous verdict first. react-router keeps this component
@@ -160,8 +166,9 @@ export function TaskDetail() {
     user != null && comp != null && comp.admins.some((a) => a.email === user.email)
   );
 
-  // Deep link from the comp hero's "Edit route…" button: open the route
-  // editor once the task has loaded and the admin check has resolved.
+  // `#edit-route` deep link (the comp page's featured-task card used to point
+  // here; a bookmarked or shared link still can): open the route editor once
+  // the task has loaded and the admin check has resolved.
   useEffect(() => {
     if (location.hash === "#edit-route" && isAdmin && task) setRouteOpen(true);
   }, [location.hash, isAdmin, task]);
@@ -178,6 +185,15 @@ export function TaskDetail() {
     compId ?? "",
     Boolean(comp?.open_igc_upload),
     isAdmin
+  );
+
+  // Fetched ONCE here and handed down, rather than in each consumer: the
+  // weather section and the route views both want it, and the endpoint can
+  // schedule a background provider fetch, so asking twice is not free.
+  const weather = useTaskWeather(compId || null, taskId || null);
+  const wind = useMemo(
+    () => taskWindFromWeather(weather.data?.weather ?? null),
+    [weather.data]
   );
 
   if (notFound || !compId || !taskId) {
@@ -247,7 +263,26 @@ export function TaskDetail() {
           ) : null}
         </div>
       </div>
+      {/* The task's action row. It leads with Submit track — the one thing a
+          pilot comes to this page to DO, and previously reachable only from
+          the Results section header, which on a task with a route and weather
+          is a scroll away. It stays there too, since that is where a section's
+          own manage action belongs. Editing the route deliberately is NOT
+          here: it is a section-scoped action and the Route header carrying it
+          is the very next thing on the page.
+
+          Submit track is the page's ONE filled button; everything after it —
+          share, map, replay, analysis — is a uniform outline cluster, because
+          those are places to go rather than things to do. */}
       <div className="mt-3 flex flex-wrap gap-2">
+        {/* Auth-dependent, so mount-gated: the server renders this page for
+            anyone, and a button that depends on who is asking would not match
+            the server's markup on hydration (same rule as TaskResults). */}
+        {mounted && user && !isClosed ? (
+          <Button size="sm" onPress={() => setSubmitOpen(true)}>
+            Submit track
+          </Button>
+        ) : null}
         {task.xctsk ? (
           <TaskExportButtons
             compId={compId}
@@ -295,12 +330,40 @@ export function TaskDetail() {
             Field analysis
           </LinkButton>
         ) : null}
+        {/* Last, and deliberately not the primary: a signed-out visitor came to
+            READ the task, and the page they want is the one they are on. */}
+        {mounted && !user && !isClosed ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => goToSignIn(window.location.pathname)}
+          >
+            Sign in to submit your track
+          </Button>
+        ) : null}
       </div>
+
+      {submitOpen ? (
+        <SubmitTrackDialog
+          compId={compId}
+          taskId={taskId}
+          canUploadOnBehalf={canUploadOnBehalf}
+          onClose={() => setSubmitOpen(false)}
+          onUploaded={() => {
+            setSubmitOpen(false);
+            // The podium and the "your track is in" line below are a separate
+            // fetch — tell them something changed, or the pilot's own upload
+            // is the one thing the page fails to show them.
+            setResultsRefresh((n) => n + 1);
+          }}
+        />
+      ) : null}
 
       <TurnpointsSection
         xctsk={task.xctsk}
         taskDate={task.task_date}
         timezone={comp?.timezone ?? null}
+        wind={wind}
         isAdmin={isAdmin}
         onEditRoute={() => setRouteOpen(true)}
       />
@@ -312,6 +375,7 @@ export function TaskDetail() {
       <WeatherSection
         compId={compId}
         taskId={taskId}
+        weather={weather}
         notes={task.weather_notes}
         isAdmin={isAdmin}
         compTimezone={comp?.timezone ?? null}
@@ -525,14 +589,17 @@ function TaskSummaryHeader({
 }
 
 /**
- * Turnpoint listing. Read-only for everyone; admins get an Edit route
- * button that opens the full route editor dialog (turnpoints, start
+ * The task's route — headed "Route", because it is the start/goal summary,
+ * the diagram and the task strip as well as the turnpoint listing (the
+ * component keeps its older name). Read-only for everyone; admins get an Edit
+ * route button that opens the full route editor dialog (turnpoints, start
  * gates, goal, .xctsk / XContest import-export).
  */
 function TurnpointsSection({
   xctsk,
   taskDate,
   timezone,
+  wind,
   isAdmin,
   onEditRoute,
 }: {
@@ -540,6 +607,8 @@ function TurnpointsSection({
   taskDate: string;
   /** Comp-local IANA zone; gate times in the summary show comp-local when set. */
   timezone: string | null;
+  /** The day's modelled wind, once the weather lands. Null until then. */
+  wind: TaskWind | null;
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
@@ -552,7 +621,7 @@ function TurnpointsSection({
   return (
     <section>
       <SectionHeader
-        title="Turnpoints"
+        title="Route"
         action={
           isAdmin ? (
             <Button variant="outline" size="sm" onPress={onEditRoute}>
@@ -579,8 +648,14 @@ function TurnpointsSection({
               onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
               onTurnpointSelect={(tp) => setFocused(tp.index)}
               highlightIndex={focused}
+              wind={wind}
             />
           </div>
+          {/* Two views of one route: the diagram is the shape on the ground,
+              the strip is the order and the winding with geography
+              straightened out. The table underneath is the numbers, and the
+              accessible equivalent for both. */}
+          <TaskStrip xctsk={xctsk} wind={wind} />
           <TurnpointsTable xctsk={xctsk} highlightIndex={focused} />
         </>
       ) : (

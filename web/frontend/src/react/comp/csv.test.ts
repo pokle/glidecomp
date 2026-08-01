@@ -51,6 +51,23 @@ describe("exportCsvContent", () => {
     expect(parsed.errors).toEqual([]);
     expect(parsed.rows).toEqual(rows);
   });
+
+  it("prefixes a formula-looking name with a quote (CSV formula injection)", () => {
+    const csv = exportCsvContent([makeRow({ name: "=HYPERLINK(\"https://evil\")" })]);
+    expect(csv).toContain("'=HYPERLINK");
+  });
+
+  it("round-trips a formula-looking name without accumulating quotes", () => {
+    const rows = [
+      makeRow({ name: "=SUM(A1)", team_name: "+61 not a phone", driver_contact: "@handle" }),
+    ];
+    const parsed = parseImportedCsv(exportCsvContent(rows), CLASSES);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows).toEqual(rows);
+    // A second export/import cycle must not add a second guard.
+    const again = parseImportedCsv(exportCsvContent(parsed.rows), CLASSES);
+    expect(again.rows).toEqual(rows);
+  });
 });
 
 describe("parseImportedCsv robustness", () => {

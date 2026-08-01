@@ -146,7 +146,7 @@ project's backlog of record.
 
 ### Parameter Sensitivity
 
-The fixed thresholds work well for typical XC flying conditions but may not suit all situations:
+The default thresholds (`DEFAULT_THRESHOLDS` in `web/engine/src/thresholds.ts`, overridable per call via `resolveThresholds()` and from the analysis page's Settings dialog) work well for typical XC flying conditions but may not suit all situations:
 
 - **Weak thermals** (alpine early morning, coastal): Thermals below 0.5 m/s average will be missed. A pilot circling at 0.3 m/s won't register.
 - **Strong conditions** (flatland summer): Many short thermals may merge if the gap between them is less than 20 seconds.

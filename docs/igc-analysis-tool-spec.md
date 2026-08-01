@@ -37,20 +37,29 @@ Quick access menu for display options and actions.
 - **Toggle Task** - Show/hide task visualization (cylinders, route lines, labels) - persisted via `?task-visible=0` URL param
 - **Toggle Track** - Show/hide flight track and event markers - persisted via `?track-visible=0` URL param
 - **Show Track Metrics** - Show/hide speed overlay with glide chevrons and labels for all glide segments (on/off indicator)
+- **Annotate Map** (`menu-annotate`) - Toggle the freehand annotation overlay (on/off indicator, shortcut `D`)
+- **Text Shadow Tuner** (`menu-text-shadow-tuner`) - Debug tool for tuning the glide-label text shadow
 
-**File Operations:**
-- **Open IGC file** - File picker for IGC upload
-- **Import XContest task** - Enter task code to load from XContest
+**File:**
+- **Load track (IGC) / task (XCTSK) file** (`menu-open-igc`) - File picker for IGC/XCTSK upload
+- **Load XContest task** (`menu-import-task`) - Enter task code to load from XContest
+- **Load AirScore task** (`menu-import-airscore`) - Import a task (and its tracks) from an AirScore competition
+- **Download task (.xctsk)** (`menu-download-task`) - Export the loaded task; hidden until a task is loaded
+- **Unload all (task & track)** (`menu-clear-session`) - Clear the session back to an empty map
 
 **Sample Flights:**
 - Quick load sample IGC files for testing
 
+**Sample Competitions:**
+- Quick load a bundled competition task with its whole field of tracks (enters multi-track mode)
+
 **Settings:**
-- **Configure units...** - Opens dialog to configure display units (see below)
+- **Competition Settings...** (`menu-competition-settings`) - Opens `#competition-settings-dialog` for the GAP scoring parameters (PG/HG, nominal distance/goal/time, minimum distance, leading/arrival toggles)
+- **Settings...** (`menu-configure-settings`) - Opens `#settings-dialog`, which covers display units *and* the event-detection thresholds (see below)
 
-### Units Configuration
+### Settings Dialog
 
-Users can configure display units for measurements via the "Configure units..." option in the command palette. See `configurable-units-spec.md` (in this directory) for full details.
+Opened from the command palette's "Settings..." item (`menu-configure-settings` → `#settings-dialog`). Collapsible sections: **Units**, **Thermal Detection**, **Glide Detection**, **Vario Extremes**, **Takeoff / Landing**, **Circle Detection** — so the same dialog configures how values are displayed and the thresholds the detectors run with (`resolveThresholds` in `web/engine/src/thresholds.ts`). See `configurable-units-spec.md` (in this directory) for full details on the units half.
 
 **Configurable Units:**
 | Unit Type | Options | Default |
@@ -63,38 +72,49 @@ Users can configure display units for measurements via the "Configure units..." 
 **Key Features:**
 - All values update immediately when units are changed (no page refresh required)
 - Preferences persist in localStorage
-- Accessed via command palette: Cmd+K → "Configure units..."
+- Accessed via command palette: Cmd+K → "Settings..."
 
 ### Event Detection
-The tool automatically detects and displays:
+The tool automatically detects the events below. Not everything detected is *listed* in the panel: the raw cylinder crossings are superseded by the scored `*_reaching` events, and individual circles would swamp the list, so `analysis-panel.ts` filters them out of the events list (`hiddenEventTypes`). They still exist on the event array for other consumers.
 
-| Event Type | Description |
-|------------|-------------|
-| Takeoff | First moment of significant ground speed (>5 m/s) |
-| Landing | Last moment of significant ground speed |
-| Thermal Entry | Start of sustained climb (>0.5 m/s average) |
-| Thermal Exit | End of thermal with altitude gain reported |
-| Glide Start/End | Straight glide segments between thermals |
-| Turnpoint Entry/Exit | Crossing turnpoint cylinder boundaries |
-| Start Crossing | Crossing SSS cylinder (race start) |
-| Goal Crossing | Crossing goal cylinder/line |
-| Max/Min Altitude | Altitude extremes during flight |
-| Max Climb/Sink | Maximum vertical speeds |
+| Event Type | Description | In the events list |
+|------------|-------------|--------------------|
+| Takeoff | First moment of significant ground speed (>5 m/s) | Yes |
+| Landing | Last moment of significant ground speed | Yes |
+| Thermal Entry | Start of sustained climb (>0.5 m/s average) | Yes |
+| Thermal Exit | End of thermal with altitude gain reported | Yes |
+| Glide Start/End | Straight glide segments between thermals | Yes |
+| Start Reaching | The scored SSS tag — the fix the start is taken at | Yes |
+| Turnpoint Reaching | The scored tag of each turnpoint in sequence | Yes |
+| ESS Reaching | The scored end-of-speed-section tag | Yes |
+| Goal Reaching | The scored goal tag | Yes |
+| Max/Min Altitude | Altitude extremes during flight | Yes |
+| Max Climb/Sink | Maximum vertical speeds | Yes |
+| Turnpoint Entry/Exit | Crossing turnpoint cylinder boundaries | No — superseded by Turnpoint Reaching |
+| Start Crossing | Crossing SSS cylinder (race start) | No — superseded by Start Reaching |
+| Goal Crossing | Crossing goal cylinder/line | No — superseded by Goal Reaching |
+| Circle Complete | One completed circle (with wind estimate) | No — too numerous to list; feeds the HUD's wind/last-thermal data |
+
+Map markers are a further narrowing again: only `KEY_EVENT_TYPES` (takeoff, landing, the four `*_reaching` events, max altitude) get a marker — see [`mapbox-interactions-spec.md`](mapbox-interactions-spec.md).
 
 ### Event Panel
-Sidebar panel with tabbed interface for viewing flight data. The main tabs appear in the header bar and control the sidebar content.
+Sidebar panel with a tabbed interface for viewing flight data. There is **one flat tab row** — no Track tab, no sub-tabs (`PanelTabType` in `analysis-panel.ts`). Which row is shown depends on the mode; the active tab is remembered in localStorage (`glidecomp-active-tab`).
 
-**Header Tabs (always visible):**
-- **Track** - Flight track analysis with sub-tabs for events, glides, climbs, and sinks
+**Single-track tab row** (`#tab-row-single`, default — Events is the initial tab):
 - **Task** - Task turnpoints with optimized distances, radii, and altitudes
-- **Score** - Scoring breakdown (when a scored task is loaded)
-- **>>** (Hide) - Collapses the sidebar to show full map; clicking any other tab reopens it
-
-**Track Tab Sub-tabs:**
-- **Events** - Chronological list of all detected events (takeoff, thermals, glides, landing, etc.)
+- **Score** - Scoring breakdown for this pilot (when a scored task is loaded)
+- **Events** - Chronological list of the detected events (takeoff, thermals, glides, the `*_reaching` tags, landing, etc.)
 - **Glides** - Glides sorted by distance (longest first), combining start/end info into single entries
 - **Climbs** - Thermals sorted by altitude gain (highest first), combining entry/exit info into single entries
 - **Sinks** - Glides with poor L/D ratio (5:1 or worse), sorted by altitude lost (deepest first)
+
+**Multi-track tab row** (`#tab-row-multi`, shown by `setMultiTrackMode(true)` when a whole competition field is loaded — e.g. from the Sample Competitions group or an AirScore import). The single-track row is hidden and the panel switches to Competition Score:
+- **Competition Score** - The whole field's scores for the task: GAP breakdown or the open-distance table depending on `setCompetitionScoringFormat()`. Selecting pilots here drives which tracks the map draws (`setPilotSelection` / `onPilotSelectionChanged`)
+- **Task** - The same task view as single-track mode
+
+Leaving multi-track mode restores the single row and falls back to Events.
+
+**Hiding the panel:** a close button (`#sidebar-close`) in the flight-info banner collapses the sidebar to show the full map; the map's "Analysis" panel-toggle control reopens it.
 
 **Task Tab Features:**
 - Lists all turnpoints in order with:
@@ -188,19 +208,23 @@ When an event is selected from the panel, the map highlights the event location 
 │                                # field-analysis report after the scores
 └── comp-manifest.ts             # Bundled-comp manifest reading for --comp mode
 
-/web/frontend/src/
+/web/frontend/src/          # (key modules; not exhaustive)
 ├── analysis.html                # Main HTML page with Tailwind layout
-├── analysis.css                 # Page styles (Tailwind, shadcn tokens, MapBox CSS)
+├── analysis.css                 # Page styles (Tailwind, design tokens, MapBox CSS)
 └── analysis/
     ├── main.ts                  # Application entry point and orchestration
-    ├── analysis-panel.ts        # Tabbed panel UI (Track/Task/Score tabs)
+    ├── analysis-panel.ts        # Sidebar panel UI (single- and multi-track tab rows)
+    ├── command-menu.ts          # Command palette (⌘K) wiring
+    ├── task-editor.ts           # Task route editing (turnpoint add/edit/reorder)
     ├── map-provider.ts          # Map provider interface
     ├── map-provider-shared.ts   # Shared map utilities (HUD, glide markers, collision detection)
     ├── mapbox-provider.ts       # MapBox GL JS implementation
+    ├── map-annotations.ts       # Freehand annotation overlay (strokes persisted via storage.ts)
+    ├── elevation.ts             # Terrain elevation lookups
     ├── airscore-client.ts       # AirScore API client
     ├── config.ts                # Configuration storage abstraction
     ├── units-browser.ts         # Browser-side unit formatting
-    ├── storage.ts               # Browser storage (IndexedDB)
+    ├── storage.ts               # Tracks/tasks/annotations via the /api/user/... endpoints (R2 + D1)
     ├── storage-menu.ts          # Storage command menu integration
     ├── waypoint-loader.ts       # Waypoint file loading
     └── xctsk-fetch.ts           # XContest task fetching

@@ -197,8 +197,9 @@ function rangeCell(fromMs: number, toMs: number): ReportCell {
 }
 
 const WIND_METHOD_FOOTNOTE =
-  'Vector mean of per-circle wind estimates (centre-drift preferred over ' +
-  'ground-speed modulation); direction is degrees the wind blows FROM (0° = north).';
+  'The vector mean of the wind estimate of each circle. GlideComp uses centre drift where it ' +
+  'can, and ground-speed modulation where it cannot. The direction is the degrees the wind ' +
+  'blows FROM (0° = north).';
 
 const dayWind: MetricComputer = {
   id: 'day.wind',
@@ -208,11 +209,12 @@ const dayWind: MetricComputer = {
   family: 'day',
   direction: 'neutral',
   explanation:
-    'What the air was doing, read from the field itself: wind estimated from every pilot’s ' +
-    'circling (centre drift preferred, ground-speed modulation as fallback), vector-averaged ' +
-    'two ways. By hour of day shows how the wind built and shifted through the day; by ' +
-    'speed-section leg shows the wind each part of the course saw. Describes the day, so there ' +
-    'is no per-pilot value.',
+    'What the air did, read from the field itself. We estimate the wind from the circling of ' +
+    'every pilot. The first method is the drift of the circle centre, and the second method, ' +
+    'used when the first is not available, is the modulation of the ground speed. We then ' +
+    'average the vectors two ways. The table by hour of day shows how the wind increased and ' +
+    'changed direction through the day. The table by speed-section leg shows the wind on each ' +
+    'part of the course. This metric describes the day, so it has no value for each pilot.',
   compute(field) {
     const winds = collectCircleWinds(field);
 
@@ -371,10 +373,10 @@ const dayClimbByHour: MetricComputer = {
   family: 'day',
   direction: 'neutral',
   explanation:
-    'When the day switched on, peaked and died. All pilots’ thermal climbs bucketed by the ' +
-    'hour the climb started (labelled in the competition’s time zone); the median and ' +
-    '90th-percentile average climb rate per hour show how the lift developed. Describes the ' +
-    'day, so there is no per-pilot value.',
+    'When the day started, reached its peak, and ended. We group the thermal climbs of all ' +
+    'pilots by the hour in which each climb started, labelled in the time zone of the ' +
+    'competition. The median and the 90th-percentile average climb rate for each hour show how ' +
+    'the lift developed. This metric describes the day, so it has no value for each pilot.',
   compute(field) {
     const buckets = hourlyClimbBuckets(field);
     const rows: ReportCell[][] = [];
@@ -412,8 +414,8 @@ const dayClimbByHour: MetricComputer = {
       ],
       rows,
       footnotes: [
-        'Average climb rate of every thermal use across the field, bucketed by climb start; ' +
-          'hours shown in the competition’s time zone.',
+        'The average climb rate of every thermal use across the field, grouped by the start of ' +
+          'the climb. The hours are in the time zone of the competition.',
       ],
     };
     return { perPilot: allNullPerPilot(field), extraTables: [table], extraSeries: [series] };
@@ -568,11 +570,12 @@ const dayAirtimeQuality: MetricComputer = {
   family: 'day',
   direction: 'neutral',
   explanation:
-    'How much of the flight met air worth being in. Share of a pilot’s airborne time (on the ' +
-    'shared grid) with a 30 s-smoothed vario at or above −0.5 m/s. When they flew, where they ' +
-    'steered and how the flight ended all feed this, so it is as much a reading of the day as ' +
-    'of the pilot — no expected direction, the correlation sign is the finding. The timing ' +
-    'table relates the day’s best climbs window to when the field actually launched.',
+    'How much of the flight was in air worth being in. The value is the share of the airborne ' +
+    'time of a pilot, on the shared grid, with a 30 s-smoothed vario at or above −0.5 m/s. The ' +
+    'time they flew, the line they steered and the way the flight ended all feed this value. It ' +
+    'is therefore a reading of the day as much as of the pilot. There is no expected direction, ' +
+    'and the sign of the correlation is the finding. The timing table compares the window of ' +
+    'the day’s best climbs against the time when the field launched.',
   compute(field) {
     const timing = launchTiming(field);
     return {

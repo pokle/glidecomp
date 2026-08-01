@@ -2,74 +2,336 @@
 
 ## Project Overview
 
-GlideComp is a web application for analyzing hanggliding/paragliding competition track logs (IGC files). It provides task analysis, scoring explanations, glide and thermal analysis.
-
-## Architecture
-
-Cloudflare monorepo on the Workers Paid plan ($5/mo — includes paid-plan features like Email Sending; still cost-conscious, avoid services beyond that):
-
-- `web/engine` — pure TypeScript analysis library (IGC/XCTask parsing, event detection, GAP scoring, and cross-pilot **field analysis** — per-pilot behavioural metrics over a whole task's tracks, ranked by Spearman correlation against GAP rank; surfaced on the public field-analysis pages (see Coding Rules below) and via the CLI `bun run score-task -- --field-analysis` / `--comp <slug>`, see [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md)). Also **task weather** (`src/weather/`) — a provider-neutral interface over outside meteorological sources, with Open-Meteo adapters behind a priority registry (see Coding Rules below). No DOM dependencies; all track analysis runs client-side in the browser.
-- `web/frontend` — Vite app on Cloudflare Pages. The main UI (competitions, comp/task detail, scores, dashboard, profile, settings, onboarding) is a React SPA under `src/react/` served from `src/app.html`, built with the react-aria-components kit in `src/react/rac/` and Tailwind (tokens in `src/react/globals.css`). The content pages (home `/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`, `/scoring/open-distance`) are prerendered static HTML built by a small Astro app in `web/frontend/static/` — no client framework, and KaTeX on the GAP page is prerendered at build via `katex.renderToString`. Reuses the SPA's `globals.css` tokens/fonts. **The rule here is SEO, not a JS ban:** every word and image a visitor or a crawler needs must be in the prerendered HTML, and the page must stay useful with JS off. Interaction that genuinely helps someone understand GlideComp is worth adding on top of that — the homepage already carries hand-written vanilla enhancement (reveal-on-scroll, the FAQ accordion, and the chart tabs in the "For pilots" section, a plain ARIA tablist over a native scroll-snap track with all six panels in the prerendered DOM). Write such things in vanilla JS/CSS against the existing tokens rather than pulling the SPA's RAC kit (or any framework) into these pages: the point is that the content pages ship as HTML a crawler reads without executing anything, not that they contain no script. The analysis page and 3D replay remain separate vanilla-TS Vite entries. `bun run build` runs the Vite app build, then the **SSR bundle** build (`build:ssr` → `dist-ssr/`), then the Astro build, merging all into `dist/`; `bun run dev` runs Vite + `astro dev` together and proxies the static routes (and Astro's `/_static` dev namespace) so everything is seamless on `:3000`. Most SPA routes reach `/app.html` via `public/_redirects`; the static pages are served directly.
-- **SSR — the six public competition pages are server-rendered** (this is the SEO strategy; crawlers and link-preview bots must see the text, not an empty `#root`). See [docs/2026-07-06-ssr-public-pages-plan.md](docs/2026-07-06-ssr-public-pages-plan.md) and [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) §6. `/comp`, `/comp/:id` (hub: merged task list + top-3 standings summary), `/comp/:id/scores` (the canonical full-scores page; `?task=` deep-links the results-by-task view), `/comp/:id/waypoints`, `/comp/:id/task/:id` (route + public top-3 results; the admin manage grid is client-only), and `/comp/:id/task/:id/pilot/:id` are owned by the Pages Function `functions/comp/[[path]].ts`: it runs a route loader (`src/react/loaders.ts`, one per route, parameterized by a `FetchFn`) over the `COMPETITION_API` service binding — **forwarding the visitor's cookie** so admins still get their `test` comps — renders the *same* React components the SPA uses (shared tree in `src/react/routes.tsx`, rendered server-side by `entry-server.tsx`), splices the markup into the `/app` shell with per-route `<title>`/description/JSON-LD (deliberately **no** `<link rel="canonical">` — iOS Safari's share sheet copies it instead of the address bar and it goes stale after client-side navigation; the `glidecomp.pages.dev` prod alias is deduped by a 301 in `functions/_middleware.ts`, with the static content pages routed through it via `_routes.json` because `_redirects` can't match hosts), and embeds `window.__SSR_DATA__` for the client to hydrate from (`entry-client.tsx` → `hydrateRoot`; `src/react/lib/initial-data.tsx` seeds each page's state so the first render matches). Upstream 404/400 → real 404 + `noindex` (hidden `test` comps 404 anonymously); any loader/render error → plain SPA shell, so SSR can never make a page *less* available than the pure-client version. `public/_routes.json` hands `/comp*` + `/sitemap.xml` to Functions; the old `/comp* → /app` `_redirects` lines are gone. Rules when touching these pages: keep the SSR tree identical across `entry-server`/`entry-client` (e.g. the toaster lives in its own root); no `window`/`document`/`localStorage` at **module scope** in anything these pages import (it runs in workerd — guard with `typeof window`); render dates/times deterministically (fixed locale + injected "today"/zone, never the runtime's) or hydration mismatches appear. Dev serves the SPA shell (no SSR); verify SSR with `bun run build && wrangler pages dev web/frontend/dist` or the `bun run test:e2e:ssr` harness. Non-goals: auth-gated pages (incl. the admin-only `/comp/:id/pilots` roster editor — a noindex shell, as the public-but-unSSR'd field-analysis pages also are), analysis, replay stay pure-SPA.
-- `web/workers/*` — Workers (auth-api, competition-api, airscore-api) backed by D1 + R2, handling accounts, user file storage, and competition management. Reached via Pages Functions proxies in `functions/api/`. **In local dev all of them run in ONE `wrangler dev` session** (`bun run dev:workers` → `web/scripts/dev-workers.sh`), fronted by `web/workers/dev-router` — a dev-only fourth Worker that owns the single exposed port (**8790**) and dispatches `/api/*` to its siblings over the same service bindings the Pages Functions use. They are not separate processes on separate ports any more: auth-api and competition-api share one D1 SQLite file, and two Miniflare processes writing it raced into `D1_ERROR: internal error` — which could kill `wrangler dev` outright and cascade a whole CI run (issue #477). Multi-config `wrangler dev -c … -c …` exposes only the primary's port, which is the entire reason the router exists. Vite proxies all of `/api` to it; nothing addresses `:8788`/`:8789`/`:8787` any more, so a routing change belongs in three places at once — `functions/api/`, `dev-router/src/index.ts` (pinned by its unit test), and the Vite proxy.
-
-## Build & Development
-
-If `node_modules/` is missing or a dependency can't be resolved, run `bun install` before proceeding. Build commands are in `package.json` scripts. Key ones: `bun run dev`, `bun run test`, `bun run typecheck:all`.
-
-**E2E tests (`bun run test:e2e`) on a fresh clone:**
-- Playwright browsers must be installed first: `bunx playwright install chromium` (CI uses `--with-deps`).
-- The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it `BETTER_AUTH_URL` defaults to production, `isLocalDev()` is false, and `/api/auth/dev-login` 404s — every test fails at sign-in. The `test:e2e` script copies `.dev.vars.example` into place if the file is missing.
-- If dev servers are already running from a previous session, `bun run kill-dev` clears them.
-
-**Before you trust an e2e failure (issue #477 — read this before debugging one):**
-- **A long list of unrelated failures usually means the stack died, not that twelve things broke.** `e2e/reporters/stack-health.ts` probes the Workers and the dev server after any failure and, if they've stopped answering, prints a banner and interrupts the run — only the FIRST failure can be real, the rest ran against a dead port. In an older report the same thing shows up as an `error-context.md` snapshot of the app **signed out** where an admin control was expected: dev-login failing, not a UI regression.
-- **Every failing spec passing in isolation** is the tell for shared-state trouble. The e2e suite writes to the *persistent* local D1 (`web/.wrangler/state`), so anything a spec creates and doesn't delete is still there next run. Rules: a spec that creates a comp names it with a prefix from `e2e/fixtures/stack.ts` (`E2E …`) and deletes it in an `afterEach`, asserting the delete succeeded; a spec that needs an account uses a **stable** `…@test.local` identity (dev-login signs up-or-in, so it's created once and reused) rather than minting a per-run one, and empties whatever that account accumulates. `e2e/global-setup.ts` sweeps E2E-prefixed comps left behind by a killed run — a net, not a bin. `bun run kill-state` (then `bun run seed`) remains the hard reset.
-- `playwright.config.ts` is pinned to `workers: 1` for **test isolation** now, not for the D1 race (which is fixed): the specs share the seeded sample comp and the super-admin account. Give them their own fixtures before raising it.
-
-**Isolated preview (`bun run preview:container`):** `bun run preview` binds the host's :3000 (pages dev), :8790 (the dev-router fronting all three Workers) and a workerd inspector, coordinates them through wrangler's **localhost-only dev registry**, and keeps D1 + R2 in `web/.wrangler/state` — so a second copy collides on all three counts. (It was eight listeners until the #477 dev-router change collapsed the Workers into one session; the state collision is the durable reason for the container, not the port count.) `preview:container` runs the whole stack inside one Apple `container(1)` VM (`Containerfile` + `web/scripts/container-preview{,-entry}.sh`, macOS 26+ / Apple silicon): the stock ports stay inside the VM, only `PORT` (default **3200**) is published, and D1 + R2 live on a per-`PORT` named volume, so `PORT=3201` is a wholly independent instance. **One published port is enough because the browser never talks to anything else** — `/api/*` and the SSR `/comp` pages are same-origin Pages Functions that reach the Workers over service bindings, in-process. The lone exception is AirScore import: `src/analysis/airscore-client.ts` calls same-origin `/api/airscore` (it hardcoded `http://localhost:8787` until #477), and there is still no `functions/api/airscore/` proxy — so that path 404s in the container exactly as it does in prod, and adding the proxy fixes both at once.
-
-Four things about it are load-bearing and were each learned the hard way:
-- **Base image is `node:22-slim` + bun, not `oven/bun`.** wrangler is a Node CLI and refuses the Bun runtime; on a bun-only image auth-api dies at startup with the un-Googleable `Unexpected server response: 101`.
-- **Source is bind-mounted read-only at `/src` and rsync'd to `/app`**, never `COPY`d — so an edit needs a container restart, not an image rebuild. `node_modules` must come from the image: the host's is macOS-arm64. The rsync excludes `node_modules/` (arch), `.wrangler/` (that path is the mounted D1/R2 volume) and `dist*/`. The image is **rebuilt automatically** when the dependency inputs drift: the script hashes exactly what the Containerfile's deps layer COPYs (`bun.lock`, workspace manifests, `patches/`) and compares against a stamp at `web/.wrangler/container-preview-<image>.deps`; `REBUILD=1` forces it. Content hash, not mtime, so a branch switch or a touched source file doesn't trigger one. This is a **speed** optimisation only — the entrypoint's `bun install --frozen-lockfile` reconciles `node_modules` to the staged lockfile, so a missed rebuild costs a slower start and never wrong dependencies.
-- **`.dockerignore` patterns must be `**/`-prefixed.** A bare `node_modules` matches only the repo root, which left ~490 MB of nested `dist`/`node_modules`/`.wrangler` in the context and stalled the build for 20 minutes.
-- **Default port is 3200, and the script refuses an occupied port.** A native `bun run dev` binds Vite to `[::1]:3000` while a published container port binds `127.0.0.1:3000`; macOS treats those as different sockets, so both bind and `localhost` silently serves whichever the resolver picked — you debug the wrong process. `vite build` also needs `--memory` ≥ ~4G or it is OOM-killed (exit 137).
-
-The old `docker-compose.yml` / `Dockerfile.dev` were deleted in July 2026 — they had rotted (Vite-only, so the Astro static pages 502'd; no `.dev.vars`, so sign-in 404'd; no seed; and they bind-mounted the host repo read-write, sharing D1/R2 straight back).
-
-**Testing on a phone (dev tunnel):** `TUNNEL=1 bun run dev` + `cloudflared tunnel --url http://localhost:3000` exposes the local Vite server publicly with HMR intact. The `TUNNEL` env var gates two settings in `web/frontend/vite.config.ts` — `allowedHosts: ['.trycloudflare.com']` and `hmr.clientPort: 443` — which are **deliberately not unconditional**, because `clientPort: 443` breaks HMR on plain localhost. Only Vite needs exposing; `/api/*` and Astro are proxied server-side. See `.claude/skills/dev-tunnel/SKILL.md`.
-
-**Backlog:** open and planned work is tracked in [GitHub issues](https://github.com/pokle/glidecomp/issues) — **not** in a checked-in TODO file (`docs/TODO.md` existed until 2026-07-18 and was deleted as stale; don't recreate it). `docs/` holds specs, plans, and dated review reports; treat the dated ones (`docs/2026-*.md`) as point-in-time snapshots rather than current status.
+GlideComp is a web application for analyzing hanggliding/paragliding competition
+track logs (IGC files). It provides task analysis, scoring explanations, glide
+and thermal analysis.
 
 **Production:** https://glidecomp.com
 
-**Branch preview deploys:** every branch gets a Cloudflare Pages branch-alias URL that always tracks the branch's latest commit. **When you open or push to a PR, always include this branch preview URL in the PR body and show it in the chat** — and get it from `bun run preview-url` (optionally `bun run preview-url -- --check` to confirm the alias is live, or pass a branch name), **never by deriving it in your head**. The slug is the branch name lowercased, non-alphanumerics replaced with `-`, truncated to 28 chars — and the truncation usually lands mid-token, leaving a final character that reads like a typo you should trim but isn't (`claude/glidecomp-issue-454-0midgz` → `claude-glidecomp-issue-454-0`, trailing `0` and all). Getting it wrong publishes a 404 in a PR body, which is why it's a script: `web/scripts/preview-url.sh` prints the URL alone on stdout, so `PREVIEW=$(bun run --silent preview-url)` works.
+## Architecture
 
-**Updating bundled data:**
-- **Sample competitions:** the bundled comps live under `web/samples/comps/` — real AirScore downloads (**Corryong Cup 2026, Unungra Cup 2020** — only each competition's most recent year is bundled) plus the two synthetic fixtures below, plus the curated `corryong-cup-2021-open-t1` task folder (the gap-2018 parity fixture the engine tests score — the rest of that comp lives in the archive). Each comp is one folder per task (`<slug>-<class>-t<N>`) plus a `<slug>/` meta folder (`comp.json` manifest + region `waypoints.wpt`/`.json`, and since the AirScore-formula capture also `gap_params` — the parameters AirScore actually scored the comp with, mapped by `web/scripts/lib/airscore-formula-map.ts`, with per-task overrides on the task entries). Corryong Cup 2026 is the canonical example: AirScore scores the event as two comps — **open** and **floater** — flying different tasks per day; here they become one comp with two pilot classes (a pilot who flew both, e.g. CIVL 46402, gets one `comp_pilot` row per class).
-  - **History back-catalogue:** older years (Corryong 2017 & 2021–2025) and the wider history (Forbes Flatlands, Dalby Big Air, Bright Open, …) live in the separate **[pokle/glidecomp-archive](https://github.com/pokle/glidecomp-archive)** repo, kept for occasional scoring-parity verification. All comp scripts accept `GLIDECOMP_COMPS_DIR=<archive>/comps` to operate on that checkout; those registry entries are `history: true`, so the default `bun run seed` never touches them (seed by slug or with `--history`). Parity gate: `bun web/scripts/verify-airscore-parity.ts <slug>` compares engine totals against the published AirScore results.
-  - **Re-download from source:** `bun web/scripts/download-airscore-comp.ts <slug>` (e.g. `corryong-cup-2026`) — idempotent, politely rate-limited (`REQUEST_DELAY_MS`, default 3500ms). Rebuilds every task folder + waypoints from xc.highcloud.net (with a curl fallback where Bun's fetch can't tunnel the egress proxy); a folder with a `.curated` marker (the AirScore-parity fixtures) is left untouched. `--manifest-only` regenerates manifests (formula capture + xctsk repairs) from the raw JSONs on disk with no network. Add new comps to the `COMPS` registry in that script.
-  - **Seed into D1 + R2:** `bun run seed` (idempotent; `--remote` for prod) seeds every bundled non-history comp — it reads each `comp.json` and loads all tasks/classes/pilots/tracks (one Miniflare boot is shared across all of them), writing comp + per-task `gap_params` and synthesizing **track-less published pilots** (result rows with no/empty IGC) as DNF statuses or manual flights at the published distance, so the seeded field matches the field AirScore scored. Pass one or more slugs to seed just those (e.g. `bun run seed big-chip kosci-loop`). The manifest may set `comp_name` (the D1 comp name; defaults to the fixed Corryong `SAMPLE_COMP_NAME`), `category`, `scoring_format` (`gap` | `open_distance`; default `gap`), `hidden` (seeds with D1 `test=1` → public list excludes it and anonymous visitors 404; default public — used by the fabricated Big Chip / Kosciuszko Loop fixtures), and `history` (see above). **A reseed preserves every id that appears in a URL** (`web/scripts/lib/seed-identity.ts`): `/comp/:comp/task/:task/pilot/:pilot` is a shareable, indexable link, and rebuilding a comp by deleting and reinserting its rows handed out fresh auto-increment ids and 404'd every saved link. The comp row was always matched by name and reused; tasks and pilots now match the same way one level down — a task by its seeded name (`<name> (<Class>)`), a pilot registration by the same (class, federation-id-or-name) key that already collapses a pilot's tasks onto one `comp_pilot` row. Matched rows are UPDATEd in place, unmatched ones deleted, so the comp still ends up holding exactly what the source describes. Consequences worth knowing: a pilot who linked their account to a seeded registration keeps that link; a task's cached weather survives (it is keyed by route + date, not by a revision, so an unchanged task keeps its answer); and the two organizer-owned task fields the source can't describe (`stop_announcement_time`, `weather_notes`) are reset, exactly as the old delete-and-reinsert did. The wipe still clears that comp's materialized derived caches (`task_scores`/`task_field_analysis`/`track_analysis`) — the tracks behind them are all rebuilt, so every blob is stale even where the ids it names still resolve, and a reused task is never deleted so the FK cascade would not fire for it at all. On `--remote` it then best-effort **purges that comp's public URLs from Cloudflare's edge** — comp hub / scores / waypoints HTML, the comp-level scores API, and now each task page, task score API and pilot score page, since those URLs are stable across reseeds too and would otherwise serve pre-reseed content for up to their max-age (three months for a settled comp). Chunked at 30 URLs per call (the API's limit); a no-op unless both `CLOUDFLARE_API_TOKEN` (Cache Purge permission) and `CLOUDFLARE_ZONE_ID` are set; the edge purge can't touch an already-cached browser copy, so hard-refresh after reseeding a comp you're viewing. The 3D replay at `/replay` loads packed tracks from the competition-api Worker (`GET /api/comp/sample-3dvis` → the first task by date, or `/api/comp/:comp_id/task/:task_id/3dvis` for any comp task) — packing is `packTracksFromIgc` in the engine, shared with the offline `bun run build-3dvis` mirror. See `docs/3d-flight-replay-notes.md`.
-- **Synthetic Big Chip open-distance comp:** `web/samples/comps/big-chip/` (meta: `comp.json` + paste-ready `pilots.tsv`) plus `big-chip-t1/` and `big-chip-t2/` (each: a single-`TAKEOFF` open-distance `task.xctsk` + 50 IGC tracks). Two tasks tow-launch from Jil Jil Farm near Birchip, VIC, inside a 5 km take-off ("launch") cylinder; pilots fly downwind (Task 1 NE, Task 2 SE). Each track is an emergent soaring model — hunt for a thermal, circle up, glide downwind, hunt again, land when the altitude runs out — so distance falls out of how many thermals a pilot connects with (a bell curve over thermal count: bulk make ~half the field's best, thin tails). Open-distance scoring measures from the cylinder exit, so short flights that never leave it score 0. Fully fabricated by `bun web/scripts/generate-big-chip.ts` (deterministic seeded PRNG → byte-stable output; re-run and commit). Seed with `bun run seed big-chip`; score with `bun run score-task -- --open-distance web/samples/comps/big-chip-t1/task.xctsk web/samples/comps/big-chip-t1/`. Seeds as comp **"Big Chip"**, **hidden** (`"hidden": true` in its manifest → D1 `test=1`): it's a fabricated fixture, so it's absent from the public comp list and 404s for anonymous visitors — sign in as an admin to view it.
-- **Synthetic Kosciuszko Loop out-and-return comp (exit turnpoints, issue #347):** `web/samples/comps/kosci-loop/` (meta) plus `kosci-loop-t{1,2,3}/` (each: a `CLASSIC` GAP race `task.xctsk` with start gates + 44 IGC tracks). A PG race-to-goal comp centred on Mount Kosciuszko (`-36.455825, 148.263502`, 2228 m); one shared 44-pilot field flies all three tasks. **Task 1 "Grand Loop"** is the canonical #347 shape: concentric TAKEOFF/SSS/ESS/GOAL + one 10 km **exit** ring (fly out across it, turn, return to goal). **Task 2 "Double Ring"** adds a second concentric exit ring (5 km + 11 km, sequential exits). **Task 3 "Ridge Run"** is a point-to-point around named peaks (Townsend/Blue Lake/Rams Head/Thredbo) — all **enter** turnpoints, the contrast/regression-guard case. Each field spans every outcome (made goal, tagged the ring then landed on return, never flew out of the ring → scored the outbound distance, never crossed the start → 0) via a bell curve on how far each pilot flies. Tracks are route-following with a triangle-wave altitude + cross-track wander (not the Big Chip soaring model). Fully fabricated by `bun web/scripts/generate-kosci-loop.ts` (deterministic seeded PRNG → byte-stable; re-run and commit); the generator sanity-prints per-task outcomes and the inferred turnpoint directions. Seed with `bun run seed kosci-loop`. Seeds as comp **"Kosciuszko Loop"**, **hidden** (`"hidden": true` in its manifest → D1 `test=1`), same as Big Chip: fabricated, so admins-only. **Headless caveat:** every exit-ring task is fully concentric (all turnpoints at the summit), so the map's auto-fit has zero extent and won't recenter — verify the rings/arrowheads by setting the map view manually.
+Cloudflare monorepo on the Workers Paid plan ($5/mo — includes paid-plan
+features like Email Sending; still cost-conscious, avoid services beyond that).
 
-## Coding Rules
+- **`web/engine`** — pure TypeScript analysis library: IGC/XCTask parsing, event
+  detection, GAP scoring, cross-pilot field analysis (`src/field-analysis/`),
+  track quality (`src/track-quality.ts`), task weather (`src/weather/`). No DOM
+  dependencies; all track analysis runs client-side in the browser.
+- **`web/frontend`** — Vite app on Cloudflare Pages. Three kinds of page:
+  - The **SPA** (`src/react/`, served from `src/app.html`) — competitions,
+    comp/task detail, scores, dashboard, profile, settings, onboarding. Built
+    with the react-aria-components kit in `src/react/rac/` and Tailwind (tokens
+    in `src/react/globals.css`). Most SPA routes reach `/app.html` via
+    `public/_redirects`.
+  - The **content pages** (`/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`,
+    `/scoring/open-distance`) — prerendered static HTML from a small Astro app in
+    `web/frontend/static/`, reusing the SPA's `globals.css` tokens/fonts. KaTeX
+    on the GAP page is prerendered at build via `katex.renderToString`.
+  - The **eight public comp pages**, which are **server-rendered** — see
+    [docs/ssr.md](docs/ssr.md) and the SSR-safety rule below.
 
-- Decisions MUST be explainable - return explanations for scoring decisions and support unit testing. The explainers live in `web/engine/src/score-explanation*.ts` and surface on the **report card** (`/comp/:id/task/:id/pilot/:id`, `src/react/pages/PilotScoreDetail.tsx`). Two standing rules there: **(a) every section that states a rule must name its inputs and print the substituted arithmetic** — the day-quality section asserted bare percentages for a year, which is the one figure a reader cannot check ([docs/2026-07-28-report-card-improvements.md](docs/2026-07-28-report-card-improvements.md)); the numbers come from `ClassScore.validity_inputs`, and because the stale-first store keeps serving pre-change bodies, every consumer must degrade to the bare value rather than fail when a field is absent. **(b) Never re-derive GAP parameters from the comp record on a page that explains a scored task** — the scorer merges the TASK's `gap_params` (migration 0021; imported AirScore comps publish a different formula, and a different nominal distance, per task) over the comp's and resolves "auto" nominal distance against the route. Read the published `ClassScore.gap_params` instead; `resolveCompGapParams(comp…)` is a fallback for old cached payloads only. Sections carry a `docHref` into `/scoring/gap`, so a reader who doesn't know GAP always has a way out of the page. **(c) The report card's charts are EMPHASIS charts, not field charts** — one accent dot for this pilot, muted ink for everyone else; do not reuse the field-analysis `RankScatter`, which paints every dot alike and would bury the reader in the crowd they came to locate themselves in. Their curve is sampled from the scorer's own functions (`score-explanation-charts.ts`), so it is the formula and never a fit — the field-analysis captions say "a trend fitted through the dots", these must not. A pilot is plotted only when the curve provably explains their published points; anyone carrying a reduction it doesn't model (§12.1, §12.3.5) is counted out, and if that's the viewing pilot the chart is suppressed. Shared chart geometry lives in `src/react/charts/scale.ts` (promoted out of `field-analysis/charts/chart-utils.ts`, which re-exports it). **(d) A repaired track shows its repairs** — the "Track data cleaning" section draws the same three lines as `/scoring/data-cleaning` (raw GPS, raw barometer, the cleaned line the analysis used) via `charts/TrackCleaningChart.tsx`, off the tracklog the page already downloads for the map. That makes it deliberately **client-only**: server-side there are no fixes, the SSR'd prose and list are unchanged, and the exact numbers live in the list either way — which also doubles as the chart's controls (pick a stretch, the frame zooms to it). A channel the file doesn't carry is named in the legend, never drawn as a flat line at 0, and the y domain always covers the RAW excursion: how far off the fix was is the whole finding, so it must never be clipped off-frame.
-- **Every mutation that could affect a competition's scores MUST be audit-logged.** Use the `audit()` helper in `web/workers/competition-api/src/audit.ts` from every mutating route handler (comp / task / pilot / track / penalty / xctsk / settings). The description must be a specific human-readable sentence — include the subject name and, where available, the old and new values via `describeChange()`. The audit log is publicly visible (for non-test comps) and is the transparency record for the competition. When you add a new mutating endpoint or field, adding the audit call is part of "done".
-- **Every mutation that changes a scoring input MUST also mark the materialized scores stale.** Scores are stale-first rows in D1 (`task_scores`, [docs/score-caching-stale-first-plan.md](docs/score-caching-stale-first-plan.md)): reads never compute, so a mutation that skips the bump serves silently stale scores forever. Call `bumpAndRevalidateScores()` from `web/workers/competition-api/src/score-store.ts` right AFTER the mutation's DB write (never before), beside `audit()`, under the same "part of done" rule. Scoring inputs are tracks/uploads, penalties, task xctsk/date/classes, comp `scoring_format`/`gap_params`, pilot name/class, and pilot status (absent/DNF/landed feed launch validity, S7F §9.1); roster metadata like team names is read live and needs no bump. **One bump covers every derived table:** `bumpScoreInputs()` batches an upsert for `task_scores` *and* `task_field_analysis`, so call sites stay unaware of the second table — anything new that derives from scoring inputs belongs in that same batch rather than in 28 new call sites. (`task_weather` is the deliberate exception — see the weather rule below: it is not derived from competition data, so it must NOT be bumped.)
-- **A failure to ask is not an answer** (issue #481). Identity and page data are each fetched once per page load, and every downstream decision keys off the result — so a *transient* failure must never be recorded as a *fact*. A dropped request or 5xx is not "signed out" and not "not found": those are terminal states nothing re-fetches, so a blip lasting milliseconds becomes a wrong page that stays wrong until a reload (an admin's controls silently vanish; a comp that exists reports "Competition not found"). Retry, then decide. The three places this lives are `getCurrentUser()` (`src/auth/client.ts`), `fetchWithRetry()` (`src/react/comp/types.ts`) — which every comp/task page load goes through, so use it rather than a bare `$get` — and `resolveUser()` in `web/workers/competition-api/src/middleware/auth.ts`, whose hop to auth-api decides `is_admin` and the `admins` list. A **4xx is a real answer** and must NOT be retried (`/api/auth/me` answers 429 for a rate-limited API key). `src/react/lib/retry.ts` is the same rule for the SSR/loader path, where a heavily-loaded D1 can also produce a false 404. Regression coverage: `e2e/transient-api-failure.spec.ts` injects the blip with `page.route` instead of waiting for it.
-- **A dead link is a searchable one.** Public URLs are `${slug}-${id}` segments (`lib/slug.ts`): the id is the identity, but the slug is a readable copy of the name and it survives whatever happened to the id. So a 404 under `/comp` does not merely apologise — `src/react/components/NotFound.tsx` reads the words out of the dead path, asks `GET /api/comp/lookup` which comps/tasks/pilots carry those words *now*, and offers the deepest URL that resolves ("did you mean…"), plus a search box over the same endpoint. It is rendered by the router's catch-all AND from each public comp page's own not-found branch, because those pages match a real route and never reach the catch-all — the id parses, it just doesn't resolve, which is precisely the repairable case. **The lookup endpoint knows nothing about URLs**: no slugifying, no path building. Those live in one place (`lib/slug.ts`) and that place is the client, so the two cannot drift; the worker route (`routes/lookup.ts`, mounted ahead of `compRoutes` so the static segment beats `/api/comp/:comp_id`) is a name search over three tables returning ids and names. It is public and unauthenticated, so every dimension of its work is capped (term length, token count, comps drilled into, rows per kind — see the constants) and `test` comps stay invisible to anyone who can't already see them. This is defence in depth, not the fix: the seed script preserves the ids in URLs (see "Updating bundled data" above), so a reseed no longer breaks links in the first place. Coverage: `e2e/not-found-suggestions.spec.ts` mangles a live pilot URL's ids and asserts the page hands back the working one.
-- **Track data quality** (FAI S7A §4.4.2 — the verification software must check "all points used to verify the flight occurred at reasonable times"). `web/engine/src/track-quality.ts` assesses every tracklog against its task; `assessTrackQuality()` is pure and returns a report of findings, each already rendered as a sentence. Two **HARD** checks (fixes outside the task's LOCAL day by more than a day; no fix within 100 km of any turnpoint) withhold the track from scoring **and** from field analysis; three **SOFT** checks (never left the take-off cylinder, no sign of flight, implausible sustained speed) only annotate, because a short honest flight still earns the S7F §5.3/§8.6.1 minimum distance. **A withheld pilot is never deleted from the standings** — `buildClassScore` seats them last at 0 with the reasons (`PilotScoreEntry.track_excluded`); before that fix, removing a track made the pilot vanish entirely, since uploading auto-sets them "Landed", which counts in neither `numFlying` nor `numDNF`. They stay out of both S7F §9.1 buckets deliberately, so a false positive can only ever change **that one pilot's** score. §4.4.6 makes rejection the organiser's call, so every verdict is overridable per track (`task_track.quality_override`, migration 0024). The verdict is computed on the read path and cached as the `"quality"` `track_analysis` variant — **never** stored on `task_track`, because it depends on the task's route/date/zone, all of which an admin can edit. Thresholds are calibrated against the whole archive: re-tune them only with `bun web/scripts/audit-track-quality.ts` (bundled) and `GLIDECOMP_COMPS_DIR=<archive>/comps bun web/scripts/audit-track-quality.ts`, which must report exactly one HARD finding across 5,112 real tracks. `track-quality.ts` is in `SCORING_ROOTS`, so a threshold change cannot ship without a `SCORING_ENGINE_VERSION` bump.
-- **Field analysis** (behavioural metrics: climbing, gliding, decision-making, gaggle, race craft, day profile — 26 metrics ranked by Spearman ρ against GAP rank) lives in `web/engine/src/field-analysis/` and surfaces on two **public** pages, `/comp/:id/analysis` and `/comp/:id/analysis/task/:id` (`src/react/pages/{Comp,Task}FieldAnalysis.tsx` + `src/react/field-analysis/`) — the per-task page is nested under the comp report because it's a chapter of it, so "up" returns to the other tasks rather than to the task page (which cross-links in, and is linked back from a "View task" button); the old `/comp/:id/task/:id/analysis` redirects. Presentation order is fixed — **separation ranking first**, then per-family tables — because which metrics have explanatory power is the finding. Some metrics emit charting series (`ReportSeries`, a discriminated union) alongside their tables; the day family's series (wind/climb/timing) are composed by `charts/day-profile/DayProfilePanel.tsx` onto ONE shared comp-zone time axis rather than rendered per-metric — tables stay the accessible exact reading, and a new series kind must be ignored (not crash) by older UIs. Storage is stale-first (`task_field_analysis`, migration 0019) with two deliberate departures from scores: revalidation is **lazy** (triggered by a read, not the mutation — it's expensive and few people read it) and the cold path **never computes synchronously** (returns `pending`, schedules, UI polls). Visibility is `canViewFieldAnalysis()` in `routes/field-analysis.ts`: these pages went public in July 2026 and now mirror the score route exactly — anyone may read a normal comp's report; a hidden `test` comp still 404s for non-admins. Public **and SSR'd**: both pages have `ROUTES` entries in `functions/comp/[[path]].ts` (a cold report server-renders its pending notice, `noindex`, and the client polls); only the superseded `/comp/:id/task/:id/analysis` URL and the admin `pilots` roster still take `NOINDEX_SHELL_ROUTES`. So `bun run test:e2e:ssr` (which asserts clean hydration on both) is part of "done" when you touch them. See [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md).
-- **Task weather and weather notes.** Two separate things that answer each other, surfaced together in two prominent places, notes first: the task page's "Weather" section (under the route, above the results; modelled charts only, via `src/react/weather/TaskWeatherPanel.tsx`) and a top-level "What the weather did" section on the task field-analysis page, placed BEFORE the separation ranking because the conditions decide which metrics matter. That section's body is `charts/day-profile/DayProfilePanel.tsx`: the flown, track-derived day charts and the modelled charts stacked on ONE shared time axis under explicit "From the pilots' tracks" / "From the weather model" group labels, so the predicted day reads against the day the field actually flew (the day metric family below keeps only its tables).
-  - **Weather** comes from an outside provider via `web/engine/src/weather/` — a provider-neutral `WeatherProvider` interface plus a priority registry, so a call site names no provider and adding a regional source (a BOM adapter for Australian comps) is one new file plus one registry entry. Three Open-Meteo adapters ship today and they have genuinely different capabilities: the archived forecast (2022+) carries pressure-level winds and CAPE, ERA5 (1940+) carries neither, so `WeatherSource.variables` reports what a dataset actually has and consumers degrade rather than draw an empty axis. The third is the **live forecast**, because tasks are usually set a day or two ahead (sometimes a whole comp is): it serves any window that hasn't fully elapsed, out to 15 days (`beyondForecastHorizon` — past that the read path says "not yet" rather than scheduling a fetch that can only fail into a backoff). **Past and future are a strict partition enforced in each adapter's `fetch`, not in `supports`** (which is handed the query and not the clock): the archives refuse a window that hasn't elapsed, the forecast refuses one that has. That is not tidiness — both archive endpoints will cheerfully serve a future day, returning the current forecast run verbatim, and it would reach the reader stamped "archived forecast, modelled". `WeatherSource.kind` exists so a prediction (`forecast`) can never be read as a record (`model`), and every chart's in-plot source tag prints it. That list is narrowed **per answer** (`deliveredVariables()`), not taken from the provider's advertisement, because coverage varies by date inside one dataset — the archived forecast claims `boundary_layer` but only populates it from ~Sept 2024, so earlier comps get no thermal top and the chart says so instead of showing one line. Changing what an answer stores means bumping `WEATHER_SCHEMA_VERSION`, which expires cached rows. Wind direction is degrees FROM, speeds km/h, heights metres, times ISO-UTC hour starts — fixed across every provider.
-  - Storage is stale-first (`task_weather`, migration 0023) but **invalidated by query key, not by `inputs_rev`**: weather is a function of a place and a past interval, and a past interval's weather never changes, so there is deliberately **no bump at the mutation sites**. Move the route or the date and the engine's `weatherQueryKey` stops matching the stored row, which re-fetches on next read. Provisional answers (fetched inside a source's publication lag) re-fetch on a TTL; failures back off. Like field analysis the cold path never fetches synchronously — a page render must not depend on a third party's uptime.
-  - **Weather notes** (`task.weather_notes`) are the organizer's free-text account of the day — "overdeveloped by 2pm, glass off at 3". Public to read, comp-admin/super-admin to write, through the task PATCH like any other task field. Audit-logged with an **excerpt** (it is prose; the whole field would bury the log), and explicitly **not a scoring input**, so it must not bump scores. They exist because the modelled numbers are a 9–25 km grid cell and the people who were there know what it cannot — mark the met source on every weather chart so the two are never confused.
-- Main UI (React, `src/react/`): **one component kit — react-aria-components, in `src/react/rac/`.** Every page and dialog uses it, as does all the shared chrome (breadcrumbs/PageToc/Timestamp, the `Shell` header and account menu, the app-wide confirm dialog in `rac/confirm.tsx`; `lib/confirm.tsx` is context-only, so calling `useConfirm()` never pulls in a kit). Read [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md) before touching kit code — it carries the conventions and eighteen hard-won gotchas. The shadcn/Base UI kit that used to live in `src/react/ui/` is **gone** (the migration finished 2026-07-27, [#483](https://github.com/pokle/glidecomp/issues/483)); `src/react/one-kit.test.ts` fails the build if it comes back, and there is no `components.json`, so `bunx shadcn add` is not the way to get a missing component — add it to `rac/` instead (a static styled element is fine: see `rac/badge.tsx` and `rac/alert.tsx`, which own no behaviour). Thin wrappers over third-party widgets that aren't RAC live in `src/react/vendor/` — today the `input-otp` sign-in field and the `sonner` toaster, neither of which RAC provides. **Editable tables/grids are Tabulator by policy** (owner preference — don't rebuild spreadsheet editing in RAC; lazy-load the grid, RAC chrome around it, shared theme in `comp/tabulator-grid.css`; see the guide's Tabulator policy + gotcha #16). The analysis page is vanilla TS (imperative map app): it shares the design tokens via `src/analysis.css`, which also defines its small set of vanilla component classes (`.btn*`, `.input`, `.command`, …) — extend those there rather than adding a UI library. The 3D replay styles itself (own `replay.css` + inline theme)
-- Use Tailwind utility classes for styling - avoid custom CSS when Tailwind provides equivalent functionality
-- **UI conventions** (see design-language section of [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md)): section-scoped manage actions sit right-aligned on the section header row via `SectionHeader` (`src/react/components/SectionHeader.tsx`); breadcrumbs are one component app-wide — the RAC kit's `Breadcrumbs` (`src/react/rac/breadcrumbs.tsx`), **ARIA-native** (parent links + the current page as a final `aria-current="page"` crumb); build the ancestor array with the helpers in `src/react/lib/crumbs.ts` rather than inline, and remember the parent crumb is where a page *belongs* in the IA, not where the user came from; every Submit-track button opens the shared `SubmitTrackDialog`; **anything waiting on an API response says so** via the loading family in `src/react/rac/progress.tsx` — `<Loading>` for a section that's fetching (a `role="status"` live region), `<Button isPending pendingLabel="Saving">` for an action in flight (never `isDisabled={saving}` + a label swap — that drops focus mid-action), and `<ProgressBar isIndeterminate>` for a known background job like a re-score (see the RAC guide's loading section)
-- **Never** implement inline geo math (distance, bearing, etc.) - always use `web/engine/src/geo.ts` which provides WGS84 ellipsoid formulas (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for bearing/bbox
-- **Single source of truth for map visuals/interactions**: [`docs/mapbox-interactions-spec.md`](docs/mapbox-interactions-spec.md) - the map provider must match this spec
-- **Accessibility**: all UI work is measured against [`docs/accessibility-standard.md`](docs/accessibility-standard.md) (WCAG 2.2 AA baseline across the SPA, static Astro pages, analysis map, and 3D replay). Use its per-PR checklist; meeting the standard is part of "done".
-- **SSR-safety (the six public comp pages are server-rendered — see the Architecture note above).** When you touch anything those pages import: no `window`/`document`/`localStorage` at module scope (guard with `typeof window`); render dates/times deterministically (fixed locale, injected "today"/zone — never the runtime default) or you get hydration mismatches; keep the `entry-server`/`entry-client` React trees identical; heavy browser-only libs (mapbox/three/tabulator) stay behind `lazy()` so they stay out of the SSR entry bundle. If a public page needs new data server-side, extend its loader in `src/react/loaders.ts` and seed via `initial-data`. Verifying SSR still renders the content (`bun run test:e2e:ssr`, or `curl` the built output under `wrangler pages dev`) is part of "done".
+  The analysis page and 3D replay are separate vanilla-TS Vite entries.
+  `bun run build` runs the Vite app build → the SSR bundle (`build:ssr` →
+  `dist-ssr/`) → the Astro build, merging all into `dist/`. `bun run dev` runs
+  Vite + `astro dev` together and proxies the static routes (and Astro's
+  `/_static` dev namespace) so everything is seamless on `:3000`.
+- **`web/workers/*`** — auth-api, competition-api, airscore-api, backed by D1 +
+  R2. Reached via Pages Functions proxies in `functions/api/`. In local dev they
+  all run in ONE `wrangler dev` session behind the `dev-router` Worker on port
+  **8790** — see [docs/local-dev.md](docs/local-dev.md).
+
+## Build & Development
+
+If `node_modules/` is missing or a dependency can't be resolved, run
+`bun install`. Build commands are in `package.json`; the key ones are
+`bun run dev`, `bun run test`, `bun run typecheck:all`, `bun run test:all`.
+
+For dev servers, the e2e suite and its failure modes, the isolated container
+preview, and the dev tunnel: **[docs/local-dev.md](docs/local-dev.md)**. Read its
+"Before you trust an e2e failure" section before debugging one.
+
+**Backlog:** open and planned work is tracked in
+[GitHub issues](https://github.com/pokle/glidecomp/issues) — **not** in a
+checked-in TODO file (`docs/TODO.md` was deleted as stale; don't recreate it).
+`docs/` holds specs, plans, and reference. Treat the dated ones (`docs/2026-*.md`)
+as point-in-time snapshots rather than current status.
+
+**Branch previews:** every branch gets a Cloudflare Pages branch-alias URL.
+**When you open or push to a PR, always include it in the PR body and show it in
+the chat** — and get it from `bun run preview-url`, **never by deriving it in
+your head** (the slug truncates mid-token; see
+[docs/local-dev.md](docs/local-dev.md)).
+
+## Rules
+
+These are the standing imperatives. Each links to the reference that explains it.
+
+### Writing
+
+- **Australian English spelling in all prose.** `-ise`/`-isation` (organise,
+  optimised, analyse, recognise), `-our` (colour, behaviour, favour), `-re`
+  (metre, centre), `-ogue` (catalogue), `defence`, `licence` (noun) /
+  `license` (verb), `travelled`, `modelling`. This covers everything a person
+  reads: UI copy, error and toast messages, page content, `docs/`, code
+  comments, commit messages and PR bodies.
+  - **This deliberately overrides ASD-STE100 Rule 1.14**, which mandates
+    American spelling. The rest of the standard's writing rules still apply to
+    documentation — see the `simple-english` skill — but spelling is ours.
+  - **Never respell code.** Identifiers, CSS/Tailwind classes (`items-center`),
+    DOM and CSS properties (`behavior`, `color`), JSON/DB field names, API
+    routes, npm packages, and third-party names (Mapbox, AirScore, `optimizer`)
+    keep their original spelling. A rename there is a code change, not a
+    spelling fix, and mostly breaks things. When a UI label is generated from
+    such a name, respell the label, not the name.
+  - Quoted external text — FAI/CIVL spec wording, error strings from other
+    tools — is reproduced verbatim, whatever it spells.
+
+### Correctness and transparency
+
+- **Decisions MUST be explainable.** Return explanations for scoring decisions
+  and support unit testing. The explainers live in
+  `web/engine/src/score-explanation*.ts` and surface on the **report card**
+  (`/comp/:id/task/:id/pilot/:id`, `src/react/pages/PilotScoreDetail.tsx`). See
+  the report-card rules below.
+- **Every mutation that could affect a competition's scores MUST be
+  audit-logged.** Use `audit()` in `web/workers/competition-api/src/audit.ts`
+  from every mutating route handler (comp / task / pilot / track / penalty /
+  xctsk / settings). The description must be a specific human-readable sentence —
+  include the subject name and, where available, old and new values via
+  `describeChange()`. The audit log is publicly visible for non-test comps and is
+  the competition's transparency record. Adding the audit call is part of "done".
+- **Every mutation that changes a scoring input MUST also mark the materialized
+  scores stale.** Scores are stale-first rows in D1 (`task_scores`,
+  [docs/score-caching-stale-first-plan.md](docs/score-caching-stale-first-plan.md));
+  reads never compute, so a mutation that skips the bump serves silently stale
+  scores forever. Call `bumpAndRevalidateScores()` from
+  `web/workers/competition-api/src/score-store.ts` right AFTER the mutation's DB
+  write (never before), beside `audit()`, under the same "part of done" rule.
+  - Scoring inputs are: tracks/uploads, penalties, task xctsk/date/classes, comp
+    `scoring_format`/`gap_params`, pilot name/class, and pilot status
+    (absent/DNF/landed feed launch validity, S7F §9.1). Roster metadata like team
+    names is read live and needs no bump.
+  - **One bump covers every derived table.** `bumpScoreInputs()` batches an upsert
+    for `task_scores` *and* `task_field_analysis`, so call sites stay unaware of
+    the second table — anything new that derives from scoring inputs belongs in
+    that same batch rather than in 28 new call sites.
+  - Two standing exceptions, both because they are **not** derived from
+    competition data: `task_weather` ([docs/weather.md](docs/weather.md)) and
+    `pilot_ranking` ([docs/civl-rankings.md](docs/civl-rankings.md)). Neither
+    takes an `audit()` call either.
+- **A failure to ask is not an answer** (issue #481). Identity and page data are
+  each fetched once per page load, and every downstream decision keys off the
+  result — so a *transient* failure must never be recorded as a *fact*. A dropped
+  request or 5xx is not "signed out" and not "not found": those are terminal
+  states nothing re-fetches, so a blip lasting milliseconds becomes a wrong page
+  that stays wrong until reload. Retry, then decide.
+  - The four places this lives: `getCurrentUser()` (`src/auth/client.ts`),
+    `fetchWithRetry()` (`src/react/comp/types.ts`) — which every comp/task page
+    load goes through, so use it rather than a bare `$get` — `resolveUser()`
+    (`web/workers/competition-api/src/middleware/auth.ts`), and
+    `src/react/lib/retry.ts` for the SSR/loader path, where a heavily-loaded D1
+    can also produce a false 404.
+  - **A 4xx is a real answer** and must NOT be retried (`/api/auth/me` answers
+    429 for a rate-limited API key).
+  - Coverage: `e2e/transient-api-failure.spec.ts`.
+- **The search index maintains itself — do NOT add a call site for it.**
+  `GET /api/comp/search` answers over an FTS5 index of competitions, tasks
+  (including their routes' turnpoints) and pilots
+  ([docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md)). Unlike
+  `audit()` and `bumpAndRevalidateScores()`, which every handler must remember
+  to call, the documents derive from columns the database watches itself:
+  triggers in migration 0026 queue the changed keys and
+  `web/workers/competition-api/src/search-index.ts` drains that queue from one
+  middleware, the search endpoint, a cron and an admin button. A new mutating
+  route needs nothing.
+  - What DOES need a change: adding a column to a document (extend the trigger's
+    `UPDATE OF` list, and bump `SEARCH_DOC_REV` so the nightly sweep reindexes
+    what is behind), and anything that could name a competition it was not given
+    the id of — visibility is `visibleCompsFilter()` in `src/comp-visibility.ts`,
+    and a search must never be how someone discovers a hidden `test` comp.
+  - A competition's waypoint set is deliberately not indexed: the task's frozen
+    `xctsk` is what it flew.
+- **A dead link is a searchable one.** Public URLs are `${slug}-${id}` segments
+  (`lib/slug.ts`): the id is the identity, but the slug is a readable copy of the
+  name and survives whatever happened to the id. A 404 under `/comp` does not
+  merely apologise — `src/react/components/NotFound.tsx` reads the words out of
+  the dead path, asks `GET /api/comp/lookup` which comps/tasks/pilots carry those
+  words *now*, and offers the deepest URL that resolves, plus a search box.
+  - It is rendered by the router's catch-all AND from each public comp page's own
+    not-found branch, because those pages match a real route and never reach the
+    catch-all — the id parses, it just doesn't resolve, which is exactly the
+    repairable case.
+  - **The lookup endpoint knows nothing about URLs** — no slugifying, no path
+    building. Those live in `lib/slug.ts` on the client, so the two cannot drift;
+    the worker route (`routes/lookup.ts`, mounted ahead of `compRoutes` so the
+    static segment beats `/api/comp/:comp_id`) is a name search over three tables
+    returning ids and names. Public and unauthenticated, so every dimension of its
+    work is capped (term length, token count, comps drilled into, rows per kind),
+    and `test` comps stay invisible to anyone who can't already see them.
+  - Coverage: `e2e/not-found-suggestions.spec.ts`.
+
+### The report card
+
+- **(a) Every section that states a rule must name its inputs and print the
+  substituted arithmetic.** The day-quality section asserted bare percentages for
+  a year, which is the one figure a reader cannot check
+  ([docs/2026-07-28-report-card-improvements.md](docs/2026-07-28-report-card-improvements.md)).
+  Numbers come from `ClassScore.validity_inputs` — and because the stale-first
+  store keeps serving pre-change bodies, every consumer must degrade to the bare
+  value rather than fail when a field is absent.
+- **(b) Never re-derive GAP parameters from the comp record on a page that
+  explains a scored task.** The scorer merges the TASK's `gap_params` (migration
+  0021 — imported AirScore comps publish a different formula, and a different
+  nominal distance, per task) over the comp's, and resolves "auto" nominal
+  distance against the route. Read the published `ClassScore.gap_params`;
+  `resolveCompGapParams(comp…)` is a fallback for old cached payloads only.
+- **(c) The report card's charts are EMPHASIS charts, not field charts** — one
+  accent dot for this pilot, muted ink for everyone else. Do not reuse the
+  field-analysis `RankScatter`, which paints every dot alike and would bury the
+  reader in the crowd they came to locate themselves in. The curve is sampled
+  from the scorer's own functions (`score-explanation-charts.ts`), so it is the
+  formula and never a fit — the field-analysis captions say "a trend fitted
+  through the dots"; these must not. A pilot is plotted only when the curve
+  provably explains their published points; anyone carrying a reduction it
+  doesn't model (§12.1, §12.3.5) is counted out, and if that's the viewing pilot
+  the chart is suppressed. Shared chart geometry lives in
+  `src/react/charts/scale.ts`.
+- **(d) A repaired track shows its repairs.** The "Track data cleaning" section
+  draws the same three lines as `/scoring/data-cleaning` (raw GPS, raw barometer,
+  the cleaned line the analysis used) via `charts/TrackCleaningChart.tsx`, off the
+  tracklog the page already downloads for the map. That makes it deliberately
+  **client-only**: server-side there are no fixes, the SSR'd prose and list are
+  unchanged, and the exact numbers live in the list either way — which also
+  doubles as the chart's controls. A channel the file doesn't carry is named in
+  the legend, never drawn as a flat line at 0, and the y domain always covers the
+  RAW excursion: how far off the fix was is the whole finding, so it must never be
+  clipped off-frame.
+- Sections carry a `docHref` into `/scoring/gap`, so a reader who doesn't know
+  GAP always has a way out of the page.
+
+### Frontend
+
+- **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
+  dialog and piece of shared chrome uses it. Read
+  [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
+  before touching kit code — it carries the conventions and eighteen hard-won
+  gotchas. The shadcn/Base UI kit is **gone** (migration finished 2026-07-27,
+  [#483](https://github.com/pokle/glidecomp/issues/483)); `src/react/one-kit.test.ts`
+  fails the build if it comes back, and there is no `components.json`, so
+  `bunx shadcn add` is not the way to get a missing component — add it to `rac/`
+  instead (a static styled element is fine: see `rac/badge.tsx`, `rac/alert.tsx`).
+  - Thin wrappers over non-RAC third-party widgets live in `src/react/vendor/` —
+    today the `input-otp` sign-in field and the `sonner` toaster.
+  - **Editable tables/grids are Tabulator by policy** (owner preference — don't
+    rebuild spreadsheet editing in RAC). Lazy-load the grid, RAC chrome around it,
+    shared theme in `comp/tabulator-grid.css`.
+  - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
+    which defines its small set of vanilla component classes (`.btn*`, `.input`,
+    `.command`, …) — extend those there rather than adding a UI library. The 3D
+    replay styles itself (`replay.css` + inline theme).
+- **Use Tailwind utilities** — avoid custom CSS where Tailwind has an equivalent.
+- **UI conventions** (see the design-language section of
+  [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md)):
+  section-scoped manage actions sit right-aligned on the section header row via
+  `SectionHeader`; breadcrumbs are one component app-wide — the RAC kit's
+  `Breadcrumbs`, ARIA-native (parent links + the current page as a final
+  `aria-current="page"` crumb), with the ancestor array built by the helpers in
+  `src/react/lib/crumbs.ts` rather than inline (the parent crumb is where a page
+  *belongs* in the IA, not where the user came from); every Submit-track button
+  opens the shared `SubmitTrackDialog`; **anything waiting on an API response says
+  so** via `src/react/rac/progress.tsx` — `<Loading>` for a fetching section (a
+  `role="status"` live region), `<Button isPending pendingLabel="Saving">` for an
+  action in flight (never `isDisabled={saving}` + a label swap — that drops focus
+  mid-action), `<ProgressBar isIndeterminate>` for a known background job.
+- **Content pages: the rule is SEO, not a JS ban.** Every word and image a
+  visitor or crawler needs must be in the prerendered HTML, and the page must stay
+  useful with JS off. Interaction that genuinely helps someone understand
+  GlideComp is worth adding on top — the homepage already carries hand-written
+  vanilla enhancement (reveal-on-scroll, the FAQ accordion, and the chart tabs in
+  "For pilots", a plain ARIA tablist over a native scroll-snap track with all six
+  panels in the prerendered DOM). Write such things in vanilla JS/CSS against the
+  existing tokens rather than pulling the RAC kit (or any framework) into these
+  pages.
+- **SSR-safety.** When you touch anything the eight server-rendered comp pages
+  import ([docs/ssr.md](docs/ssr.md)):
+  - No `window`/`document`/`localStorage` at **module scope** — it runs in
+    workerd; guard with `typeof window`.
+  - Render dates/times **deterministically** (fixed locale, injected "today"/zone
+    — never the runtime's) or hydration mismatches appear.
+  - Keep the `entry-server`/`entry-client` React trees identical (e.g. the toaster
+    lives in its own root).
+  - Heavy browser-only libs (mapbox/three/tabulator) stay behind `lazy()` so they
+    stay out of the SSR entry bundle.
+  - New server-side data means extending the route's loader in
+    `src/react/loaders.ts` and seeding via `initial-data`.
+  - Dev serves the SPA shell with no SSR, so verifying is part of "done":
+    `bun run test:e2e:ssr`, or `curl` the built output under `wrangler pages dev`.
+- **Accessibility**: all UI work is measured against
+  [docs/accessibility-standard.md](docs/accessibility-standard.md) (WCAG 2.2 AA
+  across the SPA, static pages, analysis map and 3D replay). Use its per-PR
+  checklist; meeting the standard is part of "done".
+
+### Engine
+
+- **Never implement inline geo math** (distance, bearing, etc.) — always use
+  `web/engine/src/geo.ts`, which provides WGS84 ellipsoid formulas
+  (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for
+  bearing/bbox.
+- **Single source of truth for map visuals/interactions**:
+  [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) — the map
+  provider must match this spec.
+- **Track quality** ([docs/track-quality.md](docs/track-quality.md)): two HARD
+  checks withhold a track from scoring and field analysis; three SOFT checks only
+  annotate. A withheld pilot is **never** deleted from the standings — they are
+  seated last at 0 with reasons. Every verdict is organiser-overridable (FAI S7A
+  §4.4.6). Re-tune thresholds only via `audit-track-quality.ts` over both the
+  bundled comps and the archive.
+- **Field analysis** — 26 behavioural metrics (climbing, gliding, decision-making,
+  gaggle, race craft, day profile) ranked by Spearman ρ against GAP rank, in
+  `web/engine/src/field-analysis/`, surfacing on the public, SSR'd
+  `/comp/:id/analysis` and `/comp/:id/analysis/task/:id`
+  (`src/react/pages/{Comp,Task}FieldAnalysis.tsx` + `src/react/field-analysis/`),
+  and via the CLI: `bun run score-task -- --field-analysis` / `--comp <slug>`.
+  See [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md).
+  - The per-task page is nested under the comp report because it's a chapter of
+    it, so "up" returns to the other tasks. The old
+    `/comp/:id/task/:id/analysis` redirects.
+  - **Presentation order is fixed** — separation ranking first, then per-family
+    tables — because which metrics have explanatory power *is* the finding.
+  - Some metrics emit charting series (`ReportSeries`, a discriminated union)
+    alongside their tables. The day family's series are composed by
+    `charts/day-profile/DayProfilePanel.tsx` onto ONE shared comp-zone time axis
+    rather than per-metric; tables stay the accessible exact reading, and a new
+    series kind must be **ignored, not crash**, in older UIs.
+  - Storage is stale-first (`task_field_analysis`, migration 0019) with two
+    departures from scores: revalidation is **lazy** (triggered by a read — it's
+    expensive and few people read it) and the cold path **never computes
+    synchronously** (returns `pending`, schedules, UI polls).
+  - Visibility is `canViewFieldAnalysis()` in `routes/field-analysis.ts`, mirroring
+    the score route: anyone may read a normal comp's report; a hidden `test` comp
+    404s for non-admins.
+- **Weather** ([docs/weather.md](docs/weather.md)) — provider-neutral interface
+  over outside meteorological sources, so a call site names no provider. A
+  prediction can never be read as a record; every chart prints its source, and
+  weather notes are the organizer's account beside the model's.
+
+## Where things live
+
+| Topic | Doc |
+|---|---|
+| Local dev, e2e, container preview, tunnel | [docs/local-dev.md](docs/local-dev.md) |
+| SSR'd public comp pages + `scores.csv` | [docs/ssr.md](docs/ssr.md) |
+| Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
+| Task weather + weather notes | [docs/weather.md](docs/weather.md) |
+| Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |
+| Track data quality | [docs/track-quality.md](docs/track-quality.md) |
+| Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
+| CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |
+| RAC component kit conventions | [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md) |
+| Accessibility standard | [docs/accessibility-standard.md](docs/accessibility-standard.md) |
+| Map interaction spec | [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) |
+| Score caching (stale-first) | [docs/score-caching-stale-first-plan.md](docs/score-caching-stale-first-plan.md) |
+| Field analysis internals | [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md) |
+| Information architecture + design language | [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) |
+| 3D replay | [docs/3d-flight-replay-notes.md](docs/3d-flight-replay-notes.md) |
+| Database | [docs/database.md](docs/database.md) |

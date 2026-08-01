@@ -4,6 +4,7 @@ import {
   compScoresPath,
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
+import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
 /**
@@ -138,6 +139,38 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
   });
 
+  test("/comp/:id/scores.csv serves the standings as long-form CSV", async ({ request }) => {
+    const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
+    const res = await request.get(`/comp/${compId}/scores.csv`);
+    expect(res.ok()).toBeTruthy();
+    expect(res.headers()["content-type"]).toContain("text/csv");
+    expect(res.headers()["content-disposition"]).toContain(".csv");
+    // Never indexed — the page is the indexable form of this data.
+    expect(res.headers()["x-robots-tag"]).toContain("noindex");
+
+    const [header, ...rows] = (await res.text()).trim().split("\n");
+    expect(header).toBe(SCORES_CSV_COLUMNS.join(","));
+    // Long form: one row per pilot per task, so the leading pilot has a row
+    // naming a task rather than a column per task.
+    const pilotRows = rows.filter((r) => r.includes(pilotId));
+    expect(pilotRows.length).toBeGreaterThan(0);
+    expect(pilotRows.some((r) => r.includes(taskId))).toBeTruthy();
+    expect(rows.some((r) => r.includes(pilotName))).toBeTruthy();
+    expect(rows.every((r) => r.includes(compName) || r.includes(`"${compName}"`))).toBeTruthy();
+
+    // The link columns are absolute against THIS origin (so a preview
+    // deployment's export stays inside the preview) and they resolve.
+    const cells = pilotRows[0].split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    const scoreUrl = cells[SCORES_CSV_COLUMNS.indexOf("score_url")];
+    expect(scoreUrl).toContain(`${new URL(res.url()).origin}/comp/`);
+    expect((await request.get(scoreUrl)).status()).toBe(200);
+  });
+
+  test("a missing comp's scores.csv is a 404, not an empty file", async ({ request }) => {
+    const res = await request.get("/comp/zzznope/scores.csv", { failOnStatusCode: false });
+    expect(res.status()).toBe(404);
+  });
+
   test("task page shows the route and per-class scores", async ({ request }) => {
     const { compId, taskId } = await discover(request);
     const res = await request.get(`/comp/${compId}/task/${taskId}`);
@@ -185,6 +218,23 @@ test.describe("SSR — isolation and fallback", () => {
     expect(res.status()).toBe(404);
     const html = await res.text();
     expect(html).toContain('name="robots" content="noindex"');
+  });
+
+  test("/comp?q= is a noindex shell, not a server-rendered list", async ({ request }) => {
+    // A search on the competitions page. The results come from
+    // /api/comp/search client-side, so there is nothing to server-render —
+    // and a search-results URL is not a page for a crawler to keep. Serving
+    // the plain shell is also what keeps hydration trivial: no SSR data, so
+    // the client creates a fresh root rather than matching against markup the
+    // search is about to replace.
+    const res = await request.get("/comp?q=kangck");
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain('name="robots" content="noindex"');
+    expect(html).not.toContain("window.__SSR_DATA__");
+    // The bare URL is unaffected — still the real server-rendered list.
+    const bare = await request.get("/comp");
+    expect(await bare.text()).not.toContain('name="robots" content="noindex"');
   });
 
   test("a non-SSR SPA route still serves the plain app shell", async ({ request }) => {

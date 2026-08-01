@@ -13,6 +13,7 @@ type Unknown = Record<string, unknown>;
 
 interface Waypoint {
   name?: string;
+  description?: string;
   lat?: number;
   lon?: number;
 }
@@ -131,6 +132,47 @@ export function taskRouteSummary(
       : {}),
     ...(task?.goal?.type ? { goal: { type: task.goal.type } } : {}),
   };
+}
+
+/** A turnpoint as the search index names it: its code and its long name. */
+export interface TurnpointName {
+  /** The waypoint code, e.g. "KANGCK" — what task sheets and pilots use. */
+  code: string;
+  /** The longer description where the file carries a different one. */
+  description?: string;
+}
+
+/**
+ * Every turnpoint's code and description, in route order, deduplicated.
+ *
+ * This is the search index's view of a route (see search-index.ts). A task is
+ * mostly found by where it goes rather than by what it is called — "Task 3"
+ * distinguishes nothing, "ELLIOT KANGCK" distinguishes one task in a decade of
+ * competitions — so these words are indexed in their own column and weighted
+ * well above the task's name.
+ *
+ * Deduplicated because a route commonly starts TAKEOFF and SSS on the same
+ * waypoint, and a repeated word would otherwise bias the ranking towards
+ * whichever task happens to loop back through a turnpoint twice.
+ */
+export function turnpointNames(xctskJson: string | null): TurnpointName[] {
+  const tps = safeParse(xctskJson)?.turnpoints ?? [];
+  const seen = new Set<string>();
+  const out: TurnpointName[] = [];
+  for (const tp of tps) {
+    const code = tp?.waypoint?.name?.trim();
+    if (!code) continue;
+    const key = code.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const description = tp.waypoint?.description?.trim();
+    out.push(
+      description && description.toLowerCase() !== key
+        ? { code, description }
+        : { code }
+    );
+  }
+  return out;
 }
 
 /**

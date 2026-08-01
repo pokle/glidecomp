@@ -17,6 +17,17 @@ tables already moved onto the comp page in IA v2 before SSR landed).
 > `/comp/:id/scores` instead). `/scores?comp_id=X` now redirects to
 > `/comp/X/scores`. The admin-only `/comp/:id/pilots` roster editor joined the
 > noindex-shell routes alongside field analysis.
+>
+> **Update (2026-07-29):** the count is now **eight** — `ROUTES` in
+> `functions/comp/[[path]].ts` holds `/comp`, `/comp/:id`,
+> `/comp/:id/scores`, `/comp/:id/waypoints`, `/comp/:id/task/:id`,
+> `/comp/:id/task/:id/pilot/:id`, and the two field-analysis pages
+> `/comp/:id/analysis` and `/comp/:id/analysis/task/:id`. Field analysis went
+> public in July 2026 and is server-rendered rather than noindex-shelled (a
+> cold report SSRs its pending notice and the client polls); only the
+> superseded `/comp/:id/task/:id/analysis` URL and the admin
+> `/comp/:id/pilots` roster remain on `NOINDEX_SHELL_ROUTES`. Read "four"
+> below as "the original four".
 
 ## Goal
 
@@ -97,7 +108,7 @@ GET /comp/abc123
     → inject: rendered HTML into #root, <script>window.__SSR_DATA__…</script>,
               per-route <title>/<meta>/canonical/JSON-LD into <head>
   ← full HTML with scores in the body
-Browser: main.tsx sees __SSR_DATA__ → hydrateRoot; map/interactive bits attach.
+Browser: entry-client.tsx sees __SSR_DATA__ → hydrateRoot; map/interactive bits attach.
 Client-side nav (e.g. list → comp): the same loader runs against window.fetch.
 ```
 
@@ -172,8 +183,10 @@ Cheap wins that matter regardless of SSR:
      `"/scores"` if kept — see Phase 2). Note `/api/*` stays; the prefixes
      don't collide.
    - `public/_redirects`: delete the `/comp` and `/comp/*` → `/app 200` lines.
-   - `main.tsx`: `window.__SSR_DATA__` present → `hydrateRoot`, else
-     `createRoot` (non-SSR routes still boot the classic way).
+   - Client entry: `window.__SSR_DATA__` present → `hydrateRoot`, else
+     `createRoot` (non-SSR routes still boot the classic way). *(As shipped
+     this lives in `web/frontend/src/react/entry-client.tsx`, not the
+     `main.tsx` named here.)*
    - Dev story: the Vite middleware in `vite.config.ts` currently rewrites
      `/comp*` to `/app.html`. Either keep that for dev (SSR only in
      preview/prod, verified via `wrangler pages dev`) or add a small Vite dev

@@ -132,7 +132,7 @@ Competitions operate with open registration by default. When an authenticated us
 2. Look up the user's `pilot` profile (create one from `user.name` if it doesn't exist yet).
 3. Check if a `comp_pilot` entry exists for this pilot + comp.
 4. If not, auto-create a `comp_pilot` with `pilot_class` set to `comp.default_pilot_class`.
-5. Preprocess the IGC and store `flight_data` (see Scoring Pipeline).
+5. ~~Preprocess the IGC and store `flight_data` (see Scoring Pipeline).~~ — **superseded.** There is no preprocessing: the upload stores the IGC in R2 and its metadata in D1, and the `flight_data` column was dropped in `0003_drop_flight_data.sql`. Scoring reads the IGC files back at revalidation time (see the Scores note below).
 
 ### Cascade deletes
 
@@ -150,7 +150,7 @@ IGC files are stored on Cloudflare R2. XCTSK data is stored in D1 (in the `task.
 
 - Future (out of scope): `/u/{user_id}/*.igc` and `/u/{user_id}/*.xctsk` paths for a personal track library where users upload their own tracks and tasks for personal analysis outside of a competition context.
 
-- If a competition is deleted, all its R2 files must be deleted. D1 rows are cascade-deleted immediately. R2 cleanup is async via Cloudflare Queue — one message per task, each Queue Consumer lists and deletes all objects under `/c/{comp_id}/t/{task_id}/`. Same pattern for task deletion.
+- If a competition is deleted, all its R2 files must be deleted. D1 rows **are** cascade-deleted immediately. The R2 half **is not implemented**: there is no Queue binding in `web/workers/competition-api/wrangler.toml` and no `queue` handler in `src/index.ts`, so comp and task deletes leave the objects under `/c/{comp_id}/t/{task_id}/` orphaned in the bucket (a `TODO` in both handlers). Still open as Iteration 11 below.
 
 ## API design
 
@@ -196,7 +196,7 @@ Auth verification via service binding to auth-api (Option A in `docs/auth.md`). 
 | GET | `/api/comp` | Optional | List comps. Authenticated: includes caller's admin comps (incl. test). Public: non-test only. |
 | GET | `/api/comp/:comp_id` | Optional | Get comp details (incl. tasks summary, admin list, pilot count). Public for non-test. Test requires admin. |
 | PATCH | `/api/comp/:comp_id` | Admin | Update name, category, test flag, close_date, gap_params, **and admin list**. Reject if update would remove the last admin. |
-| DELETE | `/api/comp/:comp_id` | Admin | Delete comp. D1 rows are cascade-deleted immediately. R2 file cleanup is enqueued via Cloudflare Queue (one message per task with its R2 prefix). |
+| DELETE | `/api/comp/:comp_id` | Admin | Delete comp. D1 rows are cascade-deleted immediately. R2 file cleanup is **not implemented** — the objects are orphaned (see Iteration 11). |
 
 `GET /api/comp/:comp_id` returns the comp with its tasks array and admin list inline, avoiding separate requests.
 
@@ -209,8 +209,8 @@ Admin management is handled via `PATCH` — the client sends the desired admin l
 | POST | `/api/comp/:comp_id/task` | Admin | Create task (name, pilot classes). Returns new task with task_id. |
 | GET | `/api/comp/:comp_id/task/:task_id` | Optional | Get task details including xctsk data and track list. Public for non-test. |
 | PATCH | `/api/comp/:comp_id/task/:task_id` | Admin | Update task name, pilot classes (via `task_class`), **and/or xctsk data**, and/or `stop_announcement_time` (stopped tasks, S7F §12.3 — set to stop, null to clear; audit-logged, rescores the task). |
-| DELETE | `/api/comp/:comp_id/task/:task_id` | Admin | Delete task. D1 rows cascade-deleted immediately. R2 cleanup enqueued via Queue. |
-| POST | `/api/comp/:comp_id/task/:task_id/reprocess` | Admin | Reprocess all `flight_data` for this task. Enqueues one Cloudflare Queue message per `task_track` — each Queue Consumer fetches the IGC from R2, parses it against the current xctsk, and writes updated `flight_data` back to D1. Use after changing task xctsk. |
+| DELETE | `/api/comp/:comp_id/task/:task_id` | Admin | Delete task. D1 rows cascade-deleted immediately. R2 cleanup is **not implemented** — the objects are orphaned (see Iteration 11). |
+| ~~POST~~ | ~~`/api/comp/:comp_id/task/:task_id/reprocess`~~ | — | **Never shipped.** The `flight_data` + Queue reprocess pipeline was designed but cancelled (Iteration 7 below); no such route exists in `web/workers/competition-api/src`. Stale scores are handled by the stale-first store instead — see the Scores section. |
 
 The xctsk object is stored in the `task.xctsk` D1 column — no R2 involved. The task editor UI sends `PATCH` with the updated `xctsk` field on each change (debounced). Returned inline with `GET`.
 
@@ -232,12 +232,19 @@ Tracks are uploaded one-by-one, typically by pilots after the competition. Uploa
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/comp/:comp_id/task/:task_id/igc` | User | Upload one IGC file (max 5MB, compressed in browser). Auto-registers pilot if needed. Rejected if past comp close_date. If the pilot already has a track for this task, replaces it (preserving any admin-set penalties). Enforces max 250 unique pilots per task. Preprocesses the IGC and stores `flight_data` (see Scoring Pipeline). Returns track metadata. |
-| GET | `/api/comp/:comp_id/task/:task_id/igc` | Optional | List tracks with metadata (pilot name, filename, size, upload date). Public for non-test. Each entry includes a time-limited signed R2 URL for direct download. |
+| POST | `/api/comp/:comp_id/task/:task_id/igc` | User | Upload one IGC file (max 5MB, compressed in browser). Auto-registers pilot if needed. Rejected if past comp close_date. If the pilot already has a track for this task, replaces it (preserving any admin-set penalties). Enforces max 250 unique pilots per task. ~~Preprocesses the IGC and stores `flight_data`~~ — no preprocessing happens; the file goes to R2 and its metadata to D1 (`flight_data` was dropped in `0003_drop_flight_data.sql`). Returns track metadata. |
+| POST | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id` | Admin / open-upload | Upload on behalf of a specific registered pilot. |
+| GET | `/api/comp/:comp_id/task/:task_id/igc` | Optional | List tracks with metadata (pilot name, filename, size, upload date, penalties, uploader attribution). Public for non-test. |
+| GET | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id/download` | Optional | Download one pilot's raw IGC. Public for non-test. |
 | PATCH | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id` | Admin | Update penalty_points and penalty_reason on a pilot's track. |
+| PATCH | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id/quality-override` | Admin | Override the computed track-quality verdict (`task_track.quality_override`, migration 0024 — FAI S7A §4.4.6 makes rejection the organiser's call). |
 | DELETE | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id` | Admin | Delete a pilot's track for this task. |
+| POST | `/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id/restore` | Admin | Reactivate a superseded track (e.g. after a DNF deactivated it), supersede any active manual flight, and resolve the outcome to Landed. |
 
-No separate download endpoint — the list response includes signed R2 URLs that the browser can fetch directly.
+**Correction (superseded design).** There are no signed R2 URLs anywhere in the
+worker — R2 objects are never exposed to the browser directly. Downloads go
+through the `…/igc/:comp_pilot_id/download` endpoint above, which applies the
+same test-comp visibility rules as the rest of the API.
 
 #### Scores
 
@@ -253,8 +260,9 @@ No separate download endpoint — the list response includes signed R2 URLs that
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/comp/:comp_id/task/:task_id/reprocess` | Admin | Reprocess all `flight_data` for this task. Enqueues one Cloudflare Queue message per `task_track` — each Queue Consumer fetches the IGC from R2, parses it against the current xctsk, and writes updated `flight_data` back to D1. Use after changing task xctsk. |
-| GET | `/api/comp/:comp_id/task/:task_id/score` | Public | Compute and return scores for a single task on-demand. Loads all `flight_data` + `penalty_points` from `task_track` for matching pilots, runs the GAP formula, returns ranked pilot list with individual point breakdowns. No stored results — computed fresh each request. No auth required. |
+| ~~POST~~ | ~~`/api/comp/:comp_id/task/:task_id/reprocess`~~ | — | **Never shipped** (see the note above and Iteration 6/7 below). No such route exists. |
+| GET | `/api/comp/:comp_id/task/:task_id/score` | Public | Return scores for a single task. ~~No stored results — computed fresh each request.~~ — **superseded:** the read serves a materialized `task_scores` row in one D1 query (`src/score-store.ts`), with `computed_at` / `stale` fields and ETag/304 support; mutations bump `inputs_rev` and recompute in the background. Ranked pilot list with individual point breakdowns. No auth required. |
+| POST | `/api/comp/:comp_id/rescore` | Admin | Force revalidation of every task in the comp (the "Re-score" button). |
 | GET | `/api/comp/:comp_id/scores` | Public | Compute and return competition-level standings on-demand. Aggregates each task's stored scores into per-class standings (S7A §5.2.5.4 shared ranks on ties). When the comp's `series_scoring` is `ftv`, the total is the Fixed Total Validity result (S7F §15) instead of the plain sum, and each pilot's per-task entries carry `ftv_status` (full/partial/discarded), `ftv_counted_score`, and `validity`. Response includes `series_scoring` and the resolved `ftv_factor`. No auth required. |
 
 **Scoring pipeline:** Scoring is split into two concerns:
@@ -278,14 +286,67 @@ No separate download endpoint — the list response includes signed R2 URLs that
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | GET | `/api/comp/:comp_id/pilot` | Optional | List registered pilots for this comp with their class, team, etc. Public for non-test. |
+| POST | `/api/comp/:comp_id/pilot` | Admin | Register one pilot (runs the linking resolver). |
+| POST | `/api/comp/:comp_id/pilot/bulk` | Admin | Register/update up to 250 pilot rows in one transactional diff-and-write. Idempotent — re-submitting the same import is a no-op. Backs the paste-from-spreadsheet UI. |
 | PATCH | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Admin | Update pilot_class, team_name, driver_contact, starting_order. |
+| DELETE | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Admin | Remove a registration. |
 
 Pilot profile (the `pilot` table) is managed via the competition-api worker:
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | GET | `/api/comp/pilot` | User | Get the current user's pilot profile. |
+| GET | `/api/comp/pilot/flights` | User | List the caller's flights across every comp (the dashboard's "My flights"). |
 | PATCH | `/api/comp/pilot` | User | Update own profile (name, civl_id, sporting_body_ids, phone, glider). |
+
+#### Route families added since v3.0
+
+The spec above is the original design. These route families shipped later and
+are live in `web/workers/competition-api/src/routes/`. Public reads follow the
+same visibility rule as scores throughout: anonymous for a normal comp, admin
+for a `test` comp.
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| GET | `/api/comp/lookup` | Optional | Name search over comps / tasks / pilots, returning ids + names. Powers the "did you mean…" repair on a dead `/comp` URL — it knows nothing about URLs; slugifying and path building live client-side in `lib/slug.ts`. Public and unauthenticated, so every dimension is capped. |
+| GET | `/api/comp/:comp_id/waypoints` | Optional | The comp's region waypoints (`comp_waypoints`, migration 0015) as JSON. |
+| GET | `/api/comp/:comp_id/waypoints/:format` | Optional | Export them (`seeyou-cup`, `gpx`, `compegps`, `ozi`, `fs-geo`, `fs-utm`, `kml`, `csv`; anything else 404s). |
+| GET | `/api/comp/:comp_id/task/:task_id/waypoints/:format` | Optional | Export just the waypoints a task uses — same formats plus `xctsk`. |
+| PUT | `/api/comp/:comp_id/waypoints` | Admin | Replace the comp's waypoint file. |
+| GET | `/api/comp/:comp_id/task/:task_id/field-analysis` | Optional | Per-task behavioural-metric report. Stale-first (`task_field_analysis`, 0019) with **lazy** revalidation; a cold row returns `pending` rather than computing inline, and the UI polls. |
+| GET | `/api/comp/:comp_id/field-analysis` | Optional | Comp-level report — pure aggregation over the per-task rows, nothing extra materialized. |
+| POST | `/api/comp/:comp_id/task/:task_id/field-analysis/refresh` | Admin | Explicit "recompute now" for one task's report. Bumps only the analysis row. |
+| GET | `/api/comp/:comp_id/task/:task_id/weather` | Optional | The task's modelled weather (`task_weather`, 0023). Invalidated by query key, not `inputs_rev` — so no mutation site bumps it. |
+| POST | `/api/comp/:comp_id/task/:task_id/weather/refresh` | Admin | Re-fetch: clears a provider-failure backoff, or pulls a settled answer for a provisional day. |
+| GET | `/api/comp/:comp_id/task/:task_id/pilot-status` | Optional | Per-task pilot statuses. Only pilots moved off the Present default have a row. |
+| PUT | `/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id` | Admin / self | Upsert a status (absent / DNF / landed — mutually exclusive). Feeds S7F §9.1 launch validity, so it bumps scores. |
+| PATCH | `…/pilot-status/:comp_pilot_id` | Admin / self | Edit just the note. A note carries no scoring meaning, so this does **not** bump scores. |
+| DELETE | `…/pilot-status/:comp_pilot_id` | Admin / self | Clear the status, returning the pilot to Present. |
+| GET | `/api/comp/:comp_id/task/:task_id/manual-flight` | Optional | Active manual flight reports for the task (`task_manual_flight`, 0014) — how a track-less pilot's distance is recorded. |
+| GET | `…/manual-flight/:comp_pilot_id/history` | Optional | Every record for one pilot, active + superseded, newest first. |
+| PUT | `…/manual-flight/:comp_pilot_id` | Admin / self | Record/replace a manual flight. Computes made-good via the engine and supersedes any prior manual flight **and** any active track — evidence is track XOR manual. |
+| DELETE | `…/manual-flight/:comp_pilot_id` | Admin / self | Supersede the active record (it is retained, never deleted); no auto-restore of a superseded track. |
+| POST | `…/manual-flight/:comp_pilot_id/restore/:manual_flight_id` | Admin / self | Reactivate a superseded record, re-materializing its made-good against the current route. |
+| GET | `/api/comp/:comp_id/task/:task_id/pilot/:comp_pilot_id/analysis` | Optional | The turnpoint sequence (GAP) or scored open-distance line behind one pilot's score — the report card's transparency data. Same engine and inputs as the scorer. |
+| GET | `/api/comp/:comp_id/task/:task_id/3dvis` | Optional | Packed track bundle for the 3D replay (KV-cached). |
+| GET | `/api/comp/sample-3dvis` | Public | The replay's default dataset: the seeded sample comp's first task by date. |
+| GET | `/api/civl-rankings.csv` | Public | The imported FAI/CIVL world rankings (`pilot_ranking`, 0025) as CSV; `?slug=` narrows to one list. An unlinked, noindexed verification hatch — every row is a copy of a public list. Visitors reach it at the site root (`/civl-rankings.csv`, forwarded by `functions/civl-rankings.csv.ts`) because it is opened in a browser, not called by the app. See [civl-rankings.md](civl-rankings.md). |
+| GET | `/api/admin/whoami` | User | Cheap super-admin check for gating UI. |
+| GET | `/api/admin/users` | Super-admin | Every registered user with cheap per-user stats. |
+| GET | `/api/admin/cache/stats` | Super-admin | Item counts across the score stores, KV, and the AirScore proxy cache (the last read over the airscore-api service binding). |
+| DELETE | `/api/admin/cache` | Super-admin | Mark every materialized score stale and clear the KV + AirScore caches; `?hard=true` also deletes the rows so the next visit recomputes from R2. |
+
+**User-owned files** (`routes/user-files.ts`) are a separate, non-competition
+family on the same worker — a pilot's personal track/task library, outside any
+comp:
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST / GET / DELETE | `/api/user/tracks[/:track_id]` | User | Upload, list, fetch and delete own tracks (R2 under `u/{userId}/`, content-addressed by SHA-256). |
+| GET / DELETE | `/api/user/tracks/:track_id/annotations` | User | Annotations on own tracks. |
+| GET / DELETE | `/api/user/tasks[/:task_code]` | User | Own saved XCTSK tasks (stored inline in D1). |
+| GET | `/api/u/:username/track/:track_id` | Optional | Public-by-link read of another user's track… |
+| GET | `/api/u/:username/task/:task_code` | Optional | …and task. |
 
 ## URL design
 
@@ -297,7 +358,10 @@ Pilot profile (the `pilot` table) is managed via the competition-api worker:
 - `/comp/{comp_id}/analysis`, `/comp/{comp_id}/analysis/task/{task_id}`:
   field analysis (behavioural metrics); the per-task page is a chapter of the
   comp report (the old `/comp/{comp_id}/task/{task_id}/analysis` URL
-  redirects). **Admin-only** during rollout, and client-rendered only — see
+  redirects). **Public and server-rendered** since July 2026 — both have
+  `ROUTES` entries in `functions/comp/[[path]].ts`; a hidden `test` comp still
+  404s for non-admins, and a cold report server-renders its `pending` notice
+  (noindex) while the client polls. See
   [2026-07-18-field-analysis-plan.md](./2026-07-18-field-analysis-plan.md).
 - `/scores`: public scores page. Query params: comp_id
 
@@ -385,7 +449,7 @@ Staged iterative plan. Each iteration delivers a working, testable vertical slic
 - [x] Implement API routes: `POST .../igc`, `GET .../igc`, `PATCH .../igc/:comp_pilot_id`, `DELETE .../igc/:comp_pilot_id`
 - [x] Implement open registration flow (auto-create `pilot` + `comp_pilot` on first upload)
 - [x] Enforce `close_date`, one-track-per-pilot replacement (preserving penalties), 250 pilots-per-task limit, 5MB file size limit
-- [x] Generate signed R2 download URLs in list response
+- [x] ~~Generate signed R2 download URLs in list response~~ — not how it shipped: R2 is never exposed to the browser; downloads go through `GET .../igc/:comp_pilot_id/download`, which re-applies the visibility rules
 - [x] Build track list UI on the task page
 - [x] Implement pilot profile endpoints on competition-api (`GET/PATCH /api/comp/pilot`)
 

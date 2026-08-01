@@ -1,6 +1,6 @@
 # Glide Detection Algorithm
 
-Specification for glide detection and sink classification in `web/engine/src/flight-phase-detectors.ts` (orchestrated by `web/engine/src/event-detector.ts`), with downstream visualization in `web/engine/src/glide-speed.ts` and `web/frontend/src/analysis/event-panel.ts`.
+Specification for glide detection and sink classification in `web/engine/src/flight-phase-detectors.ts` (orchestrated by `web/engine/src/event-detector.ts`), with glide/sink extraction in `web/engine/src/segment-extractors.ts`, downstream visualization in `web/engine/src/glide-speed.ts`, and the panel UI in `web/frontend/src/analysis/analysis-panel.ts`.
 
 ## Overview
 
@@ -33,7 +33,9 @@ Indices:        0          prevEnd    startIndex    endIndex   startIndex    end
 
 ### Filters
 
-| Filter | Value | Rationale |
+The values below are the defaults (`DEFAULT_THRESHOLDS.glide` in `web/engine/src/thresholds.ts`), not hard-coded constants — callers can override them through `resolveThresholds()`, and the analysis page's Settings dialog does exactly that.
+
+| Filter | Default | Rationale |
 |--------|-------|-----------|
 | Minimum gap | 10 fixes | Gaps smaller than this are too short to be meaningful glides — likely just a brief transition between thermals. |
 | Minimum duration | 30 seconds | Filters noise. A pilot needs at least half a minute of straight flight for the glide statistics to be meaningful. |
@@ -61,7 +63,7 @@ Both events share the same `segment` object, enabling segment highlighting on th
 
 ## Downstream: Sink Classification
 
-Sinks are not separately detected — they are glides filtered by poor glide ratio in the event panel (`event-panel.ts`).
+Sinks are not separately detected — they are glides filtered by poor glide ratio, by `extractSinks()` in `segment-extractors.ts` (the counterpart to `extractGlides()`), which the panel calls when rendering the Sinks tab.
 
 **Criteria:** A glide qualifies as a sink if `glideRatio <= 5` (L/D of 5:1 or worse).
 

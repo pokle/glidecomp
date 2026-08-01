@@ -50,9 +50,10 @@ export function categoryLabel(cat: string): string {
 
 /**
  * "Today" as a bare YYYY-MM-DD string in the given IANA zone (or the runtime
- * local zone when null). Used to pick the today's-task hero; computed once on
- * the SSR server and passed to the client so the selection is deterministic
- * across the hydration boundary (see loadCompDetail / pickHeroTasks).
+ * local zone when null). Used to tell whether a comp has finished flying;
+ * computed once on the SSR server and passed to the client so the verdict is
+ * deterministic across the hydration boundary (see loadCompDetail /
+ * isCompFinished).
  */
 export function todayInZone(timezone: string | null, now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {

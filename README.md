@@ -12,7 +12,7 @@
 
 **How it's built:**
 - **Client-side first** — IGC parsing and flight analysis happen entirely in the browser, no server required for core functionality
-- **Frontend**: React SPA hosted on Cloudflare Pages, built with react-aria-components and shadcn/ui component kits (mid-migration to the former — see `docs/2026-07-18-rac-adoption-guide.md`) and Tailwind CSS
+- **Frontend**: React SPA hosted on Cloudflare Pages, built with react-aria-components (the app's only component kit — see [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)) and Tailwind CSS. The public competition pages are **server-rendered** by Pages Functions, and the content pages (home, about, scoring guides) are prerendered static HTML
 - **Backend**: Cloudflare Workers API for competition management, with D1 (SQLite) database and R2 storage
 - **Engine**: A dedicated `@glidecomp/engine` package handles geo calculations (WGS84 ellipsoid math, Vincenty formulas) and flight analysis
 
@@ -28,15 +28,21 @@ The app is live at **[glidecomp.com](https://glidecomp.com)**.
 - **Flight event detection** — automatic detection of takeoff, landing, thermals, glides, start/goal crossings, and turnpoint tagging
 - **Thermal analysis** — entry/exit times, altitude gain, average climb rate
 - **Glide analysis** — distance, altitude lost, L/D ratio, plus sink detection for poor glides
-- **GAP scoring** — CIVL GAP scoring with distance, time, leading, and arrival points
+- **GAP scoring** — CIVL GAP scoring with distance, time, leading, and arrival points, including stopped tasks (S7F §12.3)
+- **Open-distance scoring** — for tasks flown downwind from a launch cylinder rather than around a route
+- **Report card** — a per-pilot page explaining exactly how their score was arrived at, with the substituted arithmetic, each component's scoring curve drawn with the field on it, and links into the scoring guides
 - **Field analysis** — 26 cross-pilot behavioural metrics per task, ranked by Spearman correlation against finishing position, with per-comp consistency across tasks
+- **Task weather** — modelled wind, climb and timing for the task's day from an outside provider, plus the organizer's own weather notes, read against what the field actually flew
+- **Track quality checks** — every tracklog assessed against its task (FAI S7A §4.4.2); hard findings withhold a track from scoring, and every verdict is overridable by the organizer
 - **Competition management** — create competitions, register pilots, upload IGC tracks, manage tasks, apply penalties, with full audit logging
-- **Authentication** — Google OAuth login with user profiles
+- **Scores export** — the full standings as a pivot-ready CSV, downloadable or opened live in Google Sheets
+- **Waypoints** — a per-competition waypoint list, editable and exportable to flight instruments
+- **Authentication** — sign in with Google, or passwordless email one-time codes
 - **Task editor** — create and edit tasks with drag-to-reorder turnpoints, waypoint database search, and click-on-map placement
 - **Multiple data sources** — drag & drop IGC/XCTSK files, import from XContest by task code, or import from AirScore by URL
 - **Interactive map** — 2D (Mapbox) and 3D views with track overlay, task cylinders, and map annotations
+- **3D flight replay** — a Three.js replay of a whole task's field, with gaggle detection
 - **Altitude sparkline** — clickable time-series chart linked to events and map position
-- **Theme editor** — customizable UI themes with color and font controls, import/export support
 - **Configurable units & detection** — speed, altitude, distance, climb rate units; adjustable thermal/glide detection thresholds
 
 ## Web Development
@@ -156,12 +162,16 @@ same-origin `/api/airscore`, and there's no Pages Function proxying that, so it
 ### Tests and type checking
 
 ```bash
-bun run test             # Run unit tests (engine + airscore worker) and type check
-bun run test:comp        # Run competition API tests
-bun run test:all         # Run all unit tests
-bun run test:e2e         # Run Playwright end-to-end tests
-bun run typecheck        # Type check root project
-bun run typecheck:all    # Type check everything (frontend + engine + workers)
+bun run test             # bun test sweep (root, engine, airscore-api, dev-router, scripts) + type check
+bun run test:all         # the above, then the three vitest suites concurrently
+bun run test:comp        # Competition API tests only
+bun run test:auth        # Auth API tests only
+bun run test:frontend    # Frontend tests only
+bun run test:e2e         # Playwright end-to-end tests
+bun run test:e2e:ssr     # Playwright suite against the server-rendered build
+bun run db:migrate       # Apply D1 migrations to the local state
+bun run typecheck        # Type check the root project
+bun run typecheck:all    # Type check everything (frontend + engine + all four workers)
 ```
 
 The e2e suite writes to the *persistent* local D1 state in `web/.wrangler/state`.
@@ -214,7 +224,7 @@ bun run get-xcontest-task -- --file task.json
 **score-task** - Score multiple pilots against a task using CIVL GAP (FAI Sporting Code Section 7F):
 
 ```bash
-bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
+bun run score-task -- <task.xctsk> <igc-file-or-folder>... [options]
 
 # Scores identically to the web app. --wing (HG or PG) is REQUIRED for GAP
 # scoring — the CLI has no comp record and won't guess. Given it, the run starts
@@ -237,18 +247,24 @@ bun run score-task <task.xctsk> <igc-file-or-folder>... [options]
 #                              vs GAP rank). See docs/2026-07-18-field-analysis-plan.md.
 # Nominal parameters:
 #   --nominal-distance <m>     `nominalDistance` (default: 70% of task distance)
+#   --nominal-distance-pct <%> That percentage, when you'd rather not do the sum
 #   --nominal-goal <ratio>     `nominalGoal` 0-1 (default: 0.3)
 #   --nominal-time <s>         `nominalTime` in seconds (default: 5400)
 #   --minimum-distance <m>     `minimumDistance` in metres (default: 5000)
-# Scoring terms (per-wing defaults; pass to override):
+# Scoring terms (per-wing defaults; each has a --use-… form to turn it back on):
 #   --no-use-leading           Disable leading (departure) points (`useLeading`)
 #   --no-use-arrival           Disable arrival points (`useArrival`)
+#   --no-use-distance-difficulty   Disable difficulty points (`useDistanceDifficulty`)
+# Stopped tasks (S7F §12.3):
+#   --stop-time <iso-datetime> Announce a stop, e.g. 2026-01-15T03:45:00Z
+#   --score-back-time <s>      PG score-back window (default: 300)
 # Formula & advanced:
 #   --leading-formula <weighted|classic>  `leadingFormula` (default: classic HG / weighted PG)
 #   --leading-weight-formula <gap2020|s7f2024>  PG leading weight (default: gap2020)
 #   --time-points-exponent <5/6|2/3>       `timePointsExponent` (default: 5/6)
-#   (see --help for the full list, incl. nominal-launch, distance-origin, jump-the-gun,
-#    leading-time-ratio)
+#   --ess-not-goal-factor <ratio>          `essNotGoalFactor` (default: 0.8 HG / 0 PG)
+#   (see --help for the full list, incl. nominal-launch, distance-origin,
+#    jump-the-gun-factor, jump-the-gun-max-seconds, leading-time-ratio)
 # Output:
 #   --json                     Output as JSON
 
@@ -302,18 +318,42 @@ bun run seed                    # every bundled comp
 bun run seed big-chip kosci-loop  # just these slugs
 ```
 
+**civl-rankings** - Import the FAI/CIVL monthly world pilot rankings into D1 (all ten disciplines; idempotent, and a no-op on a day CIVL hasn't published anything new). Runs daily in CI — see [docs/civl-rankings.md](docs/civl-rankings.md):
+
+```bash
+bun run civl-rankings
+```
+
+**build-3dvis** - Pack a task's tracks into the asset the 3D replay loads:
+
+```bash
+bun run build-3dvis
+```
+
+**bench-task / bench-analysis** - Benchmark the scoring and analysis paths (see the `benchmark-engine` skill).
+
 ## Project Structure
 
 ```
+functions/               - Cloudflare Pages Functions (SSR for the public /comp pages,
+                           /api/* proxies to the Workers, sitemap, middleware)
 web/
   frontend/              - Cloudflare Pages frontend (Vite + TypeScript)
-  engine/                - Shared analysis library (IGC parsing, event detection, GAP scoring, field analysis)
+    static/              - Astro app: the prerendered content pages (home, about,
+                           legal, the scoring guides)
+  engine/                - Shared analysis library (IGC parsing, event detection, GAP scoring,
+                           field analysis, track quality, weather)
     cli/                 - CLI utilities (detect-events, get-xcontest-task, score-task, build-3dvis, benchmarks)
   workers/
     auth-api/            - Authentication API (Cloudflare Worker + D1)
     competition-api/     - Competition management API (Cloudflare Worker + D1 + R2)
     airscore-api/        - AirScore caching proxy (Cloudflare Worker)
+    dev-router/          - Dev-only router: owns :8790 and dispatches to the three above
+  db/
+    migrations/          - D1 schema migrations (shared by auth-api and competition-api)
+  samples/               - Bundled sample competitions, CIVL ranking fixtures, reference data
   scripts/               - Operational scripts (comp seeding/download/generation, dev helpers, secrets)
 e2e/                     - Playwright end-to-end tests
 docs/                    - Feature and architecture specifications
+patches/                 - Patched dependencies (applied by bun)
 ```
