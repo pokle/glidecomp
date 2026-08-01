@@ -239,7 +239,7 @@ the per-family per-pilot tables.
 - Audit every `shortLabel` in the engine registry for readability. They are the
   engine's, shared with the CLI text report, and **stored inside cached
   reports** — a change needs `FIELD_ANALYSIS_VERSION` bumped so stale rows
-  expire (it is 20 as of #520).
+  expire (it is 21 as of #526, and moves often — read it, don't quote this).
 - Where a short label cannot be made self-explaining in ~10 characters, prefer
   the full label rotated with a `max-height` truncation over a cryptic
   contraction, and rely on the existing hover readout for the rest.
