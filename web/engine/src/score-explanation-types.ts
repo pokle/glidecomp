@@ -214,6 +214,21 @@ export interface ScoreExplanationSection {
   /** The points this section contributed, when it is a point component. */
   points?: number;
   /**
+   * The points this component (or, on the total section, the day) had on
+   * offer, so a UI can render "143.4 of 156.2 pts" and make a not-maxed
+   * component scannable without reading any formula. Absent on the sections
+   * it doesn't apply to (penalties, the narrative).
+   */
+  pointsAvailable?: number;
+  /**
+   * Where this pilot placed on the section's own input — "2nd fastest of 12
+   * through the speed section" — pre-worded here so every UI says the same
+   * thing. Ranked by the input (time, distance, coefficient, arrival order),
+   * NOT by points: that is what a pilot means by the question, and it stays
+   * honest when a §12.1/§12.3.5 reduction reorders the points.
+   */
+  rank?: string;
+  /**
    * Where the site's GAP explainer covers this section, e.g.
    * `/scoring/gap#time-points`. A UI that has such a page renders it as a
    * "how this works" link on the section header; one that doesn't (the CLI)
@@ -234,6 +249,14 @@ export interface ScoreExplanation {
   format: 'gap' | 'open_distance';
   /** One-sentence outcome, e.g. "Made goal in 1:42:07 — 845 points". */
   headline: string;
+  /**
+   * The winner's bridging sentence, shown under the headline: why the top
+   * score is still short of the points on offer ("of the 1000 points on
+   * offer, 46.9 went untaken — mostly time"). Set only when this pilot leads
+   * the class and points were left; every other pilot's version of the
+   * question is the gap to the leader, which the comparison section answers.
+   */
+  headlineNote?: string;
   sections: ScoreExplanationSection[];
 }
 

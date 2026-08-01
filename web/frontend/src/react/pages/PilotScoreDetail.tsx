@@ -709,6 +709,14 @@ export function PilotScoreDetail() {
           {data.scoreStale ? " — a re-score is in progress" : ""}
         </p>
         <p className="mt-1 font-medium">{explanation.headline}</p>
+        {/* The winner's bridging sentence — why the top score is still short
+            of the points on offer. The one question the day's leader arrives
+            with, answered before any scrolling. */}
+        {explanation.headlineNote ? (
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {explanation.headlineNote}
+          </p>
+        ) : null}
       </header>
 
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] lg:gap-6">
@@ -1113,10 +1121,24 @@ function ExplanationSection({
         <h2 className="font-semibold">{section.title}</h2>
         {section.points !== undefined ? (
           <span className="shrink-0 font-semibold tabular-nums">
-            {Math.round(section.points * 10) / 10} pts
+            {Math.round(section.points * 10) / 10}
+            {/* "of 156.2" — the component's offer beside its points, so a
+                not-maxed component is scannable without reading a formula. */}
+            {section.pointsAvailable !== undefined ? (
+              <span className="font-normal text-muted-foreground">
+                {" of "}
+                {Math.round(section.pointsAvailable * 10) / 10}
+              </span>
+            ) : null}{" "}
+            pts
           </span>
         ) : null}
       </div>
+      {/* Where this pilot placed on the section's own input ("2nd fastest of
+          12 through the speed section") — worded by the engine. */}
+      {section.rank ? (
+        <p className="mt-0.5 text-sm text-muted-foreground">{section.rank}</p>
+      ) : null}
       {section.summary ? (
         <p className="mt-1 text-sm text-muted-foreground">{section.summary}</p>
       ) : null}
