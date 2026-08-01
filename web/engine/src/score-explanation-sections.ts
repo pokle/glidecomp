@@ -1585,23 +1585,31 @@ export function buildComparisonSection(
   }
 
   // Penalties are points lost to the leader like any component, and a ledger
-  // that omits them cannot reconcile with the gap it claims to explain. This
-  // pilot's are published; the leader's are derived from the one identity the
-  // payload guarantees — components − total — with a tolerance for the
-  // total's 0.1 rounding. (A §12.2/§12.4 floor folds into that derived figure,
-  // which is still the points the leader lost to it: the ledger's truth.)
-  const minePenalty = entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
+  // that omits them cannot reconcile with the gap it claims to explain. BOTH
+  // sides are derived from the identity the payload guarantees — components −
+  // total — rather than from the published penalty figures: a §12.2/§12.4
+  // floor makes the published deduction bigger than its net effect (the
+  // archive's jump-the-gun cases were 74 points apart), and the ledger's
+  // business is the net. Tolerance for the total's 0.1 rounding.
+  const minePenalty =
+    entry.distance_points +
+    entry.time_points +
+    entry.leading_points +
+    entry.arrival_points -
+    entry.total_score;
   const leaderPenalty =
     (leader.distance_points ?? 0) +
     (leader.time_points ?? 0) +
     (leader.leading_points ?? 0) +
     (leader.arrival_points ?? 0) -
     leaderTotal;
-  if (Math.abs(minePenalty) > 0.05 || Math.abs(leaderPenalty) > 0.1) {
+  const publishedPenalty =
+    entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
+  if (Math.abs(minePenalty) > 0.1 || Math.abs(leaderPenalty) > 0.1) {
     rows.push({
       id: 'penalty',
       label: 'Penalties',
-      mine: -minePenalty,
+      mine: Math.abs(minePenalty) > 0.1 ? -minePenalty : 0,
       theirs: Math.abs(leaderPenalty) > 0.1 ? -leaderPenalty : 0,
     });
   }
@@ -1613,6 +1621,12 @@ export function buildComparisonSection(
 
   const items: ScoreExplanationItem[] = rows.map((r) => {
     const diff = r.mine - r.theirs;
+    // The ledger states the penalty's NET effect; when a floor made that
+    // smaller than the published deduction, say where the full figure lives.
+    const floorNote =
+      r.id === 'penalty' && Math.abs(minePenalty - publishedPenalty) > 0.3
+        ? ' — the net effect after the scoring floor; the penalty section shows the full deduction'
+        : '';
     return {
       id: `gap-${r.id}`,
       text: r.label,
@@ -1620,7 +1634,7 @@ export function buildComparisonSection(
         Math.abs(diff) < 0.05
           ? 'level'
           : `${diff > 0 ? '+' : '−'}${fmtPoints(Math.abs(diff))} pts`,
-      detail: `you ${signedPts(r.mine)}, the leader ${signedPts(r.theirs)}`,
+      detail: `you ${signedPts(r.mine)}, the leader ${signedPts(r.theirs)}${floorNote}`,
       emphasis: Math.abs(diff) < 0.05 ? 'muted' : undefined,
     };
   });
@@ -1638,11 +1652,6 @@ export function buildComparisonSection(
     .sort((a, b) => b.won - a.won);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * gap ? losses[0] : null;
-
-  const listLabels = (labels: string[]) =>
-    labels.length <= 1
-      ? (labels[0] ?? '')
-      : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
 
   let gapDetail: string;
   if (dominant && dominant.lost > gap + 0.05 && gains.length > 0) {
@@ -1685,6 +1694,13 @@ export function buildComparisonSection(
   };
 }
 
+/** "time", "time and arrival", "time, leading and arrival". */
+function listLabels(labels: string[]): string {
+  return labels.length <= 1
+    ? (labels[0] ?? '')
+    : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
 /**
  * What separates this pilot's published points from the day's per-component
  * offer, penalties included — the "left on the day" ledger shared by the
@@ -1704,8 +1720,15 @@ function shortfallsAgainstOffer(
       ? [{ label: 'arrival', lost: ap.arrival - entry.arrival_points }]
       : []),
     {
+      // Net penalty effect, derived from components − total, so a §12.2/§12.4
+      // floor never overstates what the deduction actually cost.
       label: 'penalties',
-      lost: entry.penalty_points + (entry.jump_the_gun_penalty ?? 0),
+      lost:
+        entry.distance_points +
+        entry.time_points +
+        entry.leading_points +
+        entry.arrival_points -
+        entry.total_score,
     },
   ];
   return rows.filter((r) => r.lost > 0.05).sort((a, b) => b.lost - a.lost);
@@ -1765,21 +1788,27 @@ function buildPointsLeftSection(
     });
   };
 
-  row('distance', 'Distance', entry.distance_points, ap.distance);
-  const fastest = fullTaker((p) => p.time_points, ap.time);
-  row(
-    'time',
-    'Time',
-    entry.time_points,
-    ap.time,
-    fastest
-      ? ` — ${fastest.pilot_name} took the full time points${
-          fastest.speed_section_time
-            ? ` in ${duration(fastest.speed_section_time)}`
-            : ''
-        }`
-      : undefined,
-  );
+  // Every row is gated on a real offer: a nobody-in-goal HG day clamps the
+  // time weight to zero, and "full points — you 0 of 0 on offer" is noise.
+  if (ap.distance > 0) {
+    row('distance', 'Distance', entry.distance_points, ap.distance);
+  }
+  if (ap.time > 0) {
+    const fastest = fullTaker((p) => p.time_points, ap.time);
+    row(
+      'time',
+      'Time',
+      entry.time_points,
+      ap.time,
+      fastest
+        ? ` — ${fastest.pilot_name} took the full time points${
+            fastest.speed_section_time
+              ? ` in ${duration(fastest.speed_section_time)}`
+              : ''
+          }`
+        : undefined,
+    );
+  }
   if (ap.leading > 0) {
     const bestLead = fullTaker((p) => p.leading_points, ap.leading);
     row(
@@ -1802,13 +1831,25 @@ function buildPointsLeftSection(
         : undefined,
     );
   }
-  const penalties = entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
-  if (penalties > 0.05) {
+  // Net penalty effect (components − total), so a §12.2/§12.4 floor never
+  // overstates what the deduction actually cost.
+  const penalties =
+    entry.distance_points +
+    entry.time_points +
+    entry.leading_points +
+    entry.arrival_points -
+    entry.total_score;
+  const publishedPenalty =
+    entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
+  if (penalties > 0.1) {
     items.push({
       id: 'left-penalty',
       text: 'Penalties',
       value: `−${fmtPoints(penalties)} pts`,
-      detail: 'See the penalty section above.',
+      detail:
+        Math.abs(penalties - publishedPenalty) > 0.3
+          ? 'The net effect after the scoring floor — the penalty section shows the full deduction.'
+          : 'See the penalty section above.',
       emphasis: 'warning',
     });
   }
@@ -1818,15 +1859,35 @@ function buildPointsLeftSection(
   const losses = shortfallsAgainstOffer(entry, ap);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * left ? losses[0] : null;
+  // On a day nobody makes goal, the GAP weight split can sum to slightly more
+  // than 1 (the time weight is clamped at zero — S7F §10, calculateWeights),
+  // so the per-component offers overshoot the day total and the rows above
+  // sum to more than the points actually left. Say so, rather than print a
+  // share the rows visibly contradict.
+  const shownOffers =
+    ap.distance +
+    ap.time +
+    (ap.leading > 0 ? ap.leading : 0) +
+    (ap.arrival > 0 ? ap.arrival : 0);
+  const overshoot = shownOffers - ap.total;
+  let leftDetail: string;
+  if (overshoot > 0.2) {
+    leftDetail = `The component offers sum to ${fmtPoints(shownOffers)} on a ${fmtPoints(ap.total)}-point day — with nobody in goal the GAP weights overshoot slightly — so the rows above come to more than the ${fmtPoints(left)} actually left.${dominant ? ` The biggest untaken offer is ${dominant.label}.` : ''}`;
+  } else if (dominant && dominant.lost <= left + 0.05) {
+    leftDetail =
+      losses.length === 1
+        ? `All of it is ${dominant.label}.`
+        : `Most of it — ${fmtPoints(dominant.lost)} of ${fmtPoints(left)} points — is ${dominant.label}.`;
+  } else if (losses.length > 0) {
+    leftDetail = `Spread across ${listLabels(losses.map((l) => l.label))} — ${losses[0].label} the largest, at ${fmtPoints(losses[0].lost)}.`;
+  } else {
+    leftDetail = 'Display rounding — the components above account for it.';
+  }
   items.push({
     id: 'left-total',
     text: 'Left on the day',
     value: `−${fmtPoints(left)} pts`,
-    detail: dominant
-      ? losses.length === 1
-        ? `All of it is ${dominant.label}.`
-        : `Most of it — ${fmtPoints(dominant.lost)} of ${fmtPoints(left)} points — is ${dominant.label}.`
-      : `Spread across ${losses.length} components.`,
+    detail: leftDetail,
   });
 
   return {
@@ -1863,11 +1924,14 @@ export function buildWinnerHeadlineNote(
   const losses = shortfallsAgainstOffer(entry, ap);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * left ? losses[0] : null;
-  const mostly = dominant
-    ? losses.length === 1
-      ? ` — all of it ${dominant.label}`
-      : ` — mostly ${dominant.label}`
-    : '';
+  // No share claim when the dominant shortfall exceeds the net left (weight
+  // overshoot on a nobody-in-goal day, or a bonus) — the ledger explains it.
+  const mostly =
+    dominant && dominant.lost <= left + 0.05
+      ? losses.length === 1
+        ? ` — all of it ${dominant.label}`
+        : ` — mostly ${dominant.label}`
+      : '';
   let note = `Top of the class, but not a full sweep: of the ${fmtPoints(
     ap.total,
   )} points on offer, ${fmtPoints(left)} went untaken${mostly}.`;

@@ -1315,9 +1315,10 @@ describe('explainGapScore — where the points went', () => {
   // A ledger that omits penalties cannot reconcile with the gap it explains.
   it('carries penalties as a ledger row and names the spread, largest first', () => {
     const ctx = fieldContext();
-    // Leader clean on 900; this pilot lost 69.5 on time and 70 to a penalty.
+    // Leader clean on 900; this pilot lost 69.5 on time and 70 to a penalty
+    // (components 830.5, penalty 70 → published total 760.5).
     ctx.pilots[1] = {
-      ...ctx.pilots[1], total_score: 710.5, time_points: 430.5,
+      ...ctx.pilots[1], total_score: 760.5, time_points: 430.5,
     };
     ctx.pilots[0] = { ...ctx.pilots[0], time_points: 500, total_score: 900 };
     const s = explainGapScore({
@@ -1328,7 +1329,7 @@ describe('explainGapScore — where the points went', () => {
         time_points: 430.5,
         penalty_points: 70,
         penalty_reason: 'Airspace infringement',
-        total_score: 710.5,
+        total_score: 760.5,
       },
       classContext: ctx,
       params: { scoring: 'PG' },
@@ -1337,7 +1338,7 @@ describe('explainGapScore — where the points went', () => {
     expect(pen.value).toBe('−70 pts');
     expect(pen.detail).toBe('you −70, the leader 0');
     const total = s.items.find((i) => i.id === 'gap-total')!;
-    expect(total.value).toBe('−189.5 pts');
+    expect(total.value).toBe('−139.5 pts');
     // 69.5 lost on time + 70 to the penalty: no single culprit, so the
     // spread names its members with the largest first — never a bare count.
     expect(total.detail).toBe(
@@ -1407,6 +1408,88 @@ describe('explainGapScore — where the points went', () => {
     expect(time.detail).toContain('Fast Pilot took the full time points in 1:05:00');
     // Our pilot was first to ESS points-wise, so arrival reads as maxed.
     expect(s.items.find((i) => i.id === 'left-arrival')!.value).toBe('full points');
+  });
+
+  // §12.2: a floored jump-the-gun deduction's PUBLISHED figure overstates its
+  // net effect — the ledger derives the net from components − total instead.
+  it('shows the net penalty effect, not the gross deduction, when a floor engaged', () => {
+    const ctx = fieldContext();
+    // Components 780.5, gross deduction 90, but floored at 750 — net 30.5.
+    ctx.pilots[1] = { ...ctx.pilots[1], total_score: 750 };
+    const s = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        early_start_seconds: 180,
+        early_start_outcome: 'hg_penalty',
+        jump_the_gun_penalty: 90,
+        total_score: 750,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG' },
+    }).sections.find((sec) => sec.id === 'comparison')!;
+    const pen = s.items.find((i) => i.id === 'gap-penalty')!;
+    expect(pen.value).toBe('−30.5 pts');
+    expect(pen.detail).toContain('net effect after the scoring floor');
+    // And the ledger reconciles: 119.5 time + 30.5 net penalty = the gap.
+    expect(s.items.find((i) => i.id === 'gap-total')!.value).toBe('−150 pts');
+  });
+
+  // A nobody-in-goal HG day: the GAP weight split sums to slightly more than
+  // 1 (time weight clamped at zero), so the component offers overshoot the
+  // day total — the winner's ledger must say so instead of printing a share
+  // its own rows contradict.
+  it("explains the weight overshoot on a nobody-in-goal day instead of a broken share", () => {
+    const ctx = fieldContext();
+    // Offers sum to 943.8 on a 934.7-point day (real Dalby 2022 shape).
+    ctx.available_points = {
+      distance: 841.2, time: 0, leading: 90.9, arrival: 11.7, total: 934.7,
+    };
+    ctx.pilots = [
+      {
+        flown_distance: 60_000, speed_section_time: null,
+        made_goal: false, reached_ess: false,
+        pilot_name: 'Winner', rank: 1, total_score: 932.1,
+        distance_points: 841.2, time_points: 0,
+        leading_points: 90.9, arrival_points: 0,
+      },
+      {
+        flown_distance: 50_000, speed_section_time: null,
+        made_goal: false, reached_ess: false,
+        pilot_name: 'Runner Up', rank: 2, total_score: 700,
+        distance_points: 700, time_points: 0,
+        leading_points: 0, arrival_points: 0,
+      },
+    ];
+    const x = explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false },
+      entry: {
+        ...makeGoalEntry(),
+        made_goal: false,
+        reached_ess: false,
+        speed_section_time: null,
+        distance_points: 841.2,
+        time_points: 0,
+        leading_points: 90.9,
+        arrival_points: 0,
+        total_score: 932.1,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true },
+    });
+    const s = x.sections.find((sec) => sec.id === 'comparison')!;
+    const total = s.items.find((i) => i.id === 'left-total')!;
+    expect(total.value).toBe('−2.6 pts');
+    expect(total.detail).toContain('offers sum to 943.8 on a 934.7-point day');
+    expect(total.detail).toContain('overshoot');
+    expect(total.detail).toContain('The biggest untaken offer is arrival.');
+    // The headline note drops its share clause rather than claim "all of it
+    // arrival" about a 2.6-point remainder beside an 11.7-point offer.
+    expect(x.headlineNote).toBe(
+      'Top of the class, but not a full sweep: of the 934.7 points on offer, 2.6 went untaken.',
+    );
   });
 
   it('is omitted for a leader who swept the day — a full house needs no ledger', () => {
