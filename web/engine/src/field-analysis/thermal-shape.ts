@@ -121,6 +121,14 @@ export interface ThermalWindEstimate {
   samples: number;
 }
 
+/** One pilot's climb rate over their samples in this thermal (m/s). */
+export interface ThermalPilotClimb {
+  minVario: number;
+  medianVario: number;
+  maxVario: number;
+  samples: number;
+}
+
 export interface ThermalShape {
   /** SharedThermal id within the task (chronological). */
   id: number;
@@ -132,6 +140,11 @@ export interface ThermalShape {
   useCount: number;
   /** Labels of the pilots that contributed samples, ThermalSample.pilot order. */
   pilots: string[];
+  /**
+   * Per-pilot climb statistics, parallel to `pilots`. Optional so reports
+   * stored before FIELD_ANALYSIS_VERSION 21 still parse.
+   */
+  pilotClimbs?: ThermalPilotClimb[];
   bands: ThermalShapeBand[];
   /** null when fewer than 3 bands (no meaningful axis). */
   lean: ThermalLean | null;
@@ -408,12 +421,33 @@ export function extractThermalShape(
     pilotCount: shared.pilotCount,
     useCount: shared.uses.length,
     pilots: pilotLabels,
+    pilotClimbs: summarisePilotClimbs(samples, pilotLabels.length),
     bands,
     lean,
     wind,
     strongestSide,
     samples,
   };
+}
+
+/**
+ * Min/median/max of each pilot's smoothed vario samples, parallel to
+ * `pilots`. A pilot whose uses produced no valid samples keeps their slot
+ * with samples = 0, so the arrays never fall out of step.
+ */
+function summarisePilotClimbs(samples: ThermalSample[], pilotCount: number): ThermalPilotClimb[] {
+  const byPilot: number[][] = Array.from({ length: pilotCount }, () => []);
+  for (const s of samples) byPilot[s.pilot].push(s.vario);
+  return byPilot.map((varios) => {
+    if (varios.length === 0) return { minVario: 0, medianVario: 0, maxVario: 0, samples: 0 };
+    varios.sort((a, b) => a - b);
+    return {
+      minVario: varios[0],
+      medianVario: varios[(varios.length - 1) >> 1],
+      maxVario: varios[varios.length - 1],
+      samples: varios.length,
+    };
+  });
 }
 
 // --- Sample collection ---

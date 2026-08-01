@@ -46,6 +46,7 @@ export {
   type ThermalShape,
   type ThermalShapeBand,
   type ThermalShapePilot,
+  type ThermalPilotClimb,
   type ThermalShapeOptions,
   type ThermalSample,
   type ThermalSectorStat,
