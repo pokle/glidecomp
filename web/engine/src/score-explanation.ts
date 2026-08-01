@@ -41,6 +41,7 @@ import {
   buildTotalSection,
   buildPenaltySection,
   buildManualFlightSection,
+  buildWinnerHeadlineNote,
 } from './score-explanation-sections';
 import {
   buildTimeChart,
@@ -172,7 +173,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
   if (penalty) sections.push(penalty);
-  sections.push(buildTotalSection(entry));
+  sections.push(buildTotalSection(entry, classContext.available_points.total));
   // After the total, deliberately: the reader needs their own arithmetic to
   // add up before being shown what it cost them against the winner.
   const comparison = buildComparisonSection(entry, classContext);
@@ -193,7 +194,13 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
     headline = `No valid start — ${entry.total_score} points`;
   }
 
-  return { format: 'gap', headline, sections };
+  const headlineNote = buildWinnerHeadlineNote(entry, classContext);
+  return {
+    format: 'gap',
+    headline,
+    ...(headlineNote ? { headlineNote } : {}),
+    sections,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +362,9 @@ export function explainManualFlightScore(
       id: 'leading',
       title: 'Leading points',
       points: entry.leading_points,
+      ...(classContext.available_points.leading > 0
+        ? { pointsAvailable: classContext.available_points.leading }
+        : {}),
       docHref: '/scoring/gap#leading-points',
       items: [
         {
@@ -372,7 +382,7 @@ export function explainManualFlightScore(
 
   const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
   if (penalty) sections.push(penalty);
-  sections.push(buildTotalSection(entry));
+  sections.push(buildTotalSection(entry, classContext.available_points.total));
   const comparison = buildComparisonSection(entry, classContext);
   if (comparison) sections.push(comparison);
 
@@ -380,7 +390,13 @@ export function explainManualFlightScore(
     ? `Manual flight — made goal — ${fmtPoints(entry.total_score)} points`
     : `Manual flight — ${km(entry.flown_distance)} made good — ${fmtPoints(entry.total_score)} points`;
 
-  return { format: 'gap', headline, sections };
+  const headlineNote = buildWinnerHeadlineNote(entry, classContext);
+  return {
+    format: 'gap',
+    headline,
+    ...(headlineNote ? { headlineNote } : {}),
+    sections,
+  };
 }
 
 /**
