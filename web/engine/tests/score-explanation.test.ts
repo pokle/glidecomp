@@ -1268,6 +1268,83 @@ describe('explainGapScore — where the points went', () => {
     expect(total.detail).toBe('All of the gap is time.');
   });
 
+  // Jon Durand's case: fastest through the speed section (+67 on time) but
+  // beaten on leading — the leading loss is BIGGER than the net gap, and the
+  // old "85.6 of 38.9 points" wording read as an arithmetic error.
+  it('re-words the dominant loss when it exceeds the whole gap', () => {
+    const ctx = fieldContext();
+    ctx.available_points = {
+      distance: 400, time: 400, leading: 100, arrival: 0, total: 900,
+    };
+    ctx.pilots = [
+      {
+        flown_distance: 60_000, speed_section_time: 70 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Leader', rank: 1, total_score: 833,
+        distance_points: 400, time_points: 333, leading_points: 100,
+        arrival_points: 0,
+      },
+      {
+        flown_distance: 60_000, speed_section_time: 65 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Fast Pilot', rank: 2, total_score: 810,
+        distance_points: 400, time_points: 400, leading_points: 10,
+        arrival_points: 0,
+      },
+    ];
+    const s = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        speed_section_time: 65 * 60,
+        time_points: 400,
+        leading_points: 10,
+        total_score: 810,
+      },
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    }).sections.find((sec) => sec.id === 'comparison')!;
+    const total = s.items.find((i) => i.id === 'gap-total')!;
+    // Gap 23, leading loss 90, time gain 67: never "90 of 23 points".
+    expect(total.detail).toBe(
+      'Leading cost you 90 points — more than the whole gap — offset by the 67 you won on time.',
+    );
+  });
+
+  // A ledger that omits penalties cannot reconcile with the gap it explains.
+  it('carries penalties as a ledger row and names the spread, largest first', () => {
+    const ctx = fieldContext();
+    // Leader clean on 900; this pilot lost 69.5 on time and 70 to a penalty.
+    ctx.pilots[1] = {
+      ...ctx.pilots[1], total_score: 710.5, time_points: 430.5,
+    };
+    ctx.pilots[0] = { ...ctx.pilots[0], time_points: 500, total_score: 900 };
+    const s = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        time_points: 430.5,
+        penalty_points: 70,
+        penalty_reason: 'Airspace infringement',
+        total_score: 710.5,
+      },
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    }).sections.find((sec) => sec.id === 'comparison')!;
+    const pen = s.items.find((i) => i.id === 'gap-penalty')!;
+    expect(pen.value).toBe('−70 pts');
+    expect(pen.detail).toBe('you −70, the leader 0');
+    const total = s.items.find((i) => i.id === 'gap-total')!;
+    expect(total.value).toBe('−189.5 pts');
+    // 69.5 lost on time + 70 to the penalty: no single culprit, so the
+    // spread names its members with the largest first — never a bare count.
+    expect(total.detail).toBe(
+      'Spread across penalties and time — penalties the largest, at 70.',
+    );
+  });
+
   // The leader used to get nothing here — and the winner's actual question
   // ("full validity, why not full points?") went unanswered on the one page
   // built to answer it. They now get the vs-the-day variant.
@@ -1952,9 +2029,11 @@ describe('explainGapScore — section ranks and available points', () => {
     expect(section(x, 'arrival').rank).toBe(
       '7th of 22 to the end of the speed section',
     );
-    // Two pilots share 1.284, so the rank discloses the tie.
+    // Two pilots share 1.284, so the rank discloses the tie — and the
+    // denominator names itself, because it is the whole measured field
+    // rather than the goal/ESS count the neighbouring ranks use.
     expect(section(x, 'leading').rank).toBe(
-      'Equal 2nd best leading coefficient of 3',
+      'Equal 2nd best of 3 measured leading coefficients',
     );
   });
 

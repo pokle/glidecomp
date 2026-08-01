@@ -1203,13 +1203,14 @@ export function buildLeadingSection(
   });
 
   // Standing on the section's input: the coefficient itself (lower is
-  // better), never the points — a §12.1 reduction can reorder those.
+  // better), never the points — a §12.1 reduction can reorder those. "Of the
+  // N measured" on purpose: a coefficient exists for everyone who flew the
+  // speed section, so this denominator is the whole field, not the goal/ESS
+  // count the time and arrival ranks use — say so or the mismatch reads as
+  // a bug.
   const rank =
     typeof lc === 'number' && Number.isFinite(lc) && lc > 0 && allLCs.length >= 2
-      ? rankLabel(
-          rankAmong(allLCs, lc, (a, b) => a < b),
-          'best leading coefficient',
-        )
+      ? `${rankLabel(rankAmong(allLCs, lc, (a, b) => a < b), 'best')} measured leading coefficients`
       : undefined;
 
   return {
@@ -1583,6 +1584,33 @@ export function buildComparisonSection(
     });
   }
 
+  // Penalties are points lost to the leader like any component, and a ledger
+  // that omits them cannot reconcile with the gap it claims to explain. This
+  // pilot's are published; the leader's are derived from the one identity the
+  // payload guarantees — components − total — with a tolerance for the
+  // total's 0.1 rounding. (A §12.2/§12.4 floor folds into that derived figure,
+  // which is still the points the leader lost to it: the ledger's truth.)
+  const minePenalty = entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
+  const leaderPenalty =
+    (leader.distance_points ?? 0) +
+    (leader.time_points ?? 0) +
+    (leader.leading_points ?? 0) +
+    (leader.arrival_points ?? 0) -
+    leaderTotal;
+  if (Math.abs(minePenalty) > 0.05 || Math.abs(leaderPenalty) > 0.1) {
+    rows.push({
+      id: 'penalty',
+      label: 'Penalties',
+      mine: -minePenalty,
+      theirs: Math.abs(leaderPenalty) > 0.1 ? -leaderPenalty : 0,
+    });
+  }
+
+  // Points prefixed with the proper minus sign — the ledger's negative values
+  // (penalties) must not print a bare hyphen beside typeset minuses elsewhere.
+  const signedPts = (n: number) =>
+    n < -0.05 ? `−${fmtPoints(-n)}` : fmtPoints(n);
+
   const items: ScoreExplanationItem[] = rows.map((r) => {
     const diff = r.mine - r.theirs;
     return {
@@ -1592,7 +1620,7 @@ export function buildComparisonSection(
         Math.abs(diff) < 0.05
           ? 'level'
           : `${diff > 0 ? '+' : '−'}${fmtPoints(Math.abs(diff))} pts`,
-      detail: `you ${fmtPoints(r.mine)}, the leader ${fmtPoints(r.theirs)}`,
+      detail: `you ${signedPts(r.mine)}, the leader ${signedPts(r.theirs)}`,
       emphasis: Math.abs(diff) < 0.05 ? 'muted' : undefined,
     };
   });
@@ -1604,18 +1632,46 @@ export function buildComparisonSection(
     .map((r) => ({ label: r.label.toLowerCase(), lost: r.theirs - r.mine }))
     .filter((r) => r.lost > 0.05)
     .sort((a, b) => b.lost - a.lost);
+  const gains = rows
+    .map((r) => ({ label: r.label.toLowerCase(), won: r.mine - r.theirs }))
+    .filter((r) => r.won > 0.05)
+    .sort((a, b) => b.won - a.won);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * gap ? losses[0] : null;
+
+  const listLabels = (labels: string[]) =>
+    labels.length <= 1
+      ? (labels[0] ?? '')
+      : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+
+  let gapDetail: string;
+  if (dominant && dominant.lost > gap + 0.05 && gains.length > 0) {
+    // A loss bigger than the whole gap: points won elsewhere offset it, and
+    // "85.6 of 38.9 points" would read as an arithmetic error — say what
+    // actually happened instead. (Jon Durand's case: fastest through the
+    // speed section, lost the day on leading.)
+    const wonBack = gains.reduce((s, g) => s + g.won, 0);
+    gapDetail = `${dominant.label.charAt(0).toUpperCase()}${dominant.label.slice(1)} cost you ${fmtPoints(dominant.lost)} points — more than the whole gap — offset by the ${fmtPoints(wonBack)} you won on ${listLabels(gains.map((g) => g.label))}.`;
+  } else if (dominant) {
+    gapDetail =
+      losses.length === 1
+        ? `All of the gap is ${dominant.label}.`
+        : `Most of the gap — ${fmtPoints(dominant.lost)} of ${fmtPoints(gap)} points — is ${dominant.label}.`;
+  } else if (losses.length > 0) {
+    // No single culprit — but a bare count is a dead end on a page where
+    // every other line substitutes its numbers, so name them, largest first.
+    gapDetail = `Spread across ${listLabels(losses.map((l) => l.label))} — ${losses[0].label} the largest, at ${fmtPoints(losses[0].lost)}.`;
+  } else {
+    // A gap the rows cannot account for: the leader's breakdown is missing
+    // from this payload. State that rather than crash or invent a culprit.
+    gapDetail = 'The gap is not in the components above — the leader’s published breakdown does not carry it.';
+  }
 
   items.push({
     id: 'gap-total',
     text: `Behind ${leader.pilot_name ?? 'the class leader'}`,
     value: `−${fmtPoints(gap)} pts`,
-    detail: dominant
-      ? losses.length === 1
-        ? `All of the gap is ${dominant.label}.`
-        : `Most of the gap — ${fmtPoints(dominant.lost)} of ${fmtPoints(gap)} points — is ${dominant.label}.`
-      : `Spread across ${losses.length} components.`,
+    detail: gapDetail,
   });
 
   return {
