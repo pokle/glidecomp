@@ -1265,7 +1265,7 @@ describe('explainGapScore — where the points went', () => {
     const total = comparisonFor(fieldContext())!.items.find((i) => i.id === 'gap-total')!;
     expect(total.text).toContain('Fast Pilot');
     expect(total.value).toBe('−119.5 pts');
-    expect(total.detail).toBe('All of the gap is time.');
+    expect(total.detail).toBe('All of the gap is time-points.');
   });
 
   // Jon Durand's case: fastest through the speed section (+67 on time) but
@@ -1308,7 +1308,8 @@ describe('explainGapScore — where the points went', () => {
     const total = s.items.find((i) => i.id === 'gap-total')!;
     // Gap 23, leading loss 90, time gain 67: never "90 of 23 points".
     expect(total.detail).toBe(
-      'Leading cost you 90 points — more than the whole gap — offset by the 67 you won on time.',
+      'You took 90 fewer leading-points than the leader — more than the whole gap — and won 67 back on time-points. ' +
+      'Leading-points reward being out front on the clock, which the fastest pilot often isn’t.',
     );
   });
 
@@ -1342,7 +1343,7 @@ describe('explainGapScore — where the points went', () => {
     // 69.5 lost on time + 70 to the penalty: no single culprit, so the
     // spread names its members with the largest first — never a bare count.
     expect(total.detail).toBe(
-      'Spread across penalties and time — penalties the largest, at 70.',
+      'Spread across penalties and time-points — penalties the largest, at 70.',
     );
   });
 
@@ -1365,7 +1366,7 @@ describe('explainGapScore — where the points went', () => {
     expect(time.detail).toBe('you 380.5 of 500 on offer');
     const total = s.items.find((i) => i.id === 'left-total')!;
     expect(total.value).toBe('−119.5 pts');
-    expect(total.detail).toBe('All of it is time.');
+    expect(total.detail).toBe('All of it is time-points.');
   });
 
   // Rohan's case: the winner was not the fastest to ESS — another pilot took
@@ -1405,7 +1406,7 @@ describe('explainGapScore — where the points went', () => {
       params: { scoring: 'HG', useArrival: true },
     }).sections.find((sec) => sec.id === 'comparison')!;
     const time = s.items.find((i) => i.id === 'left-time')!;
-    expect(time.detail).toContain('Fast Pilot took the full time points in 1:05:00');
+    expect(time.detail).toContain('Fast Pilot took the full time-points in 1:05:00');
     // Our pilot was first to ESS points-wise, so arrival reads as maxed.
     expect(s.items.find((i) => i.id === 'left-arrival')!.value).toBe('full points');
   });
@@ -1484,7 +1485,7 @@ describe('explainGapScore — where the points went', () => {
     expect(total.value).toBe('−2.6 pts');
     expect(total.detail).toContain('offers sum to 943.8 on a 934.7-point day');
     expect(total.detail).toContain('overshoot');
-    expect(total.detail).toContain('The biggest untaken offer is arrival.');
+    expect(total.detail).toContain('The biggest untaken offer is arrival-points.');
     // The headline note drops its share clause rather than claim "all of it
     // arrival" about a 2.6-point remainder beside an 11.7-point offer.
     expect(x.headlineNote).toBe(
@@ -2180,7 +2181,7 @@ describe('explainGapScore — the winner\'s headline note', () => {
     const x = explainWinner(winnerContext());
     expect(x.headlineNote).toBe(
       'Top of the class, but not a full sweep: of the 900 points on offer, ' +
-        '50 went untaken — all of it time. The fastest pilot through the ' +
+        '50 went untaken — all of it time-points. The fastest pilot through the ' +
         'speed section was 5:00 quicker.',
     );
   });

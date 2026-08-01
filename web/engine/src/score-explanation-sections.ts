@@ -1643,11 +1643,17 @@ export function buildComparisonSection(
   // is the sentence the reader came for, and it is a fact about the
   // arithmetic — not advice about how to fly.
   const losses = rows
-    .map((r) => ({ label: r.label.toLowerCase(), lost: r.theirs - r.mine }))
+    .map((r) => ({
+      label: LEDGER_TERMS[r.label.toLowerCase()] ?? r.label.toLowerCase(),
+      lost: r.theirs - r.mine,
+    }))
     .filter((r) => r.lost > 0.05)
     .sort((a, b) => b.lost - a.lost);
   const gains = rows
-    .map((r) => ({ label: r.label.toLowerCase(), won: r.mine - r.theirs }))
+    .map((r) => ({
+      label: LEDGER_TERMS[r.label.toLowerCase()] ?? r.label.toLowerCase(),
+      won: r.mine - r.theirs,
+    }))
     .filter((r) => r.won > 0.05)
     .sort((a, b) => b.won - a.won);
   const dominant =
@@ -1657,10 +1663,22 @@ export function buildComparisonSection(
   if (dominant && dominant.lost > gap + 0.05 && gains.length > 0) {
     // A loss bigger than the whole gap: points won elsewhere offset it, and
     // "85.6 of 38.9 points" would read as an arithmetic error — say what
-    // actually happened instead. (Jon Durand's case: fastest through the
-    // speed section, lost the day on leading.)
+    // actually happened instead, leading with the deficit rather than the
+    // "cost", which read as the flying style being penalised. (Jon Durand's
+    // case: fastest through the speed section, lost the day on leading.)
     const wonBack = gains.reduce((s, g) => s + g.won, 0);
-    gapDetail = `${dominant.label.charAt(0).toUpperCase()}${dominant.label.slice(1)} cost you ${fmtPoints(dominant.lost)} points — more than the whole gap — offset by the ${fmtPoints(wonBack)} you won on ${listLabels(gains.map((g) => g.label))}.`;
+    // The reader in this exact spot — a big leading-points deficit offset by
+    // a time-points win — is by construction someone who was fast but not in
+    // front, the pilot most likely to misread the component's name.
+    const leadingNote =
+      dominant.label === 'leading-points' &&
+      gains.some((g) => g.label === 'time-points')
+        ? ' Leading-points reward being out front on the clock, which the fastest pilot often isn’t.'
+        : '';
+    gapDetail =
+      dominant.label === 'penalties'
+        ? `Penalties cost you ${fmtPoints(dominant.lost)} — more than the whole gap — and you won ${fmtPoints(wonBack)} back on ${listLabels(gains.map((g) => g.label))}.`
+        : `You took ${fmtPoints(dominant.lost)} fewer ${dominant.label} than the leader — more than the whole gap — and won ${fmtPoints(wonBack)} back on ${listLabels(gains.map((g) => g.label))}.${leadingNote}`;
   } else if (dominant) {
     gapDetail =
       losses.length === 1
@@ -1694,7 +1712,23 @@ export function buildComparisonSection(
   };
 }
 
-/** "time", "time and arrival", "time, leading and arrival". */
+/**
+ * How a ledger sentence names a component: the hyphenated points term,
+ * never the bare activity noun. "The gap is leading" parses as being out
+ * front — the exact opposite of what the sentence means — and "leading
+ * cost you 85.6 points" reads as the act of leading being penalised.
+ * "Leading-points" cannot be misread as either. Penalties are already
+ * unambiguous and stay themselves.
+ */
+const LEDGER_TERMS: Record<string, string> = {
+  distance: 'distance-points',
+  time: 'time-points',
+  leading: 'leading-points',
+  arrival: 'arrival-points',
+  penalties: 'penalties',
+};
+
+/** "time-points", "time-points and arrival-points", "…, … and …". */
 function listLabels(labels: string[]): string {
   return labels.length <= 1
     ? (labels[0] ?? '')
@@ -1711,13 +1745,13 @@ function shortfallsAgainstOffer(
   ap: ClassContextInput['available_points'],
 ): Array<{ label: string; lost: number }> {
   const rows = [
-    { label: 'distance', lost: ap.distance - entry.distance_points },
-    { label: 'time', lost: ap.time - entry.time_points },
+    { label: 'distance-points', lost: ap.distance - entry.distance_points },
+    { label: 'time-points', lost: ap.time - entry.time_points },
     ...(ap.leading > 0
-      ? [{ label: 'leading', lost: ap.leading - entry.leading_points }]
+      ? [{ label: 'leading-points', lost: ap.leading - entry.leading_points }]
       : []),
     ...(ap.arrival > 0
-      ? [{ label: 'arrival', lost: ap.arrival - entry.arrival_points }]
+      ? [{ label: 'arrival-points', lost: ap.arrival - entry.arrival_points }]
       : []),
     {
       // Net penalty effect, derived from components − total, so a §12.2/§12.4
@@ -1801,7 +1835,7 @@ function buildPointsLeftSection(
       entry.time_points,
       ap.time,
       fastest
-        ? ` — ${fastest.pilot_name} took the full time points${
+        ? ` — ${fastest.pilot_name} took the full time-points${
             fastest.speed_section_time
               ? ` in ${duration(fastest.speed_section_time)}`
               : ''
@@ -1816,7 +1850,7 @@ function buildPointsLeftSection(
       'Leading',
       entry.leading_points,
       ap.leading,
-      bestLead ? ` — ${bestLead.pilot_name} took the full leading points` : undefined,
+      bestLead ? ` — ${bestLead.pilot_name} took the full leading-points` : undefined,
     );
   }
   if (ap.arrival > 0) {
@@ -1936,8 +1970,8 @@ export function buildWinnerHeadlineNote(
     ap.total,
   )} points on offer, ${fmtPoints(left)} went untaken${mostly}.`;
   // When the shortfall is time, state the concrete fact behind it: how much
-  // quicker the pilot who took the full time points was.
-  if (dominant?.label === 'time' && entry.speed_section_time !== null) {
+  // quicker the pilot who took the full time-points was.
+  if (dominant?.label === 'time-points' && entry.speed_section_time !== null) {
     const fastest = scored.find(
       (p) =>
         p.speed_section_time != null &&
