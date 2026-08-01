@@ -506,17 +506,23 @@ interface CompManifest {
  * is populated with the first timezone derived from a task's location (via
  * the engine's tz-lookup helper — the same derivation the competition-api
  * runs on route save) so the caller can stamp it on the comp row.
+ *
+ * Returns null for a task that was SET but never flown — a route on disk with
+ * no tracklog beside it, which the source published with zero results and zero
+ * day quality (Dalby Big Air 2022 T6, both classes: the last day was called
+ * off). There is nothing to seed for such a day, so the caller drops it and
+ * says so rather than aborting the whole comp.
  */
 function readTask(
   spec: TaskSpec,
   tzOut: { value?: string },
   root: string,
   category: string,
-): SampleTask {
+): SampleTask | null {
   const compDir = join(root, spec.dir);
   const entries = readdirSync(compDir);
   const igcFiles = entries.filter((f) => f.toLowerCase().endsWith('.igc')).sort();
-  if (igcFiles.length === 0) throw new Error(`No IGC files in ${compDir}`);
+  if (igcFiles.length === 0) return null;
 
   const taskFile = entries.find((f) => f.toLowerCase().endsWith('.xctsk'));
   if (!taskFile) throw new Error(`No .xctsk task file in ${compDir}`);
@@ -658,16 +664,21 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     `  gap_params: ${compGapParamsJson ? 'from AirScore formula capture' : 'none (category defaults)'}`,
   );
 
-  // Read every task, sharing one resolved timezone across the comp.
+  // Read every task, sharing one resolved timezone across the comp. A task the
+  // source describes but has no tracklog for was never flown — it is named
+  // here and left out of the seed (see readTask).
   const tzOut: { value?: string } = {};
-  const tasks = manifest.tasks.map((t) =>
-    readTask(
+  const tasks: SampleTask[] = [];
+  for (const t of manifest.tasks) {
+    const task = readTask(
       { dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class, gapParams: t.gap_params },
       tzOut,
       ref.root,
       manifest.category ?? 'hg',
-    ),
-  );
+    );
+    if (task) tasks.push(task);
+    else console.log(`  ${t.pilot_class}/${t.name} (${t.date}): no tracklogs — not flown, skipped`);
+  }
   for (const t of tasks) {
     console.log(`  ${t.pilotClass}/${t.name} (${t.date}): ${t.pilots.length} pilots`);
   }
