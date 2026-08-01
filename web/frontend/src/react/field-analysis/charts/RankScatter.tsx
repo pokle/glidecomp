@@ -47,14 +47,18 @@ import {
   spreadLabels,
 } from "./chart-utils";
 import { notableExcludedRanks, notableRanksPhrase } from "../exclusions";
+import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 
 const W = 560;
 /** The plot's viewBox width — the unit `minHeight` is expressed in, so a
  * caller sizing the chart against a measured box can ask for the matching
  * aspect without hardcoding this number twice. */
 export const SCATTER_WIDTH = W;
-const BASE_H = 300;
-const MARGIN = { top: 10, right: 16, bottom: 26, left: 40 };
+const BASE_H = 316;
+// left fits the rank ticks AND the rotated y-axis title; bottom fits the x
+// ticks and the x-axis title beneath them. Both grew when the axes were
+// titled — BASE_H grew with them so the plot itself did not shrink.
+const MARGIN = { top: 10, right: 16, bottom: 42, left: 52 };
 /** Vertical room per label when naming every pilot (labels spread at 11). */
 const LABEL_ROW = 12;
 
@@ -150,6 +154,18 @@ export function captionText(
     );
   }
   return parts.join(" ");
+}
+
+/**
+ * The x axis's name: the metric and the unit it is measured in. `count` and
+ * `ratio` are unitless in the engine's vocabulary — `formatTickValue` leaves
+ * their ticks bare for the same reason — so they get no parenthetical rather
+ * than a meaningless "(count)".
+ */
+export function axisTitleFor(metric: Pick<MetricReport, "label" | "unit">): string {
+  return metric.unit === "count" || metric.unit === "ratio"
+    ? metric.label
+    : `${metric.label} (${unitWords(metric.unit)})`;
 }
 
 export function RankScatter({
@@ -273,6 +289,7 @@ export function RankScatter({
     : null;
   const trendEnd = trendRanks?.[trendRanks.length - 1];
 
+  const xAxisTitle = axisTitleFor(metric);
   const xTicks = niceTicks(xDomain, 5);
   // Rank ticks: always show 1 (it is the whole point of the axis), then
   // whatever whole-number steps fit.
@@ -410,10 +427,17 @@ export function RankScatter({
               {t}
             </text>
           ))}
-          <text x={plot.left - 6} y={plot.top - 1} textAnchor="end" className="fill-current">
-            rank
-          </text>
         </g>
+
+        {/* The axes, named. Rank 1 is at the top and is the winner, which is
+            the single most misreadable thing about this chart — the corner
+            label that used to sit here said only "rank". */}
+        <YAxisTitle x={12} top={plot.top} bottom={plot.bottom}>
+          rank — 1 is the winner
+        </YAxisTitle>
+        <XAxisTitle left={plot.left} right={plot.right} y={plot.bottom + 34}>
+          {xAxisTitle}
+        </XAxisTitle>
 
         {points.map((p, i) => (
           <g
@@ -560,9 +584,10 @@ export function RankScatter({
         {readout ? pointLabel(readout) : "Hover or focus a dot to name the pilot behind it."}
       </p>
 
+      {/* The axes now say which way is which, so the caption no longer
+          opens by explaining them — it is the statistics, in words. */}
       <figcaption className="text-xs text-muted-foreground">
-        Each dot is a pilot: across is what was measured, up is a better rank.{" "}
-        {caption}
+        Each dot is a pilot. {caption}
       </figcaption>
     </figure>
   );

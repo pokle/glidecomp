@@ -19,6 +19,7 @@ import { useRef, useState } from "react";
 import { cn } from "@/react/lib/utils";
 import { ALL_METRICS, type CompMetricAggregate } from "../types";
 import { linearScale, spreadLabels } from "./chart-utils";
+import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 import { consistencyWords } from "../ConsistencyChip";
 
 /**
@@ -148,23 +149,16 @@ export function ConsistencyMap({ metrics }: { metrics: CompMetricAggregate[] }) 
               {t}
             </text>
           ))}
-          <text
-            x={(M.left + W - M.right) / 2}
-            y={H - 6}
-            textAnchor="middle"
-            className="fill-current"
-          >
-            per-day power — mean |ρ|
-          </text>
-          <text
-            x={12}
-            y={(M.top + H - M.bottom) / 2}
-            textAnchor="middle"
-            transform={`rotate(-90 12 ${(M.top + H - M.bottom) / 2})`}
-            className="fill-current"
-          >
-            consistent separation — |mean ρ|
-          </text>
+          {/* These two were hand-rolled here first; XAxisTitle/YAxisTitle are
+              that pattern extracted for every other chart, so this chart now
+              draws them from the shared helper rather than being a copy the
+              others can drift from. */}
+          <XAxisTitle left={M.left} right={W - M.right} y={H - 6}>
+            {"per-day power — mean |ρ|"}
+          </XAxisTitle>
+          <YAxisTitle x={12} top={M.top} bottom={H - M.bottom}>
+            {"consistent separation — |mean ρ|"}
+          </YAxisTitle>
           <text
             x={x(0.97)}
             y={y(0.97) - 5}

@@ -226,6 +226,24 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
           setHighlight(null);
         }}
       >
+        {/* The two axes, named. Both are SORTED — pilots by placing, columns
+            by how much each behaviour went with the placings — and that
+            ordering is the whole reading of the picture, but nothing on the
+            chart said so: it lived six sentences into the caption. */}
+        <div style={gridTemplate} aria-hidden>
+          {/* Kept short deliberately: the row column is 7–10rem and the
+              caption below carries the full account of both orderings. */}
+          <div className="truncate pr-2 text-right text-[10px] font-medium text-muted-foreground">
+            pilots, best first ↓
+          </div>
+          <div
+            style={{ gridColumn: `span ${metricCount}` }}
+            className="truncate text-[10px] font-medium text-muted-foreground"
+          >
+            behaviours, most explanatory first →
+          </div>
+        </div>
+
         {/* How much pattern each stretch of columns holds — the ruler the
             sorted order needs. Replaced the metric-family band, which grouped
             by something this chart isn't asking about. */}

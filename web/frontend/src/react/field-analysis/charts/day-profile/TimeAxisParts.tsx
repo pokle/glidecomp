@@ -5,6 +5,8 @@
  * across the stack.
  */
 import type { TimeAxis } from "./time-axis";
+import { W, PLOT_LEFT, PLOT_RIGHT } from "./shared";
+import { XAxisTitle } from "@/react/charts/AxisTitle";
 
 export function TimeGridColumns({
   axis,
@@ -41,5 +43,24 @@ export function TimeTickLabels({ axis, y }: { axis: TimeAxis; y: number }) {
         </text>
       ))}
     </g>
+  );
+}
+
+/**
+ * The shared axis's title, in its own strip UNDER the whole stack.
+ *
+ * Every chart in the panel repeats the hour ticks — that is what makes a
+ * vertical scan legible — but the axis is one axis, so its title is written
+ * once, at the bottom, rather than five times. Its own `<svg>` on the panel's
+ * viewBox and plot bounds, so it lines up with the ticks above it without any
+ * caller doing geometry.
+ */
+export function TimeAxisTitle({ zone }: { zone: string }) {
+  return (
+    <svg viewBox={`0 0 ${W} 14`} className="h-auto w-full" aria-hidden>
+      <XAxisTitle left={PLOT_LEFT} right={PLOT_RIGHT} y={10}>
+        {`time of day (${zone})`}
+      </XAxisTitle>
+    </svg>
   );
 }
