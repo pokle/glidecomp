@@ -123,6 +123,28 @@ describe('extractThermalShapes', () => {
     );
   });
 
+  it('reports each pilot\'s climb range, parallel to the pilot labels', () => {
+    const pilots = [
+      spiralPilot({ startSeconds: 0, durationSeconds: 400, startAltitude: 1000, label: 'a' }),
+      spiralPilot({ startSeconds: 120, durationSeconds: 400, startAltitude: 1000, label: 'b' }),
+    ];
+    const shapes = extractThermalShapes(pilots);
+    expect(shapes.length).toBe(1);
+    const shape = shapes[0];
+    expect(shape.pilotClimbs).toHaveLength(shape.pilots.length);
+    for (const climb of shape.pilotClimbs!) {
+      // The synthetic vario is base 2 ± 1.5 m/s around the circle; smoothing
+      // narrows the extremes, so bound loosely but keep the ordering strict.
+      expect(climb.samples).toBeGreaterThan(0);
+      expect(climb.minVario).toBeLessThanOrEqual(climb.medianVario);
+      expect(climb.medianVario).toBeLessThanOrEqual(climb.maxVario);
+      expect(climb.medianVario).toBeGreaterThan(1);
+      expect(climb.medianVario).toBeLessThan(3);
+      expect(climb.maxVario).toBeLessThanOrEqual(3.5);
+      expect(climb.minVario).toBeGreaterThanOrEqual(0.5);
+    }
+  });
+
   it('keeps two simultaneous but distant thermals apart', () => {
     const pilots = [
       spiralPilot({ startSeconds: 0, durationSeconds: 300, startAltitude: 1000, label: 'a' }),
