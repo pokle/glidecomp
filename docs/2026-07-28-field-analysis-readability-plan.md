@@ -6,6 +6,10 @@ Analysis user experience issues), alongside the still-open
 [#452](https://github.com/pokle/glidecomp/issues/452) and
 [#458](https://github.com/pokle/glidecomp/issues/458).
 
+**Status.** §A is shipped. §B, §C, §E, §F, §G, §H are untouched by anything
+since. §D is half-answered by [#519](https://github.com/pokle/glidecomp/pull/519)
+and [#520](https://github.com/pokle/glidecomp/pull/520) — see the note there.
+
 ## The problem, measured
 
 Rendered against the bundled Corryong Cup 2026, Task 1 (Open) — 32 pilots, a
@@ -24,6 +28,15 @@ mid-sized field, not a worst case:
 Reproduce with `.claude/skills/run-glidecomp/` running and a headless page
 measure; the numbers above came from `document.body.scrollHeight` and
 `innerText` on the live page.
+
+**These are a snapshot, not a fixed baseline — re-measure before and after any
+phase.** They were taken on 2026-07-28; by 2026-07-31 the same page measured
+**17,523 px / 9,081 words**, having absorbed §A's axis titles (taller charts,
++42 words), #519's Simplified-Technical-English rewrite of every caption and
+legend, and #521's new thermals section. The shape of the problem has not
+moved — the page is still the better part of twenty screens, and every word of
+its reference material is still permanently on screen — but a phase that claims
+a reduction has to prove it against a fresh measurement rather than this table.
 
 The page is not badly designed — it is **fully explained at all times**. Every
 legend, caveat, method note, provenance line and footnote is permanently
@@ -132,6 +145,31 @@ Implementation notes:
   a real budget — check each at phone width after growing them, and check the
   full-screen overlay (`MetricChartOverlay`) which passes a computed height.
 
+**SHIPPED.** The helper is `web/frontend/src/react/charts/AxisTitle.tsx` —
+promoted to the shared chart directory (beside `scale.ts`) rather than left in
+`field-analysis/`, because the report card's score charts draw the same
+furniture. `ConsistencyMap` now draws its titles from the helper too, so the
+chart the pattern came from cannot drift from its own descendants.
+
+Two things came out differently from the table above:
+
+- **`DistributionStrip` got nothing.** The plan asked for a title on the
+  premise that the strip appears in the ⓘ popover with no surrounding context.
+  That was wrong: the popover prints the metric name and "Measured in
+  kilometres per hour" immediately above it, and `MetricDetailPanel` does the
+  same. A title would have been a third copy.
+- **`AxisUnit` exists** for the corner stamp (`pts`, `m`) on the report card's
+  charts, and converting those to rotated titles would have been the wrong read
+  of consistency. A stamp says what the NUMBERS are; a title says what the AXIS
+  is. Where a corner label was hiding a real ambiguity instead — which end of
+  `rank` is good — naming the axis was a title's job and the corner form was
+  the bug. `AxisTitle.tsx` documents which to reach for.
+
+One instance is knowingly left alone: `field-analysis/thermals/ThermalsPanel.tsx`
+(`ClimbProfile`) landed in #521 with its own inline x title, at 9px and
+left-anchored rather than the helper's 10px centred — deliberate choices for a
+320-unit panel that adopting the helper would silently overturn.
+
 ## B. One explanation affordance, extended from metrics to sections and charts
 
 The ⓘ vocabulary exists and readers already meet it 48 times on this page. Do
@@ -180,21 +218,32 @@ Everything a reader consults once should start closed. Use `Disclosure`
 
 ## D. Fix the vocabulary in the heatmap and the family tables
 
-The percentile heatmap's column headers are the densest, least readable thing
-on either page: 26 rotated abbreviations — `GlideSpd`, `TopOut% +`, `StartDly`,
-`GlidedL/D`, `InGaggle% +`, `LeaveWin% +`, `km/climb`, `Kept% +`, `Core s`,
-`Spare m`, `LowSaves +` — and the `+` / `†` markers are explained only at the
-end of the caption. The same `shortLabel`s head the per-family per-pilot
-tables.
+**Half of this landed on master without us:**
+[#519](https://github.com/pokle/glidecomp/pull/519) rewrote every metric's FULL
+label to name the quantity ("Glide speed between climbs", "Share of lift turned
+in that was kept as a climb"), and #520 renamed `decision.altitude_floor` to
+match what it measures. `FIELD_ANALYSIS_VERSION` went 17 → 20 with them, so
+cached reports carry the new text. That is a straight win for §A too, since the
+scatter's x-axis title is built from `metric.label`.
+
+**What is left is the SHORT labels**, which #519 did not touch, and they are
+still the densest, least readable thing on either page: 26 rotated
+abbreviations heading the percentile heatmap — `GlideSpd`, `TopOut%`,
+`StartDly`, `GlideL/D`, `InGaggle%`, `LeaveWin%`, `km/climb`, `Kept%`,
+`Core s`, `Spare m`, `LowSaves`, `Floor%`, `FinalGl` — with a `†` on the
+no-direction ones that is explained only at the end of a six-sentence caption.
+(At 10px rotated, that dagger reads as a `+`; an earlier draft of this document
+misread it as one, which rather makes the point.) The same `shortLabel`s head
+the per-family per-pilot tables.
 
 - Audit every `shortLabel` in the engine registry for readability. They are the
   engine's, shared with the CLI text report, and **stored inside cached
   reports** — a change needs `FIELD_ANALYSIS_VERSION` bumped so stale rows
-  expire.
+  expire (it is 20 as of #520).
 - Where a short label cannot be made self-explaining in ~10 characters, prefer
   the full label rotated with a `max-height` truncation over a cryptic
   contraction, and rely on the existing hover readout for the rest.
-- Give the `+` marker a visible key next to the band row rather than a footnote
+- Give the `†` marker a visible key next to the band row rather than a footnote
   at the end of a six-sentence caption, or drop it in favour of the ⓘ.
 
 ## E. Say what the page found, at the top
