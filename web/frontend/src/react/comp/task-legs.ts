@@ -1,20 +1,19 @@
 /**
- * The task as a straight line — order, direction and winding, with geography
- * discarded (see TaskStrip.tsx).
+ * The task read as a course: each leg's length and true bearing, and the turn
+ * made at each turnpoint between them.
  *
- * This is the tube-map idea applied honestly. A tube map works because
- * geography is irrelevant to the rider; for a task it is the opposite —
- * which way each leg points decides the pilot's day. So the route is
- * straightened like a tube map, but heading is kept as an explicit per-leg
- * NUMBER rather than as geometry, the way a rally roadbook or a sailing route
- * card does it. Nothing here is measured off the page.
+ * Heading is kept as an explicit NUMBER rather than as geometry, the way a
+ * rally roadbook or a sailing route card does it — nothing here is measured
+ * off a picture. That is what lets the turnpoint listing resolve the day's
+ * wind against a leg (`TurnpointsTable`), and it is why this module outlived
+ * the task strip it was first written for.
  *
  * Everything derives from the OPTIMISED line — the same computation the scorer
  * and the turnpoint table use — so bearings and distances can never disagree
  * with the published numbers.
  *
- * Pure math, no DOM, all metres and degrees: the component formats them into
- * the viewer's units.
+ * Pure math, no DOM, all metres and degrees: the caller formats them into the
+ * viewer's units.
  */
 import {
   calculateBearing,
@@ -31,7 +30,7 @@ const STRAIGHT_ON_DEG = 8;
 /** At or above this the course reverses — the out-and-return signature. */
 export const REVERSAL_DEG = 165;
 
-export interface TaskStripStation {
+export interface TaskStation {
   index: number;
   name: string;
   role: TaskDiagramRole;
@@ -51,7 +50,7 @@ export interface TaskStripStation {
   isReversal: boolean;
 }
 
-export interface TaskStripLeg {
+export interface TaskLeg {
   fromIndex: number;
   toIndex: number;
   meters: number;
@@ -61,10 +60,10 @@ export interface TaskStripLeg {
   compass: string;
 }
 
-export interface TaskStrip {
-  stations: TaskStripStation[];
+export interface TaskCourse {
+  stations: TaskStation[];
   /** legs[i] runs from stations[i] to stations[i + 1]. */
-  legs: TaskStripLeg[];
+  legs: TaskLeg[];
   totalMeters: number;
 }
 
@@ -93,11 +92,11 @@ export function courseChange(fromDeg: number, toDeg: number): number {
 }
 
 /**
- * Build the strip. Returns null when there is no course to describe — a task
- * with fewer than two turnpoints (an open-distance launch cylinder) has an
- * order of one and no direction at all.
+ * Read the course off a task. Returns null when there is no course to
+ * describe — a task with fewer than two turnpoints (an open-distance launch
+ * cylinder) has an order of one and no direction at all.
  */
-export function buildTaskStrip(task: XCTask): TaskStrip | null {
+export function buildTaskLegs(task: XCTask): TaskCourse | null {
   const tps = task.turnpoints ?? [];
   if (tps.length < 2) return null;
   if (
@@ -128,7 +127,7 @@ export function buildTaskStrip(task: XCTask): TaskStrip | null {
     directions = tps.map(() => "enter" as const);
   }
 
-  const legs: TaskStripLeg[] = distances.map((meters, i) => {
+  const legs: TaskLeg[] = distances.map((meters, i) => {
     // Turf (via calculateBearing) returns -180..180; a heading is 0..360, and
     // "fly -118°" is not a thing anyone has ever said on a hill.
     const raw = calculateBearing(
@@ -147,7 +146,7 @@ export function buildTaskStrip(task: XCTask): TaskStrip | null {
     };
   });
 
-  const stations: TaskStripStation[] = tps.map((tp, i) => {
+  const stations: TaskStation[] = tps.map((tp, i) => {
     const incoming = legs[i - 1];
     const outgoing = legs[i];
     let turnDeg: number | null = null;

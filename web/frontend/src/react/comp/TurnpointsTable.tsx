@@ -35,7 +35,7 @@ import {
   type UnitPreferences,
 } from "../lib/units";
 import { unitDisplay } from "../field-analysis/units";
-import { buildTaskStrip } from "./task-strip-layout";
+import { buildTaskLegs } from "./task-legs";
 import { legWind, legWindWord, type TaskWind } from "./task-wind";
 
 export function TurnpointsTable({
@@ -87,10 +87,10 @@ export function TurnpointsTable({
     const totalM = legs.length > 0 ? legs.reduce((sum, d) => sum + d, 0) : null;
     // Leg bearings, off the same optimised line the distances come from, so a
     // leg's wind can never be resolved against a course the table doesn't
-    // show. buildTaskStrip returns null on a half-defined route — the same
+    // show. buildTaskLegs returns null on a half-defined route — the same
     // case the distances above already tolerate — and the wind goes quiet.
-    const strip = buildTaskStrip(xctsk);
-    const bearings = strip ? strip.legs.map((leg) => leg.bearingDeg) : [];
+    const course = buildTaskLegs(xctsk);
+    const bearings = course ? course.legs.map((leg) => leg.bearingDeg) : [];
     return { directions, legs, totalM, bearings };
   }, [xctsk]);
 
@@ -129,17 +129,25 @@ export function TurnpointsTable({
       >
         <TableHeader>
           {/* Empty visible header for the role column; labelled for AT. */}
-          <Column isRowHeader={false} aria-label="Type" className="w-16" />
+          <Column isRowHeader={false} aria-label="Type" className="w-16 px-1.5" />
           <Column isRowHeader>Turnpoint</Column>
-          {/* Abbreviated so four columns fit a phone without scrolling: the
-              headers, not the readings, were what pushed the listing past the
-              content column. The unabbreviated name goes to assistive tech,
-              which reads the header before every cell in the column. */}
-          <Column className="px-1.5 text-right" aria-label="Leg distance">
+          {/* Abbreviated, and allowed to wrap, so four columns fit a phone
+              without scrolling: the headers and the wind reading are the long
+              things here, and the kit's columns and cells are nowrap by
+              default — which turns a two-word heading into a hard minimum
+              width. The unabbreviated name goes to assistive tech, which reads
+              the header before every cell in the column. */}
+          <Column
+            className="px-1.5 text-right whitespace-normal"
+            aria-label="Leg distance"
+          >
             Leg Dist.
           </Column>
           {showWind ? (
-            <Column className="px-1.5 text-right" aria-label="Leg wind">
+            <Column
+              className="px-1.5 text-right whitespace-normal"
+              aria-label="Leg wind"
+            >
               Leg Wind
             </Column>
           ) : null}
@@ -166,7 +174,7 @@ export function TurnpointsTable({
                 }
                 onAction={onTurnpointSelect ? () => onTurnpointSelect(i) : undefined}
               >
-                <Cell className="align-top">
+                <Cell className="px-1.5 align-top">
                   <div className="flex flex-col gap-1">
                     {role ? (
                       <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
@@ -200,7 +208,7 @@ export function TurnpointsTable({
                   )}
                 </Cell>
                 {showWind ? (
-                  <Cell className="px-1.5 text-right align-top tabular-nums">
+                  <Cell className="px-1.5 text-right align-top tabular-nums whitespace-normal">
                     {wind && bearings[i - 1] !== undefined ? (
                       <LegWindReading
                         wind={wind}
@@ -272,14 +280,18 @@ function LegWindReading({
   return (
     <span
       className={cn(
-        "whitespace-nowrap",
         resolved.kind === "cross" ? "text-muted-foreground" : "font-medium"
       )}
     >
-      <span aria-hidden="true">
-        {resolved.kind === "head" ? "▲" : resolved.kind === "tail" ? "▼" : "↔"}
+      {/* The reading wraps on a narrow screen — but only between the figure
+          and the word for it. An arrow orphaned from its number, or "km/h" on
+          a line of its own, is not a reading. */}
+      <span className="whitespace-nowrap">
+        <span aria-hidden="true">
+          {resolved.kind === "head" ? "▲" : resolved.kind === "tail" ? "▼" : "↔"}
+        </span>{" "}
+        {magnitude} {speed.unit}
       </span>{" "}
-      {magnitude} {speed.unit}{" "}
       <span className="sr-only">{legWindWord(resolved.kind)}</span>
       <span aria-hidden="true">
         {resolved.kind === "head" ? "head" : resolved.kind === "tail" ? "tail" : "cross"}

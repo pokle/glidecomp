@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { XCTask } from "@glidecomp/engine";
 import {
-  buildTaskStrip,
+  buildTaskLegs,
   compassPoint,
   courseChange,
   REVERSAL_DEG,
-} from "./task-strip-layout";
+} from "./task-legs";
 
 function tp(
   name: string,
@@ -71,40 +71,40 @@ describe("courseChange", () => {
   });
 });
 
-describe("buildTaskStrip", () => {
+describe("buildTaskLegs", () => {
   it("returns null when there is no course to describe", () => {
     // One turnpoint (an open-distance launch cylinder) has an order of one.
     expect(
-      buildTaskStrip({
+      buildTaskLegs({
         taskType: "CLASSIC",
         version: 1,
         turnpoints: [tp("JILJIL", -35.99, 142.92, 5000, "TAKEOFF")],
       })
     ).toBeNull();
     expect(
-      buildTaskStrip({ taskType: "CLASSIC", version: 1, turnpoints: [] })
+      buildTaskLegs({ taskType: "CLASSIC", version: 1, turnpoints: [] })
     ).toBeNull();
   });
 
   it("returns null when a coordinate is missing", () => {
     const task = dogLeg();
     (task.turnpoints[1].waypoint as { lat: number }).lat = NaN;
-    expect(buildTaskStrip(task)).toBeNull();
+    expect(buildTaskLegs(task)).toBeNull();
   });
 
   it("gives one leg per gap, with headings as compass bearings", () => {
-    const strip = buildTaskStrip(dogLeg())!;
-    expect(strip.stations).toHaveLength(3);
-    expect(strip.legs).toHaveLength(2);
+    const course = buildTaskLegs(dogLeg())!;
+    expect(course.stations).toHaveLength(3);
+    expect(course.legs).toHaveLength(2);
     // Roughly due north then due east — "roughly" on purpose: these bearings
     // are taken from the OPTIMISED tag points, not the turnpoint centres, so
     // the cylinder radii shift them a degree or so. That is the whole point of
-    // the strip (it describes the route as flown and scored), and a test that
+    // the course (it describes the route as flown and scored), and a test that
     // demanded exactly 0°/90° would be asserting the wrong geometry.
-    expect(Math.abs(strip.legs[0].bearingDeg)).toBeLessThan(2);
-    expect(strip.legs[0].compass).toBe("N");
-    expect(Math.abs(strip.legs[1].bearingDeg - 90)).toBeLessThan(2);
-    expect(strip.legs[1].compass).toBe("E");
+    expect(Math.abs(course.legs[0].bearingDeg)).toBeLessThan(2);
+    expect(course.legs[0].compass).toBe("N");
+    expect(Math.abs(course.legs[1].bearingDeg - 90)).toBeLessThan(2);
+    expect(course.legs[1].compass).toBe("E");
   });
 
   it("never reports a negative heading", () => {
@@ -114,20 +114,20 @@ describe("buildTaskStrip", () => {
       version: 1,
       turnpoints: [tp("A", -36.0, 148.0, 400, "TAKEOFF"), tp("B", -36.0, 147.6)],
     };
-    const strip = buildTaskStrip(west)!;
-    expect(strip.legs[0].bearingDeg).toBeGreaterThan(180);
-    expect(strip.legs[0].bearingDeg).toBeLessThanOrEqual(360);
-    expect(strip.legs[0].compass).toBe("W");
+    const course = buildTaskLegs(west)!;
+    expect(course.legs[0].bearingDeg).toBeGreaterThan(180);
+    expect(course.legs[0].bearingDeg).toBeLessThanOrEqual(360);
+    expect(course.legs[0].compass).toBe("W");
   });
 
   it("measures the turn at the middle turnpoint only", () => {
-    const strip = buildTaskStrip(dogLeg())!;
-    expect(strip.stations[0].turnDeg).toBeNull();
-    expect(strip.stations[2].turnDeg).toBeNull();
+    const course = buildTaskLegs(dogLeg())!;
+    expect(course.stations[0].turnDeg).toBeNull();
+    expect(course.stations[2].turnDeg).toBeNull();
     // ~90°, off by a degree because the tag points sit on the cylinder edges.
-    expect(Math.abs(strip.stations[1].turnDeg! - 90)).toBeLessThan(3);
-    expect(strip.stations[1].turnSide).toBe("right");
-    expect(strip.stations[1].isReversal).toBe(false);
+    expect(Math.abs(course.stations[1].turnDeg! - 90)).toBeLessThan(3);
+    expect(course.stations[1].turnSide).toBe("right");
+    expect(course.stations[1].isReversal).toBe(false);
   });
 
   it("calls a doubling-back leg a reversal", () => {
@@ -140,7 +140,7 @@ describe("buildTaskStrip", () => {
         tp("HOME", -36.0, 148.0, 400),
       ],
     };
-    const turn = buildTaskStrip(outAndReturn)!.stations[1];
+    const turn = buildTaskLegs(outAndReturn)!.stations[1];
     expect(turn.turnDeg).toBeGreaterThanOrEqual(REVERSAL_DEG);
     expect(turn.isReversal).toBe(true);
   });
@@ -155,7 +155,7 @@ describe("buildTaskStrip", () => {
         tp("C", -35.6, 148.001),
       ],
     };
-    const turn = buildTaskStrip(almostStraight)!.stations[1];
+    const turn = buildTaskLegs(almostStraight)!.stations[1];
     expect(turn.turnDeg).toBeLessThan(8);
     expect(turn.turnSide).toBeNull();
     expect(turn.isReversal).toBe(false);
@@ -167,12 +167,12 @@ describe("buildTaskStrip", () => {
       ...task.turnpoints[1].waypoint,
       altSmoothed: 1200,
     };
-    const strip = buildTaskStrip(task)!;
-    expect(strip.stations.map((s) => s.role)).toEqual(["TAKEOFF", null, "GOAL"]);
-    expect(strip.stations[1].elevationM).toBe(1200);
-    expect(strip.stations[0].elevationM).toBeNull();
-    expect(strip.totalMeters).toBeCloseTo(
-      strip.legs.reduce((sum, l) => sum + l.meters, 0),
+    const course = buildTaskLegs(task)!;
+    expect(course.stations.map((s) => s.role)).toEqual(["TAKEOFF", null, "GOAL"]);
+    expect(course.stations[1].elevationM).toBe(1200);
+    expect(course.stations[0].elevationM).toBeNull();
+    expect(course.totalMeters).toBeCloseTo(
+      course.legs.reduce((sum, l) => sum + l.meters, 0),
       6
     );
   });
