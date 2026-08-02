@@ -12,7 +12,7 @@
  * SSR-safe: no browser-only imports, no window/document, and every number is
  * formatted deterministically from the unit preferences.
  */
-import { useMemo } from "react";
+import { useMemo, type FocusEvent } from "react";
 import {
   computeTurnpointDirections,
   getOptimizedSegmentDistances,
@@ -25,14 +25,28 @@ import { formatAltitude, formatDistance, formatRadius, useUnits } from "../lib/u
 export function TurnpointsTable({
   xctsk,
   highlightIndex = null,
+  onTurnpointHover,
+  onTurnpointSelect,
 }: {
   xctsk: XCTask;
   /**
    * Turnpoint to mark as the one under the reader's attention — the task
-   * diagram above the table sets this when a turnpoint is hovered, tapped or
+   * diagram beside the table sets this when a turnpoint is hovered, tapped or
    * tabbed to, so the picture and the numbers point at the same thing.
    */
   highlightIndex?: number | null;
+  /**
+   * The same tie in the other direction: fires with the row under the pointer
+   * or keyboard focus, and with null when the reader leaves, so the host can
+   * raise the matching turnpoint in the diagram. Optional — the route editor
+   * renders this listing with no diagram to point at.
+   */
+  onTurnpointHover?: (index: number | null) => void;
+  /**
+   * Fires on click/tap/Enter on a row. Touch has no hover, so without this a
+   * phone reader could never point the diagram at a turnpoint from the table.
+   */
+  onTurnpointSelect?: (index: number) => void;
 }) {
   const units = useUnits();
   const { directions, legs, totalM } = useMemo(() => {
@@ -52,8 +66,28 @@ export function TurnpointsTable({
 
   const lastIndex = xctsk.turnpoints.length - 1;
 
+  // Keyboard half of the tie-in. The grid moves focus a CELL at a time and
+  // RAC's Row takes no focus handlers, so the listing listens once at the top
+  // and reads the row out of the event's target: arrowing down the table walks
+  // the diagram's highlight with it. Clearing only when focus leaves the whole
+  // listing keeps the highlight steady while the reader moves across a row.
+  const focusHandlers = onTurnpointHover
+    ? {
+        onFocus: (e: FocusEvent<HTMLDivElement>) => {
+          const row = (e.target as HTMLElement).closest("tr");
+          const body = row?.parentElement;
+          if (!row || body?.tagName !== "TBODY") return;
+          const index = Array.prototype.indexOf.call(body.children, row);
+          if (index >= 0) onTurnpointHover(index);
+        },
+        onBlur: (e: FocusEvent<HTMLDivElement>) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) onTurnpointHover(null);
+        },
+      }
+    : {};
+
   return (
-    <div className="mt-2">
+    <div className="mt-2" {...focusHandlers}>
       <Table aria-label="Turnpoints">
         <TableHeader>
           {/* Empty visible header for the role column; labelled for AT. */}
@@ -73,7 +107,16 @@ export function TurnpointsTable({
               ? formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit
               : null;
             return (
-              <Row key={i} className={i === highlightIndex ? "bg-muted" : undefined}>
+              <Row
+                key={i}
+                className={i === highlightIndex ? "bg-muted" : undefined}
+                onHoverChange={
+                  onTurnpointHover
+                    ? (hovered) => onTurnpointHover(hovered ? i : null)
+                    : undefined
+                }
+                onAction={onTurnpointSelect ? () => onTurnpointSelect(i) : undefined}
+              >
                 <Cell className="align-top">
                   <div className="flex flex-col gap-1">
                     {role ? (
