@@ -38,6 +38,7 @@ import { useMemo, useRef, useState } from "react";
 import type { ScoreCurveChart, ScoreChartPilot } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
 import { extent, linearScale, niceTicks } from "./scale";
+import { AxisUnit, XAxisTitle } from "./AxisTitle";
 
 const W = 520;
 const H = 210;
@@ -278,12 +279,16 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
               {Math.round(t)}
             </text>
           ))}
-          <text x={plot.left - 6} y={plot.top - 2} textAnchor="end" className="fill-current">
+          {/* A unit STAMP on y, an axis TITLE on x — see AxisTitle.tsx for why
+              the two are different things. The y axis here is points and
+              nothing else, and the section heading above already names the
+              component being scored. */}
+          <AxisUnit left={plot.left} top={plot.top}>
             pts
-          </text>
-          <text x={(plot.left + plot.right) / 2} y={H - 2} textAnchor="middle" className="fill-current">
+          </AxisUnit>
+          <XAxisTitle left={plot.left} right={plot.right} y={H - 2}>
             {xLabel}
-          </text>
+          </XAxisTitle>
         </g>
 
         {/* The formula. Foreground ink rather than a chart hue: it is the

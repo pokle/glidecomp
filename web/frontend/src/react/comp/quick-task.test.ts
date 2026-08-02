@@ -3,15 +3,19 @@ import type { WaypointFileRecord } from "@glidecomp/engine";
 import {
   activeToken,
   completeToken,
+  DEFAULT_START,
   inferTypes,
   matchWaypoints,
   parseQuickTask,
   parseRadiusToken,
+  parseTimeToken,
   quickTaskText,
   randomExampleRoute,
+  startConfigFromItems,
   suggestionsFor,
   resolveTypes,
   tokenizeQuickTask,
+  type QuickStartConfig,
 } from "./quick-task";
 
 function wp(code: string, name = code): WaypointFileRecord {
@@ -43,7 +47,34 @@ describe("parseRadiusToken", () => {
   });
 });
 
+describe("parseTimeToken", () => {
+  it("reads a time of day, padding the hour", () => {
+    expect(parseTimeToken("13:15")).toBe("13:15");
+    expect(parseTimeToken("9:05")).toBe("09:05");
+    expect(parseTimeToken("00:00")).toBe("00:00");
+  });
+
+  it("rejects impossible times, names and radii", () => {
+    expect(parseTimeToken("24:00")).toBeNull();
+    expect(parseTimeToken("13:99")).toBeNull();
+    expect(parseTimeToken("1315")).toBeNull();
+    expect(parseTimeToken("ell")).toBeNull();
+  });
+});
+
 describe("tokenizeQuickTask", () => {
+  it("marks a token carrying a colon as a start gate", () => {
+    expect(
+      tokenizeQuickTask("mitta 400m 13:15 13:99").map((t) => [t.kind, t.hhmm])
+    ).toEqual([
+      ["name", undefined],
+      ["radius", undefined],
+      ["time", "13:15"],
+      // Still a time — reported as a bad one rather than matched as a waypoint.
+      ["time", undefined],
+    ]);
+  });
+
   it("splits on spaces and commas only", () => {
     expect(tokenizeQuickTask("ell 400m, mitta,cudg  ncor").map((t) => t.raw)).toEqual([
       "ell",
@@ -375,6 +406,195 @@ describe("quickTaskText", () => {
         type: resolveTypes(items)[n],
       }))
     )).toBe(text);
+  });
+});
+
+describe("start configuration in the line", () => {
+  const opts = { defaultRadius: 400 };
+  /** The start a line states, as the field reads it. */
+  const startOf = (line: string, waypoints = WAYPOINTS) => {
+    const items = parseQuickTask(line, waypoints, opts);
+    return startConfigFromItems(items, resolveTypes(items));
+  };
+
+  it("defaults to today's behaviour when the line says nothing", () => {
+    expect(startOf("ell mitta sss cudgwa bogong").start).toEqual({
+      direction: "EXIT",
+      type: "RACE",
+      gates: [],
+    });
+  });
+
+  it("reads direction, timing and gates off the start", () => {
+    expect(startOf("ell to, mitta sss enter 13:15 13:30, cudgwa, bogong").start).toEqual({
+      direction: "ENTER",
+      type: "RACE",
+      gates: ["13:15", "13:30"],
+    });
+    expect(startOf("ell to, mitta sss elapsed 13:15, cudgwa, bogong").start).toEqual({
+      direction: "EXIT",
+      type: "ELAPSED-TIME",
+      gates: ["13:15"],
+    });
+  });
+
+  it("takes 'et' as elapsed time", () => {
+    expect(startOf("ell to, mitta sss et, cudgwa").start?.type).toBe("ELAPSED-TIME");
+  });
+
+  it("doesn't care what order the modifiers come in", () => {
+    const shapes = [
+      "ell to, mitta 5k sss exit 13:15, cudgwa",
+      "ell to, mitta sss 5k exit 13:15, cudgwa",
+      "ell to, mitta exit sss 5k 13:15, cudgwa",
+      "ell to, mitta 13:15 5k exit sss, cudgwa",
+    ].map((line) => startOf(line).start);
+    for (const shape of shapes) {
+      expect(shape).toEqual({ direction: "EXIT", type: "RACE", gates: ["13:15"] });
+    }
+    // …and the radius still lands on the same turnpoint.
+    expect(
+      parseQuickTask("ell to, mitta exit sss 5k 13:15, cudgwa", WAYPOINTS, opts)[1].radius
+    ).toBe(5000);
+  });
+
+  it("configures a start the line only implies", () => {
+    // No "sss" written: MITTA is the start by position, and takes the modifier.
+    expect(startOf("ell mitta enter 13:15 cudgwa bogong").start).toEqual({
+      direction: "ENTER",
+      type: "RACE",
+      gates: ["13:15"],
+    });
+  });
+
+  it("normalises a single-digit hour", () => {
+    expect(startOf("ell to, mitta sss 9:05, cudgwa").start?.gates).toEqual(["09:05"]);
+  });
+
+  it("prefers a waypoint over a modifier word when a code collides", () => {
+    const withRace = [...WAYPOINTS, wp("RACE", "Race Course"), wp("EXIT", "Exit Gate")];
+    const items = parseQuickTask("ell race exit", withRace, opts);
+    expect(items.map((i) => i.candidates[0]?.code)).toEqual(["ELLIOT", "RACE", "EXIT"]);
+    // The route has no start settings — those are three turnpoints.
+    expect(startConfigFromItems(items, resolveTypes(items)).start).toEqual({
+      direction: "EXIT",
+      type: "RACE",
+      gates: [],
+    });
+  });
+
+  it("reports a time that isn't a time", () => {
+    const { start, problems } = startOf("ell to, mitta sss 13:99, cudgwa");
+    expect(start?.gates).toEqual([]);
+    expect(problems).toEqual([
+      "“13:99” isn't a time — start gates are written HH:MM, like 13:15",
+    ]);
+  });
+
+  it("reports a repeated gate and keeps one", () => {
+    const { start, problems } = startOf("ell to, mitta sss 13:15 13:15, cudgwa");
+    expect(start?.gates).toEqual(["13:15"]);
+    expect(problems).toEqual(["Start gate 13:15 is listed twice — ignoring the repeat"]);
+  });
+
+  it("reports the extra gates an elapsed-time task won't use, without dropping them", () => {
+    const { start, problems } = startOf("ell to, mitta sss elapsed 13:15 13:30, cudgwa");
+    expect(start?.gates).toEqual(["13:15", "13:30"]);
+    expect(problems).toEqual([
+      "Elapsed time uses one gate — when the start opens. The later ones are ignored.",
+    ]);
+  });
+
+  it("reports settings stranded on a turnpoint that isn't the start", () => {
+    const { problems } = startOf("ell to, mitta sss, cudgwa enter 13:15, bogong");
+    expect(problems).toEqual([
+      "Start settings on cudgwa are ignored — they belong on the start (sss) turnpoint",
+    ]);
+  });
+
+  it("says there's no start rather than inventing one", () => {
+    // Two turnpoints is take-off + goal: no room for a speed section.
+    const { start, problems } = startOf("ell 13:15 mitta");
+    expect(start).toBeNull();
+    expect(problems).toEqual(["Start settings need a start turnpoint — mark one “sss”"]);
+  });
+
+  it("treats a gate with no turnpoint before it as a name, like a leading type word", () => {
+    const items = parseQuickTask("13:15 ell mitta", WAYPOINTS, opts);
+    expect(items[0].query).toBe("13:15");
+    expect(items[0].candidates).toEqual([]);
+  });
+});
+
+describe("quickTaskText — start configuration", () => {
+  const opts = { defaultRadius: 400 };
+  const ROUTE = [
+    { name: "ELLIOT", radius: 400, type: "TAKEOFF" as const },
+    { name: "MITTA", radius: 400, type: "SSS" as const },
+    { name: "CUDGWA", radius: 400, type: "" as const },
+    { name: "BOGONG", radius: 400, type: "ESS" as const },
+    { name: "NCORRY", radius: 400, type: "" as const },
+  ];
+  /** Render, then read back what the line says — the loop the editor runs. */
+  const roundTrip = (start: QuickStartConfig | null, types?: "needed" | "all") => {
+    const text = quickTaskText(ROUTE, { start, types });
+    const items = parseQuickTask(text, WAYPOINTS, opts);
+    const read = startConfigFromItems(items, resolveTypes(items));
+    return { text, read, again: quickTaskText(ROUTE, { start: read.start, types }) };
+  };
+
+  it("writes nothing extra for a default start — the line is what it always was", () => {
+    const { text } = roundTrip(DEFAULT_START);
+    expect(text).toBe("ELLIOT 400m, MITTA 400m, CUDGWA 400m, BOGONG 400m, NCORRY 400m");
+    // Byte-identical to the same route rendered without any start at all.
+    expect(text).toBe(quickTaskText(ROUTE));
+  });
+
+  it("spells out anything that isn't the default, and says 'sss' when it does", () => {
+    expect(quickTaskText(ROUTE, { start: { ...DEFAULT_START, direction: "ENTER" } })).toBe(
+      "ELLIOT 400m, MITTA 400m sss enter, CUDGWA 400m, BOGONG 400m, NCORRY 400m"
+    );
+    expect(
+      quickTaskText(ROUTE, { start: { ...DEFAULT_START, gates: ["13:15", "13:30"] } })
+    ).toBe(
+      "ELLIOT 400m, MITTA 400m sss 13:15 13:30, CUDGWA 400m, BOGONG 400m, NCORRY 400m"
+    );
+  });
+
+  it("writes the whole start out when every role is named — the Enter key's job", () => {
+    expect(quickTaskText(ROUTE, { types: "all", start: DEFAULT_START })).toBe(
+      "ELLIOT 400m to, MITTA 400m sss exit race, CUDGWA 400m, BOGONG 400m ess, NCORRY 400m goal"
+    );
+  });
+
+  it("is a fixed point: rendering what it read reproduces the line", () => {
+    const configs: QuickStartConfig[] = [
+      DEFAULT_START,
+      { direction: "ENTER", type: "RACE", gates: [] },
+      { direction: "EXIT", type: "ELAPSED-TIME", gates: ["13:15"] },
+      { direction: "ENTER", type: "ELAPSED-TIME", gates: ["09:05"] },
+      { direction: "EXIT", type: "RACE", gates: ["13:15", "13:30", "13:45"] },
+    ];
+    for (const start of configs) {
+      for (const types of ["needed", "all"] as const) {
+        const trip = roundTrip(start, types);
+        expect(trip.read.start).toEqual(start);
+        expect(trip.read.problems).toEqual([]);
+        // The convergence rule: what comes back renders to the same text, so
+        // the field and the editor can never push each other in circles.
+        expect(trip.again).toBe(trip.text);
+      }
+    }
+  });
+
+  it("leaves the start alone when the route hasn't got one", () => {
+    const pair = [
+      { name: "ELLIOT", radius: 400, type: "TAKEOFF" as const },
+      { name: "MITTA", radius: 400, type: "" as const },
+    ];
+    expect(quickTaskText(pair, { start: { direction: "ENTER", type: "RACE", gates: [] } })).toBe(
+      "ELLIOT 400m, MITTA 400m"
+    );
   });
 });
 

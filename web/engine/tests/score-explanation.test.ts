@@ -1265,12 +1265,240 @@ describe('explainGapScore — where the points went', () => {
     const total = comparisonFor(fieldContext())!.items.find((i) => i.id === 'gap-total')!;
     expect(total.text).toContain('Fast Pilot');
     expect(total.value).toBe('−119.5 pts');
-    expect(total.detail).toBe('All of the gap is time.');
+    expect(total.detail).toBe('All of the gap is time-points.');
   });
 
-  it('is omitted for the class leader — a table of zeroes is noise', () => {
+  // Jon Durand's case: fastest through the speed section (+67 on time) but
+  // beaten on leading — the leading loss is BIGGER than the net gap, and the
+  // old "85.6 of 38.9 points" wording read as an arithmetic error.
+  it('re-words the dominant loss when it exceeds the whole gap', () => {
+    const ctx = fieldContext();
+    ctx.available_points = {
+      distance: 400, time: 400, leading: 100, arrival: 0, total: 900,
+    };
+    ctx.pilots = [
+      {
+        flown_distance: 60_000, speed_section_time: 70 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Leader', rank: 1, total_score: 833,
+        distance_points: 400, time_points: 333, leading_points: 100,
+        arrival_points: 0,
+      },
+      {
+        flown_distance: 60_000, speed_section_time: 65 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Fast Pilot', rank: 2, total_score: 810,
+        distance_points: 400, time_points: 400, leading_points: 10,
+        arrival_points: 0,
+      },
+    ];
+    const s = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        speed_section_time: 65 * 60,
+        time_points: 400,
+        leading_points: 10,
+        total_score: 810,
+      },
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    }).sections.find((sec) => sec.id === 'comparison')!;
+    const total = s.items.find((i) => i.id === 'gap-total')!;
+    // Gap 23, leading loss 90, time gain 67: never "90 of 23 points".
+    expect(total.detail).toBe(
+      'You took 90 fewer leading-points than the leader — more than the whole gap — and won 67 back on time-points. ' +
+      'Leading-points reward being out front on the clock, which the fastest pilot often isn’t.',
+    );
+  });
+
+  // A ledger that omits penalties cannot reconcile with the gap it explains.
+  it('carries penalties as a ledger row and names the spread, largest first', () => {
+    const ctx = fieldContext();
+    // Leader clean on 900; this pilot lost 69.5 on time and 70 to a penalty
+    // (components 830.5, penalty 70 → published total 760.5).
+    ctx.pilots[1] = {
+      ...ctx.pilots[1], total_score: 760.5, time_points: 430.5,
+    };
+    ctx.pilots[0] = { ...ctx.pilots[0], time_points: 500, total_score: 900 };
+    const s = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        time_points: 430.5,
+        penalty_points: 70,
+        penalty_reason: 'Airspace infringement',
+        total_score: 760.5,
+      },
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    }).sections.find((sec) => sec.id === 'comparison')!;
+    const pen = s.items.find((i) => i.id === 'gap-penalty')!;
+    expect(pen.value).toBe('−70 pts');
+    expect(pen.detail).toBe('you −70, the leader 0');
+    const total = s.items.find((i) => i.id === 'gap-total')!;
+    expect(total.value).toBe('−139.5 pts');
+    // 69.5 lost on time + 70 to the penalty: no single culprit, so the
+    // spread names its members with the largest first — never a bare count.
+    expect(total.detail).toBe(
+      'Spread across penalties and time-points — penalties the largest, at 70.',
+    );
+  });
+
+  // The leader used to get nothing here — and the winner's actual question
+  // ("full validity, why not full points?") went unanswered on the one page
+  // built to answer it. They now get the vs-the-day variant.
+  it('gives the class leader the points-left-on-the-day variant instead of nothing', () => {
     const ctx = fieldContext();
     ctx.pilots[0] = { ...ctx.pilots[0], total_score: 780.5, time_points: 380.5 };
+    const s = comparisonFor(ctx)!;
+    expect(s.title).toBe('The points left on the day');
+    expect(s.summary).toContain('Nobody out-scored you');
+    expect(s.summary).toContain('900');
+    // Distance was maxed; time is where the day's missing points are.
+    const dist = s.items.find((i) => i.id === 'left-distance')!;
+    expect(dist.value).toBe('full points');
+    expect(dist.emphasis).toBe('muted');
+    const time = s.items.find((i) => i.id === 'left-time')!;
+    expect(time.value).toBe('−119.5 pts');
+    expect(time.detail).toBe('you 380.5 of 500 on offer');
+    const total = s.items.find((i) => i.id === 'left-total')!;
+    expect(total.value).toBe('−119.5 pts');
+    expect(total.detail).toBe('All of it is time-points.');
+  });
+
+  // Rohan's case: the winner was not the fastest to ESS — another pilot took
+  // the full time points (and lost the day elsewhere). Name them.
+  it('names the pilot who took the full time points, with their time', () => {
+    const ctx = fieldContext();
+    ctx.available_points = {
+      distance: 380, time: 450, leading: 0, arrival: 70, total: 900,
+    };
+    ctx.pilots = [
+      {
+        flown_distance: 60_000, speed_section_time: 65 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Fast Pilot', rank: 2, total_score: 700,
+        distance_points: 380, time_points: 450,
+        leading_points: 0, arrival_points: 20,
+      },
+      {
+        flown_distance: 60_000, speed_section_time: 70 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Our Pilot', rank: 1, total_score: 850,
+        distance_points: 380, time_points: 400,
+        leading_points: 0, arrival_points: 70,
+      },
+    ];
+    const s = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        distance_points: 380,
+        time_points: 400,
+        arrival_points: 70,
+        total_score: 850,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true },
+    }).sections.find((sec) => sec.id === 'comparison')!;
+    const time = s.items.find((i) => i.id === 'left-time')!;
+    expect(time.detail).toContain('Fast Pilot took the full time-points in 1:05:00');
+    // Our pilot was first to ESS points-wise, so arrival reads as maxed.
+    expect(s.items.find((i) => i.id === 'left-arrival')!.value).toBe('full points');
+  });
+
+  // §12.2: a floored jump-the-gun deduction's PUBLISHED figure overstates its
+  // net effect — the ledger derives the net from components − total instead.
+  it('shows the net penalty effect, not the gross deduction, when a floor engaged', () => {
+    const ctx = fieldContext();
+    // Components 780.5, gross deduction 90, but floored at 750 — net 30.5.
+    ctx.pilots[1] = { ...ctx.pilots[1], total_score: 750 };
+    const s = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        early_start_seconds: 180,
+        early_start_outcome: 'hg_penalty',
+        jump_the_gun_penalty: 90,
+        total_score: 750,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG' },
+    }).sections.find((sec) => sec.id === 'comparison')!;
+    const pen = s.items.find((i) => i.id === 'gap-penalty')!;
+    expect(pen.value).toBe('−30.5 pts');
+    expect(pen.detail).toContain('net effect after the scoring floor');
+    // And the ledger reconciles: 119.5 time + 30.5 net penalty = the gap.
+    expect(s.items.find((i) => i.id === 'gap-total')!.value).toBe('−150 pts');
+  });
+
+  // A nobody-in-goal HG day: the GAP weight split sums to slightly more than
+  // 1 (time weight clamped at zero), so the component offers overshoot the
+  // day total — the winner's ledger must say so instead of printing a share
+  // its own rows contradict.
+  it("explains the weight overshoot on a nobody-in-goal day instead of a broken share", () => {
+    const ctx = fieldContext();
+    // Offers sum to 943.8 on a 934.7-point day (real Dalby 2022 shape).
+    ctx.available_points = {
+      distance: 841.2, time: 0, leading: 90.9, arrival: 11.7, total: 934.7,
+    };
+    ctx.pilots = [
+      {
+        flown_distance: 60_000, speed_section_time: null,
+        made_goal: false, reached_ess: false,
+        pilot_name: 'Winner', rank: 1, total_score: 932.1,
+        distance_points: 841.2, time_points: 0,
+        leading_points: 90.9, arrival_points: 0,
+      },
+      {
+        flown_distance: 50_000, speed_section_time: null,
+        made_goal: false, reached_ess: false,
+        pilot_name: 'Runner Up', rank: 2, total_score: 700,
+        distance_points: 700, time_points: 0,
+        leading_points: 0, arrival_points: 0,
+      },
+    ];
+    const x = explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false },
+      entry: {
+        ...makeGoalEntry(),
+        made_goal: false,
+        reached_ess: false,
+        speed_section_time: null,
+        distance_points: 841.2,
+        time_points: 0,
+        leading_points: 90.9,
+        arrival_points: 0,
+        total_score: 932.1,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true },
+    });
+    const s = x.sections.find((sec) => sec.id === 'comparison')!;
+    const total = s.items.find((i) => i.id === 'left-total')!;
+    expect(total.value).toBe('−2.6 pts');
+    expect(total.detail).toContain('offers sum to 943.8 on a 934.7-point day');
+    expect(total.detail).toContain('overshoot');
+    expect(total.detail).toContain('The biggest untaken offer is arrival-points.');
+    // The headline note drops its share clause rather than claim "all of it
+    // arrival" about a 2.6-point remainder beside an 11.7-point offer.
+    expect(x.headlineNote).toBe(
+      'Top of the class, but not a full sweep: of the 934.7 points on offer, 2.6 went untaken.',
+    );
+  });
+
+  it('is omitted for a leader who swept the day — a full house needs no ledger', () => {
+    const ctx = fieldContext();
+    ctx.pilots[0] = { ...ctx.pilots[0], total_score: 780.5, time_points: 380.5 };
+    ctx.available_points = {
+      distance: 400, time: 380.5, leading: 0, arrival: 0, total: 780.5,
+    };
     expect(comparisonFor(ctx)).toBeUndefined();
   });
 
@@ -1758,5 +1986,225 @@ describe('explainGapScore — validity charts', () => {
     for (const id of ['launch-validity', 'time-validity']) {
       expect(items.find((i) => i.id === id)!.chart).toBeUndefined();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Surfacing the standings: per-section ranks, points-of-available, and the
+// winner's headline note (the "full validity but not 1000 points" report).
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — section ranks and available points', () => {
+  it('states each component section\'s points against the points on offer', () => {
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    expect(section(x, 'distance').pointsAvailable).toBe(400);
+    expect(section(x, 'time').pointsAvailable).toBe(500);
+    // The total's offer is the day's, so "780.5 of 900" is readable there too.
+    expect(section(x, 'total').pointsAvailable).toBe(900);
+  });
+
+  it('ranks the time section by speed-section time, not by points', () => {
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    expect(section(x, 'time').rank).toBe('2nd fastest of 2 through the speed section');
+  });
+
+  it('says how far behind the fastest pilot this time was, naming them when known', () => {
+    const anonymous = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    expect(
+      section(anonymous, 'time').items.find((i) => i.id === 'best-time')!.detail,
+    ).toBe('You were 5:00 behind.');
+
+    const ctx = makeClassContext();
+    ctx.pilots[1] = { ...ctx.pilots[1], pilot_name: 'Fast Pilot' };
+    const named = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    });
+    expect(
+      section(named, 'time').items.find((i) => i.id === 'best-time')!.detail,
+    ).toBe('Set by Fast Pilot — you were 5:00 behind.');
+  });
+
+  it('gives the fastest pilot the top rank and no behind detail', () => {
+    const ctx = makeClassContext();
+    ctx.pilots[1].speed_section_time = 80 * 60;
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: { ...makeGoalEntry(), time_points: 500 },
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    });
+    expect(section(x, 'time').rank).toBe('Fastest of 2 through the speed section');
+    expect(
+      section(x, 'time').items.find((i) => i.id === 'best-time')!.detail,
+    ).toBeUndefined();
+  });
+
+  // A goal day is degenerate for a distance rank — every goal pilot ties at
+  // full distance, and "equal 1st of 30" would say nothing.
+  it('words the distance rank as the goal tie for a goal pilot', () => {
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    expect(section(x, 'distance').rank).toBe('Full distance — one of 2 pilots in goal');
+  });
+
+  it('ranks a landed-out pilot by distance flown', () => {
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: { ...makeGoalEntry(), made_goal: false, flown_distance: 42_000 },
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    // 60 km, 60 km, then this pilot's 42 km — tied with the third fixture row.
+    expect(section(x, 'distance').rank).toBe('3rd furthest of 3');
+  });
+
+  it('ranks arrival by position and leading by coefficient', () => {
+    const ctx = makeClassContext();
+    ctx.available_points = {
+      ...ctx.available_points, leading: 100, arrival: 100,
+    };
+    ctx.validity_inputs = { ...makeValidityInputs(), num_reached_ess: 22 };
+    ctx.pilots = ctx.pilots.map((p, i) => ({
+      ...p,
+      leading_coefficient: i === 0 ? 0.981 : 1.284,
+    }));
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        leading_points: 62.5,
+        leading_coefficient: 1.284,
+        arrival_points: 55.4,
+        arrival_position: 7,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true },
+    });
+    expect(section(x, 'arrival').rank).toBe(
+      '7th of 22 to the end of the speed section',
+    );
+    // Two pilots share 1.284, so the rank discloses the tie — and the
+    // denominator names itself, because it is the whole measured field
+    // rather than the goal/ESS count the neighbouring ranks use.
+    expect(section(x, 'leading').rank).toBe(
+      'Equal 2nd best of 3 measured leading coefficients',
+    );
+  });
+
+  it('leaves ranks off when the inputs are not there to rank by', () => {
+    // A landed-out PG pilot has no time rank; no leading/arrival published
+    // means no ranks there either.
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: { ...makeGoalEntry(), made_goal: false, reached_ess: false },
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    expect(section(x, 'time').rank).toBeUndefined();
+  });
+});
+
+describe('explainGapScore — the winner\'s headline note', () => {
+  function winnerContext(): ClassContextInput {
+    const ctx = makeClassContext();
+    ctx.available_points = {
+      distance: 380, time: 450, leading: 0, arrival: 70, total: 900,
+    };
+    ctx.pilots = [
+      {
+        flown_distance: 60_000, speed_section_time: 65 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Fast Pilot', rank: 2, total_score: 700,
+        distance_points: 380, time_points: 450,
+        leading_points: 0, arrival_points: 20,
+      },
+      {
+        flown_distance: 60_000, speed_section_time: 70 * 60,
+        made_goal: true, reached_ess: true,
+        pilot_name: 'Our Pilot', rank: 1, total_score: 850,
+        distance_points: 380, time_points: 400,
+        leading_points: 0, arrival_points: 70,
+      },
+    ];
+    return ctx;
+  }
+
+  function explainWinner(ctx: ClassContextInput, entry?: Partial<ScoreEntryInput>) {
+    return explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: {
+        ...makeGoalEntry(),
+        distance_points: 380,
+        time_points: 400,
+        arrival_points: 70,
+        total_score: 850,
+        ...entry,
+      },
+      classContext: ctx,
+      params: { scoring: 'HG', useArrival: true },
+    });
+  }
+
+  it('answers "full validity, why not full points?" under the headline', () => {
+    const x = explainWinner(winnerContext());
+    expect(x.headlineNote).toBe(
+      'Top of the class, but not a full sweep: of the 900 points on offer, ' +
+        '50 went untaken — all of it time-points. The fastest pilot through the ' +
+        'speed section was 5:00 quicker.',
+    );
+  });
+
+  it('stays silent for a pilot who is not leading — the comparison section answers them', () => {
+    const ctx = winnerContext();
+    ctx.pilots[0] = { ...ctx.pilots[0], total_score: 880 };
+    expect(explainWinner(ctx).headlineNote).toBeUndefined();
+  });
+
+  it('stays silent on a full sweep, and on payloads with no comparable pilots', () => {
+    const swept = explainWinner(winnerContext(), {
+      time_points: 450, arrival_points: 70, total_score: 900,
+    });
+    expect(swept.headlineNote).toBeUndefined();
+    // Old cached payloads carry no per-pilot totals: no leader is knowable.
+    const old = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+    expect(old.headlineNote).toBeUndefined();
   });
 });

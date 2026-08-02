@@ -181,7 +181,8 @@ instance only exists a tick after mount, so gate anything that drives it on
   markup; the kit pieces it uses are rac), `components/PageToc.tsx` (rac
   Select for the mobile section jump), `components/Timestamp.tsx` (rac
   Tooltip), and `rac/tree.tsx` in `pages/Dashboard.tsx` (the flights Tree —
-  the rest of the Dashboard is still ui/).
+  the rest of the Dashboard followed in the 2026-07-27 waves; it is now rac
+  tabs/meter/button/tooltip throughout).
   And — 2026-07-21 — the waypoints page: `pages/CompWaypoints.tsx` (RAC
   buttons/FileTrigger/ToggleButton, read-only RAC table for non-admins;
   the editable grid became an **inline Tabulator grid**
@@ -192,15 +193,18 @@ instance only exists a tick after mount, so gate anything that drives it on
   now RAC ModalOverlay/Modal/Dialog primitives, so focus trap/restore, Esc
   and scroll-locking come from react-aria).
   Note that dialogs like SubmitTrackDialog/AddWaypointDialog are **shared** —
-  unconverted pages (CompWaypoints) already render these RAC components today;
+  which is why they could be converted ahead of every page that renders them:
   RAC components work fine outside converted pages (`RacRouterProvider` is
   global in `Shell`, so `href`-based client routing just works).
-- **Not converted:** see the conversion map at the end of this doc. Tabulator
-  remains in the comp-page pilots dialog **by design** (see the Tabulator
-  policy at the top — it is kept, not pending). The ui/ (shadcn) kit stays
-  for unconverted pages.
-- The date/time pickers (`ui/date-picker.tsx`) were already RAC and are used
-  as-is by both kits.
+- **Nothing is left unconverted** — the six waves finished on 2026-07-27 and
+  `src/react/ui/` is gone. For where each kind of code lives now, see
+  [Where the UI lives](#where-the-ui-lives-2026-07-27-post-migration) at the
+  end of this doc. Tabulator remains in the comp-page pilots dialog and the
+  waypoints admin grid **by design** (see the Tabulator policy at the top —
+  it is kept, not pending).
+- The date/time pickers were already RAC before the migration and moved across
+  unchanged; they live at `rac/date-picker.tsx` (lazy-loaded via
+  `date-picker.impl.tsx` so they stay out of the SSR bundle).
 
 ## Loading and in-flight states (2026-07-27)
 

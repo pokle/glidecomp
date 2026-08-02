@@ -384,6 +384,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return shellWithNoindex(env, url, 200);
   }
 
+  // A search on the competitions page (/comp?q=…). The results are fetched
+  // client-side from /api/comp/search — there is nothing to server-render, and
+  // a search-results URL is not a page a crawler should hold on to. Serving
+  // the plain shell also keeps hydration simple: the competition list this
+  // route would otherwise render is hidden while a search is showing.
+  if (path === "/comp" && (url.searchParams.get("q") ?? "").trim() !== "") {
+    return shellWithNoindex(env, url, 200);
+  }
+
   // The scores page's CSV twin — a real URL, not a client-side blob, so it can
   // be linked, curl'd and pulled into a spreadsheet (Google Sheets IMPORTDATA).
   const csvMatch = path.match(SCORES_CSV_PATTERN);

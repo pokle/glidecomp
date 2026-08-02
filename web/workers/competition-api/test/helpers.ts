@@ -108,6 +108,11 @@ export async function clearCompData(): Promise<void> {
     env.DB.prepare("DELETE FROM comp_waypoints"),
     env.DB.prepare("DELETE FROM comp"),
     env.DB.prepare("DELETE FROM pilot"),
+    // The search index (migration 0026) mostly cascades away with its comps,
+    // but the reindex queue is keyed by text and does not — left behind, it
+    // makes the next test's first mutation do somebody else's work.
+    env.DB.prepare("DELETE FROM search_doc"),
+    env.DB.prepare("DELETE FROM search_dirty"),
     // Re-seed test users: the Cloudflare vitest pool uses per-test storage
     // isolation, which wipes the `user` table between tests. apply-migrations
     // only seeds at file-load time. INSERT OR REPLACE keeps rows idempotent.

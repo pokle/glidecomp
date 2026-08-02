@@ -5,8 +5,8 @@
  *
  * 1. A small set of vanilla component classes (.btn*, .input, .alert*,
  *    .tabs, .command) — the analysis page builds its DOM imperatively, so it
- *    can't use the React components in src/react/ui/. These are the same
- *    shadcn recipes, expressed as classes.
+ *    can't use the React components in src/react/rac/. These are the same
+ *    recipes, expressed as classes over the shared tokens.
  * 2. Analysis-specific styles: map container, map controls, track-point HUD,
  *    glide legend, panel list items, drop zone.
  */

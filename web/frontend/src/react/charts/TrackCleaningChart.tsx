@@ -48,6 +48,7 @@ import { fixAltitude, type IGCFix } from "@glidecomp/engine";
 import type { AltitudeCleaningData } from "../comp/types";
 import { formatTimeInZone } from "../lib/time";
 import { extent, linearScale, niceTicks } from "./scale";
+import { AxisUnit } from "./AxisTitle";
 
 export type CleaningRange = AltitudeCleaningData["ranges"][number];
 
@@ -360,9 +361,11 @@ export function TrackCleaningChart({
               {metres(t)}
             </text>
           ))}
-          <text x={plot.left - 6} y={plot.top - 2} textAnchor="end" className="fill-current">
+          {/* A unit stamp, not an axis title: the y axis is altitude and the
+              three lines' legend already says whose. See AxisTitle.tsx. */}
+          <AxisUnit left={plot.left} top={plot.top}>
             m
-          </text>
+          </AxisUnit>
           {xTicks.map((t, i) => (
             <text
               key={`tx${t}`}

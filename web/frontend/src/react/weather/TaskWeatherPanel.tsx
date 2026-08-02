@@ -24,6 +24,7 @@ import {
   MetAttribution,
 } from "@/react/field-analysis/charts/day-profile/MetChartsGroup";
 import { weatherInstants } from "@/react/field-analysis/charts/day-profile/met-shared";
+import { TimeAxisTitle } from "@/react/field-analysis/charts/day-profile/TimeAxisParts";
 
 const HOUR_MS = 3_600_000;
 
@@ -102,11 +103,14 @@ export function TaskWeatherPanel({
         timeZone={timeZone}
         setReadout={setReadout}
       />
+      {/* The axis all three share, named once at the foot of the stack. */}
+      <TimeAxisTitle zone={zone} />
+
       <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout ?? "Hover a chart for exact figures."}
       </p>
       <p className="text-xs text-muted-foreground">
-        All charts share one time axis ({zone}). Arrows fly WITH the wind — the
+        All charts share that one time axis. Arrows fly WITH the wind — the
         readout&rsquo;s direction figures are degrees the wind blows from.
       </p>
       <MetAttribution weather={weather} />

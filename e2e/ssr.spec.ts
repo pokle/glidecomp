@@ -220,6 +220,23 @@ test.describe("SSR — isolation and fallback", () => {
     expect(html).toContain('name="robots" content="noindex"');
   });
 
+  test("/comp?q= is a noindex shell, not a server-rendered list", async ({ request }) => {
+    // A search on the competitions page. The results come from
+    // /api/comp/search client-side, so there is nothing to server-render —
+    // and a search-results URL is not a page for a crawler to keep. Serving
+    // the plain shell is also what keeps hydration trivial: no SSR data, so
+    // the client creates a fresh root rather than matching against markup the
+    // search is about to replace.
+    const res = await request.get("/comp?q=kangck");
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain('name="robots" content="noindex"');
+    expect(html).not.toContain("window.__SSR_DATA__");
+    // The bare URL is unaffected — still the real server-rendered list.
+    const bare = await request.get("/comp");
+    expect(await bare.text()).not.toContain('name="robots" content="noindex"');
+  });
+
   test("a non-SSR SPA route still serves the plain app shell", async ({ request }) => {
     const res = await request.get("/u/me");
     expect(res.ok()).toBeTruthy();

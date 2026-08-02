@@ -72,10 +72,11 @@ export function TaskDebrief({
         Task debrief
       </h2>
       <p className="text-sm text-muted-foreground">
-        Where this task ran against the rest of the competition — each of
-        these cleared its noise floor today AND contradicts a direction every
-        other informative task agreed on. A flip day is a finding about the
-        day, not a data problem.
+        Where this task differed from the rest of the competition. Each of
+        these behaviours cleared its noise floor today, AND contradicts a
+        direction that every other informative task agreed on. A day that
+        reverses a direction is a finding about the day, and not a fault in the
+        data.
       </p>
       <ul className="list-disc space-y-2 pl-5 text-sm">
         {findings.map((f) => (

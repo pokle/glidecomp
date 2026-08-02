@@ -39,7 +39,7 @@ differs. Know which surface you're touching:
 
 | Surface | Where | Foundation | Accessibility posture |
 |---|---|---|---|
-| **Main app (SPA)** | `web/frontend/src/react/` served from `src/app.html` | React + shadcn/ui on Base UI | Full AA. Use the primitives — they carry the ARIA. |
+| **Main app (SPA)** | `web/frontend/src/react/` served from `src/app.html` | React + react-aria-components (the kit in `src/react/rac/`) | Full AA. Use the primitives — they carry the ARIA. |
 | **Content pages (static)** | `web/frontend/static/` (Astro, prerendered) | Semantic HTML + hand-written vanilla enhancement | Full AA, and the *easiest* place to hit it — mostly it's just HTML. There are no framework primitives here, so anything interactive (the header's account menu, the FAQ accordion, the "For pilots" tablist) carries its own ARIA and keyboard handling; write it to the WAI-ARIA pattern by hand and test it with the keyboard. |
 | **Analysis map** | `/analysis.html` (vanilla TS) | Imperative map app, `analysis.css` | AA for all controls/panels. The map canvas itself follows §9 (non-text-content rules for interactive graphics). |
 | **3D replay** | `/replay` (vanilla TS + WebGL) | Own `replay.css` + inline theme | AA for the control chrome. The 3D scene follows §9. |
@@ -107,10 +107,11 @@ differs. Know which surface you're touching:
 - **Everything works from the keyboard.** Every interactive element is
   reachable and operable with Tab / Shift-Tab / Enter / Space / arrow keys, and
   nothing traps focus (except a modal, which traps *intentionally* and releases
-  on close — Base UI's `Dialog`/`AlertDialog` handle this; use them rather than
-  rolling your own).
+  on close — `rac/dialog.tsx`'s `Modal`/`Dialog` (and the `role="alertdialog"`
+  variant behind `rac/confirm.tsx`) handle this; use them rather than rolling
+  your own).
 - **No click-only handlers.** Do not attach behaviour to a non-interactive
-  element (`div`/`span` with `onClick`). Use `<button>`, `<a>`, or the shadcn
+  element (`div`/`span` with `onClick`). Use `<button>`, `<a>`, or the kit
   primitive. If a design truly needs a custom widget, it needs `role`,
   `tabindex`, and key handlers to match — but reach for the primitive first.
 - Map/replay: pan, zoom, layer toggles, and playback controls must have
@@ -119,10 +120,12 @@ differs. Know which surface you're touching:
 
 ### 4.2 Focus (WCAG 2.4.7, 2.4.11, 2.4.13)
 
-- **Visible focus indicator on every focusable element.** shadcn buttons/inputs
-  ship `focus-visible:ring-3 focus-visible:ring-ring/50` — do not strip it. Any
-  custom focusable element gets an equivalently visible ring using `--ring`
-  (which must keep ≥ 3:1 against its background, see §3.1).
+- **Visible focus indicator on every focusable element.** The kit's buttons and
+  inputs ship RAC's state-attribute equivalent — `data-focus-visible:ring-3
+  data-focus-visible:ring-ring/50` on `rac/button.tsx`, `data-focused:ring-3
+  data-focused:ring-ring/50` on `rac/field.tsx`'s `inputClass` — do not strip
+  it. Any custom focusable element gets an equivalently visible ring using
+  `--ring` (which must keep ≥ 3:1 against its background, see §3.1).
 - Never set `outline: none` without providing a replacement indicator.
 - Focus must not be obscured (WCAG 2.4.11): sticky headers (the 60px chrome,
   the mobile anchor bar) and toasts (`sonner`) must not cover the focused
@@ -136,8 +139,11 @@ differs. Know which surface you're touching:
 
 - **Skip link**: every page with the global chrome provides a "Skip to main
   content" link as the first focusable element, targeting the `<main>` landmark.
-  *(Status: not present today — required for new/changed page shells and to be
-  backfilled in `Shell.tsx` and `Base.astro`.)*
+  *(Shipped on both shells — `Shell.tsx` for the SPA and `Base.astro` for the
+  static pages; each is `sr-only` until focused and points at
+  `#main-content`, which carries `tabindex="-1"` so focus lands there and not
+  just the scroll position. Keep the two in sync, and give any new page shell
+  the same link.)*
 - **Landmarks**: one `<header>`, one `<nav aria-label="Main">` (already in
   `Shell.tsx`), one `<main>`, one `<footer>` per page. The full-screen tools
   (`/analysis.html`, `/replay`) use their top-center breadcrumb bar (IA v2 §3)
@@ -163,19 +169,28 @@ differs. Know which surface you're touching:
 
 - Honour `prefers-reduced-motion`: non-essential transitions, the 3D replay's
   auto-play camera moves, and any autoplaying animation must reduce or stop.
-  *(Status: no `prefers-reduced-motion` handling exists today — required for any
-  new animation and to be added where motion already ships, notably the replay
-  and page transitions.)*
+  *(Shipped as a blanket `@media (prefers-reduced-motion: reduce)` rule that
+  near-zeroes animation/transition durations and `scroll-behavior` in
+  `react/globals.css` (which the static Astro pages reuse) and in
+  `replay.css`. The blanket rule is a floor, not a licence to stop thinking:
+  a component whose meaning IS the motion needs a real reduced-motion state,
+  the way `globals.css` swaps the indeterminate progress bar's travelling
+  stripe for a static striped fill rather than a solid one that would read as
+  "100%, done". Motion driven by JS rather than CSS is not covered by the
+  media query at all and must check it itself — the replay's camera eases do,
+  via `easeMs()` in `replay/terrain-backend.ts`, which collapses a
+  fly-through to a jump-cut.)*
 - No content flashes more than 3×/second (WCAG 2.3.1).
 - Anything that auto-updates or auto-advances (toasts, live activity feed) is
   pausable/dismissable and does not steal focus.
 
 ### 4.5 Targets (WCAG 2.5.8)
 
-- Pointer targets are **≥ 24×24 CSS px**, or have ≥ 24px spacing. The shadcn
-  `xs`/`icon-xs` (24px) sizes are the floor — do not go below, and avoid
-  crowding multiple sub-24px targets (e.g. per-row track actions in dense
-  tables).
+- Pointer targets are **≥ 24×24 CSS px**, or have ≥ 24px spacing. The kit's
+  smallest button sizes — `sm` (h-7) and `icon-sm` (size-7), i.e. 28px — clear
+  the bar with room to spare; nothing in `rac/button.tsx` goes below it and
+  nothing new should. Avoid crowding several small targets together (e.g.
+  per-row track actions in dense tables).
 
 ---
 
@@ -183,15 +198,17 @@ differs. Know which surface you're touching:
 
 ### 5.1 Forms & inputs (WCAG 1.3.5, 3.3.1, 3.3.2, 3.3.3, 4.1.2)
 
-- **Every input has a programmatically associated label** — use the shadcn
-  `Field`/`Label` components (`for`/`id` wiring), not a bare placeholder.
+- **Every input has a programmatically associated label** — use the kit's
+  field components (`TextField`/`NumberField`/`SearchField` + `Label` in
+  `rac/field.tsx`, which wire `for`/`id` for you), not a bare placeholder.
   Placeholder text is not a label.
 - Required fields, formats, and constraints are stated in text, not only by
   colour or a lone asterisk.
 - **Errors** (3.3.1/3.3.3): identify the field in text, describe how to fix it,
   and wire it with `aria-invalid` + `aria-describedby` pointing at the message.
-  The shadcn field styles already react to `aria-invalid`; supply the message
-  and association.
+  Render the message as `rac/field.tsx`'s `FieldError` inside the field and RAC
+  does both wirings for you; the input styling reacts to the same state via
+  `data-invalid`. Supply the message — never the colour alone.
 - Autocomplete: use `autocomplete` tokens on identity/login fields (WCAG 1.3.5).
 - The shared `SubmitTrackDialog` "Submitting for" row must remain a real,
   labelled control (select/combobox) — its auto-selection of a pilot from the
@@ -314,18 +331,27 @@ Automated checks catch ~30–40% of issues; the rest is manual. Do both.
 Backlog of standard-violations that exist in the codebase today, tracked so
 they're closed deliberately rather than rediscovered:
 
-1. **No skip link** on any page shell (§4.3) — add to `Shell.tsx` and
-   `Base.astro`.
-2. **No `prefers-reduced-motion` handling** anywhere (§4.4) — cover page
-   transitions and the 3D replay camera.
-3. **`aria-current="page"` on the active nav tab, static pages only** (§6) —
-   the SPA gets it free from React Router's `NavLink` (`Shell.tsx`), but the
-   static Astro header (`SiteHeader.astro`) marks the active tab with an
-   underline only.
-4. **Map/replay keyboard parity + text alternatives** (§4.1, §7) — audit needed;
-   drag/pointer-only interactions likely fail.
-5. **Live-region coverage** for toasts and the SubmitTrackDialog auto-detect
-   (§6) — confirm `sonner` announces and add regions where missing.
+1. **Map/replay keyboard parity + text alternatives** (§4.1, §7) — audit needed;
+   drag/pointer-only interactions likely fail. The two surfaces do bind global
+   `keydown` handlers (`analysis/main.ts`, `replay/main.ts`), but nothing has
+   confirmed that every pan/zoom/layer/playback affordance has a keyboard
+   equivalent, or that the scene's essential content is available as text.
+2. **Live-region coverage is partial** (§6) — the SubmitTrackDialog's *status*
+   line is a proper `role="status"`/`role="alert"` region, but the sentence
+   announcing the auto-detected pilot ("Pilot named in the IGC file: … —
+   matched to a registered pilot above") appears silently. Confirm `sonner`
+   announces its toasts too, and add regions where missing.
+
+Closed since this document was written, kept here as pointers rather than
+rediscovered as gaps:
+
+- **Skip link** (§4.3) — shipped on both shells, `Shell.tsx` and `Base.astro`.
+- **`prefers-reduced-motion`** (§4.4) — a blanket reduce rule in
+  `react/globals.css` and `replay.css`, plus `easeMs()` in
+  `replay/terrain-backend.ts` for the JS-driven camera.
+- **`aria-current="page"` on the active nav tab** (§6) — the SPA gets it from
+  React Router's `NavLink` (`Shell.tsx`) and `SiteHeader.astro` now emits
+  `aria-current={active === … ? "page" : undefined}` on each static tab.
 
 New work should not add to this list; each item here is a candidate for its own
 follow-up PR.

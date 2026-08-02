@@ -363,6 +363,11 @@ export class TerrainBackend implements Backend {
     this.initialView = view;
   }
 
+  /** Jump the mounted camera to a pose (thermal deep link / drawer). */
+  flyTo(view: ViewState): void {
+    this.applyView(view);
+  }
+
   getViewState(): ViewState {
     const c = this.map.getCenter();
     const { lat0, lon0, mPerDegLat, mPerDegLon } = this.toGeoParams();

@@ -56,10 +56,17 @@ const COLUMNS = [
 
 /** RFC 4180: quote when the value could otherwise break the row, double inner
  *  quotes. Pilot names carry commas and parentheses; nothing here has a
- *  newline, but quoting on one costs nothing and removes the question. */
+ *  newline, but quoting on one costs nothing and removes the question.
+ *
+ *  `pilot_name`/`ranking_name`/`region`/`selection`/`nation` are copied
+ *  verbatim from civlcomps.org's own export (see module header) — a name
+ *  Excel/Sheets would read as a formula (leading `=`/`+`/`-`/`@`, or a tab/CR
+ *  that survives quoting) is prefixed with `'` before quoting, so opening this
+ *  attachment can never execute one. */
 function csvCell(value: unknown): string {
   const s = value === null || value === undefined ? "" : String(value);
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 export const civlRankingsRoutes = new Hono<HonoEnv>().get(

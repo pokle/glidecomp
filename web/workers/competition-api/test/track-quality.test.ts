@@ -1,8 +1,8 @@
 /**
  * Track data-quality on the read path: a tracklog that a HARD check withholds
- * (engine track-quality.ts, FAI S7A §4.4.2) must be kept out of scoring and
- * out of field analysis WITHOUT deleting the pilot from the results, and
- * without costing the rest of the field their points.
+ * (engine track-quality.ts, FAI S7A §4.4.2) must be kept out of scoring, out
+ * of field analysis and out of the 3D replay WITHOUT deleting the pilot from
+ * the results, and without costing the rest of the field their points.
  */
 import { env } from "cloudflare:test";
 import { describe, expect, test, beforeEach } from "vitest";
@@ -217,5 +217,80 @@ describe("the quality cache interlock", () => {
       "SELECT COUNT(*) AS n FROM track_analysis WHERE variant = 'quality'"
     ).first<{ n: number }>();
     expect(relearned!.n).toBe(3);
+  });
+});
+
+/**
+ * The replay is a visualisation of the day, so a track that is not this
+ * flight must not be drawn any more than it may be scored. It is not merely
+ * an extra dot: the packed bundle's bounds and clock come from the tracks in
+ * it, so ONE withheld track sets the whole scene's scale and the whole
+ * timeline. A real one (a New Zealand flight on a Corryong task, ten days
+ * off) took a task's scene extent to 2,225 km against a 28 km field and its
+ * replay clock to 243 hours against a 6-hour day — every pilot drawn into
+ * five pixels, on a scrubber where the task was 2% of the travel.
+ */
+describe("hard-failed tracks in the 3D replay bundle", () => {
+  /** `[uint32 LE manifestLen][manifest JSON][gzipped data]` — see visualization.ts. */
+  async function fetchManifest(compId: string, taskId: string) {
+    const res = await request("GET", `/api/comp/${compId}/task/${taskId}/3dvis`);
+    expect(res.status).toBe(200);
+    const buf = await res.arrayBuffer();
+    const len = new DataView(buf).getUint32(0, true);
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, len))) as {
+      t0: number;
+      t1: number;
+      pilots: { name: string }[];
+    };
+  }
+
+  test("the withheld track is not packed, and does not stretch the clock", async () => {
+    const withBad = await seedTask({ good: 2, bad: true });
+    // The verdict is learned on the scoring pass; the bundle reads it from D1.
+    await getFreshScores(`/api/comp/${withBad.compId}/task/${withBad.taskId}/score`);
+    const packed = await fetchManifest(withBad.compId, withBad.taskId);
+
+    expect(packed.pilots).toHaveLength(2);
+    // The decisive property: the clock spans one flying day, not the ten-day
+    // gap to the restamped track. Without the fix this is >200 hours.
+    expect((packed.t1 - packed.t0) / 3600).toBeLessThan(24);
+  });
+
+  test("the two good tracks pack identically with or without the bad one", async () => {
+    const withBad = await seedTask({ good: 2, bad: true });
+    await getFreshScores(`/api/comp/${withBad.compId}/task/${withBad.taskId}/score`);
+    const dirty = await fetchManifest(withBad.compId, withBad.taskId);
+
+    await clearCompData();
+    const listed = await env.R2.list();
+    await Promise.all(listed.objects.map((o) => env.R2.delete(o.key)));
+
+    const clean = await seedTask({ good: 2, bad: false });
+    await getFreshScores(`/api/comp/${clean.compId}/task/${clean.taskId}/score`);
+    const pure = await fetchManifest(clean.compId, clean.taskId);
+
+    // Same field, same clock: the withheld track changed nothing for anyone.
+    expect(dirty.pilots.map((p) => p.name)).toEqual(pure.pilots.map((p) => p.name));
+    expect(dirty.t1 - dirty.t0).toBe(pure.t1 - pure.t0);
+  });
+
+  // S7A §4.4.6: the organiser's call overrules the heuristic here too, and the
+  // cache key has to carry it or the bundle it was cut from would be served on.
+  test("a scorekeeper override puts the track back into the replay", async () => {
+    const { compId, taskId } = await seedTask({ good: 2, bad: true });
+    const before = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
+    expect(await fetchManifest(compId, taskId)).toHaveProperty("pilots.length", 2);
+
+    const withheld = before.classes
+      .find((c) => c.pilot_class === "open")!
+      .pilots.find((p) => p.track_excluded)!;
+    const res = await authRequest(
+      "PATCH",
+      `/api/comp/${compId}/task/${taskId}/igc/${withheld.comp_pilot_id}/quality-override`,
+      { quality_override: true }
+    );
+    expect(res.status).toBe(200);
+
+    expect(await fetchManifest(compId, taskId)).toHaveProperty("pilots.length", 3);
   });
 });

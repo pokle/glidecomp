@@ -1,6 +1,13 @@
 # Email Submission Specification
 
 > **Status:** Future Roadmap - Not yet implemented. This spec describes planned functionality for email-based IGC submission.
+>
+> **Note (2026-07-29):** the *inbound* half is still entirely unbuilt — there
+> is no `email_submission` table and no inbound email handler. The *outbound*
+> half no longer needs new infrastructure: transactional email now ships for
+> OTP sign-in via the Cloudflare Email Service `send_email` Workers binding
+> (`web/workers/auth-api/src/otp-email.ts`), so the confirmation emails this
+> spec describes can reuse that path rather than introducing a mail provider.
 
 ## Overview
 

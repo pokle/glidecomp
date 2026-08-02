@@ -145,6 +145,19 @@ describe("GET /api/civl-rankings.csv", () => {
     expect(lines[1]).toContain('"Daeyoun ""Dae"" Hwang"');
   });
 
+  test("guards a formula-looking name against CSV/DDE injection", async () => {
+    // civlcomps.org's export is copied verbatim (see module header) and this
+    // route is public/unauthenticated, so a name starting with =/+/-/@ must
+    // never reach the downloaded CSV unguarded — Excel/Sheets would read it
+    // as a formula the moment the file is opened.
+    await insert([
+      { slug: "hang-gliding-class-1-xc", date: "2026-07-01", rankingId: 1914, rank: 1, civlId: "1", name: "=SUM(A1:A9)" },
+    ]);
+    const { lines } = await dump();
+    const nameCell = lines[1].split(",")[8];
+    expect(nameCell).toBe("'=SUM(A1:A9)");
+  });
+
   test("keeps non-ASCII names intact", async () => {
     await insert([
       {

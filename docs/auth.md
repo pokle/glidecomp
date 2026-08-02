@@ -1,6 +1,9 @@
 # Authentication Architecture
 
-Google OAuth authentication for GlideComp using Better Auth, Hono, and Cloudflare D1.
+Authentication for GlideComp using Better Auth, Hono, and Cloudflare D1. Two
+sign-in methods run in production: **Google OAuth** and **passwordless email
+OTP** (a 6-digit code emailed to the address you type). Email+password exists
+only in local dev, to back the `dev-login` endpoint the e2e suite uses.
 
 ## Architecture
 
@@ -41,17 +44,69 @@ Legacy pre-derivation accounts may still have a null username; the SPA
 redirects those to /onboarding, and POST /api/auth/set-username lets a user
 change their handle. New sign-ups skip both.
 
+## Email OTP Flow
+
+Pilots who have no Google account (or don't want to use it) sign in with a
+one-time code. This is the Better Auth [`emailOTP`](https://www.better-auth.com/docs/plugins/email-otp)
+plugin, configured in `src/auth.ts` — 6-digit codes, `expiresIn: 600` (10
+minutes), 3 attempts per code, and `storeOTP: "hashed"` so the D1 row is
+useless if leaked. Full design and rationale: [2026-07-14-email-otp-signin-plan.md](./2026-07-14-email-otp-signin-plan.md).
+
+```
+1. User types their email on the sign-in page
+2. POST /api/auth/email-otp/send-verification-otp (Better Auth handler)
+3. The worker's sendVerificationOTP hook builds the message with
+   src/otp-email.ts and sends it via the Cloudflare Email Sending binding
+   (`[[send_email]] name = "EMAIL"` in wrangler.toml), off the response's
+   latency path with ctx.waitUntil
+4. User enters the 6 digits → POST /api/auth/sign-in/email-otp
+5. Better Auth creates/updates the user + session exactly as the OAuth flow
+   does — same auto-derived username hook, same session cookie
+```
+
+Only `type: "sign-in"` codes are ever sent; the plugin's password-reset and
+email-change endpoints are inert because `emailAndPassword` is disabled outside
+local dev. In local dev nothing is emailed at all — the code is logged and
+readable via `GET /api/auth/dev-last-otp`.
+
+**Rate limits** — three layers, with every constant in `src/rate-limit.ts` as
+the single source of truth (the API-key limit in the same file is quoted by
+`docs/api.md` and pinned by `e2e/api-doc.spec.ts`, so the doc can't drift from
+what the worker enforces):
+
+| Layer | Limit | Where |
+|-------|-------|-------|
+| Per-code attempts | 3 | `allowedAttempts` in the `emailOTP` plugin |
+| Per-IP sends | 3 / 60 s | Better Auth `customRules`, D1-backed (`rateLimit` table, migration 0017) |
+| Per-IP verifies | 5 / 60 s | as above |
+| Per-email sends | 5 / 15 min | `registerOtpEmailSend()` — silently drops past the cap, so it can't become an inbox-existence oracle |
+
+IP keying uses `cf-connecting-ip` (not the spoofable `x-forwarded-for`);
+`x-test-client-ip` is honoured **only** when `isLocalDev()`, so e2e runs get
+their own buckets.
+
+### Sessions
+
+60-day rolling sessions, refreshed at most daily (`session.expiresIn` /
+`updateAge` in `src/auth.ts`). Active users stay signed in indefinitely; idle
+sessions expire after 60 days. This applies to Google and email-OTP sign-ins
+alike.
+
 ## Components
 
 ### Auth Worker (`web/workers/auth-api/`)
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, and Better Auth catch-all |
-| `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, username field, auto-derive-username create hook |
+| `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, `/delete-account`, the dev-only endpoints, and the Better Auth catch-all |
+| `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, `emailOTP` + `apiKey` plugins, rate limits, 60-day rolling sessions, username field, auto-derive-username create hook, pilot bootstrap on sign-in |
+| `src/otp-email.ts` | Builds the sign-in OTP email (subject/HTML/text) for the Cloudflare Email Sending binding |
+| `src/rate-limit.ts` | Single source of truth for the API-key and email-OTP limits; per-email send throttle over the `rateLimit` table |
+| `src/pilot-bootstrap.ts` | On every sign-in, ensures the account's `pilot` row exists and claims email-matching unlinked pre-registrations |
 | `src/username.ts` | Slugify + derive a unique, format-valid username at sign-up |
-| `src/db/schema.sql` | D1 schema: `user`, `session`, `account`, `verification` tables |
-| `wrangler.toml` | D1 binding, route config, env vars |
+| `src/routes/preferences.ts` | `GET`/`PUT /api/auth/preferences` (per-user UI preferences) |
+| `web/db/migrations/` | D1 schema (shared with competition-api — see `migrations_dir` in `wrangler.toml`): `user`, `session`, `account`, `verification`, `apikey`, `rateLimit`, … |
+| `wrangler.toml` | D1 binding + `migrations_dir`, R2 binding, `send_email` binding, route config, env vars |
 
 ### Frontend Auth (`web/frontend/src/auth/`)
 
@@ -70,9 +125,20 @@ change their handle. New sign-ups skip both.
 
 | Method | Path | Auth Required | Description |
 |--------|------|---------------|-------------|
-| GET | `/api/auth/me` | No | Returns `{ user }` or `{ user: null }` |
+| GET | `/api/auth/me` | No | Returns `{ user }` or `{ user: null }`. Accepts a session cookie **or** an `x-api-key` |
 | POST | `/api/auth/set-username` | Yes | Sets username (3-20 chars, `[a-zA-Z0-9-]`) |
-| ALL | `/api/auth/*` | — | Better Auth handles sign-in, callback, sign-out, session |
+| GET | `/api/auth/preferences` | Yes | Read the caller's UI preferences (`src/routes/preferences.ts`) |
+| PUT | `/api/auth/preferences` | Yes | Update them |
+| POST | `/api/auth/delete-account` | Yes | Purges every R2 object under `u/{userId}/`, then deletes the `user` row (cascades to sessions, accounts, preferences, user tracks/tasks/annotations — see [database.md](database.md)) |
+| POST | `/api/auth/dev-login` | No | **Local dev only** (404s unless `isLocalDev()`). Signs up-or-in an email+password identity so e2e specs don't need Google |
+| GET | `/api/auth/dev-last-otp` | No | **Local dev only.** Returns the last sign-in OTP issued for an email, so local/e2e flows can complete OTP sign-in without a mailbox |
+| ALL | `/api/auth/*` | — | Better Auth handles OAuth sign-in/callback, email-OTP send + verify, sign-out, session, and API-key management |
+
+**API keys.** The Better Auth [`apiKey`](https://www.better-auth.com/docs/plugins/api-key)
+plugin issues `glc_`-prefixed keys (created under Settings → API keys). A key
+carries the permissions of the account that made it, is accepted anywhere a
+session cookie is (`enableSessionForAPIKeys`), and is rate-limited to the
+`API_KEY_RATE_LIMIT` in `src/rate-limit.ts`. See [api.md](api.md).
 
 ## Configuration
 
@@ -118,18 +184,22 @@ Set in `wrangler.toml` (production) or `.dev.vars` (local dev override):
 
 ### D1 Database
 
+The schema is not a single file — it is the numbered migrations in
+`web/db/migrations/`, shared with competition-api (`migrations_dir =
+"../../db/migrations"` in `wrangler.toml`). Apply them, don't execute a schema
+dump.
+
 ```bash
-cd web/workers/auth-api
-
 # Create database (only needed once)
-bun run wrangler d1 create taskscore-auth
-# Copy database_id into wrangler.toml
+bunx wrangler d1 create taskscore-auth
+# Copy database_id into web/workers/auth-api/wrangler.toml
 
-# Apply schema to remote (production)
-bun run wrangler d1 execute taskscore-auth --remote --file=src/db/schema.sql
+# Apply migrations to remote (production) — CI does this on every master deploy
+bunx wrangler --config web/workers/auth-api/wrangler.toml \
+  d1 migrations apply taskscore-auth --remote
 
-# Apply schema to local (development)
-bun run wrangler d1 execute taskscore-auth --local --file=src/db/schema.sql
+# Apply migrations to local dev state (what `bun run dev` uses)
+bun run db:migrate
 ```
 
 ### Node.js Compatibility
@@ -166,12 +236,14 @@ BETTER_AUTH_SECRET=your-random-secret
 BETTER_AUTH_URL=http://localhost:3000
 ```
 
-2. Apply the D1 schema locally:
+2. Apply the D1 migrations locally:
 
 ```bash
-cd web/workers/auth-api
-bun run wrangler d1 execute taskscore-auth --local --file=src/db/schema.sql
+bun run db:migrate
 ```
+
+(`bun run dev:workers` runs this for you before starting wrangler, so this step
+is only needed if you're driving the database on its own.)
 
 ## Tech Stack
 

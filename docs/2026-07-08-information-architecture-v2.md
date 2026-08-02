@@ -1,7 +1,8 @@
 # Information Architecture v2 — collapse the hierarchy around the comp page
 
 Date: 2026-07-08
-Status: proposed. Supersedes the navigation parts of
+Status: implemented (see the 2026-07-23 update below and the resolutions in
+§9). Supersedes the navigation parts of
 [information-architecture.md](./information-architecture.md) (2026-04-05);
 builds on [issue #277](https://github.com/pokle/glidecomp/issues/277) and the
 review comments there, and aligns with
@@ -31,8 +32,15 @@ review comments there, and aligns with
 >   "Manage pilots & tracks" section.
 > - Activity is a 3-entry digest ("Show all activity" expands); Admins is an
 >   "Organized by …" footnote (the `#admins` anchor survives). The section nav
->   is sticky. SSR covers **six** public pages (the four here plus
->   `/comp/:id/scores` and the task page).
+>   is sticky. SSR covers **eight** public pages — the authoritative list is
+>   the `ROUTES` table in `functions/comp/[[path]].ts`: `/comp`,
+>   `/comp/:id`, `/comp/:id/scores`, `/comp/:id/waypoints`,
+>   `/comp/:id/task/:id`, `/comp/:id/task/:id/pilot/:id`, and the two
+>   field-analysis reports `/comp/:id/analysis` and
+>   `/comp/:id/analysis/task/:id` (both went public and SSR'd later; a cold
+>   report server-renders its pending notice under `noindex` and the client
+>   polls). The admin-only `/comp/:id/pilots` roster and the superseded
+>   `/comp/:id/task/:id/analysis` redirect get a noindex SPA shell instead.
 
 **Scope guard: this is a navigation/IA change only.** No permission changes,
 no new backend capabilities (one small exception, §8). Everything public today
@@ -262,7 +270,9 @@ explainer page, onboarding, admin pages.
 ## 6. SSR alignment (J8)
 
 Identical to the SSR plan's four routes: `/`(already static), `/comp`,
-`/comp/:id`, explainer — plus the task workroom's public half if cheap. This
+`/comp/:id`, explainer — plus the task workroom's public half if cheap.
+(Shipped wider than this: eight `/comp` routes are server-rendered today —
+see the 2026-07-23 update at the top for the list.) This
 IA makes the plan's Phase-2 "scores move onto the comp page" flow change
 official. Sitemap/robots/meta per the plan's Phase 0. Test comps keep
 404-ing anonymously (SSR loaders forward cookies, per the plan).

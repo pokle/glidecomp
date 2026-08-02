@@ -1,6 +1,15 @@
 # Plan: faithful AirScore formula import + competition history back to 2020
 
-**Date:** 2026-07-21 · **Status:** workstreams 1–2 implemented (same PR); 3–4 in progress · **Context:** PR #398
+**Date:** 2026-07-21 · **Status:** workstreams 1–2 shipped (same PR); 3–4 in progress · **Context:** PR #398
+
+*Verified 2026-07-29: workstream 2 has landed — `'s7f2020'` is a live
+`LeadingWeightFormula` (`web/engine/src/gap-params.ts:157`), implemented in
+`gap-formulas.ts` and named in `score-explanation-sections.ts` and on the
+`/scoring/gap` page. It shipped behind the planned `SCORING_ENGINE_VERSION`
+bump; that constant has since advanced past this plan's v24 target to **29**
+through later scoring changes, so the v24 references below are the value at
+writing, not the current one. The WS3/WS4 status blocks are dated
+2026-07-21 and are left as the historical record.*
 
 PR #398 compared the GAP engine against the FAI S7F PDFs (2018/2020/2024
 editions) and the AirScore source ([biuti/airscore-app]) and documented the
@@ -273,8 +282,10 @@ reproducible.
 - Score explanation: wherever the weight formula is named
   (`score-explanation-sections.ts`, PilotScoreDetail) add the third name.
 - `/scoring/gap` doc: update the PG-weights table cell + the prose
-  subsection (both currently say "not implemented"), and the
-  leading-weight bullet list.
+  subsection (both said "not implemented" when this was written), and the
+  leading-weight bullet list. *(Done — `web/frontend/static/src/pages/
+  scoring/gap.astro` now names `s7f2020`; no "not implemented" text
+  survives on the scoring pages.)*
 - Tests: unit-test the exact weights at GR = 0, 0.3, 1.0 (expected DW at
   GR=1: 0.805 − 1.374 + 1.413 − 0.484 = 0.36); integration test that a PG
   field scored under `'s7f2020'` distributes 0.162·quality·1000 leading

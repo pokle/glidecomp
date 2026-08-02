@@ -1,11 +1,11 @@
 /**
- * Super-admin-only routes to inspect and reset the scoring stores: the
+ * Super-admin-only routes to inspect and reset the derived stores: the
  * materialized scores in D1 (`task_scores` + `track_analysis`, see
- * ../score-store.ts), the KV namespace (`glidecomp_scores_cache` — now only
- * 3dvis replay bundles plus any legacy score keys from the pre-D1 design),
- * and the AirScore proxy cache in the airscore-api worker, reached over the
- * AIRSCORE_API service binding. Gated by the same hardcoded allowlist as
- * ../admin.ts.
+ * ../score-store.ts), the search index (`search_doc`, see ../search-index.ts),
+ * the KV namespace (`glidecomp_scores_cache` — now only 3dvis replay bundles
+ * plus any legacy score keys from the pre-D1 design), and the AirScore proxy
+ * cache in the airscore-api worker, reached over the AIRSCORE_API service
+ * binding. Gated by the same hardcoded allowlist as ../admin.ts.
  *
  * "Clear" marks every task_scores row stale (inputs_rev + 1) so organic
  * traffic recomputes in the background — nothing goes slow. Pass ?hard=true
@@ -19,12 +19,23 @@ import type { Env, AuthUser } from "../env";
 import { requireAuth } from "../middleware/auth";
 import { isSuperAdmin } from "../super-admin";
 import { mapWithConcurrency } from "../scoring";
+import {
+  drainSearchIndex,
+  reindexAllSearchDocs,
+  searchIndexStats,
+} from "../search-index";
 
 type Variables = { user: AuthUser };
 type HonoEnv = { Bindings: Env; Variables: Variables };
 
 type CacheStats = { item_count: number; by_prefix: Record<string, number> };
 type NamespaceStats = CacheStats & { name: string };
+
+/** Reindex passes one admin request will wait for (40 documents each). A pass
+ *  is five small queries — 1000 documents measured at well under a second
+ *  against the seeded archive — so this is generous while staying far inside
+ *  the Worker's CPU ceiling. The rest is left queued. */
+const REINDEX_PASSES_PER_REQUEST = 100;
 
 const SCORE_CACHE_PREFIXES: Array<[string, string]> = [
   ["3dvis:", "3D replay bundles"],
@@ -144,11 +155,13 @@ export const cacheRoutes = new Hono<HonoEnv>()
     }
 
     const scoreStoreStats = await getScoreStoreStats(c.env.DB);
+    const searchStats = await searchIndexStats(c.env.DB);
     const kvStats = await getKvCacheStats(c.env.glidecomp_scores_cache);
     const airscoreStats = await getAirscoreCacheStats(c.env.AIRSCORE_API);
 
     const namespaces: NamespaceStats[] = [
       { name: "Materialized scores (D1)", ...scoreStoreStats },
+      { name: "Search index (D1)", ...searchStats },
       { name: "Score cache (KV)", ...kvStats },
     ];
     if (airscoreStats) {
@@ -210,4 +223,39 @@ export const cacheRoutes = new Hono<HonoEnv>()
       score_cache_cleared: kvCleared,
       airscore_cache_cleared: airscoreCleared,
     });
+  })
+
+  // ── POST /api/admin/search/reindex ── Rebuild every search document.
+  //
+  // The lever for "search is wrong and I don't know why". The nightly sweep
+  // only reindexes documents that LOOK out of date (missing, or behind the
+  // document-builder revision); this asks no questions.
+  //
+  // A database with more documents than one request should rebuild does not
+  // finish in one call, so the caller repeats with `?resume=true` — which
+  // drains what is already queued WITHOUT queueing everything again. Without
+  // that distinction a repeat call re-queues the whole database each time and
+  // `remaining` never reaches zero: it re-adds more than the call can drain.
+  // (Whatever is still queued when the admin stops asking is picked up by the
+  // hourly cron regardless.)
+  .post("/api/admin/search/reindex", requireAuth, async (c) => {
+    if (!isSuperAdmin(c.var.user)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const resume = c.req.query("resume") === "true";
+    const queued = resume ? 0 : await reindexAllSearchDocs(c.env.DB);
+    const rebuilt = await drainSearchIndex(c.env.DB, REINDEX_PASSES_PER_REQUEST);
+    const left = await c.env.DB.prepare(
+      "SELECT COUNT(*) AS cnt FROM search_dirty"
+    ).first<{ cnt: number }>();
+    const remaining = left?.cnt ?? 0;
+
+    console.log(
+      `[admin] ${c.var.user.email} rebuilt the search index` +
+        `${resume ? " (resumed)" : ""}: ${queued} documents queued, ` +
+        `${rebuilt} rebuilt, ${remaining} left for the cron`
+    );
+
+    return c.json({ queued, rebuilt, remaining });
   });

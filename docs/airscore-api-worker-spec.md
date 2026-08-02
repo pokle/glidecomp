@@ -135,6 +135,14 @@ Fetches raw IGC track file.
 
 Health check endpoint returning worker info and available endpoints.
 
+### GET /internal/cache/stats · POST /internal/cache/clear
+
+Cache administration: item counts, and a full flush of the KV namespace. Both
+sit **outside** the `/api/airscore/*` route pattern, so they are unreachable
+from the internet — competition-api calls them over its service binding, behind
+the super-admin-gated `/api/admin/cache` endpoints that back the admin cache
+page.
+
 ### Error Responses
 
 All errors return JSON:
@@ -146,6 +154,7 @@ All errors return JSON:
 |------|-------------|-------|
 | `MISSING_PARAMS` | 400 | Required parameter not provided |
 | `INVALID_PARAMS` | 400 | Parameter format invalid |
+| `METHOD_NOT_ALLOWED` | 405 | Anything but `GET` (or the `OPTIONS` preflight, and the internal cache-clear `POST`) |
 | `UPSTREAM_ERROR` | 502 | AirScore API returned error |
 | `INVALID_TRACK` | 502 | Track data not valid IGC |
 | `NOT_FOUND` | 404 | Unknown endpoint |
@@ -153,9 +162,19 @@ All errors return JSON:
 
 ## Frontend Integration
 
-The frontend client (`web/frontend/src/analysis/airscore-client.ts`) automatically detects environment:
-- **localhost** → `http://localhost:8787` (local worker)
-- **production** → `/api/airscore` (proxied through Pages)
+The frontend client (`web/frontend/src/analysis/airscore-client.ts`) does no
+environment detection — the base URL is `import.meta.env.VITE_AIRSCORE_URL ||
+'/api/airscore'`, i.e. same-origin unless you override it. Nothing addresses
+the worker's own port any more: in local dev all the Workers share one wrangler
+session and Vite proxies `/api` to the `dev-router` Worker, which dispatches
+over a service binding.
+
+**Known gap.** Unlike auth-api and competition-api, this worker has **no**
+Pages Function proxy — there is no `functions/api/airscore/` directory and no
+`AIRSCORE_API` binding in the root `wrangler.toml`. The same-origin path is
+therefore served only where the zone route below applies, and 404s anywhere it
+doesn't: `*.glidecomp.pages.dev` branch previews and `bun run
+preview:container`. Adding the proxy file fixes both at once.
 
 ## Deployment
 
@@ -178,11 +197,19 @@ bun run deploy
 
 ### Production Routing
 
-Options for routing `glidecomp.com/api/airscore/*` to the worker:
+Decided and live: a **Worker route** on the `glidecomp.com` zone, declared in
+`web/workers/airscore-api/wrangler.toml`.
 
-1. **Worker routes** - Configure in `wrangler.toml`
-2. **Pages Functions** - Proxy from Pages to Worker
-3. **Separate subdomain** - `api.glidecomp.com`
+```toml
+[[routes]]
+pattern = "glidecomp.com/api/airscore/*"
+zone_name = "glidecomp.com"
+```
+
+The two alternatives once considered are not in use — there is no Pages
+Function proxy (see the known gap under Frontend Integration) and no
+`api.glidecomp.com` subdomain. Deploys happen from `master` only; the branch
+Pages deploys don't touch Workers.
 
 ## Security Considerations
 
@@ -213,6 +240,7 @@ Options for routing `glidecomp.com/api/airscore/*` to the worker:
 | `web/workers/airscore-api/src/cache.ts` | KV caching utilities |
 | `web/workers/airscore-api/src/handlers/task.ts` | Task endpoint handler |
 | `web/workers/airscore-api/src/handlers/track.ts` | Track endpoint handler |
+| `web/workers/airscore-api/src/handlers/track.test.ts` | Tests for the track handler |
 | `web/workers/airscore-api/src/transforms/task.ts` | AirScore → XCTask transformation |
 | `web/workers/airscore-api/src/transforms/pilots.ts` | HTML parsing for pilot data |
 | `web/frontend/src/analysis/airscore-client.ts` | Frontend API client |

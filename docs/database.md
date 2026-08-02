@@ -81,6 +81,43 @@ The token must have **Account / D1 / Edit** permission. Without it, migration co
 
 If the token is rotated or recreated, ensure D1 Edit is included alongside Workers Scripts Edit and Cloudflare Pages Edit.
 
+## Tables
+
+Grouped by what owns them. Migration numbers are given where a table arrived
+after the initial schema.
+
+| Group | Tables |
+|-------|--------|
+| Auth (Better Auth) | `user`, `session`, `account`, `verification`, `apikey` (0002), `rateLimit` (0017 — the D1-backed request limiter; in-memory counters reset with every workerd isolate) |
+| Competition | `pilot`, `comp`, `comp_admin`, `comp_pilot`, `comp_waypoints` (0015), `task`, `task_class`, `task_track`, `task_manual_flight` (0014), `task_pilot_status` (0006), `audit_log` (0005) |
+| Derived, stale-first | `task_scores` (0012), `track_analysis` (0012), `task_field_analysis` (0019), `task_weather` (0023) |
+| Derived, trigger-fed | `search_doc` + `search_fts` + `search_dirty` (0026) — the site search index. The only derived store that maintains itself: SQL triggers queue the changed keys, so no route handler calls it. See [2026-08-01-site-search.md](2026-08-01-site-search.md) |
+| Rankings | `pilot_ranking` (0025) — the FAI/CIVL monthly world ranking; deliberately standalone, no FK to `pilot`/`comp_pilot`. See [civl-rankings.md](civl-rankings.md) |
+| User files | `user_preferences` (0007), `user_track`, `user_task`, `user_annotation` (0008) |
+
 ## Schema History
 
-- **2026-03-14** — Applied initial schema to remote D1
+`web/db/migrations/` is the source of truth — every applied change is a
+numbered file there, and `wrangler d1 migrations apply` tracks what has run.
+Read the directory rather than a hand-kept changelog; this list is only a map
+of the notable ones.
+
+| Migration | What it did |
+|-----------|-------------|
+| `0001_auth_init` / `0001_comp_init` | The initial auth and competition schemas (applied to remote D1 on 2026-03-14) |
+| `0002_apikey` | Better Auth API keys (`glc_` prefixed) |
+| `0003_drop_flight_data` | Removed the per-track preprocessed `flight_data` column — scoring reads the IGC files instead |
+| `0005_pilot_management_and_audit` | Pilot pre-registration fields + the public `audit_log` |
+| `0009_comp_scoring_format` | `gap` vs `open_distance` per comp |
+| `0012_task_scores` | Stale-first materialized scores + per-track analyses ([plan](score-caching-stale-first-plan.md)) |
+| `0014_manual_flights` | Manual flight reports for track-less pilots (supersede, never delete) |
+| `0015_comp_waypoints` | The comp's region waypoint file |
+| `0017_rate_limit` | Persistent rate-limit buckets, for the email-OTP sign-in limits |
+| `0018_task_stop` | Stopped tasks (`stop_announcement_time`, FAI S7F §12.3) |
+| `0019_task_field_analysis` | Stale-first store for the behavioural-metric reports |
+| `0021_task_gap_params` | Per-task GAP parameters, merged over the comp's (imported AirScore comps publish a different formula per task) |
+| `0022_comp_series_scoring` | FTV series scoring (`series_scoring`, `ftv_factor`) |
+| `0023_task_weather` | Cached task weather, invalidated by query key rather than `inputs_rev` |
+| `0024_track_quality_override` | The organiser's per-track override of a track-quality verdict (S7A §4.4.6) |
+| `0025_pilot_ranking` | CIVL world rankings import |
+| `0026_search_index` | FTS5 site search over comps, tasks (with their routes) and pilots, kept current by triggers |

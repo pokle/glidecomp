@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captionText } from "./RankScatter";
+import { axisTitleFor, captionText } from "./RankScatter";
 import { notableExcludedRanks } from "../exclusions";
 import type { MetricReport, MetricCorrelation, MetricDirection } from "../types";
 
@@ -79,19 +79,19 @@ describe("captionText", () => {
   });
   it("says why no curve is drawn when ρ is within noise", () => {
     const text = captionText(metric("higher", -0.2, "within noise"), 0);
-    expect(text).toContain("No trend curve is drawn");
+    expect(text).toContain("There is no trend curve");
     expect(text).toContain("does not clear the noise floor");
   });
   it("says why no curve is drawn when n is too small", () => {
     expect(captionText(metric("higher", -0.9, "n too small"), 0)).toContain(
-      "too few pilots to fit one that would mean anything"
+      "Too few pilots have a value to fit one that means anything"
     );
   });
   it("stays silent about the curve when one is drawn for a real correlation", () => {
     // A trend was fitted and passed in — no "no curve" apology anywhere.
     expect(
       captionText(metric("higher", -0.6), 0, [], { startRank: 3, endRank: 17 })
-    ).not.toContain("No trend curve");
+    ).not.toContain("no trend curve");
   });
   it("names top-ranked pilots among the excluded", () => {
     // The Corryong 2026 T1 case: gaggle.departure_winrate null for the #1
@@ -129,5 +129,31 @@ describe("notableExcludedRanks", () => {
   it("empty when the top ranks all have values", () => {
     const perPilot = pilots.map((p) => ({ trackFile: p.trackFile, value: 1 }));
     expect(notableExcludedRanks(pilots, perPilot)).toEqual([]);
+  });
+});
+
+describe("axisTitleFor", () => {
+  // The x axis names the metric AND the unit it is measured in — the caption
+  // used to be the only place either was stated.
+  it("names the metric and spells its unit out in words", () => {
+    expect(axisTitleFor({ label: "Gliding speed between climbs", unit: "km/h" })).toBe(
+      "Gliding speed between climbs (kilometres per hour)"
+    );
+  });
+  it("converted display units come through as themselves", () => {
+    expect(axisTitleFor({ label: "Climb rate", unit: "fpm" })).toBe(
+      "Climb rate (feet per minute)"
+    );
+  });
+  // 'count' and 'ratio' are the engine's two unitless tokens — formatTickValue
+  // leaves their ticks bare for the same reason, and "(count)" would be noise
+  // dressed as information.
+  it("unitless metrics get no parenthetical", () => {
+    expect(axisTitleFor({ label: "Thermals connected with", unit: "count" })).toBe(
+      "Thermals connected with"
+    );
+    expect(axisTitleFor({ label: "Track efficiency", unit: "ratio" })).toBe(
+      "Track efficiency"
+    );
   });
 });

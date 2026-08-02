@@ -52,6 +52,8 @@ export interface Backend {
    * framing). Must be called before mount().
    */
   setInitialView(view: ViewState): void;
+  /** Jump the mounted camera to a pose (the thermal deep link / drawer). */
+  flyTo(view: ViewState): void;
   /** Spin the view so north is up, keeping zoom/pitch and any active follow. */
   faceNorth(): void;
   /** Orient straight down (north up), keeping any active follow. */

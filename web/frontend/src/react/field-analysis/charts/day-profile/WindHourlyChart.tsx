@@ -19,6 +19,7 @@ import { unitDisplay } from "../../units";
 import { formatTickValue, linearScale, niceTicks } from "../chart-utils";
 import type { TimeAxis } from "./time-axis";
 import { TimeGridColumns, TimeTickLabels } from "./TimeAxisParts";
+import { ChartTitle } from "@/react/charts/AxisTitle";
 import {
   PLOT_LEFT,
   PLOT_RIGHT,
@@ -29,9 +30,13 @@ import {
 } from "./shared";
 
 const HOUR_MS = 3_600_000;
-const H = 168;
-const LANE_Y = 14; // direction-arrow lane centreline
-const PLOT = { top: 30, bottom: H - 26 };
+// The lane and the plot sit 14 lower than they used to, and H grew with them,
+// to clear the chart title above — the same headroom MetWindChart has always
+// had for "Weather: wind". Without it the title printed straight through the
+// "direction" lane label.
+const H = 182;
+const LANE_Y = 28; // direction-arrow lane centreline
+const PLOT = { top: 44, bottom: H - 26 };
 const TICK_LABEL_Y = H - 10;
 
 export function WindHourlyChart({
@@ -90,6 +95,14 @@ export function WindHourlyChart({
       }
       onMouseLeave={() => setReadout(null)}
     >
+      {/* Named in-plot, the way every modelled chart in the same stack is
+          (MetWindChart's "Weather: wind"). Without it a reader scrolling the
+          stack had no way to tell this chart's quantity from the one above
+          it — only its y-tick units. */}
+      <ChartTitle x={PLOT_LEFT - 38} y={12}>
+        From tracks: wind
+      </ChartTitle>
+
       <TimeGridColumns axis={axis} top={PLOT.top} bottom={PLOT.bottom} />
       {yTicks.map((t) => (
         <line

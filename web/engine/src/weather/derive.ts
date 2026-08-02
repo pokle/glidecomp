@@ -105,3 +105,52 @@ export function flyingHeightLevel(
   const base = terrainElevationM ?? 0;
   return levelNearestHeight(levels, base + aboveGroundM);
 }
+
+/**
+ * Vector-interpolate an hour's level winds to a height AMSL — the model's
+ * wind at a specific altitude, for comparing against a wind measured from
+ * tracks at that altitude (the thermal-shape cross-check).
+ *
+ * Interpolation happens on the u/v components, not on speed and direction
+ * separately: two levels 40° apart average to the vector between them, where
+ * a naive direction average through north would swing the wrong way.
+ *
+ * Heights outside the column clamp to the nearest level rather than
+ * extrapolating — the column's ends are real readings; a projected gradient
+ * past them is not. Null when the hour carries no usable levels.
+ */
+export function windAtHeight(
+  levels: readonly WeatherLevel[],
+  heightM: number
+): { directionDeg: number; speedKmh: number } | null {
+  const usable = levels.filter(
+    (l): l is WeatherLevel & { windDirectionDeg: number; windSpeedKmh: number } =>
+      l.windDirectionDeg !== null && l.windSpeedKmh !== null
+  );
+  if (usable.length === 0) return null;
+  const sorted = [...usable].sort((a, b) => a.heightM - b.heightM);
+  const toVec = (l: { windDirectionDeg: number; windSpeedKmh: number }) => {
+    const rad = (l.windDirectionDeg * Math.PI) / 180;
+    return { u: l.windSpeedKmh * Math.sin(rad), v: l.windSpeedKmh * Math.cos(rad) };
+  };
+  let u: number;
+  let v: number;
+  if (heightM <= sorted[0].heightM) {
+    ({ u, v } = toVec(sorted[0]));
+  } else if (heightM >= sorted[sorted.length - 1].heightM) {
+    ({ u, v } = toVec(sorted[sorted.length - 1]));
+  } else {
+    let i = 1;
+    while (sorted[i].heightM < heightM) i++;
+    const lo = sorted[i - 1];
+    const hi = sorted[i];
+    const t = (heightM - lo.heightM) / (hi.heightM - lo.heightM);
+    const a = toVec(lo);
+    const b = toVec(hi);
+    u = a.u + (b.u - a.u) * t;
+    v = a.v + (b.v - a.v) * t;
+  }
+  const speedKmh = Math.hypot(u, v);
+  const directionDeg = ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
+  return { directionDeg, speedKmh };
+}

@@ -415,12 +415,36 @@ export interface FieldAnalysisBasis {
   analysisWindow?: { from: string; to: string };
 }
 
+/**
+ * The task's reconstructed thermals — shape summaries (no point clouds) of
+ * every shared thermal enough pilots climbed in to measure. See
+ * thermal-shape.ts for what a summary carries and how it is measured.
+ */
+export interface FieldThermalsSummary {
+  /**
+   * Chronological. Only shapes with ≥ 2 pilots and ≥ 3 altitude bands —
+   * below that there is no cross-pilot structure worth drawing — and capped
+   * by pilot count so one task cannot balloon the stored report.
+   */
+  shapes: import('./thermal-shape').ThermalShapeSummary[];
+  /** How many qualifying shapes existed before the cap; equal to
+   * shapes.length when nothing was dropped. The UI must say when it is
+   * showing fewer than existed — no silent caps. */
+  totalShapeCount: number;
+}
+
 export interface FieldAnalysisReport {
   basis: FieldAnalysisBasis;
   /** Rank order — every perPilot array is aligned to this. */
   pilots: { trackFile: string; pilotName: string; rank: number }[];
   /** Registry order. */
   metrics: MetricReport[];
+  /**
+   * Optional: added in FIELD_ANALYSIS_VERSION 20, and stored reports from
+   * before it are served stale while they revalidate — consumers must
+   * render without it.
+   */
+  thermals?: FieldThermalsSummary;
 }
 
 // ---------------------------------------------------------------------------

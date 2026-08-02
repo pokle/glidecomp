@@ -9,6 +9,11 @@ of the previous task's scores) is a separate, later piece of work; see
 `docs/competition-spec.md` Iteration 10 and the prior implementation in
 [pokle/taskmaster](https://github.com/pokle/taskmaster).
 
+**This is not competition data**, so — like `task_weather` — the import takes
+neither an `audit()` call nor a `bumpScoreInputs()` bump. A world ranking cannot
+change a task score. It is the standing exception, alongside weather, to the two
+"part of done" rules in CLAUDE.md.
+
 | | |
 |---|---|
 | Source | https://civlcomps.org/rankings — 10 lists, one per discipline |

@@ -26,6 +26,7 @@ export type {
   FieldAnalysisBasis,
   FieldAirtimeSplit,
   FieldAnalysisReport,
+  FieldThermalsSummary,
   CompTaskResult,
   CompMetricAggregate,
   CompAggregateReport,
@@ -36,9 +37,26 @@ export { buildFieldContext, airborneSeconds, type BuildFieldContextOptions } fro
 export { buildTimeGrid, sampleAt, stepFor, type ResampledSample, type ResampledTrack, type TimeGrid } from './resample';
 export { clusterSharedThermals, DEFAULT_SHARED_THERMAL_OPTIONS, type SharedThermal, type SharedThermalOptions, type ThermalUse } from './shared-thermals';
 export { partitionPhases, DEFAULT_PHASE_OPTIONS, type FlightPhase, type PhaseInterval, type PhasePartitionOptions } from './phase-partition';
+export {
+  extractThermalShapes,
+  extractThermalShape,
+  summariseThermalShape,
+  DEFAULT_THERMAL_SHAPE_OPTIONS,
+  type ThermalShapeSummary,
+  type ThermalShape,
+  type ThermalShapeBand,
+  type ThermalShapePilot,
+  type ThermalPilotClimb,
+  type ThermalShapeOptions,
+  type ThermalSample,
+  type ThermalSectorStat,
+  type ThermalSubCore,
+  type ThermalLean,
+  type ThermalWindEstimate,
+} from './thermal-shape';
 export { estimateWorkingBand, type WorkingBand, type WorkingBandHour } from './working-band';
 export { percentile, median, mean, rankWithTies, spearman, circularMeanWind, type WindSample, type MeanWind } from './stats';
-export { evaluateField, MIN_CORRELATION_N } from './evaluate';
+export { evaluateField, MIN_CORRELATION_N, MAX_THERMAL_SHAPES } from './evaluate';
 export {
   clusterPilotStyles,
   MIN_CLUSTER_PILOTS,

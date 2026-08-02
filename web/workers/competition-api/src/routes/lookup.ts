@@ -25,7 +25,13 @@ import { Hono } from "hono";
 import type { Env, AuthUser } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { optionalAuth } from "../middleware/auth";
-import { isSuperAdmin } from "../super-admin";
+import { visibleCompsFilter } from "../comp-visibility";
+import { searchTokens } from "../search-terms";
+
+// Re-exported because this endpoint's own tests (and its history) know the
+// tokeniser by this name. It is shared with /api/comp/search — see
+// ../search-terms.ts for why the two must agree.
+export { searchTokens };
 
 type Variables = { user: AuthUser | null };
 type HonoEnv = { Bindings: Env; Variables: Variables };
@@ -36,14 +42,6 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
 // links, and a "did you mean" that trawls the whole database to offer twenty
 // guesses is both worse UX and a free query amplifier.
 
-/** Longest search text accepted per field; anything beyond is truncated. */
-const MAX_TERM_CHARS = 120;
-/** Most words used from one field. Extra words are dropped, not ANDed in. */
-const MAX_TOKENS = 5;
-/** A single letter matches almost everything, so it is not a search term.
- *  A single DIGIT is (see searchTokens) — it is what separates Task 1 from
- *  Task 2, the commonest thing anyone looks up. */
-const MIN_TOKEN_CHARS = 2;
 /** Competitions returned, and the number we drill into for tasks/pilots. */
 const MAX_COMPS = 5;
 const MAX_TASKS = 10;
@@ -77,29 +75,6 @@ interface PilotHit {
 }
 
 /**
- * Split search text into the words we match on: lowercased, alphanumeric,
- * capped in both length and count. A slug arrives here as "corryong-cup-2026"
- * and a typed query as "corryong cup 2026"; both reduce to the same words,
- * which is the whole point — the caller needn't know which it holds.
- *
- * One-character words are dropped unless they are digits. "a" narrows nothing,
- * but the "1" in `task-1-open` is the entire difference between Task 1 and
- * Task 2 — drop it and every task in the comp comes back as an equal match.
- *
- * Splitting on non-alphanumerics also means a LIKE wildcard can never survive
- * into a token; likePattern escapes them anyway, as the second of two barriers.
- */
-export function searchTokens(raw: string | undefined): string[] {
-  if (!raw) return [];
-  return raw
-    .slice(0, MAX_TERM_CHARS)
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= MIN_TOKEN_CHARS || /^[0-9]$/.test(t))
-    .slice(0, MAX_TOKENS);
-}
-
-/**
  * A token as a LIKE pattern. `%` and `_` are wildcards and `\` is our escape
  * character, so all three are escaped — otherwise a query of "%" would ask for
  * a full scan of every name in the database.
@@ -116,31 +91,6 @@ function nameFilter(
   return {
     sql: tokens.map(() => `${column} LIKE ? ESCAPE '\\'`).join(" AND "),
     binds: tokens.map(likePattern),
-  };
-}
-
-/**
- * SQL that restricts a query to the comps this caller may see, plus its binds.
- * Mirrors the comp routes: everything non-`test`, plus the `test` comps the
- * caller administers (all of them, for a super admin).
- */
-async function visibleCompsFilter(
-  db: D1Database,
-  user: AuthUser | null,
-  compColumn: string
-): Promise<{ sql: string; binds: unknown[] }> {
-  if (isSuperAdmin(user)) return { sql: "1 = 1", binds: [] };
-  if (!user) return { sql: `${compColumn}.test = 0`, binds: [] };
-  const rows = await db
-    .prepare("SELECT comp_id FROM comp_admin WHERE user_id = ?")
-    .bind(user.id)
-    .all<{ comp_id: number }>();
-  const ids = rows.results.map((r) => r.comp_id);
-  if (ids.length === 0) return { sql: `${compColumn}.test = 0`, binds: [] };
-  const placeholders = ids.map(() => "?").join(",");
-  return {
-    sql: `(${compColumn}.test = 0 OR ${compColumn}.comp_id IN (${placeholders}))`,
-    binds: ids,
   };
 }
 

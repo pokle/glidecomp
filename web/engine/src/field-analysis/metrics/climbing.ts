@@ -36,12 +36,13 @@ const sharedPercentile: MetricComputer = {
   family: 'climbing',
   direction: 'higher',
   explanation:
-    'When this pilot and others were in the SAME thermal, who climbed faster? In every thermal ' +
-    'two or more pilots used, each use is ranked by average climb rate; a use’s percentile is ' +
-    'the share of strictly slower uses. The value is the duration-weighted mean percentile over ' +
-    'the pilot’s shared climbs. 50% is dead average; 80% means they out-climbed four in five of ' +
-    'the pilots they shared lift with. Sharing the thermal is what isolates centring skill from ' +
-    'thermal selection — a pilot who simply picked better air scores no higher here.',
+    'When this pilot and other pilots were in the SAME thermal, who climbed faster? In every ' +
+    'thermal that two pilots or more used, we rank each use by its average climb rate. The ' +
+    'percentile of a use is the share of uses that were strictly slower. The value is the ' +
+    'duration-weighted mean percentile over the shared climbs of the pilot. 50% is exactly ' +
+    'average. 80% means they climbed faster than four in five of the pilots they shared lift ' +
+    'with. The shared thermal is what separates centring skill from thermal selection: a pilot ' +
+    'who only found better air gets no higher value here.',
   compute(field) {
     const n = field.pilots.length;
     const weightedSum = new Array<number>(n).fill(0);
@@ -123,16 +124,17 @@ function timeToCoreSeconds(fixes: IGCFix[], seg: ThermalSegment): number | null 
 
 const timeToCore: MetricComputer = {
   id: 'climb.time_to_core',
-  label: 'Time to find the core of a thermal',
+  label: 'Time to core thermals',
   shortLabel: 'Core s',
   unit: 's',
   family: 'climbing',
   direction: 'lower',
   explanation:
-    'How long it takes the pilot to get into the best lift after arriving in a thermal. For ' +
-    'each thermal of at least 60 s, the seconds from entering until the 30 s rolling climb rate ' +
-    'first reaches 90% of its peak in that thermal; the value is the median across the pilot’s ' +
-    'thermals. Every second here is spent climbing slower than the thermal could carry them.',
+    'How long the pilot takes to get into the best lift after they arrive in a thermal. For ' +
+    'each thermal of 60 s or more, we measure the seconds from the entry until the 30 s rolling ' +
+    'climb rate first reaches 90% of its peak in that thermal. The value is the median across ' +
+    'the thermals of the pilot. Every second here is a second spent climbing slower than the ' +
+    'thermal can carry them.',
   compute(field) {
     return {
       perPilot: field.pilots.map((p): PilotMetricValue => {
@@ -176,19 +178,19 @@ function exitDecayRate(fixes: IGCFix[], seg: ThermalSegment): number | null {
 
 const exitDecay: MetricComputer = {
   id: 'climb.exit_decay',
-  label: 'Leaving good lift vs milking it until it dies',
+  label: 'Climb rate at thermal exit',
   shortLabel: 'LeaveRate',
   unit: 'm/s',
   family: 'climbing',
   direction: 'neutral',
   explanation:
-    'The climb rate the pilot walked away from. For each thermal of at least 90 s, the climb ' +
-    'rate over its final 30 s — the "give-up rate" — and the value is the median. High means ' +
-    'they leave lift that is still working and go; low means they ride climbs until nothing is ' +
-    'left. Read it against the day: this is an absolute rate, so compare it with the median ' +
-    'climb in "How strong the day’s climbs were" — leaving at 1.5 m/s is walking away from a ' +
-    'good climb on a 1 m/s day and scraping the bottom of a 4 m/s one. No expected direction: ' +
-    'the correlation sign says which paid on this task.',
+    'The median climb rate that the pilot left thermals at. For each thermal of 90 s or more, we take the climb ' +
+    'rate over its final 30 s. A high value means they leave lift that still works. ' +
+    'A low value means they stay in a climb until nothing is left. ' +
+    'This is an absolute rate, so read it against the day: compare it with the ' +
+    'median climb in "How strong the day’s climbs were". A pilot who leaves at 1.5 m/s leaves a ' +
+    'good climb on a 1 m/s day, and takes the worst lift available on a 4 m/s day. There is no ' +
+    'expected direction. The sign of the correlation says which behaviour paid on this task.',
   compute(field) {
     return {
       perPilot: field.pilots.map((p): PilotMetricValue => {
@@ -224,11 +226,12 @@ const selectivity: MetricComputer = {
   family: 'climbing',
   direction: 'neutral',
   explanation:
-    'How fussy the pilot is about what they stop for. Circling bouts of at least 30 s after the ' +
-    'start count as lift the pilot sampled; one that overlaps a detected thermal was kept, ' +
-    'otherwise they turned a few circles and left it. The value is the percentage kept — low ' +
-    'means choosy, high means they take almost everything they turn in. No expected direction: ' +
-    'being picky wins on a strong day and wastes a weak one.',
+    'How selective the pilot is about the lift they stop for. Each period of circling of 30 s ' +
+    'or more after the start counts as lift that the pilot sampled. If the period overlaps a ' +
+    'detected thermal, the pilot kept that lift. If it does not, they turned a few circles and ' +
+    'left it. The value is the percentage kept. A low value means they are selective. A high ' +
+    'value means they keep almost every climb they turn in. There is no expected direction: ' +
+    'selection wins on a strong day and wastes time on a weak one.',
   compute(field) {
     // hour bucket (epoch ms) → per-pilot acceptance percentages in that hour.
     const hourly = new Map<number, number[]>();
@@ -313,16 +316,17 @@ const ON_COURSE_FIX_STRIDE = 5;
 
 const departureBand: MetricComputer = {
   id: 'climb.departure_band',
-  label: 'How high in the day’s band each climb was topped out',
+  label: 'How much of the thermal the pilot climbed before leaving it',
   shortLabel: 'TopOut%',
   unit: 'pct',
   family: 'climbing',
   direction: 'neutral',
   explanation:
-    'Does the pilot top out every climb, or leave with lift still above them? The altitude at ' +
-    'which they left each thermal after the start, as a percentage of the day’s working band — ' +
-    '0% is the field’s floor, 100% its ceiling — and the value is the median. No expected ' +
-    'direction: topping out buys margin, leaving early buys time.',
+    'Does the pilot climb to the top of every thermal, or leave with lift still above them? We ' +
+    'take the altitude where they left each thermal after the start, as a percentage of the ' +
+    'day’s working band. 0% is the floor of the field and 100% is its ceiling. The value is the ' +
+    'median. There is no expected direction: a climb to the top buys height in reserve, and an ' +
+    'early departure buys time.',
   compute(field) {
     const band = field.workingBand;
 
@@ -379,10 +383,10 @@ const circleSmoothness: MetricComputer = {
   family: 'climbing',
   direction: 'lower',
   explanation:
-    'Whether the pilot flies clean, repeatable circles or wanders around the thermal. Each ' +
-    'detected circle is least-squares fitted; its RMS fit error divided by the fitted radius ' +
-    'measures how round the turn really was, and the value is the median over all the pilot’s ' +
-    'circles. Lower means smoother, more consistent turning.',
+    'Whether the pilot flies clean, repeatable circles, or moves around the thermal. We fit ' +
+    'each detected circle by least squares. The RMS fit error divided by the fitted radius ' +
+    'measures how round the turn was. The value is the median over all of the circles of the ' +
+    'pilot. A lower value means smoother and more consistent turns.',
   compute(field) {
     let fieldLeft = 0;
     let fieldTotal = 0;

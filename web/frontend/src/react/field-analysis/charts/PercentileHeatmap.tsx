@@ -226,6 +226,24 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
           setHighlight(null);
         }}
       >
+        {/* The two axes, named. Both are SORTED — pilots by placing, columns
+            by how much each behaviour went with the placings — and that
+            ordering is the whole reading of the picture, but nothing on the
+            chart said so: it lived six sentences into the caption. */}
+        <div style={gridTemplate} aria-hidden>
+          {/* Kept short deliberately: the row column is 7–10rem and the
+              caption below carries the full account of both orderings. */}
+          <div className="truncate pr-2 text-right text-[10px] font-medium text-muted-foreground">
+            pilots, best first ↓
+          </div>
+          <div
+            style={{ gridColumn: `span ${metricCount}` }}
+            className="truncate text-[10px] font-medium text-muted-foreground"
+          >
+            behaviours, most explanatory first →
+          </div>
+        </div>
+
         {/* How much pattern each stretch of columns holds — the ruler the
             sorted order needs. Replaced the metric-family band, which grouped
             by something this chart isn't asking about. */}
@@ -300,18 +318,20 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
       </p>
 
       <figcaption className="text-xs text-muted-foreground">
-        Pilots in rank order against every behaviour: darker = a better
-        percentile in this field (empty = not applicable). Columns run from the
-        behaviours whose better end went with better placings, through the ones
-        that separated nobody, to the ones that ran the other way — so a field
-        separated by something shades dark in the top-left corner, and a field
-        where everyone won differently doesn't. The band above rates how much
-        pattern each stretch of columns holds — a <strong>clear</strong>,{" "}
+        The pilots in rank order against every behaviour. A darker cell is a
+        better percentile in this field, and an empty cell is a behaviour that
+        does not apply. The columns start with the behaviours whose better end
+        went with better places, continue through the behaviours that separated
+        nobody, and end with the behaviours that ran the other way. A field
+        that one behaviour separated therefore shades dark in the top-left
+        corner, and a field where each pilot won differently does not. The band
+        above rates how much pattern each group of columns holds: a{" "}
+        <strong>clear</strong>,{" "}
         <strong>some</strong> or <strong>faint</strong> pattern,{" "}
         <strong>noise</strong> (could be chance), or <strong>too few</strong>{" "}
         pilots to tell. The family sections below carry the exact values.
         {hasNeutral
-          ? " † No good/bad direction — shade is position in the field, not quality."
+          ? " † This behaviour has no good or bad direction. The shade is the position in the field, and not the quality."
           : null}
       </figcaption>
     </figure>

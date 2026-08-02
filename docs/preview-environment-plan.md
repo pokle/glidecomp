@@ -14,11 +14,20 @@ Cloudflare infrastructure, with production code, routes, and data untouchable.
   hard-code production routes (`glidecomp.com/api/...`) and production data
   bindings (D1 `taskscore-auth`, R2 `glidecomp`), so even a renamed worker would
   still touch production data.
-- `branch-deploy.yml` already gives every non-master branch a public Pages
-  preview URL (`<branch>.glidecomp.pages.dev`, posted as a PR comment) — but it
-  deploys **only the frontend**. Branch previews run against whatever the Pages
-  *Preview* environment service bindings point at today: the production workers
-  and production database.
+- CI already gives every non-master branch a public Pages preview URL
+  (`<branch>.glidecomp.pages.dev`, posted as a PR comment) — but for a branch
+  it deploys **only the frontend**. *(Since this plan was written the separate
+  `branch-deploy.yml` was folded into the single
+  [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml), which runs
+  on every branch: build + `wrangler pages deploy --branch=<ref>` + the PR
+  comment always, while the three `wrangler deploy` Worker steps and the D1
+  migration step are gated on `github.ref_name == 'master'`. So the
+  frontend-only property is now expressed as an `if:` on the Worker steps
+  rather than as a separate workflow — the comment there is explicit: "Branch
+  previews reuse the already-deployed production Workers via their service
+  bindings.")* Branch previews run against whatever the Pages *Preview*
+  environment service bindings point at today: the production workers and
+  production database.
 - `wrangler dev` gives full local isolation but only on `localhost`. Tunneling a
   dev server out of a Claude Code cloud session was tested (2026-07-05) and is
   not possible: the sandbox egress is a TLS-re-terminating HTTPS proxy on port
@@ -34,7 +43,8 @@ Cloudflare Pages has exactly two runtime environments: **Production**
 (deployments where `--branch` equals the production branch, `master`) and
 **Preview** (every other branch). Service bindings are configured per
 environment. The existing `wrangler pages deploy --branch=<branch>` command in
-`branch-deploy.yml` therefore already lands in the Preview environment — no new
+`deploy.yml` (formerly `branch-deploy.yml`) therefore already lands in the
+Preview environment for any non-`master` ref — no new
 selection logic is needed. The work is to give Preview its own backend and point
 the Preview bindings at it.
 
@@ -169,9 +179,15 @@ targets local state or `--remote` (production). Add a `--preview` flag that:
 Then `bun run seed --preview` (and `--preview big-chip`) populates the
 preview stack with the bundled comps so previews have data to render.
 
-## Step 5 — CI: extend `branch-deploy.yml`
+## Step 5 — CI: extend `deploy.yml`
 
-Mirror the worker steps from `deploy.yml`'s deploy job, targeting preview,
+*(This step was written against the since-deleted `branch-deploy.yml`. There is
+now one workflow, `.github/workflows/deploy.yml`, whose `deploy` job handles
+both branches and `master`; the preview Worker steps below belong in that job,
+as the non-`master` counterpart to its existing `if: github.ref_name ==
+'master'` production Worker steps.)*
+
+Mirror the production worker steps in the same deploy job, targeting preview,
 before the existing Pages deploy step. Order matters: workers first (service
 bindings require the target workers to exist), Pages last.
 
@@ -207,7 +223,7 @@ bindings require the target workers to exist), Pages last.
       - name: Deploy Competition API Worker (preview)
         # ... command: deploy --env preview
 
-      # existing "Deploy to Cloudflare Pages (Branch Preview)" step unchanged
+      # existing "Deploy to Cloudflare Pages" step unchanged
 ```
 
 Same secrets, same action, same trigger as today. The existing smoke tests
