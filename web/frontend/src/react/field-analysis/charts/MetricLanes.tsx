@@ -42,9 +42,11 @@ import { useMemo, useState } from "react";
 import { formatMetricValue, type FieldAnalysisReport, type MetricReport } from "../types";
 import { unitWords } from "../units";
 import { usePilotHighlight } from "../PilotHighlightContext";
+import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 import { formatTickValue, linearScale } from "./chart-utils";
 import {
   buildLanes,
+  defaultProfileTrack,
   lanesAccessibleName,
   lanesCaption,
   type Lane,
@@ -97,14 +99,14 @@ export function MetricLanes({
   // Whose profile the connector draws. A percentile axis spreads the field
   // near-evenly by construction, so with nobody picked the lanes are rows of
   // dots and little else — and print and a reader who never hovers get only
-  // that. So the winner is drawn by default, the same "show the strongest
+  // that. So a profile is drawn by default, the same "show the strongest
   // finding on first paint" the separation ranking and the leg waterfall
   // already do. Hovering anyone replaces them.
-  const leader = [...pilots].sort((a, b) => a.rank - b.rank)[0] ?? null;
-  const shownTrack = highlight ?? leader?.trackFile ?? null;
-  const shownPilot = highlight
-    ? pilots.find((p) => p.trackFile === highlight) ?? null
-    : leader;
+  const defaultTrack = defaultProfileTrack(lanes, pilots);
+  const shownTrack = highlight ?? defaultTrack;
+  const shownPilot = shownTrack
+    ? pilots.find((p) => p.trackFile === shownTrack) ?? null
+    : null;
 
   const H = TOP_PAD + lanes.length * LANE_H + AXIS_H;
   const x = linearScale([0, 100], [PLOT_LEFT, PLOT_RIGHT]);
@@ -176,12 +178,39 @@ export function MetricLanes({
           const maxPct = Math.max(...pcts);
           // Real dot positions, not the axis ends: the leftmost dot is where
           // the lane's low value actually is.
+          // A lane where every pilot produced the same number stacks all its
+          // dots on P50 — one blob in the middle under a bare figure, which
+          // reads as a broken chart rather than as the finding it is. 283 of
+          // the archive's 3,401 lanes are like this, so it says so in words.
+          // (`text` rather than a value: formatTickValue is for an axis.)
           const marks = lane.degenerate
-            ? [{ key: "only", value: lane.median, at: 50, anchor: "middle" as const }]
+            ? [
+                {
+                  key: "only",
+                  text: `every pilot ${formatTickValue(lane.unit, lane.median)}`,
+                  at: 50,
+                  anchor: "middle" as const,
+                },
+              ]
             : [
-                { key: "low", value: lane.low, at: minPct, anchor: "start" as const },
-                { key: "median", value: lane.median, at: 50, anchor: "middle" as const },
-                { key: "high", value: lane.high, at: maxPct, anchor: "end" as const },
+                {
+                  key: "low",
+                  text: formatTickValue(lane.unit, lane.low),
+                  at: minPct,
+                  anchor: "start" as const,
+                },
+                {
+                  key: "median",
+                  text: formatTickValue(lane.unit, lane.median),
+                  at: 50,
+                  anchor: "middle" as const,
+                },
+                {
+                  key: "high",
+                  text: formatTickValue(lane.unit, lane.high),
+                  at: maxPct,
+                  anchor: "end" as const,
+                },
               ].filter(
                 (m, j, all) =>
                   j === 0 || Math.abs(x(m.at) - x(all[j - 1].at)) > LABEL_MIN_GAP
@@ -228,7 +257,7 @@ export function MetricLanes({
                     textAnchor={m.anchor}
                     className="fill-current"
                   >
-                    {formatTickValue(lane.unit, m.value)}
+                    {m.text}
                   </text>
                 ))}
               </g>
@@ -303,10 +332,18 @@ export function MetricLanes({
               {t}
             </text>
           ))}
-          <text x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={axisY + 24} textAnchor="middle" className="fill-current">
-            percentile in this field
-          </text>
         </g>
+
+        {/* Both axes named in the plot, per charts/AxisTitle.tsx: a caption is
+            read once, an axis is consulted continuously, and a screenshot
+            separates the two. The y axis is the one a reader can misread here
+            — the rows are behaviours, and their ORDER is itself the finding. */}
+        <XAxisTitle left={PLOT_LEFT} right={PLOT_RIGHT} y={axisY + 24}>
+          percentile in this field (100 = the expected-better end)
+        </XAxisTitle>
+        <YAxisTitle x={10} top={TOP_PAD} bottom={axisY}>
+          behaviour — strongest separator first
+        </YAxisTitle>
       </svg>
 
       {/* Visual mirror of hover; the table below is the accessible read.

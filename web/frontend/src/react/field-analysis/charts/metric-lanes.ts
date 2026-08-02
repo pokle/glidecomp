@@ -148,11 +148,54 @@ export function buildLanes(
         degenerate: sorted.length > 0 && min === max,
       } satisfies Lane;
     })
+    // Two dots minimum, for two different reasons.
+    //
     // `laneable` reads perPilot before the trackFile join, so a metric whose
-    // only values belong to pilots this report doesn't list survives it and
-    // arrives here with no dots at all. Drop it: an empty lane has no ends to
-    // label and nothing to say.
-    .filter((lane) => lane.n > 0);
+    // only values belong to pilots this report doesn't list arrives here with
+    // no dots at all — nothing to label, nothing to say.
+    //
+    // And a single dot cannot be a percentile: there is no field for it to sit
+    // within, so midrank puts it at exactly 50 and the lane states "this pilot
+    // was dead average" when the truth is "only one pilot could be measured".
+    // The coverage count discloses the n, but position is what a reader reads
+    // first, and at n = 1 it is false. Auditing the archive found 136 such
+    // lanes across 3,401 — too many to leave asserting it. The value is still
+    // in the per-pilot table below, which is where a single reading belongs.
+    .filter((lane) => lane.n >= 2);
+}
+
+/**
+ * Whose profile the chart draws when nobody is hovered.
+ *
+ * The best-ranked pilot who actually appears in at least two of these lanes —
+ * NOT simply rank 1. A percentile axis spreads the field near-evenly by
+ * construction, so a chart with no connector is rows of dots and nothing else,
+ * which is what print and a reader who never hovers would be left with. Rank 1
+ * having no measured value in a family is rare but real: auditing the archive
+ * found 5 charts across 861 where it happens (a winner who never shared a
+ * thermal has no gaggle metrics at all), and each of those drew nothing.
+ *
+ * Two lanes, not one: a single dot is not a profile, and the connector needs
+ * two points to exist.
+ */
+export function defaultProfileTrack(
+  lanes: Lane[],
+  pilots: FieldAnalysisReport["pilots"]
+): string | null {
+  const laneCount = new Map<string, number>();
+  for (const lane of lanes) {
+    for (const p of lane.points) {
+      laneCount.set(p.trackFile, (laneCount.get(p.trackFile) ?? 0) + 1);
+    }
+  }
+  const ranked = [...pilots].sort((a, b) => a.rank - b.rank);
+  return (
+    ranked.find((p) => (laneCount.get(p.trackFile) ?? 0) >= 2)?.trackFile ??
+    // Nobody appears twice (a one-lane-each field): fall back to anyone with a
+    // dot, so at least their position is marked, then to nothing.
+    ranked.find((p) => laneCount.has(p.trackFile))?.trackFile ??
+    null
+  );
 }
 
 /**

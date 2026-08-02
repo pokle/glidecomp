@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildLanes, laneEndWords, laneSentence, lanesCaption } from "./metric-lanes";
+import {
+  buildLanes,
+  defaultProfileTrack,
+  laneEndWords,
+  laneSentence,
+  lanesCaption,
+} from "./metric-lanes";
 import type {
   FieldAnalysisReport,
   MetricCorrelation,
@@ -195,20 +201,39 @@ describe("buildLanes placement", () => {
     expect(lane.points.every((p) => p.pct === 50)).toBe(true);
   });
 
-  it("handles a single measured pilot", () => {
+  it("drops a lane with one measured pilot rather than calling them average", () => {
+    // Midrank puts a lone value at exactly 50, so the lane would state "dead
+    // average" when it means "only one pilot could be measured". There is no
+    // field for a percentile to be within.
+    const lanes = buildLanes(
+      [
+        metric("lonely", "higher", null, [
+          ["a.igc", 5],
+          ["b.igc", null],
+          ["c.igc", null],
+          ["d.igc", null],
+        ]),
+        metric("kept", "higher", -0.4),
+      ],
+      PILOTS
+    );
+    expect(ids(lanes)).toEqual(["kept"]);
+  });
+
+  it("keeps a two-pilot lane, where position does mean something", () => {
     const [lane] = buildLanes(
       [
         metric("m", "higher", null, [
           ["a.igc", 5],
-          ["b.igc", null],
+          ["b.igc", 9],
           ["c.igc", null],
           ["d.igc", null],
         ]),
       ],
       PILOTS
     );
-    expect(lane.n).toBe(1);
-    expect(lane.points[0].pct).toBe(50);
+    expect(lane.n).toBe(2);
+    expect(lane.points.map((p) => p.pct).sort((x, y) => x - y)).toEqual([25, 75]);
   });
 
   it("drops a lane whose every value belongs to a pilot the report omits", () => {
@@ -229,13 +254,82 @@ describe("buildLanes placement", () => {
       [
         metric("m", "higher", null, [
           ["a.igc", 1],
+          ["b.igc", 2],
           ["ghost.igc", 99],
         ]),
       ],
       PILOTS
     );
-    expect(lane.n).toBe(1);
-    expect(lane.points[0].pilotName).toBe("Ana");
+    expect(lane.n).toBe(2);
+    expect(lane.points.map((p) => p.pilotName)).toEqual(["Ana", "Bo"]);
+    // The ghost's 99 must not stretch the lane's ends either.
+    expect(lane.high).toBe(2);
+  });
+});
+
+describe("defaultProfileTrack", () => {
+  // Auditing the archive found 5 charts of 861 where the winner has no
+  // measured value in the whole family (a winner who never shared a thermal
+  // has no gaggle metrics), and each drew no connector at all — the exact
+  // rows-of-dots state the default profile exists to prevent.
+  it("picks the winner when the winner is measured", () => {
+    const lanes = buildLanes([metric("a", "higher", -0.5), metric("b", "higher", -0.4)], PILOTS);
+    expect(defaultProfileTrack(lanes, PILOTS)).toBe("a.igc");
+  });
+
+  it("falls past a leader who has no values to the best pilot who does", () => {
+    const absent: Array<[string, number | null]> = [
+      ["a.igc", null],
+      ["b.igc", 2],
+      ["c.igc", 3],
+      ["d.igc", 4],
+    ];
+    const lanes = buildLanes(
+      [metric("a", "higher", -0.5, absent), metric("b", "higher", -0.4, absent)],
+      PILOTS
+    );
+    expect(defaultProfileTrack(lanes, PILOTS)).toBe("b.igc");
+  });
+
+  it("requires two lanes to call it a profile, not one", () => {
+    // Ana appears in one lane only; Bo in both. A single dot is not a profile
+    // and the connector needs two points to exist at all.
+    const lanes = buildLanes(
+      [
+        metric("a", "higher", -0.5, [
+          ["a.igc", 1],
+          ["b.igc", 2],
+        ]),
+        metric("b", "higher", -0.4, [
+          ["a.igc", null],
+          ["b.igc", 2],
+          ["c.igc", 3],
+        ]),
+      ],
+      PILOTS
+    );
+    expect(defaultProfileTrack(lanes, PILOTS)).toBe("b.igc");
+  });
+
+  it("still marks a lone dot when nobody appears twice", () => {
+    const lanes = buildLanes(
+      [
+        metric("a", "higher", -0.5, [
+          ["a.igc", 1],
+          ["b.igc", 2],
+        ]),
+        metric("b", "higher", -0.4, [
+          ["c.igc", 3],
+          ["d.igc", 4],
+        ]),
+      ],
+      PILOTS
+    );
+    expect(defaultProfileTrack(lanes, PILOTS)).toBe("a.igc");
+  });
+
+  it("returns null when no lane has a dot for anyone in the report", () => {
+    expect(defaultProfileTrack([], PILOTS)).toBeNull();
   });
 });
 
