@@ -279,7 +279,19 @@
 //      arrival as the one component whose arithmetic could not be shown —
 //      and, more importantly, left unsaid that the order is by wall-clock
 //      time at ESS rather than by speed.
-export const SCORING_ENGINE_VERSION = 29;
+// v30: NO score change on well-formed tracks — algorithmic hardening against
+//      adversarial IGC files (#470 SEC-32, #471 SEC-33). The cross-channel
+//      rolling residual median is now maintained incrementally by an exact
+//      order-statistic structure (same window multiset → same two middle
+//      values → identical float baseline), the never-airborne glide check
+//      takes its window minimum from a monotone deque, and rateClean's
+//      excursion return-scan stops at a non-forward timestamp. All three were
+//      quadratic when a crafted file stamped tens of thousands of fixes into
+//      one small time span — a per-upload CPU sink, since cleaning runs
+//      inside parseIGC on every upload. Only tracks whose timestamps jump
+//      backwards — already corrupt — can score differently, and only via the
+//      rate path.
+export const SCORING_ENGINE_VERSION = 30;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -287,4 +299,4 @@ export const SCORING_ENGINE_VERSION = 29;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "61158d654bd7fa448140e53b8b1e44dafcb46f4654b24e20207aab550967954f";
+  "4de39e3953fac44fa2649c2803a5e3d90eaeadfbbb4fa4335580d8e75ada076a";
