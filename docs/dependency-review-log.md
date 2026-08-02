@@ -2,6 +2,68 @@
 
 This log is written by the weekly upgrade routine at `.claude/commands/upgrade-deps.md`. The routine reads the most recent entries and "Lessons" sections each run, then appends a new dated entry. Edit the routine itself when steps need to change.
 
+## 2026-08-02
+
+### Security Vulnerabilities Fixed
+
+None new. `bun audit` reports the same 5 pre-existing vulnerabilities before and after this cycle (react-router RSC CSRF, 3× Astro XSS, sharp libvips) — all require major-version bumps already tracked as intentionally deferred below.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **wrangler** | 4.114.0 | 4.116.0 | root, frontend, auth-api, competition-api, airscore-api, dev-router | **Capped below latest (4.118.0) — see Lessons.** 4.115.0: removes `legacy_env`/`--legacy-env` (verified unused via grep), adds `Retry-After` respect on rate-limited API calls, D1 database-limit error messaging. 4.116.0: `wrangler check startup` graduated from alpha, email handler dispatch in `createTestHarness`. workerd/miniflare stay on the stable 4.x line at this version — 4.117.0+ switches to `miniflare@5.x-alpha` (see below). No breaking changes affecting our usage at 4.116.0. |
+| **@cloudflare/vitest-pool-workers** | 0.18.8 | 0.19.1 | auth-api, competition-api | **Capped below latest (0.20.1) — see Lessons.** Bundles wrangler 4.116.0 + miniflare 4.20260730.0 (stable). Adds `verbose` option to `cloudflareTest()`/`cloudflarePool()` to suppress workerd runtime logs (defaults `true`, unused so far). Fixed TLS-disconnection exception logging during external fetch calls in tests. |
+| **hono** | 4.12.32 | 4.12.33 | frontend, auth-api, competition-api (+ root override) | Bug fixes only: relaxed cookie-name validation when parsing the `Cookie` header, `useSyncExternalStore` subscription/snapshot fix in JSX, dropped the `undici` dependency in favour of global `fetch`. No security fixes, no breaking changes. |
+| **@playwright/test** | 1.62.0 | 1.62.1 | root | Regression-fix release: TS config `extends` bare-specifier resolution, directory-form tsconfig project references, accessibility snapshot button-name omission with `aria-hidden` SVG children, `page.evaluate()` branded-primitive type checking, missing image-type actionable elements in snapshots. Same chromium pin (rev 1234) as 1.62.0 — no new browser download needed beyond what last cycle already required. |
+| **lucide-react** | 1.27.0 | 1.28.0 | frontend | New icons, no breaking changes. |
+| **react-aria-components** | 1.19.0 | 1.20.0 | frontend | Minor release, no breaking changes affecting our `rac/` wrapper usage (verified via full frontend test + typecheck). |
+| **shadcn** | 4.15.0 | 4.16.1 | frontend | CLI-only (component-add tooling, not a runtime dependency). 4.16.1: fixed `shadcn build` ENOENT on registry item names with path segments; search params now forwarded to registries. No security fixes this cycle. |
+| **@internationalized/date** | 3.12.2 | 3.12.3 | frontend | Patch release. |
+| **@types/three** | 0.185.1 | 0.185.3 | frontend | Type definition patch. |
+
+### Code Changes Required
+
+None. All shipped upgrades are drop-in replacements with no API changes affecting our usage. `legacy_env`/`--legacy-env` removal in wrangler 4.115.0 was verified unused via grep before upgrading.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.118.0 | **New this cycle: capped, not just deferred.** wrangler 4.117.0 switches its bundled `miniflare` dependency from the stable 4.x line straight to `5.20260730.0-alpha` — a pre-release. This broke local D1 persistence outright: `bun run seed` against the existing `web/.wrangler/state` failed with `D1_ERROR: no such table: comp`, because the alpha miniflare reads/writes a different on-disk storage format than miniflare 4.x. Confirmed via `npm view wrangler@<version> dependencies.miniflare` across 4.114.0–4.118.0 that 4.117.0 is the exact version where the jump happens. Re-tested after capping at 4.116.0 with `bun run kill-state && bun run seed` — works cleanly. Re-evaluate once miniflare 5 leaves alpha (or once wrangler ships a 4.11x.x patch that stays on stable miniflare — check with `npm view wrangler@<version> dependencies.miniflare` before bumping past 4.116.0). |
+| @cloudflare/vitest-pool-workers | 0.19.1 | 0.20.1 | Paired with the wrangler cap above — 0.20.0+ bundles the same `miniflare@5.x-alpha`. Re-evaluate alongside wrangler. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260801.1 | **Major (5.x).** No newer 4.x release available. Evaluate in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest within range. |
+| zod | 3.25.76 | 4.4.3 | Major. Standalone task — `@hono/zod-validator` 0.9.0 accepts both. |
+| vite | 7.3.6 | 8.2.0 | Major. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. |
+| @vitejs/plugin-react | 5.2.0 | 6.0.5 | Major. Pairs with Vite 8. |
+| astro | 6.4.8 | 7.1.6 | **Major.** Still has the 3 XSS advisories (GHSA-4g3v-8h47-v7g6, GHSA-f48w-9m4c-m7f5, GHSA-7pw4-f3q4-r2p2) fixed in 7.0.10+, not exploitable here (no View Transitions / dynamic spread attributes in our static pages). Needs focused evaluation. |
+| @astrojs/mdx | 6.0.3 | 7.0.5 | Major. Pairs with Astro 7. |
+| kysely | 0.28.17 | 0.29.4 | Pre-1.0 minor bump (equivalent to major). Defer to a focused PR. |
+| jsdom | 25.0.1 | 30.0.1 | Major version jump. Defer. |
+| katex | 0.17.0 | 0.18.1 | Pre-1.0 minor bump (equivalent to major). Defer. |
+| concurrently | 9.2.4 | 10.0.4 | Major. ESM-only, drops `--name-separator`. Low priority. |
+| @types/node | 25.9.5 | 26.1.2 | Major. Stay on 25.x. |
+| react-router-dom | 7.9.5 (range) | 7.18.2 | Already satisfied by the existing `^7.9.5` range (resolves to 7.18.1 → 7.18.2 automatically on install). Has the HIGH RSC CSRF advisory fixed only in 8.x (RSC-mode only, not exploitable — we use client-side React). |
+| react-router | 7.18.2 | 8.3.0 | Has HIGH RSC CSRF advisory (GHSA-qwww-vcr4-c8h2) fixed in 8.3.0, but RSC mode only — not exploitable (client-side React only). Major version to fix. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, dev-router).
+- `bun run test:all` — 1279 root/engine/airscore-api/dev-router/scripts tests + 554 frontend + 92 auth-api (6 todo) + 508 competition-api all pass.
+- `bun run test:e2e` — **not clean in this session; root-caused to a pre-existing environment artifact, not this cycle's dependency changes.** Repeated full-suite runs died mid-run (`ProxyController: Error inside ProxyWorker … Network connection lost`, `dev:workers` exiting non-zero) at varying points, cascading into "stack died" collateral failures. To rule out a regression, the exact same full-suite run was repeated on the **unmodified pre-upgrade code** (`git stash`) — it exhibited the identical failure class (stack death mid-run, including the exact same `field-analysis.spec.ts` "wide chart" 103px-offset failure), proving this is a session/container artifact independent of any package version. The failing test differed between repeated runs on both old and new deps (field-analysis, full-screen-sheets, comp-detail), which is inconsistent with a deterministic code regression. Individual specs, including every spec that failed in a full run, passed cleanly when run in isolation. Container resources were not obviously constrained (16GB RAM/12GB free, 4 CPUs, ulimit -n 4096). See Lessons below.
+- `bun audit` — 5 vulnerabilities, unchanged from before this cycle (react-router RSC CSRF, 3× Astro XSS, sharp libvips), all requiring major version bumps already tracked as deferred.
+
+### Lessons / Notes for Future Sessions
+
+- **wrangler 4.117.0 silently switches to `miniflare@5.x-alpha`, breaking local D1 persistence.** `npm view wrangler@4.117.0 dependencies.miniflare` → `5.20260730.0-alpha`, vs `4.116.0` → `4.20260730.0` (stable). This is not called out as a breaking change in the wrangler changelog's prose — it only shows up by inspecting the dependency graph. The alpha miniflare reads local D1 state (`web/.wrangler/state`) in an incompatible format from miniflare 4.x, so `bun run seed` (and by extension `bun run dev`, `bun run test:e2e`) fails with `D1_ERROR: no such table: comp` after upgrading past 4.116.0. **Before bumping wrangler past 4.116.0 in a future cycle, run `npm view wrangler@<candidate> dependencies.miniflare` and confirm it's still on the stable `4.x` line — or budget time to validate the new miniflare major works with a fresh (not just reset) local D1 state.** `@cloudflare/vitest-pool-workers` must stay paired with whichever wrangler line is chosen (0.19.1 ↔ wrangler 4.116.0/miniflare 4.x stable; 0.20.0+ ↔ wrangler 4.117.0+/miniflare 5.x alpha).
+- **A long list of differently-named e2e failures across repeated runs is the tell for a session artifact, not a regression** (per `docs/local-dev.md` "Before you trust an e2e failure") — but this cycle went further than a single flaky spec: the *entire remaining suite* died mid-run on 4 out of 5 full-suite attempts, with the crash point (test 17, 23, or 24) and the specific first-failing spec varying between runs. The decisive test was re-running the identical full suite against `git stash`-ed (pre-upgrade) code: it reproduced the same stack-death pattern, including a byte-for-byte identical assertion failure (`field-analysis.spec.ts:179`, expected <4 received 103) — conclusive proof the flakiness predates this cycle's changes and lives in the session/container, not the dependency bumps. If a future session hits this, don't spend the whole budget chasing it — one baseline comparison via `git stash` settles it quickly.
+- **Playwright 1.62.1 still pins chromium rev 1234** (same as 1.62.0 last cycle) — `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` was still needed since this environment's pre-installed browsers are rev 1194, but no *new* download was forced by this cycle's Playwright patch bump specifically.
+- **`react-router-dom`'s existing `^7.9.5` range already covers the 7.18.2 patch** — no package.json edit was needed for it to resolve past 7.18.1; `bun install` alone picked it up.
+- **shadcn 4.16.1 is CLI-only** (used via `bunx shadcn add` when adding new `rac/` components) — it's a devDependency-shaped tool but currently listed under `dependencies` in `web/frontend/package.json`; not changed this cycle since moving it is unrelated to the upgrade, but worth a look in a future cleanup pass.
+
 ## 2026-07-26
 
 ### Security Vulnerabilities Fixed
