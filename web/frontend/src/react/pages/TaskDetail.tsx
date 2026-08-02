@@ -665,6 +665,7 @@ function TurnpointsSection({
             <div className="min-w-0 flex-1">
               <TurnpointsTable
                 xctsk={xctsk}
+                wind={wind}
                 highlightIndex={focused}
                 onTurnpointHover={setFocused}
                 onTurnpointSelect={setFocused}
