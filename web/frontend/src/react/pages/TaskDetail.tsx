@@ -7,8 +7,8 @@
  * rest of the app; the interaction layer (dialogs, tables, fields, menus) is
  * RAC. See the PR/issue discussion before extending the pattern elsewhere.
  *
- * Everyone sees a read-only "Route" section (summary, diagram, task strip and
- * turnpoint listing); admins additionally get the route editor dialog
+ * Everyone sees a read-only "Route" section (summary, diagram and turnpoint
+ * listing); admins additionally get the route editor dialog
  * (comp/RouteEditorDialog) covering turnpoints, start gates, goal, and
  * .xctsk / XContest import-export (#270).
  */
@@ -56,7 +56,6 @@ import { TaskStandings } from "../comp/TaskStandings";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
-import { TaskStrip } from "../comp/TaskStrip";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
@@ -589,11 +588,11 @@ function TaskSummaryHeader({
 }
 
 /**
- * The task's route — headed "Route", because it is the start/goal summary,
- * the diagram and the task strip as well as the turnpoint listing (the
- * component keeps its older name). Read-only for everyone; admins get an Edit
- * route button that opens the full route editor dialog (turnpoints, start
- * gates, goal, .xctsk / XContest import-export).
+ * The task's route — headed "Route", because it is the start/goal summary and
+ * the diagram as well as the turnpoint listing (the component keeps its older
+ * name). Read-only for everyone; admins get an Edit route button that opens
+ * the full route editor dialog (turnpoints, start gates, goal, .xctsk /
+ * XContest import-export).
  */
 function TurnpointsSection({
   xctsk,
@@ -612,9 +611,10 @@ function TurnpointsSection({
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
-  // Which turnpoint the diagram is pointing at, mirrored into the table below
-  // so the shape and the numbers stay tied together. Client-only state, so it
-  // does not affect the server-rendered markup.
+  // Which turnpoint the reader is pointing at, shared by the diagram and the
+  // table so the shape and the numbers stay tied together — either one can
+  // set it, and both show it. Client-only state, so it does not affect the
+  // server-rendered markup.
   const [focused, setFocused] = useState<number | null>(null);
 
   if (!xctsk && !isAdmin) return null;
@@ -637,26 +637,40 @@ function TurnpointsSection({
             taskDate={taskDate}
             timezone={timezone}
           />
-          {/* The task's shape, drawn from the same optimised line the table
-              measures and the scorer uses. Not a map — "View on map" above is
-              for that; this is the at-a-glance read. */}
-          <div className="mt-3 flex justify-center overflow-x-auto rounded-lg border bg-muted/20 p-2">
-            <TaskDiagram
-              task={xctsk}
-              size="md"
-              className="shrink-0"
-              onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
-              onTurnpointSelect={(tp) => setFocused(tp.index)}
-              highlightIndex={focused}
-              wind={wind}
-            />
+          {/* Two views of one route, paired: the diagram is the shape on the
+              ground (drawn from the same optimised line the table measures and
+              the scorer uses — not a map, "View on map" above is for that),
+              the table is the numbers and the accessible reading of it.
+
+              The diagram leads in the DOM because it is the at-a-glance read,
+              which is also the stacked order on a phone. Wide enough for two
+              columns, the row reverses so the numbers sit left and the shape
+              right, beside them rather than a scroll above them. */}
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row-reverse lg:items-start">
+            <div className="flex justify-center rounded-lg border bg-muted/20 p-2 lg:shrink-0">
+              <TaskDiagram
+                task={xctsk}
+                size="md"
+                // Scales down rather than scrolling sideways: on a phone the
+                // diagram now leads the section, and the `md` preset is a few
+                // pixels wider than the content column. The viewBox keeps the
+                // drawing intact at any width.
+                className="h-auto max-w-full"
+                onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
+                onTurnpointSelect={(tp) => setFocused(tp.index)}
+                highlightIndex={focused}
+                wind={wind}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <TurnpointsTable
+                xctsk={xctsk}
+                highlightIndex={focused}
+                onTurnpointHover={setFocused}
+                onTurnpointSelect={setFocused}
+              />
+            </div>
           </div>
-          {/* Two views of one route: the diagram is the shape on the ground,
-              the strip is the order and the winding with geography
-              straightened out. The table underneath is the numbers, and the
-              accessible equivalent for both. */}
-          <TaskStrip xctsk={xctsk} wind={wind} />
-          <TurnpointsTable xctsk={xctsk} highlightIndex={focused} />
         </>
       ) : (
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
