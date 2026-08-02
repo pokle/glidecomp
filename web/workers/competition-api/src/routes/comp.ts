@@ -272,6 +272,7 @@ export const compRoutes = new Hono<HonoEnv>()
           ftv_factor: ftvFactor,
           timezone: body.timezone ?? null,
           open_igc_upload: true,
+          open_registration: true,
         },
         201
       );
@@ -289,7 +290,7 @@ export const compRoutes = new Hono<HonoEnv>()
     const cutoffStr = cutoff.toISOString();
 
     const publicComps = await c.env.DB.prepare(
-      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload
+      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, open_registration
        FROM comp
        WHERE test = 0 AND creation_date >= ?
        ORDER BY creation_date DESC`
@@ -306,12 +307,12 @@ export const compRoutes = new Hono<HonoEnv>()
       // `comp_admin` row for.
       adminComps = isSuperAdmin(user)
         ? await c.env.DB.prepare(
-            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
              FROM comp c
              ORDER BY c.creation_date DESC`
           ).all()
         : await c.env.DB.prepare(
-            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
              FROM comp c
              JOIN comp_admin ca ON c.comp_id = ca.comp_id
              WHERE ca.user_id = ?
@@ -352,6 +353,7 @@ export const compRoutes = new Hono<HonoEnv>()
         gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
         test: !!(r.test as number),
         open_igc_upload: !!(r.open_igc_upload as number),
+        open_registration: !!(r.open_registration as number),
         first_task_date: datesByComp.get(r.comp_id as number)?.first_task_date ?? null,
         last_task_date: datesByComp.get(r.comp_id as number)?.last_task_date ?? null,
       })),
@@ -364,6 +366,7 @@ export const compRoutes = new Hono<HonoEnv>()
           gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
           test: !!(r.test as number),
           open_igc_upload: !!(r.open_igc_upload as number),
+          open_registration: !!(r.open_registration as number),
           first_task_date: datesByComp.get(r.comp_id as number)?.first_task_date ?? null,
           last_task_date: datesByComp.get(r.comp_id as number)?.last_task_date ?? null,
         })),
@@ -396,7 +399,7 @@ export const compRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, settings_reviewed
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, settings_reviewed
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -496,6 +499,7 @@ export const compRoutes = new Hono<HonoEnv>()
         series_scoring: (comp.series_scoring as string) ?? "total",
         ftv_factor: (comp.ftv_factor as number | null) ?? null,
         open_igc_upload: !!(comp.open_igc_upload as number),
+        open_registration: !!(comp.open_registration as number),
         admins: adminList,
         is_admin: isAdmin,
         tasks: tasks.results.map((t) => {
@@ -543,7 +547,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Fetch current state so we can compute audit diffs and validate consistency
       const current = await c.env.DB.prepare(
-        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -560,6 +564,7 @@ export const compRoutes = new Hono<HonoEnv>()
           ftv_factor: number | null;
           timezone: string | null;
           open_igc_upload: number;
+          open_registration: number;
         }>();
       if (!current) return c.json({ error: "Competition not found" }, 404);
 
@@ -654,6 +659,10 @@ export const compRoutes = new Hono<HonoEnv>()
       if (body.open_igc_upload !== undefined) {
         updates.push("open_igc_upload = ?");
         values.push(body.open_igc_upload ? 1 : 0);
+      }
+      if (body.open_registration !== undefined) {
+        updates.push("open_registration = ?");
+        values.push(body.open_registration ? 1 : 0);
       }
 
       if (updates.length > 0) {
@@ -792,6 +801,16 @@ export const compRoutes = new Hono<HonoEnv>()
             : "Disabled open IGC upload (admins only)"
         );
       }
+      if (
+        body.open_registration !== undefined &&
+        (body.open_registration ? 1 : 0) !== current.open_registration
+      ) {
+        auditChanges.push(
+          body.open_registration
+            ? "Enabled open registration (a pilot joins by uploading a track)"
+            : "Disabled open registration (only an admin can add pilots)"
+        );
+      }
       if (scoringInputsChanged) {
         await bumpAndRevalidateScores(
           c,
@@ -821,7 +840,7 @@ export const compRoutes = new Hono<HonoEnv>()
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -849,6 +868,7 @@ export const compRoutes = new Hono<HonoEnv>()
         series_scoring: (updated.series_scoring as string) ?? "total",
         ftv_factor: (updated.ftv_factor as number | null) ?? null,
         open_igc_upload: !!(updated.open_igc_upload as number),
+        open_registration: !!(updated.open_registration as number),
         admins: admins.results,
       });
     }

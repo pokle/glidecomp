@@ -228,8 +228,11 @@ Every row is a copy of a public CIVL list.
 ## Writing: submitting a track
 
 Uploading a track requires a key. The request body is a **gzip-compressed IGC
-file** sent as raw bytes (max ~5 MB uncompressed). Uploads are rejected after a
-competition's close date.
+file** sent as raw bytes: at most 1 MiB compressed, and at most 2 MiB once
+decompressed. Uploads are rejected after a competition's close date.
+
+Pilots can also submit without a key at all, from the website's `/submit` page —
+see [track-submission.md](track-submission.md).
 
 Upload **your own** track for a task:
 

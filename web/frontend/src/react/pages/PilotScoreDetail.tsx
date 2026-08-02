@@ -52,7 +52,8 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
 import { retry } from "../lib/retry";
-import { idFromSegment, pilotPath } from "../lib/slug";
+import { idFromSegment, pilotPath, taskPath } from "../lib/slug";
+import { LinkButton } from "@/react/rac/button";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { Timestamp } from "../components/Timestamp";
 import { NotFound } from "../components/NotFound";
@@ -125,6 +126,7 @@ function assertAnalysisMatchesScore(analysedDistance: number, scoredDistance: nu
 
 type DetailState =
   | { kind: "loading" }
+  | { kind: "pending" }
   | { kind: "error"; message: string; notFound?: boolean }
   | { kind: "ready"; data: DetailData };
 
@@ -137,6 +139,29 @@ type DetailState =
 class DetailNotFoundError extends Error {
   readonly notFound = true;
 }
+
+/**
+ * The pilot has a track on this task but the served scores predate it.
+ *
+ * Scores are stale-first: a read never computes, so straight after an upload
+ * the stored blob is still the pre-upload one and does not contain this pilot.
+ * That is a WAIT, not a 404 — and telling a pilot who has just submitted that
+ * their score cannot be found is the worst possible answer, since it reads as
+ * "your track did not go in".
+ */
+class ScorePendingError extends Error {
+  readonly pending = true;
+}
+
+/**
+ * How hard to chase a score that has not landed yet. Same shape as the rescore
+ * poll in comp/ScoreFreshness.tsx: quick at first, backing off, and giving up
+ * rather than hammering a task whose revalidation has genuinely failed.
+ */
+const PENDING_INITIAL_MS = 2_000;
+const PENDING_BACKOFF = 1.6;
+const PENDING_MAX_MS = 15_000;
+const PENDING_MAX_ATTEMPTS = 8;
 
 /** True for the statuses that mean "no such thing": a real 404, or a 400 from
  *  an id sqid that doesn't decode at all. */
@@ -269,7 +294,11 @@ function buildDetailData(
       break;
     }
   }
-  if (!cls || !entry) throw new Error("No score found for this pilot");
+  if (!cls || !entry) {
+    // A stale blob simply has not caught up with this pilot's upload yet.
+    if (score.stale) throw new ScorePendingError("Scores are being recomputed");
+    throw new Error("No score found for this pilot");
+  }
 
   const trackQuality = analysis.track_quality ?? null;
 
@@ -513,6 +542,7 @@ export function PilotScoreDetail() {
         ),
       };
     } catch (err) {
+      if (err instanceof ScorePendingError) return { kind: "pending" };
       return {
         kind: "error",
         message: err instanceof Error ? err.message : "Failed to load score details",
@@ -521,6 +551,8 @@ export function PilotScoreDetail() {
     }
   });
   const seededRef = useRef(initial != null);
+  // Bumped by the pending poll below; re-runs the load effect.
+  const [pendingAttempt, setPendingAttempt] = useState(0);
   const [fixes, setFixes] = useState<IGCFix[] | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
@@ -566,10 +598,14 @@ export function PilotScoreDetail() {
       return;
     }
     let cancelled = false;
-    setState({ kind: "loading" });
-    setFocus(null);
-    setSelectedItem(null);
-    setMapExpanded(false);
+    // A poll re-entry keeps the "scores are being recomputed" panel up rather
+    // than flashing the spinner every few seconds.
+    if (pendingAttempt === 0) {
+      setState({ kind: "loading" });
+      setFocus(null);
+      setSelectedItem(null);
+      setMapExpanded(false);
+    }
     // Retry through a transient D1 blip (the 4 concurrent reads can 404 one
     // spuriously on a cold DB) so we don't flash a false "not found".
     retry(() => loadDetail(compId, taskId, pilotId))
@@ -577,17 +613,50 @@ export function PilotScoreDetail() {
         if (!cancelled) setState({ kind: "ready", data });
       })
       .catch((err: unknown) => {
-        if (!cancelled)
-          setState({
-            kind: "error",
-            message: err instanceof Error ? err.message : "Failed to load score details",
-            notFound: err instanceof DetailNotFoundError,
-          });
+        if (cancelled) return;
+        if (err instanceof ScorePendingError) {
+          setState({ kind: "pending" });
+          return;
+        }
+        setState({
+          kind: "error",
+          message: err instanceof Error ? err.message : "Failed to load score details",
+          notFound: err instanceof DetailNotFoundError,
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [compId, taskId, pilotId]);
+  }, [compId, taskId, pilotId, pendingAttempt]);
+
+  // While the scores are catching up with a just-uploaded track, keep asking.
+  // Backoff and give-up match ScoreFreshness's rescore poll: a revalidation is
+  // usually under a second, but it queues behind whatever else the task is
+  // doing. Pauses with the tab, because nobody is reading a hidden page.
+  useEffect(() => {
+    if (state.kind !== "pending") return;
+    if (pendingAttempt >= PENDING_MAX_ATTEMPTS) return;
+    const delay = Math.min(
+      PENDING_INITIAL_MS * Math.pow(PENDING_BACKOFF, pendingAttempt),
+      PENDING_MAX_MS,
+    );
+    let onVisible: (() => void) | null = null;
+    const again = () => setPendingAttempt((n) => n + 1);
+    const timer = window.setTimeout(() => {
+      if (!document.hidden) return again();
+      // Hidden when the timer fired: wait for the reader to come back rather
+      // than dropping the poll, which would leave the page saying "recomputing"
+      // forever.
+      onVisible = () => {
+        if (!document.hidden) again();
+      };
+      document.addEventListener("visibilitychange", onVisible);
+    }, delay);
+    return () => {
+      window.clearTimeout(timer);
+      if (onVisible) document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [state.kind, pendingAttempt]);
 
   // The tracklog is only needed to draw the flight on the map — the
   // explanation renders from the analysis endpoint without it, so load it
@@ -654,6 +723,36 @@ export function PilotScoreDetail() {
       <div>
         {breadcrumbs}
         <Loading className="mt-4">Loading score details…</Loading>
+      </div>
+    );
+  }
+
+  if (state.kind === "pending") {
+    // The pilot's track is in, but the served scores predate it — a wait, not
+    // a 404. This page is where the submit flow sends someone the moment they
+    // upload, so "no score found" would read as "your track did not go in".
+    const gaveUp = pendingAttempt >= PENDING_MAX_ATTEMPTS;
+    return (
+      <div>
+        {breadcrumbs}
+        <div className="mt-4">
+          {gaveUp ? (
+            <p role="status" className="text-muted-foreground">
+              Your track is in, but the scores are taking longer than usual to
+              recompute. Reload in a minute, or open the task to see the field.
+            </p>
+          ) : (
+            <Loading>
+              Your track is in. Working out the scores — they depend on
+              everyone else's tracks too…
+            </Loading>
+          )}
+          <p className="mt-4">
+            <LinkButton variant="outline" href={taskPath(compId, null, taskId, null)}>
+              Go to the task
+            </LinkButton>
+          </p>
+        </div>
       </div>
     );
   }

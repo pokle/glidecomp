@@ -91,6 +91,11 @@ export function Shell() {
           <NavLink to={flightsHref} className={navLinkClass}>
             My Flights
           </NavLink>
+          {/* The one thing a pilot who has just landed came here to do, so it
+              is reachable from every page. Mirrored in SiteHeader.astro. */}
+          <NavLink to="/submit" className={navLinkClass}>
+            Submit track
+          </NavLink>
           <div className="ml-auto">
             {user ? (
               <UserMenu name={user.name ?? user.email ?? "Account"} />

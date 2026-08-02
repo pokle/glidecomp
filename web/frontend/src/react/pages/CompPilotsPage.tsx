@@ -110,6 +110,7 @@ export function CompPilotsPage() {
         compName={comp.name}
         compClasses={comp.pilot_classes}
         isAdmin={isAdmin}
+        openRegistration={comp.open_registration}
         headingAs="h1"
       />
     </div>

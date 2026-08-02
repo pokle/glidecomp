@@ -18,7 +18,7 @@
  */
 interface Props {
   /** Which tab to highlight, if any. */
-  active?: "home" | "comp" | "flights";
+  active?: "home" | "comp" | "flights" | "submit";
 }
 const { active } = Astro.props;
 
@@ -46,6 +46,12 @@ const menuItem =
       href="/u/me"
       class={`${tab(active === "flights")} max-sm:hidden`}
       aria-current={active === "flights" ? "page" : undefined}>My Flights</a>
+    <!-- The one thing a pilot who has just landed came here to do, so it is
+         reachable from every page rather than only the homepage. -->
+    <a
+      href="/submit"
+      class={tab(active === "submit")}
+      aria-current={active === "submit" ? "page" : undefined}>Submit track</a>
     <!-- Fixed h-8 either way, so swapping the pill for the avatar can't shift
          the bar. `relative` anchors the menu popover. -->
     <div class="relative ml-auto h-8" data-account>

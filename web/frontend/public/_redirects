@@ -15,6 +15,7 @@
 # server-renders the four public routes and falls back to the SPA shell for
 # any other /comp shape.
 /u/*  /app  200
+/submit  /app  200
 /scores  /app  200
 /profile  /app  200
 /settings  /app  200

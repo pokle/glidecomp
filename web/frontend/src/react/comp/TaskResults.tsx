@@ -104,6 +104,11 @@ export function TaskResults({
   const { user } = useUser();
   const mounted = useMounted();
   const [uploadOpen, setUploadOpen] = useState(false);
+  // Bumped after this section's own Submit-track dialog uploads, so the
+  // "your track is in" line below re-fetches. The parent's `refresh` covers
+  // the scores; nothing else covers this.
+  const [mineRefresh, setMineRefresh] = useState(0);
+  const refreshMine = () => setMineRefresh((n) => n + 1);
 
   const [score, setScore] = useState<TaskScoreData | null>(initialScore ?? null);
   const [scoreState, setScoreState] = useState<
@@ -192,7 +197,7 @@ export function TaskResults({
     return () => {
       cancelled = true;
     };
-  }, [mounted, user, compId, taskId, refresh]);
+  }, [mounted, user, compId, taskId, refresh, mineRefresh]);
 
   const scoresHref = `/comp/${encodeURIComponent(compId)}/scores?task=${encodeURIComponent(taskId)}`;
 
@@ -201,7 +206,10 @@ export function TaskResults({
       <SectionHeader
         title="Results"
         action={
-          mounted && isAuthenticated && !isClosed ? (
+          // No longer gated on a session: submitting is open to anyone the
+          // comp's roster knows. Still mount-gated, because what the dialog
+          // shows inside depends on who is asking.
+          mounted && !isClosed ? (
             <Button variant="outline" size="sm" onPress={() => setUploadOpen(true)}>
               Submit track
             </Button>
@@ -215,7 +223,13 @@ export function TaskResults({
           taskId={taskId}
           canUploadOnBehalf={canUploadOnBehalf}
           onClose={() => setUploadOpen(false)}
-          onUploaded={() => setUploadOpen(false)}
+          onUploaded={() => {
+            // The "your track is in" line below is this component's own
+            // fetch — without this, the one thing the section fails to show
+            // is the upload that just happened.
+            setUploadOpen(false);
+            refreshMine();
+          }}
         />
       ) : null}
 

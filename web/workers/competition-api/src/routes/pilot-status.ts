@@ -516,10 +516,13 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
  * the reconciled state — no separate bump needed here.
  *
  * Exported so igc.ts can call it without re-implementing the logic.
+ *
+ * `user` is null for an anonymous submission; the status row and the audit
+ * line then name the source rather than a person (see markLandedFromEvidence).
  */
 export async function applyStatusOnTrackUpload(
   db: D1Database,
-  user: AuthUser,
+  user: AuthUser | null,
   compId: number,
   taskId: number,
   compPilotId: number,

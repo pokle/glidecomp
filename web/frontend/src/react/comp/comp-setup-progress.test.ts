@@ -18,6 +18,7 @@ function comp(overrides: Partial<CompDetailData> = {}): CompDetailData {
     ftv_factor: null,
     timezone: null,
     open_igc_upload: true,
+    open_registration: true,
     tasks: [],
     admins: [{ email: "a@b.c", name: "Admin" }],
     pilot_count: 0,

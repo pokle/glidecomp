@@ -50,6 +50,7 @@
     "test:e2e:ssr": "[ -f web/workers/auth-api/.dev.vars ] || cp web/workers/auth-api/.dev.vars.example web/workers/auth-api/.dev.vars; bun run db:migrate && bunx playwright test --config playwright.ssr.config.ts",
     "build-3dvis": "bun web/engine/cli/build-3dvis.ts",
     "seed": "bun web/scripts/seed-sample-comp.ts",
+    "forge-igc": "bun web/scripts/forge-igc.ts",
     "civl-rankings": "bun web/scripts/fetch-civl-rankings.ts",
     "detect-events": "bun web/engine/cli/detect-events.ts",
     "get-xcontest-task": "bun web/engine/cli/get-xcontest-task.ts",

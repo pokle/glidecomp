@@ -51,6 +51,8 @@ export interface CompDetailData {
    */
   timezone: string | null;
   open_igc_upload: boolean;
+  /** Off means only an admin can add pilots; on means a pilot joins by uploading. */
+  open_registration: boolean;
   tasks: TaskSummary[];
   admins: Array<{ email: string; name: string }>;
   pilot_count: number;

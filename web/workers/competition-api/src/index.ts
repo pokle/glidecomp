@@ -10,6 +10,8 @@ import { drainSearchIndex, sweepSearchIndex } from "./search-index";
 import { taskRoutes } from "./routes/task";
 import { waypointsRoutes } from "./routes/waypoints";
 import { igcRoutes } from "./routes/igc";
+import { igcAnonRoutes } from "./routes/igc-anon";
+import { openCompsRoutes } from "./routes/open-comps";
 import { pilotRoutes } from "./routes/pilot";
 import { pilotStatusRoutes } from "./routes/pilot-status";
 import { manualFlightRoutes } from "./routes/manual-flight";
@@ -49,14 +51,31 @@ const corsConfig = cors({
   origin: (origin) => (origin && isAllowedOrigin(origin) ? origin : ""),
   credentials: true,
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowHeaders: ["Content-Type", "Authorization", "x-filename"],
+  // x-pilot-ident-kind / x-pilot-ident carry the identifier on the anonymous
+  // submit route. Without them here every browser preflight for that route
+  // fails — and only in a real browser, never in the worker tests.
+  allowHeaders: [
+    "Content-Type",
+    "Authorization",
+    "x-filename",
+    "x-pilot-ident-kind",
+    "x-pilot-ident",
+  ],
   // Custom response headers we want the browser to surface to JS. X-Filename/
   // X-Display-Name are used by the user-files download endpoints so the
   // frontend can recover the original filename and display name without an
   // extra metadata round-trip. ETag/X-Cache back the score endpoints'
   // conditional re-score polling (ETag is not on the CORS safelist, so
   // cross-origin dev against a live backend needs it exposed explicitly).
-  exposeHeaders: ["X-Filename", "X-Display-Name", "ETag", "X-Cache"],
+  // Retry-After lets the submit dialog say how long a rate-limited pilot has
+  // to wait rather than guessing.
+  exposeHeaders: [
+    "X-Filename",
+    "X-Display-Name",
+    "ETag",
+    "X-Cache",
+    "Retry-After",
+  ],
 });
 
 app.use("/api/comp/*", corsConfig);
@@ -118,15 +137,19 @@ app.use("*", async (c, next) => {
 
 // Mount routes — igcRoutes first to avoid potential conflicts
 const routes = app
+  // Ahead of igcRoutes: the anonymous submit route's literal "open-submit"
+  // leaf must win over the on-behalf route's :comp_pilot_id param.
+  .route("/", igcAnonRoutes)
   .route("/", igcRoutes)
   .route("/", visualizationRoutes)
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", manualFlightRoutes)
-  // Ahead of compRoutes: /api/comp/lookup and /api/comp/search must win over
-  // /api/comp/:comp_id.
+  // Ahead of compRoutes: /api/comp/lookup, /api/comp/search and
+  // /api/comp/open-now must win over /api/comp/:comp_id.
   .route("/", lookupRoutes)
   .route("/", searchRoutes)
+  .route("/", openCompsRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", waypointsRoutes)
