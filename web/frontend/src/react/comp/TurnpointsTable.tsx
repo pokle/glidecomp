@@ -131,8 +131,18 @@ export function TurnpointsTable({
           {/* Empty visible header for the role column; labelled for AT. */}
           <Column isRowHeader={false} aria-label="Type" className="w-16" />
           <Column isRowHeader>Turnpoint</Column>
-          <Column className="text-right">Leg Distance</Column>
-          {showWind ? <Column className="text-right">Leg Wind</Column> : null}
+          {/* Abbreviated so four columns fit a phone without scrolling: the
+              headers, not the readings, were what pushed the listing past the
+              content column. The unabbreviated name goes to assistive tech,
+              which reads the header before every cell in the column. */}
+          <Column className="px-1.5 text-right" aria-label="Leg distance">
+            Leg Dist.
+          </Column>
+          {showWind ? (
+            <Column className="px-1.5 text-right" aria-label="Leg wind">
+              Leg Wind
+            </Column>
+          ) : null}
         </TableHeader>
         <TableBody>
           {xctsk.turnpoints.map((tp, i) => {
@@ -182,7 +192,7 @@ export function TurnpointsTable({
                     </span>
                   </div>
                 </Cell>
-                <Cell className="text-right align-top tabular-nums">
+                <Cell className="px-1.5 text-right align-top tabular-nums">
                   {legM !== undefined ? (
                     formatDistance(legM, { decimals: 1, prefs: units }).withUnit
                   ) : (
@@ -190,7 +200,7 @@ export function TurnpointsTable({
                   )}
                 </Cell>
                 {showWind ? (
-                  <Cell className="text-right align-top tabular-nums">
+                  <Cell className="px-1.5 text-right align-top tabular-nums">
                     {wind && bearings[i - 1] !== undefined ? (
                       <LegWindReading
                         wind={wind}
