@@ -52,6 +52,7 @@ import {
   formatCoords,
   gateToHHMM,
   parseCoords,
+  startConfigSummary,
   turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
@@ -59,9 +60,9 @@ import {
   type RouteRow,
 } from "./route-editor";
 import { AddWaypointDialog } from "./AddWaypointDialog";
-import { QuickTaskField, type QuickTaskPick } from "./QuickTaskField";
+import { QuickTaskField, type QuickTaskApply } from "./QuickTaskField";
 import { TurnpointsTable } from "./TurnpointsTable";
-import { quickTaskText } from "./quick-task";
+import { parseTimeToken, quickTaskText } from "./quick-task";
 
 // Lazy so the map library (mapbox) and its CSS load only when the editor
 // opens and never enter the SSR'd task-detail bundle.
@@ -330,7 +331,13 @@ export function RouteEditorDialog({
   const showQuickTask = !wpLoading && waypointRecords.length > 0;
 
   // The route as a quick-task line, so the field opens showing the task that's
-  // loaded and keeps mirroring it as rows change elsewhere in the editor.
+  // loaded and keeps mirroring it as rows change elsewhere in the editor. The
+  // start config is part of that mirror (#436) — otherwise the line would keep
+  // saying "sss" while the panel quietly held an enter start.
+  //
+  // Only gates that read as times are offered: a gate mid-edit in the picker
+  // isn't something the line can say, and leaving it out of BOTH renderings is
+  // what stops the field from pushing a half-typed time back as a change.
   const quickText = useMemo(
     () =>
       quickTaskText(
@@ -338,9 +345,18 @@ export function RouteEditorDialog({
           name: String(r.name),
           radius: Number(r.radius) || NEW_ROW_RADIUS,
           type: r.type,
-        }))
+        })),
+        openDistance
+          ? {}
+          : {
+              start: {
+                direction,
+                type: sssType,
+                gates: gates.filter((g) => parseTimeToken(g) !== null),
+              },
+            }
       ),
-    [rows]
+    [rows, openDistance, direction, sssType, gates]
   );
 
   /**
@@ -349,9 +365,13 @@ export function RouteEditorDialog({
    * type; everything else comes from the waypoint record, exactly as picking it
    * by hand would. Nothing is saved until Save, so this stays undoable by
    * cancelling the dialog.
+   *
+   * The line also carries the start config, so the Start panel below follows it
+   * — but only when the route has a start to configure, and never for an
+   * open-distance task (which has no speed section and hides the panel).
    */
   const applyQuickTask = useCallback(
-    (picks: QuickTaskPick[]) => {
+    ({ picks, start }: QuickTaskApply) => {
       setRows(
         picks.map((p) => ({
           id: nextRowId(),
@@ -362,8 +382,18 @@ export function RouteEditorDialog({
           dir: null,
         }))
       );
+      if (openDistance || !start) return;
+      setSssType(start.type);
+      setDirection(start.direction);
+      // Rewrite the gates only when the line genuinely says something else:
+      // an edit elsewhere in the route mustn't discard a gate that's mid-edit
+      // in the picker (and so absent from the line — see quickText above).
+      setGates((prev) => {
+        const sayable = prev.filter((g) => parseTimeToken(g) !== null);
+        return sayable.join(",") === start.gates.join(",") ? prev : start.gates;
+      });
     },
-    [nextRowId, draftFromRecord]
+    [nextRowId, draftFromRecord, openDistance]
   );
 
   /** Pick from the map: the nearest marker, resolved to its record by id, and
@@ -747,6 +777,17 @@ export function RouteEditorDialog({
           <span className="font-medium">ess</span>,{" "}
           <span className="font-medium">tp</span>,{" "}
           <span className="font-medium">goal</span>).
+          {!openDistance ? (
+            <>
+              {" "}
+              The start takes its settings the same way —{" "}
+              <span className="font-medium">enter</span> or{" "}
+              <span className="font-medium">exit</span>,{" "}
+              <span className="font-medium">race</span> or{" "}
+              <span className="font-medium">elapsed</span>, and any start gates
+              as times: <span className="font-medium">sss enter 13:15 13:30</span>.
+            </>
+          ) : null}
         </p>
         {openDistance ? (
           <p className="text-sm text-muted-foreground">
@@ -769,6 +810,7 @@ export function RouteEditorDialog({
               openDistance ? "ell 5k" : "ell 400m ell 5k mitta cudg ncor 1k"
             }
             exampleSize={openDistance ? 1 : undefined}
+            timeZoneLabel={openDistance ? undefined : timeZoneLabel}
             onApply={applyQuickTask}
           />
         ) : null}
@@ -900,8 +942,28 @@ export function RouteEditorDialog({
 
         {!openDistance ? (
           <>
-            {/* Collapsed by default — the defaults suit most competitions. */}
-            <Disclosure title="Start (SSS)">
+            {/* Collapsed by default — the defaults suit most competitions. The
+                badge is why that's safe: it reads the live configuration back
+                on the header row, so an exit start (or a gate list) is never
+                something you'd have to expand the panel to discover (#436).
+                Same sentence the task page prints, from the same helper. */}
+            <Disclosure
+              title="Start (SSS)"
+              badge={
+                <span className="text-xs font-normal text-muted-foreground">
+                  {startConfigSummary(
+                    {
+                      type: sssType,
+                      direction,
+                      timeGates: gates.flatMap((g) =>
+                        parseTimeToken(g) !== null ? [`${toUtcTime(g)}:00Z`] : []
+                      ),
+                    },
+                    { timeZone: tz, taskDate }
+                  )}
+                </span>
+              }
+            >
               {!derived.hasSSSTurnpoint ? (
                 <p className="mt-1 text-sm text-amber-500">
                   ⚠ This task has no Start (SSS) turnpoint — set one in the list

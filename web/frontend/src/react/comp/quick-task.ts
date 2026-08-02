@@ -11,7 +11,7 @@
  * guess plus the runners-up, so a wrong pick is one tap to correct. DOM-free so
  * it's unit-testable (quick-task.test.ts).
  */
-import type { WaypointFileRecord } from "@glidecomp/engine";
+import type { SSSConfig, WaypointFileRecord } from "@glidecomp/engine";
 
 // ---------------------------------------------------------------------------
 // Tokenizing
@@ -20,6 +20,9 @@ import type { WaypointFileRecord } from "@glidecomp/engine";
 /** A distance: "400", "400m", "5k", "5km", "2.5km". Bare numbers are metres. */
 const RADIUS_RE = /^(\d+(?:\.\d+)?)(m|k|km)?$/i;
 
+/** A time of day: "13:15", "9:05" — a start gate. */
+const TIME_RE = /^(\d{1,2}):([0-5]\d)$/;
+
 export interface QuickToken {
   /** The text exactly as typed. */
   raw: string;
@@ -27,9 +30,11 @@ export interface QuickToken {
   start: number;
   end: number;
   /** Radius tokens carry metres; name tokens are matched against waypoints. */
-  kind: "name" | "radius";
+  kind: "name" | "radius" | "time";
   /** Metres, for `kind: "radius"`. */
   metres?: number;
+  /** Normalised "HH:MM", for a `kind: "time"` token that reads as a real time. */
+  hhmm?: string;
 }
 
 /** Metres for a radius token, or null when the token isn't a distance. */
@@ -41,6 +46,15 @@ export function parseRadiusToken(text: string): number | null {
   const unit = (m[2] ?? "m").toLowerCase();
   const metres = unit === "m" ? value : value * 1000;
   return Math.round(metres);
+}
+
+/** Normalised "HH:MM" for a time-of-day token, or null when it isn't one. */
+export function parseTimeToken(text: string): string | null {
+  const m = TIME_RE.exec(text.trim());
+  if (!m) return null;
+  const hours = Number(m[1]);
+  if (hours > 23) return null;
+  return `${String(hours).padStart(2, "0")}:${m[2]}`;
 }
 
 /** One token: a run of anything that isn't a separator. */
@@ -60,6 +74,15 @@ const SEPARATOR_RE = /^[\s,]+/;
  * separator regardless: it's what the generated text puts between turnpoints.
  *
  * A separator never carries meaning: it's only ever where one turnpoint ends.
+ *
+ * A token carrying a colon is a start gate. The colon is what makes a time
+ * self-identifying — it can't appear in a radius, and appears in none of the
+ * waypoint codes the bundled competitions ship — so `sss 13:15` needs no sigil
+ * and reads like English. A colon-carrying token that *isn't* a valid time is
+ * still a time token, with no `hhmm`: parseQuickTask reports it rather than
+ * fuzzy-matching "13:99" into a waypoint it was never meant to be. (Should a
+ * competition ever code a waypoint with a colon, the parse loop's
+ * exact-code guard still hands it back — same escape the type words have.)
  */
 export function tokenizeQuickTask(text: string): QuickToken[] {
   const tokens: QuickToken[] = [];
@@ -68,13 +91,16 @@ export function tokenizeQuickTask(text: string): QuickToken[] {
   while ((m = re.exec(text)) !== null) {
     const raw = m[0];
     const metres = parseRadiusToken(raw);
+    const hhmm = metres === null && raw.includes(":") ? parseTimeToken(raw) : null;
     tokens.push({
       raw,
       start: m.index,
       end: m.index + raw.length,
       ...(metres !== null
         ? { kind: "radius" as const, metres }
-        : { kind: "name" as const }),
+        : raw.includes(":")
+          ? { kind: "time" as const, ...(hhmm !== null ? { hhmm } : {}) }
+          : { kind: "name" as const }),
     });
   }
   return tokens;
@@ -213,6 +239,14 @@ export interface QuickTaskItem {
   radiusExplicit: boolean;
   /** Type spelled out in the text ("ell 5k sss"); undefined = infer it. */
   explicitType?: QuickTypeWord;
+  /** Start direction stated here ("sss enter"); undefined = the default. */
+  startDirection?: SSSConfig["direction"];
+  /** Start timing stated here ("sss elapsed"); undefined = the default. */
+  startTiming?: SSSConfig["type"];
+  /** Start gates stated here, "HH:MM", in the order typed. */
+  startGates?: string[];
+  /** Time-shaped tokens that aren't times ("13:99"), kept so they're reported. */
+  badTimes?: string[];
   /** Ranked guesses, best first. Empty when nothing matched. */
   candidates: WaypointFileRecord[];
 }
@@ -231,6 +265,16 @@ export interface ParseQuickTaskOptions {
  * ("ell 5k sss") types the turnpoint before it, overriding what position alone
  * would infer — that's how you say "two concentric cylinders at ELLIOT, the
  * first the take-off and the second the start".
+ *
+ * A start modifier ("sss enter", "sss elapsed 13:15") attaches the same way, so
+ * ordering is as forgiving as it is for a radius: `sss 400m exit 13:15` and
+ * `exit sss 400m 13:15` say the same thing. What the modifiers *mean* is read
+ * off the start turnpoint by {@link startConfigFromItems}, once the roles are
+ * resolved — so they work on an implied start as well as a spelled-out one.
+ *
+ * A modifier or gate with no turnpoint before it falls through to a name, so it
+ * surfaces as "didn't match a competition waypoint" — exactly what a leading
+ * type word already does, and one less special case.
  */
 export function parseQuickTask(
   text: string,
@@ -252,9 +296,24 @@ export function parseQuickTask(
       }
       continue;
     }
+    // Every branch below defers to a waypoint whose code spells the same thing,
+    // so a competition with a waypoint coded RACE, EXIT — or, in principle, one
+    // carrying a colon — stays typeable. Same guard the type words rely on.
+    const settled = last && !isWaypointCode(token.raw, waypoints);
+    if (token.kind === "time" && settled) {
+      if (token.hhmm) (last.startGates ??= []).push(token.hhmm);
+      else (last.badTimes ??= []).push(token.raw);
+      continue;
+    }
     const asType = typeAlias(token.raw);
-    if (asType !== null && last && !isWaypointCode(token.raw, waypoints)) {
+    if (asType !== null && settled) {
       last.explicitType = asType;
+      continue;
+    }
+    const modifier = startModifier(token.raw);
+    if (modifier !== null && settled) {
+      if (modifier.direction) last.startDirection = modifier.direction;
+      if (modifier.timing) last.startTiming = modifier.timing;
       continue;
     }
     items.push({
@@ -338,6 +397,114 @@ export function typeAlias(word: string): QuickTypeWord | null {
 function isWaypointCode(word: string, waypoints: WaypointFileRecord[]): boolean {
   const q = norm(word.trim());
   return waypoints.some((w) => norm(w.code) === q);
+}
+
+// ---------------------------------------------------------------------------
+// Start (SSS) configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * The start settings the route line can state. Gates are "HH:MM" on the
+ * competition's own clock — the same domain the editor's gate pickers hold, so
+ * the grammar needs no timezone of its own; the dialog converts to the UTC the
+ * xctsk format stores at the one boundary it already converts at.
+ */
+export interface QuickStartConfig {
+  direction: SSSConfig["direction"];
+  type: SSSConfig["type"];
+  gates: string[];
+}
+
+/**
+ * What an unqualified `sss` means. Exit starts are the overwhelmingly common
+ * paragliding race-to-goal convention, so this is the right default — the whole
+ * point of the grammar is that it stops being an *invisible* one.
+ */
+export const DEFAULT_START: QuickStartConfig = {
+  direction: "EXIT",
+  type: "RACE",
+  gates: [],
+};
+
+/** One start setting a modifier word carries. */
+interface StartModifier {
+  direction?: SSSConfig["direction"];
+  timing?: SSSConfig["type"];
+}
+
+/** What you can type after `sss` to configure the start. */
+const START_MODIFIERS: Record<string, StartModifier> = {
+  exit: { direction: "EXIT" },
+  enter: { direction: "ENTER" },
+  race: { timing: "RACE" },
+  elapsed: { timing: "ELAPSED-TIME" },
+  et: { timing: "ELAPSED-TIME" },
+};
+
+/** The start setting a word states, or null when it isn't a modifier word. */
+export function startModifier(word: string): StartModifier | null {
+  const key = word.trim().toLowerCase();
+  return key in START_MODIFIERS ? START_MODIFIERS[key] : null;
+}
+
+/**
+ * The start configuration a parsed line states, read off whichever turnpoint
+ * ended up being the start — so modifiers work on an implied `sss` as well as a
+ * spelled-out one. Null when the route has no start at all, which is how the
+ * editor knows to leave its Start panel alone rather than inventing a config
+ * for a route that can't hold one.
+ *
+ * `types` must be {@link resolveTypes} over the *same* items, in the same
+ * order: the caller filters unmatched names out of both together, so the start
+ * this reports is the start the route actually has.
+ *
+ * Anything the line says but the route can't use is returned as a problem
+ * rather than silently dropped or silently honoured.
+ */
+export function startConfigFromItems(
+  items: QuickTaskItem[],
+  types: QuickType[]
+): { start: QuickStartConfig | null; problems: string[] } {
+  const problems: string[] = [];
+  const sssIndex = types.indexOf("SSS");
+
+  items.forEach((item, i) => {
+    for (const bad of item.badTimes ?? []) {
+      problems.push(`“${bad}” isn't a time — start gates are written HH:MM, like 13:15`);
+    }
+    if (i === sssIndex) return;
+    const states =
+      item.startDirection !== undefined ||
+      item.startTiming !== undefined ||
+      (item.startGates?.length ?? 0) > 0;
+    if (!states) return;
+    problems.push(
+      sssIndex < 0
+        ? "Start settings need a start turnpoint — mark one “sss”"
+        : `Start settings on ${item.query} are ignored — they belong on the start (sss) turnpoint`
+    );
+  });
+
+  if (sssIndex < 0) return { start: null, problems };
+
+  const item = items[sssIndex];
+  const gates: string[] = [];
+  for (const gate of item.startGates ?? []) {
+    if (gates.includes(gate)) problems.push(`Start gate ${gate} is listed twice — ignoring the repeat`);
+    else gates.push(gate);
+  }
+  const type = item.startTiming ?? DEFAULT_START.type;
+  // Reported, not truncated: scoring uses the first gate, but throwing the rest
+  // away because someone typed "elapsed" would lose work a keystroke undoes.
+  if (type === "ELAPSED-TIME" && gates.length > 1) {
+    problems.push(
+      "Elapsed time uses one gate — when the start opens. The later ones are ignored."
+    );
+  }
+  return {
+    start: { direction: item.startDirection ?? DEFAULT_START.direction, type, gates },
+    problems,
+  };
 }
 
 /** The word to type for a type, for round-tripping a route back to text. */
@@ -433,19 +600,28 @@ export function radiusToken(metres: number): string {
  * - `"needed"` (default) — a type word only where position wouldn't infer it,
  *   so the line is the shortest text that rebuilds this route. This is what
  *   the field mirrors a loaded route with.
- * - `"all"` — every role named: take-off, start, ESS and goal all spelled out.
- *   Longer, but it shows what the route IS rather than leaving it implied, and
- *   it puts each role somewhere you can edit. This is what Enter writes.
+ * - `"all"` — every role named: take-off, start, ESS and goal all spelled out,
+ *   and the start configuration written out in full. Longer, but it shows what
+ *   the route IS rather than leaving it implied, and it puts each role
+ *   somewhere you can edit. This is what Enter writes — which is how the start
+ *   direction stops being a default you never see.
  *
  * Both forms round-trip to the same route; "all" is what the eye wants and
  * "needed" is what the fingers want.
+ *
+ * `start` is written onto the start turnpoint. In "needed" mode only what
+ * *differs* from {@link DEFAULT_START} is written, which is what keeps the line
+ * and the route from fighting: a plain race/exit/no-gates task renders exactly
+ * as it always did, and anything else is always spelled out — so deleting
+ * `enter` from the line means "make it an exit start" and nothing is hiding.
  */
 export function quickTaskText(
   turnpoints: { name: string; radius: number; type: QuickType }[],
-  opts: { types?: "needed" | "all" } = {}
+  opts: { types?: "needed" | "all"; start?: QuickStartConfig | null } = {}
 ): string {
   const inferred = inferTypes(turnpoints.length);
   const last = turnpoints.length - 1;
+  const all = opts.types === "all";
   return turnpoints
     .map((tp, i) => {
       const parts = [tp.name.trim() || "?", radiusToken(tp.radius)];
@@ -455,12 +631,30 @@ export function quickTaskText(
       // A word is *needed* wherever inference would produce something else —
       // without it the line wouldn't rebuild this route.
       const needed = tp.type !== inferred[i];
+      const modifiers =
+        tp.type === "SSS" && opts.start ? startModifierWords(opts.start, all) : [];
       const spellOut =
-        opts.types === "all" ? tp.type !== "" || i === last || needed : needed;
+        (all ? tp.type !== "" || i === last || needed : needed) ||
+        // Modifiers without the word they hang off would read as a bare
+        // "PINEMT 400m enter" — say "sss" whenever the start is configured.
+        modifiers.length > 0;
       if (spellOut) parts.push(word);
+      parts.push(...modifiers);
       return parts.join(" ");
     })
     .join(", ");
+}
+
+/** The modifier words a start configuration needs written down (see above). */
+function startModifierWords(start: QuickStartConfig, all: boolean): string[] {
+  const words: string[] = [];
+  if (all || start.direction !== DEFAULT_START.direction) {
+    words.push(start.direction === "ENTER" ? "enter" : "exit");
+  }
+  if (all || start.type !== DEFAULT_START.type) {
+    words.push(start.type === "ELAPSED-TIME" ? "elapsed" : "race");
+  }
+  return [...words, ...start.gates];
 }
 
 // ---------------------------------------------------------------------------
