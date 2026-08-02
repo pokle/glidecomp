@@ -100,6 +100,9 @@ export function SettingsDialog({
   );
   const [test, setTest] = useState(comp.test);
   const [openUpload, setOpenUpload] = useState(comp.open_igc_upload ?? true);
+  const [openRegistration, setOpenRegistration] = useState(
+    comp.open_registration ?? true
+  );
   // "auto" = no explicit zone: the server derives one from the task
   // location (and re-derives when saved as auto).
   const [timezone, setTimezone] = useState(comp.timezone ?? "auto");
@@ -283,6 +286,7 @@ export function SettingsDialog({
           test,
           timezone: timezone === "auto" ? null : timezone,
           open_igc_upload: openUpload,
+          open_registration: openRegistration,
           admin_emails: adminEmails,
           gap_params: gapParams,
           scoring_format: scoringFormat,
@@ -377,6 +381,12 @@ export function SettingsDialog({
           </div>
 
           <TestCompField checked={test} onChange={setTest} />
+          <CheckboxField
+            checked={openRegistration}
+            onChange={setOpenRegistration}
+            label="Let pilots register themselves by submitting a track"
+            hint="Off, only admins add pilots. Pilots you registered can always submit."
+          />
           <CheckboxField
             checked={openUpload}
             onChange={setOpenUpload}

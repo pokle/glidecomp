@@ -37,6 +37,12 @@ import { useCompName } from "./comp-name-context";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { ManualFlightDialog } from "./ManualFlightDialog";
 import { compressIgc } from "./types";
+import {
+  NOT_AN_IGC_MESSAGE,
+  describeUploadOutcome,
+  tooLargeReason,
+  type TrackQualityWire,
+} from "./submit-track";
 import type {
   ClassScore,
   DistanceOriginValue,
@@ -608,16 +614,19 @@ function RowManage({
     const file = files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".igc")) {
-      toast.error("Please choose an IGC file");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File too large (max 5MB)");
+      toast.error(NOT_AN_IGC_MESSAGE);
       return;
     }
     setBusy(true);
     try {
       const compressed = await compressIgc(file);
+      // The size rule is the server's, both halves of it. This used to be an
+      // invented 5 MB check on the raw file, which matched neither.
+      const tooLarge = tooLargeReason(file.size, compressed.byteLength);
+      if (tooLarge) {
+        toast.error(tooLarge);
+        return;
+      }
       const res = await fetch(
         `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}`,
         { method: "POST", credentials: "include", body: compressed }
@@ -627,10 +636,15 @@ function RowManage({
         toast.error(err.error || "Upload failed");
         return;
       }
-      const data = (await res.json()) as { replaced?: boolean };
-      toast.success(
-        data.replaced ? `Track replaced for ${row.name}` : `Track uploaded for ${row.name}`
-      );
+      const data = (await res.json()) as {
+        replaced?: boolean;
+        track_quality?: TrackQualityWire | null;
+      };
+      // A withheld track must not be announced as a plain success — the pilot
+      // it belongs to is not here to notice, so the admin is the only one who
+      // can act on it.
+      const outcome = describeUploadOutcome(row.name, !!data.replaced, data.track_quality);
+      toast[outcome.tone](outcome.message);
       onMutated();
     } catch {
       toast.error("Network error. Please try again.");

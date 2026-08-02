@@ -41,6 +41,183 @@ beforeEach(async () => {
 
 // ── POST /api/comp/:comp_id/task/:task_id/igc ────────────────────────────
 
+describe("what an upload tells the client back", () => {
+  // The submit form's whole success panel reads from these two fields. Before
+  // this, only the anonymous route pinned flight_summary and NOTHING pinned
+  // track_quality on any route.
+  test("the self route returns track_quality and flight_summary", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    const res = await uploadIgc(compId, taskId);
+    const data = (await res.json()) as Record<string, any>;
+
+    // Always present, so the client has one shape to read.
+    expect(data.track_quality).toEqual({ hard_failed: false, findings: [] });
+    // This fixture has no B records, so every derived field is null rather
+    // than a confidently wrong zero — but the header it does carry is read.
+    expect(data.flight_summary).not.toBeNull();
+    expect(data.flight_summary.flight_date).toBe("2026-01-01");
+    expect(data.flight_summary.fix_count).toBe(0);
+    expect(data.flight_summary.duration_seconds).toBeNull();
+    expect(data.flight_summary.track_length_m).toBeNull();
+  });
+
+  test("the on-behalf route returns them too", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    const pilotRes = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bob Behalf",
+      pilot_class: "open",
+    });
+    const { comp_pilot_id } = (await pilotRes.json()) as { comp_pilot_id: string };
+
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${comp_pilot_id}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
+    );
+    expect(res.status).toBe(201);
+    const data = (await res.json()) as Record<string, any>;
+    expect(data.track_quality).toEqual({ hard_failed: false, findings: [] });
+    expect(data.flight_summary.flight_date).toBe("2026-01-01");
+  });
+});
+
+describe("the close date is the end of its day", () => {
+  // The date-only → end-of-day rule is copy-pasted across three routes. Only
+  // one copy had a test, and the boundary the rule exists FOR — a comp whose
+  // close date is today — had none at all.
+  const yesterday = () => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
+
+  test("a comp closing today still accepts a track (self route)", async () => {
+    const compId = await createComp({ close_date: new Date().toISOString().slice(0, 10) });
+    const taskId = await createTask(compId);
+    expect((await uploadIgc(compId, taskId)).status).toBe(201);
+  });
+
+  test("a comp that closed yesterday does not (self route)", async () => {
+    const compId = await createComp({ close_date: yesterday() });
+    const taskId = await createTask(compId);
+    expect((await uploadIgc(compId, taskId)).status).toBe(400);
+  });
+
+  test("the on-behalf route enforces it as well", async () => {
+    const compId = await createComp({ close_date: yesterday() });
+    const taskId = await createTask(compId);
+    const pilotRes = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bob Behalf",
+      pilot_class: "open",
+    });
+    const { comp_pilot_id } = (await pilotRes.json()) as { comp_pilot_id: string };
+
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${comp_pilot_id}`,
+      fakeIgcPayload(),
+      { user: "user-1" }
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("POST .../igc — open registration is on the record", () => {
+  test("audits the pilot joining, not just the track arriving", async () => {
+    // Uploading to a comp you are not registered for silently creates your
+    // comp_pilot row. That is a roster change, and the pilot count feeds
+    // launch validity (S7F §9.1) — so the public audit log has to show it, or
+    // it reads as a track uploaded for somebody who was never registered.
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    await uploadIgc(compId, taskId);
+
+    const rows = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE subject_type = 'pilot'"
+    ).all<{ description: string }>();
+    const lines = rows.results.map((r) => r.description);
+    expect(lines.some((d) => d.startsWith('Registered pilot "Test Pilot"'))).toBe(true);
+    expect(lines.some((d) => d.includes("on first upload"))).toBe(true);
+  });
+
+  test("is on by default, so every existing comp behaves as it always did", async () => {
+    const compId = await createComp();
+    const res = await authRequest("GET", `/api/comp/${compId}`);
+    expect(((await res.json()) as { open_registration: boolean }).open_registration).toBe(
+      true
+    );
+  });
+
+  test("refuses an unregistered pilot once the organiser closes registration", async () => {
+    const compId = await createComp();
+    await authRequest("PATCH", `/api/comp/${compId}`, { open_registration: false });
+    const taskId = await createTask(compId);
+
+    // user-3 has no comp_pilot row and cannot make one.
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      fakeIgcPayload(),
+      { user: "user-3" }
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.code).toBe("registration_closed");
+    // The pilot cannot fix this themselves, so the answer names who can.
+    expect(body.organisers.length).toBeGreaterThan(0);
+
+    const rows = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM task_track"
+    ).first<{ n: number }>();
+    expect(rows?.n).toBe(0);
+  });
+
+  test("still lets a pilot the organiser registered submit when it is closed", async () => {
+    // Closing registration stops STRANGERS joining. It must not lock out the
+    // roster the organiser built, or it would break the comps that use it.
+    const compId = await createComp();
+    await authRequest("PATCH", `/api/comp/${compId}`, { open_registration: false });
+    const taskId = await createTask(compId);
+    await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Pilot Three",
+      pilot_class: "open",
+      registered_pilot_email: "pilot3@test.com",
+    });
+
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      fakeIgcPayload(),
+      { user: "user-3" }
+    );
+    expect(res.status).toBe(201);
+  });
+
+  test("audits the organiser turning it off", async () => {
+    const compId = await createComp();
+    await authRequest("PATCH", `/api/comp/${compId}`, { open_registration: false });
+    const rows = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE description LIKE '%registration%'"
+    ).all<{ description: string }>();
+    expect(rows.results.map((r) => r.description).join("\n")).toContain(
+      "Disabled open registration"
+    );
+  });
+
+  test("does not claim a second registration when the pilot is already on the roster", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    await uploadIgc(compId, taskId);
+    await env.DB.prepare("DELETE FROM audit_log").run();
+
+    // A replacement upload must not re-announce the registration.
+    await uploadIgc(compId, taskId);
+    const rows = await env.DB.prepare(
+      "SELECT description FROM audit_log WHERE description LIKE 'Registered pilot%'"
+    ).all<{ description: string }>();
+    expect(rows.results).toHaveLength(0);
+  });
+});
+
 describe("POST .../igc (upload)", () => {
   test("uploads IGC and auto-registers pilot", async () => {
     const compId = await createComp();

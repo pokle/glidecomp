@@ -126,7 +126,7 @@ Tables referenced from the auth-api worker:
 
 ### Open registration
 
-Competitions operate with open registration by default. When an authenticated user uploads a track to a task:
+Competitions operate with open registration by default — `comp.open_registration`, on unless an organiser turns it off in Competition settings (migration 0027; see [track-submission.md](track-submission.md)). When it is off, an upload from someone not already on the roster is refused with `403 registration_closed`. When an authenticated user uploads a track to a task and registration is open:
 
 1. If `comp.close_date` is set and the current date is past it, reject the upload.
 2. Look up the user's `pilot` profile (create one from `user.name` if it doesn't exist yet).

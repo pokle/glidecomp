@@ -237,13 +237,20 @@ test.describe("SSR — isolation and fallback", () => {
     expect(await bare.text()).not.toContain('name="robots" content="noindex"');
   });
 
-  test("a non-SSR SPA route still serves the plain app shell", async ({ request }) => {
-    const res = await request.get("/u/me");
-    expect(res.ok()).toBeTruthy();
-    const html = await res.text();
-    expect(html).toContain('<div id="root"></div>');
-    expect(html).not.toContain("window.__SSR_DATA__");
-  });
+  // /submit is here rather than in the noindex list below: it is not under
+  // /comp, so _routes.json never hands it to the SSR Function at all — it is a
+  // _redirects rewrite to the plain shell, and that is the contract to pin.
+  for (const path of ["/u/me", "/submit"]) {
+    test(`a non-SSR SPA route (${path}) still serves the plain app shell`, async ({
+      request,
+    }) => {
+      const res = await request.get(path);
+      expect(res.ok()).toBeTruthy();
+      const html = await res.text();
+      expect(html).toContain('<div id="root"></div>');
+      expect(html).not.toContain("window.__SSR_DATA__");
+    });
+  }
 
   /**
    * A hard reload of an admin-only / redirect-only deep URL must still get a
@@ -497,6 +504,9 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     // was unexercised — and the next query-driven view will need it.
     ":scoresByTask",
     ":compAnalysisByClass",
+    // The submit page: not SSR'd, but it is in the Shell, so the nav and the
+    // account slot hydrate around it like anywhere else.
+    "/submit",
   ] as const) {
     test(`no hydration mismatch on ${path}`, async ({ page, request }) => {
       const d = await discover(request);
@@ -516,6 +526,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":compAnalysisByClass": `/comp/${d.compId}/analysis${
           cls ? `?class=${encodeURIComponent(cls)}` : ""
         }`,
+        "/submit": "/submit",
       };
       const url = urls[path];
 

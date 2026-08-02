@@ -83,9 +83,9 @@ export async function createTask(
 export async function uploadRequest(
   path: string,
   body: ArrayBuffer | Uint8Array,
-  options: { user?: string | null } = {}
+  options: { user?: string | null; headers?: Record<string, string> } = {}
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...options.headers };
   if (options.user) {
     headers["Cookie"] = `test-user=${options.user}`;
   }
@@ -94,6 +94,37 @@ export async function uploadRequest(
     headers,
     body,
   });
+}
+
+/**
+ * Submit a track anonymously — no cookie, identity in the headers.
+ *
+ * The value is percent-encoded exactly as the browser client encodes it, so a
+ * non-ASCII identifier travels the same way here as in production.
+ */
+export function anonUploadRequest(
+  compId: string,
+  taskId: string,
+  body: ArrayBuffer | Uint8Array,
+  identifier: { kind: string; value: string }
+): Promise<Response> {
+  return uploadRequest(
+    `/api/comp/${compId}/task/${taskId}/igc/open-submit`,
+    body,
+    {
+      headers: {
+        "x-pilot-ident-kind": identifier.kind,
+        "x-pilot-ident": encodeURIComponent(identifier.value),
+      },
+    }
+  );
+}
+
+/** A YYYY-MM-DD date `n` days from today, for endpoints that key off "now". */
+export function isoDaysFromToday(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 /** Clear all competition data between tests. */
@@ -113,6 +144,10 @@ export async function clearCompData(): Promise<void> {
     // makes the next test's first mutation do somebody else's work.
     env.DB.prepare("DELETE FROM search_doc"),
     env.DB.prepare("DELETE FROM search_dirty"),
+    // Anonymous-submission budgets are keyed by comp/pilot/IP, not by comp id
+    // alone, so they outlive the rows they were charged against and would make
+    // one test's uploads count against the next one's.
+    env.DB.prepare(`DELETE FROM "rateLimit"`),
     // Re-seed test users: the Cloudflare vitest pool uses per-test storage
     // isolation, which wipes the `user` table between tests. apply-migrations
     // only seeds at file-load time. INSERT OR REPLACE keeps rows idempotent.

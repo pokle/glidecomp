@@ -31,6 +31,7 @@ import {
   type FlightScoringData,
 } from "@glidecomp/engine";
 import type { AuthUser } from "./env";
+import { ANONYMOUS_ACTOR_NAME } from "./audit";
 
 /** Synthetic `trackFile` key that pairs a manual flight's score back to its
  * pilot in scoreFlights — mirrors a track's igc_filename, but never collides
@@ -181,14 +182,21 @@ export async function supersedeActiveManualFlights(
  * the active evidence. Upserts the `task_pilot_status` row to `landed` (note
  * cleared), mirroring applyStatusOnTrackUpload. Returns the previous status
  * key (or null when Present) so the caller can shape its audit line.
+ *
+ * `user` is null when the evidence arrived from an anonymous submission. The
+ * row then records no user id and names the source rather than a person —
+ * pointing `set_by_user_id` at an account nobody proved they hold would make
+ * the record say something untrue.
  */
 export async function markLandedFromEvidence(
   db: D1Database,
-  user: AuthUser,
+  user: AuthUser | null,
   compId: number,
   taskId: number,
   compPilotId: number
 ): Promise<string | null> {
+  const setById = user?.id ?? null;
+  const setByName = user?.name ?? ANONYMOUS_ACTOR_NAME;
   const prev = await db
     .prepare(
       `SELECT status_key FROM task_pilot_status
@@ -207,7 +215,7 @@ export async function markLandedFromEvidence(
          SET status_key = 'landed', note = NULL, set_by_user_id = ?, set_by_name = ?, set_at = ?
          WHERE task_id = ? AND comp_pilot_id = ?`
       )
-      .bind(user.id, user.name, now, taskId, compPilotId)
+      .bind(setById, setByName, now, taskId, compPilotId)
       .run();
   } else {
     await db
@@ -216,7 +224,7 @@ export async function markLandedFromEvidence(
            (comp_id, task_id, comp_pilot_id, status_key, note, set_by_user_id, set_by_name, set_at)
          VALUES (?, ?, ?, 'landed', NULL, ?, ?, ?)`
       )
-      .bind(compId, taskId, compPilotId, user.id, user.name, now)
+      .bind(compId, taskId, compPilotId, setById, setByName, now)
       .run();
   }
   return prev?.status_key ?? null;

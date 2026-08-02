@@ -4,6 +4,7 @@
 export { sanitizeText } from './sanitize';
 export { parseIGC, fixAltitude, type IGCFile, type IGCFix, type IGCHeader, type IGCEvent, type IGCTask, type IGCTaskPoint } from './igc-parser';
 export { cleanAltitudes, type AltitudeCleaningReport, type AltitudeRepairRange } from './altitude-cleaning';
+export { summariseFlight, type FlightSummary } from './flight-summary';
 export { assessTrackQuality, EMPTY_TRACK_QUALITY_REPORT, type TrackQualityReport, type TrackQualityFinding, type TrackQualityEvidence, type TrackQualityContext, type TrackQualityCheckId, type TrackQualitySeverity } from './track-quality';
 export { detectFlightEvents, filterEventsByBounds, getEventStyle, type FlightEvent, type FlightEventType, type ThermalSegment, type GlideSegment, type TrackSegment, type EventDetails, type ThermalEventDetails, type GlideEventDetails, type FixIndexDetails, type TurnpointCrossingDetails, type TurnpointReachingDetails, type CircleEventDetails } from './event-detector';
 export { parseXCTask, parseXCTaskAsync, toXctskJSON, igcTaskToXCTask, calculateNominalTaskDistance, getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex, getIntermediateTurnpoints, isValidTask, type XCTask, type Turnpoint, type TurnpointType, type Waypoint, type SSSConfig, type GoalConfig, type IGCTaskConversionOptions } from './xctsk-parser';

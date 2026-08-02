@@ -210,6 +210,110 @@ export async function linkExistingRegistrations(
 }
 
 /**
+ * The identifier kinds a person can be asked to type to name themselves.
+ *
+ * Same vocabulary and same priority as the linker above, so the two never
+ * drift. `name` is deliberately absent and must stay absent: two people share
+ * a name, which is why neither the linker nor the resolver will auto-link on
+ * one, and an anonymous caller has strictly less standing than either.
+ */
+export const PILOT_IDENTIFIER_KINDS = [...ID_FIELDS, "email"] as const;
+
+export type PilotIdentifierKind = (typeof PILOT_IDENTIFIER_KINDS)[number];
+
+export function isPilotIdentifierKind(v: string): v is PilotIdentifierKind {
+  return (PILOT_IDENTIFIER_KINDS as readonly string[]).includes(v);
+}
+
+/** How each kind reads in a sentence a human is going to be shown. */
+export const PILOT_IDENTIFIER_LABELS: Record<PilotIdentifierKind, string> = {
+  civl_id: "CIVL ID",
+  safa_id: "SAFA ID",
+  ushpa_id: "USHPA ID",
+  bhpa_id: "BHPA ID",
+  dhv_id: "DHV ID",
+  ffvl_id: "FFVL ID",
+  fai_id: "FAI ID",
+  email: "email address",
+};
+
+export interface CompPilotMatch {
+  comp_pilot_id: number;
+  registered_pilot_name: string;
+  pilot_class: string;
+  /** Set once the registration has been claimed by a GlideComp account. */
+  pilot_id: number | null;
+  /** Where to write to this pilot, preferring what the organiser registered
+   * over the account address. Null when neither exists. */
+  notify_email: string | null;
+}
+
+/**
+ * Find the registrations in ONE competition that answer to a single typed
+ * identifier — the question "who on this comp's roster is this?".
+ *
+ * Deliberately NOT the linker's query, though it shares its vocabulary:
+ *
+ *   - the linker reads only `registered_pilot_*` and only on rows nobody has
+ *     claimed yet, because its job is to claim them. This has to see claimed
+ *     rows too: a pilot who has an account but is at launch with no session
+ *     must still be able to submit.
+ *   - so it also has to look at the linked account's own identity, because
+ *     once a row is claimed the ids may live on `pilot`/`user` rather than on
+ *     the registration the organiser typed.
+ *
+ * Comparison is case-insensitive. A person typing their own email address at
+ * the end of a flying day will get the case wrong, and a match that fails on
+ * capitalisation reads to them as "the organiser never registered me".
+ *
+ * Returns every match. Deciding what to do with none, one, or several is the
+ * caller's — an ambiguous roster is a thing to report, never to guess at.
+ */
+export async function findCompPilotsByIdentifier(
+  db: D1Database,
+  compId: number,
+  kind: PilotIdentifierKind,
+  value: string
+): Promise<CompPilotMatch[]> {
+  const trimmed = value.trim();
+  if (trimmed === "") return [];
+
+  // The column name comes from the ID_FIELDS whitelist via the kind union,
+  // never from the request, so it cannot carry an injection.
+  const condition =
+    kind === "email"
+      ? `(cp.registered_pilot_email = ?2 COLLATE NOCASE OR u.email = ?2 COLLATE NOCASE)`
+      : `(cp.registered_pilot_${kind} = ?2 COLLATE NOCASE OR p.${kind} = ?2 COLLATE NOCASE)`;
+
+  const rows = await db
+    .prepare(
+      `SELECT cp.comp_pilot_id, cp.registered_pilot_name, cp.pilot_class,
+              cp.pilot_id, cp.registered_pilot_email, u.email AS account_email
+       FROM comp_pilot cp
+       LEFT JOIN pilot p ON p.pilot_id = cp.pilot_id
+       LEFT JOIN "user" u ON u.id = p.user_id
+       WHERE cp.comp_id = ?1 AND ${condition}`
+    )
+    .bind(compId, trimmed)
+    .all<{
+      comp_pilot_id: number;
+      registered_pilot_name: string;
+      pilot_class: string;
+      pilot_id: number | null;
+      registered_pilot_email: string | null;
+      account_email: string | null;
+    }>();
+
+  return rows.results.map((r) => ({
+    comp_pilot_id: r.comp_pilot_id,
+    registered_pilot_name: r.registered_pilot_name,
+    pilot_class: r.pilot_class,
+    pilot_id: r.pilot_id,
+    notify_email: r.registered_pilot_email ?? r.account_email ?? null,
+  }));
+}
+
+/**
  * Work out which field a candidate matched against, in priority order.
  * Returns the first field that agrees. Used for audit descriptions and
  * to distinguish real matches from phantom ones (shouldn't happen given

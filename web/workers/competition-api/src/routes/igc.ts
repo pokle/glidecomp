@@ -9,8 +9,6 @@ import {
   trackQualityOverrideSchema,
   validated,
 } from "../validators";
-import { parseIGC, parseXCTask, assessTrackQuality } from "@glidecomp/engine";
-import type { TrackQualityReport } from "@glidecomp/engine";
 import { audit } from "../audit";
 import { bumpAndRevalidateScores } from "../score-store";
 import { linkExistingRegistrations } from "../pilot-linker";
@@ -23,6 +21,17 @@ import {
   validateAndDecompressIgc,
   IgcValidationException,
 } from "../igc-validation";
+import {
+  TaskPilotLimitError,
+  assessUploadedTrack,
+  flightSummaryOf,
+  formatBytes,
+  igcPilotNameOf,
+  parseUploadedIgc,
+  qualityAuditLine,
+  storeUploadedTrack,
+  toUploadResult,
+} from "../track-upload";
 
 type Variables = {
   user: AuthUser;
@@ -30,96 +39,6 @@ type Variables = {
 };
 
 type HonoEnv = { Bindings: Env; Variables: Variables };
-
-const MAX_PILOTS_PER_TASK = 250;
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** The wire shape the upload routes return alongside the stored track. */
-export interface TrackQualityUploadResult {
-  hard_failed: boolean;
-  findings: { id: string; severity: string; title: string; detail: string }[];
-}
-
-/**
- * Assess an uploaded tracklog against its task (engine track-quality.ts).
- *
- * Upload NEVER blocks on the result — this is not igc-validation.ts, which
- * rejects (SEC-11 size/gzip guards) and returns 400. A data-quality finding is
- * information: the file is kept, the flags are surfaced to the uploader and
- * the scorekeeper, and a HARD verdict withholds the track from scoring on the
- * read path, where an admin can overrule it (FAI S7A §4.4.6). Do not merge
- * the two concerns.
- *
- * The verdict is deliberately NOT written to track_analysis here: this handler
- * has no resolveTaskScoringConfig and duplicating that geometry hash is how
- * the two paths drift. The bumpAndRevalidateScores this route already calls
- * recomputes and caches it within seconds.
- *
- * Returns null when there is nothing to assess (no route saved yet, or an
- * unparseable file — the latter is already handled downstream).
- */
-async function assessUploadedTrack(
-  db: D1Database,
-  taskId: number,
-  igcText: string
-): Promise<TrackQualityReport | null> {
-  const row = await db
-    .prepare(
-      `SELECT t.xctsk, t.task_date, c.category, c.timezone
-       FROM task t JOIN comp c ON c.comp_id = t.comp_id
-       WHERE t.task_id = ?`
-    )
-    .bind(taskId)
-    .first<{
-      xctsk: string | null;
-      task_date: string;
-      category: string;
-      timezone: string | null;
-    }>();
-  if (!row) return null;
-
-  try {
-    const igc = parseIGC(igcText);
-    if (igc.fixes.length === 0) return null;
-    return assessTrackQuality(igc.fixes, igc.header, {
-      task: row.xctsk ? parseXCTask(row.xctsk) : undefined,
-      taskDate: row.task_date,
-      timeZone: row.timezone ?? undefined,
-      category: row.category === "pg" ? "pg" : "hg",
-    });
-  } catch {
-    return null;
-  }
-}
-
-/** The wire form of a report, always present so the client has one shape. */
-function toUploadResult(report: TrackQualityReport | null): TrackQualityUploadResult {
-  return {
-    hard_failed: report?.hardFailed ?? false,
-    findings: (report?.findings ?? []).map((f) => ({
-      id: f.id,
-      severity: f.severity,
-      title: f.title,
-      detail: f.detail,
-    })),
-  };
-}
-
-/** The audit sentence for a flagged upload — the audit log is the public
- * transparency record, so a silent flag is worse than a noisy one. */
-function qualityAuditLine(pilotName: string, report: TrackQualityReport): string | null {
-  if (report.findings.length === 0) return null;
-  const detail = report.findings.map((f) => `${f.title}: ${f.detail}`).join(" ");
-  return report.hardFailed
-    ? `Uploaded track for ${pilotName} was flagged and excluded from scoring — ${detail} ` +
-        `It scores 0 until a correct tracklog is uploaded or the scorekeeper accepts it.`
-    : `Uploaded track for ${pilotName} was flagged for review — ${detail} It is still scored.`;
-}
 
 /**
  * Ensure a `pilot` row exists for the given user. Returns the pilot_id.
@@ -152,13 +71,34 @@ async function ensurePilot(
  * Returns `{ compPilotId, claimedFromPreReg }` — the boolean is used by
  * the caller to emit a different audit description.
  */
+/**
+ * Thrown when the caller is not on the roster and the competition has closed
+ * open registration. The organiser adds pilots themselves in that case.
+ */
+class RegistrationClosedError extends Error {
+  constructor() {
+    super("registration closed");
+    this.name = "RegistrationClosedError";
+  }
+}
+
 async function ensureCompPilot(
   db: D1Database,
   compId: number,
   pilotId: number,
   pilotName: string,
-  defaultPilotClass: string
-): Promise<{ compPilotId: number; claimedFromPreReg: boolean; preRegName: string | null }> {
+  defaultPilotClass: string,
+  /** False when `comp.open_registration` is off — an unknown pilot is refused
+   *  rather than added. Claiming an existing pre-registration still works:
+   *  that pilot IS on the roster, the account just had not been linked yet. */
+  mayRegister: boolean
+): Promise<{
+  compPilotId: number;
+  claimedFromPreReg: boolean;
+  preRegName: string | null;
+  /** True when this upload put the pilot on the roster for the first time. */
+  registeredNow: boolean;
+}> {
   const existing = await db
     .prepare(
       "SELECT comp_pilot_id FROM comp_pilot WHERE comp_id = ? AND pilot_id = ?"
@@ -170,6 +110,7 @@ async function ensureCompPilot(
       compPilotId: existing.comp_pilot_id,
       claimedFromPreReg: false,
       preRegName: null,
+      registeredNow: false,
     };
   }
 
@@ -184,8 +125,12 @@ async function ensureCompPilot(
       compPilotId: first.comp_pilot_id,
       claimedFromPreReg: true,
       preRegName: first.registered_pilot_name,
+      // The organiser already registered them; this only linked the account.
+      registeredNow: false,
     };
   }
+
+  if (!mayRegister) throw new RegistrationClosedError();
 
   const res = await db
     .prepare(
@@ -198,6 +143,7 @@ async function ensureCompPilot(
     compPilotId: res.meta.last_row_id,
     claimedFromPreReg: false,
     preRegName: null,
+    registeredNow: true,
   };
 }
 
@@ -215,13 +161,15 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Verify comp exists and check close_date
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, close_date, default_pilot_class FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, name, close_date, default_pilot_class, open_registration FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
           comp_id: number;
+          name: string;
           close_date: string | null;
           default_pilot_class: string;
+          open_registration: number;
         }>();
 
       if (!comp) {
@@ -270,13 +218,38 @@ export const igcRoutes = new Hono<HonoEnv>()
       // unlinked admin pre-registration matches this user, the linker
       // will claim that row instead of creating a new one.
       const pilotId = await ensurePilot(c.env.DB, user.id, user.name);
-      const ensured = await ensureCompPilot(
-        c.env.DB,
-        compId,
-        pilotId,
-        user.name,
-        comp.default_pilot_class
-      );
+      let ensured;
+      try {
+        ensured = await ensureCompPilot(
+          c.env.DB,
+          compId,
+          pilotId,
+          user.name,
+          comp.default_pilot_class,
+          !!comp.open_registration
+        );
+      } catch (err) {
+        if (err instanceof RegistrationClosedError) {
+          // Name who can fix it: the pilot cannot add themselves, so an answer
+          // without a person in it is a dead end.
+          const organisers = await c.env.DB.prepare(
+            `SELECT u.email, u.name FROM comp_admin ca
+             JOIN "user" u ON ca.user_id = u.id WHERE ca.comp_id = ?`
+          )
+            .bind(compId)
+            .all<{ email: string; name: string }>();
+          return c.json(
+            {
+              error: `You are not registered for ${comp.name}, and it does not accept pilots registering themselves. Ask the organiser to add you.`,
+              code: "registration_closed",
+              comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
+              organisers: organisers.results,
+            },
+            403
+          );
+        }
+        throw err;
+      }
       const compPilotId = ensured.compPilotId;
       if (ensured.claimedFromPreReg && ensured.preRegName) {
         await audit(c.env.DB, c.var.user, compId, {
@@ -285,166 +258,66 @@ export const igcRoutes = new Hono<HonoEnv>()
           subject_name: ensured.preRegName,
           description: `Linked pre-registered pilot "${ensured.preRegName}" to GlideComp account on first upload`,
         });
+      } else if (ensured.registeredNow) {
+        // Open registration just put someone on the roster. Without this the
+        // transparency record shows a track uploaded for a pilot it never saw
+        // join — and the pilot count feeds launch validity (S7F §9.1), so this
+        // is a scoring input arriving unannounced. Mirrors the wording the
+        // admin registration routes use, plus how it happened.
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "pilot",
+          subject_id: compPilotId,
+          subject_name: user.name,
+          description: `Registered pilot "${user.name}" (class: ${comp.default_pilot_class}) on first upload`,
+        });
       }
 
-      // Enforce max pilots per task
-      const pilotCount = await c.env.DB.prepare(
-        "SELECT COUNT(*) as cnt FROM task_track WHERE task_id = ?"
-      )
-        .bind(taskId)
-        .first<{ cnt: number }>();
-
-      // Check if this pilot already has a track (replacement doesn't count toward limit)
-      const existingTrack = await c.env.DB.prepare(
-        "SELECT task_track_id, igc_filename, penalty_points, penalty_reason FROM task_track WHERE task_id = ? AND comp_pilot_id = ?"
-      )
-        .bind(taskId, compPilotId)
-        .first<{
-          task_track_id: number;
-          igc_filename: string;
-          penalty_points: number;
-          penalty_reason: string | null;
-        }>();
-
-      if (
-        !existingTrack &&
-        pilotCount &&
-        pilotCount.cnt >= MAX_PILOTS_PER_TASK
-      ) {
-        return c.json(
-          { error: `Maximum ${MAX_PILOTS_PER_TASK} pilots per task` },
-          400
-        );
-      }
-
-      // R2 path: /c/{comp_id}/t/{task_id}/{comp_pilot_id}.igc
-      const r2Key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
-      const now = new Date().toISOString();
-
-      // Extract pilot name from IGC header (best-effort — null if unparseable)
-      let igcPilotName: string | null = null;
-      try {
-        const igc = parseIGC(igcText);
-        igcPilotName = igc.header.pilot || igc.header.competitionId || null;
-      } catch {
-        // Unparseable IGC — store null, scoring will skip it too
-      }
+      // ONE parse, shared by the header name, the quality assessment and the
+      // flight summary.
+      const igc = parseUploadedIgc(igcText);
+      const igcPilotName = igcPilotNameOf(igc);
 
       // Data quality (FAI S7A §4.4.2). Never blocks the upload.
-      const quality = await assessUploadedTrack(c.env.DB, taskId, igcText);
+      const quality = await assessUploadedTrack(c.env.DB, taskId, igc);
 
-      // Upload to R2 with gzip content-encoding
-      await c.env.R2.put(r2Key, body, {
-        httpMetadata: {
-          contentType: "application/octet-stream",
-          contentEncoding: "gzip",
-        },
-      });
-
-      if (existingTrack) {
-        // Replace existing track, preserving penalties
-        // Delete old R2 object if filename differs (shouldn't since we use comp_pilot_id)
-        if (existingTrack.igc_filename !== r2Key) {
-          await c.env.R2.delete(existingTrack.igc_filename);
-        }
-
-        await c.env.DB.prepare(
-          `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?,
-               uploaded_by_user_id = ?, uploaded_by_name = ?, active = 1
-           WHERE task_track_id = ?`
-        )
-          .bind(
-            r2Key,
-            now,
-            body.byteLength,
-            igcPilotName,
-            user.id,
-            user.name,
-            existingTrack.task_track_id
-          )
-          .run();
-
-        await bumpAndRevalidateScores(c, [taskId]);
-        await audit(c.env.DB, c.var.user, compId, {
-          subject_type: "track",
-          subject_id: existingTrack.task_track_id,
-          subject_name: user.name,
-          description: `Replaced IGC for ${user.name} (${formatBytes(body.byteLength)})`,
-        });
-        const qualityLine = quality && qualityAuditLine(user.name, quality);
-        if (qualityLine) {
-          await audit(c.env.DB, c.var.user, compId, {
-            subject_type: "track",
-            subject_id: existingTrack.task_track_id,
-            subject_name: user.name,
-            description: qualityLine,
-          });
-        }
-
-        // A hard-failed file is not evidence that this pilot flew this task,
-        // so it must not stamp them "Landed" — and, critically, must not
-        // supersede an existing scorekeeper-entered manual flight, which
-        // would destroy a real result on the strength of a rejected upload.
-        if (!quality?.hardFailed) {
-          await applyStatusOnTrackUpload(
-            c.env.DB,
-            user,
-            compId,
-            taskId,
-            compPilotId,
-            user.name
-          );
-        }
-
-        return c.json({
-          task_track_id: encodeId(alphabet, existingTrack.task_track_id),
-          comp_pilot_id: encodeId(alphabet, compPilotId),
-          igc_filename: r2Key,
-          uploaded_at: now,
-          file_size: body.byteLength,
-          replaced: true,
-          track_quality: toUploadResult(quality),
-        });
-      }
-
-      // Insert new track
-      const trackResult = await c.env.DB.prepare(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, uploaded_by_user_id, uploaded_by_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
+      let stored;
+      try {
+        stored = await storeUploadedTrack(c.env.DB, c.env.R2, {
+          compId,
           taskId,
           compPilotId,
-          r2Key,
-          now,
-          body.byteLength,
+          body,
           igcPilotName,
-          user.id,
-          user.name
-        )
-        .run();
-
-      const newTrackId = trackResult.meta.last_row_id;
+          uploader: { userId: user.id, name: user.name },
+        });
+      } catch (err) {
+        if (err instanceof TaskPilotLimitError) {
+          return c.json({ error: err.message }, 400);
+        }
+        throw err;
+      }
 
       await bumpAndRevalidateScores(c, [taskId]);
       await audit(c.env.DB, c.var.user, compId, {
         subject_type: "track",
-        subject_id: newTrackId,
+        subject_id: stored.taskTrackId,
         subject_name: user.name,
-        description: `Uploaded IGC for ${user.name} (${formatBytes(body.byteLength)})`,
+        description: `${stored.replaced ? "Replaced" : "Uploaded"} IGC for ${user.name} (${formatBytes(stored.fileSize)})`,
       });
       const qualityLine = quality && qualityAuditLine(user.name, quality);
       if (qualityLine) {
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "track",
-          subject_id: newTrackId,
+          subject_id: stored.taskTrackId,
           subject_name: user.name,
           description: qualityLine,
         });
       }
 
-      // See the note above: a hard-failed file must not claim the pilot flew.
+      // A hard-failed file is not evidence that this pilot flew this task,
+      // so it must not stamp them "Landed" — and, critically, must not
+      // supersede an existing scorekeeper-entered manual flight, which
+      // would destroy a real result on the strength of a rejected upload.
       if (!quality?.hardFailed) {
         await applyStatusOnTrackUpload(
           c.env.DB,
@@ -458,15 +331,16 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       return c.json(
         {
-          task_track_id: encodeId(alphabet, newTrackId),
+          task_track_id: encodeId(alphabet, stored.taskTrackId),
           comp_pilot_id: encodeId(alphabet, compPilotId),
-          igc_filename: r2Key,
-          uploaded_at: now,
-          file_size: body.byteLength,
-          replaced: false,
+          igc_filename: stored.r2Key,
+          uploaded_at: stored.uploadedAt,
+          file_size: stored.fileSize,
+          replaced: stored.replaced,
           track_quality: toUploadResult(quality),
+          flight_summary: flightSummaryOf(igc),
         },
-        201
+        stored.replaced ? 200 : 201
       );
     }
   )
@@ -572,155 +446,50 @@ export const igcRoutes = new Hono<HonoEnv>()
         throw err;
       }
 
-      // Check for existing track (replacement preserves penalties)
-      const existingTrack = await c.env.DB.prepare(
-        "SELECT task_track_id, igc_filename, penalty_points, penalty_reason FROM task_track WHERE task_id = ? AND comp_pilot_id = ?"
-      )
-        .bind(taskId, compPilotId)
-        .first<{
-          task_track_id: number;
-          igc_filename: string;
-          penalty_points: number;
-          penalty_reason: string | null;
-        }>();
-
-      if (!existingTrack) {
-        // Enforce max pilots per task for new tracks
-        const pilotCount = await c.env.DB.prepare(
-          "SELECT COUNT(*) as cnt FROM task_track WHERE task_id = ?"
-        )
-          .bind(taskId)
-          .first<{ cnt: number }>();
-
-        if (pilotCount && pilotCount.cnt >= MAX_PILOTS_PER_TASK) {
-          return c.json(
-            { error: `Maximum ${MAX_PILOTS_PER_TASK} pilots per task` },
-            400
-          );
-        }
-      }
-
-      const r2Key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
-      const now = new Date().toISOString();
-
-      // Extract pilot name from IGC header (best-effort)
-      let igcPilotName: string | null = null;
-      try {
-        const igc = parseIGC(igcText);
-        igcPilotName = igc.header.pilot || igc.header.competitionId || null;
-      } catch {
-        // Ignore — store null
-      }
+      // ONE parse, shared by the header name, the quality assessment and the
+      // flight summary.
+      const igc = parseUploadedIgc(igcText);
+      const igcPilotName = igcPilotNameOf(igc);
 
       // Data quality (FAI S7A §4.4.2). Never blocks the upload.
-      const quality = await assessUploadedTrack(c.env.DB, taskId, igcText);
+      const quality = await assessUploadedTrack(c.env.DB, taskId, igc);
 
-      await c.env.R2.put(r2Key, body, {
-        httpMetadata: {
-          contentType: "application/octet-stream",
-          contentEncoding: "gzip",
-        },
-      });
-
-      if (existingTrack) {
-        if (existingTrack.igc_filename !== r2Key) {
-          await c.env.R2.delete(existingTrack.igc_filename);
-        }
-
-        await c.env.DB.prepare(
-          `UPDATE task_track
-           SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?,
-               uploaded_by_user_id = ?, uploaded_by_name = ?, active = 1
-           WHERE task_track_id = ?`
-        )
-          .bind(
-            r2Key,
-            now,
-            body.byteLength,
-            igcPilotName,
-            user.id,
-            user.name,
-            existingTrack.task_track_id
-          )
-          .run();
-
-        await bumpAndRevalidateScores(c, [taskId]);
-        await audit(c.env.DB, c.var.user, compId, {
-          subject_type: "track",
-          subject_id: existingTrack.task_track_id,
-          subject_name: targetPilotName,
-          description: `Replaced IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
-        });
-        const qualityLine = quality && qualityAuditLine(targetPilotName, quality);
-        if (qualityLine) {
-          await audit(c.env.DB, c.var.user, compId, {
-            subject_type: "track",
-            subject_id: existingTrack.task_track_id,
-            subject_name: targetPilotName,
-            description: qualityLine,
-          });
-        }
-
-        // See the note in the self-upload route: a hard-failed file must not
-        // stamp the pilot "Landed" or supersede a manual flight.
-        if (!quality?.hardFailed) {
-          await applyStatusOnTrackUpload(
-            c.env.DB,
-            user,
-            compId,
-            taskId,
-            compPilotId,
-            targetPilotName
-          );
-        }
-
-        return c.json({
-          task_track_id: encodeId(alphabet, existingTrack.task_track_id),
-          comp_pilot_id: encodeId(alphabet, compPilotId),
-          igc_filename: r2Key,
-          uploaded_at: now,
-          file_size: body.byteLength,
-          replaced: true,
-          track_quality: toUploadResult(quality),
-        });
-      }
-
-      const trackResult = await c.env.DB.prepare(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, uploaded_by_user_id, uploaded_by_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
+      let stored;
+      try {
+        stored = await storeUploadedTrack(c.env.DB, c.env.R2, {
+          compId,
           taskId,
           compPilotId,
-          r2Key,
-          now,
-          body.byteLength,
+          body,
           igcPilotName,
-          user.id,
-          user.name
-        )
-        .run();
-
-      const newTrackId = trackResult.meta.last_row_id;
+          uploader: { userId: user.id, name: user.name },
+        });
+      } catch (err) {
+        if (err instanceof TaskPilotLimitError) {
+          return c.json({ error: err.message }, 400);
+        }
+        throw err;
+      }
 
       await bumpAndRevalidateScores(c, [taskId]);
       await audit(c.env.DB, c.var.user, compId, {
         subject_type: "track",
-        subject_id: newTrackId,
+        subject_id: stored.taskTrackId,
         subject_name: targetPilotName,
-        description: `Uploaded IGC for ${targetPilotName} on behalf (${formatBytes(body.byteLength)})`,
+        description: `${stored.replaced ? "Replaced" : "Uploaded"} IGC for ${targetPilotName} on behalf (${formatBytes(stored.fileSize)})`,
       });
       const qualityLine = quality && qualityAuditLine(targetPilotName, quality);
       if (qualityLine) {
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "track",
-          subject_id: newTrackId,
+          subject_id: stored.taskTrackId,
           subject_name: targetPilotName,
           description: qualityLine,
         });
       }
 
-      // See the note in the self-upload route.
+      // See the note in the self-upload route: a hard-failed file must not
+      // stamp the pilot "Landed" or supersede a manual flight.
       if (!quality?.hardFailed) {
         await applyStatusOnTrackUpload(
           c.env.DB,
@@ -734,15 +503,16 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       return c.json(
         {
-          task_track_id: encodeId(alphabet, newTrackId),
+          task_track_id: encodeId(alphabet, stored.taskTrackId),
           comp_pilot_id: encodeId(alphabet, compPilotId),
-          igc_filename: r2Key,
-          uploaded_at: now,
-          file_size: body.byteLength,
-          replaced: false,
+          igc_filename: stored.r2Key,
+          uploaded_at: stored.uploadedAt,
+          file_size: stored.fileSize,
+          replaced: stored.replaced,
           track_quality: toUploadResult(quality),
+          flight_summary: flightSummaryOf(igc),
         },
-        201
+        stored.replaced ? 200 : 201
       );
     }
   )

@@ -44,6 +44,17 @@ migrations_dir = "../../db/migrations"
 binding = "R2"
 bucket_name = "glidecomp"
 
+# Cloudflare Email Service (Email Sending) — delivers the "your track was
+# replaced" notice after an anonymous submission overwrites a pilot's track.
+# That notice is the detection channel for the one thing anonymous submission
+# gives up, so it is load-bearing rather than a courtesy. Requires
+# glidecomp.com to be verified as a sender domain in the dashboard (Email
+# Service → sender domains); sends fail with E_SENDER_NOT_VERIFIED until then.
+# Local dev and the worker tests have no binding at all and simply do not send
+# (see sendTrackReplacedNotice).
+[[send_email]]
+name = "EMAIL"
+
 [[services]]
 binding = "AUTH_API"
 service = "auth-api"

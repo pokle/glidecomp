@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
+import { Badge } from "@/react/rac/badge";
 import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { SectionHeader } from "../components/SectionHeader";
@@ -51,6 +52,7 @@ export function PilotsSection({
   compName,
   compClasses,
   isAdmin,
+  openRegistration,
   onPilotsChanged,
   headingAs = "h2",
 }: {
@@ -58,6 +60,9 @@ export function PilotsSection({
   compName: string;
   compClasses: string[];
   isAdmin: boolean;
+  /** Whether a pilot can join this comp by submitting a track. Shown here
+   *  because the roster is the only place the consequence is visible. */
+  openRegistration?: boolean;
   /** Called after a successful pilots save so the parent can refetch data
    * that depends on the roster (e.g. the setup guide's pilot_count). */
   onPilotsChanged?: () => void;
@@ -120,6 +125,23 @@ export function PilotsSection({
           ) : null
         }
       />
+
+      {/* Whether this list can grow on its own. It used to be true of every
+          competition with nothing anywhere to say so — an organiser reading
+          their own roster could not tell that anyone signed in could join it.
+          This is the list the answer belongs to, because this is the list that
+          changes. */}
+      {openRegistration !== undefined ? (
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <Badge variant={openRegistration ? "default" : "secondary"}>
+            {openRegistration ? "Open registration" : "Registration closed"}
+          </Badge>
+          {openRegistration
+            ? "Any signed-in pilot joins this list the first time they submit a track."
+            : "Only an admin can add pilots. Anyone else is told to ask an organiser."}
+          {isAdmin ? <span>Change it in Competition settings.</span> : null}
+        </p>
+      ) : null}
 
       {loadError ? (
         <p className="mt-2 text-muted-foreground">Could not load pilots</p>

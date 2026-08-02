@@ -237,8 +237,11 @@ These are the standing imperatives. Each links to the reference that explains it
   `Breadcrumbs`, ARIA-native (parent links + the current page as a final
   `aria-current="page"` crumb), with the ancestor array built by the helpers in
   `src/react/lib/crumbs.ts` rather than inline (the parent crumb is where a page
-  *belongs* in the IA, not where the user came from); every Submit-track button
-  opens the shared `SubmitTrackDialog`; **anything waiting on an API response says
+  *belongs* in the IA, not where the user came from); every Submit-track entry
+  point goes through the one `SubmitTrackForm`
+  ([docs/track-submission.md](docs/track-submission.md)) — as the `/submit`
+  page, or wrapped in `SubmitTrackDialog` where comp and task are already known;
+  **anything waiting on an API response says
   so** via `src/react/rac/progress.tsx` — `<Loading>` for a fetching section (a
   `role="status"` live region), `<Button isPending pendingLabel="Saving">` for an
   action in flight (never `isDisabled={saving}` + a label swap — that drops focus
@@ -321,6 +324,7 @@ These are the standing imperatives. Each links to the reference that explains it
 |---|---|
 | Local dev, e2e, container preview, tunnel | [docs/local-dev.md](docs/local-dev.md) |
 | SSR'd public comp pages + `scores.csv` | [docs/ssr.md](docs/ssr.md) |
+| Track submission (incl. anonymous) | [docs/track-submission.md](docs/track-submission.md) |
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
 | Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |

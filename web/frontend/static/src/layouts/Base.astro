@@ -37,6 +37,12 @@ const metaDescription =
       type="font/woff2"
       crossorigin
     />
+    {/* "Submit track" is in the header of every one of these pages and is the
+        homepage's primary action, but it lives in the SPA — so the app shell
+        is fetched ahead of the click rather than after it. Prefetching
+        /submit rather than /app primes the cache under the URL actually
+        navigated to (Pages rewrites /submit to /app). */}
+    <link rel="prefetch" href="/submit" />
     <title>{title}</title>
     <meta name="description" content={metaDescription} />
     <meta property="og:site_name" content="GlideComp" />

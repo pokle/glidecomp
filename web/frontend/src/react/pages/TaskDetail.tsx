@@ -43,7 +43,7 @@ import {
 } from "../lib/time";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { useAdminView, useGoToSignIn, useUser } from "../lib/user";
+import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
 import { WeatherSection } from "../weather/WeatherSection";
@@ -79,7 +79,6 @@ export function TaskDetail() {
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
-  const goToSignIn = useGoToSignIn();
   // Gate the ICU zone abbreviation in SSR-rendered instants (the stop notice
   // below) until mounted, so the server markup and first client render agree.
   const mounted = useMounted();
@@ -274,10 +273,12 @@ export function TaskDetail() {
           share, map, replay, analysis — is a uniform outline cluster, because
           those are places to go rather than things to do. */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {/* Auth-dependent, so mount-gated: the server renders this page for
-            anyone, and a button that depends on who is asking would not match
-            the server's markup on hydration (same rule as TaskResults). */}
-        {mounted && user && !isClosed ? (
+        {/* Mount-gated: the dialog's contents still depend on who is asking
+            (the on-behalf picker), and the server renders this page for
+            anyone, so the markup must settle after hydration rather than
+            before. The button itself no longer depends on a session —
+            submitting is open to anyone the comp's roster knows. */}
+        {mounted && !isClosed ? (
           <Button size="sm" onPress={() => setSubmitOpen(true)}>
             Submit track
           </Button>
@@ -329,23 +330,14 @@ export function TaskDetail() {
             Field analysis
           </LinkButton>
         ) : null}
-        {/* Last, and deliberately not the primary: a signed-out visitor came to
-            READ the task, and the page they want is the one they are on. */}
-        {mounted && !user && !isClosed ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => goToSignIn(window.location.pathname)}
-          >
-            Sign in to submit your track
-          </Button>
-        ) : null}
       </div>
 
       {submitOpen ? (
         <SubmitTrackDialog
           compId={compId}
           taskId={taskId}
+          compName={comp?.name}
+          taskName={task.name}
           canUploadOnBehalf={canUploadOnBehalf}
           onClose={() => setSubmitOpen(false)}
           onUploaded={() => {

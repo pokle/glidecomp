@@ -146,6 +146,7 @@ export const updateCompSchema = z.object({
   ftv_factor: ftvFactorSchema.nullable().optional(),
   timezone: timezoneSchema.nullable().optional(),
   open_igc_upload: z.boolean().optional(),
+  open_registration: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
 });
 

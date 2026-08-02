@@ -12,7 +12,7 @@ import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
-import { Button } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import {
   Dialog,
@@ -54,10 +54,12 @@ import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
 import {
   fetchWithRetry,
+  isPastCloseDate,
   type CompDetailData,
   type TaskSummary,
 } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
+import { useMounted } from "../lib/use-mounted";
 import type { CompDetailLoaderData, CompScores } from "../loaders";
 
 export function CompDetail() {
@@ -188,6 +190,10 @@ function CompDetailView({
   const isAdmin = useAdminView(
     user != null && comp.admins.some((a) => a.email === user.email)
   );
+  // This page is server-rendered, so anything clock-dependent has to settle
+  // after hydration rather than differ from the server's markup.
+  const mounted = useMounted();
+  const isClosed = isPastCloseDate(comp.close_date);
 
   const facts = [
     categoryLabel(comp.category),
@@ -252,6 +258,17 @@ function CompDetailView({
             {comp.test ? " · Hidden" : null}
           </p>
         </div>
+        {/* Submitting is the one thing a pilot comes to a live comp to DO, so
+            it leads. It goes to /submit with the comp prefilled rather than
+            opening the dialog here: from the comp page the task is still an
+            open question, and the page is where that question is answered.
+            Mount-gated for the same reason as the task page's button — this
+            page is server-rendered. */}
+        {mounted && !isClosed ? (
+          <LinkButton size="sm" href={`/submit?comp=${encodeURIComponent(compId)}`}>
+            Submit track
+          </LinkButton>
+        ) : null}
         {isAdmin ? (
           <Button variant="outline" size="sm" onPress={() => setSettingsOpen(true)}>
             Settings
