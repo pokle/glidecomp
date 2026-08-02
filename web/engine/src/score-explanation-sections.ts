@@ -1203,13 +1203,14 @@ export function buildLeadingSection(
   });
 
   // Standing on the section's input: the coefficient itself (lower is
-  // better), never the points — a §12.1 reduction can reorder those.
+  // better), never the points — a §12.1 reduction can reorder those. "Of the
+  // N measured" on purpose: a coefficient exists for everyone who flew the
+  // speed section, so this denominator is the whole field, not the goal/ESS
+  // count the time and arrival ranks use — say so or the mismatch reads as
+  // a bug.
   const rank =
     typeof lc === 'number' && Number.isFinite(lc) && lc > 0 && allLCs.length >= 2
-      ? rankLabel(
-          rankAmong(allLCs, lc, (a, b) => a < b),
-          'best leading coefficient',
-        )
+      ? `${rankLabel(rankAmong(allLCs, lc, (a, b) => a < b), 'best')} measured leading coefficients`
       : undefined;
 
   return {
@@ -1583,8 +1584,49 @@ export function buildComparisonSection(
     });
   }
 
+  // Penalties are points lost to the leader like any component, and a ledger
+  // that omits them cannot reconcile with the gap it claims to explain. BOTH
+  // sides are derived from the identity the payload guarantees — components −
+  // total — rather than from the published penalty figures: a §12.2/§12.4
+  // floor makes the published deduction bigger than its net effect (the
+  // archive's jump-the-gun cases were 74 points apart), and the ledger's
+  // business is the net. Tolerance for the total's 0.1 rounding.
+  const minePenalty =
+    entry.distance_points +
+    entry.time_points +
+    entry.leading_points +
+    entry.arrival_points -
+    entry.total_score;
+  const leaderPenalty =
+    (leader.distance_points ?? 0) +
+    (leader.time_points ?? 0) +
+    (leader.leading_points ?? 0) +
+    (leader.arrival_points ?? 0) -
+    leaderTotal;
+  const publishedPenalty =
+    entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
+  if (Math.abs(minePenalty) > 0.1 || Math.abs(leaderPenalty) > 0.1) {
+    rows.push({
+      id: 'penalty',
+      label: 'Penalties',
+      mine: Math.abs(minePenalty) > 0.1 ? -minePenalty : 0,
+      theirs: Math.abs(leaderPenalty) > 0.1 ? -leaderPenalty : 0,
+    });
+  }
+
+  // Points prefixed with the proper minus sign — the ledger's negative values
+  // (penalties) must not print a bare hyphen beside typeset minuses elsewhere.
+  const signedPts = (n: number) =>
+    n < -0.05 ? `−${fmtPoints(-n)}` : fmtPoints(n);
+
   const items: ScoreExplanationItem[] = rows.map((r) => {
     const diff = r.mine - r.theirs;
+    // The ledger states the penalty's NET effect; when a floor made that
+    // smaller than the published deduction, say where the full figure lives.
+    const floorNote =
+      r.id === 'penalty' && Math.abs(minePenalty - publishedPenalty) > 0.3
+        ? ' — the net effect after the scoring floor; the penalty section shows the full deduction'
+        : '';
     return {
       id: `gap-${r.id}`,
       text: r.label,
@@ -1592,7 +1634,7 @@ export function buildComparisonSection(
         Math.abs(diff) < 0.05
           ? 'level'
           : `${diff > 0 ? '+' : '−'}${fmtPoints(Math.abs(diff))} pts`,
-      detail: `you ${fmtPoints(r.mine)}, the leader ${fmtPoints(r.theirs)}`,
+      detail: `you ${signedPts(r.mine)}, the leader ${signedPts(r.theirs)}${floorNote}`,
       emphasis: Math.abs(diff) < 0.05 ? 'muted' : undefined,
     };
   });
@@ -1601,21 +1643,62 @@ export function buildComparisonSection(
   // is the sentence the reader came for, and it is a fact about the
   // arithmetic — not advice about how to fly.
   const losses = rows
-    .map((r) => ({ label: r.label.toLowerCase(), lost: r.theirs - r.mine }))
+    .map((r) => ({
+      label: LEDGER_TERMS[r.label.toLowerCase()] ?? r.label.toLowerCase(),
+      lost: r.theirs - r.mine,
+    }))
     .filter((r) => r.lost > 0.05)
     .sort((a, b) => b.lost - a.lost);
+  const gains = rows
+    .map((r) => ({
+      label: LEDGER_TERMS[r.label.toLowerCase()] ?? r.label.toLowerCase(),
+      won: r.mine - r.theirs,
+    }))
+    .filter((r) => r.won > 0.05)
+    .sort((a, b) => b.won - a.won);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * gap ? losses[0] : null;
+
+  let gapDetail: string;
+  if (dominant && dominant.lost > gap + 0.05 && gains.length > 0) {
+    // A loss bigger than the whole gap: points won elsewhere offset it, and
+    // "85.6 of 38.9 points" would read as an arithmetic error — say what
+    // actually happened instead, leading with the deficit rather than the
+    // "cost", which read as the flying style being penalised. (Jon Durand's
+    // case: fastest through the speed section, lost the day on leading.)
+    const wonBack = gains.reduce((s, g) => s + g.won, 0);
+    // The reader in this exact spot — a big leading-points deficit offset by
+    // a time-points win — is by construction someone who was fast but not in
+    // front, the pilot most likely to misread the component's name.
+    const leadingNote =
+      dominant.label === 'leading-points' &&
+      gains.some((g) => g.label === 'time-points')
+        ? ' Leading-points reward being out front on the clock, which the fastest pilot often isn’t.'
+        : '';
+    gapDetail =
+      dominant.label === 'penalties'
+        ? `Penalties cost you ${fmtPoints(dominant.lost)} — more than the whole gap — and you won ${fmtPoints(wonBack)} back on ${listLabels(gains.map((g) => g.label))}.`
+        : `You took ${fmtPoints(dominant.lost)} fewer ${dominant.label} than the leader — more than the whole gap — and won ${fmtPoints(wonBack)} back on ${listLabels(gains.map((g) => g.label))}.${leadingNote}`;
+  } else if (dominant) {
+    gapDetail =
+      losses.length === 1
+        ? `All of the gap is ${dominant.label}.`
+        : `Most of the gap — ${fmtPoints(dominant.lost)} of ${fmtPoints(gap)} points — is ${dominant.label}.`;
+  } else if (losses.length > 0) {
+    // No single culprit — but a bare count is a dead end on a page where
+    // every other line substitutes its numbers, so name them, largest first.
+    gapDetail = `Spread across ${listLabels(losses.map((l) => l.label))} — ${losses[0].label} the largest, at ${fmtPoints(losses[0].lost)}.`;
+  } else {
+    // A gap the rows cannot account for: the leader's breakdown is missing
+    // from this payload. State that rather than crash or invent a culprit.
+    gapDetail = 'The gap is not in the components above — the leader’s published breakdown does not carry it.';
+  }
 
   items.push({
     id: 'gap-total',
     text: `Behind ${leader.pilot_name ?? 'the class leader'}`,
     value: `−${fmtPoints(gap)} pts`,
-    detail: dominant
-      ? losses.length === 1
-        ? `All of the gap is ${dominant.label}.`
-        : `Most of the gap — ${fmtPoints(dominant.lost)} of ${fmtPoints(gap)} points — is ${dominant.label}.`
-      : `Spread across ${losses.length} components.`,
+    detail: gapDetail,
   });
 
   return {
@@ -1630,6 +1713,29 @@ export function buildComparisonSection(
 }
 
 /**
+ * How a ledger sentence names a component: the hyphenated points term,
+ * never the bare activity noun. "The gap is leading" parses as being out
+ * front — the exact opposite of what the sentence means — and "leading
+ * cost you 85.6 points" reads as the act of leading being penalised.
+ * "Leading-points" cannot be misread as either. Penalties are already
+ * unambiguous and stay themselves.
+ */
+const LEDGER_TERMS: Record<string, string> = {
+  distance: 'distance-points',
+  time: 'time-points',
+  leading: 'leading-points',
+  arrival: 'arrival-points',
+  penalties: 'penalties',
+};
+
+/** "time-points", "time-points and arrival-points", "…, … and …". */
+function listLabels(labels: string[]): string {
+  return labels.length <= 1
+    ? (labels[0] ?? '')
+    : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
+/**
  * What separates this pilot's published points from the day's per-component
  * offer, penalties included — the "left on the day" ledger shared by the
  * leader's comparison section and the winner's headline note.
@@ -1639,17 +1745,24 @@ function shortfallsAgainstOffer(
   ap: ClassContextInput['available_points'],
 ): Array<{ label: string; lost: number }> {
   const rows = [
-    { label: 'distance', lost: ap.distance - entry.distance_points },
-    { label: 'time', lost: ap.time - entry.time_points },
+    { label: 'distance-points', lost: ap.distance - entry.distance_points },
+    { label: 'time-points', lost: ap.time - entry.time_points },
     ...(ap.leading > 0
-      ? [{ label: 'leading', lost: ap.leading - entry.leading_points }]
+      ? [{ label: 'leading-points', lost: ap.leading - entry.leading_points }]
       : []),
     ...(ap.arrival > 0
-      ? [{ label: 'arrival', lost: ap.arrival - entry.arrival_points }]
+      ? [{ label: 'arrival-points', lost: ap.arrival - entry.arrival_points }]
       : []),
     {
+      // Net penalty effect, derived from components − total, so a §12.2/§12.4
+      // floor never overstates what the deduction actually cost.
       label: 'penalties',
-      lost: entry.penalty_points + (entry.jump_the_gun_penalty ?? 0),
+      lost:
+        entry.distance_points +
+        entry.time_points +
+        entry.leading_points +
+        entry.arrival_points -
+        entry.total_score,
     },
   ];
   return rows.filter((r) => r.lost > 0.05).sort((a, b) => b.lost - a.lost);
@@ -1709,21 +1822,27 @@ function buildPointsLeftSection(
     });
   };
 
-  row('distance', 'Distance', entry.distance_points, ap.distance);
-  const fastest = fullTaker((p) => p.time_points, ap.time);
-  row(
-    'time',
-    'Time',
-    entry.time_points,
-    ap.time,
-    fastest
-      ? ` — ${fastest.pilot_name} took the full time points${
-          fastest.speed_section_time
-            ? ` in ${duration(fastest.speed_section_time)}`
-            : ''
-        }`
-      : undefined,
-  );
+  // Every row is gated on a real offer: a nobody-in-goal HG day clamps the
+  // time weight to zero, and "full points — you 0 of 0 on offer" is noise.
+  if (ap.distance > 0) {
+    row('distance', 'Distance', entry.distance_points, ap.distance);
+  }
+  if (ap.time > 0) {
+    const fastest = fullTaker((p) => p.time_points, ap.time);
+    row(
+      'time',
+      'Time',
+      entry.time_points,
+      ap.time,
+      fastest
+        ? ` — ${fastest.pilot_name} took the full time-points${
+            fastest.speed_section_time
+              ? ` in ${duration(fastest.speed_section_time)}`
+              : ''
+          }`
+        : undefined,
+    );
+  }
   if (ap.leading > 0) {
     const bestLead = fullTaker((p) => p.leading_points, ap.leading);
     row(
@@ -1731,7 +1850,7 @@ function buildPointsLeftSection(
       'Leading',
       entry.leading_points,
       ap.leading,
-      bestLead ? ` — ${bestLead.pilot_name} took the full leading points` : undefined,
+      bestLead ? ` — ${bestLead.pilot_name} took the full leading-points` : undefined,
     );
   }
   if (ap.arrival > 0) {
@@ -1746,13 +1865,25 @@ function buildPointsLeftSection(
         : undefined,
     );
   }
-  const penalties = entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
-  if (penalties > 0.05) {
+  // Net penalty effect (components − total), so a §12.2/§12.4 floor never
+  // overstates what the deduction actually cost.
+  const penalties =
+    entry.distance_points +
+    entry.time_points +
+    entry.leading_points +
+    entry.arrival_points -
+    entry.total_score;
+  const publishedPenalty =
+    entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
+  if (penalties > 0.1) {
     items.push({
       id: 'left-penalty',
       text: 'Penalties',
       value: `−${fmtPoints(penalties)} pts`,
-      detail: 'See the penalty section above.',
+      detail:
+        Math.abs(penalties - publishedPenalty) > 0.3
+          ? 'The net effect after the scoring floor — the penalty section shows the full deduction.'
+          : 'See the penalty section above.',
       emphasis: 'warning',
     });
   }
@@ -1762,15 +1893,35 @@ function buildPointsLeftSection(
   const losses = shortfallsAgainstOffer(entry, ap);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * left ? losses[0] : null;
+  // On a day nobody makes goal, the GAP weight split can sum to slightly more
+  // than 1 (the time weight is clamped at zero — S7F §10, calculateWeights),
+  // so the per-component offers overshoot the day total and the rows above
+  // sum to more than the points actually left. Say so, rather than print a
+  // share the rows visibly contradict.
+  const shownOffers =
+    ap.distance +
+    ap.time +
+    (ap.leading > 0 ? ap.leading : 0) +
+    (ap.arrival > 0 ? ap.arrival : 0);
+  const overshoot = shownOffers - ap.total;
+  let leftDetail: string;
+  if (overshoot > 0.2) {
+    leftDetail = `The component offers sum to ${fmtPoints(shownOffers)} on a ${fmtPoints(ap.total)}-point day — with nobody in goal the GAP weights overshoot slightly — so the rows above come to more than the ${fmtPoints(left)} actually left.${dominant ? ` The biggest untaken offer is ${dominant.label}.` : ''}`;
+  } else if (dominant && dominant.lost <= left + 0.05) {
+    leftDetail =
+      losses.length === 1
+        ? `All of it is ${dominant.label}.`
+        : `Most of it — ${fmtPoints(dominant.lost)} of ${fmtPoints(left)} points — is ${dominant.label}.`;
+  } else if (losses.length > 0) {
+    leftDetail = `Spread across ${listLabels(losses.map((l) => l.label))} — ${losses[0].label} the largest, at ${fmtPoints(losses[0].lost)}.`;
+  } else {
+    leftDetail = 'Display rounding — the components above account for it.';
+  }
   items.push({
     id: 'left-total',
     text: 'Left on the day',
     value: `−${fmtPoints(left)} pts`,
-    detail: dominant
-      ? losses.length === 1
-        ? `All of it is ${dominant.label}.`
-        : `Most of it — ${fmtPoints(dominant.lost)} of ${fmtPoints(left)} points — is ${dominant.label}.`
-      : `Spread across ${losses.length} components.`,
+    detail: leftDetail,
   });
 
   return {
@@ -1807,17 +1958,20 @@ export function buildWinnerHeadlineNote(
   const losses = shortfallsAgainstOffer(entry, ap);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * left ? losses[0] : null;
-  const mostly = dominant
-    ? losses.length === 1
-      ? ` — all of it ${dominant.label}`
-      : ` — mostly ${dominant.label}`
-    : '';
+  // No share claim when the dominant shortfall exceeds the net left (weight
+  // overshoot on a nobody-in-goal day, or a bonus) — the ledger explains it.
+  const mostly =
+    dominant && dominant.lost <= left + 0.05
+      ? losses.length === 1
+        ? ` — all of it ${dominant.label}`
+        : ` — mostly ${dominant.label}`
+      : '';
   let note = `Top of the class, but not a full sweep: of the ${fmtPoints(
     ap.total,
   )} points on offer, ${fmtPoints(left)} went untaken${mostly}.`;
   // When the shortfall is time, state the concrete fact behind it: how much
-  // quicker the pilot who took the full time points was.
-  if (dominant?.label === 'time' && entry.speed_section_time !== null) {
+  // quicker the pilot who took the full time-points was.
+  if (dominant?.label === 'time-points' && entry.speed_section_time !== null) {
     const fastest = scored.find(
       (p) =>
         p.speed_section_time != null &&
