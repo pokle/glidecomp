@@ -159,7 +159,11 @@ export function TurnpointsTable({
             const role = tp.type ?? (i === lastIndex ? "GOAL" : null);
             const isExit = tp.type !== "TAKEOFF" && directions[i] === "exit";
             const legM = i >= 1 ? legs[i - 1] : undefined;
-            const radius = formatRadius(tp.radius, { prefs: units }).withUnit;
+            // Composed from the parts rather than `withUnit`: a radius prints
+            // briefing-style ("400m") everywhere else, which reads as one word
+            // and would fight the "r." in front of it here.
+            const r = formatRadius(tp.radius, { prefs: units });
+            const radius = `${r.formatted} ${r.unit}`;
             const alt = tp.waypoint.altSmoothed
               ? formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit
               : null;
@@ -191,12 +195,28 @@ export function TurnpointsTable({
                 <Cell className="align-top">
                   <div className="flex flex-col leading-tight">
                     <span className="font-medium">{tp.waypoint.name}</span>
-                    {/* Radius (always) · altitude (when the xctsk carries one —
-                        files without an altitude come through as 0, shown as
-                        nothing rather than a misleading sea-level reading). */}
+                    {/* Cylinder radius (always) · the waypoint's ground
+                        elevation (when the xctsk carries one — files without
+                        an altitude come through as 0, shown as nothing rather
+                        than a misleading sea-level reading).
+
+                        Two bare lengths side by side say nothing about which
+                        is which, so both are labelled — abbreviated for
+                        sighted readers, in full for assistive tech, which
+                        would otherwise read "r." and "amsl" as words. */}
                     <span className="text-xs text-muted-foreground tabular-nums">
+                      <span className="sr-only">radius </span>
+                      <span aria-hidden="true">r. </span>
                       {radius}
-                      {alt ? ` · ${alt}` : ""}
+                      {alt ? (
+                        <>
+                          <span aria-hidden="true"> · </span>
+                          <span className="sr-only">, elevation </span>
+                          {alt}
+                          <span className="sr-only"> above sea level</span>
+                          <span aria-hidden="true"> amsl</span>
+                        </>
+                      ) : null}
                     </span>
                   </div>
                 </Cell>
