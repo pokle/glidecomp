@@ -85,6 +85,24 @@ radio's `aria-label` composes the same words with separators, because the
 visible parts are laid out with a flex gap and would otherwise be read as
 "Boosfysport2026-08-02".
 
+**Choosing does not close the list.** The picker collapses to a line with a
+**Change** button in exactly one case: the caller already named the task, which
+is the dialog on a comp or task page where the flow is a two-field form and a
+list of one is noise. It never collapses because the pilot picked something.
+Selecting a task is not finishing with it — confirming the choice against the
+dates either side is the entire reason the dates are printed, and a control
+that answers once and shuts turns a glance into two taps. The chosen comp also
+survives the search box and the three-comp cap: a checked radio that isn't
+rendered is a selection the pilot can't see, check or undo.
+
+**Most recent task first**, ordered by the endpoint (`open-comps.ts`), ties
+broken by name so two classes on one day stay stable. A pilot submits after
+landing, so the task they mean is at the recent end; on day six of a comp,
+oldest-first makes them read past five days they have already filed. The
+suggested task is derived from the dates and never from the array's ends — it
+used to read `tasks[tasks.length - 1]`, which silently meant "oldest" the
+moment the wire order flipped.
+
 If the list ever outgrows a screen, `ListBox` with a section per competition is
 the next step up; `ComboBox` only once searching beats scanning.
 
@@ -249,6 +267,12 @@ from the parse day and the times are not evidence of a date.
 The routes parse the file **once** and hand the result to the quality
 assessment and the summary both (`src/track-upload.ts`). They used to parse
 twice.
+
+The success panel offers **one** destination — *View provisional score card* —
+plus *Submit another track*. There is deliberately no "Go to the task" beside
+it: the report card answers the question the pilot actually has, and the task
+page is one click on from there. Two equal-looking buttons only ask them to
+choose between things they cannot tell apart.
 
 ### The provisional score card
 

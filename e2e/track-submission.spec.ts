@@ -78,6 +78,20 @@ function yesterday(): string {
   return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 }
 
+/**
+ * Choose a task in the picker by clicking its visible name.
+ *
+ * NOT `getByRole("radio").check()`. The kit hides the real input under a
+ * styled span, so `check()` waits forever for it to become visible — unless
+ * the radio is ALREADY selected, in which case it returns immediately without
+ * clicking anything, which is how a test can appear to drive the picker while
+ * doing nothing at all. RAC wraps each radio in a real <label>, so clicking
+ * the name is both what a person does and what actually works.
+ */
+async function pickTask(page: Page, name: string): Promise<void> {
+  await page.getByText(name, { exact: true }).click();
+}
+
 interface Fixture {
   compId: string;
   compName: string;
@@ -96,6 +110,13 @@ async function createFixture(admin: APIRequestContext): Promise<Fixture> {
   });
   expect(compRes.ok()).toBeTruthy();
   const { comp_id: compId } = (await compRes.json()) as { comp_id: string };
+
+  // Created oldest-first ON PURPOSE, so the picker's most-recent-first order
+  // is the endpoint's doing and not the insertion order leaking through.
+  const olderRes = await admin.post(`/api/comp/${compId}/task`, {
+    data: { name: "Yesterday's Task", task_date: yesterday(), pilot_classes: ["open"] },
+  });
+  expect(olderRes.ok()).toBeTruthy();
 
   const taskRes = await admin.post(`/api/comp/${compId}/task`, {
     data: { name: "Today's Task", task_date: today(), pilot_classes: ["open"] },
@@ -153,6 +174,37 @@ test.describe("submitting a track without an account", () => {
     const todaysTask = page.getByRole("radio", { name: /Today's Task/ });
     await expect(todaysTask).toBeVisible();
     await expect(todaysTask).toBeChecked();
+  });
+
+  test("lists the most recent task at the top", async ({ page }) => {
+    await page.goto(`${BASE_URL}/submit`);
+    const group = page.getByRole("radiogroup", { name: "Which task did you fly?" });
+    await expect(group.getByRole("radio").first()).toHaveAccessibleName(
+      /Today's Task/
+    );
+    // Both are there — this is an order assertion, not a filter one.
+    await expect(group.getByRole("radio", { name: /Yesterday's Task/ })).toBeVisible();
+  });
+
+  test("choosing a task does not take the other choices away", async ({ page }) => {
+    // The picker is a list you can look at, not a modal that answers once and
+    // shuts. Confirming your choice against the dates either side is the whole
+    // reason the dates are printed.
+    await page.goto(`${BASE_URL}/submit`);
+    const group = page.getByRole("radiogroup", { name: "Which task did you fly?" });
+
+    await pickTask(page, "Yesterday's Task");
+
+    // Still on screen, with no Change button standing between the pilot and it.
+    await expect(group.getByRole("radio", { name: /Today's Task/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change" })).toHaveCount(0);
+
+    // And changing your mind is one tap, not two.
+    await pickTask(page, "Today's Task");
+    await expect(group.getByRole("radio", { name: /Today's Task/ })).toBeChecked();
+    await expect(
+      group.getByRole("radio", { name: /Yesterday's Task/ })
+    ).not.toBeChecked();
   });
 
   test("names the pilot class when the task title does not", async ({ page }) => {
@@ -215,7 +267,7 @@ test.describe("submitting a track without an account", () => {
     // perfectly correct while the form is wired to nothing.
     await page.goto(`${BASE_URL}/submit`);
 
-    await page.getByRole("radio", { name: /Today's Task/ }).check();
+    await pickTask(page, "Today's Task");
 
     // Email is the default kind, so this is the path with no dropdown to
     // drive — the kind selector's options are asserted separately below.
@@ -241,13 +293,16 @@ test.describe("submitting a track without an account", () => {
     await expect(
       page.getByRole("link", { name: "View provisional score card" })
     ).toBeVisible();
+    // One destination, not two that look alike. The task page is a click on
+    // from the report card for anyone who wants it.
+    await expect(page.getByRole("link", { name: "Go to the task" })).toHaveCount(0);
   });
 
   test("a wrong identifier is shown in the page with a way to fix it", async ({
     page,
   }) => {
     await page.goto(`${BASE_URL}/submit`);
-    await page.getByRole("radio", { name: /Today's Task/ }).check();
+    await pickTask(page, "Today's Task");
     await page.getByRole("textbox", { name: "Email address" }).fill("nobody@nowhere.test");
     await page.locator('input[type="file"]').setInputFiles({
       name: "forged.igc",

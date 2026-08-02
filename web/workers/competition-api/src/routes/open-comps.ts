@@ -44,6 +44,11 @@ function shiftDays(today: string, days: number): string {
   return isoDate(d);
 }
 
+/** The latest task date in a comp, independent of the array's order. */
+function latestTaskDate(tasks: { task_date: string }[]): string {
+  return tasks.reduce((a, t) => (t.task_date > a ? t.task_date : a), "");
+}
+
 /** Whole days between two YYYY-MM-DD strings, absolute. */
 function dayGap(a: string, b: string): number {
   const ms =
@@ -142,14 +147,16 @@ export const openCompsRoutes = new Hono<HonoEnv>().get(
         const nearest = comp.tasks.reduce((best, t) =>
           dayGap(t.task_date, today) < dayGap(best.task_date, today) ? t : best
         );
-        return { comp, nearestGap: dayGap(nearest.task_date, today) };
+        return {
+          comp,
+          nearestGap: dayGap(nearest.task_date, today),
+          latest: latestTaskDate(comp.tasks),
+        };
       })
       .sort(
         (a, b) =>
           a.nearestGap - b.nearestGap ||
-          b.comp.tasks[b.comp.tasks.length - 1].task_date.localeCompare(
-            a.comp.tasks[a.comp.tasks.length - 1].task_date
-          ) ||
+          b.latest.localeCompare(a.latest) ||
           a.comp.name.localeCompare(b.comp.name)
       )
       .slice(0, MAX_COMPS)
@@ -176,20 +183,33 @@ export const openCompsRoutes = new Hono<HonoEnv>().get(
       generated_at: new Date().toISOString(),
       window: { from, to, today },
       comps: comps.map((comp) => {
-        const tasks: OpenTask[] = comp.tasks.map((t) => ({
-          task_id: encodeId(alphabet, t.task_id),
-          name: t.name,
-          task_date: t.task_date,
-          pilot_classes: classes[t.task_id] ?? [],
-          has_xctsk: t.has_xctsk,
-        }));
+        // MOST RECENT FIRST. A pilot submits after landing, so the task they
+        // mean is at the recent end — and a comp on day six should not make
+        // them read past five days they have already filed. The ties are
+        // broken by name so two classes on one day keep a stable order.
+        const tasks: OpenTask[] = [...comp.tasks]
+          .sort(
+            (a, b) =>
+              b.task_date.localeCompare(a.task_date) || a.name.localeCompare(b.name)
+          )
+          .map((t) => ({
+            task_id: encodeId(alphabet, t.task_id),
+            name: t.name,
+            task_date: t.task_date,
+            pilot_classes: classes[t.task_id] ?? [],
+            has_xctsk: t.has_xctsk,
+          }));
         // The task dated today, else the nearest one already flown — a pilot
         // uploads after landing, so the past beats the future on a tie.
+        // Derived from the dates, never from array order: the wire order is a
+        // presentation decision and has already been changed once.
         const today_task = comp.tasks.find((t) => t.task_date === today);
         const past = comp.tasks.filter((t) => t.task_date < today);
         const suggested =
           today_task ??
-          (past.length > 0 ? past[past.length - 1] : comp.tasks[0]);
+          (past.length > 0
+            ? past.reduce((a, b) => (a.task_date >= b.task_date ? a : b))
+            : comp.tasks.reduce((a, b) => (a.task_date <= b.task_date ? a : b)));
         return {
           comp_id: encodeId(alphabet, comp.comp_id),
           name: comp.name,
