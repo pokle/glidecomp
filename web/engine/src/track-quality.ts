@@ -833,17 +833,28 @@ function checkNeverAirborne(fixes: IGCFix[], times: number[]): TrackQualityFindi
   }
 
   // S2 — sustained free glide. The minimum instantaneous speed inside the
-  // window is the discriminator, so it is recomputed per window; the windows
-  // are short and this only runs when the climb signature is absent.
+  // window is the discriminator; it comes from a monotone deque (indices of
+  // increasing speed) so each fix is pushed and evicted at most once — O(N).
+  // Rescanning the window per fix was quadratic when dense duplicate
+  // timestamps packed tens of thousands of fixes into one 90 s window
+  // (issue #471, SEC-33). The deque's front is the exact minimum over
+  // (lo, i], so the finding is unchanged on every input.
   lo = 0;
+  const glideDeque = new Int32Array(n);
+  let dequeHead = 0;
+  let dequeTail = 0;
   for (let i = 0; i < n; i++) {
     while (lo < i && (times[i] - times[lo]) / 1000 > AIRBORNE_GLIDE_SECONDS) lo++;
+    // Every fix enters the deque, even when this window is still too short —
+    // it may sit inside a later window.
+    while (dequeTail > dequeHead && speed[glideDeque[dequeTail - 1]] >= speed[i]) dequeTail--;
+    glideDeque[dequeTail++] = i;
     const seconds = (times[i] - times[lo]) / 1000;
     if (seconds < AIRBORNE_GLIDE_SECONDS) continue;
 
     const sink = (altitudes[lo] - altitudes[i]) / seconds;
-    let minSpeed = Infinity;
-    for (let j = lo + 1; j <= i; j++) if (speed[j] < minSpeed) minSpeed = speed[j];
+    while (glideDeque[dequeHead] <= lo) dequeHead++; // the window is (lo, i]
+    const minSpeed = speed[glideDeque[dequeHead]];
     const path = pathLength[i] - pathLength[lo];
     const displacement = andoyerDistance(
       fixes[lo].latitude,

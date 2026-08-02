@@ -28,6 +28,7 @@
  */
 
 import type { IGCFix } from './igc-parser';
+import { SlidingMedian } from './sliding-median';
 
 /** A glider cannot sustain vertical speed beyond this — spiral dives reach
  * ~25 m/s, freefall ~50. Anything faster between adjacent fixes is a
@@ -136,21 +137,37 @@ function crossChannelClean(fixes: IGCFix[]): AltitudeCleaningReport {
 
   // Rolling median of the residual over ±60 s. A median tolerates glitch
   // bursts (well under half a window) without chasing them.
+  //
+  // The median is maintained incrementally: both window ends only ever move
+  // forward, so each residual is added once and removed once — O(N log N)
+  // however the timestamps are distributed. Rebuilding and sorting the window
+  // per fix was O(N² log N) when degenerate timestamps (every fix stamped the
+  // same second) made every window span the whole track: a crafted IGC file
+  // became a per-upload CPU sink (issue #470, SEC-32). The structure yields
+  // the exact order statistics the sort produced, so cleaned altitudes are
+  // unchanged on every input.
+  //
+  // The live multiset is always { j ∈ [lo, hi) : residual[j] not NaN }. With
+  // non-monotone timestamps lo can overtake hi (the old loop then read an
+  // empty window); the lo<hi / hi>=lo guards reproduce that: an index skipped
+  // because hi < lo can never enter a later window (lo never decreases), so
+  // it is correctly never removed either.
   const corrections = new Map<number, number>(); // index → cleaned altitude
+  const med = new SlidingMedian(residual);
   let lo = 0;
   let hi = 0;
   for (let i = 0; i < n; i++) {
-    while (lo < n && times[lo] < times[i] - BASELINE_HALF_WINDOW_MS) lo++;
-    while (hi < n && times[hi] <= times[i] + BASELINE_HALF_WINDOW_MS) hi++;
-    const window: number[] = [];
-    for (let j = lo; j < hi; j++) {
-      if (!Number.isNaN(residual[j])) window.push(residual[j]);
+    while (lo < n && times[lo] < times[i] - BASELINE_HALF_WINDOW_MS) {
+      if (lo < hi && !Number.isNaN(residual[lo])) med.remove(residual[lo]);
+      lo++;
     }
-    if (window.length === 0) continue;
-    window.sort((a, b) => a - b);
-    const mid = window.length >> 1;
+    while (hi < n && times[hi] <= times[i] + BASELINE_HALF_WINDOW_MS) {
+      if (hi >= lo && !Number.isNaN(residual[hi])) med.add(residual[hi]);
+      hi++;
+    }
+    if (med.size() === 0) continue;
     const baseline =
-      window.length % 2 === 1 ? window[mid] : (window[mid - 1] + window[mid]) / 2;
+      med.size() % 2 === 1 ? med.medianLow() : (med.medianLow() + med.medianHigh()) / 2;
 
     const f = fixes[i];
     if (f.pressureAltitude === 0) continue; // nothing to substitute with
@@ -194,6 +211,13 @@ function rateClean(fixes: IGCFix[]): AltitudeCleaningReport {
     const base = alt[i - 1];
     let ret = -1;
     for (let j = i; j < n && times[j] - times[i - 1] <= EXCURSION_MAX_MS; j++) {
+      // Non-forward time: corrupt ordering — stop so the scan stays bounded.
+      // Never fires on non-decreasing times (a trigger needs dt > 0, so every
+      // j ≥ i has times[j] ≥ times[i] > times[i-1]). With it, triggers whose
+      // scans share a fix have strictly increasing base times inside one 30 s
+      // span at the format's 1 s resolution, so ≤ ~31 scans touch any fix —
+      // O(N) overall instead of quadratic on backwards-jumping timestamps.
+      if (times[j] <= times[i - 1]) break;
       if (Math.abs(alt[j] - base) <= EXCURSION_RETURN_TOLERANCE_M) {
         ret = j;
         break;
