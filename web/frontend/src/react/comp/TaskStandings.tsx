@@ -25,7 +25,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
-import { Button } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
@@ -563,6 +563,7 @@ function StandingsRow({
             distanceOrigin={distanceOrigin}
             taskXctsk={taskXctsk}
             statuses={statuses}
+            detailHref={detailHref}
             onMutated={onMutated}
           />
         </Cell>
@@ -571,8 +572,8 @@ function StandingsRow({
   );
 }
 
-/** Admin per-row actions: set status, upload a track, record a manual flight,
- * and restore superseded evidence. */
+/** Admin per-row actions: open the score card, set status, upload a track,
+ * record a manual flight, and restore superseded evidence. */
 function RowManage({
   row,
   compId,
@@ -582,6 +583,7 @@ function RowManage({
   distanceOrigin,
   taskXctsk,
   statuses,
+  detailHref,
   onMutated,
 }: {
   row: RowPilot;
@@ -592,6 +594,8 @@ function RowManage({
   distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   statuses: Map<string, PilotStatusEntry>;
+  /** The pilot's score card, when the row has one. Null for the tail. */
+  detailHref: string | null;
   onMutated: () => void;
 }) {
   const [recordOpen, setRecordOpen] = useState(false);
@@ -689,6 +693,20 @@ function RowManage({
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-1.5">
+      {detailHref ? (
+        // The row is already clickable, but nothing says so — this names the
+        // destination. A real anchor, so middle-click and "open in new tab"
+        // work; RAC keeps the press off the row's own action.
+        <TooltipTrigger>
+          <LinkButton variant="outline" size="sm" href={detailHref}>
+            View score card
+          </LinkButton>
+          <Tooltip>
+            Open {row.name}'s score card — every start, turnpoint and point
+            calculation, shown on the map
+          </Tooltip>
+        </TooltipTrigger>
+      ) : null}
       <SimpleSelect
         value={statusValue}
         onChange={(v) => void setStatus(v)}
