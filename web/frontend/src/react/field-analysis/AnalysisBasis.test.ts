@@ -86,6 +86,20 @@ describe("AnalysisBasis", () => {
     expect(out).toContain("23%");
     expect(out).toContain("39%");
   });
+
+  /**
+   * Reading order, worst to best use of the air — not the order the fields sit
+   * in on `FieldAirtimeSplit`. The rounding still runs in field order, so which
+   * phase collects the largest remainder does not depend on the layout: 37.6 /
+   * 23.4 / 39.0 rounds to 38 / 23 / 39 either way.
+   */
+  it("orders the phases searching, climbing, gliding", () => {
+    const out = html({ ...OLD_BASIS, airtimeSplit: SPLIT });
+    expect(out.indexOf("searching")).toBeLessThan(out.indexOf("climbing"));
+    expect(out.indexOf("climbing")).toBeLessThan(out.indexOf("gliding"));
+    // Each row is a label at the bar's start and the percentage at its end.
+    expect(out.indexOf("climbing")).toBeLessThan(out.indexOf("38%"));
+  });
 });
 
 describe("AnalysisBasis excluded pilots", () => {

@@ -73,8 +73,8 @@ export function AnalysisBasis({
   return (
     <section aria-label="Analysis basis" className="rounded-lg border p-4">
       {/* Four scalar facts, then the airtime split on a full row of its own at
-          every breakpoint — the bar is a proportion of one whole, so it reads
-          best spanning the width rather than boxed into a column beside the
+          every breakpoint — the bars are three shares of one whole read against
+          each other, so they need the width rather than a column beside the
           scalars. Column counts are 2 and 4 (both divide the four facts) so no
           breakpoint leaves a fact orphaned beside empty slots. */}
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-4">
