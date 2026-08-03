@@ -107,7 +107,19 @@ app.get("/api/auth/me", async (c) => {
   return c.json({ user: session.user });
 });
 
-// POST /api/auth/set-username — set username for authenticated user
+const MAX_NAME_LENGTH = 128;
+
+// POST /api/auth/set-username — set username (and optionally display name)
+// for the authenticated user.
+//
+// The name half exists because onboarding is the only place that asks for it:
+// an email-OTP sign-up arrives with `name: ""` (Better Auth's email-otp route
+// has no name to work from), and `"user".name` is otherwise written only at
+// sign-up. Onboarding sends both in one request so the account can never come
+// out of it half-set — a username with no name would bounce the user straight
+// back in, because that pair IS the onboarding gate (see needsOnboarding() in
+// src/auth/client.ts). The pilot-profile copy of the name is a separate write
+// to competition-api's PATCH /api/comp/pilot.
 app.post("/api/auth/set-username", async (c) => {
   const auth = createAuth(c.env);
   const session = await auth.api.getSession({
@@ -117,8 +129,19 @@ app.post("/api/auth/set-username", async (c) => {
     return c.json({ error: "Not authenticated" }, 401);
   }
 
-  const body = await c.req.json<{ username: string }>();
+  const body = await c.req.json<{ username: string; name?: string }>();
   const username = body.username?.trim();
+  const name = typeof body.name === "string" ? body.name.trim() : undefined;
+
+  // Absent name = "leave it alone" (the pre-existing callers send no name);
+  // present but empty is a caller trying to clear it, which would put the
+  // account back through the gate it just came out of.
+  if (name !== undefined && (name.length === 0 || name.length > MAX_NAME_LENGTH)) {
+    return c.json(
+      { error: `Name must be 1-${MAX_NAME_LENGTH} characters` },
+      400
+    );
+  }
 
   // Validate username format
   if (!username || username.length < 3 || username.length > 20) {
@@ -149,14 +172,21 @@ app.post("/api/auth/set-username", async (c) => {
     return c.json({ error: "Username is already taken" }, 409);
   }
 
-  // Update user
+  // Update user — one statement, so a name can never land without its
+  // username or the other way round.
   await c.env.glidecomp_auth.prepare(
-    'UPDATE "user" SET username = ?, "updatedAt" = ? WHERE id = ?'
+    name === undefined
+      ? 'UPDATE "user" SET username = ?, "updatedAt" = ? WHERE id = ?'
+      : 'UPDATE "user" SET username = ?, name = ?, "updatedAt" = ? WHERE id = ?'
   )
-    .bind(username, new Date().toISOString(), session.user.id)
+    .bind(
+      ...(name === undefined ? [username] : [username, name]),
+      new Date().toISOString(),
+      session.user.id
+    )
     .run();
 
-  return c.json({ username });
+  return c.json({ username, name: name ?? session.user.name });
 });
 
 // POST /api/auth/delete-account — delete user and all associated data

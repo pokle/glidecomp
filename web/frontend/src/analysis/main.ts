@@ -12,7 +12,7 @@
 
 import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, calculateTrackDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, scoreOpenDistance, openDistanceGeometryForFlight, isOpenDistanceTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { SAMPLE_COMPS } from '@glidecomp/samples';
-import { getCurrentUserOnce } from '../auth/client';
+import { getCurrentUserOnce, needsOnboarding } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type LoadedTrack, type OpenDistanceLine } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo, type OpenDistancePilotStats } from './analysis-panel';
@@ -98,7 +98,7 @@ async function init(): Promise<void> {
     window.location.href = "/u/me/";
     return;
   }
-  if (!user.username) {
+  if (needsOnboarding(user)) {
     window.location.href = "/onboarding";
     return;
   }

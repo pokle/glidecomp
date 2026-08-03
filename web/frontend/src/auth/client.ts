@@ -35,6 +35,26 @@ export interface AuthUser {
 }
 
 /**
+ * Has this account still to be onboarded? The ONE definition of the gate —
+ * Shell, the dashboard, the analysis page and onboarding itself all ask here,
+ * so they can't drift apart and strand someone in a redirect loop.
+ *
+ * Both halves matter, and each is the sole signal for a different sign-up
+ * path. A username is auto-derived at sign-up so a Google user never has to
+ * pick one by hand — but that derivation also fires for email-OTP sign-ups,
+ * which arrive with `name: ""` and so used to sail past a username-only gate
+ * with nothing but a handle guessed off their email address. Nothing else in
+ * the app ever asks for a display name, so the account stayed nameless.
+ *
+ * `name` is `"user".name` (the account's own display name, what /api/auth/me
+ * and the header show), NOT the pilot profile's — those are separate fields.
+ * Onboarding writes both.
+ */
+export function needsOnboarding(user: AuthUser): boolean {
+  return !user.username || user.name.trim() === "";
+}
+
+/**
  * Last-known account state, mirrored into localStorage so the *static* Astro
  * chrome can render the right thing before (or without) an API round trip —
  * the prerendered pages have no session at build time, and calling
@@ -153,14 +173,20 @@ export async function deleteAccount(): Promise<{ success: boolean; error?: strin
   }
 }
 
+/**
+ * Set the account's username, and its display name when one is given. Sent
+ * together (never as two requests) so the account can't be left holding one
+ * half of what needsOnboarding() checks.
+ */
 export async function setUsername(
-  username: string
-): Promise<{ username?: string; error?: string }> {
+  username: string,
+  name?: string
+): Promise<{ username?: string; name?: string; error?: string }> {
   const res = await fetch("/api/auth/set-username", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ username }),
+    body: JSON.stringify(name === undefined ? { username } : { username, name }),
   });
   return res.json();
 }
