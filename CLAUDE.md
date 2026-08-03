@@ -51,6 +51,25 @@ For dev servers, the e2e suite and its failure modes, the isolated container
 preview, and the dev tunnel: **[docs/local-dev.md](docs/local-dev.md)**. Read its
 "Before you trust an e2e failure" section before debugging one.
 
+**Working in a git worktree? Give the e2e its own ports.** `reuseExistingServer`
+is on outside CI, so `bun run test:e2e` in one worktree silently REUSES another
+worktree's dev server on :3000 and asserts every expectation against the wrong
+code — green, and meaningless. Nothing warns you.
+
+```bash
+DEV_FRONTEND_PORT=3100 DEV_API_PORT=8890 DEV_API_ORIGIN=http://localhost:8890 \
+  DEV_INSPECTOR_PORT=9330 bun run test:e2e
+```
+
+Also set `BETTER_AUTH_URL` in `web/workers/auth-api/.dev.vars` to the same
+frontend port, or every signed-in test fails with `INVALID_ORIGIN` (the file is
+gitignored; put it back afterwards). `test:e2e:ssr` serves on :3100 by default
+(`SSR_PORT` overrides) and honours `DEV_API_PORT` too. To check a port is
+yours, hit a route only your branch has — a 404 means you are about to test
+somebody else's tree. Full details, including why the inspector port needs its
+own knob, are in
+[docs/local-dev.md](docs/local-dev.md#two-worktrees-at-once-the-green-but-meaningless-run).
+
 **Backlog:** open and planned work is tracked in
 [GitHub issues](https://github.com/pokle/glidecomp/issues) — **not** in a
 checked-in TODO file (`docs/TODO.md` was deleted as stale; don't recreate it).

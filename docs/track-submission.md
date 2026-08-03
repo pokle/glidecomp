@@ -474,6 +474,58 @@ Mounted ahead of `compRoutes`, like `lookup` and `search`. Both new routes use a
 hyphenated segment (`open-now`, `open-submit`) so they can never collide with a
 sqid — the alphabet is a–z only.
 
+## Getting a file to test with (IGC Forge)
+
+Testing any of this needs tracklogs, and the only other ways to get one are to
+go flying or to reuse a bundled sample. A sample is worse than it looks: it was
+flown somewhere else on some other day, so track quality withholds it — the
+upload exercises the FAILURE path while appearing to test the happy one.
+
+So `web/engine/src/forge-igc.ts` synthesises a flight that actually flies a
+given route, on the task's day, at plausible speeds — launch, climb-out, glide
+and thermal leg by leg, into each cylinder, then a descent and a stint on the
+ground so the landing is detectable at all.
+
+Two front ends, one engine, so they cannot drift into making different files:
+
+- **`bun run forge-igc`** — the CLI. Lists what is open (`--open`), writes a
+  file (`--out`), or submits one straight to the anonymous route
+  (`--submit --ident`).
+- **IGC Forge**, a dialog on the task page (`comp/ForgeIgcDialog.tsx`). Opens
+  with that task's own route, date and competition zone; downloads the file.
+  It never uploads — submitting it through the real flow is the thing being
+  tested.
+
+Both **verify before offering**: every forged file goes through `parseIGC` and
+`assessTrackQuality`, the same code the worker runs, and the verdict is shown.
+That is the whole point — a clean result means the file will be accepted AND
+scored, not that it looks about right. A "clean" forge that fails a hard check
+is reported as a bug in the forge, because the file is then useless for what it
+was asked for.
+
+**Landing out.** The slider (`--land-out <km>` on the CLI) picks how far round
+the course the pilot got, from nothing to the whole task. It is measured along
+the **optimised task line** — the same geometry the scorer measures — so the
+number chosen is the distance the pilot should be credited with, not merely one
+they travelled. That is what makes a land-out a usable fixture: you can say in
+advance what it ought to score. The flight follows that line rather than
+waypoint centres for the same reason.
+
+At zero they launch, fail to connect and land back on the hill; at the far
+right they make goal.
+
+`--sabotage day` / `place` (the dropdown in the dialog) deliberately breaks one
+check. Those files are still VALID — they upload fine and are then withheld
+from scoring, which is the state nobody can otherwise reach on demand.
+
+**Who can see the dialog:** the real super admin, and not while previewing
+another role — `isSuperAdmin && previewRole === "actual"`, the rule
+`Settings.tsx` uses. Deliberately not `useAdminView()`: this is not a
+comp-admin power, and it must vanish under "Preview as" like everything else.
+The button only appears when the task has a route, because there is nothing to
+fly without one. The component is `lazy()`-loaded so its code stays out of
+everyone else's bundle.
+
 ## Where things are
 
 | Thing | File |
@@ -492,4 +544,7 @@ sqid — the alphabet is a–z only.
 | Closed-task gate | `web/workers/competition-api/src/submission-gate.ts` |
 | Open competitions | `web/workers/competition-api/src/routes/open-comps.ts` |
 | Flight summary | `web/engine/src/flight-summary.ts` |
+| Forging a test tracklog | `web/engine/src/forge-igc.ts` |
+| IGC Forge dialog | `src/react/comp/ForgeIgcDialog.tsx` |
+| IGC Forge CLI | `web/scripts/forge-igc.ts` |
 | Coverage | `test/igc-anon.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |

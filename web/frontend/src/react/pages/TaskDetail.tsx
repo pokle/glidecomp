@@ -12,7 +12,7 @@
  * (comp/RouteEditorDialog) covering turnpoints, start gates, goal, and
  * .xctsk / XContest import-export (#270).
  */
-import { useEffect, useId, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
@@ -59,6 +59,8 @@ import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
+// Super-admin only, so its code has no business in everyone else's bundle.
+const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
 import {
   fetchWithRetry,
   isPastCloseDate,
@@ -77,7 +79,7 @@ export function TaskDetail() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
-  const { user } = useUser();
+  const { user, isSuperAdmin, previewRole } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
   // Gate the ICU zone abbreviation in SSR-rendered instants (the stop notice
@@ -104,6 +106,7 @@ export function TaskDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [forgeOpen, setForgeOpen] = useState(false);
 
   useEffect(() => {
     // Clear any previous verdict first. react-router keeps this component
@@ -270,6 +273,17 @@ export function TaskDetail() {
               Settings
             </Button>
           ) : null}
+          {/* Gated on the REAL super admin and on not currently previewing
+              another role — the same rule Settings.tsx uses. `useAdminView`
+              would be wrong here: this is not a comp-admin power that a comp
+              admin should ever see, and while previewing as a pilot it must
+              disappear like everything else. A route is required because
+              there is nothing to fly without one. */}
+          {isSuperAdmin && previewRole === "actual" && comp && task.xctsk ? (
+            <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
+              IGC Forge
+            </Button>
+          ) : null}
         </div>
       </div>
       {/* The task's action row. It leads with Submit track — the one thing a
@@ -351,6 +365,21 @@ export function TaskDetail() {
           </LinkButton>
         ) : null}
       </div>
+
+      {forgeOpen && comp && task.xctsk ? (
+        <Suspense fallback={null}>
+          <ForgeIgcDialog
+            open
+            onClose={() => setForgeOpen(false)}
+            taskName={task.name}
+            taskDate={task.task_date}
+            compName={comp.name}
+            timezone={comp.timezone ?? null}
+            category={comp.category === "pg" ? "pg" : "hg"}
+            xctsk={task.xctsk}
+          />
+        </Suspense>
+      ) : null}
 
       {submitOpen ? (
         <SubmitTrackDialog

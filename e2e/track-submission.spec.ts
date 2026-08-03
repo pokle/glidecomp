@@ -161,7 +161,14 @@ test.describe("submitting a track without an account", () => {
     await page.goto(BASE_URL);
     // A plain anchor, not a scripted button: these pages are prerendered and
     // must stay useful with JS off.
-    await expect(page.locator('nav a[href="/submit"]')).toBeVisible();
+    //
+    // Explicit timeout because this is the FIRST test to hit `/`, and in dev
+    // that page is compiled on demand by the Astro server — the default 5s is
+    // the Astro cold start, not the assertion. It passes in 3s warm and has
+    // failed at 5s cold.
+    await expect(page.locator('nav a[href="/submit"]')).toBeVisible({
+      timeout: 20_000,
+    });
     // Deliberately NOT a third hero call to action — the nav carries it.
     await expect(page.locator('.hero-cta a[href="/submit"]')).toHaveCount(0);
   });
