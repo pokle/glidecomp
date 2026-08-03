@@ -140,7 +140,8 @@ export interface TaskDiagramProps {
    * The DIAGRAM gets the vector, not per-leg components: on a geographic
    * drawing you compare the arrow with the legs by eye, which is the thing a
    * map-like view is uniquely good at. The per-leg head/cross/tail numbers
-   * belong on the strip, where every leg is already a separate row.
+   * belong in the turnpoint table (TurnpointsTable), where every leg is
+   * already a separate row.
    */
   wind?: { fromDeg: number; speedKmh: number } | null;
 }

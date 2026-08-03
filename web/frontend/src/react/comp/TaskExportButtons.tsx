@@ -8,7 +8,7 @@
  *    each format opens straight into a flight app; on desktop it downloads.
  *  - "QR code" shows a full-screen, tap-to-dismiss XCTrack `XCTSK:` QR.
  *
- * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/Menu/Checkbox. Menu
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Modal/Menu/Checkbox. Menu
  * items are real links (RAC MenuItem href + download), with menu keyboard
  * semantics.
  *

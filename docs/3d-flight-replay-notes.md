@@ -14,18 +14,23 @@ viewer was built from) as background.
 
 ## 1. What was built
 
-- A page `/replay` showing all ~32 pilots of Corryong Cup 2026 Task 1
+- A page `/replay` showing the drawable field of Corryong Cup 2026 Task 1
   with synchronized playback, pilot identity, trail colouring (pilot /
   altitude / vertical speed [default] / **speed** / **glide ratio**), task
-  geometry, gaggle detection, and a selectable backdrop (abstract vs Mapbox
-  terrain). Speed and glide colour from a per-vertex smoothed ground speed
+  geometry, gaggle detection, reconstructed thermal columns, and a selectable
+  backdrop (abstract vs Mapbox terrain). *Drawable*, not "all ~32 pilots": the
+  Worker packs only the tracks a HARD data-quality check has not withheld
+  (see §5.16). Speed and glide colour from a per-vertex smoothed ground speed
   computed at load (prefix-sum path length over the same ±3-fix window as
   vario). The glide ramp is **logarithmic** over `GLIDE_LO..GLIDE_HI` (2…32 —
   a 4→8 improvement reads as strongly as 16→32); climbing/level segments
   render flat in the themed vario-zero colour (glide is effectively ∞ there).
 - **Per-pilot live metrics** (see §5.15): rank badges pinned to the marker
-  cones, and a draggable metrics callout (altitude / climb / ground speed /
-  glide ratio) with a leader line to the pilot's cone. There is deliberately
+  cones, and a draggable metrics callout (altitude / AGL / climb / ground
+  speed / glide ratio / required glide) with a leader line to the pilot's
+  cone. AGL and required glide are conditional — AGL needs the terrain
+  backend's DEM, required glide needs turnpoint altitudes in the manifest, and
+  each row hides itself when its input is absent. There is deliberately
   **no tooltip window next to the pilot** — hovering a cone routes that
   pilot's metrics into the callout as a live preview; clicking the cone pins
   (follows) them. Clicking/tapping away from every cone toggles play/pause
@@ -54,7 +59,8 @@ bun run build-3dvis           # offline: regenerate the static asset mirror
 ```
 
 The page calls `/api/comp/sample-3dvis` by default; `?comp=<id>&task=<id>` points
-the same viewer at any competition task the user may view.
+the same viewer at any competition task the user may view, and `?thermal=<id>`
+opens on one reconstructed thermal column (see §5.17).
 
 ---
 
@@ -108,6 +114,20 @@ Frontend (`web/frontend/src/replay.html` + `web/frontend/src/replay/`):
 - `backend.ts` — the `Backend` interface.
 - `abstract-backend.ts` / `terrain-backend.ts` — the two implementations.
 - `replay-viewer.ts` — orchestrator (owns view state, drives the loop).
+- `scene-bounds.ts` — `clipToTask`: the scene's bounds, clipped to the task's
+  own turnpoint box (see §5.16). Pure, unit-tested.
+- `thermal-layer.ts` — `ThermalLayer`: the reconstructed thermal columns as
+  in-scene ring stacks (see §5.17).
+- `thermal-link.ts` — `parseThermalParam`: the `?thermal=` deep link, parsed
+  apart from the entry point so the absent case cannot read as thermal 0.
+- `gaggles.ts` — viewer adapter over the engine's pure cluster detector:
+  samples the loaded tracks onto a time grid and adds a stable gaggle colour.
+- `gaggle-hull.ts` — pure 2D convex hull + rounded offset outline for the
+  blob (1 point → circle, 2 → capsule, ≥3 → rounded polygon).
+- `gaggle-layer.ts` — `GaggleLayer`: the in-scene blob + count label per
+  active gaggle, recomputed per frame from a reused object pool.
+- `gaggle-ui.ts` — `GaggleUI`: the timeline ribbon and the drawer's gaggle
+  list (hover highlights, click seeks). Pure DOM.
 - `map-styles.ts` — Mapbox style list (no mapbox-gl import → stays out of the
   initial bundle).
 - `replay.html` / `replay/main.ts` — page chrome + wiring.
@@ -124,7 +144,8 @@ Frontend (`web/frontend/src/replay.html` + `web/frontend/src/replay/`):
 `altMin/altMax`, `colors` palette, `timezone`, and `pilots[]` with
 `{id, name, colorIdx, vertexOffset, vertexCount, rank, score, reached}` plus
 optional `task.turnpoints[]` (projected `x/z`, radius, type, name, `alt` from
-the waypoint's altSmoothed) and `task.sssIndex`. `reached` is the pilot's
+the waypoint's altSmoothed), `task.sssIndex` and `task.goalLine` (the goal
+LINE's two endpoints, projected `{x1,z1,x2,z2}`). `reached` is the pilot's
 turnpoint sequence from GAP scoring — `{tp, t}` pairs on the tRel clock — so
 the viewer can resolve each pilot's *next* turnpoint at any replay time; with
 the turnpoint altitudes it drives the callout's required-glide readout
@@ -274,7 +295,7 @@ zone from the task location with the engine's `src/timezone.ts` helper
 kept out of the engine's main index so browser bundles never pay for it) and
 store `manifest.timezone` (e.g. `Australia/Melbourne`). At runtime the Worker
 prefers the comp's stored `timezone` setting (derived on route save,
-organizer-overridable) and derives only as a fallback. The viewer formats with
+organiser-overridable) and derives only as a fallback. The viewer formats with
 `Intl`, which applies the correct DST offset per fix date. Compute the zone
 *label* at the comp date, not today's, or the abbreviation is off by an hour
 across a DST boundary.
@@ -340,7 +361,7 @@ orbit/pan.)
 
 **Terrain follow must YIELD to gestures.** Mapbox's `setCenter` wraps `jumpTo`,
 whose first act is `stop()` — and `stop()` cancels the active gesture handlers.
-Per-frame recentering therefore made **touch pan/orbit impossible while
+Per-frame recentring therefore made **touch pan/orbit impossible while
 following** (mouse drags mostly survived because they re-establish on every
 mousemove; touch gestures are stateful and died continuously — it even fired
 with playback paused, since the delta-zero case still called `setCenter`).
@@ -442,6 +463,17 @@ On top of that the callout digits repaint at most ~1×/s during playback
 (live when paused or on pilot change); altitude stays per-frame (it's steady
 by nature).
 
+**Two conditional readouts sit beside those four.** **AGL** is
+`altMsl − groundElevation` from the *active backend's* DEM
+(`ReplayViewer.groundElevationAt` → `Backend.groundElevation?`, which only
+`terrain-backend.ts` implements), clamped at 0 because GPS altitude and the
+DEM disagree by a few metres right at the surface; on the abstract backdrop
+there is no ground, so the row hides rather than lying. **Required glide** is
+`requiredGlideToTarget` against the pilot's *next* turnpoint, resolved from
+the manifest's `reached` sequence and turnpoint `alt` — the same reading as
+the 2D analysis map's HUD (§3). Its row is revealed once, at load, only when
+some turnpoint carries an altitude; imported tasks without them never show it.
+
 **The climb readout is a vario gauge, not just digits**: a half-dial
 (−4…+4 m/s) whose needle shows the *near-instantaneous* climb (fixed ±3-fix
 window, `climbInst`) at full frame rate — flicker is intentional — drawn over
@@ -489,6 +521,139 @@ gauge dial labels (dial range stays ±VARIO_MAX m/s to match the colour ramp;
 only the −max/0/+max labels convert), colour-scale legend, and the scale bar
 (nice-number ladder computed in the chosen distance unit, with a `ft`
 sub-unit for short bars in `mi` mode).
+
+### 5.16 Scene bounds are the unit of scale — clip them to the task
+
+`FlightScene` derives `extentXZ` and `center` from the packed track bounds,
+and roughly everything sized in the scene reads them: the abstract backdrop's
+grid and camera distance, the marker cones, the turnpoint and start/goal
+labels, the gaggle hull padding and count-label width. So bad bounds are not
+"a bad initial view" — every one of those sizes is wrong together.
+
+Taking the bounds from the tracks alone makes them only as trustworthy as the
+worst file anyone uploaded. **One track from another day and another country
+put a task's extent at 2,225 km against a real field of 28 km**: every pilot
+collapsed into a five-pixel smudge and the marker cones grew to 27 km across.
+
+Two defences, at the two ends:
+
+- **Worker side — never pack it:** `visualization.ts` packs
+  only *drawable* tracks — a track whose stored data-quality report hard-failed
+  is not this flight (S7A §4.4.2), so it is not drawn any more than it may be
+  scored. Two rules carry over from scoring: an organiser's `quality_override`
+  reinstates it (§4.4.6), and a track with **no** stored verdict is UNKNOWN,
+  never assumed bad, so it stays in. The verdict is therefore a cache-key input
+  too — see §8.
+- **Viewer side:** `replay/scene-bounds.ts`'s `clipToTask(trackBounds, task)`,
+  read by `flight-scene.ts`, clips the track bounds to the task's own turnpoint
+  box grown by `TASK_BOX_SLACK` (50% of the box's longest side, applied equally
+  on both axes so a narrow task still has room across its short side). The
+  turnpoints come from the task definition, so a pilot's file cannot corrupt
+  them. Pilots legitimately fly outside the box — a launch outside the first
+  cylinder, a glide past goal, a land-out — hence slack rather than a hard clip.
+  With no usable box (no turnpoints, or a box under `MIN_TASK_BOX_M` = 1000 m,
+  which is a point rather than a task) it returns the track bounds unchanged:
+  clipping onto a point would leave the field off-frame, a worse failure than
+  the one this guards. Pinned by `scene-bounds.test.ts`.
+
+### 5.17 Thermal columns — the measured shapes, drawn in the replay
+
+`replay/thermal-layer.ts` renders the stored `ThermalShapeSummary` list
+(summaries only, no point clouds — see [docs/thermal-shapes.md](thermal-shapes.md))
+as in-scene geometry:
+
+- **one ring per 100 m altitude band**, centred on that band's measured core
+  and drawn at its `coreRadius` (the working radius), so the stack of rings
+  *is* the column and a leaning stack is a leaning thermal;
+- **the core axis** as a line through the band centres;
+- **octahedron feeders** for bands carrying **two or more** sub-cores — a
+  single sub-core is just the core, so only 2+ are drawn.
+
+The "point cloud" role is played by the pilots' own trails: scrub into a
+thermal's window and the trails spiral up through the rings.
+
+**Time behaviour** is opacity only, so a frame costs nothing but writes. A
+column is at `ACTIVE_OPACITY` while the clock is inside its window ±
+`ACTIVE_PAD_S` (120 s) and drops to `GHOST_OPACITY` outside it, so the day's
+thermals appear and die as the field found and left them. A highlighted
+column stays at full strength and pushes every other one to
+`DIMMED_OPACITY`. Vertical exaggeration follows the per-object rule (§5.8):
+every y is `baseY × vScale`, re-applied in `setVScale` — never a group scale.
+
+**Viewer API** (`replay-viewer.ts`): `setThermalShapes(shapes)` builds the
+layer, `setThermalsVisible(v)` shows/hides it, `setThermalHighlight(id)`
+emphasises one (`-1` clears), and `frameThermal(id)` flies to the column's
+mid-height centre from the south. `frameThermal` floors its zoom on
+`FlightScene.markerSpan`: a column is a kilometre or two across and a marker
+is a fixed fraction of the *whole* task, so on a big task a tight frame ends
+up inside a cone — a wall of flat colour with no thermal visible.
+
+**Chrome and fetch.** The drawer's `#thermalPanelWrap` section (a show/hide
+toggle, a `<select>` of columns labelled "time · N pilots · altitude band",
+and a caption) starts `hidden`. `main.ts` fetches the task's field-analysis
+report *after* load, never blocking, and only reveals the section when that
+report answers with shapes — so **sample mode shows nothing** (the fetch
+needs `?comp=`/`?task=` and returns null without them), and neither does a
+task with no shapes or a pre-v20 report. The store is stale-first and never
+computes on the request path, so a cold task answers `pending`: the fetch
+retries **6 times at 5 s** before giving up. A network error returns null
+immediately rather than retry-storming. Multi-class tasks answer one report
+per class; the largest class is taken, matching the field the bundle mostly
+shows.
+
+**`?thermal=<id>` is a first-class URL parameter.** The analysis page's
+"Watch this thermal in the 3D replay" link appends it
+(`react/pages/TaskFieldAnalysis.tsx`). Parsing lives apart from the entry
+point in `replay/thermal-link.ts` (`parseThermalParam`) for one reason worth
+saying out loud: `URLSearchParams.get()` answers `null` for an absent param
+and `Number(null)` is `0` — a perfectly good thermal id — so a naive
+`Number(get(…))` makes **every** plain replay load open as a deep link into
+thermal 0. An absent param must read as "no deep link". Selecting a column in
+the drawer writes the param back with `history.replaceState`, so **the
+selection IS the shareable link**; picking "All thermals" removes it.
+
+### 5.18 Keyboard shortcuts — and letting focused controls keep their keys
+
+`main.ts` binds a single document `keydown`:
+
+| Key | Action |
+|---|---|
+| `Space` | play / pause |
+| `←` / `→` | step ∓/± 30 s (`ARROW_STEP_S`) |
+| `⇧` + `←` / `→` | step ∓/± 5 min (×10) |
+| `Home` / `End` | jump to the start / the end |
+| `↑` / `↓` | one step faster / slower on the playback-speed `<select>` |
+| `Esc` | close the control drawer and the shortcuts popover |
+
+The ⌨ button beside the speed selector opens `#kbdPanel`, a popover listing
+exactly those bindings — desktop only (`hidden md:grid`), because shortcuts
+only matter with a physical keyboard.
+
+Two guards keep the page from stealing keys it has no right to. A chord with
+`meta`/`ctrl`/`alt` returns immediately — those belong to the browser and the
+OS. And a focused `<input>`, `<select>` or `<textarea>` owns *all* its keys
+(arrows move the scrubber and the speed list), while a focused `<button>`
+owns only `Space` — which the browser turns into a re-click of that button.
+Everything the handler does act on calls `preventDefault()`, so `Space` never
+scrolls the page.
+
+### 5.19 Collapsible timeline — and why the compass moved to the top right
+
+`#timelineCollapse` (the ▾ chevron above the timeline's right edge) toggles a
+`collapsed` class that hides every control marked `.tl-chrome` — play/pause,
+clock, speed, ⌨ button, gaggle ribbon, and the panel's own background — down
+to the bare scrubber floating over the scene. The chevron itself sits outside
+the controls row (so phones don't overflow) and stays put as the way back;
+playback still works through `Space` and canvas clicks. The choice persists in
+`localStorage` under `replay.timelineCollapsed`, wrapped in try/catch so
+private mode just doesn't remember it. Collapsing also closes the shortcuts
+popover, whose ⌨ toggle just went away with the panel.
+
+The same change moved the **compass and scale bar to the top right, under the
+hamburger**: they used to sit near the bottom timeline, whose height *varies*
+with the gaggle ribbon, and it was covering them. Both are desktop-only
+(`hidden md:flex`) to save space on phones. (§5.13's compass note is about the
+orientation-preset maths, which is unaffected.)
 
 ---
 
@@ -542,26 +707,49 @@ file, so any user can view it and the same path serves any comp task.
   duplicate under a new comp_id and `sample-3dvis` 404s.
 - **Endpoint:** `web/workers/competition-api/src/visualization.ts`
   (`buildTask3dvisBundle`) + `routes/visualization.ts`. Mirrors `scoring.ts`:
-  fetch `task_track` rows → R2 `get` → gunzip → `packTracksFromIgc` → gzip data
-  → frame the bundle → cache in KV (`3dvis:v1:<taskId>:<hash>`, invalidated by
-  the same task-state hash as scores).
+  fetch `task_track` rows → drop the tracks a HARD quality check withheld
+  (§5.16) → R2 `get` → gunzip → `packTracksFromIgc` → gzip data → frame the
+  bundle → cache in KV under `3dvis:v4:<taskId>:<hash>`.
+  - The hash covers the task's `xctsk`, the comp timezone (baked into the
+    manifest, so an organiser override must invalidate the bundle), each
+    track's id + `uploaded_at` + `quality_override`, **and each track's stored
+    data-quality report**. The verdict has to be in there because neither half
+    of it moves the rest of the key on its own: a verdict is computed *later*
+    than the upload it judges, so `uploaded_at` is unchanged when a track
+    first becomes withheld, and an organiser reinstating one touches only
+    `quality_override`. Hashing the whole report is the cheap way to be
+    exactly right — any change to any finding moves the key.
+  - The version prefix is its own invalidation lever, bumped whenever the
+    bundle's *shape* changes under an unchanged hash. `compute3dvisCacheKey`
+    records the history: **v2** when the manifest gained `task.goalLine`,
+    **v3** when it gained per-pilot turnpoint reach times, turnpoint altitudes
+    and `task.sssIndex` (the required-glide readout), **v4** when withheld
+    tracks stopped being packed — every bundle cut before that still carries
+    them.
 - **Timezone:** the manifest carries the comp's IANA zone from `comp.timezone`
   (migration 0011: derived from the task location on route save via the
-  engine's `tz-lookup` helper, organizer-overridable in Competition Settings —
+  engine's `tz-lookup` helper, organiser-overridable in Competition Settings —
   see #269). When the column is unset (comps predating it) the Worker derives
   the zone from the task's first turnpoint at bundle-build time. Without
   either, the viewer falls back to the browser zone.
 - **Frontend:** `loadTracksBundle` in `track-data.ts` (one fetch, split manifest
   from gzipped data) → `ReplayViewer.loadBundle`. `replay/main.ts` builds the URL.
-- **Entry points:** the homepage links to the replay (`/replay`, no
-  params → `sample-3dvis`). Every competition **task page** (`comp-detail.ts`)
-  and the **score page** (`scores.ts`) link to `/replay?comp=<id>&task=<id>`
-  for their real tasks — the in-app path needs no `sample-3dvis` (the page knows
-  the ids). The task-page link appears once the task has scoreable tracks.
+- **Entry points:** exactly two links in the app, both from the SPA, and both
+  passing real ids — the in-app path never needs `sample-3dvis`. The
+  parameterless `/replay` (→ `sample-3dvis`) is reachable by typing the URL;
+  **the homepage does not link to it**.
+  - The **task page** (`src/react/pages/TaskDetail.tsx`) → "3D replay",
+    `/replay?comp=<id>&task=<id>`. Gated on `replayAvailable`, which
+    `ScoresSection` reports once the task has scoreable tracks, so the button
+    appears only when there is something to replay.
+  - The **task field-analysis page**
+    (`src/react/pages/TaskFieldAnalysis.tsx`, via `ThermalsPanel`) → "Watch
+    this thermal in the 3D replay" on the selected thermal, which appends
+    `&thermal=<id>` (§5.17) and opens in a new tab.
 
 ---
 
-## 8. Conventions to keep
+## 9. Conventions to keep
 
 - Local ENU frame: **X = East, Y = Up, Z = South (North = −Z)**, right-handed.
 - `mapbox-gl` stays lazy-imported (terrain-backend only); keep style/data lists

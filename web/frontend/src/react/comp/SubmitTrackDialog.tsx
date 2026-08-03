@@ -1,10 +1,13 @@
 /**
- * The compact "Submit track" overlay, for the comp and task pages.
+ * The compact "Submit track" overlay, for the task page.
  *
  * It is a wrapper: the flow itself lives in SubmitTrackForm, which the
  * `/submit` page renders as page content. Opened from here, comp and task are
  * already known, so those steps collapse and what is left is the two-field
- * form this dialog has always been.
+ * form this dialog has always been. That is also why the dialog is the TASK
+ * page's form only — its two callers are pages/TaskDetail.tsx and
+ * comp/TaskResults.tsx, both on that page; the comp page still has to ask
+ * which task, so it links to /submit?comp= instead.
  *
  * The one behavioural difference between the two presentations lives here: a
  * clean success closes the dialog after a beat, but a success carrying
@@ -12,7 +15,7 @@
  * away before it was read. The page has nothing to close and so needs neither
  * rule.
  *
- * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/Dialog and
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Modal/Dialog and
  * FileTrigger — the file lives in state (a File object), not in a DOM input.
  */
 import { useEffect, useState } from "react";

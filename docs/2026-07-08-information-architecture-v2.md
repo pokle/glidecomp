@@ -27,12 +27,27 @@ review comments there, and aligns with
 >   downloads folded into a single Share menu; per-row Submit track / 3D
 >   replay removed (they live on the task page). Finished comps lead with the
 >   standings summary before the task list.
+>   **Superseded (2026-07-30, [#514](https://github.com/pokle/glidecomp/issues/514),
+>   "Every task alike: the comp hub groups them by day and class, no hero"):**
+>   the featured card is gone too. There is no hero and no privileged task —
+>   `pages/CompDetail.tsx` renders one list, grouped by date (newest day first,
+>   each day a `Disclosure` open by default) and then by pilot class within the
+>   day, in the order the organisers declared the classes. A task flown by
+>   several classes gets a row under each. Rows carry only the link, the setup
+>   badges and the route glyph; every action lives on the task page.
 > - **The task page split public results from management**: a public top-3
 >   podium + link to the scores page; the old standings grid is the admin-only
 >   "Manage pilots & tracks" section.
 > - Activity is a 3-entry digest ("Show all activity" expands); Admins is an
 >   "Organized by …" footnote (the `#admins` anchor survives). The section nav
->   is sticky. SSR covers **eight** public pages — the authoritative list is
+>   is sticky, and it has since grown past the four entries §9's question 3
+>   asked about. What `<nav aria-label="Sections">` in `pages/CompDetail.tsx`
+>   carries today: **Tasks (n)** · **Scores** · **Waypoints (n)** ·
+>   **Pilots (n)** (admins only — the roster moved to its own admin page) ·
+>   **Field analysis** (only when `scoring_format !== "open_distance"`, because
+>   an open-distance comp has no legs to measure) · **Activity**. Only Tasks
+>   and Activity are in-page anchors; the rest are links to sibling pages.
+>   SSR covers **eight** public pages — the authoritative list is
 >   the `ROUTES` table in `functions/comp/[[path]].ts`: `/comp`,
 >   `/comp/:id`, `/comp/:id/scores`, `/comp/:id/waypoints`,
 >   `/comp/:id/task/:id`, `/comp/:id/task/:id/pilot/:id`, and the two
@@ -78,7 +93,9 @@ whole page: the task workroom and the score explainer.
 ```
 Level 0   /                     Home (static): what GlideComp is, sign in,
 │                               prominent "Browse competitions"
-Level 1   Global tabs:  Competitions (/comp)   My Flights (/u/:username)   [user menu]
+Level 1   Global tabs:  Competitions (/comp)   My Flights (/u/:username)
+│                       Submit track (/submit)                        [user menu]
+│                       (the third tab arrived with #535 — see §3)
 │
 Level 2   /comp/:id             THE COMP HUB — everything about one comp:
 │                               today's task, task list, scores, pilots,
@@ -100,10 +117,10 @@ Maximum depth anywhere: 3. No page exists whose only purpose is navigation
 | Job | Path | Clicks from the comp URL |
 |-----|------|--------------------------|
 | J1 today's task | `/comp/:id` → **Today's task** hero → turnpoints + Download .xctsk | 0–1 |
-| J2 submit track | `/comp/:id` → hero **Submit track** | 1 |
+| J2 submit track | *(2026-08-02, #535)* **Submit track** in the nav, on any page → `/submit`; or `/comp/:id` → **Submit track** → `/submit?comp=` with the comp prefilled; or the task page's dialog | 0 — the tab is on every page |
 | J3 scores + dispute | `/comp/:id` → Scores section inline → click a score → explainer; "contact the admins" links to the Admins section | 0–1 |
 | J4 comp setup | `/comp` → **Start a new competition** → hub → **New task** (defaults to today) | 2 per day |
-| J5 on-behalf upload | hero **Submit track** → "on behalf of" picker (existing dialog) | 1 |
+| J5 on-behalf upload | *(2026-08-02)* the task page's **Submit track** → `SubmitTrackDialog` → "Submitting for" picker; the hero it used to run through is gone | 1 |
 | J6 briefing | `/comp/:id#scores` — per-class tabs, deep-linkable for a projector | 0 |
 | J7 quick task change | `/comp/:id` → hero **Edit route** (admin) → route editor | 1 |
 | J8 crawlers | `/`, `/comp`, `/comp/:id`, explainer all SSR (per the SSR plan) | — |
@@ -113,11 +130,16 @@ Maximum depth anywhere: 3. No page exists whose only purpose is navigation
 **Header (tabs), on every SPA page and every static page:**
 
 ```
-[GlideComp]   Competitions   My Flights                    [Sign in | ☰ user menu]
+[GlideComp]  Competitions  My Flights  Submit track    [Sign in | ☰ user menu]
 ```
 
 - **Competitions** first (it's the shared, public space; login lands here).
   **My Flights** second. Active tab underlined, as today.
+- **Update (2026-08-02, #535):** a third tab, **Submit track** (`/submit`),
+  sits after My Flights in both headers — `react/components/Shell.tsx` and the
+  static `SiteHeader.astro`, which must stay in sync. It is the one thing a
+  pilot who has just landed came here to do, so it is reachable from every
+  page; the homepage hero deliberately did **not** take a third button.
 - Right-aligned **user menu** (avatar): Settings, Sign out. Signed out: a
   **Sign in** button in the same slot. This satisfies "Settings right-justified"
   and rescues Sign out from the footer where it hides today
@@ -174,6 +196,10 @@ scores forever after:
    **Download .xctsk** (see §8) · **Submit track** (signed-in, comp open;
    admins get the existing on-behalf picker) · **3D replay**.
    Omitted entirely when the comp has no tasks.
+   *(2026-08-02: the hero itself is gone — see the update at the top — and
+   #535 dropped the session gate. Submitting is open to anyone the comp's
+   roster knows, so the surviving buttons on the comp and task pages are
+   gated on `mounted && !isClosed` and nothing else.)*
 3. **All tasks**: compact date-grouped list (existing rows: status badges,
    3D replay, Submit track). Default tap → task workroom. Admin: **New task**
    button, date pre-filled with today (J4's "day by day").
@@ -196,6 +222,14 @@ scores forever after:
 Signed-out users see all of the above minus the signed-in affordances; the
 Submit track slot renders as "Sign in to submit your track". No "log in to
 see more" blurb — there is nothing hidden to tease.
+
+> **Update (2026-08-02, #535):** that last sentence is no longer true, and the
+> button it describes was deleted. Anonymous submission shipped, so the session
+> gate came off the Submit track slot entirely: a signed-out visitor now gets
+> the same **Submit track** button a signed-in one does (`mounted && !isClosed`
+> in `pages/CompDetail.tsx` and `comp/TaskResults.tsx`), and the identity step
+> asks for an identifier the organiser already registered instead of a sign-in.
+> See [track-submission.md](./track-submission.md).
 
 ### `/comp/:id/task/:tid` — task workroom
 
@@ -244,9 +278,18 @@ Shell today).
 
 Content unchanged; they gain the global header tabs and the unified footer.
 
+*(Two scoring guides have been added since: `/scoring/data-cleaning` and
+`/scoring/track-validity` — same Astro app, `static/src/pages/scoring/`, same
+chrome.)*
+
 ### 404
 
 Link list updated to: Competitions, My Flights, How scoring works, Home.
+*(Later replaced by the link-repair + search 404: `components/NotFound.tsx`
+reads the words out of the dead path, asks `GET /api/comp/lookup` which comps,
+tasks and pilots carry them now, and offers "Did you mean…" plus a search
+field. The standing link list went with it — the header nav and the footer
+already carry those on every page, this one included.)*
 
 ## 5. What this changes, page by page (all navigation/presentation)
 
@@ -352,16 +395,28 @@ components so future work stays consistent:
   analysis, so it parents on that report even though the task page also
   links to it. Cross-links between subtrees get an explicit sibling link on
   the destination ("View task") rather than a bent breadcrumb.
-- **One Submit track dialog everywhere** (`comp/SubmitTrackDialog.tsx`):
-  every Submit track button opens the same dialog; the "Submitting for" row
-  is always visible (locked to "Myself" for plain pilots, registered-pilot
-  dropdown for admins/open-upload comps), and choosing an IGC surfaces the
-  pilot name from the file header, auto-selecting a unique match — visibly,
-  so the user can correct it.
+- **One Submit track *form* everywhere** — superseded wording, 2026-08-02
+  (#535). It used to be one dialog (`comp/SubmitTrackDialog.tsx`) behind every
+  Submit track button. It is now one form, `comp/SubmitTrackForm.tsx`, with two
+  presentations: as the whole of the public `/submit` page, or wrapped in
+  `SubmitTrackDialog` on the task page, where comp and task are already known
+  and those steps collapse to a line with a **Change** button. The comp page
+  links to `/submit?comp=` rather than opening either — from there the task is
+  still an open question, and the page is where it gets asked. The rest holds,
+  with one amendment: the "Submitting for" row is shown to **signed-in**
+  submitters (locked to "Myself (name)" for plain pilots, registered-pilot
+  dropdown for admins/open-upload comps) — a signed-out one names a registered
+  identifier instead — and choosing an IGC surfaces the pilot name from the
+  file header as a visible line, `Pilot named in the file: …`, rather than
+  auto-selecting from it. Full account: [track-submission.md](./track-submission.md).
 - **Print**: every major comp-page section (`#tasks #scores #pilots
   #activity #admins`) starts a fresh page (`break-before-page`) so a printed
   comp page works as briefing handouts.
 - **Chrome details**: SPA and static headers share a 60px min-height (no
   jump crossing between them); the static footer clears the viewport-fixed
-  hills background; the hero's "Edit route…" deep-links to the task page
-  with `#edit-route`, which opens the route editor and clears on close.
+  hills background; `#edit-route` on a task page URL opens the route editor
+  and clears the hash on close (`pages/TaskDetail.tsx`). The mechanism
+  outlived its first caller: the hero's "Edit route…" is gone with the hero,
+  and the deep link is now issued by the admin setup checklist,
+  `comp/CompSetupProgress.tsx` — which uses the same pattern for the roster
+  (`/comp/:id/pilots#edit-pilots`).

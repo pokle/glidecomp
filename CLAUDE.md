@@ -24,7 +24,8 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
     in `src/react/globals.css`). Most SPA routes reach `/app.html` via
     `public/_redirects`.
   - The **content pages** (`/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`,
-    `/scoring/open-distance`) — prerendered static HTML from a small Astro app in
+    `/scoring/open-distance`, `/scoring/data-cleaning`, `/scoring/track-validity`,
+    and the `404`) — prerendered static HTML from a small Astro app in
     `web/frontend/static/`, reusing the SPA's `globals.css` tokens/fonts. KaTeX
     on the GAP page is prerendered at build via `katex.renderToString`.
   - The **eight public comp pages**, which are **server-rendered** — see
@@ -227,7 +228,8 @@ These are the standing imperatives. Each links to the reference that explains it
     shared theme in `comp/tabulator-grid.css`.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
-    `.command`, …) — extend those there rather than adding a UI library. The 3D
+    `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
+    library. The 3D
     replay styles itself (`replay.css` + inline theme).
 - **Use Tailwind utilities** — avoid custom CSS where Tailwind has an equivalent.
 - **UI conventions** (see the design-language section of

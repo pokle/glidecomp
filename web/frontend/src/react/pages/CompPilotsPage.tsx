@@ -1,7 +1,7 @@
 /**
  * Pilot roster editor page (/comp/:id/pilots) — ADMIN-ONLY and NOT SSR'd
- * (functions/comp/[[path]].ts serves it a noindex shell, like field
- * analysis). The roster used to be a section of the comp page; it moved here
+ * (functions/comp/[[path]].ts serves it a noindex shell). The roster used to
+ * be a section of the comp page; it moved here
  * because for visitors it duplicated the score tables, while for admins it
  * is a management surface (paste-in roster setup, CSV import, the Tabulator
  * edit grid) that deserves room of its own.

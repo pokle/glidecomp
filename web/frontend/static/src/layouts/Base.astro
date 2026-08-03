@@ -1,7 +1,8 @@
 ---
 /**
  * Shared shell for every static page: <head>, design-token stylesheet and the
- * OS-preference dark-mode sync (mirrors react/main.tsx's `.dark` class toggle).
+ * OS-preference dark-mode sync (mirrors the `.dark` class toggle the SPA runs
+ * from react/entry-client.tsx via react/lib/theme.ts).
  */
 import "../styles/global.css";
 import SiteHeader from "../components/SiteHeader.astro";

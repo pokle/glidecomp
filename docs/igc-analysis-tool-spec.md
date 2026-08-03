@@ -32,6 +32,9 @@ This provides an alternative to browsing the event panel - pilots can click dire
 ### Command Palette (⌘K)
 Quick access menu for display options and actions.
 
+**Feedback** (the first group, above everything else):
+- **Email Feedback** (`menu-feedback`) - Closes the palette and opens a pre-addressed `mailto:` for bug reports and feature requests
+
 **Display Options:**
 - **Toggle 3D Track** - Show/hide 3D track rendering with drone follow camera (on/off indicator)
 - **Toggle Task** - Show/hide task visualization (cylinders, route lines, labels) - persisted via `?task-visible=0` URL param
@@ -57,9 +60,16 @@ Quick access menu for display options and actions.
 - **Competition Settings...** (`menu-competition-settings`) - Opens `#competition-settings-dialog` for the GAP scoring parameters (PG/HG, nominal distance/goal/time, minimum distance, leading/arrival toggles)
 - **Settings...** (`menu-configure-settings`) - Opens `#settings-dialog`, which covers display units *and* the event-detection thresholds (see below)
 
+### Page Chrome
+
+Two pieces of chrome sit outside the panel and the map layers:
+
+- **Breadcrumb bar** (`#breadcrumbs`) — a centred pill at the top of the map (so the map controls keep the corners), always carrying a "GlideComp" link home. When the page is opened on a competition task, `main.ts` appends "› comp › task" links back to `/comp/:id` and `/comp/:id/task/:id`, so a shared or direct analysis link has a way back into the app (IA v2, issue #277)
+- **Sidebar resize handle** (`#sidebar-resize-handle`) — a thin always-visible strip pinned to the panel's left edge, `title="Drag to resize, click to cycle widths"`. Drag it to set an arbitrary panel width; a click (no meaningful drag) cycles through the preset widths
+
 ### Settings Dialog
 
-Opened from the command palette's "Settings..." item (`menu-configure-settings` → `#settings-dialog`). Collapsible sections: **Units**, **Thermal Detection**, **Glide Detection**, **Vario Extremes**, **Takeoff / Landing**, **Circle Detection** — so the same dialog configures how values are displayed and the thresholds the detectors run with (`resolveThresholds` in `web/engine/src/thresholds.ts`). See `configurable-units-spec.md` (in this directory) for full details on the units half.
+Opened from the command palette's "Settings..." item (`menu-configure-settings` → `#settings-dialog`), or directly with **`Cmd/Ctrl+,`** — that shortcut populates and shows the same dialog without going through the palette. Collapsible sections: **Units**, **Thermal Detection**, **Glide Detection**, **Vario Extremes**, **Takeoff / Landing**, **Circle Detection** — so the same dialog configures how values are displayed and the thresholds the detectors run with (`resolveThresholds` in `web/engine/src/thresholds.ts`). See `configurable-units-spec.md` (in this directory) for full details on the units half.
 
 **Configurable Units:**
 | Unit Type | Options | Default |
@@ -72,7 +82,7 @@ Opened from the command palette's "Settings..." item (`menu-configure-settings` 
 **Key Features:**
 - All values update immediately when units are changed (no page refresh required)
 - Preferences persist in localStorage
-- Accessed via command palette: Cmd+K → "Settings..."
+- Accessed via command palette (Cmd+K → "Settings...") or directly with Cmd/Ctrl+,
 
 ### Event Detection
 The tool automatically detects the events below. Not everything detected is *listed* in the panel: the raw cylinder crossings are superseded by the scored `*_reaching` events, and individual circles would swamp the list, so `analysis-panel.ts` filters them out of the events list (`hiddenEventTypes`). They still exist on the event array for other consumers.
@@ -106,7 +116,7 @@ Sidebar panel with a tabbed interface for viewing flight data. There is **one fl
 - **Events** - Chronological list of the detected events (takeoff, thermals, glides, the `*_reaching` tags, landing, etc.)
 - **Glides** - Glides sorted by distance (longest first), combining start/end info into single entries
 - **Climbs** - Thermals sorted by altitude gain (highest first), combining entry/exit info into single entries
-- **Sinks** - Glides with poor L/D ratio (5:1 or worse), sorted by altitude lost (deepest first)
+- **Sinks** - Glides with poor L/D ratio, sorted by altitude lost (deepest first). The cut-off is the configurable `glide.maxGlideRatioForSink` threshold (default 5), not a constant
 
 **Multi-track tab row** (`#tab-row-multi`, shown by `setMultiTrackMode(true)` when a whole competition field is loaded — e.g. from the Sample Competitions group or an AirScore import). The single-track row is hidden and the panel switches to Competition Score:
 - **Competition Score** - The whole field's scores for the task: GAP breakdown or the open-distance table depending on `setCompetitionScoringFormat()`. Selecting pilots here drives which tracks the map draws (`setPilotSelection` / `onPilotSelectionChanged`)
@@ -147,10 +157,10 @@ Leaving multi-track mode restores the single row and falls back to Events.
 - Green accent color for climb items to distinguish from glides
 
 **Sinks Tab Features:**
-- Header: "Glides with L/D ≤ 5:1, sorted by altitude lost"
-- Only shows glides with L/D ratio of 5:1 or worse (indicating strong sink)
+- Header: "Glides with L/D ≤ N:1, sorted by altitude lost" — N is interpolated from `config.getThresholds().glide.maxGlideRatioForSink`, so the header follows the Glide Detection setting rather than stating a fixed 5
+- Only shows glides at or under that ratio (indicating strong sink). The same threshold is passed to `extractSinks()`; its default is 5 (`DEFAULT_THRESHOLDS.glide.maxGlideRatioForSink` in `web/engine/src/thresholds.ts`)
 - Each sink shows: rank (#1, #2...), altitude lost (m), time range, and stats:
-  - **L/D** - Glide ratio (always ≤5:1)
+  - **L/D** - Glide ratio (always at or under the threshold)
   - **Avg** - Average sink rate (m/s)
   - **Dist** - Distance covered (km)
   - **Spd** - Average speed (km/h)
@@ -309,13 +319,13 @@ Available at `/analysis.html`
 ## Future Enhancements
 
 - [x] Altitude sparkline (see `sparkline-spec.md`)
+- [x] Task validation and scoring — the Score and Competition Score tabs, GAP scoring and turnpoint sequencing (see the sections above)
+- [x] Multiple flight comparison — multi-track mode: the Sample Competitions group and the AirScore import load a whole field at once, and the Competition Score tab drives which tracks the map draws
+- [x] **Common waypoints used in tasks** — `waypoint-loader.ts` fetches and parses a waypoint database (today the bundled Corryong CSV, `loadCorryongWaypoints()`), and the map draws it as the pickable `waypoints` / `waypoint-labels` layers the route editor picks from (see [`mapbox-interactions-spec.md`](mapbox-interactions-spec.md))
 - [ ] Speed/vario charts
-- [ ] Task validation and scoring
-- [ ] Multiple flight comparison
 - [ ] Export analysis report
 - [ ] Thermal map aggregation
-- [ ] **Flying area features** (planned):
-  - Common waypoints used in tasks
+- [ ] **Flying area features** (still planned):
   - Map polygons for danger/no-landing areas
   - Lift generators (hot rocks, ridges, etc.)
   - Historical thermal hotspots

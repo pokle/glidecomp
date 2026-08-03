@@ -141,9 +141,10 @@
     @apply bg-background text-foreground;
   }
 
-  /* Base UI quick-start requirements:
+  /* Both rules serve the body-level portals (RAC dialogs and popovers, and the
+     sonner toaster):
      - the app root needs its own stacking context so portaled popups layer
-       above page content (https://base-ui.com/react/overview/quick-start)
+       above page content
      - body { position: relative } is required for iOS 26+ Safari backdrops */
   #root {
     isolation: isolate;

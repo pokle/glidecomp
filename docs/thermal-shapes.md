@@ -55,6 +55,19 @@ clustering (`shared-thermals.ts`) and the circle detector.
   readouts, climb profile, per-pilot climb table and band table. The model-wind cross-check comes from the task's weather column
   (independent request, `windAtHeight` interpolation) and is always drawn
   dashed and credited as a model run, never blended with the measurement.
+  - The rose (`react/field-analysis/thermals/ThermalsPanel.tsx`) puts the two
+    radii on the picture, not just in the band table. Wedge length is
+    *relative* climb by sector — the shape of the lift, with sink marked in
+    blue — while the **dashed ring is the working radius** (the bands'
+    sample-weighted mean `coreRadius`) and the **dotted ring the flown
+    extent** (the largest band `extentRadius`). Both rings, and the feeder
+    diamonds, share one metre scale, so the picture answers "how wide was it,
+    and how much wider did the field range?" at a glance. A **solid arrow**
+    carries the track-measured wind and a **dashed arrow** the weather
+    model's, each entering from the side it blows from; the centre dot is the
+    core, seen from above, with lean and drift already taken out by the
+    band re-centring. The ⓘ popover names all seven marks with the same
+    glyphs the rose draws, so a swatch can never drift from the chart.
 - **3D replay** (`/replay?comp=&task=`): `ThermalLayer` draws each thermal as
   a ring stack (one ring per band at the measured core + working radius), the
   core axis, and feeder diamonds. The pilots' own trails are the point cloud.
@@ -63,6 +76,12 @@ clustering (`shared-thermals.ts`) and the circle detector.
   picking one in the drawer flies the camera in and jumps the clock.
   The replay fetches the same stored report the analysis page renders, so the
   two surfaces cannot disagree.
+  - The drawer's **Thermals section stays hidden** until that report answers
+    with shapes, so sample mode and thermal-less tasks show no empty
+    furniture; the section carries its own show/hide toggle for the columns.
+    Picking a thermal rewrites `?thermal=` in place, so **the selection is the
+    shareable link**, and highlighting one holds it at full strength while
+    dimming every other column — including the ones the clock says are active.
 - **Research CLI**: `bun web/engine/cli/thermal-shapes.ts <task-dir>` — works
   directly on `glidecomp-archive` task dirs (no scoring needed), with
   `--out`/`--min-pilots`/`--no-samples`/`--no-weather`.

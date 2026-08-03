@@ -139,7 +139,9 @@ function mean(values: number[]): number {
 /**
  * Role for a turnpoint, matching TurnpointsTable's rule exactly: the declared
  * type, or GOAL for the last turnpoint of a task that leaves it unset. Shared
- * with the strip and profile views so all four disagree about nothing.
+ * between the diagram's own labelling below and the station model in
+ * task-legs.ts that the turnpoint table reads, so the drawing and the listing
+ * cannot disagree about what a turnpoint is.
  */
 export function turnpointRole(task: XCTask, index: number): TaskDiagramRole {
   const type = task.turnpoints[index]?.type;

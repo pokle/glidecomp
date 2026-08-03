@@ -1,6 +1,6 @@
 /**
- * React Aria Components Tabs, styled to match ui/tabs.tsx (default variant,
- * horizontal). RAC wires the ARIA tabs pattern — roving-tabindex arrow-key
+ * React Aria Components Tabs, styled to match the shadcn kit they replaced
+ * (default variant, horizontal). RAC wires the ARIA tabs pattern — roving-tabindex arrow-key
  * navigation, automatic selection on focus, and panel association — and only
  * the selected TabPanel renders its content.
  *

@@ -1,9 +1,8 @@
 /**
- * React Aria Components Button/Link, styled to match ui/button.tsx.
+ * React Aria Components Button/Link, styled to match the shadcn kit it replaced.
  *
- * Part of the RAC exploration kit (src/react/rac/): the task detail page is
- * built entirely from these primitives to evaluate react-aria-components as
- * the app-wide component foundation. Interaction states use RAC's data
+ * Part of the RAC kit (src/react/rac/) — see
+ * docs/2026-07-18-rac-adoption-guide.md. Interaction states use RAC's data
  * attributes (data-hovered / data-pressed / data-focus-visible) instead of CSS
  * pseudo-classes — RAC normalizes them across mouse/touch/keyboard.
  */

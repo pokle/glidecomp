@@ -1,5 +1,6 @@
 /**
- * React Aria Components modal dialogs, styled to match ui/dialog.tsx.
+ * React Aria Components modal dialogs, styled to match the shadcn kit they
+ * replaced.
  *
  * RAC composition: <DialogTrigger> (optional) → <Modal> (overlay + panel) →
  * <Dialog> (the ARIA dialog) → content. A Button with slot="close" anywhere

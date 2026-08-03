@@ -110,8 +110,9 @@ redesign.
    already-compliant shape.
 7. **Metric labels live in the engine registry**, shared with the CLI, and are
    *stored inside* each cached report. Changing one means bumping
-   `FIELD_ANALYSIS_VERSION` (currently 17, `web/engine/src/field-analysis/version.ts`)
-   or cached rows keep serving the old text.
+   `FIELD_ANALYSIS_VERSION` (`web/engine/src/field-analysis/version.ts` — read
+   the current value there, it moves often) or cached rows keep serving the old
+   text.
 
 ---
 

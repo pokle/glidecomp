@@ -8,7 +8,7 @@
  * page) updates every subscriber via the `glidecomp:preferences-changed`
  * event, including across tabs.
  *
- * SSR: the server snapshot is always DEFAULT_UNITS (metric), so the five
+ * SSR: the server snapshot is always DEFAULT_UNITS (metric), so the eight
  * SSR'd comp pages render deterministically; a signed-in visitor with other
  * units gets a repaint right after hydration.
  */

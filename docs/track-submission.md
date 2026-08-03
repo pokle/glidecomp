@@ -12,8 +12,14 @@ signed-out visitor was a button reading "Sign in to submit your track".
 
 ## The flow
 
-**`/submit`** (`src/react/pages/SubmitTrack.tsx`) is a real page, linked from
-the homepage hero and from the nav on every page. It asks three things:
+**`/submit`** (`src/react/pages/SubmitTrack.tsx`) is a real page, reached from a
+**Submit track** tab in the nav on every page — the SPA header
+(`components/Shell.tsx`) and the prerendered static one (`SiteHeader.astro`)
+both carry it. The homepage hero deliberately does **not**:
+its job is to explain what GlideComp is to somebody who has never seen it, and a
+third competing action there was buying reach with clarity. The hero says the
+words instead, under the two buttons — *"Free · Submit a track and read the
+scores without an account"*. It asks three things:
 
 1. **Which task** — from `GET /api/comp/open-now`, with the most likely one
    already chosen.
@@ -29,9 +35,17 @@ The logic lives in `src/react/comp/SubmitTrackForm.tsx` and its DOM-free half
 in `submit-track.ts`. Two things render it:
 
 - `pages/SubmitTrack.tsx` — as page content.
-- `comp/SubmitTrackDialog.tsx` — a `Modal` wrapper, for the comp and task
-  pages, where comp and task are already known and those steps collapse to a
-  line with a **Change** button.
+- `comp/SubmitTrackDialog.tsx` — a `Modal` wrapper, for the **task page**
+  (`pages/TaskDetail.tsx` and, inside it, `comp/TaskResults.tsx`), where comp
+  and task are already known and those steps collapse to a line with a
+  **Change** button.
+
+The comp page is the third way in, and it opens neither: `pages/CompDetail.tsx`
+links to `/submit?comp=<id>`. From a comp page the task is still an open
+question, and the page is where that question gets asked — a dialog opening onto
+a task picker would only be the page in a smaller box. Both the comp and the
+task button are mount-gated, because both pages are server-rendered, and neither
+is gated on a session.
 
 A step never simply disappears when it is prefilled. Filing a track against
 yesterday's task without ever being shown which task it was is the commonest
@@ -42,7 +56,7 @@ dialog closes itself after a clean upload (and never when there are
 track-quality findings — it would take the warning away before it was read),
 and the page has nothing to close.
 
-### The third entry point, and the size rule
+### The admin grid, and the size rule
 
 `comp/TaskStandings.tsx` — the admin manage grid — deliberately does **not**
 open the form. The pilot is already known from the row, so a dialog that asked
@@ -87,8 +101,8 @@ visible parts are laid out with a flex gap and would otherwise be read as
 
 **Choosing does not close the list.** The picker collapses to a line with a
 **Change** button in exactly one case: the caller already named the task, which
-is the dialog on a comp or task page where the flow is a two-field form and a
-list of one is noise. It never collapses because the pilot picked something.
+is the dialog on a task page where the flow is a two-field form and a list of
+one is noise. It never collapses because the pilot picked something.
 Selecting a task is not finishing with it — confirming the choice against the
 dates either side is the entire reason the dates are printed, and a control
 that answers once and shuts turns a glance into two taps. The chosen comp also
@@ -105,6 +119,32 @@ moment the wire order flipped.
 
 If the list ever outgrows a screen, `ListBox` with a section per competition is
 the next step up; `ComboBox` only once searching beats scanning.
+
+### What the browser remembers
+
+A successful **anonymous** submission writes one entry to `localStorage` under
+`glidecomp:last-submit` (`readLastSubmission` / `writeLastSubmission` in
+`submit-track.ts`): the comp id, the task id, and the identifier the submitter
+named the pilot with — its kind and its value, trimmed. Day two of a six-day
+comp then costs no typing. The identifier prefills, and `pickDefaultTask` puts
+that comp's current task ahead of everything except an explicit `?comp=` /
+`?task=`. A signed-in submission writes nothing, and the entry is read back only
+while there is no session and nobody has touched the identity fields.
+
+Say what that is, because the value can be an **email address** and `/submit` is
+a public page a pilot may well open on a borrowed phone at launch or on a shared
+laptop in the HQ tent. It is one entry, in that browser's own storage, holding
+two ids and one identifier — no name, no file, no session. It has **no expiry
+and nothing clears it**: there is no TTL, no sign-out hook and no "forget me"
+control in the flow, so it lives until the browser's site data for GlideComp is
+cleared. Anything malformed reads back as nothing, and a storage that refuses
+the write (private browsing, a full quota) is ignored rather than failing the
+upload.
+
+It is a convenience and never a credential. The worker re-checks the identifier
+against the roster on every submission, so a leftover entry lets nobody submit
+anything they could not have typed — but it does leave an email address legible
+to the next person who opens the page on that device.
 
 ### Which endpoint
 
@@ -229,6 +269,7 @@ to reopen the step that can fix it.
 | `no_pilot_match` | 404 | Another identifier, or emailing the organiser |
 | `ambiguous_pilot_match` | 409 | Only the organiser — a duplicated roster row |
 | `anonymous_not_permitted` | 403 | Signing in |
+| `registration_closed` | 403 | Only the organiser — they add the pilot to the roster |
 | `comp_closed` | 400 | Nothing; it says so |
 | `comp_not_found` / `task_not_found` | 404 | Re-picking the task |
 | `invalid_file` | 400 | Another file |

@@ -4,13 +4,22 @@
 
 **Status (2026-07-27): the migration is FINISHED.** Every page and dialog in
 the SPA is react-aria-components, `src/react/ui/` is deleted, and
-`src/react/one-kit.test.ts` fails the build if anything imports from it again.
+`src/react/one-kit.test.ts` fails if anything imports from it again — but note
+that guard only runs under the **frontend** vitest suite, which is
+`bun run test:all` (or `bun run test:frontend`), **not** `bun run test`; see the
+verification playbook.
 There is no `components.json` any more either, so `bunx shadcn add` is not the
 route to a missing component — add it to `rac/`. A static styled element is a
 perfectly good kit member when there's no behaviour to own (`rac/badge.tsx`,
 `rac/alert.tsx`). Thin wrappers over third-party widgets RAC doesn't provide
 live in `src/react/vendor/`: today the `input-otp` sign-in field and the
 `sonner` toaster.
+
+*Loose end, stated neutrally because nobody has decided anything about it:*
+`web/frontend/package.json` still declares `@base-ui/react` and `shadcn` as
+dependencies even though no app code imports Base UI at all, and `globals.css`
+still does `@import "shadcn/tailwind.css"` for the token layer. So "the kit is
+gone" is true of the *code* and not yet of the *manifest*.
 
 Read the **gotchas** section before touching kit code — twenty-one of them, each
 one something that cost real debugging. The rest of this doc is history: how
@@ -41,8 +50,8 @@ planned as six waves in
 3. **SignIn.** `input-otp` stayed (RAC has no one-time-code field) and moved
    to `vendor/`.
 4. **Dashboard.** Tabs, `FileTrigger` for the hidden file inputs, and the
-   storage bar became a **Meter, not a ProgressBar** — quota used is a
-   measurement, not a task running to completion.
+   storage bar became a **`ProportionMeter`, not a ProgressBar** — quota used
+   is a measurement, not a task running to completion.
 5. **Settings.** The last two ui/ dialogs, both radio groups, the API-key
    table. `ui/card` had exactly one consumer, so it became a local
    `SettingsCard` helper rather than a kit component.
@@ -67,9 +76,11 @@ exploration (see gotcha #2 and the route-editor history). This cuts both
 ways: existing Tabulator grids stay, and a hand-rolled editable table being
 converted should become a **Tabulator grid**, not a RAC Table/GridList (the
 waypoints page did exactly this — see gotcha #16 for the wiring pattern).
-The GridList card list stays where it's already built (the route editor) and
-remains the answer for *card-shaped* editable collections, but don't plan
-new RAC editable tables. Converting a page means converting the chrome
+The GridList card list has **no consumer today** — the route editor that was
+its one caller went back to a RAC `Table` (see the superseded section below) —
+but it stays in the kit as the answer for *card-shaped* editable collections.
+Either way, don't plan new RAC editable tables. Converting a page means
+converting the chrome
 *around* the grid (dialog shell, buttons, read-only tables) and using
 Tabulator for the grid itself. It coexists happily inside a RAC Modal: give
 the kit `Dialog` an `id` and point Tabulator's `popupContainer` at it so
@@ -106,16 +117,26 @@ instance only exists a tick after mount, so gate anything that drives it on
   `checkbox` (Checkbox/CheckboxGroup), `table` (Table/TableHeader/Column/Row/
   Cell/CellEditZone), `grid-list` (GridList/GridListItem — vertical card list
   with `keyboardNavigationBehavior="tab"`, the editable-list alternative to
-  Table; see the route editor), `combo-box` (ComboBox/ComboBoxItem — text input
+  Table. **No current consumer**: its one caller, the route editor, is a RAC
+  Table again. Kept as the kit's answer for *card-shaped* editable
+  collections), `combo-box` (ComboBox/ComboBoxItem — text input
   + floating filtered suggestions; **use this, not SearchField + list-box**,
   whenever typing filters a list: it owns the ARIA combobox contract that a
   searchbox beside a detached listbox doesn't provide — see gotcha #12),
-  `list-box` (standalone option list; no callers today), `menu`, `tooltip`, `tag-group`, `disclosure`,
-  `meter` (Meter/DivergingMeter — a **measurement**, `role="meter"`; NOT
-  ProgressBar, which means task completion. `DivergingMeter` draws a signed
-  value from a centred zero axis for the field-analysis ρ bars: sign is which
-  side it grows toward, never colour alone, and the signed number is always
-  printed beside it), `popover` (standalone DialogTrigger+Popover+Dialog,
+  `list-box` (standalone option list; one caller — `comp/QuickTaskField.tsx`
+  renders the "Enter task" field's inline waypoint suggestions as a
+  `ListBox`/`ListBoxItem`, deliberately *in flow* under the textarea rather
+  than a ComboBox popover, because on a phone the keyboard would cover a
+  floating list), `menu`, `tooltip`, `tag-group`, `disclosure`,
+  `meter` (DivergingMeter/ProportionMeter — a **measurement**, `role="meter"`;
+  NOT ProgressBar, which means task completion. RAC's own `Meter` is imported
+  inside the file as `AriaMeter` and is not exported. `DivergingMeter` draws a
+  signed value from a centred zero axis for the field-analysis ρ bars: sign is
+  which side it grows toward, never colour alone, and the signed number is
+  always printed beside it. `ProportionMeter` is the part-of-a-whole reading —
+  deliberately plainer (thinner, no axis) — used by the Dashboard's storage bar
+  and the field-analysis coverage bars),
+  `popover` (standalone DialogTrigger+Popover+Dialog,
   reusing `popoverClass` from select.tsx — **use this, not tooltip, whenever
   the content is prose**: tooltips are hover-only, so touch users never see
   them, and they dismiss before a sentence can be read),
@@ -153,7 +174,9 @@ instance only exists a tick after mount, so gate anything that drives it on
   field-analysis metric chart).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskStandings.tsx`, `comp/RouteEditorDialog.tsx`
-  (Tabulator grid → RAC **GridList** card list, see below — was a RAC Table),
+  (Tabulator grid → RAC Table → GridList card list → **RAC Table again**, via
+  the shared read-only `comp/TurnpointsTable.tsx` the task page also renders —
+  see the superseded section below for how that went),
   `comp/SubmitTrackDialog.tsx`,
   `comp/ManualFlightDialog.tsx`, `comp/AddWaypointDialog.tsx`,
   `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only),
@@ -299,7 +322,8 @@ Points worth knowing before you reach for one:
    (why the route editor dropped it, 2026-07-23):** row dragging is **native
    HTML5 drag**, which does not start on touch without a long-press — unusable
    on a phone. For touch-first reorder, prefer explicit up/down arrow buttons
-   (`moveRow` in RouteEditorDialog) over DnD. No component uses these hooks now.
+   over DnD — though the route editor now has neither, since typing the route in
+   "Enter task" makes word order the row order. No component uses these hooks now.
 5. **Grid focus management redirects programmatic `.focus()`** to the cell's
    cached child — Playwright drives must navigate like a user (click a cell,
    then arrow keys), not `.focus()` + key events.
@@ -311,8 +335,10 @@ Points worth knowing before you reach for one:
 8. `spellCheck` is a **string** (`"false"`) in RAC types.
 9. Commit-on-blur/Enter pattern for inline cell editors (local draft state,
    Escape reverts) keeps expensive derived recompute per-edit, not
-   per-keystroke — see `EditableCell` in RouteEditorDialog.tsx. This is the
-   RAC analogue of Tabulator's `cellEdited`.
+   per-keystroke. This is the RAC analogue of Tabulator's `cellEdited`. (The
+   worked example was `EditableCell` in RouteEditorDialog.tsx; that dialog's
+   list is read-only now, so the code is gone — the pattern still stands for the
+   next in-grid editor.)
 10. **SSR:** all converted components hydrate clean (`test:e2e:ssr` green).
     RAC Table renders native `<table>` markup. Keep the CLAUDE.md SSR rules
     (no window at module scope, deterministic dates, identical trees); heavy
@@ -538,11 +564,21 @@ Points worth knowing before you reach for one:
 
 ```bash
 bun run typecheck:all
-bun run test                       # engine + workers unit tests
+bun run test                       # engine + workers unit tests — NOT the frontend's
+bun run test:all                   # adds the workspaces, incl. the frontend vitest suite
 bun run build                      # Vite + SSR bundle + Astro
 bun run test:e2e:ssr               # needs no other servers running
 bun run test:e2e                   # full suite (one known flaky dev-login test; rerun)
 ```
+
+- **`bun run test` does not run any of this guide's own tests.** The root
+  `test` script runs `bun test` over `.`, `web/engine`, the airscore-api and
+  dev-router workers and `web/scripts` — `web/frontend` is not in that list, so
+  `src/react/one-kit.test.ts`, `rac/progress.test.ts` and `rac/router.test.ts`
+  are all skipped by it. They run under the frontend's own `vitest run`, which
+  is reached by `bun run test:all` (via `test:workspaces`) or directly by
+  `bun run test:frontend`. Run one of those two for RAC work, or the kit guard
+  passes by never executing.
 
 - **`waitUntil: "networkidle"` never settles on a page with a freshness
   poller** (field analysis, and any scores surface showing a stale banner) —
@@ -563,7 +599,61 @@ bun run test:e2e                   # full suite (one known flaky dev-login test;
   a hidden `input[accept=…]`, still driveable with `setInputFiles`.
 - `bun run kill-dev` clears stale servers (port-in-use crashes on dev start).
 
-## Route editor list view (BUILT — 2026-07-18)
+## Route editor: how it works now (2026-08)
+
+The route editor is **`comp/RouteEditorDialog.tsx`**, and the turnpoint list in
+it is no longer a GridList of editable cards. Three pieces:
+
+- **`comp/QuickTaskField.tsx` — "Enter task" — is where the route is edited.**
+  You type the route the way you'd say it (`ell 400m ell 5k mitta cudg ncor 1k`)
+  and the whole set of turnpoints falls out: names fuzzy-match the competition's
+  waypoints, and a distance after a name is that cylinder's radius (grammar in
+  `quick-task.ts`). So turnpoint **order** is the order of the words, and there
+  is nothing to reorder with buttons. The start settings ride the same line
+  (`mitta sss enter 13:15`, #436), so direction and gates are text you can see
+  and edit rather than defaults applied silently in a collapsed panel. The line
+  and the route are one thing seen two ways — the text round-trips exactly
+  (`quickTaskText`), so the field shows the loaded task as text and editing the
+  text rebuilds the route. It is a growing `TextArea`, not one line, and its
+  suggestions are an **inline** kit `ListBox` under the field — mobile first, no
+  overlays, because a phone keyboard can't cover what isn't floating.
+- **`comp/TurnpointsTable.tsx` is a read-only listing, shared with the task
+  page.** Its header comment states the reasoning: it is *"Shared by the task
+  detail page (read-only, server-rendered) and the route editor, which renders
+  it over the route being edited so the editor shows exactly what the task page
+  will. Read-only by design: it's a listing, not a grid — editing happens in the
+  editor's Enter task field and dialogs."* It is a RAC `Table` in XCTrack's
+  compact FLY-tab shape (role column with the Exit badge, turnpoint with radius
+  and altitude under it, optimised leg on the right, closed by the optimised
+  total), and it resolves the day's wind against each leg. SSR-safe: no
+  browser-only imports, and every number formatted deterministically from the
+  unit preferences.
+- **`TurnpointDetailsDialog` still lives inside `RouteEditorDialog.tsx`** and is
+  unchanged in the way that matters here: it edits a local `TurnpointDraft` and
+  commits only on Save, and "Load from a waypoint" is the kit **`ComboBox`**,
+  applying gotcha #12 exactly as written (controlled `selectedKey` +
+  `inputValue`, filtering at the call site with `useFilter().contains`, an empty
+  query yielding an empty list so the popover stays shut at rest and Esc can
+  close it). Today the only thing that opens it is **Add turnpoint** — the
+  per-row **Edit** entry point went away with the cards, so its `mode="edit"`
+  branch currently has no call site.
+- **`comp/RouteMap.tsx` carries a second ComboBox — and it obeys the opposite
+  rules.** `comp/PlaceSearchField.tsx` (#540) sits above the map so you can find
+  the valley before there is a waypoint to fit to. It is remote (Mapbox place
+  search), so every piece of gotcha #12's advice inverts: see **gotcha #21**
+  before touching it. Two ComboBoxes in one dialog following contradictory rules
+  is not an inconsistency to tidy up — it is what local and async collections
+  each require.
+
+## Route editor list view (BUILT — 2026-07-18) — SUPERSEDED
+
+**Superseded 2026-08** — the list became `TurnpointsTable` (a RAC Table)
+again, so the specifics below are no longer true of the code: there is **no**
+GridList in the route editor, **no** per-row up/down reorder control, **no**
+`onAction` → `RouteMap` `focus={{lat,lon,key}}` map-pan, and **no**
+`dependencies={[rows, derived]}` on a GridList. Kept for the reasoning, which
+still applies to any card-shaped editable collection; read "Route editor: how it
+works now" above for the current shape.
 
 The cramped-table problem (horizontal scroll broke row context on small
 screens) is solved: the turnpoint Table is now a **vertical list of cards**
@@ -709,9 +799,9 @@ rather than "how to convert one".
   `.claude/worktrees/explore-rac`), then `explore/rac-route-editor-list`
   (PR #374 — the GridList route editor + ARIA-native breadcrumbs). All
   merged (PRs #373, #374, #378, and #401 for the comp list).
-- RAC version in web/frontend: `^1.19.0` (a caret range, currently resolving to
-  1.19.0 — not a hard pin). Upgrades: re-run the drives — `CellEditZone` and
-  `dependencies` behavior are the fragile seams.
+- RAC version in web/frontend: `^1.20.0` (a caret range, currently resolving to
+  1.20.0 in `bun.lock` — not a hard pin). Upgrades: re-run the drives —
+  `CellEditZone` and `dependencies` behavior are the fragile seams.
 - Docs: react-aria.adobe.com (RAC), react-spectrum.adobe.com (Spectrum 2 —
   same behavior engine, Adobe-styled; its TableView `EditableCell` popover
   pattern is a good future model for *occasional*-edit tables).
