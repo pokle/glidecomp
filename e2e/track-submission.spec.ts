@@ -666,11 +666,15 @@ test.describe("submitting a track without an account", () => {
         page.getByRole("button", { name: "Submit track" }).first()
       ).toBeVisible();
 
-      // Put it back so the rest of the file's expectations still hold.
-      await page.request.patch(
+      // Put it back so the rest of the file's expectations still hold — and
+      // CHECK that it went back. This task is shared with the test below,
+      // which asserts the Submit button is offered; a silently failed restore
+      // would surface there instead of here, as a mystery.
+      const reopen = await page.request.patch(
         `/api/comp/${fixture.compId}/task/${fixture.taskId}`,
         { data: { submissions_closed: false } }
       );
+      expect(reopen.ok(), "reopened the task for the tests that follow").toBeTruthy();
     });
   });
 
@@ -765,8 +769,14 @@ test.describe("submitting a track without an account", () => {
   test("the task page offers Submit track to a signed-out visitor", async ({ page }) => {
     await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
     // This used to read "Sign in to submit your track".
+    //
+    // The explicit timeout is not padding. This page is server-rendered and
+    // the button is behind the `mounted` gate, so it is legitimately absent
+    // on first paint — the assertion is waiting for hydration, not for a
+    // render. On the default 5s this failed on CI at 6.2s while every
+    // neighbouring assertion in this file already used 15-20s.
     await expect(
       page.getByRole("button", { name: "Submit track" }).first()
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20_000 });
   });
 });
