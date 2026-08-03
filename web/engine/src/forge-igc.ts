@@ -18,6 +18,11 @@
  * both verify the result with `parseIGC` + `assessTrackQuality` — the same
  * code the worker runs. A clean verdict here means the file will be accepted,
  * not that it looks plausible.
+ *
+ * An OPEN-DISTANCE task has no route to follow — one take-off cylinder, no
+ * goal, and therefore no optimised line to measure a land-out along. Those
+ * tasks get their own course, invented here: off in a random direction, as far
+ * as was asked for. See {@link openDistanceCourse}.
  */
 
 import {
@@ -25,6 +30,10 @@ import {
   calculateBearingRadians,
   destinationPoint,
 } from './geo';
+import {
+  isOpenDistanceTask,
+  openDistanceGeometryForFlight,
+} from './open-distance-scoring';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import type { XCTask } from './xctsk-parser';
 
@@ -62,10 +71,11 @@ export interface ForgeOptions {
    */
   stopAfterMeters?: number | null;
   /**
-   * Injectable so a test can be deterministic. The randomness only jitters the
+   * Injectable so a test can be deterministic. The randomness jitters the
    * fixes on the ground, which is what stops the takeoff detector seeing a
-   * perfectly stationary point — but a test that cannot predict its own
-   * fixture is a test that can only assert vagueness.
+   * perfectly stationary point, and on an open-distance task it also picks the
+   * direction flown — but a test that cannot predict its own fixture is a test
+   * that can only assert vagueness.
    */
   random?: () => number;
 }
@@ -169,6 +179,118 @@ export function courseFor(task: XCTask): { points: Pt[]; totalMeters: number } {
   return { points, totalMeters };
 }
 
+// ── open distance: there is no route, so invent one ────────────────────────
+
+/**
+ * The furthest an open-distance forge will fly, metres.
+ *
+ * An open-distance task has no goal, so nothing in the data says how far is
+ * far enough — the range has to be picked rather than derived. 250 km is past
+ * any Australian flat-land record on a hang glider and well past what a
+ * fabricated fixture needs, so it bounds the slider without bounding what
+ * anyone would actually test.
+ */
+export const OPEN_DISTANCE_MAX_METERS = 250_000;
+
+/** What an open-distance forge flies when nothing is asked for, metres. */
+export const OPEN_DISTANCE_DEFAULT_METERS = 80_000;
+
+/**
+ * How far this task's forge may be asked to fly, and what to ask for by
+ * default — the slider's range on the dialog, and the CLI's default.
+ *
+ * A GAP task answers both from its own geometry: the optimised line is the
+ * whole task, and flying all of it is making goal. An open-distance task has
+ * neither, and asking `courseFor` gives a one-point line of zero length — a
+ * slider whose minimum, maximum and value are all zero, which is where the NaN
+ * came from. So it is answered here instead, once, for every caller.
+ */
+export function forgeRange(task: XCTask): {
+  maxMeters: number;
+  defaultMeters: number;
+  openDistance: boolean;
+} {
+  if (isOpenDistanceTask(task)) {
+    return {
+      maxMeters: OPEN_DISTANCE_MAX_METERS,
+      defaultMeters: OPEN_DISTANCE_DEFAULT_METERS,
+      openDistance: true,
+    };
+  }
+  const { totalMeters } = courseFor(task);
+  return { maxMeters: totalMeters, defaultMeters: totalMeters, openDistance: false };
+}
+
+/**
+ * Invent a course for an open-distance task: out from the take-off cylinder on
+ * a random bearing, wandering the way a pilot hunting thermals does, landing
+ * `meters` beyond the cylinder edge.
+ *
+ * That last distance is the point. Open-distance scoring credits the FURTHEST
+ * fix's distance from the take-off centre, minus the radius
+ * (`openDistanceForFlight`), so a course whose landing is its furthest point,
+ * placed at `radius + meters` from the centre, scores exactly what was asked
+ * for — the same contract the land-out slider has on a GAP task.
+ *
+ * Which is why the wander is bounded rather than free: each intermediate point
+ * is kept provably nearer the centre than the landing is, or a mid-flight
+ * detour would quietly become the scored distance instead.
+ */
+export function openDistanceCourse(
+  task: XCTask,
+  meters: number,
+  rnd: () => number
+): { points: Pt[]; bearing: number } {
+  const tp = task.turnpoints[0];
+  if (!tp) throw new Error('An open-distance task needs a take-off turnpoint');
+  const centre = { lat: tp.waypoint.lat, lon: tp.waypoint.lon };
+  const radius = tp.radius || 400;
+
+  const bearing = rnd() * 2 * Math.PI;
+  // Launched somewhere in the paddock rather than on the exact centre mark.
+  const start = destinationPoint(
+    centre.lat,
+    centre.lon,
+    Math.min(radius * 0.2, 900) * rnd(),
+    rnd() * 2 * Math.PI
+  );
+  // At zero the pilot never leaves the cylinder — land INSIDE the edge, so the
+  // file is the "landed in the launch paddock, scored nothing" fixture rather
+  // than one that scores a stray metre of GPS noise.
+  const landingRadius = meters > 0 ? radius + meters : Math.max(radius * 0.5, radius - 200);
+  const finish = destinationPoint(centre.lat, centre.lon, landingRadius, bearing);
+
+  const startRadius = gap(centre, start);
+  const span = landingRadius - startRadius;
+  // A leg every ~12 km, which is about one glide between thermals — enough for
+  // the search to look like one, not so many that the track is a scribble.
+  const legs = Math.max(1, Math.min(24, Math.round(span / 12_000)));
+  const points: Pt[] = [start];
+  for (let i = 1; i < legs; i++) {
+    const along = startRadius + (span * i) / legs;
+    // The furthest this point may sit off the axis and still be at least 250 m
+    // nearer the centre than the landing: √(r² − along²) by Pythagoras, which
+    // is exact enough at these distances.
+    const headroom = Math.sqrt(
+      Math.max(0, (landingRadius - 250) ** 2 - along * along)
+    );
+    const off = (rnd() - 0.5) * 2 * Math.min(2_500, span * 0.12, headroom);
+    const axis = destinationPoint(centre.lat, centre.lon, along, bearing);
+    points.push(
+      Math.abs(off) < 1
+        ? axis
+        : destinationPoint(
+            axis.lat,
+            axis.lon,
+            Math.abs(off),
+            bearing + (off >= 0 ? Math.PI / 2 : -Math.PI / 2)
+          )
+    );
+  }
+  points.push(finish);
+  return { points, bearing };
+}
+
 /**
  * Cut the course short at `meters`, landing wherever that falls.
  *
@@ -245,7 +367,12 @@ export function buildFlight(
   const heading = course.find((p) => gap(p, course[0]) > 50) ?? course[1];
   while (alt < groundAlt + 600) {
     alt += climbRate * step;
-    pos = towards(pos, heading, 8 * step);
+    // Never past the point being flown to. On a long course the climb-out is a
+    // couple of kilometres of nothing; on a short one — a pilot asked to land
+    // just outside the take-off cylinder — flying through the landing would
+    // hand them kilometres they were not asked to fly, and on open distance
+    // that is scored distance.
+    pos = towards(pos, heading, Math.min(8 * step, gap(pos, heading)));
     push();
     t += step;
     if (t - opts.startSec > 8 * 3600) break;
@@ -338,10 +465,94 @@ export type ForgeSabotage = 'none' | 'day' | 'place';
 
 /** What a forged flight is judged on, so a caller can show it. */
 export interface ForgeResult extends ForgedTrack {
-  /** How far along the optimised course the pilot actually got, metres. */
+  /**
+   * The distance the pilot should be credited with, metres: how far along the
+   * optimised line they got on a GAP task, and how far beyond the take-off
+   * cylinder they landed on an open-distance one.
+   */
   courseMeters: number;
-  /** The whole task, metres — the top of the land-out range. */
+  /** The top of that range — the whole task, or the open-distance maximum. */
   taskMeters: number;
+  /** True when the task had no route and the course was invented. */
+  openDistance: boolean;
+}
+
+/**
+ * Apply the sabotage, if any, and write the file. Shared by both courses, so
+ * the deliberate failures behave the same whichever kind of task was flown.
+ */
+function deliver(
+  fixes: Fix[],
+  opts: ForgeOptions & { sabotage?: ForgeSabotage },
+  site: string
+): ForgedTrack {
+  let out = fixes;
+  const headerDate = new Date(opts.headerDate.getTime());
+
+  if (opts.sabotage === 'place') {
+    // Far enough to clear the 100 km the wrong-place check allows, and in
+    // longitude so the latitude-dependent maths stays honest.
+    out = out.map((f) => ({ ...f, lon: f.lon + 16 }));
+  }
+  if (opts.sabotage === 'day') {
+    // A fortnight, not a day: a one-day offset is SOFT (a logger with its date
+    // set wrong), and only a bigger gap is a hard "different flight".
+    headerDate.setUTCDate(headerDate.getUTCDate() - 14);
+  }
+
+  return { text: toIgcText(out, headerDate, opts, site), fixCount: out.length };
+}
+
+/**
+ * Forge a flight for a task with no route: off in a random direction from the
+ * take-off cylinder, landing `stopAfterMeters` beyond its edge.
+ *
+ * The reported distance is not the number that was asked for — it is measured
+ * back off the finished fixes with `openDistanceGeometryForFlight`, the very
+ * routine the scorer uses. The two agree to a metre or so, and having them
+ * come from different places is what makes the agreement worth anything.
+ */
+function forgeOpenDistance(
+  task: XCTask,
+  opts: ForgeOptions & { sabotage?: ForgeSabotage }
+): ForgeResult {
+  const rnd = opts.random ?? Math.random;
+  const tps = turnpointsFromTask(task);
+  const target = Math.max(
+    0,
+    Math.min(opts.stopAfterMeters ?? OPEN_DISTANCE_DEFAULT_METERS, OPEN_DISTANCE_MAX_METERS)
+  );
+  const { points } = openDistanceCourse(task, target, rnd);
+
+  const fixes = buildFlight(points, {
+    ...opts,
+    random: rnd,
+    groundAlt: tps[0].alt,
+    // Flat country by definition — an open-distance day is flown to a paddock
+    // somewhere downwind, and the launch elevation is the only honest guess
+    // for how high that paddock is.
+    landAlt: tps[0].alt,
+  });
+
+  const geometry = openDistanceGeometryForFlight(task, {
+    pilotName: opts.pilot,
+    trackFile: 'forge.igc',
+    fixes: fixes.map((f) => ({
+      latitude: f.lat,
+      longitude: f.lon,
+      pressureAltitude: f.alt,
+      gnssAltitude: f.alt,
+      time: new Date(f.t * 1000),
+      valid: true,
+    })),
+  });
+
+  return {
+    ...deliver(fixes, opts, tps[0].name),
+    courseMeters: geometry?.distance ?? 0,
+    taskMeters: OPEN_DISTANCE_MAX_METERS,
+    openDistance: true,
+  };
 }
 
 /**
@@ -349,12 +560,16 @@ export interface ForgeResult extends ForgedTrack {
  *
  * Takes the task rather than turnpoints so the course is derived here: a
  * caller that passed centre-to-centre turnpoints would silently get a flight
- * whose distance does not match what the scorer will credit.
+ * whose distance does not match what the scorer will credit. A task with no
+ * route to optimise — open distance — is flown by {@link forgeOpenDistance}
+ * instead.
  */
 export function forgeIgc(
   task: XCTask,
   opts: ForgeOptions & { sabotage?: ForgeSabotage }
 ): ForgeResult {
+  if (isOpenDistanceTask(task)) return forgeOpenDistance(task, opts);
+
   const tps = turnpointsFromTask(task);
   const { points, totalMeters } = courseFor(task);
   if (points.length < 2) throw new Error('A task needs at least two turnpoints');
@@ -377,29 +592,17 @@ export function forgeIgc(
   const landAlt =
     target >= totalMeters ? tps[tps.length - 1].alt : tps[0].alt;
 
-  let fixes = buildFlight(flown, {
+  const fixes = buildFlight(flown, {
     ...opts,
     groundAlt: tps[0].alt,
     landAlt,
   });
-  const headerDate = new Date(opts.headerDate.getTime());
-
-  if (opts.sabotage === 'place') {
-    // Far enough to clear the 100 km the wrong-place check allows, and in
-    // longitude so the latitude-dependent maths stays honest.
-    fixes = fixes.map((f) => ({ ...f, lon: f.lon + 16 }));
-  }
-  if (opts.sabotage === 'day') {
-    // A fortnight, not a day: a one-day offset is SOFT (a logger with its date
-    // set wrong), and only a bigger gap is a hard "different flight".
-    headerDate.setUTCDate(headerDate.getUTCDate() - 14);
-  }
 
   return {
-    text: toIgcText(fixes, headerDate, opts, tps[0].name),
-    fixCount: fixes.length,
+    ...deliver(fixes, opts, tps[0].name),
     courseMeters: target,
     taskMeters: totalMeters,
+    openDistance: false,
   };
 }
 

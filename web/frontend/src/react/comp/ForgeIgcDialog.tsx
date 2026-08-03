@@ -16,6 +16,12 @@
  * it is offered, so the panel says whether the file will be ACCEPTED and
  * SCORED rather than whether it looks about right.
  *
+ * An open-distance task has no route and no goal, so the slider changes
+ * meaning rather than disappearing: how far beyond the take-off cylinder the
+ * pilot landed, in a direction the engine picks at random. The range comes
+ * from `forgeRange` — asking the optimiser for a task line that does not exist
+ * is what produced a zero-width slider and a NaN.
+ *
  * Nothing here reaches the server. It makes a file and offers it as a
  * download, so opening this can't touch a competition — submitting the file
  * afterwards goes through the ordinary upload path, audit log and all.
@@ -26,8 +32,8 @@
 import { useMemo, useState } from "react";
 import {
   assessTrackQuality,
-  courseFor,
   forgeIgc,
+  forgeRange,
   parseIGC,
   summariseFlight,
   startSecondsFor,
@@ -54,7 +60,10 @@ import { slugify } from "./csv";
 interface Verdict {
   text: string;
   fixCount: number;
-  /** How far round the course they got — the distance they should score. */
+  /**
+   * The distance they should score: how far round the course they got, or on
+   * an open-distance task how far beyond the take-off cylinder they landed.
+   */
   courseMeters: number;
   flightDate: string | null;
   durationSeconds: number | null;
@@ -97,16 +106,21 @@ export default function ForgeIgcDialog({
   const [rate, setRate] = useState(5);
   const [speedKmh, setSpeedKmh] = useState(32);
   const [sabotage, setSabotage] = useState<ForgeSabotage>("none");
-  // The optimised task line is what the SCORER measures, so its length is the
-  // top of the land-out range and the slider's value is the distance the pilot
-  // will be credited with — not merely one they travelled.
-  const taskMeters = useMemo(() => courseFor(xctsk).totalMeters, [xctsk]);
+  // How far this task can be asked to fly. On a GAP task that is the optimised
+  // line — what the SCORER measures — so the slider's value is the distance the
+  // pilot will be credited with, not merely one they travelled. An open-distance
+  // task has no line and no goal, so the engine names the range instead: the
+  // slider is then how far beyond the take-off cylinder they landed.
+  const range = useMemo(() => forgeRange(xctsk), [xctsk]);
+  const openDistance = range.openDistance;
   // Rounded to the slider's own step, so the top of the range is a value the
   // slider can actually hold. With a coarser step the maximum snapped DOWN and
   // the default became a land-out a few hundred metres short of goal — a
   // default that quietly does not do the ordinary thing.
-  const taskKm = Math.round((taskMeters / 1000) * 10) / 10;
-  const [stopAfterKm, setStopAfterKm] = useState(taskKm);
+  const taskKm = Math.round((range.maxMeters / 1000) * 10) / 10;
+  const [stopAfterKm, setStopAfterKm] = useState(
+    Math.min(taskKm, Math.round((range.defaultMeters / 1000) * 10) / 10)
+  );
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -227,20 +241,37 @@ export default function ForgeIgcDialog({
           />
         </div>
 
-        <Slider
-          label="Landed out after"
-          value={stopAfterKm}
-          onChange={setStopAfterKm}
-          minValue={0}
-          maxValue={taskKm}
-          step={0.1}
-          format={(v) =>
-            v >= taskKm
-              ? `${v.toFixed(1)} km — made goal`
-              : `${v.toFixed(1)} km of ${taskKm.toFixed(1)} km`
-          }
-          description="Distance along the optimised task line, so this is what the pilot should be scored for. At the far right they make goal; at zero they land back at launch."
-        />
+        {taskKm > 0 ? (
+          <Slider
+            label={openDistance ? "Flew" : "Landed out after"}
+            value={stopAfterKm}
+            onChange={setStopAfterKm}
+            minValue={0}
+            maxValue={taskKm}
+            step={0.1}
+            format={(v) =>
+              openDistance
+                ? v <= 0
+                  ? "0.0 km — landed in the launch paddock"
+                  : `${v.toFixed(1)} km beyond the launch cylinder`
+                : v >= taskKm
+                  ? `${v.toFixed(1)} km — made goal`
+                  : `${v.toFixed(1)} km of ${taskKm.toFixed(1)} km`
+            }
+            description={
+              openDistance
+                ? "Open distance is measured from the take-off cylinder edge to the furthest fix, so this is what the pilot should be scored for. There is no route to follow, so the flight heads off in a random direction; at zero they never leave the cylinder and score nothing."
+                : "Distance along the optimised task line, so this is what the pilot should be scored for. At the far right they make goal; at zero they land back at launch."
+            }
+          />
+        ) : (
+          // A GAP task whose route is a single point has no course to fly, and
+          // a slider from zero to zero is not a control — it is a NaN.
+          <p className="text-sm text-muted-foreground">
+            This task&rsquo;s route has no distance to fly, so there is no
+            flight to make. Set a route with at least two turnpoints.
+          </p>
+        )}
 
         {problem ? (
           <Alert variant="destructive">
@@ -265,7 +296,7 @@ export default function ForgeIgcDialog({
                 <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
                   <Fact label="Flight date" value={verdict.flightDate ?? "—"} />
                   <Fact
-                    label="Course flown"
+                    label={openDistance ? "Open distance" : "Course flown"}
                     value={`${(verdict.courseMeters / 1000).toFixed(1)} km`}
                   />
                   <Fact label="Airborne" value={hhmm(verdict.durationSeconds)} />

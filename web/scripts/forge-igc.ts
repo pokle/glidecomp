@@ -54,7 +54,10 @@ interface Options {
   rate: number;
   speedKmh: number;
   sabotage: "none" | "day" | "place";
-  /** Land out this far along the optimised course. Null flies the whole task. */
+  /**
+   * Land out this far along the optimised course. Null flies the whole task —
+   * or, on an open-distance task, the engine's default open distance.
+   */
   landOutKm: number | null;
 }
 
@@ -110,7 +113,10 @@ Forge an IGC tracklog that flies a real task.
   --speed <km/h>          Cruise ground speed (default 42)
   --rate <seconds>        Fix interval (default 2)
   --land-out <km>         Land out this far along the optimised course
-                          (default: fly the whole task, i.e. make goal)
+                          (default: fly the whole task, i.e. make goal).
+                          On an open-distance task there is no course: this is
+                          how far beyond the take-off cylinder the pilot lands,
+                          on a random bearing, up to 250 km (default 80).
   --sabotage day|place    Deliberately fail a HARD track-quality check
 `);
 }
@@ -187,7 +193,7 @@ const offset = zoneOffsetHours(taskDate, zone);
 // The forging itself lives in the engine (web/engine/src/forge-igc.ts), so the
 // dialog on the task page and this script cannot drift into making different
 // files. Everything below is the CLI's own job: fetching, reporting, sending.
-const { text, fixCount, courseMeters, taskMeters } = forgeIgc(task.xctsk, {
+const { text, fixCount, courseMeters, taskMeters, openDistance } = forgeIgc(task.xctsk, {
   stopAfterMeters: o.landOutKm == null ? null : o.landOutKm * 1000,
   pilot: o.pilot,
   glider: o.glider,
@@ -215,8 +221,12 @@ const hrs = Math.floor((summary.durationSeconds ?? 0) / 3600);
 const mins = Math.round(((summary.durationSeconds ?? 0) % 3600) / 60);
 
 console.log(`\n${comp.name} · ${task.name} · ${taskDate} (${zone}, UTC${offset >= 0 ? "+" : ""}${offset})`);
+// An open-distance task has no course and no goal to be short of, so the same
+// numbers would read as a land-out 170 km short of a goal that does not exist.
 console.log(
-  `  take off ${o.startLocal} local · ${(courseMeters / 1000).toFixed(1)} km of ${(taskMeters / 1000).toFixed(1)} km flown${courseMeters >= taskMeters ? " (goal)" : " (landed out)"}\n`
+  openDistance
+    ? `  take off ${o.startLocal} local · ${(courseMeters / 1000).toFixed(1)} km of open distance, off in a random direction\n`
+    : `  take off ${o.startLocal} local · ${(courseMeters / 1000).toFixed(1)} km of ${(taskMeters / 1000).toFixed(1)} km flown${courseMeters >= taskMeters ? " (goal)" : " (landed out)"}\n`
 );
 console.log(`  flight        ${summary.flightDate}  ${hrs}h ${String(mins).padStart(2, "0")}m airborne`);
 console.log(`  track         ${((summary.trackLengthMeters ?? 0) / 1000).toFixed(1)} km, top ${summary.maxAltitudeMeters} m`);

@@ -491,8 +491,8 @@ Two front ends, one engine, so they cannot drift into making different files:
 - **`bun run forge-igc`** — the CLI. Lists what is open (`--open`), writes a
   file (`--out`), or submits one straight to the anonymous route
   (`--submit --ident`).
-- **IGC Forge**, a dialog on the task page (`comp/ForgeIgcDialog.tsx`). Opens
-  with that task's own route, date and competition zone; downloads the file.
+- **Create a test IGC**, a dialog on the task page (`comp/ForgeIgcDialog.tsx`).
+  Opens with that task's own route, date and competition zone; downloads the file.
   It never uploads — submitting it through the real flow is the thing being
   tested.
 
@@ -513,6 +513,22 @@ waypoint centres for the same reason.
 
 At zero they launch, fail to connect and land back on the hill; at the far
 right they make goal.
+
+**Open distance.** An open-distance task has one TAKEOFF turnpoint, no goal and
+therefore no optimised line to measure anything along — asking the optimiser for
+one returns a single point of zero length, which is what used to leave the
+slider running 0→0 and reading NaN, with nothing forgeable behind it. So those
+tasks get a course of their own, invented in `openDistanceCourse`: off in a
+**random** bearing from the take-off cylinder, wandering the way a pilot hunting
+thermals does, landing exactly as far beyond the cylinder edge as was asked.
+That distance is the same one `openDistanceForFlight` credits — the furthest
+fix's distance from the centre, minus the radius — so the slider still names
+what the pilot should score. The range is `forgeRange()`: up to 250 km, 80 km by
+default. Each intermediate point of the wander is kept provably nearer the
+centre than the landing, because on this format a mid-flight detour that
+strayed further out would quietly BECOME the score. At zero the pilot never
+leaves the cylinder: scored nothing, and flagged `never-left-takeoff` (SOFT) for
+it rather than withheld.
 
 `--sabotage day` / `place` (the dropdown in the dialog) deliberately breaks one
 check. Those files are still VALID — they upload fine and are then withheld
