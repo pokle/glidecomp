@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { FRONTEND_URL, API_URL, API_READY_URL } from "./e2e/fixtures/stack";
+import { FRONTEND_URL, API_READY_URL } from "./e2e/fixtures/stack";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -64,6 +64,8 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
+      // The port comes from DEV_FRONTEND_PORT via vite.config.ts, not a CLI
+      // flag: `dev` runs vite under concurrently, which swallows extra args.
       command: "bun run dev:frontend",
       url: FRONTEND_URL,
       reuseExistingServer: !process.env.CI,

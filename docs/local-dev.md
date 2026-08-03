@@ -72,6 +72,36 @@ anything a spec creates and doesn't delete is still there next run. The rules:
 the D1 race (which is fixed): the specs share the seeded sample comp and the
 super-admin account. Give them their own fixtures before raising it.
 
+## Two worktrees at once (the green-but-meaningless run)
+
+`reuseExistingServer` is on outside CI, so a `bun run test:e2e` in worktree B
+**silently reuses worktree A's dev server on :3000** and asserts every
+expectation against the wrong code. Nothing warns you: the run is green, and it
+means nothing. This is not hypothetical — it cost an afternoon, and the tell
+was a checkbox that "did not render" because the tree under test never had it.
+
+Give the second worktree its own ports:
+
+```bash
+DEV_FRONTEND_PORT=3100 DEV_API_PORT=8890 DEV_API_ORIGIN=http://localhost:8890   DEV_INSPECTOR_PORT=9330 bun run test:e2e
+```
+
+- `DEV_FRONTEND_PORT` — Vite (`web/frontend/vite.config.ts`).
+- `DEV_API_PORT` — the one wrangler session (`web/scripts/dev-workers.sh`).
+  `DEV_API_ORIGIN` must agree, because it is what the specs talk to directly.
+- `DEV_INSPECTOR_PORT` — wrangler's devtools port. Without it the collision is
+  reported as `Address already in use (127.0.0.1:9232)`, which names neither
+  port you set.
+- **Also edit `web/workers/auth-api/.dev.vars`**: `BETTER_AUTH_URL` is the
+  trusted origin, so on a different frontend port every signed-in test fails
+  with `INVALID_ORIGIN`. The file is gitignored; put it back afterwards.
+
+`test:e2e:ssr` serves on :3100 by default (`SSR_PORT` overrides) and honours
+`DEV_API_PORT` too.
+
+**Quick check that a port is yours:** hit a route only your branch has. A 404
+means you are about to test somebody else's tree.
+
 ## Isolated preview (`bun run preview:container`)
 
 `bun run preview` binds the host's :3000 (pages dev), :8790 (the dev-router

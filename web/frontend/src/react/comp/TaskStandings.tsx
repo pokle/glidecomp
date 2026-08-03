@@ -93,6 +93,7 @@ export function TaskStandings({
   distanceOrigin,
   timezone,
   taskXctsk,
+  submissionsClosed = false,
   refresh,
   onMutated,
 }: {
@@ -107,6 +108,9 @@ export function TaskStandings({
   timezone: string | null;
   /** Task route — drives the ManualFlightDialog. Null when no route yet. */
   taskXctsk: XCTask | null;
+  /** The organiser closed this task for submissions (migration 0028). Shown,
+   * not enforced: these are the organiser tools that deliberately still work. */
+  submissionsClosed?: boolean;
   /** Parent bump to refetch scores (route edits). */
   refresh: number;
   /** Notify the parent a mutation happened, so the public results refetch too. */
@@ -269,6 +273,14 @@ export function TaskStandings({
         Admin tools: pilot statuses, track uploads on behalf, and manual
         flights. Every change here recomputes the task's scores.
       </p>
+      {submissionsClosed ? (
+        // Otherwise an organiser who has just closed the task is left
+        // wondering why their own upload buttons still work.
+        <p className="mt-1 text-sm text-muted-foreground">
+          This task is closed for submissions. Pilots can no longer send
+          tracks; these organiser tools still work.
+        </p>
+      ) : null}
 
       <ScoreFreshness
         computedAt={score.computed_at}

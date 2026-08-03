@@ -24,6 +24,11 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 PORT="${DEV_API_PORT:-8790}"
+# wrangler also binds a devtools inspector port (9229 by default). Two
+# worktrees running side by side collide on it just as they do on PORT, and
+# the error names the inspector rather than the thing you set — so it gets its
+# own override.
+INSPECTOR_PORT="${DEV_INSPECTOR_PORT:-9229}"
 
 # The Workers own the D1 schema; apply migrations before anything can serve a
 # request against a missing table.
@@ -36,4 +41,5 @@ exec bunx wrangler dev \
   --config web/workers/airscore-api/wrangler.toml \
   --persist-to web/.wrangler/state \
   --port "$PORT" \
+  --inspector-port "$INSPECTOR_PORT" \
   "$@"

@@ -32,6 +32,7 @@ import { pilotPath } from "../lib/slug";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
 import {
   IDENTIFIER_KINDS,
+  NEW_PILOT_SENTINEL,
   NOT_AN_IGC_MESSAGE,
   formatClockInZone,
   formatDuration,
@@ -50,6 +51,7 @@ import {
   type IdentifierKind,
   type OpenComp,
   type OpenCompsResponse,
+  type RegistrationState,
   type TrackQualityWire,
   type SubmitError,
   type SubmitStep,
@@ -124,6 +126,18 @@ export function SubmitTrackForm({
   const [identifierValue, setIdentifierValue] = useState("");
   const [onBehalfOf, setOnBehalfOf] = useState(SELF);
   const [pilots, setPilots] = useState<PilotListEntry[]>([]);
+  // Which registration in this comp the signed-in pilot is (or must pick).
+  // Null while unknown — which is not the same as "new", and must never be
+  // rendered as though it were.
+  const [registration, setRegistration] = useState<RegistrationState | null>(null);
+  // Their answer to the picker: a comp_pilot_id, or NEW_PILOT_SENTINEL.
+  const [chosenRegistration, setChosenRegistration] = useState<string | null>(null);
+  // An identifier they typed to find themselves another way ("I'm registered
+  // under my CIVL id"), which re-runs the resolve.
+  const [identifierOverride, setIdentifierOverride] = useState<{
+    kind: IdentifierKind;
+    value: string;
+  } | null>(null);
 
   // ── The file
   const [file, setFile] = useState<File | null>(null);
@@ -203,6 +217,44 @@ export function SubmitTrackForm({
     };
   }, [compId, canUploadOnBehalf]);
 
+  // Which registration in this comp is this signed-in pilot? Asked NOW, while
+  // they are still choosing a file, because the upload route refuses to guess
+  // when the roster holds registrations nobody has claimed — and a refusal
+  // that arrives after the file has been chosen is a refusal at the worst
+  // possible moment.
+  useEffect(() => {
+    if (!user || !compId) {
+      setRegistration(null);
+      return;
+    }
+    let cancelled = false;
+    setRegistration(null);
+    setChosenRegistration(null);
+    (async () => {
+      try {
+        // Through fetchWithRetry: a dropped resolve must not be recorded as
+        // "you are new", which is a terminal-looking answer nothing re-asks.
+        const res = await fetchWithRetry(() =>
+          fetch(`/api/comp/${encodeURIComponent(compId)}/registration/resolve`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(identifierOverride ? { identifier: identifierOverride } : {}),
+          })
+        );
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as RegistrationState;
+        if (!cancelled) setRegistration(data);
+      } catch {
+        // Leave it null. The upload still works for anyone the server can
+        // resolve by itself, and answers 409 for anyone it cannot.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [compId, user, identifierOverride]);
+
   // Remember the last identifier so day two of a comp costs no typing. Only
   // ever a convenience — the worker re-checks it against the roster.
   useEffect(() => {
@@ -254,6 +306,20 @@ export function SubmitTrackForm({
     if (!user && identifierValue.trim() === "") {
       return fail("Tell us who the track is for.", "bad_identifier");
     }
+    // Asked and unanswered. A nicety only — the server refuses to guess either
+    // way (409 identity_ambiguous) — but being stopped before the upload beats
+    // being stopped after it.
+    if (
+      user &&
+      onBehalfOf === SELF &&
+      registration?.state === "choose" &&
+      !chosenRegistration
+    ) {
+      return fail(
+        "Tell us which registration is yours, so your track is not filed under a second entry.",
+        "identity_ambiguous"
+      );
+    }
 
     setUploading(true);
     setFailure(null);
@@ -268,7 +334,14 @@ export function SubmitTrackForm({
       if (user) {
         // Signed in: the existing routes, and with them open registration and
         // whatever on-behalf rights this pilot already has.
-        if (onBehalfOf !== SELF) url = `${base}/${encodeURIComponent(onBehalfOf)}`;
+        if (onBehalfOf !== SELF) {
+          url = `${base}/${encodeURIComponent(onBehalfOf)}`;
+        } else if (chosenRegistration) {
+          // Which registration this is. Only ever sent when the pilot answered
+          // the question — the server's own resolution is otherwise the one
+          // that applies, and it refuses to guess rather than duplicating.
+          headers["x-comp-pilot"] = chosenRegistration;
+        }
       } else {
         url = `${base}/open-submit`;
         headers["x-pilot-ident-kind"] = identifierKind;
@@ -383,22 +456,36 @@ export function SubmitTrackForm({
         highlight={repairStep === "identity"}
       >
         {user ? (
-          <div className="flex flex-col gap-2">
-            <Label>Submitting for</Label>
-            <SimpleSelect
-              value={onBehalfOf}
-              onChange={(v) => setOnBehalfOf(v || SELF)}
-              options={[
-                { value: SELF, label: user.name ? `Myself (${user.name})` : "Myself" },
-                ...pilots.map((p) => ({
-                  value: p.comp_pilot_id,
-                  label: `${p.name} (${p.pilot_class})`,
-                })),
-              ]}
-              disabled={!canUploadOnBehalf}
-              ariaLabel="Submitting for"
-              className="w-full"
-            />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label>Submitting for</Label>
+              <SimpleSelect
+                value={onBehalfOf}
+                onChange={(v) => setOnBehalfOf(v || SELF)}
+                options={[
+                  { value: SELF, label: user.name ? `Myself (${user.name})` : "Myself" },
+                  ...pilots.map((p) => ({
+                    value: p.comp_pilot_id,
+                    label: `${p.name} (${p.pilot_class})`,
+                  })),
+                ]}
+                disabled={!canUploadOnBehalf}
+                ariaLabel="Submitting for"
+                className="w-full"
+              />
+            </div>
+            {/* Only when submitting as themselves: the on-behalf picker above
+                already names an exact registration. */}
+            {onBehalfOf === SELF && compId ? (
+              <RegistrationPicker
+                registration={registration}
+                chosen={chosenRegistration}
+                onChoose={setChosenRegistration}
+                onIdentifier={setIdentifierOverride}
+                identifierOverride={identifierOverride}
+                accountEmail={user.email ?? ""}
+              />
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -440,6 +527,14 @@ export function SubmitTrackForm({
             </div>
           </div>
         )}
+        {/* Said BEFORE a file is chosen, not after the fact. Both halves are
+            literally true of every submission: the audit log is the
+            competition's public transparency record, and every upload emails
+            the registered pilot (see track-notice-email.ts). */}
+        <p className="mt-3 text-sm text-muted-foreground">
+          This submission is recorded in the competition's public activity log,
+          and we email the registered pilot to tell them about it.
+        </p>
       </StepBox>
 
       <StepBox
@@ -572,6 +667,167 @@ function StepBox({
  * Tasks are grouped under their competition, and the value carries both ids
  * because a task id alone does not say which comp it belongs to.
  */
+/**
+ * "Which registration are you?" — asked of a signed-in pilot when the comp
+ * holds registrations nobody has claimed.
+ *
+ * This exists because the alternative is worse than a question. An organiser
+ * who typed a pilot's email wrongly used to get a SECOND roster entry for that
+ * pilot, silently: their own entry empty, a self-made one carrying the track,
+ * and a pilot count that feeds launch validity (S7F §9.1) counting a phantom.
+ *
+ * Nothing is preselected, deliberately. Preselecting the likeliest candidate
+ * is exactly how somebody files a track against a stranger without noticing —
+ * and the list is ORDERED by name likeness, which is a hint, never a verdict.
+ */
+function RegistrationPicker({
+  registration,
+  chosen,
+  onChoose,
+  onIdentifier,
+  identifierOverride,
+  accountEmail,
+}: {
+  registration: RegistrationState | null;
+  chosen: string | null;
+  onChoose: (value: string) => void;
+  onIdentifier: (v: { kind: IdentifierKind; value: string } | null) => void;
+  identifierOverride: { kind: IdentifierKind; value: string } | null;
+  accountEmail: string;
+}) {
+  const [showIdent, setShowIdent] = useState(false);
+  const [kind, setKind] = useState<IdentifierKind>("civl_id");
+  const [value, setValue] = useState("");
+
+  // Null means "we do not know yet", which is NOT "you are new". Saying
+  // nothing is the honest render.
+  if (registration === null) {
+    return <Loading>Checking your registration…</Loading>;
+  }
+
+  if (registration.state === "linked") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Filing as <strong>{registration.comp_pilot.registered_pilot_name}</strong>{" "}
+        ({registration.comp_pilot.pilot_class}).
+      </p>
+    );
+  }
+
+  if (registration.state === "new") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        You are not on this competition's roster yet
+        {registration.may_register
+          ? ". Submitting a track will add you."
+          : ", and it does not accept pilots adding themselves — ask the organiser."}
+      </p>
+    );
+  }
+
+  const candidates = registration.candidates;
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm text-muted-foreground">
+        {registration.matched_by
+          ? "That identifier is registered here. Confirm which entry is yours:"
+          : "We could not tell which entry on this competition's roster is you. Pick yourself, so your track is not filed under a second entry:"}
+      </p>
+      <RadioGroup
+        aria-label="Which registration are you?"
+        value={chosen}
+        onChange={onChoose}
+        className="gap-1.5"
+      >
+        {candidates.map((cand) => (
+          <Radio
+            key={cand.comp_pilot_id}
+            value={cand.comp_pilot_id}
+            aria-label={[
+              cand.registered_pilot_name,
+              cand.pilot_class,
+              cand.notify_email_masked ?? undefined,
+            ]
+              .filter(Boolean)
+              .join(", ")}
+            className="w-full items-baseline gap-2.5 rounded-md px-1 py-1"
+          >
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span>{cand.registered_pilot_name}</span>
+              <span className="text-xs text-muted-foreground">{cand.pilot_class}</span>
+              {cand.notify_email_masked ? (
+                <span className="text-xs text-muted-foreground">
+                  {cand.notify_email_masked}
+                </span>
+              ) : null}
+            </span>
+          </Radio>
+        ))}
+        {registration.may_register ? (
+          <Radio
+            value={NEW_PILOT_SENTINEL}
+            aria-label="None of these — register me as a new pilot"
+            className="w-full items-baseline gap-2.5 rounded-md px-1 py-1"
+          >
+            <span>None of these — register me as a new pilot</span>
+          </Radio>
+        ) : null}
+      </RadioGroup>
+
+      {showIdent ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-2 sm:w-56">
+            <Label id="reg-ident-kind">Find me by</Label>
+            <SimpleSelect
+              value={kind}
+              onChange={(v) => setKind(v as IdentifierKind)}
+              options={IDENTIFIER_KINDS}
+              ariaLabel="Find me by"
+              className="w-full"
+            />
+          </div>
+          <div className="flex flex-1 flex-col gap-2">
+            <Label htmlFor="reg-ident-value">
+              {IDENTIFIER_KINDS.find((k) => k.value === kind)?.label}
+            </Label>
+            <Input
+              id="reg-ident-value"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            onPress={() =>
+              onIdentifier(value.trim() ? { kind, value: value.trim() } : null)
+            }
+          >
+            Find me
+          </Button>
+        </div>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onPress={() => {
+            setShowIdent(true);
+            setValue(accountEmail && kind === "email" ? accountEmail : "");
+          }}
+        >
+          I'm registered under a different name
+        </Button>
+      )}
+      {identifierOverride && candidates.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nothing on this roster answers to that. Pick yourself from the list, or
+          ask the organiser.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function TaskPicker({
   comps,
   compId,
@@ -796,11 +1052,18 @@ function TrackAccepted({
 
       {result.notified?.emailed ? (
         <p className="text-sm text-muted-foreground">
-          We emailed {result.notified.masked_to} to say their track was
-          replaced.
+          We emailed {result.notified.masked_to} to tell them
+          {result.replaced
+            ? " their track was replaced."
+            : " a track was submitted for them."}
         </p>
       ) : null}
-      {result.notified && !result.notified.emailed ? (
+      {/* "no address" only. The other reason — the address IS the submitter's
+          own — needs no line: telling somebody we did not email them about a
+          thing they just did would be noise. */}
+      {result.notified &&
+      !result.notified.emailed &&
+      result.notified.reason === "no_registered_email" ? (
         <p className="text-sm text-muted-foreground">
           We could not email a confirmation — no address is registered for this
           pilot. Tell the organiser if this was not you.

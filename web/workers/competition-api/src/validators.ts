@@ -385,4 +385,9 @@ export const updateTaskSchema = z.object({
   // by 2pm, glass off at 3". Longer than MAX_TEXT because this is prose, not a
   // label; not a scoring input, so no format is imposed beyond a length cap.
   weather_notes: z.string().max(MAX_WEATHER_NOTES).optional(),
+  // "This task is done — stop sending me files." Blocks tracks and manual
+  // flights for THIS task only; organisers still upload, so a recovered SD
+  // card does not need the switch flipped twice. Not a scoring input: whether
+  // FURTHER evidence may arrive changes no score that exists.
+  submissions_closed: z.boolean().optional(),
 });

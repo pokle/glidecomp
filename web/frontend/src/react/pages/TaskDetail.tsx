@@ -32,6 +32,7 @@ import { TextField, Label, Description } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { Tag, TagGroup } from "@/react/rac/tag-group";
 import { DatePicker, TimePicker } from "@/react/rac/date-picker";
+import { CheckboxField } from "../comp/fields";
 import { api } from "../../comp/api";
 import {
   formatInstant,
@@ -227,6 +228,16 @@ export function TaskDetail() {
                 itself in the turnpoint table below. */}
             {!task.xctsk ? <span> · Route not set yet</span> : null}
           </p>
+          {task.submissions_closed ? (
+            // Above the fold, so a pilot learns the task stopped taking files
+            // without first choosing one and being refused.
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <Badge>Submissions closed</Badge>
+              <span className="text-muted-foreground">
+                The organisers are no longer accepting tracks for this task.
+              </span>
+            </p>
+          ) : null}
           {task.stop_announcement_time ? (
             // Stopped task (FAI S7F §12.3): surface the stop prominently —
             // it reshapes every score. Comp-zone (or UTC) rendering keeps
@@ -278,10 +289,19 @@ export function TaskDetail() {
             anyone, so the markup must settle after hydration rather than
             before. The button itself no longer depends on a session —
             submitting is open to anyone the comp's roster knows. */}
-        {mounted && !isClosed ? (
+        {mounted && !isClosed && (!task.submissions_closed || isAdmin) ? (
           <Button size="sm" onPress={() => setSubmitOpen(true)}>
             Submit track
           </Button>
+        ) : null}
+        {/* A sentence, not a disabled button: a greyed-out control invites
+            tapping and explains nothing. Admins see it AND keep the button,
+            because the flag stops pilots, not the scorekeeper. */}
+        {mounted && !isClosed && task.submissions_closed ? (
+          <p className="self-center text-sm text-muted-foreground">
+            Submissions for this task are closed.
+            {isAdmin ? " You can still upload as an organiser." : ""}
+          </p>
         ) : null}
         {task.xctsk ? (
           <TaskExportButtons
@@ -378,7 +398,12 @@ export function TaskDetail() {
       {/* Public results: top-3 podium per class + the link to the comp's
           scores page (the canonical results surface), plus pilot self-service
           (Submit track, your-submission line). The management grid below is
-          admin-only. */}
+          admin-only.
+
+          submissionsClosed is passed `&& !isAdmin` for the same reason the
+          page's action row keeps its button for admins: the stop is aimed at
+          pilots, and this section renders its OWN Submit action, so gating the
+          action row alone would leave a button here the server refuses. */}
       <CompNameProvider value={comp?.name ?? null}>
         <TaskResults
           compId={compId}
@@ -388,6 +413,7 @@ export function TaskDetail() {
           isOpenDistance={comp?.scoring_format === "open_distance"}
           isAuthenticated={user != null}
           isClosed={isClosed}
+          submissionsClosed={task.submissions_closed && !isAdmin}
           canUploadOnBehalf={canUploadOnBehalf}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}
@@ -410,6 +436,7 @@ export function TaskDetail() {
           distanceOrigin={comp.gap_params?.distanceOrigin ?? "takeoff"}
           timezone={comp.timezone ?? null}
           taskXctsk={task.xctsk}
+          submissionsClosed={task.submissions_closed}
           refresh={scoresRefresh}
           onMutated={() => setResultsRefresh((n) => n + 1)}
         />
@@ -711,6 +738,9 @@ function EditTaskDialog({
         ) ?? "")
       : ""
   );
+  const [submissionsClosed, setSubmissionsClosed] = useState(
+    task.submissions_closed
+  );
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -738,6 +768,7 @@ function EditTaskDialog({
           task_date: taskDate,
           pilot_classes: selectedClasses,
           stop_announcement_time: stopIso,
+          submissions_closed: submissionsClosed,
         },
       });
 
@@ -849,6 +880,12 @@ function EditTaskDialog({
               that ran to completion.
             </Description>
           </div>
+          <CheckboxField
+            checked={submissionsClosed}
+            onChange={setSubmissionsClosed}
+            label="Closed for track submissions"
+            hint="Pilots can no longer send tracks or manual flights for this task. Organisers still can, so a late recovery does not need this turned off."
+          />
           <DialogFooter>
             <Button
               variant="destructive"

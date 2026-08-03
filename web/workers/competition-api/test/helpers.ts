@@ -120,6 +120,17 @@ export function anonUploadRequest(
   );
 }
 
+/**
+ * "None of these — register me as a new pilot", for the self-upload route.
+ *
+ * Needed whenever a test uploads as somebody who is NOT on the roster while
+ * the comp HAS unclaimed registrations: the route refuses to guess in that
+ * case (see ensureCompPilot) and answers 409 identity_ambiguous instead of
+ * silently creating a second entry for the same person. A fixture that means
+ * "a genuinely different pilot" has to say so.
+ */
+export const AS_NEW_PILOT = { "x-comp-pilot": "new-pilot" };
+
 /** A YYYY-MM-DD date `n` days from today, for endpoints that key off "now". */
 export function isoDaysFromToday(n: number): string {
   const d = new Date();

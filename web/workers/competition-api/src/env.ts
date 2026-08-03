@@ -1,4 +1,4 @@
-import type { EmailSendBinding } from "./track-replaced-email";
+import type { EmailSendBinding } from "./track-notice-email";
 
 export type Env = {
   DB: D1Database;

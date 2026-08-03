@@ -17,8 +17,17 @@
  *    idempotent: the row is created once and reused forever after.
  */
 
-/** Vite dev server — the origin the browser and the specs talk to. */
-export const FRONTEND_URL = "http://localhost:3000";
+/**
+ * Vite dev server — the origin the browser and the specs talk to.
+ *
+ * Overridable because this repo's workflow is git worktrees, and two of them
+ * cannot both own :3000. Without an override, a run in worktree B silently
+ * REUSES worktree A's dev server (`reuseExistingServer` is on outside CI) and
+ * every assertion is made against the wrong code — green, and meaningless.
+ * Pair with DEV_API_PORT, which web/scripts/dev-workers.sh already honours.
+ */
+export const FRONTEND_PORT = process.env.DEV_FRONTEND_PORT || "3000";
+export const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
 
 /**
  * The Workers, direct. Everything lives behind the dev-router on one port (see
