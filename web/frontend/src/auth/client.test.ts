@@ -8,7 +8,7 @@
  * recovery short of a reload.
  */
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
-import { getCurrentUser, ACCOUNT_HINT_KEY } from "./client";
+import { getCurrentUser, needsOnboarding, ACCOUNT_HINT_KEY } from "./client";
 
 const USER = {
   id: "u1",
@@ -110,5 +110,31 @@ describe("getCurrentUser", () => {
 
     await settle(getCurrentUser());
     expect(localStorage.getItem(ACCOUNT_HINT_KEY)).toBeNull();
+  });
+});
+
+/**
+ * The onboarding gate. Both halves are load-bearing, and each is the only
+ * signal for a different sign-up path — a username-only gate let every
+ * email-OTP account through nameless, because the username is auto-derived
+ * at sign-up and the display name is not.
+ */
+describe("needsOnboarding", () => {
+  test("a fully set-up account is done", () => {
+    expect(needsOnboarding(USER)).toBe(false);
+  });
+
+  test("no username (a pre-#349 account) still needs onboarding", () => {
+    expect(needsOnboarding({ ...USER, username: null })).toBe(true);
+  });
+
+  test("an email-OTP sign-up — derived username, no name — needs onboarding", () => {
+    // What Better Auth's email-otp route creates: name "", plus the username
+    // our user.create hook derives from the email local-part.
+    expect(needsOnboarding({ ...USER, name: "", username: "pilot" })).toBe(true);
+  });
+
+  test("a whitespace-only name is no name", () => {
+    expect(needsOnboarding({ ...USER, name: "   " })).toBe(true);
   });
 });

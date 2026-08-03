@@ -40,9 +40,28 @@ Browser                    Cloudflare
 7. The SPA shows competitions straight away (username already set).
 ```
 
-Legacy pre-derivation accounts may still have a null username; the SPA
-redirects those to /onboarding, and POST /api/auth/set-username lets a user
-change their handle. New sign-ups skip both.
+## The onboarding gate
+
+`needsOnboarding(user)` in `web/frontend/src/auth/client.ts` is the ONE
+definition, asked by the Shell, the dashboard, the analysis page and the
+onboarding page itself. An account is onboarded once it has **both** a username
+and a display name:
+
+- **No username** — a legacy pre-derivation account. Google sign-ups have had
+  one derived since #349.
+- **No name** — an email-OTP sign-up. Better Auth's email-otp route has no name
+  to work from and creates the account with `name: ""`; the derive hook still
+  runs, but with an empty name slug it falls through to the email local-part.
+  Onboarding is the only place that ever asks for a display name, so gating on
+  the username alone left every email account nameless, wearing a handle guessed
+  off their address.
+
+Onboarding prefills the derived username (re-submitting your own is a no-op, not
+a "taken" rejection) and sends username + name together to POST
+`/api/auth/set-username`, which writes both in one statement — half of the pair
+would bounce the user straight back in. The pilot profile's own copy of the name
+is a separate write to competition-api's PATCH `/api/comp/pilot`; `"user".name`
+is the ACCOUNT's name, which is what /api/auth/me and the header show.
 
 ## Email OTP Flow
 
@@ -62,6 +81,8 @@ useless if leaked. Full design and rationale: [2026-07-14-email-otp-signin-plan.
 4. User enters the 6 digits → POST /api/auth/sign-in/email-otp
 5. Better Auth creates/updates the user + session exactly as the OAuth flow
    does — same auto-derived username hook, same session cookie
+6. A brand-new account has no display name (nothing in this flow asks for
+   one), so the SPA sends it to /onboarding — see the onboarding gate above
 ```
 
 Only `type: "sign-in"` codes are ever sent; the plugin's password-reset and
@@ -112,13 +133,13 @@ alike.
 
 | File | Purpose |
 |------|---------|
-| `auth/client.ts` | Better Auth client SDK + helper functions (`signInWithGoogle`, `signOut`, `getCurrentUser`, `setUsername`) |
+| `auth/client.ts` | Better Auth client SDK + helper functions (`signInWithGoogle`, `signOut`, `getCurrentUser`, `setUsername`, `needsOnboarding`) |
 
 ### Frontend Pages
 
 | Page | File | Purpose |
 |------|------|---------|
-| Onboarding | `react/pages/Onboarding.tsx` (route `/onboarding`) | Legacy username picker — only reached by pre-derivation accounts with a null username |
+| Onboarding | `react/pages/Onboarding.tsx` (route `/onboarding`) | Display name + username (prefilled) + optional CIVL/SAFA IDs. Reached by anyone `needsOnboarding()` flags — every email-OTP sign-up, and legacy accounts with a null username |
 | Dashboard | `react/pages/Dashboard.tsx` (route `/u/{username}`) | My Flights page, redirects anonymous visitors to Google sign-in |
 
 ### API Endpoints
@@ -126,7 +147,7 @@ alike.
 | Method | Path | Auth Required | Description |
 |--------|------|---------------|-------------|
 | GET | `/api/auth/me` | No | Returns `{ user }` or `{ user: null }`. Accepts a session cookie **or** an `x-api-key` |
-| POST | `/api/auth/set-username` | Yes | Sets username (3-20 chars, `[a-zA-Z0-9-]`) |
+| POST | `/api/auth/set-username` | Yes | Sets username (3-20 chars, `[a-zA-Z0-9-]`) and, when `name` is sent, the account's display name (1-128 chars) — both in one write |
 | GET | `/api/auth/preferences` | Yes | Read the caller's UI preferences (`src/routes/preferences.ts`) |
 | PUT | `/api/auth/preferences` | Yes | Update them |
 | POST | `/api/auth/delete-account` | Yes | Purges every R2 object under `u/{userId}/`, then deletes the `user` row (cascades to sessions, accounts, preferences, user tracks/tasks/annotations — see [database.md](database.md)) |
