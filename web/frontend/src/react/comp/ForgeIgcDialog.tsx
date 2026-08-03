@@ -1,22 +1,27 @@
 /**
- * IGC Forge — synthesise a tracklog that flies THIS task, and download it.
+ * Create a test IGC — synthesise a tracklog that flies THIS task, and download
+ * it.
  *
- * A super-admin tool, and deliberately not a hidden one: testing track
+ * An organiser's tool, and deliberately not a hidden one: testing track
  * submission, scoring and the report card needs files, and the only other ways
  * to get one are to go flying or to reuse a bundled sample that was flown
  * somewhere else on some other day. A sample from the wrong day is withheld by
  * track quality, so it exercises the failure path while looking like the happy
  * one — which is worse than having no file at all.
  *
- * The forging is the engine's (`web/engine/src/forge-igc.ts`), shared with the
- * `bun run forge-igc` CLI so the two cannot drift into making different files.
- * What this adds is the verdict: every forged file is put through `parseIGC`
+ * The synthesis is the engine's (`web/engine/src/forge-igc.ts`), shared with
+ * the `bun run forge-igc` CLI so the two cannot drift into making different
+ * files. What this adds is the verdict: every file is put through `parseIGC`
  * and `assessTrackQuality` — the same code the worker runs on upload — before
  * it is offered, so the panel says whether the file will be ACCEPTED and
  * SCORED rather than whether it looks about right.
  *
- * Loaded lazily. Nobody but a super admin can open it, so its code has no
- * business in the bundle everyone else downloads.
+ * Nothing here reaches the server. It makes a file and offers it as a
+ * download, so opening this can't touch a competition — submitting the file
+ * afterwards goes through the ordinary upload path, audit log and all.
+ *
+ * Loaded lazily. Only a comp's own admins can open it, so its code has no
+ * business in the bundle every pilot downloads.
  */
 import { useMemo, useState } from "react";
 import {
@@ -44,7 +49,6 @@ import { SimpleSelect } from "@/react/rac/select";
 import { Slider } from "@/react/rac/slider";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
-import { Label } from "react-aria-components";
 
 /** What the engine said about the file we just made. */
 interface Verdict {
@@ -110,7 +114,7 @@ export default function ForgeIgcDialog({
   const zone = timezone ?? "UTC";
   const offset = zoneOffsetHours(taskDate, zone);
 
-  function forge() {
+  function create() {
     setBusy(true);
     setProblem(null);
     setVerdict(null);
@@ -170,7 +174,7 @@ export default function ForgeIgcDialog({
     );
   }
 
-  // A clean forge that fails a HARD check is a bug in the forge, not a
+  // A clean flight that fails a HARD check is a bug in the generator, not a
   // finding — say so, because the file is then useless for the thing it was
   // asked for.
   const unexpectedlyWithheld =
@@ -180,11 +184,11 @@ export default function ForgeIgcDialog({
     <Modal isOpen={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Dialog className="gap-3">
         <DialogHeader>
-          <DialogTitle>IGC Forge</DialogTitle>
+          <DialogTitle>Create a test IGC</DialogTitle>
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Create a test IGC file for <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
+          For <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
           {offset >= 0 ? "+" : ""}
           {offset}).
         </p>
@@ -214,16 +218,13 @@ export default function ForgeIgcDialog({
             minValue={5}
             maxValue={120}
           />
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="sabotage">What kind of flight?</Label>
-            <SimpleSelect
-              value={sabotage}
-              onChange={(v) => setSabotage(v as ForgeSabotage)}
-              options={SABOTAGE}
-              ariaLabel="What kind of flight"
-              className="w-full"
-            />
-          </div>
+          <SimpleSelect
+            label="What kind of flight?"
+            value={sabotage}
+            onChange={(v) => setSabotage(v as ForgeSabotage)}
+            options={SABOTAGE}
+            className="w-full"
+          />
         </div>
 
         <Slider
@@ -257,8 +258,8 @@ export default function ForgeIgcDialog({
                   : unexpectedlyWithheld
                     ? "This was meant to be clean, but it fails a hard check"
                     : verdict.hardFailed
-                      ? "Forged — and withheld from scoring, as asked"
-                      : "Forged, and the engine accepts it"}
+                      ? "Created — and withheld from scoring, as asked"
+                      : "Created, and the engine accepts it"}
               </AlertTitle>
               <AlertDescription>
                 <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
@@ -297,8 +298,8 @@ export default function ForgeIgcDialog({
           <Button slot="close" variant="outline">
             Close
           </Button>
-          <Button variant="outline" isPending={busy} pendingLabel="Forging" onPress={forge}>
-            {verdict ? "Re-create" : "Create"}
+          <Button variant="outline" isPending={busy} pendingLabel="Creating" onPress={create}>
+            {verdict ? "Create again" : "Create"}
           </Button>
           {verdict?.shapeOk ? (
             <Button onPress={() => download(verdict)}>Download .igc</Button>

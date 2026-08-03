@@ -108,6 +108,7 @@ export function SimpleSelect({
   onChange,
   options,
   disabled,
+  label,
   ariaLabel,
   className,
 }: {
@@ -115,6 +116,8 @@ export function SimpleSelect({
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
+  /** A VISIBLE label, wired up by RAC — prefer this to `ariaLabel`. */
+  label?: React.ReactNode;
   ariaLabel?: string;
   className?: string;
 }) {
@@ -122,7 +125,11 @@ export function SimpleSelect({
   const fromKey = (k: Key): string => (k === EMPTY_KEY ? "" : String(k));
   return (
     <Select
-      aria-label={ariaLabel}
+      label={label}
+      // aria-label WINS over a visible <Label>, so passing both would leave the
+      // name a screen reader announces free to drift from the words on screen
+      // (WCAG 2.2 SC 2.5.3). The visible label is the better one when present.
+      aria-label={label ? undefined : ariaLabel}
       selectedKey={toKey(value)}
       onSelectionChange={(k) => {
         if (k != null) onChange(fromKey(k));
