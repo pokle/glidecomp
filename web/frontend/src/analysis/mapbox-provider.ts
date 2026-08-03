@@ -286,8 +286,12 @@ export function createMapBoxProvider(
       let bestProgressRouteData: BestProgressRoute | null = null;
       let multiTrackClickCallback: ((trackIndex: number, fixIndex: number) => void) | null = null;
       let isMultiTrackMode = false;
-      // 3D multi-track state
+      // 3D multi-track state. The track polylines live for as long as the
+      // multi-track view does; the scrubber's position markers are rebuilt on
+      // every scrub. They are kept apart so a scrub can clear its own markers
+      // without taking the tracks with them.
       let multiTrack3DObjects: unknown[] = [];
+      let multiTrackMarkerObjects: unknown[] = [];
       let speedOverlayMarkers: mapboxgl.Marker[] = [];
 
       // HUD crosshair marker (separate from activeMarkers so segment markers aren't cleared)
@@ -2128,6 +2132,16 @@ export function createMapBoxProvider(
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
       }
 
+      /** Remove the scrubber's position markers. Runs on every scrub. */
+      function clearMultiTrackMarkers(): void {
+        if (tb) {
+          for (const obj of multiTrackMarkerObjects) {
+            tb.remove(obj);
+          }
+        }
+        multiTrackMarkerObjects = [];
+      }
+
       function clearMulti3DTracks(): void {
         if (tb) {
           for (const obj of multiTrack3DObjects) {
@@ -2135,6 +2149,10 @@ export function createMapBoxProvider(
           }
         }
         multiTrack3DObjects = [];
+        // The markers are the scrubber's, and the scrubber belongs to the view
+        // being torn down — so they go too. Without this they would outlive
+        // every track they were pointing at.
+        clearMultiTrackMarkers();
       }
 
       function renderMulti3DTracks(tracks: LoadedTrack[], pilotScores: PilotScore[]): void {
@@ -2294,8 +2312,11 @@ export function createMapBoxProvider(
         pilotScores: PilotScore[],
         labelsContainer: HTMLElement,
       ): void {
-        // Clear existing 3D labels
+        // Clear what the last scrub position drew — the screen-space labels and,
+        // in 3D, the position markers. Both are rebuilt below for the new
+        // position; neither may be left behind, or a drag leaves a trail.
         labelsContainer.innerHTML = '';
+        clearMultiTrackMarkers();
 
         // Get top 3 ranked pilots
         const top3 = pilotScores.slice(0, 3);
@@ -2342,11 +2363,7 @@ export function createMapBoxProvider(
               opacity: 1,
             });
             tb.add(marker);
-            // NOTE: a scrub does NOT remove these. The label container above is
-            // emptied every call, but the 3D markers only go away when
-            // clearMulti3DTracks() runs (a full re-render or teardown), so they
-            // accumulate one marker per pilot per scrub position until then.
-            multiTrack3DObjects.push(marker);
+            multiTrackMarkerObjects.push(marker);
           }
         }
       }

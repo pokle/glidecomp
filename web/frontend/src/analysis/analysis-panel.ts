@@ -1,8 +1,10 @@
 /**
  * Analysis Panel Component
  *
- * Main tabbed panel with Track, Task, and Terrain tabs.
- * Provides a unified interface for flight analysis data.
+ * The right-hand tabbed panel. Single-track mode shows Task, Score, Events,
+ * Glides, Climbs and Sinks; multi-track mode swaps in Competition Score and
+ * Task. Which tab is open persists across loads — see `panel-tab.ts` for the
+ * restore rule.
  */
 
 import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, resolveTimePointsExponent, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
@@ -10,11 +12,9 @@ import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
 import { escapeHtml } from '../escape-html';
+import { restorePanelTab, type PanelTabType } from './panel-tab';
 
-/**
- * Unified panel tabs
- */
-export type PanelTabType = 'task' | 'score' | 'events' | 'glides' | 'climbs' | 'sinks' | 'comp-score' | 'gap-config';
+export type { PanelTabType };
 
 /** Which scoring format the multi-track score tab should present */
 export type CompScoringFormat = 'gap' | 'open_distance';
@@ -400,9 +400,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   /** Selected pilot names in competition score tab (null = all selected) */
   let selectedPilots: Set<string> | null = null;
   const TAB_STORAGE_KEY = 'glidecomp-active-tab';
-  const validTabs: PanelTabType[] = ['task', 'score', 'events', 'glides', 'climbs', 'sinks', 'comp-score', 'gap-config'];
-  const savedTab = localStorage.getItem(TAB_STORAGE_KEY) as PanelTabType | null;
-  let currentTab: PanelTabType = savedTab && validTabs.includes(savedTab) ? savedTab : 'events';
+  // A stored tab is only as good as the tab still existing — see panel-tab.ts.
+  let currentTab: PanelTabType = restorePanelTab(localStorage.getItem(TAB_STORAGE_KEY));
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;
   let selectedTurnpointIndex: number | null = null;
   let currentScore: TurnpointSequenceResult | null = null;
@@ -607,7 +606,6 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       climbs: tabClimbs,
       sinks: tabSinks,
       'comp-score': tabCompScore,
-      'gap-config': null, // removed — now a dialog
     };
     tabMap[tab]?.setAttribute('aria-selected', 'true');
 
