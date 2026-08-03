@@ -491,8 +491,8 @@ Two front ends, one engine, so they cannot drift into making different files:
 - **`bun run forge-igc`** — the CLI. Lists what is open (`--open`), writes a
   file (`--out`), or submits one straight to the anonymous route
   (`--submit --ident`).
-- **IGC Forge**, a dialog on the task page (`comp/ForgeIgcDialog.tsx`). Opens
-  with that task's own route, date and competition zone; downloads the file.
+- **Create a test IGC**, a dialog on the task page (`comp/ForgeIgcDialog.tsx`).
+  Opens with that task's own route, date and competition zone; downloads the file.
   It never uploads — submitting it through the real flow is the thing being
   tested.
 

@@ -59,7 +59,7 @@ import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
-// Super-admin only, so its code has no business in everyone else's bundle.
+// Comp admins only, so its code has no business in every pilot's bundle.
 const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
 import {
   fetchWithRetry,
@@ -79,7 +79,7 @@ export function TaskDetail() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
-  const { user, isSuperAdmin, previewRole } = useUser();
+  const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
   // Gate the ICU zone abbreviation in SSR-rendered instants (the stop notice
@@ -273,17 +273,6 @@ export function TaskDetail() {
               Settings
             </Button>
           ) : null}
-          {/* Gated on the REAL super admin and on not currently previewing
-              another role — the same rule Settings.tsx uses. `useAdminView`
-              would be wrong here: this is not a comp-admin power that a comp
-              admin should ever see, and while previewing as a pilot it must
-              disappear like everything else. A route is required because
-              there is nothing to fly without one. */}
-          {isSuperAdmin && previewRole === "actual" && comp && task.xctsk ? (
-            <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
-              IGC Forge
-            </Button>
-          ) : null}
         </div>
       </div>
       {/* The task's action row. It leads with Submit track — the one thing a
@@ -363,6 +352,19 @@ export function TaskDetail() {
           >
             Field analysis
           </LinkButton>
+        ) : null}
+        {/* An organiser's tool: the people who need a file to test submission
+            and scoring with are the ones running the competition, so it is
+            gated like every other manage action on this page. `useAdminView`
+            is the right check precisely because it also makes the button
+            disappear while a super admin previews as a pilot. Nothing here
+            reaches the server — the dialog makes a file and offers it as a
+            download — so this widens who SEES it and nothing more. A route is
+            required because there is nothing to fly without one. */}
+        {isAdmin && comp && task.xctsk ? (
+          <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
+            Create test IGC
+          </Button>
         ) : null}
       </div>
 
