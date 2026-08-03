@@ -9,7 +9,7 @@
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
 import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, andoyerDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
-import type { MapProvider, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
+import type { MapProvider, MapBounds, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
@@ -1174,6 +1174,22 @@ export function createMapBoxProvider(
 
       // Navigation controls (top-right, below panel toggle)
       map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
+
+      // "Where am I" — the only landmark a first-time organiser has when the
+      // competition has no waypoints yet and the map opens on the whole globe.
+      // Not gated on appControls: the route and waypoint editors are exactly
+      // who needs it. It costs nothing (browser geolocation, no Mapbox request)
+      // and self-disables when the browser has no geolocation or the page isn't
+      // a secure context. maxZoom caps the fit at region scale — the default
+      // (15) lands on the user's street, which is no use for laying out a task.
+      map.addControl(
+        new mapboxgl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          fitBoundsOptions: { maxZoom: 11 },
+          trackUserLocation: false,
+          showUserLocation: true,
+        }),
+      );
       if (appControls) map.addControl(new mapboxgl.FullscreenControl());
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200 }));
 
@@ -3175,6 +3191,16 @@ export function createMapBoxProvider(
           const bounds = new mapboxgl.LngLatBounds();
           for (const w of waypointsData) bounds.extend([w.lon, w.lat]);
           map.fitBounds(bounds, { padding: 40, duration: 800, maxZoom: 12 });
+        },
+
+        fitToBounds(bounds: MapBounds, options: { maxZoom?: number } = {}) {
+          map.fitBounds(
+            [
+              [bounds.west, bounds.south],
+              [bounds.east, bounds.north],
+            ],
+            { padding: 40, duration: 1000, maxZoom: options.maxZoom ?? 12 },
+          );
         },
 
         onWaypointClick(callback: (waypoint: MapWaypoint) => void) {
