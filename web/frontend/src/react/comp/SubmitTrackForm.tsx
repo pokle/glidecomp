@@ -3,9 +3,11 @@
  *
  * One component, two presentations. On `/submit` it is the page — a pilot who
  * has just landed arrives from the homepage knowing nothing but their own
- * name and their file, so all three steps are asked. Opened from a comp or
- * task page it is wrapped in the compact dialog (SubmitTrackDialog), where
- * comp and task are already known and those steps collapse to a line.
+ * name and their file, so all three steps are asked. Opened from a task page
+ * it is wrapped in the compact dialog (SubmitTrackDialog), where comp and task
+ * are already known and those steps collapse to a line. (The comp page has no
+ * task to name yet, so it links to /submit?comp= instead of opening the
+ * dialog.)
  *
  * A step that arrives prefilled shows its answer with a Change button rather
  * than disappearing: the commonest failure of a flow like this is filing a

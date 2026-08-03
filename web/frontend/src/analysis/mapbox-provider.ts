@@ -2342,7 +2342,10 @@ export function createMapBoxProvider(
               opacity: 1,
             });
             tb.add(marker);
-            // These are temporary; we'll clear on next scrub
+            // NOTE: a scrub does NOT remove these. The label container above is
+            // emptied every call, but the 3D markers only go away when
+            // clearMulti3DTracks() runs (a full re-render or teardown), so they
+            // accumulate one marker per pilot per scrub position until then.
             multiTrack3DObjects.push(marker);
           }
         }

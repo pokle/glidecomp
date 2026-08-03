@@ -12,7 +12,7 @@
 # prerendered files (built by ./static with Astro) and are served directly.
 # /comp and /comp/* are NOT listed here: they are owned by the SSR Pages
 # Function (functions/comp/[[path]].ts, routed via _routes.json), which
-# server-renders the four public routes and falls back to the SPA shell for
+# server-renders the eight public routes and falls back to the SPA shell for
 # any other /comp shape.
 /u/*  /app  200
 /submit  /app  200

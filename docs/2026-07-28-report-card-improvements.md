@@ -4,8 +4,23 @@ Date: 2026-07-28
 Subject: `/comp/:id/task/:id/pilot/:id` — the pilot score details page ("report card")
 Reference page reviewed: [Rory Duncan, Task 1 (Open), Corryong Cup 2025](https://glidecomp.com/comp/corryong-cup-2025-wugh/task/task-1-open-mzet/pilot/rory-duncan-wgmy)
 
-Status: **implemented**, across four PRs off this review. Every item in
-"Suggested order" at the foot has landed.
+Status: **implemented**, across at least eight PRs off this review — #502,
+#503, #504, #505, #506, #509, and then #528 and #529, which this document was
+written before and does not otherwise mention. Every item in "Suggested order"
+at the foot has landed.
+
+*Update 2026-08-02: the comparison section (item 4) grew past what is sketched
+below. [#528](https://github.com/pokle/glidecomp/pull/528) added a **vs-the-day
+variant for the class leader** — a pilot with no gap to anyone still asks "full
+validity, why not full points?", so `buildComparisonSection` hands off to
+`buildPointsLeftSection` instead of returning nothing — plus **per-component
+standings**, the `rank` line each of the distance / time / leading / arrival
+sections now carries ("3rd fastest of 12", "First of 22 to the end of the speed
+section"). [#529](https://github.com/pokle/glidecomp/pull/529) then made the
+ledgers reconcile: penalties are a row like any component, derived from the
+components-minus-total identity rather than the published deduction, because a
+§12.2/§12.4 floor makes the two differ and the ledger's business is the net.
+Both are in `web/engine/src/score-explanation-sections.ts`.*
 
 ---
 
@@ -160,6 +175,14 @@ the frontend's `resolveCompGapParams` call. This removes a duplicated resolution
 of comp category defaults, comp creation date, and the "auto" nominal-distance
 hole from the client, and makes the report card's prose provably the parameters
 that scored the task. Same version bump covers it.
+
+*As built, the deletion did not happen and should not: `PilotScoreDetail.tsx`
+reads `cls.gap_params` first and falls back to `resolveCompGapParams(comp…)`
+only when the published payload has none. The stale-first store keeps serving
+bodies cached before the change, so the fallback is what stops those pages
+losing their prose — the same "degrade, don't fail" rule the section builders
+follow. This is now the report-card rule (b) in CLAUDE.md: never re-derive the
+parameters, but keep the fallback for old payloads.*
 
 ---
 
@@ -384,8 +407,14 @@ anything per-pilot.
 not to curve at all: S7F uses its ratio as-is (clamped at 1), so the "curve"
 would be the identity line and drawing it would be ink pretending to be an
 explanation. It gets the distribution instead — which was already the plan for
-it, and is now the reason the sparklines and the histogram are two different
-components rather than one.
+it, and is now the reason the sparklines and the distribution strip are two
+different components rather than one. *(Naming: this document calls it "the
+histogram" throughout. As built it deliberately is not one —
+[#509](https://github.com/pokle/glidecomp/pull/509) is titled "Distance
+validity: one dot per pilot, not a histogram", and
+`src/react/charts/DistributionStrip.tsx` argues the case in its header: at a few
+dozen values the bins read as an arbitrary grid laid over the data. Read
+"distribution strip" wherever this document says histogram.)*
 
 **Distance validity is the exception, and it wants a different form entirely.**
 It is driven by the spread of the whole field's distances over the minimum, so
@@ -393,6 +422,14 @@ the informative picture is not the formula but the **distribution**: a strip or
 histogram of the field's flown distances with nominal distance, minimum distance
 and your own distance marked. `charts/DistributionStrip.tsx` already does exactly
 this shape and already takes an `emphasizeTrackFile` prop.
+
+*As built, that is two components, not one — don't go hunting for a single
+`DistributionStrip`. The one described here is
+`field-analysis/charts/DistributionStrip.tsx`, which takes a `MetricReport` and
+an `emphasizeTrackFile`. The report card got a second, different component at
+`src/react/charts/DistributionStrip.tsx`, which takes a
+`ScoreDistributionChart` from the engine and has no `emphasizeTrackFile` — the
+subject is already named in the chart data. Same encoding, different input.*
 
 ### The field comparison (item 4) as a chart
 
@@ -491,6 +528,9 @@ replace a line.
 "scoped to field-analysis and not a chart framework". Using it from the report
 card means promoting it to something like `src/react/charts/` — a deliberate
 scope decision to make explicitly rather than by quietly importing across.
+**Done — `src/react/charts/scale.ts`** now holds `extent`, `linearScale`,
+`niceTicks` and `spreadLabels`, and `field-analysis/charts/chart-utils.ts`
+re-exports them so its own callers and tests are unchanged.
 
 Keep them small inline (~160px) inside the section each explains, with the
 full-screen overlay for a proper look. The page is already long; four full-size

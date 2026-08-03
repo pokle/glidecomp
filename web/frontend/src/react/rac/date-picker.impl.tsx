@@ -65,7 +65,7 @@ import { cn } from "@/react/lib/utils";
 /** Day-first segments (DD/MM/YYYY), matching the app's en-GB date rendering. */
 const LOCALE = "en-GB";
 
-// The field box mirrors ui/input.tsx so pickers sit flush with text inputs.
+// The field box mirrors rac/field.tsx's input so pickers sit flush with text inputs.
 const fieldBox = cn(
   "flex h-8 w-full min-w-0 items-center rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors md:text-sm dark:bg-input/30",
   "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",

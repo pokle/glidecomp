@@ -1,5 +1,6 @@
 /**
- * React Aria Components RadioGroup + Radio, styled to match ui/radio-group.tsx.
+ * React Aria Components RadioGroup + Radio, styled to match the shadcn kit they
+ * replaced.
  * The label is part of each Radio (RAC wraps the box in a real <label>), so
  * call sites don't wire htmlFor/ids; the group label/description use the same
  * slot components as the other kit fields.

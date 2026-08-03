@@ -2,15 +2,15 @@
  * /submit — the front door for a pilot who has just landed.
  *
  * A real page, not a modal over an empty backdrop: it has a heading, a URL and
- * a title, it survives a reload and a back button, and it is a thing a
- * homepage button can honestly link to (a plain anchor, so it still works with
- * JavaScript off — which the content pages require).
+ * a title, it survives a reload and a back button, and it is a thing the site
+ * header's "Submit track" tab can honestly link to (a plain anchor, so it
+ * still works with JavaScript off — which the content pages require).
  *
  * `?comp=` and `?task=` prefill the first step, which makes this a URL worth
  * putting on a poster or behind a QR code at launch.
  *
  * The flow itself is SubmitTrackForm, shared with the compact dialog on the
- * comp and task pages.
+ * task page.
  */
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";

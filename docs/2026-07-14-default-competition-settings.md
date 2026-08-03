@@ -18,7 +18,7 @@ should move behind an "Advanced" wall. It does not change code.
 
 ## 1. Current state
 
-### The engine default (`DEFAULT_GAP_PARAMETERS`, `web/engine/src/gap-scoring.ts`)
+### The engine default (`DEFAULT_GAP_PARAMETERS`, `web/engine/src/gap-params.ts:173`)
 
 | Parameter | Current default | Notes |
 |---|---|---|
@@ -70,7 +70,8 @@ Two authorities matter, and the app already mirrors both:
   **arrival points apply to HG only** (PG arrival weight is 0). The weight code
   already encodes this: `aw = (scoring === 'HG' && useArrival) ? (1-dw)/8 : 0`
   and the PG leading multiplier is doubled (`1.4 * 2`) to absorb the missing
-  arrival share (`gap-scoring.ts` `calculateWeights`).
+  arrival share (`calculateWeights`, `web/engine/src/gap-formulas.ts:257` — the
+  two lines quoted are at `:281` and `:305`).
 
 - **PWCA** — the de-facto paragliding standard: GAP2020/weighted leading on,
   no arrival (PG), nominal goal ≈ 0.30.
@@ -111,6 +112,7 @@ global blob. Recommended values:
 | `leadingFormula` | `weighted` | — (2024-spec PG variant) |
 | `leadingWeightFormula` | `s7f2024` (new comps) / `gap2020` (before 2026-07-15) | ⬆ new PG comps default to the 2024 S7F §10 formula; comps created before the cutoff keep AirScore parity ([#257](https://github.com/pokle/glidecomp/issues/257)) |
 | `leadingTimeRatio` | `0.26` | S7F-2024 only; unused under the `gap2020` default |
+| `essNotGoalFactor` | `0` | S7F §12.1 fixes the PG value at 0 — no goal, no time points. Added to this table 2026-08-02: `defaultsFor` sets it per category |
 | `timePointsExponent` | `5/6` | independent knob ([#258](https://github.com/pokle/glidecomp/issues/258)); current S7F |
 | `distanceOrigin` | `takeoff` | — |
 | jump-the-gun | n/a for PG | stored `2` / `300` but unused (PG early start = launch→SSS) |
@@ -129,6 +131,7 @@ global blob. Recommended values:
 | `useArrival` | **`true`** | ⬆ HG scores arrival under FAI S7F (Advanced can turn off) |
 | `useDistanceDifficulty` | `true` | — (FAI S7F §11.1.1) |
 | `leadingFormula` | `classic` | ⬆ was `weighted`; the 2024-spec HG variant ([#258](https://github.com/pokle/glidecomp/issues/258)) |
+| `essNotGoalFactor` | `0.8` | the S7F §12.1 recommended HG value. Added to this table 2026-08-02: `defaultsFor` sets it per category |
 | `timePointsExponent` | `5/6` | now an independent knob ([#258](https://github.com/pokle/glidecomp/issues/258)); HG uses classic LC **with** the 5/6 exponent |
 | `distanceOrigin` | `takeoff` | — |
 | `jumpTheGunFactor` | `2` | — |
@@ -194,7 +197,7 @@ official formula for the chosen category.
 
 Landed on this branch:
 
-1. **`defaultsFor(category, preset = 'fai')`** in `web/engine/src/gap-scoring.ts`
+1. **`defaultsFor(category, preset = 'fai')`** in `web/engine/src/gap-params.ts:232`
    (exported from the engine) returns the official per-category FAI defaults
    above. `DEFAULT_GAP_PARAMETERS` stays as the raw partial-param merge target;
    its docstring now says so. The `preset` arg is where a future **Australian

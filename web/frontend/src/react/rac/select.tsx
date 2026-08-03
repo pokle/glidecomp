@@ -1,5 +1,5 @@
 /**
- * React Aria Components Select, styled to match ui/select.tsx.
+ * React Aria Components Select, styled to match the shadcn kit it replaced.
  *
  * A single component with label/description wiring (like rac/field.tsx):
  * <Select label="…"><SelectItem id="…">…</SelectItem></Select>. Items use RAC

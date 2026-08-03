@@ -5,15 +5,16 @@
  * score" tail (present-not-flown / DNF / absent). Columns: rank · pilot ·
  * outcome (badge + evidence) · distance · points · Manage.
  *
- * This is the management tool, admin-only by design: statuses, uploads on
- * behalf, manual flights and restores. The PUBLIC results live in
+ * This is the management tool, admin-only by design: opening a pilot's score
+ * card, statuses, uploads on behalf, manual flights and restores. The PUBLIC
+ * results live in
  * TaskResults (top 3 + link to the comp scores page) — this grid is never
  * server-rendered and mounts only after the admin check resolves.
  *
- * RAC EXPLORATION: built on react-aria-components (src/react/rac/) — the
- * rows are an ARIA grid (keyboard-navigable, onAction opens the pilot
- * detail page), per-row admin controls use RAC Select / FileTrigger /
- * Tooltip. See pages/TaskDetail.tsx for the experiment's scope.
+ * Built on the RAC kit (src/react/rac/) — see
+ * docs/2026-07-18-rac-adoption-guide.md. The rows are an ARIA grid
+ * (keyboard-navigable, onAction opens the pilot detail page), and the per-row
+ * admin controls use RAC Select / FileTrigger / Tooltip.
  *
  * Staleness: a status/track/manual change is a whole-task rescore (launch
  * validity ripples to everyone). Score columns grey out while stale; the fresh

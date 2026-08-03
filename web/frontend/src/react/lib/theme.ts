@@ -12,7 +12,7 @@ export type ThemePreference = "light" | "dark" | "auto";
 export const THEME_STORAGE_KEY = "glidecomp-theme";
 
 // Guarded so this module is import-safe under SSR (workerd has no `window`):
-// the four public pages' SSR bundle pulls in Settings (a route) → this module.
+// the public comp pages' SSR bundle pulls in Settings (a route) → this module.
 // The functions below only ever run in the browser (initTheme from the client
 // entry, the useTheme hooks after hydration), so null here is only the
 // module-load state on the server.

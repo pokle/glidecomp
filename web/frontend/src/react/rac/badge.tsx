@@ -1,7 +1,7 @@
 /**
  * Static badge span for the RAC page. RAC is behavior-focused and has no
  * badge (nothing to manage — it's presentation only), so this is a plain
- * styled <span> matching ui/badge.tsx.
+ * styled <span> matching the shadcn kit it replaced.
  */
 import { cva, type VariantProps } from "class-variance-authority";
 

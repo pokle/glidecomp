@@ -83,6 +83,7 @@ add pilots before waypoints or reviewing the settings.
 |---|------|---------------|-------------|
 | 1 | Create the competition | always (the page exists) | — |
 | 2 | Review settings | comp settings saved at least once | **new** `settings_reviewed` flag (§3.2) |
+| | *Update 2026-07-14: this step is now `optional: true` in `deriveSetupSteps` — a new comp starts from the official CIVL GAP defaults for its category ([#343](https://github.com/pokle/glidecomp/issues/343), see [docs/2026-07-14-default-competition-settings.md](2026-07-14-default-competition-settings.md)), so there is nothing an organiser must change. It still renders in the checklist, marked "(optional)", but it no longer gates the progress count or the auto-hide: both track the four required steps.* | | |
 | 3 | Add waypoints | comp has ≥ 1 waypoint | **new** `waypoint_count` on `GET /api/comp/:id` (§3.1) |
 | 4 | Add pilots | `pilot_count > 0` | already in the comp payload |
 | 5 | Create the first task | a task exists **and** has a route (`tasks.some(t => t.has_xctsk)`) | already in the comp payload |
@@ -140,7 +141,7 @@ Reasons:
   with the guide would mean the nav *appears then vanishes* for admins on
   every visit — a layout jump the current pop-in pattern deliberately
   avoids (adding content below the header is much less jarring than
-  removing content). It would also make the four SSR'd pages render
+  removing content). It would also make the eight SSR'd pages render
   differently per role, against the "role-aware, not role-gated" IA
   principle.
 - **Different jobs.** The nav is permanent wayfinding for every visitor;
@@ -238,7 +239,10 @@ feature, the client's `admins`-array check stays.)
 - Built from existing pieces: `Card`, `Progress`/`ProgressTrack`/
   `ProgressIndicator`, lucide icons (`Check`, `Circle`), Tailwind. No new
   UI primitives; there is no stepper component in `ui/` and this doesn't
-  need one.
+  need one. *(As shipped, the `src/react/ui/` kit is gone — the RAC migration
+  retired it, and `src/react/one-kit.test.ts` fails the build if it comes back.
+  `CompSetupProgress` takes its `ProgressBar` from `@/react/rac/progress`; the
+  "no stepper needed" conclusion is unchanged, it just applies to `rac/` now.)*
 - **Rendered only when `isAdmin`** — on SSR and first client paint
   `isAdmin` is `false` (auth resolves post-mount), so server and hydration
   markup agree (`null`), and the guide pops in after auth exactly like the
@@ -300,7 +304,7 @@ Each phase ships independently. **All three have shipped.**
 
 - No setup wizard/modal flow — the guide points at existing surfaces, it
   doesn't duplicate them.
-- No changes to the four SSR'd pages' public markup beyond the (uncounted →
+- No changes to the eight SSR'd pages' public markup beyond the (uncounted →
   counted) nav labels in phase 2.
 - No per-step "skip" state — "Hide guide" hides the whole card; per-step
   skips add persistence complexity for little gain.

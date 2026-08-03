@@ -1,8 +1,8 @@
 /**
  * Shared "add a single waypoint" dialog.
  *
- * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/TextField/NumberField
- * with inline coordinate validation.
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Modal/TextField/
+ * NumberField with inline coordinate validation.
  *
  * One small, single-purpose form — code, name, coordinates, altitude, with
  * snap-to-peak (#341) — used both by the competition waypoints editor

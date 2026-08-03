@@ -1,5 +1,14 @@
 # Route grammar: say the start config out loud — 2026-07-27
 
+> **Status (2026-08-02): shipped in
+> [#482](https://github.com/pokle/glidecomp/pull/482).** All of §4 landed as
+> written — the `startModifier` / `startConfigFromItems` / `startModifierWords`
+> grammar in `quick-task.ts`, the `timeZoneLabel` prop and start problems in the
+> `QuickTaskField` status line, `applyQuickTask` setting `sssType` / `direction`
+> / `gates`, the modifier help text, and `startConfigSummary` as the Start
+> disclosure's badge. The §5 round-trip and fixed-point tests are in
+> `quick-task.test.ts`.
+
 Plan for [issue #436](https://github.com/pokle/glidecomp/issues/436). Implements
 the agreed design in that issue's comment: the "Enter task" route line gains an
 optional set of modifiers on the `sss` turnpoint, so start **direction**,
@@ -160,12 +169,13 @@ task date so DST is the day's own. Grammar times use the same convention:
   converting gates display → the state the panel holds; skipped entirely when
   `openDistance` or the parsed route has no SSS.
 - Help text under the field mentions the modifiers, matching the existing
-  `to, sss, ess, tp, goal` line (`:745-750`).
+  `to, sss, ess, tp, goal` line (`:770-779`; the modifier sentence landed at
+  `:780-790`).
 - **Fix 1:** pass `startConfigSummary(...)` as the `Start (SSS)` `Disclosure`'s
   `badge` — the component already documents that slot as "an inline annotation
   next to the title (e.g. a summary)", so the active start type reads back
   without expanding the panel. The task detail page already renders the same
-  summary (`pages/TaskDetail.tsx:519`), so this makes the editor agree with the
+  summary (`pages/TaskDetail.tsx:565`), so this makes the editor agree with the
   page it's editing.
 
 **No server work.** Verified: the task PATCH already audit-logs start direction,

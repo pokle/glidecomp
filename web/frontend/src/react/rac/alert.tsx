@@ -1,7 +1,8 @@
 /**
  * Static alert panel for the RAC pages. Like `badge`, this is presentation
  * only — RAC is behavior-focused and has nothing to manage here — so it's a
- * plain styled <div> carrying `role="alert"`, matching what ui/alert.tsx drew.
+ * plain styled <div> carrying `role="alert"`, matching what the shadcn kit it
+ * replaced drew.
  *
  * Callers that render a *standing* notice rather than an interruption (the
  * score-freshness banners, the field-analysis "pending" panels) override with

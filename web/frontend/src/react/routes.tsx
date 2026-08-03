@@ -137,8 +137,7 @@ export function AppRoutes() {
           <Route path="/comp" element={<Competitions />} />
           <Route path="/comp/:compId" element={<CompDetail />} />
           <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
-          {/* Admin-only roster editor — noindex shell in the SSR Function, like
-              the field-analysis pages. */}
+          {/* Admin-only roster editor — noindex shell in the SSR Function. */}
           <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
           <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
           {/* Field analysis (behavioural metrics). One report per competition,

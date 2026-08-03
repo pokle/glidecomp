@@ -1,5 +1,5 @@
 /**
- * React Aria Components Table, styled to match ui/table.tsx.
+ * React Aria Components Table, styled to match the shadcn kit it replaced.
  *
  * Unlike the plain shadcn table (styling over <table>), RAC Table is an ARIA
  * grid: arrow-key cell navigation, focusable rows with onAction/href (whole-row

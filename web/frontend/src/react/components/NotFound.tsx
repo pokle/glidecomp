@@ -24,7 +24,7 @@
  * the catch-all: the id parses, it just doesn't resolve any more, which is
  * exactly the case worth repairing.
  *
- * SSR note: the six server-rendered comp pages never render this (a 404 there is
+ * SSR note: the eight server-rendered comp pages never render this (a 404 there is
  * served as the plain shell), but nothing here touches the DOM outside an
  * effect, so rendering it on the server would be harmless.
  */

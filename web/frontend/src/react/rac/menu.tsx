@@ -1,5 +1,5 @@
 /**
- * React Aria Components Menu, styled to match ui/dropdown-menu.tsx. MenuItems
+ * React Aria Components Menu, styled to match the shadcn kit it replaced. MenuItems
  * accept `href` (+ download/target) so "download in format X" entries are real
  * links with menu keyboard semantics.
  */

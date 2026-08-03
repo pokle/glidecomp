@@ -6,7 +6,7 @@ Manual and automated test flows for the task editor feature (PR #91).
 
 - Dev server running (`bun run dev`)
 - Open `http://localhost:3000/analysis.html`
-- Panel visible (click "Toggle panel" button if hidden)
+- Panel visible (if hidden, click the map's panel-toggle control, labelled "Analysis", top-right; the close button `#sidebar-close` in the flight-info banner hides it again)
 - Task tab selected
 
 ---
@@ -19,7 +19,7 @@ Manual and automated test flows for the task editor feature (PR #91).
 **Expected:**
 - Task tab shows "Add waypoints to build a task" placeholder
 - Large "Add waypoint" button with + icon centered
-- Toolbar shows +, map pin, and trash buttons
+- Toolbar shows six controls: "+" (Add waypoint), the map pin (Click map to add waypoint), then — after a flexible gap — "Open…" (open a `.xctsk` file), "XContest" (load a task by code), "Save" (download the task as `.xctsk`, disabled while the task is empty) and the trash icon (Clear all waypoints)
 - Stats footer absent or shows 0
 
 ---
@@ -64,7 +64,7 @@ Manual and automated test flows for the task editor feature (PR #91).
 2. Click on a different card
 
 **Expected:**
-- Clicked card expands to show editable fields: Name, Type, Radius, Altitude, Coordinates
+- Clicked card expands to show four editable fields — Name, Type, Radius (m), Altitude (m) — above a read-only small-text line with the coordinates (5 decimals each)
 - Only one card expanded at a time
 - Previously expanded card collapses when another is clicked
 - Map pans to the expanded turnpoint
@@ -75,15 +75,18 @@ Manual and automated test flows for the task editor feature (PR #91).
 
 **Steps:**
 1. Expand a waypoint card
-2. Change type dropdown to "Start (SSS)"
-3. Change another waypoint to "Goal"
+2. Open the Type dropdown and read the options
+3. Change the type to "Start (SSS)"
+4. Change a different waypoint to "Takeoff", then a third to "ESS"
+5. Change the SSS waypoint back to "Turnpoint"
 
 **Expected:**
+- The dropdown offers exactly **four** options, in this order: Turnpoint (the default, value `''`), Takeoff, Start (SSS), ESS. There is **no** Goal option — goal is the last turnpoint by position, not a type you choose
 - Badge updates immediately (e.g., "Turnpoint" → "Start (SSS)")
-- Map popup label updates to match new type
-- Setting SSS creates `task.sss` config (race type, exit direction)
-- Setting Goal creates `task.goal` config (cylinder type)
-- All 5 types available: Takeoff, Start (SSS), Turnpoint, ESS, Goal
+- Map popup label updates to match the new type
+- SSS is the only special-cased type: the first time a turnpoint is set to SSS, `currentTask.sss` is created as `{ type: 'RACE', direction: 'EXIT' }`. An existing `sss` config is left alone
+- Takeoff, ESS and Turnpoint set only `tp.type` (Turnpoint clears it to `undefined`) — no task-level config is written and none is removed
+- Every change re-renders the list and emits a task-changed event, so distances and the map update
 
 ---
 
@@ -274,7 +277,7 @@ Manual and automated test flows for the task editor feature (PR #91).
 
 ## Playwright Automation Notes
 
-- The sidebar can overlap with the map. Use `dispatchEvent(new MouseEvent('click', { bubbles: true }))` or the "Toggle panel" button to interact with sidebar elements when Playwright can't click them directly.
+- The sidebar can overlap with the map. Use `dispatchEvent(new MouseEvent('click', { bubbles: true }))`, or the map's "Analysis" panel-toggle control (and `#sidebar-close` to hide the panel again), to interact with sidebar elements when Playwright can't click them directly.
 - For "Clear all" confirmation, use `document.querySelector('.te-clear-btn').click()` then after 50-100ms `document.querySelector('.te-confirm-yes').click()` — the 3s auto-revert timeout makes Playwright snapshot-based clicks unreliable.
 - Tab switching: use `evaluate` to dispatch click events on tab elements if direct clicks are intercepted by the map overlay.
 - File loading: use `fetch()` + `DataTransfer` + `DragEvent('drop')` dispatched on `document.querySelector('main')`.

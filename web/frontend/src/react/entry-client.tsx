@@ -1,9 +1,9 @@
 /**
- * Client entry for the GlideComp UI (React + Base UI SPA), served from
+ * Client entry for the GlideComp UI (React + react-aria-components SPA), served from
  * /app.html and mapped to /comp, /u/*, /scores, /settings, /onboarding and the
- * /admin routes. The four public routes (/comp, /comp/:id, the task page and
- * the pilot score page) are additionally server-rendered by
- * functions/comp/[[path]].ts; when the server embedded `window.__SSR_DATA__`
+ * /admin routes. The eight public comp routes (the `ROUTES` array in
+ * functions/comp/[[path]].ts is the list) are additionally server-rendered
+ * there; when the server embedded `window.__SSR_DATA__`
  * this entry hydrates that markup instead of creating a fresh root, seeding the
  * matching page from the same loader data so the first render matches.
  *

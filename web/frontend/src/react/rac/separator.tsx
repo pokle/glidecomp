@@ -1,5 +1,5 @@
 /**
- * React Aria Components Separator, styled to match ui/separator.tsx.
+ * React Aria Components Separator, styled to match the shadcn kit it replaced.
  *
  * RAC renders the `role="separator"` / `aria-orientation` contract itself, so
  * this is a thin styling wrapper. Unlike the Base UI one it doesn't emit

@@ -1,11 +1,11 @@
 /**
  * Task detail page — React port of the task view in comp-detail.ts.
  *
- * RAC EXPLORATION: this page (and everything it opens) is built entirely from
- * react-aria-components primitives (src/react/rac/) instead of the shadcn /
- * Base UI kit, to evaluate RAC as the app-wide foundation. Visuals match the
- * rest of the app; the interaction layer (dialogs, tables, fields, menus) is
- * RAC. See the PR/issue discussion before extending the pattern elsewhere.
+ * Built on the RAC kit (src/react/rac/) — see
+ * docs/2026-07-18-rac-adoption-guide.md. This page (and everything it opens)
+ * is built entirely from react-aria-components primitives: visuals match the
+ * rest of the app, and the interaction layer (dialogs, tables, fields, menus)
+ * is RAC.
  *
  * Everyone sees a read-only "Route" section (summary, diagram and turnpoint
  * listing); admins additionally get the route editor dialog

@@ -2,9 +2,11 @@
  * Task route editor dialog — the React replacement for the vanilla
  * analysis/task-editor on the task detail page (#270).
  *
- * RAC EXPLORATION (see pages/TaskDetail.tsx): the Tabulator grid is replaced
- * by a react-aria-components Table whose rows live in React state. Reordering
- * is RAC drag-and-drop (mouse, touch AND keyboard via the row drag handles);
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): the Tabulator grid is
+ * replaced by a react-aria-components Table whose rows live in React state.
+ * There is no per-row reorder control at all — turnpoint order is word order
+ * in the "Enter task" field above the grid (comp/QuickTaskField.tsx), so
+ * reordering is editing text and works with keyboard, mouse and touch alike;
  * the task-specific fields (Type, Radius) are inline RAC widgets; every
  * derived column (leg distances, crossing direction, the map preview) is a
  * useMemo over the rows instead of an imperative write-back. Start (SSS)

@@ -15,13 +15,36 @@ This specification defines a browser-based storage layer for persisting XContest
 3. **Command menu integration** - Show stored items in dedicated groups ("Stored Tasks", "Stored Tracks")
 4. **Transparent loading** - Selecting a stored item should behave identically to loading fresh from source
 
-## Out of Scope (Future Work)
+## Out of Scope (as written) — three items have since shipped
+
+The original list was:
 
 - Clearing individual items from storage
 - Clearing all storage (delete all stored tasks and tracks from browser)
 - Downloading stored files back to user's computer
 - Syncing between devices
 - Storage quota management UI
+
+Three of those are no longer future work. They shipped with the R2/D1 rewrite
+described in the banner above, not in IndexedDB:
+
+- **Clearing individual items** — `deleteTask(code)` and `deleteTrack(id)` in
+  `web/frontend/src/analysis/storage.ts` `DELETE` the row via `/api/user/tasks/:code`
+  and `/api/user/tracks/:id`. The dashboard (`web/frontend/src/react/pages/Dashboard.tsx`)
+  puts a **Remove** button on every flight and task row, behind a confirmation
+  ("Remove this flight?" / "Remove this task?")
+- **Downloading stored files back** — the same dashboard rows carry **Download IGC**
+  and **Download XCTSK** buttons
+- **Storage quota management** — the server answers an over-quota upload with a
+  `QuotaExceededError` (`storage.ts`, carrying the quota kind and limit). `main.ts`
+  turns it into a status toast, the dashboard raises it as an alert dialog rather
+  than a parse error, and a `NearQuotaWarning` meter warns before the ceiling is hit
+
+Still out of scope: syncing tracks and tasks between devices (they now live
+server-side, so the question changed shape), and a bulk "clear all" UI —
+`clearAllTasks()` / `clearAllTracks()` / `clearAll()` survive only for API
+compatibility, because account deletion cascades server-side and the UI deletes
+one row at a time.
 
 ## Storage Technology
 
@@ -433,7 +456,8 @@ function deriveTrackName(filename: string, igcFile: IGCFile): string {
 
 ### Storage Failures
 
-Storage operations should be non-blocking and fail silently:
+The original rule was that storage operations should be non-blocking and fail
+silently:
 
 ```typescript
 try {
@@ -443,6 +467,20 @@ try {
   // Continue without storing - don't block the user
 }
 ```
+
+**Superseded: silence is now the exception, not the rule.** `handlePersistError()`
+in `web/frontend/src/analysis/main.ts` sorts the failure into three:
+
+- `AuthRequiredError` — swallowed with no toast. An anonymous visitor is not
+  failing at anything; they keep analysing in memory and nothing persists, which
+  is the designed behaviour
+- `QuotaExceededError` — **shown**, as an error status toast carrying the server's
+  message. A silent drop here would leave the user believing an upload was saved
+  when it was not
+- Anything else — still non-blocking, logged with `console.warn`
+
+Storage stays non-blocking throughout: no branch of this aborts the analysis the
+user is in the middle of.
 
 ### IndexedDB Unavailable
 
@@ -478,12 +516,18 @@ First time user:
 2. Empty storage, no menu items
 3. Items accumulate as user imports tasks/tracks
 
-### Future Enhancements
+### Storage management (was "Future Enhancements" — two of three shipped)
 
-Storage management features to implement:
-1. Add `deleteTask(code)` and `deleteTrack(id)` methods for individual deletion
-2. Add UI for clearing all storage (methods already exist: `clearAllTasks()`, `clearAllTracks()`, `clearAll()`)
-3. Add storage quota indicator and management UI
+1. ~~Add `deleteTask(code)` and `deleteTrack(id)` methods for individual deletion~~
+   — **shipped** in `storage.ts`, surfaced as per-row Remove buttons in
+   `Dashboard.tsx`
+2. Add UI for clearing all storage — **not shipped, and no longer wanted**:
+   `clearAllTasks()` / `clearAllTracks()` / `clearAll()` are now empty
+   compatibility stubs. Account deletion cascades server-side via the user foreign
+   key, and the dashboard deletes one row at a time
+3. ~~Add storage quota indicator and management UI~~ — **shipped**:
+   `QuotaExceededError` from `storage.ts`, the `main.ts` status toast, and the
+   dashboard's quota alert plus its `NearQuotaWarning` meter
 
 ## Testing
 

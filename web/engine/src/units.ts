@@ -57,7 +57,7 @@ export const DEFAULT_UNITS: UnitPreferences = {
 export interface FormattedValue {
   value: number;
   formatted: string; // e.g., "45"
-  withUnit: string; // e.g., "45km/h"
+  withUnit: string; // e.g., "45 km/h" — joined with a non-breaking space
   unit: string; // e.g., "km/h"
 }
 

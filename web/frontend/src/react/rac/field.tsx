@@ -1,5 +1,5 @@
 /**
- * React Aria Components form fields, styled to match ui/input.tsx + ui/field.tsx.
+ * React Aria Components form fields, styled to match the shadcn kit they replaced.
  *
  * RAC fields are self-labelling: <TextField><Label/><Input/><Description/>
  * <FieldError/></TextField> wires ids, aria-describedby and validation state
