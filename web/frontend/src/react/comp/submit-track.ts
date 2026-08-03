@@ -159,6 +159,43 @@ export function describeUploadOutcome(
   return { tone: "success", message: `${what} for ${pilotName}` };
 }
 
+/** The naming half of a caller's prefill — all `taskLine` needs. */
+export interface TaskLinePrefill {
+  compName?: string;
+  taskName?: string;
+}
+
+/**
+ * The one line a collapsed task step gets.
+ *
+ * Three sources, in order of how directly they were given: the open-comps
+ * entry the pilot picked, the names the caller passed in, then the names
+ * looked up for a task that arrived as a bare id. The last is what stops
+ * `/submit?comp=…&task=…` reading "Selected task" — a URL off a poster names
+ * a task the pilot has to be able to check.
+ */
+export function taskLine(
+  comp: OpenComp | null,
+  task: { name: string; task_date: string; pilot_classes?: string[] } | null,
+  prefill: TaskLinePrefill | undefined,
+  linked?: {
+    compName: string | null;
+    taskName: string | null;
+    pilotClasses?: string[];
+  } | null
+): string {
+  const compName = comp?.name ?? prefill?.compName ?? linked?.compName ?? null;
+  const taskName = task?.name ?? prefill?.taskName ?? linked?.taskName ?? null;
+  // The collapsed step has to name the class for the same reason the picker
+  // does — it is the last chance to notice the wrong field.
+  const classes = task?.pilot_classes ?? linked?.pilotClasses;
+  const extra = taskName ? unnamedClasses(taskName, classes) : null;
+  const named = extra ? `${taskName} (${extra})` : taskName;
+  if (compName && named) return `${named} — ${compName}`;
+  return named ?? compName ?? "Selected task";
+}
+
+
 /** What the pilot last submitted, remembered so day two costs no typing. */
 export interface LastSubmission {
   compId: string;

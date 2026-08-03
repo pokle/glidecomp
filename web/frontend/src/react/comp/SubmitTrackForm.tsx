@@ -45,6 +45,7 @@ import {
   pickDefaultTask,
   readLastSubmission,
   repairStepFor,
+  taskLine,
   tooLargeReason,
   unnamedClasses,
   writeLastSubmission,
@@ -113,6 +114,13 @@ export function SubmitTrackForm({
 
   // ── What we are submitting to
   const [openComps, setOpenComps] = useState<OpenComp[] | null>(null);
+  // Names looked up for a task the caller gave by id alone (a QR code, a
+  // poster). Null until asked, and stays null when the caller supplied names.
+  const [linkedNames, setLinkedNames] = useState<{
+    compName: string | null;
+    taskName: string | null;
+    pilotClasses?: string[];
+  } | null>(null);
   const [compId, setCompId] = useState(prefill?.compId ?? "");
   const [taskId, setTaskId] = useState(prefill?.taskId ?? "");
   // Whether the task list is on screen. It starts closed ONLY when the caller
@@ -140,10 +148,14 @@ export function SubmitTrackForm({
 
   const prefilledComp = prefill?.compId != null;
 
-  // The open competitions, so the task step can answer without a search. Only
-  // needed when the caller did not already name a task.
+  // The open competitions — what the task picker lists.
+  //
+  // Fetched even when the caller already named a task. It used to return early
+  // in that case, which broke the picker for exactly the callers that have a
+  // prefill: pressing Change opened a list whose data had never been asked
+  // for, so it sat on "Finding competitions flying now…" for good. The
+  // response is public and edge-cached for 60s, so asking anyway is cheap.
   useEffect(() => {
-    if (prefill?.taskId) return;
     let cancelled = false;
     (async () => {
       try {
@@ -155,6 +167,9 @@ export function SubmitTrackForm({
         const data = (await res.json()) as OpenCompsResponse;
         if (cancelled) return;
         setOpenComps(data.comps);
+        // A caller who named a task has already answered this. Re-deciding
+        // would let the list overrule the URL somebody scanned off a poster.
+        if (prefill?.taskId) return;
         const pick = pickDefaultTask(data.comps, {
           fromUrl: { compId: prefill?.compId, taskId: prefill?.taskId },
           last: readLastSubmission(
@@ -174,6 +189,57 @@ export function SubmitTrackForm({
       cancelled = true;
     };
   }, [prefill?.compId, prefill?.taskId]);
+
+  // Names for a task named by ID alone.
+  //
+  // `/submit?comp=…&task=…` is the QR-code-on-the-hill case, and it arrives
+  // with two sqids and nothing readable. Without this the collapsed step said
+  // "Selected task" — which is precisely the failure the step exists to
+  // prevent: filing a track against yesterday's task without ever being shown
+  // which task it was.
+  //
+  // Asked directly rather than read out of the open-comps list, because a
+  // linked task need not be in it: the list is a ±2-day window over comps
+  // still accepting uploads, and a poster outlives both.
+  useEffect(() => {
+    const wantComp = prefill?.compId;
+    const wantTask = prefill?.taskId;
+    if (!wantComp || !wantTask) return;
+    if (prefill?.compName && prefill?.taskName) return; // the dialog knows both
+    let cancelled = false;
+    (async () => {
+      try {
+        const [compRes, taskRes] = await Promise.all([
+          api.api.comp[":comp_id"].$get({ param: { comp_id: wantComp } }),
+          api.api.comp[":comp_id"].task[":task_id"].$get({
+            param: { comp_id: wantComp, task_id: wantTask },
+          }),
+        ]);
+        if (cancelled) return;
+        const compName = compRes.ok
+          ? ((await compRes.json()) as { name?: string }).name ?? null
+          : null;
+        const task = taskRes.ok
+          ? ((await taskRes.json()) as {
+              name?: string;
+              pilot_classes?: string[];
+            })
+          : null;
+        if (cancelled) return;
+        setLinkedNames({
+          compName,
+          taskName: task?.name ?? null,
+          pilotClasses: task?.pilot_classes,
+        });
+      } catch {
+        // Non-fatal: the step falls back to saying nothing rather than
+        // blocking an upload that would otherwise work.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [prefill?.compId, prefill?.taskId, prefill?.compName, prefill?.taskName]);
 
   // A signed-in pilot's own identity, and the on-behalf roster when they have
   // the right to use it. Both unchanged from the dialog's existing behaviour.
@@ -357,7 +423,7 @@ export function SubmitTrackForm({
         compact={compact}
         answered={
           !editingTask && !!taskId
-            ? taskLine(selectedComp, selectedTask, prefill)
+            ? taskLine(selectedComp, selectedTask, prefill, linkedNames)
             : null
         }
         onChange={prefilledComp && !openComps ? undefined : () => setEditingTask(true)}
@@ -488,21 +554,6 @@ export function SubmitTrackForm({
       </div>
     </div>
   );
-}
-
-function taskLine(
-  comp: OpenComp | null,
-  task: { name: string; task_date: string; pilot_classes?: string[] } | null,
-  prefill: SubmitTrackPrefill | undefined
-): string {
-  const compName = comp?.name ?? prefill?.compName;
-  const taskName = task?.name ?? prefill?.taskName;
-  // The collapsed step has to name the class for the same reason the picker
-  // does — it is the last chance to notice the wrong field.
-  const extra = task ? unnamedClasses(task.name, task.pilot_classes) : null;
-  const named = extra ? `${taskName} (${extra})` : taskName;
-  if (compName && named) return `${named} — ${compName}`;
-  return named ?? compName ?? "Selected task";
 }
 
 /**

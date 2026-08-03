@@ -166,6 +166,32 @@ test.describe("submitting a track without an account", () => {
     await expect(page.locator('.hero-cta a[href="/submit"]')).toHaveCount(0);
   });
 
+  test("a linked task names itself, and can still be changed", async ({ page }) => {
+    // /submit?comp=&task= is the QR-code-on-the-hill case. It arrives as two
+    // sqids, and used to render "Selected task" — which is precisely the
+    // failure the step exists to prevent.
+    await page.goto(
+      `${BASE_URL}/submit?comp=${fixture.compId}&task=${fixture.taskId}`
+    );
+    // Positive assertion FIRST: it is the one that waits. Asserting the
+    // absence of "Selected task" up front would pass on the placeholder that
+    // is legitimately on screen for the moment before the lookup lands.
+    await expect(
+      page.getByText(new RegExp(`Today's Task.*${fixture.compName}`))
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Selected task")).toHaveCount(0);
+
+    // And Change opens a list that has actually loaded. It used to sit on
+    // "Finding competitions flying now…" for good, because the prefill made
+    // the fetch return early.
+    await page.getByRole("button", { name: "Change" }).click();
+    const group = page.getByRole("radiogroup", { name: "Which task did you fly?" });
+    await expect(group.getByRole("radio", { name: /Today's Task/ })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText("Finding competitions flying now")).toHaveCount(0);
+  });
+
   test("preselects the task flying today", async ({ page }) => {
     await page.goto(`${BASE_URL}/submit`);
     await expect(page.getByRole("heading", { name: "Submit your track" })).toBeVisible();
