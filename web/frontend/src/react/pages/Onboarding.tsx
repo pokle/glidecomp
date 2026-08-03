@@ -3,13 +3,17 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/react/rac/button";
 import { TextField } from "@/react/rac/field";
-import { setUsername } from "../../auth/client";
+import { needsOnboarding, setUsername } from "../../auth/client";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 
 export function Onboarding() {
   const { user, loading } = useUser();
   const navigate = useNavigate();
+  // Which half is missing decides where the cursor lands. An email-OTP
+  // sign-up arrives with a derived username and no name; a pre-#349 account
+  // is the other way round.
+  const nameMissing = !!user && user.name.trim() === "";
 
   const [name, setName] = useState("");
   const [username, setUsernameValue] = useState("");
@@ -27,14 +31,18 @@ export function Onboarding() {
       return;
     }
     // Already onboarded — go straight to the dashboard.
-    if (user.username) {
+    if (!needsOnboarding(user)) {
       navigate(`/u/${user.username}`, { replace: true });
       return;
     }
     setName(user.name);
+    // The auto-derived handle is a suggestion, not a decision: show it so it
+    // can be kept with one keystroke or replaced. Re-submitting the account's
+    // own current username is a no-op, not a "taken" rejection.
+    setUsernameValue(user.username ?? "");
   }, [user, loading, navigate]);
 
-  if (loading || !user || user.username) return <p role="status">Loading…</p>;
+  if (loading || !user || !needsOnboarding(user)) return <p role="status">Loading…</p>;
 
   const firstName = user.name.split(" ")[0] || user.name;
 
@@ -44,9 +52,12 @@ export function Onboarding() {
     setGeneralError(null);
     setSubmitting(true);
 
-    // Username first — it's the gate; abort before writing the pilot profile
-    // so a taken username can be retried without a half-formed pilot row.
-    const usernameResult = await setUsername(username.trim());
+    // Account fields first — they're the gate; abort before writing the pilot
+    // profile so a taken username can be retried without a half-formed pilot
+    // row. Name goes with them rather than being left to the pilot PATCH
+    // below: the gate reads the ACCOUNT's name, so a pilot-only write would
+    // save the profile and still send the user back here.
+    const usernameResult = await setUsername(username.trim(), name.trim());
     if (usernameResult.error) {
       setUsernameError(usernameResult.error);
       setSubmitting(false);
@@ -54,9 +65,9 @@ export function Onboarding() {
     }
 
     // Full page load, not navigate(): the UserProvider context still holds
-    // username: null, so a client-side hop would bounce the dashboard's
-    // "no username → onboarding" guard straight back here. Reloading
-    // refetches /api/auth/me with the new username.
+    // the pre-submit user, so a client-side hop would bounce the dashboard's
+    // needsOnboarding() guard straight back here. Reloading refetches
+    // /api/auth/me with the saved username and name.
     const dest = `/u/${usernameResult.username}`;
     try {
       const res = await api.api.comp.pilot.$patch({
@@ -88,9 +99,13 @@ export function Onboarding() {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-4 px-4 py-10">
       {user.image ? (
-        <img src={user.image} alt={user.name} className="size-16 rounded-full border" />
+        // Decorative: the heading beside it already names the account, and an
+        // email sign-up has no name to put here anyway (WCAG 1.1.1).
+        <img src={user.image} alt="" className="size-16 rounded-full border" />
       ) : null}
-      <h1 className="text-2xl font-bold">Welcome, {firstName}!</h1>
+      <h1 className="text-2xl font-bold">
+        {firstName ? `Welcome, ${firstName}!` : "Welcome to GlideComp!"}
+      </h1>
       <p className="text-muted-foreground">Set up your GlideComp account</p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -101,6 +116,7 @@ export function Onboarding() {
           value={name}
           onChange={setName}
           isRequired
+          autoFocus={nameMissing}
           maxLength={128}
         />
 
@@ -117,7 +133,7 @@ export function Onboarding() {
             setUsernameError(null);
           }}
           isRequired
-          autoFocus
+          autoFocus={!nameMissing}
           isInvalid={usernameError !== null}
           errorMessage={usernameError ?? undefined}
         />

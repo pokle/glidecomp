@@ -70,6 +70,43 @@ describe("email OTP sign-in", () => {
     expect(me.user?.email).toBe(email);
   });
 
+  test("a brand-new user arrives with a derived username and NO name", async () => {
+    // The state the onboarding gate exists to catch. Better Auth's email-otp
+    // route has no name to work from, so it creates the account with `name:
+    // ""`; our user.create hook still derives a username, but with the name
+    // slug empty it falls through to the email local-part. Onboarding is the
+    // only thing that ever asks for the name, so a username-only gate would
+    // leave this account nameless forever.
+    const email = "otp-no-name@example.com";
+    await sendOtp(email, "203.0.113.9");
+    const signInRes = await signInWithOtp(
+      email,
+      await fetchDevOtp(email),
+      "203.0.113.9"
+    );
+    const cookie = cookieHeader(signInRes);
+
+    const me = (await (
+      await request("GET", "/api/auth/me", { cookie })
+    ).json()) as { user: { name: string; username: string } };
+    expect(me.user.name).toBe("");
+    expect(me.user.username).toBe("otp-no-name");
+
+    // …and set-username is what gets it out of that state, in one request.
+    const fix = await request("POST", "/api/auth/set-username", {
+      cookie,
+      body: { username: "nogales", name: "Jean Nogales" },
+    });
+    expect(fix.status).toBe(200);
+    const after = (await (
+      await request("GET", "/api/auth/me", { cookie })
+    ).json()) as { user: { name: string; username: string } };
+    expect(after.user).toMatchObject({
+      name: "Jean Nogales",
+      username: "nogales",
+    });
+  });
+
   test("signs into the SAME account as an existing user with that email", async () => {
     // Simulates the Google-first user: dev-login creates the account, then
     // OTP sign-in must resolve to it rather than minting a duplicate.

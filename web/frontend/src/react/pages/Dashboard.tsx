@@ -23,6 +23,7 @@ import { useGoToSignIn, useUser } from "../lib/user";
 import { downloadFile, formatTaskDate, ordinal, relativeTime } from "../lib/format";
 import { compPath, taskPath, pilotPath } from "../lib/slug";
 import { api } from "../../comp/api";
+import { needsOnboarding } from "../../auth/client";
 import { Tree, TreeItem, TreeItemContent, TreeChevron } from "../rac/tree";
 
 // Mirrors the server-side limits in
@@ -51,7 +52,7 @@ export function Dashboard() {
   }, []);
 
   // Auth guards mirror the vanilla dashboard: anonymous → sign-in redirect,
-  // no username → onboarding, /u/me → the user's own page. A superadmin
+  // not yet onboarded → onboarding, /u/me → the user's own page. A superadmin
   // previewing the signed-out view gets the sign-in card instead of OAuth.
   useEffect(() => {
     document.title = "GlideComp - My Flights";
@@ -60,7 +61,7 @@ export function Dashboard() {
       if (!previewingSignedOut) goToSignIn(window.location.pathname);
       return;
     }
-    if (!user.username) {
+    if (needsOnboarding(user)) {
       navigate("/onboarding", { replace: true });
       return;
     }
