@@ -166,6 +166,32 @@ test.describe("submitting a track without an account", () => {
     await expect(page.locator('.hero-cta a[href="/submit"]')).toHaveCount(0);
   });
 
+  test("a linked task names itself, and can still be changed", async ({ page }) => {
+    // /submit?comp=&task= is the QR-code-on-the-hill case. It arrives as two
+    // sqids, and used to render "Selected task" — which is precisely the
+    // failure the step exists to prevent.
+    await page.goto(
+      `${BASE_URL}/submit?comp=${fixture.compId}&task=${fixture.taskId}`
+    );
+    // Positive assertion FIRST: it is the one that waits. Asserting the
+    // absence of "Selected task" up front would pass on the placeholder that
+    // is legitimately on screen for the moment before the lookup lands.
+    await expect(
+      page.getByText(new RegExp(`Today's Task.*${fixture.compName}`))
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Selected task")).toHaveCount(0);
+
+    // And Change opens a list that has actually loaded. It used to sit on
+    // "Finding competitions flying now…" for good, because the prefill made
+    // the fetch return early.
+    await page.getByRole("button", { name: "Change" }).click();
+    const group = page.getByRole("radiogroup", { name: "Which task did you fly?" });
+    await expect(group.getByRole("radio", { name: /Today's Task/ })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText("Finding competitions flying now")).toHaveCount(0);
+  });
+
   test("preselects the task flying today", async ({ page }) => {
     await page.goto(`${BASE_URL}/submit`);
     await expect(page.getByRole("heading", { name: "Submit your track" })).toBeVisible();
@@ -640,11 +666,15 @@ test.describe("submitting a track without an account", () => {
         page.getByRole("button", { name: "Submit track" }).first()
       ).toBeVisible();
 
-      // Put it back so the rest of the file's expectations still hold.
-      await page.request.patch(
+      // Put it back so the rest of the file's expectations still hold — and
+      // CHECK that it went back. This task is shared with the test below,
+      // which asserts the Submit button is offered; a silently failed restore
+      // would surface there instead of here, as a mystery.
+      const reopen = await page.request.patch(
         `/api/comp/${fixture.compId}/task/${fixture.taskId}`,
         { data: { submissions_closed: false } }
       );
+      expect(reopen.ok(), "reopened the task for the tests that follow").toBeTruthy();
     });
   });
 
@@ -739,8 +769,14 @@ test.describe("submitting a track without an account", () => {
   test("the task page offers Submit track to a signed-out visitor", async ({ page }) => {
     await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
     // This used to read "Sign in to submit your track".
+    //
+    // The explicit timeout is not padding. This page is server-rendered and
+    // the button is behind the `mounted` gate, so it is legitimately absent
+    // on first paint — the assertion is waiting for hydration, not for a
+    // render. On the default 5s this failed on CI at 6.2s while every
+    // neighbouring assertion in this file already used 15-20s.
     await expect(
       page.getByRole("button", { name: "Submit track" }).first()
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20_000 });
   });
 });

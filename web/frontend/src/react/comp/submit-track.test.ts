@@ -16,6 +16,7 @@ import {
   pickDefaultTask,
   readLastSubmission,
   repairStepFor,
+  taskLine,
   unnamedClasses,
   writeLastSubmission,
   type LastSubmission,
@@ -389,6 +390,78 @@ describe("what an upload is announced as", () => {
     // every upload into a warning.
     expect(describeUploadOutcome("Jane Smith", false, null).tone).toBe("success");
     expect(describeUploadOutcome("Jane Smith", false, undefined).tone).toBe("success");
+  });
+});
+
+describe("the line a collapsed task step shows", () => {
+  const comp: OpenComp = {
+    comp_id: "c1",
+    name: "Corryong Cup",
+    category: "hg",
+    timezone: null,
+    close_date: null,
+    suggested_task_id: "t1",
+    tasks: [],
+  };
+  const task = { name: "Task 3", task_date: "2026-01-05", pilot_classes: ["open"] };
+
+  test("prefers what the pilot actually picked", () => {
+    expect(taskLine(comp, task, undefined)).toBe("Task 3 (open) — Corryong Cup");
+  });
+
+  test("uses the names a caller passed in", () => {
+    // The dialog on a task page knows both without asking anything.
+    expect(
+      taskLine(null, null, { compName: "Corryong Cup", taskName: "Task 3" })
+    ).toBe("Task 3 — Corryong Cup");
+  });
+
+  test("uses names looked up for a task given as a bare id", () => {
+    // /submit?comp=…&task=… off a poster: two sqids and nothing readable.
+    // Saying "Selected task" there is exactly the failure this step exists to
+    // prevent — filing against yesterday's task without being shown which.
+    expect(
+      taskLine(null, null, undefined, {
+        compName: "Corryong Cup",
+        taskName: "Task 3",
+        pilotClasses: ["sports"],
+      })
+    ).toBe("Task 3 (sports) — Corryong Cup");
+  });
+
+  test("still names the class when the looked-up title does not", () => {
+    expect(
+      taskLine(null, null, undefined, {
+        compName: "C",
+        taskName: "Boosfy",
+        pilotClasses: ["open"],
+      })
+    ).toBe("Boosfy (open) — C");
+  });
+
+  test("does not repeat a class the title already carries", () => {
+    expect(
+      taskLine(null, null, undefined, {
+        compName: "C",
+        taskName: "Task 1 (Open)",
+        pilotClasses: ["open"],
+      })
+    ).toBe("Task 1 (Open) — C");
+  });
+
+  test("falls back only when nothing at all resolved", () => {
+    // Still reachable — a lookup can fail — but it must be the last resort,
+    // not the ordinary answer for every linked URL.
+    expect(taskLine(null, null, undefined, null)).toBe("Selected task");
+    expect(taskLine(null, null, {}, { compName: null, taskName: null })).toBe(
+      "Selected task"
+    );
+  });
+
+  test("shows whichever half it has", () => {
+    expect(
+      taskLine(null, null, undefined, { compName: "Corryong Cup", taskName: null })
+    ).toBe("Corryong Cup");
   });
 });
 
