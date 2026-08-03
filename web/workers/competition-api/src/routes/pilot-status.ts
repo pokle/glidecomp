@@ -170,6 +170,10 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
   // ── PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id ──
   // Upsert a pilot's status for a task. Any valid status replaces the
   // previous one (mutually exclusive). To make a pilot Present again, DELETE.
+  //
+  // Deliberately NOT gated by task.submissions_closed. Marking the day's
+  // absentees and DNFs is exactly what an organiser does AFTER closing the
+  // task for submissions; gating it here would make the flag unusable.
   .put(
     "/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id",
     requireAuth,

@@ -344,3 +344,111 @@ function classifyMatch(
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Names may propose, never dispose
+// ---------------------------------------------------------------------------
+
+/**
+ * How alike two pilot names look. Higher is more alike; 0 is "nothing".
+ *
+ * READ THIS BEFORE USING IT. Everything else in this file refuses to match on
+ * names, and that refusal is correct: two people share a name, so a name is
+ * never proof of identity. This function does NOT change that rule. It exists
+ * only to ORDER a list that a human is about to choose from — the pilot's own
+ * likely registration first, so they are not scrolling a roster of two hundred
+ * looking for themselves.
+ *
+ * Nothing may branch on it. The decision of whether to ASK at all is "does the
+ * comp have an unclaimed registration", which involves no names whatsoever
+ * (see `findUnclaimedRegistrations`). If you find yourself writing
+ * `if (nameAffinity(a, b) > n)` to link, claim, or skip something, that is the
+ * bug this comment is here to prevent.
+ *
+ *   2 — the same words in some order ("SMITH, Jane" / "jane smith" / "Müller")
+ *   1 — same last word, and one first name is the other's initial ("J Smith")
+ *   0 — anything else
+ */
+export function nameAffinity(a: string, b: string): 0 | 1 | 2 {
+  const at = nameTokens(a);
+  const bt = nameTokens(b);
+  if (at.length === 0 || bt.length === 0) return 0;
+
+  if (at.length === bt.length && at.every((t, i) => t === bt[i])) return 2;
+
+  // Surname plus an initial. Compare the ORIGINAL order for this one — the
+  // sorted form has already lost which token was the family name.
+  const ao = nameTokensOrdered(a);
+  const bo = nameTokensOrdered(b);
+  if (ao.length >= 2 && bo.length >= 2) {
+    const sameLast = ao[ao.length - 1] === bo[bo.length - 1];
+    const initialOf = (x: string, y: string) => x.length === 1 && y.startsWith(x);
+    if (sameLast && (initialOf(ao[0], bo[0]) || initialOf(bo[0], ao[0]))) return 1;
+  }
+  return 0;
+}
+
+/** Casefolded, de-accented, punctuation-free words, in their original order. */
+function nameTokensOrdered(name: string): string[] {
+  return name
+    .normalize("NFD")
+    // Strip combining marks so "Müller" and "Muller" are the same word. A
+    // roster imported from a spreadsheet loses accents constantly.
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** The same words, sorted, so "SMITH, Jane" and "Jane Smith" agree. */
+function nameTokens(name: string): string[] {
+  return nameTokensOrdered(name).sort();
+}
+
+/** A registration nobody has claimed yet — someone the pilot might be. */
+export interface UnclaimedRegistration {
+  comp_pilot_id: number;
+  registered_pilot_name: string;
+  pilot_class: string;
+  registered_pilot_email: string | null;
+}
+
+/**
+ * Every registration in this comp that no account has claimed.
+ *
+ * This is what makes the duplicate impossible: if the answer is non-empty, the
+ * upload route asks the pilot which of these they are rather than guessing.
+ * Deliberately NOT filtered by name — filtering here would mean a pilot whose
+ * organiser spelled them "Mick" instead of "Michael" silently gets the
+ * duplicate again, which is the whole bug.
+ */
+export async function findUnclaimedRegistrations(
+  db: D1Database,
+  compId: number
+): Promise<UnclaimedRegistration[]> {
+  const rows = await db
+    .prepare(
+      `SELECT comp_pilot_id, registered_pilot_name, pilot_class,
+              registered_pilot_email
+       FROM comp_pilot
+       WHERE comp_id = ? AND pilot_id IS NULL
+       ORDER BY registered_pilot_name`
+    )
+    .bind(compId)
+    .all<UnclaimedRegistration>();
+  return rows.results;
+}
+
+/** Most-likely-you first, then alphabetical. Ordering only — see nameAffinity. */
+export function orderByLikelihood<T extends { registered_pilot_name: string }>(
+  rows: T[],
+  accountName: string
+): T[] {
+  return [...rows].sort(
+    (a, b) =>
+      nameAffinity(b.registered_pilot_name, accountName) -
+        nameAffinity(a.registered_pilot_name, accountName) ||
+      a.registered_pilot_name.localeCompare(b.registered_pilot_name)
+  );
+}

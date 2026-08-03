@@ -11,7 +11,7 @@
  */
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
-import { request, uploadRequest, clearCompData } from "./helpers";
+import { AS_NEW_PILOT, request, uploadRequest, clearCompData } from "./helpers";
 import { encodeId } from "../src/sqids";
 import {
   computeAndStoreFieldAnalysis,
@@ -505,13 +505,15 @@ describe("field analysis invalidation is shared with scores", () => {
     const before = await getRow(t.taskIdNum);
     expect(isFieldRowStale(before)).toBe(false);
 
-    // The upload route takes gzipped IGC and auto-registers the pilot it
-    // finds in the file's own header.
+    // The upload route takes gzipped IGC and registers the uploading account
+    // as a pilot. AS_NEW_PILOT because the seeded task already has unclaimed
+    // registrations, and the route now refuses to guess whether user-1 is one
+    // of them rather than silently making a duplicate.
     const entries = sampleIgcEntries();
     const res = await uploadRequest(
       `/api/comp/${t.compId}/task/${t.taskId}/igc`,
       await compressText(entries[TRACK_COUNT][1]),
-      { user: "user-1" }
+      { user: "user-1", headers: AS_NEW_PILOT }
     );
     expect(res.status).toBeLessThan(300);
 

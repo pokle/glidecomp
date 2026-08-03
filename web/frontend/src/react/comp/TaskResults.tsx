@@ -81,6 +81,7 @@ export function TaskResults({
   isOpenDistance,
   isAuthenticated,
   isClosed,
+  submissionsClosed = false,
   canUploadOnBehalf,
   refresh,
   onReplayAvailable,
@@ -94,6 +95,11 @@ export function TaskResults({
   isOpenDistance: boolean;
   isAuthenticated: boolean;
   isClosed: boolean;
+  /** The organiser closed THIS task (migration 0028). The section's own
+   * Submit action has to honour it, or the page offers a button the server
+   * will refuse — this component renders its own header action, so gating the
+   * page's action row is not enough. */
+  submissionsClosed?: boolean;
   canUploadOnBehalf: boolean;
   /** Parent bump to refetch scores (route edits, admin mutations). */
   refresh: number;
@@ -209,7 +215,7 @@ export function TaskResults({
           // No longer gated on a session: submitting is open to anyone the
           // comp's roster knows. Still mount-gated, because what the dialog
           // shows inside depends on who is asking.
-          mounted && !isClosed ? (
+          mounted && !isClosed && !submissionsClosed ? (
             <Button variant="outline" size="sm" onPress={() => setUploadOpen(true)}>
               Submit track
             </Button>

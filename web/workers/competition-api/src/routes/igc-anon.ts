@@ -63,10 +63,12 @@ import {
   ANON_SUBMIT_PER_PILOT,
   chargeBudget,
 } from "../rate-limit";
+import { noticeOnUpload } from "../track-notice-email";
 import {
-  buildTrackReplacedEmail,
-  sendTrackReplacedNotice,
-} from "../track-replaced-email";
+  maskEmail,
+  organisersOf,
+  submissionsClosedBody,
+} from "../submission-gate";
 
 type Variables = {
   ids: { comp_id?: number; task_id?: number };
@@ -105,32 +107,8 @@ export type AnonSubmitCode =
   | "ambiguous_pilot_match"
   | "invalid_file"
   | "task_pilot_limit"
-  | "rate_limited";
-
-interface Organiser {
-  name: string;
-  email: string;
-}
-
-/**
- * The organisers of a competition, with their addresses.
- *
- * Not a new exposure: `GET /api/comp/:comp_id` already returns `admins` with
- * emails to anonymous callers, and the public comp page renders them with a
- * `mailto:` link. It is included only on genuine failures, which are
- * rate-limited, so this does not become a harvesting endpoint.
- */
-async function organisersOf(db: D1Database, compId: number): Promise<Organiser[]> {
-  const rows = await db
-    .prepare(
-      `SELECT u.email, u.name FROM comp_admin ca
-       JOIN "user" u ON ca.user_id = u.id
-       WHERE ca.comp_id = ?`
-    )
-    .bind(compId)
-    .all<{ email: string; name: string }>();
-  return rows.results;
-}
+  | "rate_limited"
+  | "submissions_closed";
 
 /** Read and validate the two identifier headers. */
 function readIdentifier(
@@ -268,9 +246,11 @@ export const igcAnonRoutes = new Hono<HonoEnv>().post(
     }
 
     const task = await db
-      .prepare("SELECT task_id, name FROM task WHERE task_id = ? AND comp_id = ?")
+      .prepare(
+        "SELECT task_id, name, submissions_closed FROM task WHERE task_id = ? AND comp_id = ?"
+      )
       .bind(taskId, compId)
-      .first<{ task_id: number; name: string }>();
+      .first<{ task_id: number; name: string; submissions_closed: number }>();
     if (!task) {
       return c.json(
         {
@@ -280,6 +260,12 @@ export const igcAnonRoutes = new Hono<HonoEnv>().post(
         },
         404
       );
+    }
+
+    // A hard stop here: this route has no admin concept to bypass with, and an
+    // anonymous caller is exactly who the organiser meant to stop.
+    if (task.submissions_closed) {
+      return c.json(await submissionsClosedBody(db, compId, taskId), 403);
     }
 
     // ── Who is this?
@@ -434,43 +420,41 @@ export const igcAnonRoutes = new Hono<HonoEnv>().post(
       );
     }
 
-    // ── Tell the pilot their track was replaced.
+    // ── Tell the pilot. On EVERY submission, not only replacements: an
+    // anonymous first upload against somebody's registration is exactly as
+    // unverified as an anonymous replacement, and the submit form promises
+    // the notice unconditionally.
 
-    let notified: { emailed: boolean; reason?: string; masked_to?: string } = {
-      emailed: false,
-    };
-    if (stored.replaced) {
-      if (pilot.notify_email) {
-        const origin = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
-        const organisers = await organisersOf(db, compId);
-        const message = buildTrackReplacedEmail({
-          to: pilot.notify_email,
-          pilotName,
-          compName: comp.name,
-          taskName: task.name,
-          identifierLabel: label,
-          // Bare-id paths are valid URLs on their own — building a slugged one
-          // would put URL knowledge in the worker, which is where it drifts.
-          taskUrl: `${origin}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
-          organisers,
-        });
-        c.executionCtx.waitUntil(
-          sendTrackReplacedNotice(c.env.EMAIL, message)
-        );
-        notified = { emailed: true, masked_to: maskEmail(pilot.notify_email) };
-      } else {
-        // Nobody to write to. The replacement still stands — refusing it would
-        // punish exactly the pilots whose organiser did the least data entry —
-        // but the audit log has to say so, because it is now the only record.
-        notified = { emailed: false, reason: "no_registered_email" };
-        await audit(db, null, compId, {
-          subject_type: "track",
-          subject_id: stored.taskTrackId,
-          subject_name: pilotName,
-          description: `Could not advise ${pilotName} that their track was replaced by an anonymous submission — no email address is registered for them`,
-        });
+    const origin = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
+    const notified = await noticeOnUpload(
+      {
+        db,
+        email: c.env.EMAIL,
+        waitUntil: (p) => c.executionCtx.waitUntil(p),
+        origin,
+      },
+      {
+        compId,
+        taskId,
+        compPilotId: pilot.comp_pilot_id,
+        // Bare-id paths are valid URLs on their own — building a slugged one
+        // would put URL knowledge in the worker, which is where it drifts.
+        taskUrl: `${origin}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
+        compName: comp.name,
+        taskName: task.name,
+        pilotName,
+        submitter: { kind: "anonymous", identifierLabel: label },
+        replaced: stored.replaced,
+        organisers: await organisersOf(db, compId),
+        audit: (description) =>
+          audit(db, null, compId, {
+            subject_type: "track",
+            subject_id: stored.taskTrackId,
+            subject_name: pilotName,
+            description,
+          }),
       }
-    }
+    );
 
     return c.json(
       {
@@ -521,9 +505,3 @@ function describePrevious(previousAt: string | null, now: string): string {
   return ` — replacing a track uploaded ${days} days earlier`;
 }
 
-/** Enough of an address to recognise, not enough to learn. */
-function maskEmail(email: string): string {
-  const [local, domain] = email.split("@");
-  if (!domain) return "***";
-  return `${local.slice(0, 1)}***@${domain}`;
-}

@@ -30,6 +30,7 @@ describe("CORS allows the headers our own clients send", () => {
     ["x-pilot-ident-kind", "the anonymous submit route's identifier kind"],
     ["x-pilot-ident", "the anonymous submit route's identifier value"],
     ["x-filename", "the personal track library's upload"],
+    ["x-comp-pilot", "which registration a signed-in pilot is claiming"],
   ])("preflight permits %s (%s)", async (header) => {
     const res = await SELF.fetch("https://test/api/comp", {
       method: "OPTIONS",

@@ -1,0 +1,21 @@
+-- An organiser can close ONE task for submissions.
+--
+-- Until now the only lever was comp.close_date, which closes the whole
+-- competition. There was no way to say "task 3 is done, stop sending me files"
+-- while task 4 is still flying — so organisers either left everything open or
+-- closed the comp early.
+--
+-- Named as a "closed" flag rather than mirroring the comp's positively-named
+-- open_igc_upload / open_registration, because the semantics differ. Those
+-- describe a MODE the organiser configured for the whole competition; this
+-- describes an EVENT they performed on one task at the end of the day.
+-- `if (task.submissions_closed)` at the enforcement sites is also harder to get
+-- backwards than `if (!task.open_submissions)`.
+--
+-- DEFAULT 0 is provably a no-op for every existing row: nothing is closed until
+-- an organiser closes it.
+--
+-- No closed_at / closed_by columns. The audit log already records who closed it
+-- and when, and a second copy would be the one that drifts.
+
+ALTER TABLE task ADD COLUMN submissions_closed INTEGER NOT NULL DEFAULT 0;

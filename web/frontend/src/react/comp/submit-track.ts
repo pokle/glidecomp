@@ -300,12 +300,57 @@ export type SubmitErrorCode =
   | "ambiguous_pilot_match"
   | "invalid_file"
   | "task_pilot_limit"
-  | "rate_limited";
+  | "rate_limited"
+  /** The organiser closed this one task (migration 0028). */
+  | "submissions_closed"
+  /** The server will not guess which registration a signed-in pilot is. The
+   *  form normally settles this before a file is chosen, so this arrives only
+   *  from a stale bundle — but it must still be repairable in place. */
+  | "identity_ambiguous"
+  /** The registration they named cannot be theirs. */
+  | "claim_rejected";
 
 export interface Organiser {
   name: string;
   email: string;
 }
+
+/** A registration the pilot might be. */
+export interface RegistrationCandidate {
+  comp_pilot_id: string;
+  registered_pilot_name: string;
+  pilot_class: string;
+  /** "j***@example.com" — often how somebody recognises their own old address. */
+  notify_email_masked: string | null;
+}
+
+/**
+ * What `POST /api/comp/:comp_id/registration/resolve` answers.
+ *
+ * `choose` is the interesting one: the comp has registrations nobody has
+ * claimed, so the server will not guess which (if any) is this pilot. Asking
+ * here — before a file is chosen — is what keeps that refusal from ever
+ * interrupting an upload.
+ */
+export type RegistrationState =
+  | {
+      state: "linked";
+      comp_pilot: {
+        comp_pilot_id: string;
+        registered_pilot_name: string;
+        pilot_class: string;
+      };
+    }
+  | {
+      state: "choose";
+      matched_by?: IdentifierKind;
+      may_register: boolean;
+      candidates: RegistrationCandidate[];
+    }
+  | { state: "new"; may_register: boolean; candidates: [] };
+
+/** The header value meaning "none of these — register me as a new pilot". */
+export const NEW_PILOT_SENTINEL = "new-pilot";
 
 export interface SubmitError {
   error: string;
@@ -328,11 +373,16 @@ export function repairStepFor(code: SubmitErrorCode | undefined): SubmitStep | n
   switch (code) {
     case "bad_identifier":
     case "no_pilot_match":
+    case "identity_ambiguous":
+    case "claim_rejected":
       return "identity";
     case "invalid_file":
       return "file";
     case "comp_not_found":
     case "task_not_found":
+    // Picking a different task is a real repair here: the pilot may well have
+    // meant yesterday's, which is probably still open.
+    case "submissions_closed":
       return "task";
     // An ambiguous roster, a closed comp, a comp that wants a sign-in, a full
     // task, a spent budget: none of these are repairable by trying again.

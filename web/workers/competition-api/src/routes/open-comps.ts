@@ -13,6 +13,12 @@
  * Public and unauthenticated, and deliberately caller-independent — the answer
  * does not vary by who asks, which is what makes one shared cached body
  * correct and keeps a `Vary` hazard from existing at all.
+ *
+ * A task the organiser has closed for submissions is EXCLUDED, and a comp
+ * whose only in-window task is closed drops off the list entirely. The
+ * endpoint's contract is literally "what could somebody submit to right now",
+ * and `suggested_task_id` is derived from dates — left in, it would cheerfully
+ * steer every pilot into a 403.
  */
 
 import { Hono } from "hono";
@@ -85,10 +91,12 @@ export const openCompsRoutes = new Hono<HonoEnv>().get(
        JOIN task t ON t.comp_id = c.comp_id
        WHERE c.test = 0
          AND c.open_igc_upload = 1
+         AND t.submissions_closed = 0
          AND (c.close_date IS NULL OR c.close_date = ''
               OR substr(c.close_date, 1, 10) >= ?1)
          AND EXISTS (SELECT 1 FROM task t2
                      WHERE t2.comp_id = c.comp_id
+                       AND t2.submissions_closed = 0
                        AND t2.task_date BETWEEN ?2 AND ?3)
        ORDER BY c.comp_id, t.task_date ASC`
     )

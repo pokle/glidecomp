@@ -12,6 +12,7 @@ import { waypointsRoutes } from "./routes/waypoints";
 import { igcRoutes } from "./routes/igc";
 import { igcAnonRoutes } from "./routes/igc-anon";
 import { openCompsRoutes } from "./routes/open-comps";
+import { registrationRoutes } from "./routes/registration";
 import { pilotRoutes } from "./routes/pilot";
 import { pilotStatusRoutes } from "./routes/pilot-status";
 import { manualFlightRoutes } from "./routes/manual-flight";
@@ -60,6 +61,7 @@ const corsConfig = cors({
     "x-filename",
     "x-pilot-ident-kind",
     "x-pilot-ident",
+    "x-comp-pilot",
   ],
   // Custom response headers we want the browser to surface to JS. X-Filename/
   // X-Display-Name are used by the user-files download endpoints so the
@@ -150,6 +152,9 @@ const routes = app
   .route("/", lookupRoutes)
   .route("/", searchRoutes)
   .route("/", openCompsRoutes)
+  // Also ahead of compRoutes: /api/comp/:comp_id/registration/resolve would
+  // otherwise be shadowed by comp's own :comp_id routes.
+  .route("/", registrationRoutes)
   .route("/", compRoutes)
   .route("/", taskRoutes)
   .route("/", waypointsRoutes)

@@ -229,7 +229,7 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       const task = await c.env.DB.prepare(
         `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
-                stop_announcement_time, weather_notes
+                stop_announcement_time, weather_notes, submissions_closed
          FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
@@ -265,6 +265,9 @@ export const taskRoutes = new Hono<HonoEnv>()
         // ground truth pilots read the modelled weather and the field
         // analysis against, so everyone who can see the task can see it.
         weather_notes: (task.weather_notes as string | null) ?? "",
+        // Public too: a pilot has to be able to see that the task stopped
+        // taking files without first trying to send one.
+        submissions_closed: !!task.submissions_closed,
         pilot_classes: tc.results.map((r) => r.pilot_class),
         track_count: trackCount?.cnt ?? 0,
       });
@@ -287,7 +290,7 @@ export const taskRoutes = new Hono<HonoEnv>()
       // Verify task exists and belongs to comp; capture current state for audit
       const task = await c.env.DB.prepare(
         `SELECT task_id, name, task_date, xctsk, stop_announcement_time,
-                weather_notes
+                weather_notes, submissions_closed
          FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
@@ -298,6 +301,7 @@ export const taskRoutes = new Hono<HonoEnv>()
           xctsk: string | null;
           stop_announcement_time: string | null;
           weather_notes: string | null;
+          submissions_closed: number;
         }>();
 
       if (!task) {
@@ -388,6 +392,15 @@ export const taskRoutes = new Hono<HonoEnv>()
       if (body.weather_notes !== undefined) {
         updates.push("weather_notes = ?");
         values.push(body.weather_notes);
+      }
+      // Closing the task for submissions. Like weather_notes, deliberately NOT
+      // a scoring input: nothing the scorer reads depends on whether further
+      // evidence may arrive, and closing the day does not retroactively change
+      // a single points figure. It IS audit-logged — it is the record that
+      // makes a later organiser upload legible rather than mysterious.
+      if (body.submissions_closed !== undefined) {
+        updates.push("submissions_closed = ?");
+        values.push(body.submissions_closed ? 1 : 0);
       }
 
       if (updates.length > 0) {
@@ -502,6 +515,20 @@ export const taskRoutes = new Hono<HonoEnv>()
         }
       }
 
+      // Closing or reopening the task. Says who may still submit, because that
+      // is the part an organiser gets wrong: they close the task and are then
+      // surprised to find they can still upload.
+      if (
+        body.submissions_closed !== undefined &&
+        Number(body.submissions_closed) !== task.submissions_closed
+      ) {
+        auditChanges.push(
+          body.submissions_closed
+            ? "Closed the task for track submissions — organisers can still upload"
+            : "Reopened the task for track submissions"
+        );
+      }
+
       if (scoreInputsChanged) {
         await bumpAndRevalidateScores(c, [taskId]);
       }
@@ -523,7 +550,7 @@ export const taskRoutes = new Hono<HonoEnv>()
       // Return updated task
       const updated = await c.env.DB.prepare(
         `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
-                stop_announcement_time, weather_notes
+                stop_announcement_time, weather_notes, submissions_closed
          FROM task WHERE task_id = ?`
       )
         .bind(taskId)
@@ -547,6 +574,7 @@ export const taskRoutes = new Hono<HonoEnv>()
         stop_announcement_time:
           (updated.stop_announcement_time as string | null) ?? null,
         weather_notes: (updated.weather_notes as string | null) ?? "",
+        submissions_closed: !!updated.submissions_closed,
         pilot_classes: tc.results.map((r) => r.pilot_class),
       });
     }

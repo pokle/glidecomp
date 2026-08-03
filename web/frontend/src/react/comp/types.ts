@@ -103,6 +103,10 @@ export interface TaskDetailData {
    * read, comp-admin writable. Empty string when unset — never null, so no
    * caller has to distinguish "no notes" from "not loaded". */
   weather_notes: string;
+  /** The organiser has closed THIS task for submissions (migration 0028).
+   * Distinct from the comp's close_date, which closes everything. Organisers
+   * can still upload; everyone else is refused. */
+  submissions_closed: boolean;
   pilot_classes: string[];
   track_count: number;
 }

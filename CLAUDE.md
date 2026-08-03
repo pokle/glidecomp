@@ -94,6 +94,20 @@ These are the standing imperatives. Each links to the reference that explains it
   `web/engine/src/score-explanation*.ts` and surface on the **report card**
   (`/comp/:id/task/:id/pilot/:id`, `src/react/pages/PilotScoreDetail.tsx`). See
   the report-card rules below.
+- **A pilot's registration is never guessed.** If a competition holds any
+  UNCLAIMED `comp_pilot` row, a signed-in upload asks which one the pilot is
+  (`ensureCompPilot` in `routes/igc.ts` → `409 identity_ambiguous`; the form
+  settles it beforehand via `POST /api/comp/:comp_id/registration/resolve`).
+  Guessing used to mean a silent SECOND roster row whenever the organiser
+  mistyped an email — the pilot registered twice, one entry empty, and the
+  pilot count feeding launch validity (S7F §9.1) counting a phantom.
+  - **Names may propose, never dispose.** `nameAffinity()` orders the picker so
+    the pilot's own entry is first. Nothing branches on it, and the decision to
+    ask involves no names at all. `pilot-linker.ts` and `pilot-resolver.ts`
+    still refuse to auto-link on a name, and must keep refusing.
+  - **Every submission emails the registered pilot** (`track-notice-email.ts`),
+    and the submit form promises that upfront. A route that skipped it would
+    make the copy a lie. See [docs/track-submission.md](docs/track-submission.md).
 - **Every mutation that could affect a competition's scores MUST be
   audit-logged.** Use `audit()` in `web/workers/competition-api/src/audit.ts`
   from every mutating route handler (comp / task / pilot / track / penalty /

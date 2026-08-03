@@ -17,6 +17,10 @@ import {
   type ManualFlightInput,
 } from "../manual-flight-store";
 import { mergeStoredGapParamsJson } from "../scoring";
+import {
+  submissionsBlockedFor,
+  submissionsClosedBody,
+} from "../submission-gate";
 
 type Variables = {
   user: AuthUser;
@@ -250,6 +254,14 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       );
       if (authErr) return c.json({ error: authErr.error }, authErr.status);
 
+      // A closed task stops manual flights too. This is not optional: a manual
+      // flight is evidence for the task in exactly the way a tracklog is, and
+      // leaving it open would make "closed for submissions" false. Organisers
+      // still pass, as they do on the upload routes.
+      if (await submissionsBlockedFor(c.env.DB, compId, taskId, user)) {
+        return c.json(await submissionsClosedBody(c.env.DB, compId, taskId), 403);
+      }
+
       // Compute made-good against the task geometry, by scoring format. Open
       // distance ignores turnpoints (measured from the take-off exit); GAP
       // measures along the course from the last reached turnpoint.
@@ -408,6 +420,11 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
   // ── POST .../manual-flight/:comp_pilot_id/restore/:manual_flight_id ──
   // Reactivate a superseded manual flight, re-materializing its made-good
   // against the current route. Supersedes any other active evidence.
+  //
+  // Deliberately NOT gated by task.submissions_closed. Restoring evidence the
+  // task already holds is a CORRECTION, not a submission — it is precisely
+  // what an organiser does after closing the task, and it adds nothing that
+  // was not sent while the task was open.
   .post(
     "/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id/restore/:manual_flight_id",
     requireAuth,

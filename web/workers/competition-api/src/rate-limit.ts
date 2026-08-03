@@ -53,6 +53,17 @@ export const ANON_SUBMIT_PER_COMP: Budget = { max: 300, windowMs: DAY_MS };
  */
 export const ANON_SUBMIT_MISSES: Budget = { max: 20, windowMs: DAY_MS };
 
+/**
+ * Per signed-in account, on the registration resolver.
+ *
+ * That endpoint is read-only and requires an account, so it needs no damage
+ * budget — but it does disclose MASKED addresses from a comp's unclaimed
+ * roster, and it can be pointed at any competition. Sixty a day is far more
+ * than a pilot at a six-day comp will ever use and far less than an
+ * enumeration sweep needs.
+ */
+export const RESOLVE_PER_USER: Budget = { max: 60, windowMs: DAY_MS };
+
 export interface BudgetVerdict {
   allowed: boolean;
   /** Seconds until the window resets, for `Retry-After`. */
