@@ -598,6 +598,170 @@ test.describe("submitting a track without an account", () => {
     });
   });
 
+  test.describe("closing one task for submissions", () => {
+    // A task-level stop, distinct from the comp's close_date. The risk worth
+    // an e2e is a checkbox that renders but is not wired to the save, and a
+    // page that keeps offering a button the server will refuse.
+
+    test("the organiser closes it, and the task stops taking tracks", async ({
+      page,
+    }) => {
+      await devLogin(page);
+      await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
+
+      const settings = page.getByRole("button", { name: "Settings", exact: true });
+      await expect(settings).toBeVisible({ timeout: 20_000 });
+      await settings.click();
+
+      const box = page.getByLabel("Closed for track submissions");
+      await expect(box).not.toBeChecked(); // default 0, as the migration sets
+      // The kit hides the real checkbox under a styled span, so the visible
+      // label is both what a person clicks and the only thing Playwright can.
+      await page.getByText("Closed for track submissions").click();
+      await expect(box).toBeChecked();
+      await page.getByRole("button", { name: /^Save/ }).click();
+
+      await expect
+        .poll(
+          async () => {
+            const res = await page.request.get(
+              `/api/comp/${fixture.compId}/task/${fixture.taskId}`
+            );
+            return ((await res.json()) as { submissions_closed: boolean })
+              .submissions_closed;
+          },
+          { timeout: 15_000 }
+        )
+        .toBe(true);
+
+      // Said above the fold, so a pilot learns before choosing a file.
+      await expect(page.getByText("Submissions closed")).toBeVisible();
+
+      // A signed-OUT visitor gets the sentence, not a button that would 403.
+      const visitor = await page.context().browser()!.newContext();
+      const visitorPage = await visitor.newPage();
+      await visitorPage.goto(
+        `${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`
+      );
+      await expect(
+        visitorPage.getByText("Submissions for this task are closed.")
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(
+        visitorPage.getByRole("button", { name: "Submit track" })
+      ).toHaveCount(0);
+
+      // And /submit stops offering it — the only user-side coverage of the
+      // open-now SQL change.
+      await visitorPage.goto(`${BASE_URL}/submit`);
+      await expect(
+        visitorPage.getByRole("radiogroup", { name: "Which task did you fly?" })
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(
+        visitorPage.getByRole("radio", { name: /Today's Task/ })
+      ).toHaveCount(0);
+      await visitor.close();
+
+      // The organiser still can — the stop is aimed at pilots, not at them.
+      await expect(
+        page.getByRole("button", { name: "Submit track" }).first()
+      ).toBeVisible();
+
+      // Put it back so the rest of the file's expectations still hold.
+      await page.request.patch(
+        `/api/comp/${fixture.compId}/task/${fixture.taskId}`,
+        { data: { submissions_closed: false } }
+      );
+    });
+  });
+
+  test.describe("which registration is this?", () => {
+    // A signed-in pilot whose account matches nothing on the roster used to be
+    // given a SECOND entry, silently. Now they are asked.
+
+    let strangerCompId: string;
+    let strangerTaskId: string;
+
+    test.beforeAll(async () => {
+      // Its own comp: the shared fixture's roster would otherwise change
+      // under the anonymous tests above.
+      const compRes = await admin.post("/api/comp", {
+        data: { name: e2eCompName("claim"), category: "hg", pilot_classes: ["open"] },
+      });
+      const { comp_id } = (await compRes.json()) as { comp_id: string };
+      strangerCompId = comp_id;
+
+      const taskRes = await admin.post(`/api/comp/${comp_id}/task`, {
+        data: { name: "Claim Task", task_date: today(), pilot_classes: ["open"] },
+      });
+      strangerTaskId = ((await taskRes.json()) as { task_id: string }).task_id;
+
+      // Registered with an address that is nobody's account — the mistyped
+      // email at the heart of the whole problem.
+      await admin.post(`/api/comp/${comp_id}/pilot`, {
+        data: {
+          registered_pilot_name: "Mistyped Pilot",
+          pilot_class: "open",
+          registered_pilot_email: "mistyped@nowhere.invalid",
+        },
+      });
+    });
+
+    test.afterAll(async () => {
+      if (strangerCompId) await admin.delete(`/api/comp/${strangerCompId}`);
+    });
+
+    test("asks the pilot instead of quietly making a second entry", async ({
+      page,
+    }) => {
+      await devLogin(page);
+      await page.goto(
+        `${BASE_URL}/submit?comp=${strangerCompId}&task=${strangerTaskId}`
+      );
+
+      // The question is asked while they are still choosing a file, not after
+      // they press Submit.
+      const group = page.getByRole("radiogroup", {
+        name: "Which registration are you?",
+      });
+      await expect(group).toBeVisible({ timeout: 20_000 });
+      await expect(
+        group.getByRole("radio", { name: /Mistyped Pilot/ })
+      ).toBeVisible();
+      // The escape hatch is offered too, and nothing is preselected — a
+      // preselected candidate is how a track gets filed against a stranger.
+      await expect(
+        group.getByRole("radio", { name: /None of these/ })
+      ).toBeVisible();
+      for (const r of await group.getByRole("radio").all()) {
+        await expect(r).not.toBeChecked();
+      }
+
+      // And the promise about the audit log and the email is made UPFRONT.
+      await expect(
+        page.getByText(/recorded in the competition's public activity log/)
+      ).toBeVisible();
+
+      // Choosing the registration files the track against it — the roster
+      // does not grow, which is the entire point.
+      await page.getByText("Mistyped Pilot", { exact: true }).click();
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "claimed.igc",
+        mimeType: "application/octet-stream",
+        buffer: Buffer.from(PLAIN_IGC),
+      });
+      await page.getByRole("button", { name: "Submit track" }).click();
+
+      await expect(
+        page.getByText(/Track (submitted|replaced) for Mistyped Pilot/)
+      ).toBeVisible({ timeout: 20_000 });
+
+      const roster = (await (
+        await admin.get(`/api/comp/${strangerCompId}/pilot`)
+      ).json()) as { pilots: unknown[] };
+      expect(roster.pilots, "no duplicate registration").toHaveLength(1);
+    });
+  });
+
   test("the task page offers Submit track to a signed-out visitor", async ({ page }) => {
     await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
     // This used to read "Sign in to submit your track".

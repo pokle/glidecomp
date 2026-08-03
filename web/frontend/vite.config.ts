@@ -357,7 +357,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    // Overridable so two git worktrees can run side by side. Without it the
+    // second one silently reuses the first's dev server and every e2e
+    // assertion is made against the wrong code. Matches DEV_API_PORT, which
+    // the API origin above already honours.
+    port: Number(process.env.DEV_FRONTEND_PORT) || 3000,
     // Set TUNNEL=1 when exposing the dev server via `cloudflared tunnel`:
     //  - allowedHosts: let the random *.trycloudflare.com hostname through
     //    (leading dot matches the domain and all subdomains).

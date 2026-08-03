@@ -14,11 +14,12 @@ cd "$(dirname "$0")/../.."
 # local D1 state directly and needs the tables to exist). All the Workers share
 # one wrangler dev session behind the dev-router on :8790 — see
 # web/scripts/dev-workers.sh.
-echo "ssr-e2e: waiting for the API Workers on :8790 (/__ready)…"
+API_PORT="${DEV_API_PORT:-8790}"
+echo "ssr-e2e: waiting for the API Workers on :${API_PORT} (/__ready)…"
 for _ in $(seq 1 60); do
   # -f so the 503 that /__ready returns while a Worker is still loading
   # counts as "not yet", not as "answered".
-  if curl -sf -o /dev/null "http://localhost:8790/__ready"; then break; fi
+  if curl -sf -o /dev/null "http://localhost:${API_PORT}/__ready"; then break; fi
   sleep 1
 done
 # Just the one comp: these tests only need a single public comp, and seeding the
@@ -26,6 +27,6 @@ done
 # comp" pick depend on seed order.
 bun run seed corryong-cup-2026
 
-exec npx wrangler pages dev web/frontend/dist --port 3100 \
+exec npx wrangler pages dev web/frontend/dist --port "${SSR_PORT:-3100}" \
   --compatibility-date=2025-03-10 --compatibility-flags=nodejs_compat \
   --service COMPETITION_API=competition-api --service AUTH_API=auth-api

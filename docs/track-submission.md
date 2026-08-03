@@ -189,9 +189,135 @@ that last one used to be silent, leaving the transparency record showing a track
 for a pilot it never saw register, while the pilot count feeds launch validity
 (S7F §9.1).
 
-One rough edge remains: **a roster added by name only cannot use the anonymous
-flow at all**, because the identifier is the only key and name matching is
-deliberately refused.
+One rough edge remains, and it is now narrower than it was: **a roster added by
+name only cannot use the ANONYMOUS flow at all**, because the identifier is the
+only key there and name matching is deliberately refused.
+
+A signed-in pilot on such a roster is fine — the registration picker below
+shows them the whole list and lets them say which entry is theirs, which is
+precisely a name match performed by the one party entitled to make it. The
+anonymous route cannot offer the same thing, because "pick any name off the
+public roster" is not a claim, it is a menu.
+
+## Which registration is this?
+
+A signed-in pilot uploads. Whose track is it?
+
+Until migration 0028's sibling change, `ensureCompPilot` answered by trying
+three things and then **guessing**: a row already linked to the account, else an
+exact id/email match via `linkExistingRegistrations`, else INSERT a new roster
+row. That last step was the bug. An organiser who registered a pilot with a
+mistyped email — and a pilot whose own profile carries no national ids — got a
+silent duplicate: the organiser's entry sitting empty, a self-made one carrying
+the track, and nobody told. The pilot count feeds launch validity (S7F §9.1),
+so the phantom is a scoring input too.
+
+### The rule
+
+**If the competition has ANY unclaimed registration, the server asks.** It does
+not guess, and it does not create a second entry. `ensureCompPilot` returns
+`ambiguous`, the upload answers `409 identity_ambiguous` with the candidates,
+and the pilot picks — including an explicit "None of these — register me as a
+new pilot".
+
+An empty roster still self-registers silently, exactly as before. That is the
+legitimate open-registration path and nothing about it changed.
+
+### Names may propose, never dispose
+
+This is the one place the codebase compares names, and the distinction has to
+survive future editing:
+
+- **The decision to ask involves no names at all.** It is "is there an
+  unclaimed row", nothing more. A name threshold would mean a pilot the
+  organiser wrote down as "Mick" never sees "Michael" — the original bug, back
+  again and harder to spot.
+- **`nameAffinity` only ORDERS the list** the pilot chooses from, so their own
+  entry is first rather than forty rows down. Nothing branches on it.
+
+`pilot-linker.ts` and `pilot-resolver.ts` still refuse to auto-link on a name,
+and must keep refusing. A name may propose; only a person disposes.
+
+### Asking before it matters
+
+The refusal is the safety net, not the flow. `POST
+/api/comp/:comp_id/registration/resolve` (`routes/registration.ts`) answers the
+same question as soon as the form knows the competition — while the pilot is
+still choosing a file — so the 409 is only ever reached by a stale bundle or a
+scripted client. It is **strictly read-only**: it never claims, links or
+inserts, so an abandoned or replayed resolve leaves nothing behind. POST rather
+than GET because the optional identifier can be an email address.
+
+It answers `linked` / `choose` / `new`, and `choose` carries candidates ordered
+by `nameAffinity` with masked addresses — often how somebody recognises which
+of two entries is their own old email.
+
+### The answer travels in one header
+
+`x-comp-pilot: <comp_pilot sqid>` or `x-comp-pilot: new-pilot`. The hyphen is
+load-bearing: the sqid alphabet is a–z only, so a hyphenated sentinel can never
+collide with a real id — the same trick as the `open-submit` and `open-now`
+route segments. In the CORS `allowHeaders` list, without which every browser
+preflight fails and only in a real browser.
+
+Deliberately **not** the on-behalf route (`.../igc/:comp_pilot_id`), which
+looks like it would do: its authorisation excludes a pilot who is not yet on
+the roster, its audit line says "on behalf", and — decisively — it never sets
+`comp_pilot.pilot_id`, so the row would stay unclaimed and the next upload
+would duplicate anyway.
+
+Claiming is the ONE strict thing in an otherwise permissive design: the row
+must be genuinely unclaimed, and a pilot already registered here cannot move.
+A wrong track is recoverable (the superseded file is retained, restore exists);
+a wrong claim is a persistent identity link that redirects every future upload.
+
+## Telling the pilot
+
+`track-notice-email.ts`. **Every submission emails the registered pilot** —
+self, on behalf, anonymous, first upload or replacement. The submit form says
+so upfront, before a file is chosen, so the promise is made rather than
+discovered.
+
+It is unconditional on purpose: the notice is only worth anything if its
+ABSENCE is meaningful. One exception, and it is not a hedge — when the address
+is provably the submitter's own account, there is nobody to tell.
+
+Where it goes matters, and the two cases differ:
+
+| Event | Address | Why |
+|---|---|---|
+| Ordinary upload to a claimed row | the **account** | the registered address may be the very typo that started this, and writing to it tells a stranger that Jane flew task 3 |
+| A **claim** | the **registered** address, only | the claim just set `pilot_id` to the CLAIMER, so preferring the account would mail the person who did it. A notice sent to its own subject is not a notice |
+
+When there is no address, the upload still stands — refusing it would punish
+exactly the pilots whose organiser did the least data entry — and the audit log
+says so, because it is then the only record.
+
+## Closing a task for submissions
+
+`task.submissions_closed` (migration 0028). The competition already had
+`close_date`, which closes everything; this closes one task, which is what an
+organiser actually wants at the end of a day while tomorrow is still flying.
+
+Enforced in **four** places, all before the body is read: the self upload, the
+on-behalf upload, the anonymous submit, and the **manual flight** — a manual
+flight is evidence for the task in exactly the way a tracklog is, and leaving
+it open would make "closed" false.
+
+Deliberately **not** enforced on pilot-status (marking the day's DNFs is what
+an organiser does *after* closing) or on either restore route (reactivating
+evidence the task already holds is a correction, not a submission). Both carry
+a comment saying so, because the next author will otherwise add them.
+
+**Comp admins bypass it** on the three routes with an admin concept; the
+anonymous route is a hard stop. The flag tells pilots to stop sending files —
+it must not lock the scorekeeper out of the recovered SD card, or it stops
+being used. Their upload is audit-logged like any other.
+
+**No score bump**: whether further evidence *may* arrive changes no score that
+exists. It IS audit-logged — that is what makes a later organiser upload
+legible rather than mysterious. `GET /api/comp/open-now` excludes closed tasks
+entirely, so the picker never steers a pilot into a 403.
 
 ## Anonymous submission
 
@@ -228,9 +354,9 @@ That is a deliberate choice for low-stakes competitions, and the same posture
   strictly less standing than either, and names are on the public roster, so a
   name match would mean typing nothing you cannot already see;
 - every submission is in the public audit log, named as anonymous;
-- a **replacement emails the pilot** (`track-replaced-email.ts`) — that notice
-  is the detection channel, which is why it goes out on every replacement and
-  not only suspicious ones;
+- **every submission emails the pilot** (`track-notice-email.ts`) — that notice
+  is the detection channel, which is why it goes out on every submission and
+  not only suspicious ones (see "Telling the pilot" below);
 - the superseded track is retained; `POST …/igc/:comp_pilot_id/restore` already
   exists for admins;
 - track quality still withholds a wrong-day or wrong-place file from scoring;
@@ -275,6 +401,9 @@ to reopen the step that can fix it.
 | `invalid_file` | 400 | Another file |
 | `task_pilot_limit` | 400 | The organiser |
 | `rate_limited` | 429 | Waiting (`Retry-After`, exposed via CORS) |
+| `submissions_closed` | 403 | Re-picking the task — yesterday's is probably still open — or asking the organiser |
+| `identity_ambiguous` | 409 | Saying which registration is theirs |
+| `claim_rejected` | 409 | Picking another, or the organiser |
 
 Where the pilot cannot fix it, the answer names the organiser and carries their
 address so the dialog can render a `mailto:` — the same thing the public comp
@@ -358,7 +487,9 @@ sqid — the alphabet is a–z only.
 | Shared upload half | `web/workers/competition-api/src/track-upload.ts` |
 | Roster matcher | `web/workers/competition-api/src/pilot-linker.ts` |
 | Budgets | `web/workers/competition-api/src/rate-limit.ts` |
-| Replacement notice | `web/workers/competition-api/src/track-replaced-email.ts` |
+| Submission notice email | `web/workers/competition-api/src/track-notice-email.ts` |
+| Registration resolve | `web/workers/competition-api/src/routes/registration.ts` |
+| Closed-task gate | `web/workers/competition-api/src/submission-gate.ts` |
 | Open competitions | `web/workers/competition-api/src/routes/open-comps.ts` |
 | Flight summary | `web/engine/src/flight-summary.ts` |
 | Coverage | `test/igc-anon.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |

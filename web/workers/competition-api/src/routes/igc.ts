@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env, AuthUser } from "../env";
-import { encodeId } from "../sqids";
+import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
@@ -11,7 +11,11 @@ import {
 } from "../validators";
 import { audit } from "../audit";
 import { bumpAndRevalidateScores } from "../score-store";
-import { linkExistingRegistrations } from "../pilot-linker";
+import {
+  findUnclaimedRegistrations,
+  linkExistingRegistrations,
+  orderByLikelihood,
+} from "../pilot-linker";
 import { applyStatusOnTrackUpload } from "./pilot-status";
 import {
   supersedeActiveManualFlights,
@@ -32,6 +36,12 @@ import {
   storeUploadedTrack,
   toUploadResult,
 } from "../track-upload";
+import {
+  maskEmail,
+  organisersOf,
+  submissionsClosedBody,
+} from "../submission-gate";
+import { noticeOnUpload } from "../track-notice-email";
 
 type Variables = {
   user: AuthUser;
@@ -62,26 +72,86 @@ async function ensurePilot(
 }
 
 /**
- * Ensure a `comp_pilot` row exists for the given pilot + comp.
- * Returns the comp_pilot_id.
+ * How a signed-in pilot names the registration this track is for.
  *
- * Iteration 8g behaviour: before inserting a fresh row, run the linker
- * scoped to this comp so that a previously unlinked admin-registered
- * row for the same person is claimed instead of creating a duplicate.
- * Returns `{ compPilotId, claimedFromPreReg }` — the boolean is used by
- * the caller to emit a different audit description.
+ * A header, not a query string, for the same reason igc-anon.ts gives: this
+ * identifies a person, and query strings land in access logs, `Referer` and
+ * browser history.
+ *
+ * `new-pilot` is hyphenated deliberately. The sqid alphabet is a–z only, so a
+ * hyphenated sentinel can never collide with a real comp_pilot_id — the same
+ * trick as the `open-submit` and `open-now` route segments. A bare word like
+ * "new" WOULD be a decodable id and must not be used.
  */
-/**
- * Thrown when the caller is not on the roster and the competition has closed
- * open registration. The organiser adds pilots themselves in that case.
- */
-class RegistrationClosedError extends Error {
-  constructor() {
-    super("registration closed");
-    this.name = "RegistrationClosedError";
-  }
+const COMP_PILOT_HEADER = "x-comp-pilot";
+const NEW_PILOT_SENTINEL = "new-pilot";
+
+/** Parse the header into a claim. "invalid" means the value was not readable. */
+function readSelfClaim(
+  raw: string | undefined,
+  alphabet: string
+): SelfClaim | "invalid" {
+  const value = raw?.trim();
+  if (!value) return { kind: "auto" };
+  if (value === NEW_PILOT_SENTINEL) return { kind: "new" };
+  const id = decodeId(alphabet, value);
+  if (id === null) return "invalid";
+  return { kind: "row", compPilotId: id };
 }
 
+/**
+ * Which registration a signed-in pilot says this track belongs to.
+ *
+ * `auto` is the ordinary case — nothing was said, so the server works it out
+ * (and refuses to guess when it cannot). The other two come from the
+ * `x-comp-pilot` header, and are the pilot answering the question.
+ */
+export type SelfClaim =
+  | { kind: "auto" }
+  | { kind: "row"; compPilotId: number }
+  | { kind: "new" };
+
+/** A registration the pilot might be, offered when the server will not guess. */
+export interface IdentityCandidate {
+  comp_pilot_id: number;
+  registered_pilot_name: string;
+  pilot_class: string;
+  /** Masked, so a pilot can recognise their own old address without the
+   *  roster becoming an address book. */
+  notify_email_masked: string | null;
+}
+
+export type EnsureResult =
+  | { outcome: "existing"; compPilotId: number }
+  /** An exact id/email match claimed the organiser's row. */
+  | { outcome: "claimed"; compPilotId: number; preRegName: string }
+  /** The pilot pointed at the row themselves. */
+  | { outcome: "claimed-by-choice"; compPilotId: number; preRegName: string }
+  | { outcome: "registered"; compPilotId: number; declined: number }
+  | { outcome: "ambiguous"; candidates: IdentityCandidate[] }
+  | { outcome: "registration-closed" }
+  | {
+      outcome: "claim-rejected";
+      reason: "not_found" | "already_claimed" | "already_registered";
+      compPilotId?: number;
+    };
+
+/**
+ * Find, claim or create this pilot's registration in a competition — and
+ * NEVER silently create a second one.
+ *
+ * The bug this exists to prevent: a pilot the organiser registered with a
+ * mistyped email, whose own profile carries no national ids, matches nothing.
+ * The old code inserted a fresh roster row, so the pilot was registered twice
+ * — the organiser's entry sitting empty, a self-made one carrying the track —
+ * and nobody was told. The pilot count feeds launch validity (S7F §9.1), so
+ * the phantom is a scoring input too.
+ *
+ * The fix is step 4 below: if there is ANY unclaimed registration in this
+ * comp, the answer is "ask the pilot", not "make a new one". That rule looks
+ * at no names at all — see `nameAffinity` for why names order the question but
+ * never answer it.
+ */
 async function ensureCompPilot(
   db: D1Database,
   compId: number,
@@ -91,14 +161,10 @@ async function ensureCompPilot(
   /** False when `comp.open_registration` is off — an unknown pilot is refused
    *  rather than added. Claiming an existing pre-registration still works:
    *  that pilot IS on the roster, the account just had not been linked yet. */
-  mayRegister: boolean
-): Promise<{
-  compPilotId: number;
-  claimedFromPreReg: boolean;
-  preRegName: string | null;
-  /** True when this upload put the pilot on the roster for the first time. */
-  registeredNow: boolean;
-}> {
+  mayRegister: boolean,
+  claim: SelfClaim = { kind: "auto" }
+): Promise<EnsureResult> {
+  // 1. Already on the roster under this account.
   const existing = await db
     .prepare(
       "SELECT comp_pilot_id FROM comp_pilot WHERE comp_id = ? AND pilot_id = ?"
@@ -106,15 +172,60 @@ async function ensureCompPilot(
     .bind(compId, pilotId)
     .first<{ comp_pilot_id: number }>();
   if (existing) {
+    if (claim.kind === "row" && claim.compPilotId !== existing.comp_pilot_id) {
+      // They are already somebody here. Silently moving the track to another
+      // row would either hide a genuine roster duplicate (the organiser's job)
+      // or act on a mis-tap. Say so instead.
+      return {
+        outcome: "claim-rejected",
+        reason: "already_registered",
+        compPilotId: existing.comp_pilot_id,
+      };
+    }
+    return { outcome: "existing", compPilotId: existing.comp_pilot_id };
+  }
+
+  // 2. The pilot named a row. Claim it, but only if it is genuinely unclaimed.
+  //    Strict on purpose: a wrong track is recoverable (the superseded file is
+  //    retained, restore exists), but a wrong CLAIM is a persistent identity
+  //    link that redirects every future upload and shows a stranger's comp in
+  //    the pilot's own flights.
+  if (claim.kind === "row") {
+    const row = await db
+      .prepare(
+        `SELECT comp_pilot_id, registered_pilot_name, pilot_id
+         FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?`
+      )
+      .bind(claim.compPilotId, compId)
+      .first<{
+        comp_pilot_id: number;
+        registered_pilot_name: string;
+        pilot_id: number | null;
+      }>();
+    if (!row) return { outcome: "claim-rejected", reason: "not_found" };
+    if (row.pilot_id !== null) {
+      return { outcome: "claim-rejected", reason: "already_claimed" };
+    }
+    // The same guarded update the linker uses, so a concurrent claim behaves
+    // identically here: whoever writes first wins, the loser is told.
+    const res = await db
+      .prepare(
+        "UPDATE comp_pilot SET pilot_id = ? WHERE comp_pilot_id = ? AND pilot_id IS NULL"
+      )
+      .bind(pilotId, row.comp_pilot_id)
+      .run();
+    if (!res.meta.changes) {
+      return { outcome: "claim-rejected", reason: "already_claimed" };
+    }
     return {
-      compPilotId: existing.comp_pilot_id,
-      claimedFromPreReg: false,
-      preRegName: null,
-      registeredNow: false,
+      outcome: "claimed-by-choice",
+      compPilotId: row.comp_pilot_id,
+      preRegName: row.registered_pilot_name,
     };
   }
 
-  // Try to claim a matching unlinked pre-registration in this comp.
+  // 3. An exact id/email match claims the organiser's row by itself. Today's
+  //    happy path, untouched.
   const claimed = await linkExistingRegistrations(db, pilotId, { comp_id: compId });
   if (claimed.length > 0) {
     // Take the first match — if admins pre-registered the same person
@@ -122,16 +233,32 @@ async function ensureCompPilot(
     // show up in admin tools to resolve.
     const first = claimed[0];
     return {
+      outcome: "claimed",
       compPilotId: first.comp_pilot_id,
-      claimedFromPreReg: true,
       preRegName: first.registered_pilot_name,
-      // The organiser already registered them; this only linked the account.
-      registeredNow: false,
     };
   }
 
-  if (!mayRegister) throw new RegistrationClosedError();
+  // 4. THE GUARANTEE. While there is anything on this roster the pilot could
+  //    be, and they have not said "none of these", the INSERT below is
+  //    unreachable.
+  const unclaimed = await findUnclaimedRegistrations(db, compId);
+  if (unclaimed.length > 0 && claim.kind !== "new") {
+    return {
+      outcome: "ambiguous",
+      candidates: orderByLikelihood(unclaimed, pilotName).map((r) => ({
+        comp_pilot_id: r.comp_pilot_id,
+        registered_pilot_name: r.registered_pilot_name,
+        pilot_class: r.pilot_class,
+        notify_email_masked: maskEmail(r.registered_pilot_email),
+      })),
+    };
+  }
 
+  // 5. Nothing to be, and the comp does not accept self-registration.
+  if (!mayRegister) return { outcome: "registration-closed" };
+
+  // 6. Genuinely new.
   const res = await db
     .prepare(
       `INSERT INTO comp_pilot (comp_id, pilot_id, registered_pilot_name, pilot_class)
@@ -140,10 +267,9 @@ async function ensureCompPilot(
     .bind(compId, pilotId, pilotName, defaultPilotClass)
     .run();
   return {
+    outcome: "registered",
     compPilotId: res.meta.last_row_id,
-    claimedFromPreReg: false,
-    preRegName: null,
-    registeredNow: true,
+    declined: unclaimed.length,
   };
 }
 
@@ -191,14 +317,102 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Verify task exists and belongs to comp
       const task = await c.env.DB.prepare(
-        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+        "SELECT task_id, name, submissions_closed FROM task WHERE task_id = ? AND comp_id = ?"
       )
         .bind(taskId, compId)
-        .first();
+        .first<{ task_id: number; name: string; submissions_closed: number }>();
 
       if (!task) {
         return c.json({ error: "Task not found" }, 404);
       }
+
+      // Closed for the day. Before the body read: a refusal should cost a
+      // header parse, not a megabyte and a decompression.
+      if (task.submissions_closed && !(await isCompAdmin(c.env.DB, compId, user))) {
+        return c.json(await submissionsClosedBody(c.env.DB, compId, taskId), 403);
+      }
+
+      // WHO before WHAT. Identity is resolved ahead of the body read so an
+      // unanswerable one costs a header parse rather than a megabyte and a
+      // decompression — the same cheapest-rejection-first order igc-anon.ts
+      // states. It also means the 409 below can be answered without the pilot
+      // having uploaded anything yet.
+      const parsedClaim = readSelfClaim(c.req.header(COMP_PILOT_HEADER), alphabet);
+      if (parsedClaim === "invalid") {
+        return c.json({ error: "That is not a registration we can look up." }, 400);
+      }
+
+      const pilotId = await ensurePilot(c.env.DB, user.id, user.name);
+      const ensured = await ensureCompPilot(
+        c.env.DB,
+        compId,
+        pilotId,
+        user.name,
+        comp.default_pilot_class,
+        !!comp.open_registration,
+        parsedClaim
+      );
+
+      if (ensured.outcome === "registration-closed") {
+        // Name who can fix it: the pilot cannot add themselves, so an answer
+        // without a person in it is a dead end.
+        return c.json(
+          {
+            error: `You are not registered for ${comp.name}, and it does not accept pilots registering themselves. Ask the organiser to add you.`,
+            code: "registration_closed",
+            comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
+            organisers: await organisersOf(c.env.DB, compId),
+          },
+          403
+        );
+      }
+
+      if (ensured.outcome === "ambiguous") {
+        // The server will not guess which registration this is. This is the
+        // SAFETY NET rather than the flow — the form asks before the pilot
+        // ever chooses a file — so it is reachable only from a stale bundle or
+        // a scripted client.
+        return c.json(
+          {
+            error: `Which registration are you in ${comp.name}?`,
+            code: "identity_ambiguous",
+            comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
+            candidates: ensured.candidates.map((cand) => ({
+              ...cand,
+              comp_pilot_id: encodeId(alphabet, cand.comp_pilot_id),
+            })),
+            organisers: await organisersOf(c.env.DB, compId),
+          },
+          409
+        );
+      }
+
+      if (ensured.outcome === "claim-rejected") {
+        const message =
+          ensured.reason === "already_claimed"
+            ? "Somebody has already claimed that registration. Ask the organiser if it should be yours."
+            : ensured.reason === "already_registered"
+              ? `You are already registered in ${comp.name} under a different entry.`
+              : "That registration is not part of this competition.";
+        return c.json(
+          {
+            error: message,
+            code: "claim_rejected",
+            reason: ensured.reason,
+            comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
+            organisers: await organisersOf(c.env.DB, compId),
+          },
+          409
+        );
+      }
+
+      const compPilotId = ensured.compPilotId;
+      // The name the track is FILED under, which is not always the account's:
+      // a pilot who just claimed "Jane Smith" is Jane Smith on this roster.
+      const filedForName =
+        ensured.outcome === "claimed" || ensured.outcome === "claimed-by-choice"
+          ? ensured.preRegName
+          : user.name;
 
       // Read and validate the gzip-compressed IGC body. SEC-11: caps
       // both compressed and decompressed size and rejects non-gzip blobs
@@ -214,61 +428,37 @@ export const igcRoutes = new Hono<HonoEnv>()
         throw err;
       }
 
-      // Open registration: ensure pilot + comp_pilot. If a previously
-      // unlinked admin pre-registration matches this user, the linker
-      // will claim that row instead of creating a new one.
-      const pilotId = await ensurePilot(c.env.DB, user.id, user.name);
-      let ensured;
-      try {
-        ensured = await ensureCompPilot(
-          c.env.DB,
-          compId,
-          pilotId,
-          user.name,
-          comp.default_pilot_class,
-          !!comp.open_registration
-        );
-      } catch (err) {
-        if (err instanceof RegistrationClosedError) {
-          // Name who can fix it: the pilot cannot add themselves, so an answer
-          // without a person in it is a dead end.
-          const organisers = await c.env.DB.prepare(
-            `SELECT u.email, u.name FROM comp_admin ca
-             JOIN "user" u ON ca.user_id = u.id WHERE ca.comp_id = ?`
-          )
-            .bind(compId)
-            .all<{ email: string; name: string }>();
-          return c.json(
-            {
-              error: `You are not registered for ${comp.name}, and it does not accept pilots registering themselves. Ask the organiser to add you.`,
-              code: "registration_closed",
-              comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
-              organisers: organisers.results,
-            },
-            403
-          );
-        }
-        throw err;
-      }
-      const compPilotId = ensured.compPilotId;
-      if (ensured.claimedFromPreReg && ensured.preRegName) {
+      if (ensured.outcome === "claimed") {
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "pilot",
           subject_id: compPilotId,
           subject_name: ensured.preRegName,
           description: `Linked pre-registered pilot "${ensured.preRegName}" to GlideComp account on first upload`,
         });
-      } else if (ensured.registeredNow) {
+      } else if (ensured.outcome === "claimed-by-choice") {
+        // Says it was the PILOT'S assertion, not a match the server made. That
+        // distinction is the whole basis of the permissive model: nothing here
+        // was verified, so the record has to show who claimed what.
+        await audit(c.env.DB, c.var.user, compId, {
+          subject_type: "pilot",
+          subject_id: compPilotId,
+          subject_name: ensured.preRegName,
+          description: `${user.name} claimed the registration for "${ensured.preRegName}" when uploading a track`,
+        });
+      } else if (ensured.outcome === "registered") {
         // Open registration just put someone on the roster. Without this the
         // transparency record shows a track uploaded for a pilot it never saw
         // join — and the pilot count feeds launch validity (S7F §9.1), so this
         // is a scoring input arriving unannounced. Mirrors the wording the
         // admin registration routes use, plus how it happened.
+        const declined = ensured.declined
+          ? `, declining ${ensured.declined} unclaimed registration${ensured.declined === 1 ? "" : "s"} already on the roster`
+          : "";
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "pilot",
           subject_id: compPilotId,
           subject_name: user.name,
-          description: `Registered pilot "${user.name}" (class: ${comp.default_pilot_class}) on first upload`,
+          description: `Registered pilot "${user.name}" (class: ${comp.default_pilot_class}) on first upload${declined}`,
         });
       }
 
@@ -329,6 +519,41 @@ export const igcRoutes = new Hono<HonoEnv>()
         );
       }
 
+      // Tell the registered pilot. Suppressed only when the address IS the
+      // submitter's own — writing to somebody about a thing they just did, at
+      // the address they are signed in with, on the screen that already says
+      // it. Every other case is a notice worth having.
+      const origin = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
+      const notified = await noticeOnUpload(
+        {
+          db: c.env.DB,
+          email: c.env.EMAIL,
+          waitUntil: (p) => c.executionCtx.waitUntil(p),
+          origin,
+        },
+        {
+          compId,
+          taskId,
+          compPilotId,
+          taskUrl: `${origin}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
+          compName: comp.name,
+          taskName: task.name,
+          pilotName: filedForName,
+          submitter: { kind: "person", name: user.name },
+          replaced: stored.replaced,
+          claimedRegistration: ensured.outcome === "claimed-by-choice",
+          organisers: await organisersOf(c.env.DB, compId),
+          submitterEmail: user.email,
+          audit: (description) =>
+            audit(c.env.DB, c.var.user, compId, {
+              subject_type: "track",
+              subject_id: stored.taskTrackId,
+              subject_name: filedForName,
+              description,
+            }),
+        }
+      );
+
       return c.json(
         {
           task_track_id: encodeId(alphabet, stored.taskTrackId),
@@ -339,6 +564,11 @@ export const igcRoutes = new Hono<HonoEnv>()
           replaced: stored.replaced,
           track_quality: toUploadResult(quality),
           flight_summary: flightSummaryOf(igc),
+          notified,
+          // The name it was FILED under, which is not always the account's —
+          // a pilot who just claimed "Jane Smith" needs the confirmation to
+          // say Jane Smith, because that is the thing worth checking.
+          pilot_name: filedForName,
         },
         stored.replaced ? 200 : 201
       );
@@ -361,11 +591,12 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Look up the comp once — need open_igc_upload to gate authorisation
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, close_date, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, name, close_date, open_igc_upload FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
           comp_id: number;
+          name: string;
           close_date: string | null;
           open_igc_upload: number;
         }>();
@@ -411,13 +642,19 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Verify task exists and belongs to comp
       const task = await c.env.DB.prepare(
-        "SELECT task_id FROM task WHERE task_id = ? AND comp_id = ?"
+        "SELECT task_id, name, submissions_closed FROM task WHERE task_id = ? AND comp_id = ?"
       )
         .bind(taskId, compId)
-        .first();
+        .first<{ task_id: number; name: string; submissions_closed: number }>();
 
       if (!task) {
         return c.json({ error: "Task not found" }, 404);
+      }
+
+      // Closed for the day. `isAdmin` is already resolved above, so the
+      // organiser bypass costs nothing extra here.
+      if (task.submissions_closed && !isAdmin) {
+        return c.json(await submissionsClosedBody(c.env.DB, compId, taskId), 403);
       }
 
       // Verify comp_pilot exists and belongs to this comp
@@ -501,6 +738,40 @@ export const igcRoutes = new Hono<HonoEnv>()
         );
       }
 
+      // Tell the pilot somebody else filed for them. Until now this was the
+      // biggest silent gap in the whole flow: a STRANGER'S anonymous
+      // replacement emailed you, but a fellow registered pilot overwriting
+      // your track did not. Under a trust-plus-notice model that is backwards.
+      const origin2 = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
+      const notified = await noticeOnUpload(
+        {
+          db: c.env.DB,
+          email: c.env.EMAIL,
+          waitUntil: (p) => c.executionCtx.waitUntil(p),
+          origin: origin2,
+        },
+        {
+          compId,
+          taskId,
+          compPilotId,
+          taskUrl: `${origin2}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
+          compName: comp.name,
+          taskName: task.name,
+          pilotName: targetPilotName,
+          submitter: { kind: "person", name: user.name },
+          replaced: stored.replaced,
+          organisers: await organisersOf(c.env.DB, compId),
+          submitterEmail: user.email,
+          audit: (description) =>
+            audit(c.env.DB, c.var.user, compId, {
+              subject_type: "track",
+              subject_id: stored.taskTrackId,
+              subject_name: targetPilotName,
+              description,
+            }),
+        }
+      );
+
       return c.json(
         {
           task_track_id: encodeId(alphabet, stored.taskTrackId),
@@ -511,6 +782,8 @@ export const igcRoutes = new Hono<HonoEnv>()
           replaced: stored.replaced,
           track_quality: toUploadResult(quality),
           flight_summary: flightSummaryOf(igc),
+          notified,
+          pilot_name: targetPilotName,
         },
         stored.replaced ? 200 : 201
       );
@@ -859,6 +1132,9 @@ export const igcRoutes = new Hono<HonoEnv>()
   // which deactivated it). Makes the track the active evidence again,
   // supersedes any active manual flight, and resolves the outcome to Landed.
   // Admin-only — this overrides a status an admin set.
+  //
+  // Deliberately NOT gated by task.submissions_closed: restoring a file the
+  // task already holds is a correction, not a submission.
   .post(
     "/api/comp/:comp_id/task/:task_id/igc/:comp_pilot_id/restore",
     requireAuth,

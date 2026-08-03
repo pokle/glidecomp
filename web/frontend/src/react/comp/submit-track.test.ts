@@ -4,6 +4,7 @@ import {
   LAST_SUBMISSION_KEY,
   MAX_COMPRESSED_BYTES,
   MAX_DECOMPRESSED_BYTES,
+  NEW_PILOT_SENTINEL,
   describeUploadOutcome,
   formatClockInZone,
   tooLargeReason,
@@ -461,6 +462,29 @@ describe("the line a collapsed task step shows", () => {
     expect(
       taskLine(null, null, undefined, { compName: "Corryong Cup", taskName: null })
     ).toBe("Corryong Cup");
+  });
+});
+
+describe("which step can fix a failure", () => {
+  test("an unanswered identity question sends the pilot to the identity step", () => {
+    // The 409 the server answers when it will not guess which registration a
+    // signed-in pilot is. Sending them to the file step, or nowhere, would
+    // leave the one control that can fix it unhighlighted.
+    expect(repairStepFor("identity_ambiguous")).toBe("identity");
+    expect(repairStepFor("claim_rejected")).toBe("identity");
+  });
+
+  test("a closed task sends them back to the task list", () => {
+    // A real repair, not a shrug: they may well have meant yesterday's task,
+    // which is probably still open.
+    expect(repairStepFor("submissions_closed")).toBe("task");
+  });
+
+  test("the sentinel cannot collide with a real registration id", () => {
+    // Sqids use a-z only, so a hyphen makes this unambiguous. Same trick as
+    // the open-submit and open-now route segments.
+    expect(NEW_PILOT_SENTINEL).toContain("-");
+    expect(/^[a-z]+$/.test(NEW_PILOT_SENTINEL)).toBe(false);
   });
 });
 
