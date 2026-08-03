@@ -18,10 +18,15 @@ import {
   startSecondsFor,
   zoneOffsetHours,
   courseFor,
+  forgeRange,
+  openDistanceCourse,
+  OPEN_DISTANCE_MAX_METERS,
+  OPEN_DISTANCE_DEFAULT_METERS,
 } from '../src/forge-igc';
 import { parseIGC } from '../src/igc-parser';
 import { assessTrackQuality } from '../src/track-quality';
 import { summariseFlight } from '../src/flight-summary';
+import { openDistanceForFlight } from '../src/open-distance-scoring';
 import {
   andoyerDistance,
   calculateBearingRadians,
@@ -247,6 +252,179 @@ describe('landing out part way round', () => {
     expect(text[0]).toBe('A');
     expect(judge(text).quality.hardFailed).toBe(false);
     expect(parseIGC(text).fixes.length).toBeGreaterThan(200);
+  });
+});
+
+describe('a task with no route to fly (open distance)', () => {
+  /** Jil Jil Farm, the Big Chip launch: one take-off cylinder, no goal. */
+  const OPEN_TASK: XCTask = {
+    taskType: 'OPEN-DISTANCE',
+    version: 1,
+    earthModel: 'WGS84',
+    turnpoints: [
+      {
+        type: 'TAKEOFF',
+        radius: 5000,
+        waypoint: { name: 'JILJIL', lat: -35.86, lon: 142.89, altSmoothed: 90 },
+      },
+    ],
+  } as unknown as XCTask;
+
+  const OPEN_DATE = '2026-02-14';
+
+  function forgeOpen(
+    meters: number | null = null,
+    sabotage: 'none' | 'day' | 'place' = 'none',
+    seed = 7
+  ) {
+    return forgeIgc(OPEN_TASK, {
+      stopAfterMeters: meters,
+      pilot: 'Test Pilot',
+      glider: 'Forged Wing',
+      startSec: startSecondsFor('12:00', OPEN_DATE, ZONE),
+      rate: 5,
+      speedKmh: 45,
+      headerDate: new Date(`${OPEN_DATE}T00:00:00Z`),
+      random: seeded(seed),
+      sabotage,
+    });
+  }
+
+  function judgeOpen(text: string) {
+    const igc = parseIGC(text);
+    return {
+      igc,
+      quality: assessTrackQuality(igc.fixes, igc.header, {
+        task: OPEN_TASK,
+        taskDate: OPEN_DATE,
+        timeZone: ZONE,
+        category: 'hg',
+      }),
+      /** What the scorer will credit, read back off the finished file. */
+      scored: openDistanceForFlight(OPEN_TASK, {
+        pilotName: 'Test Pilot',
+        trackFile: 'forged.igc',
+        fixes: igc.fixes,
+      }),
+    };
+  }
+
+  it('has a range at all, rather than a zero-width one', () => {
+    // The bug: asking the optimiser for a task line a one-turnpoint task does
+    // not have gives zero, so the slider ran 0→0 and its reading was NaN.
+    expect(courseFor(OPEN_TASK).totalMeters).toBe(0);
+    const range = forgeRange(OPEN_TASK);
+    expect(range).toEqual({
+      maxMeters: OPEN_DISTANCE_MAX_METERS,
+      defaultMeters: OPEN_DISTANCE_DEFAULT_METERS,
+      openDistance: true,
+    });
+    // And a task that DOES have a route still answers from its own geometry.
+    expect(forgeRange(TASK)).toEqual({
+      maxMeters: courseFor(TASK).totalMeters,
+      defaultMeters: courseFor(TASK).totalMeters,
+      openDistance: false,
+    });
+  });
+
+  it('makes a file the engine accepts and scores', () => {
+    const { text, fixCount, openDistance } = forgeOpen(80_000);
+    expect(openDistance).toBe(true);
+    expect(text[0]).toBe('A');
+    expect(text).toContain('HFDTE');
+    expect(fixCount).toBeGreaterThan(500);
+
+    const { igc, quality } = judgeOpen(text);
+    expect(igc.fixes.length).toBe(fixCount);
+    expect(quality.hardFailed).toBe(false);
+    expect(quality.findings.map((f) => `${f.severity}/${f.id}`)).toEqual([]);
+  });
+
+  it('scores the distance the slider asked for', () => {
+    // The whole point of the control: pick 120 km and get a pilot the scorer
+    // credits with 120 km of open distance. Within a cruise step or two — the
+    // last leg is flown in finite steps and the landing wanders on the ground.
+    for (const asked of [5_000, 40_000, 120_000]) {
+      const { courseMeters } = forgeOpen(asked);
+      expect(Math.abs(courseMeters - asked)).toBeLessThan(200);
+      const { scored } = judgeOpen(forgeOpen(asked).text);
+      expect(Math.abs(scored - asked)).toBeLessThan(200);
+    }
+  });
+
+  it('lands at its furthest point, so a detour is never the score', () => {
+    // Open distance is measured to the FURTHEST fix, so the search wander has
+    // to stay inside the landing's radius or the pilot quietly scores more
+    // than was asked for.
+    const { igc } = judgeOpen(forgeOpen(120_000).text);
+    const centre = OPEN_TASK.turnpoints[0].waypoint;
+    const from = (f: { latitude: number; longitude: number }) =>
+      andoyerDistance(centre.lat, centre.lon, f.latitude, f.longitude);
+    const last = igc.fixes[igc.fixes.length - 1];
+    const furthest = Math.max(...igc.fixes.map(from));
+    expect(furthest - from(last)).toBeLessThan(50);
+  });
+
+  it('goes off in a random direction, not one fixed bearing', () => {
+    // There is no route, so the direction is the forge's to choose — and a
+    // forge that always flew due north would put every test track in one line.
+    const bearings = [1, 2, 3, 4, 5].map(
+      (s) => openDistanceCourse(OPEN_TASK, 60_000, seeded(s)).bearing
+    );
+    expect(new Set(bearings.map((b) => Math.round(b * 100))).size).toBe(5);
+  });
+
+  it('flies further when you ask for further', () => {
+    const km = (t: string) => (summariseFlight(parseIGC(t)).trackLengthMeters ?? 0);
+    expect(km(forgeOpen(150_000).text)).toBeGreaterThan(km(forgeOpen(30_000).text));
+  });
+
+  it('stops at the maximum rather than flying past it', () => {
+    const { courseMeters, taskMeters } = forgeOpen(OPEN_DISTANCE_MAX_METERS * 5);
+    expect(taskMeters).toBe(OPEN_DISTANCE_MAX_METERS);
+    expect(Math.abs(courseMeters - OPEN_DISTANCE_MAX_METERS)).toBeLessThan(200);
+  });
+
+  it('asked for nothing in particular, flies the default distance', () => {
+    expect(Math.abs(forgeOpen(null).courseMeters - OPEN_DISTANCE_DEFAULT_METERS))
+      .toBeLessThan(200);
+  });
+
+  it('at zero, the pilot never leaves the launch cylinder', () => {
+    // The real outcome an open-distance day always has some of: towed up, sank
+    // out, landed in the paddock — scored nothing, and flagged SOFT for it
+    // rather than withheld.
+    const { text, courseMeters } = forgeOpen(0);
+    expect(courseMeters).toBe(0);
+    const { quality, scored } = judgeOpen(text);
+    expect(scored).toBe(0);
+    expect(quality.hardFailed).toBe(false);
+    expect(quality.findings.map((f) => f.id)).toEqual(['never-left-takeoff']);
+  });
+
+  it('reads as a plausible flight, not a teleport', () => {
+    const s = summariseFlight(parseIGC(forgeOpen(80_000).text));
+    expect(s.flightDate).toBe(OPEN_DATE);
+    expect(s.durationSeconds ?? 0).toBeGreaterThan(30 * 60);
+    expect(s.maxAltitudeMeters ?? 0).toBeLessThan(4300);
+    // Thermalled its way there rather than gliding one impossible glide.
+    expect((s.trackLengthMeters ?? 0) / 1000).toBeGreaterThan(80);
+  });
+
+  it('can still be sabotaged', () => {
+    // The withheld-track paths are no less needed on an open-distance comp.
+    for (const s of ['day', 'place'] as const) {
+      const { text } = forgeOpen(60_000, s);
+      expect(text[0]).toBe('A');
+      const { igc, quality } = judgeOpen(text);
+      expect(igc.fixes.length).toBeGreaterThan(500);
+      expect(quality.hardFailed).toBe(true);
+    }
+  });
+
+  it('is deterministic given a seeded random', () => {
+    expect(forgeOpen(60_000).text).toBe(forgeOpen(60_000).text);
+    expect(forgeOpen(60_000, 'none', 8).text).not.toBe(forgeOpen(60_000).text);
   });
 });
 
