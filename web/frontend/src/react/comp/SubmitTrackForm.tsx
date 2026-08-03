@@ -28,7 +28,7 @@ import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { SimpleSelect } from "@/react/rac/select";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
-import { pilotPath, taskPath } from "../lib/slug";
+import { pilotPath } from "../lib/slug";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
 import {
   IDENTIFIER_KINDS,
@@ -113,6 +113,10 @@ export function SubmitTrackForm({
   const [openComps, setOpenComps] = useState<OpenComp[] | null>(null);
   const [compId, setCompId] = useState(prefill?.compId ?? "");
   const [taskId, setTaskId] = useState(prefill?.taskId ?? "");
+  // Whether the task list is on screen. It starts closed ONLY when the caller
+  // already named the task — the dialog on a comp or task page, where the flow
+  // is a two-field form and a list of one is noise. Once open it stays open;
+  // nothing the pilot does in the list closes it.
   const [editingTask, setEditingTask] = useState(!prefill?.taskId);
 
   // ── Who it is for
@@ -364,7 +368,10 @@ export function SubmitTrackForm({
           onPick={(nextComp, nextTask) => {
             setCompId(nextComp);
             setTaskId(nextTask);
-            setEditingTask(false);
+            // Deliberately does NOT collapse the step. Picking a task is not
+            // finishing with it: a pilot who has just chosen wants to see the
+            // dates either side to confirm, and changing their mind should not
+            // cost a Change button. The list stays until they leave the page.
           }}
         />
       </StepBox>
@@ -589,12 +596,19 @@ function TaskPicker({
     );
   }
 
-  const filtered =
-    query.trim().length < 2
+  const term = query.trim().toLowerCase();
+  const matching =
+    term.length < 2
       ? comps.slice(0, 3)
-      : comps.filter((c) =>
-          c.name.toLowerCase().includes(query.trim().toLowerCase())
-        );
+      : comps.filter((c) => c.name.toLowerCase().includes(term));
+
+  // The chosen comp is always on screen, even when a later search or the
+  // three-comp cap would have hidden it. A checked radio that is not rendered
+  // is a selection the pilot cannot see, check or undo — which is the failure
+  // this whole change is about.
+  const chosen = compId ? comps.find((c) => c.comp_id === compId) : undefined;
+  const filtered =
+    chosen && !matching.includes(chosen) ? [chosen, ...matching] : matching;
 
   return (
     <div className="flex flex-col gap-3">
@@ -807,13 +821,10 @@ function TrackAccepted({
         >
           View provisional score card
         </LinkButton>
-        <LinkButton
-          variant="outline"
-          href={taskPath(result.compId, result.compName, result.taskId, result.taskName)}
-          onPress={onDone}
-        >
-          Go to the task
-        </LinkButton>
+        {/* No "Go to the task" here. The report card is the answer to "what
+            did my track do", and the task page is one click on from it — a
+            second, equal-looking button next to it only asks the pilot to
+            choose between two things they cannot tell apart. */}
         <Button variant="outline" onPress={onAnother}>
           Submit another track
         </Button>

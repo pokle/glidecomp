@@ -127,6 +127,54 @@ describe("GET /api/comp/open-now", () => {
     expect(body.comps[0].suggested_task_id).toBe(yesterday);
   });
 
+  test("lists a comp's tasks most recent first", async () => {
+    // A pilot submits after landing, so the task they mean is at the recent
+    // end. On day six of a comp, oldest-first makes them read past five days
+    // they have already filed to reach the one they want.
+    const compId = await createComp({ name: "Multi Day" });
+    await createTask(compId, { name: "Task 1", task_date: isoDaysFromToday(-2) });
+    await createTask(compId, { name: "Task 2", task_date: isoDaysFromToday(-1) });
+    await createTask(compId, { name: "Task 3", task_date: isoDaysFromToday(0) });
+
+    const { body } = await openNow();
+    expect(body.comps[0].tasks.map((t) => t.task_date)).toEqual([
+      isoDaysFromToday(0),
+      isoDaysFromToday(-1),
+      isoDaysFromToday(-2),
+    ]);
+  });
+
+  test("two tasks on one day keep a stable order", async () => {
+    // Same date is the ordinary case for a comp flying two classes, and an
+    // unstable sort there would reshuffle the list between cached answers.
+    const compId = await createComp({ name: "Two Classes" });
+    await createTask(compId, { name: "Task 3 (Sports)", task_date: isoDaysFromToday(0) });
+    await createTask(compId, { name: "Task 3 (Open)", task_date: isoDaysFromToday(0) });
+
+    const { body } = await openNow();
+    expect(body.comps[0].tasks.map((t) => t.name)).toEqual([
+      "Task 3 (Open)",
+      "Task 3 (Sports)",
+    ]);
+  });
+
+  test("the suggestion survives the display order being reversed", async () => {
+    // The suggestion is derived from the DATES, not from the array's ends.
+    // It used to read tasks[tasks.length - 1], which silently meant "oldest"
+    // the moment the wire order flipped.
+    const compId = await createComp({ name: "Multi Day" });
+    await createTask(compId, { name: "Task 1", task_date: isoDaysFromToday(-2) });
+    const yesterday = await createTask(compId, {
+      name: "Task 2",
+      task_date: isoDaysFromToday(-1),
+    });
+
+    const { body } = await openNow();
+    expect(body.comps[0].suggested_task_id).toBe(yesterday);
+    // And it is the one now shown at the top.
+    expect(body.comps[0].tasks[0].task_id).toBe(yesterday);
+  });
+
   test("reports the window it used, so a cached answer is diagnosable", async () => {
     await compWithTaskOn(0);
     const { body } = await openNow();
