@@ -25,6 +25,7 @@ import {
   calculateBearingRadians,
   destinationPoint,
 } from './geo';
+import { calculateOptimizedTaskLine } from './task-optimizer';
 import type { XCTask } from './xctsk-parser';
 
 /** A turnpoint reduced to what flying it needs. */
@@ -49,6 +50,17 @@ export interface ForgeOptions {
   speedKmh: number;
   /** The date stamped into HFDTE, and the base for every B record's clock. */
   headerDate: Date;
+  /**
+   * Land out after this many metres ALONG THE COURSE, instead of flying it
+   * all. Null or undefined flies the lot.
+   *
+   * Measured along the optimised task line, which is the same geometry the
+   * scorer measures — so the number chosen here is the distance the pilot
+   * will be scored for, not merely a distance they travelled. That is the
+   * whole point: a land-out is only a useful fixture if you can say in advance
+   * what it should score.
+   */
+  stopAfterMeters?: number | null;
   /**
    * Injectable so a test can be deterministic. The randomness only jitters the
    * fixes on the ground, which is what stops the takeoff detector seeing a
@@ -140,23 +152,69 @@ function hhmmss(seconds: number): string {
 // ── the flight ─────────────────────────────────────────────────────────────
 
 /**
- * Launch, climb out, then leg by leg: glide towards the next turnpoint,
- * thermal back up when it gets low, and enter each cylinder. Finishes with a
- * descent and a stint on the ground, which is what makes the landing
- * detectable — without it the flight summary has no duration to report.
+ * The optimised task line, and how long it is.
+ *
+ * This is the geometry the SCORER measures — the shortest legal way through
+ * the cylinders — so a flight that follows it covers scored distance at the
+ * same rate it covers ground. Flying waypoint centre to waypoint centre, as
+ * this used to, is both longer and not what anybody is credited with, which
+ * makes "land out after 40 km" unanswerable.
+ */
+export function courseFor(task: XCTask): { points: Pt[]; totalMeters: number } {
+  const points = calculateOptimizedTaskLine(task);
+  let totalMeters = 0;
+  for (let i = 1; i < points.length; i++) {
+    totalMeters += gap(points[i - 1], points[i]);
+  }
+  return { points, totalMeters };
+}
+
+/**
+ * Cut the course short at `meters`, landing wherever that falls.
+ *
+ * Returns the points actually to be flown, so a land-out ends in mid-leg at
+ * the right place rather than at the nearest turnpoint.
+ */
+function truncateCourse(points: Pt[], meters: number): Pt[] {
+  if (points.length < 2) return points;
+  const flown: Pt[] = [points[0]];
+  let left = meters;
+  for (let i = 1; i < points.length; i++) {
+    const leg = gap(points[i - 1], points[i]);
+    if (left >= leg) {
+      flown.push(points[i]);
+      left -= leg;
+      continue;
+    }
+    if (left > 0) flown.push(towards(points[i - 1], points[i], left));
+    return flown;
+  }
+  return flown;
+}
+
+/**
+ * Launch, climb out, then follow the course: glide towards the next point,
+ * thermal back up when it gets low. Finishes with a descent and a stint on
+ * the ground, which is what makes the landing detectable — without it the
+ * flight summary has no duration to report.
  */
 export function buildFlight(
-  tps: ForgeTurnpoint[],
-  opts: Pick<ForgeOptions, 'rate' | 'speedKmh' | 'startSec'> & { random?: () => number }
+  course: Pt[],
+  opts: Pick<ForgeOptions, 'rate' | 'speedKmh' | 'startSec'> & {
+    /** Ground elevation at launch, and at the landing. */
+    groundAlt: number;
+    landAlt: number;
+    random?: () => number;
+  }
 ): Fix[] {
-  if (tps.length < 2) throw new Error('A task needs at least two turnpoints');
+  if (course.length < 2) throw new Error('A task needs at least two turnpoints');
 
   const rnd = opts.random ?? Math.random;
   const step = opts.rate;
   const cruise = opts.speedKmh / 3.6;
   const climbRate = 2.2; // m/s, an ordinary thermal
   const sink = -1.15; // m/s on glide
-  const groundAlt = tps[0].alt || 500;
+  const groundAlt = opts.groundAlt || 500;
   const floor = groundAlt + 350;
   // Clamped absolutely, not just relative to launch: a task whose waypoints
   // carry odd altitudes would otherwise produce a flight topping out in the
@@ -167,23 +225,24 @@ export function buildFlight(
   const fixes: Fix[] = [];
   let t = opts.startSec;
   let alt = groundAlt;
-  let pos: Pt = { lat: tps[0].lat, lon: tps[0].lon };
+  let pos: Pt = { lat: course[0].lat, lon: course[0].lon };
   const push = () => fixes.push({ t, lat: pos.lat, lon: pos.lon, alt });
 
   // On the hill. The takeoff detector averages the first ten fixes for its
   // ground altitude, so there has to be a ground to start from.
   for (let i = 0; i < Math.ceil(120 / step); i++) {
     pos = {
-      lat: tps[0].lat + (rnd() - 0.5) * 2e-5,
-      lon: tps[0].lon + (rnd() - 0.5) * 2e-5,
+      lat: course[0].lat + (rnd() - 0.5) * 2e-5,
+      lon: course[0].lon + (rnd() - 0.5) * 2e-5,
     };
     push();
     t += step;
   }
 
   // Climb-out: clears minAltitudeGain (50 m) and minGroundSpeed (5 m/s), so
-  // takeoff is unambiguous.
-  const heading = tps.find((tp) => gap(tp, tps[0]) > 50) ?? tps[1];
+  // takeoff is unambiguous. Even a pilot who lands at launch has to leave it
+  // first, or there is no flight to detect at all.
+  const heading = course.find((p) => gap(p, course[0]) > 50) ?? course[1];
   while (alt < groundAlt + 600) {
     alt += climbRate * step;
     pos = towards(pos, heading, 8 * step);
@@ -193,19 +252,21 @@ export function buildFlight(
   }
 
   let climbing = false;
-  for (let i = 1; i < tps.length; i++) {
-    const tp = tps[i];
-    if (gap(pos, tp) < 30) continue; // takeoff and SSS are usually one waypoint
-    const reach = Math.max(60, tp.radius * 0.55);
+  for (let i = 1; i < course.length; i++) {
+    const to = course[i];
+    if (gap(pos, to) < 30) continue;
+    // Following a line rather than aiming at cylinder centres, so the
+    // tolerance is one cruise step — enough not to oscillate around a vertex.
+    const reach = Math.max(30, cruise * step);
     let guard = 0;
-    while (gap(pos, tp) > reach && guard++ < 20000) {
+    while (gap(pos, to) > reach && guard++ < 20000) {
       if (climbing) {
         alt += climbRate * step;
-        pos = towards(pos, tp, 1.5 * step); // circling drifts, barely advances
+        pos = towards(pos, to, 1.5 * step); // circling drifts, barely advances
         if (alt >= ceiling) climbing = false;
       } else {
         alt += sink * step;
-        pos = towards(pos, tp, cruise * step);
+        pos = towards(pos, to, cruise * step);
         if (alt <= floor) climbing = true;
       }
       push();
@@ -213,11 +274,16 @@ export function buildFlight(
     }
   }
 
-  const last = tps[tps.length - 1];
-  const landAlt = (last.alt || groundAlt) + 5;
+  // Down, where they got to. A land-out lands mid-leg; a completed task lands
+  // at goal. Descending in place keeps the landing at the distance flown
+  // rather than adding free kilometres on the way down.
+  const landAlt = (opts.landAlt || groundAlt) + 5;
   while (alt > landAlt) {
     alt = Math.max(landAlt, alt + sink * 1.3 * step);
-    pos = towards(pos, last, cruise * 0.55 * step);
+    pos = {
+      lat: pos.lat + (rnd() - 0.5) * 1e-5,
+      lon: pos.lon + (rnd() - 0.5) * 1e-5,
+    };
     push();
     t += step;
   }
@@ -270,12 +336,52 @@ function toIgcText(
  */
 export type ForgeSabotage = 'none' | 'day' | 'place';
 
-/** Forge a flight over `tps`, returning the IGC text and its fix count. */
+/** What a forged flight is judged on, so a caller can show it. */
+export interface ForgeResult extends ForgedTrack {
+  /** How far along the optimised course the pilot actually got, metres. */
+  courseMeters: number;
+  /** The whole task, metres — the top of the land-out range. */
+  taskMeters: number;
+}
+
+/**
+ * Forge a flight over `task`'s optimised line, returning the IGC text.
+ *
+ * Takes the task rather than turnpoints so the course is derived here: a
+ * caller that passed centre-to-centre turnpoints would silently get a flight
+ * whose distance does not match what the scorer will credit.
+ */
 export function forgeIgc(
-  tps: ForgeTurnpoint[],
+  task: XCTask,
   opts: ForgeOptions & { sabotage?: ForgeSabotage }
-): ForgedTrack {
-  let fixes = buildFlight(tps, opts);
+): ForgeResult {
+  const tps = turnpointsFromTask(task);
+  const { points, totalMeters } = courseFor(task);
+  if (points.length < 2) throw new Error('A task needs at least two turnpoints');
+
+  const target =
+    opts.stopAfterMeters == null
+      ? totalMeters
+      : Math.max(0, Math.min(opts.stopAfterMeters, totalMeters));
+  let flown = target >= totalMeters ? points : truncateCourse(points, target);
+  if (flown.length < 2) {
+    // Zero distance is a real outcome — launched, never connected, landed on
+    // the hill — so it has to FLY, not throw. Out a little way and back, which
+    // is what sinking out looks like; landing at the launch point is what
+    // makes the distance nothing.
+    flown = [points[0], towards(points[0], points[1], 800), points[0]];
+  }
+
+  // Where they came down: goal's ground when the task was completed, else the
+  // launch elevation, which is the only honest guess for a paddock mid-course.
+  const landAlt =
+    target >= totalMeters ? tps[tps.length - 1].alt : tps[0].alt;
+
+  let fixes = buildFlight(flown, {
+    ...opts,
+    groundAlt: tps[0].alt,
+    landAlt,
+  });
   const headerDate = new Date(opts.headerDate.getTime());
 
   if (opts.sabotage === 'place') {
@@ -292,6 +398,8 @@ export function forgeIgc(
   return {
     text: toIgcText(fixes, headerDate, opts, tps[0].name),
     fixCount: fixes.length,
+    courseMeters: target,
+    taskMeters: totalMeters,
   };
 }
 

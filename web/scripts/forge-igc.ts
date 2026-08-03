@@ -30,7 +30,6 @@ import {
   assessTrackQuality,
   summariseFlight,
   forgeIgc,
-  turnpointsFromTask,
   startSecondsFor,
   zoneOffsetHours,
   type XCTask,
@@ -55,12 +54,14 @@ interface Options {
   rate: number;
   speedKmh: number;
   sabotage: "none" | "day" | "place";
+  /** Land out this far along the optimised course. Null flies the whole task. */
+  landOutKm: number | null;
 }
 
 function parseArgs(argv: string[]): Options {
   const o: Options = {
     open: false, comp: null, task: null, out: null, submit: false,
-    identKind: "civl_id", ident: null,
+    identKind: "civl_id", ident: null, landOutKm: null,
     pilot: "Forge Test Pilot", glider: "Moyes RX 3.5",
     date: null, startLocal: "12:30", rate: 2, speedKmh: 42, sabotage: "none",
   };
@@ -82,6 +83,7 @@ function parseArgs(argv: string[]): Options {
       case "--rate": o.rate = Number(next()); break;
       case "--speed": o.speedKmh = Number(next()); break;
       case "--sabotage": o.sabotage = next() as Options["sabotage"]; break;
+      case "--land-out": o.landOutKm = Number(next()); break;
       case "--help": case "-h": usage(); process.exit(0);
       default:
         if (a.startsWith("--")) { console.error(`Unknown option ${a}`); usage(); process.exit(2); }
@@ -107,6 +109,8 @@ Forge an IGC tracklog that flies a real task.
   --start <HH:MM>         Local take-off time (default 12:30)
   --speed <km/h>          Cruise ground speed (default 42)
   --rate <seconds>        Fix interval (default 2)
+  --land-out <km>         Land out this far along the optimised course
+                          (default: fly the whole task, i.e. make goal)
   --sabotage day|place    Deliberately fail a HARD track-quality check
 `);
 }
@@ -176,8 +180,6 @@ const comp = await getJson<{ name: string; timezone: string | null; category: st
 
 if (!task.xctsk) throw new Error(`"${task.name}" has no route defined yet — nothing to fly.`);
 
-const tps = turnpointsFromTask(task.xctsk);
-
 const taskDate = o.date ?? task.task_date;
 const zone = comp.timezone ?? "UTC";
 const offset = zoneOffsetHours(taskDate, zone);
@@ -185,7 +187,8 @@ const offset = zoneOffsetHours(taskDate, zone);
 // The forging itself lives in the engine (web/engine/src/forge-igc.ts), so the
 // dialog on the task page and this script cannot drift into making different
 // files. Everything below is the CLI's own job: fetching, reporting, sending.
-const { text, fixCount } = forgeIgc(tps, {
+const { text, fixCount, courseMeters, taskMeters } = forgeIgc(task.xctsk, {
+  stopAfterMeters: o.landOutKm == null ? null : o.landOutKm * 1000,
   pilot: o.pilot,
   glider: o.glider,
   startSec: startSecondsFor(o.startLocal, taskDate, zone),
@@ -212,7 +215,9 @@ const hrs = Math.floor((summary.durationSeconds ?? 0) / 3600);
 const mins = Math.round(((summary.durationSeconds ?? 0) % 3600) / 60);
 
 console.log(`\n${comp.name} · ${task.name} · ${taskDate} (${zone}, UTC${offset >= 0 ? "+" : ""}${offset})`);
-console.log(`  ${tps.length} turnpoints, take off ${o.startLocal} local\n`);
+console.log(
+  `  take off ${o.startLocal} local · ${(courseMeters / 1000).toFixed(1)} km of ${(taskMeters / 1000).toFixed(1)} km flown${courseMeters >= taskMeters ? " (goal)" : " (landed out)"}\n`
+);
 console.log(`  flight        ${summary.flightDate}  ${hrs}h ${String(mins).padStart(2, "0")}m airborne`);
 console.log(`  track         ${((summary.trackLengthMeters ?? 0) / 1000).toFixed(1)} km, top ${summary.maxAltitudeMeters} m`);
 console.log(`  file          ${fixCount.toLocaleString()} fixes · ${(text.length / 1024).toFixed(0)} KB · ${(gz.length / 1024).toFixed(0)} KB gzipped`);

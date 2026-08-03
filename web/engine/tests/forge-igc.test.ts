@@ -17,11 +17,16 @@ import {
   turnpointsFromTask,
   startSecondsFor,
   zoneOffsetHours,
-  type ForgeTurnpoint,
+  courseFor,
 } from '../src/forge-igc';
 import { parseIGC } from '../src/igc-parser';
 import { assessTrackQuality } from '../src/track-quality';
 import { summariseFlight } from '../src/flight-summary';
+import {
+  andoyerDistance,
+  calculateBearingRadians,
+  destinationPoint,
+} from '../src/geo';
 import type { XCTask } from '../src/xctsk-parser';
 
 /** Deterministic stand-in for Math.random, so a failure is reproducible. */
@@ -51,9 +56,12 @@ const TASK: XCTask = {
 const TASK_DATE = '2026-01-05';
 const ZONE = 'Australia/Melbourne';
 
-function forge(sabotage: 'none' | 'day' | 'place' = 'none') {
-  const tps = turnpointsFromTask(TASK);
-  return forgeIgc(tps, {
+function forge(
+  sabotage: 'none' | 'day' | 'place' = 'none',
+  stopAfterMeters: number | null = null
+) {
+  return forgeIgc(TASK, {
+    stopAfterMeters,
     pilot: 'Test Pilot',
     glider: 'Forged Wing',
     startSec: startSecondsFor('13:00', TASK_DATE, ZONE),
@@ -156,6 +164,92 @@ describe('sabotage reaches the paths nobody can reach on demand', () => {
   });
 });
 
+describe('landing out part way round', () => {
+  const { points, totalMeters } = courseFor(TASK);
+
+  /** Walk the optimised line independently, so the expectation is derived
+   *  rather than read back out of the code under test. */
+  function pointAt(meters: number) {
+    let left = meters;
+    for (let i = 1; i < points.length; i++) {
+      const leg = andoyerDistance(
+        points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon
+      );
+      if (left > leg) { left -= leg; continue; }
+      const b = calculateBearingRadians(
+        points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon
+      );
+      return destinationPoint(points[i - 1].lat, points[i - 1].lon, left, b);
+    }
+    return points[points.length - 1];
+  }
+
+  function landedAt(text: string) {
+    const fixes = parseIGC(text).fixes;
+    const last = fixes[fixes.length - 1];
+    return { lat: last.latitude, lon: last.longitude };
+  }
+
+  it('comes down where the slider says, not at a turnpoint', () => {
+    // The whole feature: pick 40 km, get a pilot who landed 40 km along the
+    // course — mid-leg if that is where 40 km falls.
+    const target = 40_000;
+    const { text, courseMeters } = forge('none', target);
+    expect(courseMeters).toBe(target);
+
+    const want = pointAt(target);
+    const got = landedAt(text);
+    // Within a few hundred metres: the last leg is flown in cruise-sized
+    // steps, and the landing wanders a little on the ground.
+    expect(andoyerDistance(want.lat, want.lon, got.lat, got.lon)).toBeLessThan(600);
+  });
+
+  it('flies further when you ask for further', () => {
+    const short = forge('none', 20_000);
+    const long = forge('none', 60_000);
+    const km = (t: string) => (summariseFlight(parseIGC(t)).trackLengthMeters ?? 0);
+    expect(km(long.text)).toBeGreaterThan(km(short.text));
+  });
+
+  it('reaches goal when the slider is at the end', () => {
+    const full = forge('none', totalMeters);
+    const goal = points[points.length - 1];
+    const got = landedAt(full.text);
+    expect(andoyerDistance(goal.lat, goal.lon, got.lat, got.lon)).toBeLessThan(600);
+  });
+
+  it('is the same flight as not asking at all', () => {
+    // Null means the whole task; passing the total explicitly must not be a
+    // second, subtly different path.
+    expect(forge('none', totalMeters).text).toBe(forge('none', null).text);
+  });
+
+  it('clamps beyond the end rather than flying past goal', () => {
+    const { courseMeters } = forge('none', totalMeters * 5);
+    expect(courseMeters).toBe(totalMeters);
+  });
+
+  it('at zero, the pilot lands back at launch', () => {
+    // A real outcome, not a degenerate one: launched, never connected, landed
+    // on the hill. It has to produce a FLIGHT — a zero-length course would
+    // otherwise have nothing to fly and throw.
+    const { text, courseMeters } = forge('none', 0);
+    expect(courseMeters).toBe(0);
+    const got = landedAt(text);
+    expect(andoyerDistance(points[0].lat, points[0].lon, got.lat, got.lon))
+      .toBeLessThan(3_000);
+    const { quality } = judge(text);
+    expect(quality.hardFailed).toBe(false);
+  });
+
+  it('still produces a file the engine accepts', () => {
+    const { text } = forge('none', 25_000);
+    expect(text[0]).toBe('A');
+    expect(judge(text).quality.hardFailed).toBe(false);
+    expect(parseIGC(text).fixes.length).toBeGreaterThan(200);
+  });
+});
+
 describe('the forge itself', () => {
   it('is deterministic given a seeded random', () => {
     // Otherwise a failure here could never be reproduced.
@@ -163,11 +257,14 @@ describe('the forge itself', () => {
   });
 
   it('refuses a route with nothing to fly', () => {
-    const one: ForgeTurnpoint[] = [
-      { lat: -36.7, lon: 146.8, radius: 400, alt: 1000, name: 'ONLY' },
-    ];
     expect(() =>
-      buildFlight(one, { rate: 5, speedKmh: 30, startSec: 0 })
+      buildFlight([{ lat: -36.7, lon: 146.8 }], {
+        rate: 5,
+        speedKmh: 30,
+        startSec: 0,
+        groundAlt: 1000,
+        landAlt: 1000,
+      })
     ).toThrow(/at least two turnpoints/);
   });
 

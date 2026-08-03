@@ -18,13 +18,13 @@
  * Loaded lazily. Nobody but a super admin can open it, so its code has no
  * business in the bundle everyone else downloads.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   assessTrackQuality,
+  courseFor,
   forgeIgc,
   parseIGC,
   summariseFlight,
-  turnpointsFromTask,
   startSecondsFor,
   zoneOffsetHours,
   type ForgeSabotage,
@@ -41,6 +41,7 @@ import {
 } from "@/react/rac/dialog";
 import { NumberField, TextField } from "@/react/rac/field";
 import { SimpleSelect } from "@/react/rac/select";
+import { Slider } from "@/react/rac/slider";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
 
@@ -48,6 +49,8 @@ import { slugify } from "./csv";
 interface Verdict {
   text: string;
   fixCount: number;
+  /** How far round the course they got — the distance they should score. */
+  courseMeters: number;
   flightDate: string | null;
   durationSeconds: number | null;
   trackKm: number;
@@ -89,6 +92,16 @@ export default function ForgeIgcDialog({
   const [rate, setRate] = useState(5);
   const [speedKmh, setSpeedKmh] = useState(32);
   const [sabotage, setSabotage] = useState<ForgeSabotage>("none");
+  // The optimised task line is what the SCORER measures, so its length is the
+  // top of the land-out range and the slider's value is the distance the pilot
+  // will be credited with — not merely one they travelled.
+  const taskMeters = useMemo(() => courseFor(xctsk).totalMeters, [xctsk]);
+  // Rounded to the slider's own step, so the top of the range is a value the
+  // slider can actually hold. With a coarser step the maximum snapped DOWN and
+  // the default became a land-out a few hundred metres short of goal — a
+  // default that quietly does not do the ordinary thing.
+  const taskKm = Math.round((taskMeters / 1000) * 10) / 10;
+  const [stopAfterKm, setStopAfterKm] = useState(taskKm);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,8 +114,8 @@ export default function ForgeIgcDialog({
     setProblem(null);
     setVerdict(null);
     try {
-      const tps = turnpointsFromTask(xctsk);
-      const { text, fixCount } = forgeIgc(tps, {
+      const { text, fixCount, courseMeters } = forgeIgc(xctsk, {
+        stopAfterMeters: stopAfterKm * 1000,
         pilot,
         glider,
         startSec: startSecondsFor(startLocal, taskDate, zone),
@@ -126,6 +139,7 @@ export default function ForgeIgcDialog({
       setVerdict({
         text,
         fixCount,
+        courseMeters,
         flightDate: summary.flightDate,
         durationSeconds: summary.durationSeconds,
         trackKm: (summary.trackLengthMeters ?? 0) / 1000,
@@ -211,6 +225,21 @@ export default function ForgeIgcDialog({
           </div>
         </div>
 
+        <Slider
+          label="Landed out after"
+          value={stopAfterKm}
+          onChange={setStopAfterKm}
+          minValue={0}
+          maxValue={taskKm}
+          step={0.1}
+          format={(v) =>
+            v >= taskKm
+              ? `${v.toFixed(1)} km — made goal`
+              : `${v.toFixed(1)} km of ${taskKm.toFixed(1)} km`
+          }
+          description="Distance along the optimised task line, so this is what the pilot should be scored for. At the far right they make goal; at zero they land back at launch."
+        />
+
         {problem ? (
           <Alert variant="destructive">
             <AlertTitle>Nothing to fly</AlertTitle>
@@ -233,6 +262,10 @@ export default function ForgeIgcDialog({
               <AlertDescription>
                 <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
                   <Fact label="Flight date" value={verdict.flightDate ?? "—"} />
+                  <Fact
+                    label="Course flown"
+                    value={`${(verdict.courseMeters / 1000).toFixed(1)} km`}
+                  />
                   <Fact label="Airborne" value={hhmm(verdict.durationSeconds)} />
                   <Fact label="Track" value={`${verdict.trackKm.toFixed(1)} km`} />
                   <Fact

@@ -15,12 +15,14 @@ export { toSeeYouCup, toGPX, toKML, toCompeGPS, toOziExplorer, toFsGeo, toFsUtm,
 export {
   forgeIgc,
   buildFlight,
+  courseFor,
   turnpointsFromTask,
   zoneOffsetHours,
   startSecondsFor,
   type ForgeTurnpoint,
   type ForgeOptions,
   type ForgedTrack,
+  type ForgeResult,
   type ForgeSabotage,
 } from './forge-igc';
 export { andoyerDistance, calculateBearing, calculateBearingRadians, calculateTrackDistance, destinationPoint, getBoundingBox, isInsideCylinder, getCirclePoints, localEastNorth } from './geo';

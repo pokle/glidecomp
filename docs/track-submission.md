@@ -503,6 +503,17 @@ scored, not that it looks about right. A "clean" forge that fails a hard check
 is reported as a bug in the forge, because the file is then useless for what it
 was asked for.
 
+**Landing out.** The slider (`--land-out <km>` on the CLI) picks how far round
+the course the pilot got, from nothing to the whole task. It is measured along
+the **optimised task line** — the same geometry the scorer measures — so the
+number chosen is the distance the pilot should be credited with, not merely one
+they travelled. That is what makes a land-out a usable fixture: you can say in
+advance what it ought to score. The flight follows that line rather than
+waypoint centres for the same reason.
+
+At zero they launch, fail to connect and land back on the hill; at the far
+right they make goal.
+
 `--sabotage day` / `place` (the dropdown in the dialog) deliberately breaks one
 check. Those files are still VALID — they upload fine and are then withheld
 from scoring, which is the state nobody can otherwise reach on demand.
