@@ -220,6 +220,12 @@ export interface MapProvider {
      *  a waypoint file so the whole set is visible). No-op if none are set. */
     fitToWaypoints?(): void;
 
+    /** Fit the view to an arbitrary box — used by the place search, where the
+     *  geocoder returns a town's or a region's extent and zooming to its
+     *  centre point alone would tell us nothing about how big it is.
+     *  `maxZoom` caps how far a pin-sized box pulls the camera in. */
+    fitToBounds?(bounds: MapBounds, options?: { maxZoom?: number }): void;
+
     /** Register callback for when the user clicks a pickable waypoint marker */
     onWaypointClick?(callback: (waypoint: MapWaypoint) => void): void;
 

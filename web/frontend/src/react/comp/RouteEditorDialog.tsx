@@ -902,6 +902,7 @@ export function RouteEditorDialog({
                 waypoints={mapWaypoints}
                 addMode={addMode}
                 fitNonce={wpFitNonce}
+                placeSearch
                 onWaypointPick={pickWaypoint}
                 onMapPick={(lat, lon, details) =>
                   openAddPoint(formatCoords(lat, lon), details)

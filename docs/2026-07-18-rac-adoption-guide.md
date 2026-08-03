@@ -12,7 +12,7 @@ perfectly good kit member when there's no behaviour to own (`rac/badge.tsx`,
 live in `src/react/vendor/`: today the `input-otp` sign-in field and the
 `sonner` toaster.
 
-Read the **gotchas** section before touching kit code — twenty of them, each
+Read the **gotchas** section before touching kit code — twenty-one of them, each
 one something that cost real debugging. The rest of this doc is history: how
 the migration went, what was decided and why. It is worth keeping because the
 reasoning still applies to new UI.
@@ -360,7 +360,9 @@ Points worth knowing before you reach for one:
     re-picked). Keep the empty query mapping to an *empty* list so the popover
     stays shut at rest — if an empty query lists everything, Esc's revert
     reopens it immediately. Gate `allowsEmptyCollection` on having a query so
-    "No matches" still shows while searching.
+    "No matches" still shows while searching. **Every sentence in this paragraph
+    assumes the items are a local array that is already in hand — for a remote
+    collection all three pieces of advice are wrong. See gotcha #21.**
 
     **Don't put a toggle/clear button in the field.** react-aria's
     `ariaHideOutside` aria-hides everything except the input and the popover
@@ -501,6 +503,36 @@ Points worth knowing before you reach for one:
     this is why. (Plain `<a>` elements were never affected — the provider only
     touches RAC's own components, which is why the app's other outbound links
     survived.)
+
+21. **An ASYNC ComboBox inverts gotcha #12's advice, because RAC decides
+    everything from the collection it can see *at that instant* — and for a
+    remote list, that is empty.** Found building `comp/PlaceSearchField.tsx`
+    (Mapbox place search); the three rules that changed:
+    - **`allowsEmptyCollection` cannot be gated on having a query.**
+      `useComboBoxState.open()` refuses to open a menu whose collection is
+      empty unless the flag is set, and it runs *inside the keystroke*, when
+      the request hasn't returned and the gate is still reading the PREVIOUS
+      query. The open is swallowed and the results land with nowhere to go.
+      Leave it on, and let `renderEmptyState` carry the states a local list
+      never has: below the minimum query length, in flight, and **failed** —
+      a search that 500s must not read as "no matches".
+    - **Pinning `selectedKey={null}` leaves the popover open over a map that
+      has already moved.** The close-on-selection path is *"the display value
+      changed"*, so with nothing committed there is nothing to close on.
+      Control `selectedKey` for real, and drop it back to null when the user
+      next edits the field — which is also what lets the same item be re-picked.
+    - **Even then it stays open when the picked label equals what was typed**
+      (search "Corryong", pick "Corryong" — the display value never changed).
+      Emptying the collection on the settled render is the deterministic close:
+      RAC shuts a menu whose collection went empty *and* whose
+      `allowsEmptyCollection` is off, so turn both off together for exactly
+      that render. Writing the fuller label back (`"Corryong, Victoria,
+      Australia"`) is worth doing anyway — six places are called Manilla.
+
+    Debounce (300 ms) plus an `AbortController` per keystroke; ignore
+    `AbortError` in the catch or your own cancellation renders as an error.
+    And do not retry a failed search — the next keystroke is already a fresh
+    request, and each one is billed.
 
 ## Verification playbook (all part of "done" for RAC work)
 
