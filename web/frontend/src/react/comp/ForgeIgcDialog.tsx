@@ -44,6 +44,7 @@ import { SimpleSelect } from "@/react/rac/select";
 import { Slider } from "@/react/rac/slider";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
+import { Label } from "react-aria-components";
 
 /** What the engine said about the file we just made. */
 interface Verdict {
@@ -61,9 +62,9 @@ interface Verdict {
 }
 
 const SABOTAGE: { value: ForgeSabotage; label: string }[] = [
-  { value: "none", label: "A clean flight" },
-  { value: "day", label: "Wrong day — withheld from scoring" },
-  { value: "place", label: "Wrong place — withheld from scoring" },
+  { value: "none", label: "Clean flight" },
+  { value: "day", label: "Wrong day" },
+  { value: "place", label: "Wrong place" },
 ];
 
 export default function ForgeIgcDialog({
@@ -86,7 +87,7 @@ export default function ForgeIgcDialog({
   category: "hg" | "pg";
   xctsk: XCTask;
 }) {
-  const [pilot, setPilot] = useState("Forged Pilot");
+  const [pilot, setPilot] = useState("Test Pilot");
   const [glider, setGlider] = useState("Test Wing");
   const [startLocal, setStartLocal] = useState("13:00");
   const [rate, setRate] = useState(5);
@@ -155,7 +156,7 @@ export default function ForgeIgcDialog({
     } catch (err) {
       // A task with one turnpoint, a waypoint with no coordinates: say what
       // happened rather than offering a file that was never made.
-      setProblem(err instanceof Error ? err.message : "Could not forge a flight.");
+      setProblem(err instanceof Error ? err.message : "Could not create a flight.");
     } finally {
       setBusy(false);
     }
@@ -183,10 +184,9 @@ export default function ForgeIgcDialog({
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Fly <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
+          Create a test IGC file for <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
           {offset >= 0 ? "+" : ""}
-          {offset}) and download the tracklog. Nothing is uploaded — submit it
-          yourself to test the real path.
+          {offset}).
         </p>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -215,6 +215,7 @@ export default function ForgeIgcDialog({
             maxValue={120}
           />
           <div className="flex flex-col gap-2">
+            <Label htmlFor="sabotage">What kind of flight?</Label>
             <SimpleSelect
               value={sabotage}
               onChange={(v) => setSabotage(v as ForgeSabotage)}
@@ -297,7 +298,7 @@ export default function ForgeIgcDialog({
             Close
           </Button>
           <Button variant="outline" isPending={busy} pendingLabel="Forging" onPress={forge}>
-            {verdict ? "Forge again" : "Forge"}
+            {verdict ? "Re-create" : "Create"}
           </Button>
           {verdict?.shapeOk ? (
             <Button onPress={() => download(verdict)}>Download .igc</Button>

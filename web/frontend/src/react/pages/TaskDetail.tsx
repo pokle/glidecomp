@@ -359,7 +359,7 @@ export function TaskDetail() {
             admin should ever see, and while previewing as a pilot it must
             disappear like everything else. A route is required because
             there is nothing to fly without one. */}
-        {isSuperAdmin && previewRole === "actual" && comp && task.xctsk ? (
+        {isAdmin && comp && task.xctsk ? (
           <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
             IGC Forge
           </Button>
