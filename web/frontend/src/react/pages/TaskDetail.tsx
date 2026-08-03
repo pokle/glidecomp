@@ -273,17 +273,6 @@ export function TaskDetail() {
               Settings
             </Button>
           ) : null}
-          {/* Gated on the REAL super admin and on not currently previewing
-              another role — the same rule Settings.tsx uses. `useAdminView`
-              would be wrong here: this is not a comp-admin power that a comp
-              admin should ever see, and while previewing as a pilot it must
-              disappear like everything else. A route is required because
-              there is nothing to fly without one. */}
-          {isSuperAdmin && previewRole === "actual" && comp && task.xctsk ? (
-            <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
-              IGC Forge
-            </Button>
-          ) : null}
         </div>
       </div>
       {/* The task's action row. It leads with Submit track — the one thing a
@@ -363,6 +352,17 @@ export function TaskDetail() {
           >
             Field analysis
           </LinkButton>
+        ) : null}
+        {/* Gated on the REAL super admin and on not currently previewing
+            another role — the same rule Settings.tsx uses. `useAdminView`
+            would be wrong here: this is not a comp-admin power that a comp
+            admin should ever see, and while previewing as a pilot it must
+            disappear like everything else. A route is required because
+            there is nothing to fly without one. */}
+        {isSuperAdmin && previewRole === "actual" && comp && task.xctsk ? (
+          <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
+            IGC Forge
+          </Button>
         ) : null}
       </div>
 
