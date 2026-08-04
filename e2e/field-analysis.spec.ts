@@ -114,9 +114,16 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-  // Tests that scroll leave the page scrolled; every other reset (viewport,
-  // selection, the fold toggle) is done by the test that needs it.
-  await page.evaluate(() => window.scrollTo(0, 0));
+  // Tests that scroll leave the page scrolled — and, now that the ranking has
+  // its own capped scroll box while stacked, leave THAT scrolled too. Reset
+  // both; every other reset (viewport, selection, the fold toggle) is done by
+  // the test that needs it.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    document
+      .querySelectorAll('[role="region"]')
+      .forEach((el) => el.scrollTo({ top: 0 }));
+  });
 });
 
 /** The ranking table. */
@@ -187,41 +194,69 @@ test("wide: the chart sits beside the table, and the table still fits", async ()
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test("narrow: the chart pins to the top while the table scrolls under it", async () => {
+test("narrow: the table scrolls in its own box, and the chart above it stays put", async () => {
   await setViewport(390, 780);
   const pane = detailPane();
+  // The ranking's scroll viewport — capped while stacked, so working down the
+  // rows never moves the page (and so never moves the chart).
+  const viewport = page.getByRole("region", { name: "Behaviour ranking" });
 
   await pane.scrollIntoViewIfNeeded();
   const before = (await pane.boundingBox())!;
-  await page.evaluate(() => window.scrollBy(0, 800));
-  const after = (await pane.boundingBox())!;
+  const pageBefore = await page.evaluate(() => window.scrollY);
 
-  // Still on screen after scrolling a long way down the table.
+  // Scroll the ROWS, not the window. A long way — further than the box is tall.
+  await viewport.evaluate((el) => el.scrollBy(0, 2000));
+  expect(await viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+
+  const after = (await pane.boundingBox())!;
+  // The chart has not moved a pixel, because nothing outside the box scrolled.
+  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageBefore);
+  // And it is still on screen, which is the whole point of capping the box.
   expect(after.y).toBeLessThan(780);
   expect(after.y + after.height).toBeGreaterThan(0);
-  // And pinned, not merely tall: it moved up relative to the document.
-  expect(after.y).toBeLessThanOrEqual(before.y + 1);
 });
 
-test("narrow: keyboard focus never lands behind the pinned chart", async () => {
+test("narrow: a keyboard-focused row is never hidden by the chart or its own box", async () => {
   await setViewport(390, 780);
   const rows = ranking().locator("tbody tr");
 
-  // Start low and walk UP — the direction that drives a focused row under a
-  // pane pinned to the top of the viewport.
-  await rows.nth(Math.min(16, (await rows.count()) - 1)).click();
+  // Start low and walk UP — the direction that used to drive a focused row
+  // under a chart pinned to the top of the viewport. Nothing is pinned now, so
+  // the check is the general one: the focused row must be inside the scroll
+  // box it lives in, and must not intersect the chart.
+  // The FIRST cell, not the row: a row's middle holds the ⓘ that opens the
+  // method popover, and clicking that focuses a dialog instead of the row.
+  await rows
+    .nth(Math.min(16, (await rows.count()) - 1))
+    .locator("th, td")
+    .first()
+    .click();
+  // The walk below is only meaningful from a focused row.
+  expect(
+    await page.evaluate(() => Boolean((document.activeElement as HTMLElement)?.closest("tr")))
+  ).toBe(true);
   for (let i = 0; i < 10; i++) {
     await page.keyboard.press("ArrowUp");
-    const obscured = await page.evaluate(() => {
-      const el = (document.activeElement as HTMLElement).closest("tr");
-      if (!el) return false;
-      const r = el.getBoundingClientRect();
-      const p = document
+    const hidden = await page.evaluate(() => {
+      const row = (document.activeElement as HTMLElement).closest("tr");
+      if (!row) return null;
+      const r = row.getBoundingClientRect();
+      const box = document
+        .querySelector('[role="region"][aria-label="Behaviour ranking"]')!
+        .getBoundingClientRect();
+      const chart = document
         .querySelector('[role="region"][aria-labelledby]')!
         .getBoundingClientRect();
-      return r.top < p.bottom && r.bottom > p.top;
+      return {
+        clippedByBox: r.bottom > box.bottom + 1 || r.top < box.top - 1,
+        behindChart: r.top < chart.bottom && r.bottom > chart.top,
+      };
     });
-    expect(obscured).toBe(false);
+    expect(hidden).not.toBeNull();
+    expect(hidden!.clippedByBox, "focused row scrolled out of its own box").toBe(false);
+    expect(hidden!.behindChart, "focused row overlaps the chart").toBe(false);
   }
 });
 

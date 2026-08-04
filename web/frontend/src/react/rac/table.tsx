@@ -29,9 +29,17 @@ import { cn } from "@/react/lib/utils";
 export function Table({
   className,
   scrollLabel,
+  viewportClassName,
   ...props
 }: Omit<TableProps, "className"> & {
   className?: string;
+  /**
+   * Classes for the scroll VIEWPORT rather than the table. Use it to cap the
+   * viewport's height so the table scrolls inside a box instead of running the
+   * page down — one scroll region, so `scrollLabel` still names the only tab
+   * stop rather than nesting a second one inside it.
+   */
+  viewportClassName?: string;
   /**
    * Turns the horizontal overflow wrapper into a labelled, focusable scroll
    * region. Pass this on any table wide enough to actually scroll: without a
@@ -46,7 +54,10 @@ export function Table({
       // print:overflow-x-visible: a scroll viewport would print only its
       // visible slice; letting the table overflow at least keeps every
       // column present for browsers' shrink-to-fit.
-      className="relative w-full overflow-x-auto print:overflow-x-visible"
+      className={cn(
+        "relative w-full overflow-x-auto print:overflow-x-visible",
+        viewportClassName
+      )}
       {...(scrollLabel
         ? { role: "region", "aria-label": scrollLabel, tabIndex: 0 }
         : {})}

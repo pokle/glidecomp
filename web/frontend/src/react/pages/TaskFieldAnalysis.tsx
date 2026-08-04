@@ -625,45 +625,12 @@ export function TaskFieldAnalysis() {
               </Card>
             ) : null}
 
-            {/* The ONE chapter that is deliberately not a Card.
-                SeparationRanking's master-detail pins its chart to the VIEWPORT
-                at narrow widths. Wrapping this section in a panel reliably
-                breaks the pinned pane's controls: the pane paints correctly,
-                but `elementsFromPoint` over its Expand button returns only
-                <body>, so the click never lands and Playwright retries until it
-                times out. e2e/field-analysis.spec.ts's expand test is the
-                guard, and it fails 4/4 with a panel and passes 4/4 without.
-
-                What has been measured, so the next attempt does not re-walk it
-                (all on a freshly reset stack, with a CSS-identical control edit
-                confirming the harness):
-                  - `py-5` on this section alone: PASSES.
-                  - `px-5` on this section alone: FAILS. Horizontal padding is
-                    the trigger; vertical is harmless.
-                  - But a Card with `px-0` plus the section padding its own
-                    parts (so no ancestor pads it horizontally) STILL FAILS —
-                    which means the axis is a symptom, not the cause.
-                  - Also ruled out individually: the pane's negative-margin
-                    bleed, `flex flex-col`, `text-sm`, `bg-card` vs
-                    `bg-background`, and `scroll-mt` on the pane to settle the
-                    scroll/re-pin loop.
-                The retry log shows ~110 rounds of "done scrolling" then
-                "intercepts pointer events", which looks like scrollIntoView
-                and the sticky re-pin failing to converge — but that is a
-                hypothesis, not a finding.
-
-                So this is a real layout interaction, not a wrapper change.
-                The behaviour has issue history behind it (#453, plus the WCAG
-                focus work in MasterDetail), so until someone reworks the
-                master/detail layout itself, the panel loses. Do not "fix" the
-                inconsistency by wrapping this — the chart stops taking clicks
-                on a phone, and only the e2e catches it. */}
-            <section aria-labelledby="separation-heading" className="space-y-3">
+            <Card aria-labelledby="separation-heading" className="gap-3">
               <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
                 Which behaviours went with better results
               </h2>
               <SeparationRanking metrics={report.metrics} report={report} />
-            </section>
+            </Card>
 
             <Card aria-labelledby="heatmap-heading" className="gap-3">
               <h2 id="heatmap-heading" className="scroll-mt-20 text-lg font-semibold">
