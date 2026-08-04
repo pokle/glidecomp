@@ -12,6 +12,8 @@
  */
 import { Link as AriaLink } from "react-aria-components";
 import { Loading } from "@/react/rac/progress";
+import { cardSurface } from "@/react/rac/card";
+import { cn } from "@/react/lib/utils";
 import { compPath, compPilotsPath, pilotPath, taskPath } from "../lib/slug";
 import { categoryLabel, formatDate, scoringFormatLabel } from "../lib/format";
 import type { SearchComp, SearchState, SearchTask } from "./use-site-search";
@@ -83,7 +85,7 @@ function CompResult({ comp }: { comp: SearchComp }) {
   ].join(" · ");
 
   return (
-    <div className="rounded-lg border">
+    <div className={cn(cardSurface, "overflow-hidden")}>
       <AriaLink
         href={compPath(comp.comp_id, comp.name)}
         className="block rounded-t-lg px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"

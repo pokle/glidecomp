@@ -135,7 +135,7 @@ export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
         Each group carries the name of its strongest signature. A ★ marks the
         pilot most typical of their group.
       </p>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(22rem,100%),1fr))] gap-4">
         {sc.clusters.map((c) => (
           <ClusterCard key={c.id} cluster={c} />
         ))}

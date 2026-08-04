@@ -28,6 +28,7 @@ import { useCompName } from "./comp-name-context";
 import { SectionHeader } from "../components/SectionHeader";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { SubmitTrackDialog } from "./SubmitTrackDialog";
+import { Card } from "@/react/rac/card";
 import type {
   ClassScore,
   PilotListEntry,
@@ -208,7 +209,7 @@ export function TaskResults({
   const scoresHref = `/comp/${encodeURIComponent(compId)}/scores?task=${encodeURIComponent(taskId)}`;
 
   return (
-    <section id="results" className="scroll-mt-4">
+    <Card id="results" className="scroll-mt-4">
       <SectionHeader
         title="Results"
         action={
@@ -306,7 +307,7 @@ export function TaskResults({
           </div>
         </>
       )}
-    </section>
+    </Card>
   );
 }
 

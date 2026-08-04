@@ -54,6 +54,7 @@ import { underTask } from "../lib/crumbs";
 import { retry } from "../lib/retry";
 import { idFromSegment, pilotPath, taskPath } from "../lib/slug";
 import { LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { Timestamp } from "../components/Timestamp";
 import { NotFound } from "../components/NotFound";
@@ -1056,9 +1057,9 @@ function TrackQualityNote({
   if (!quality || quality.findings.length === 0 || inExplanation) return null;
   const hard = quality.hardFailed;
   return (
-    <section
+    <Card
       aria-labelledby="track-quality-heading"
-      className={`rounded-lg border p-4 ${hard ? "border-destructive/50" : ""}`}
+      className={hard ? "border-destructive/50" : undefined}
     >
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="track-quality-heading" className="font-semibold">
@@ -1077,7 +1078,7 @@ function TrackQualityNote({
         ))}
       </ul>
       <TrackValidityDocLink className="mt-3" />
-    </section>
+    </Card>
   );
 }
 
@@ -1138,7 +1139,7 @@ function TrackDataCleaningNote({
       r.maxCorrectionMeters,
     )} m off`;
   return (
-    <section className="rounded-lg border p-4">
+    <Card>
       <h2 className="font-semibold">Track data cleaning</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         {cleaning.repairedFixCount} of {cleaning.totalFixCount} GPS fixes (
@@ -1199,7 +1200,7 @@ function TrackDataCleaningNote({
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }
 
@@ -1215,7 +1216,7 @@ function ExplanationSection({
   onItemClick: (item: ScoreExplanationItem) => void;
 }) {
   return (
-    <section className="rounded-lg border p-4">
+    <Card>
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="font-semibold">{section.title}</h2>
         {section.points !== undefined ? (
@@ -1273,7 +1274,7 @@ function ExplanationSection({
           it illustrates: the numbers are the answer, the curve is the shape.
           Inline SVG, so it is in the server-rendered first paint. */}
       {section.chart ? <ScoreChartView chart={section.chart} /> : null}
-    </section>
+    </Card>
   );
 }
 

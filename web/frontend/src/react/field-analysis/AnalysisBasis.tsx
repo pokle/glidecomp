@@ -77,7 +77,7 @@ export function AnalysisBasis({
           each other, so they need the width rather than a column beside the
           scalars. Column counts are 2 and 4 (both divide the four facts) so no
           breakpoint leaves a fact orphaned beside empty slots. */}
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-4">
+      <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(9rem,100%),1fr))] gap-x-6 gap-y-3">
         <Fact term="Pilots">{basis.pilotCount}</Fact>
         {/* Both halves are optional (≤ v12 / v13 rows) — fall back to whichever
             half a stale report carries rather than dropping the fact. */}
