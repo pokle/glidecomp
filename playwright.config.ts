@@ -6,7 +6,15 @@ export default defineConfig({
   // ssr.spec.ts needs the built output served through the real Pages runtime
   // (wrangler pages dev), not this config's SPA dev server — it has its own
   // config (playwright.ssr.config.ts, run via `bun run test:e2e:ssr`).
-  testIgnore: ["**/ssr.spec.ts"],
+  //
+  // e2e/fixtures/ holds the suite's plumbing, and one bun:test file that guards
+  // it. Playwright's default testMatch claims any `*.test.ts` under testDir, and
+  // loading that one fails the whole run before a single spec starts:
+  // `Only URLs with a scheme in: file, data, and node are supported by the
+  // default ESM loader. Received protocol 'bun:'`. It is run by `bun run test`,
+  // not from here. (playwright.ssr.config.ts needs no such line — it selects
+  // with testMatch rather than sweeping the directory.)
+  testIgnore: ["**/ssr.spec.ts", "**/fixtures/**"],
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
   // Sequential. The original reason was the cross-process D1 race (two

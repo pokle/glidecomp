@@ -12,7 +12,7 @@
  * reindex, which rebuilds a derived index and touches no competition data.
  */
 import { execSync } from "node:child_process";
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 
 const BASE_URL = FRONTEND_URL;

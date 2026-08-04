@@ -32,7 +32,7 @@
  * role locators.
  */
 import { execSync } from "node:child_process";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures/test";
 import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";

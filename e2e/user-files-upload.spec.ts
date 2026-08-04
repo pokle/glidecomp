@@ -1,4 +1,4 @@
-import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { test, expect, type Page, type APIRequestContext } from "./fixtures/test";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 

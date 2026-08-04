@@ -11,7 +11,7 @@
  * competition as the super admin, and removes it afterwards — see the
  * state-hygiene notes in e2e/fixtures/stack.ts.
  */
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
 import { resolve, dirname } from "path";
 import { readFile } from "fs/promises";
 import { fileURLToPath } from "url";
