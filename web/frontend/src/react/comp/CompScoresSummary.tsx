@@ -9,6 +9,7 @@
  */
 import { Link } from "react-router-dom";
 import { LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { SectionHeader } from "../components/SectionHeader";
 import { formatScore, ordinal } from "../lib/format";
 import { ScoreFreshness } from "./ScoreFreshness";
@@ -34,7 +35,7 @@ export function CompScoresSummary({
   const scoresHref = `/comp/${compId}/scores`;
 
   return (
-    <section id="scores" className="scroll-mt-24 break-before-page">
+    <Card id="scores" className="scroll-mt-24 break-before-page">
       <SectionHeader
         title="Standings"
         action={
@@ -106,6 +107,6 @@ export function CompScoresSummary({
           </p>
         </>
       )}
-    </section>
+    </Card>
   );
 }

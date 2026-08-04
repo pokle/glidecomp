@@ -21,6 +21,16 @@
  */
 import { cn } from "@/react/lib/utils";
 
+/**
+ * The surface recipe on its own, for elements that need to READ as a card but
+ * cannot be a `<section>` — a link row in a list, a `<li>`, a Tabulator shell.
+ * Prefer `<Card>`; reach for this only when the element is dictated by
+ * semantics. Keeping it in one place is the point: a bordered, transparent box
+ * was fine on a white page and reads as a hole punched in a tinted one.
+ */
+export const cardSurface =
+  "rounded-xl border bg-card text-card-foreground shadow-card";
+
 export function Card({
   className,
   ...props
@@ -28,10 +38,7 @@ export function Card({
   return (
     <section
       data-slot="card"
-      className={cn(
-        "flex flex-col gap-4 rounded-xl border bg-card p-5 text-sm text-card-foreground shadow-card",
-        className
-      )}
+      className={cn(cardSurface, "flex flex-col gap-4 p-5 text-sm", className)}
       {...props}
     />
   );

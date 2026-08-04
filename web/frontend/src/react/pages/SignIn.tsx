@@ -17,6 +17,7 @@ import { TextField } from "@/react/rac/field";
 // Not a kit component at all: RAC has no one-time-code field, so this stays a
 // thin wrapper over the `input-otp` package (hence react/vendor/, not rac/).
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/react/vendor/input-otp";
+import { Card } from "@/react/rac/card";
 import {
   sendSignInOtp,
   signInWithGoogle,
@@ -141,7 +142,7 @@ export function SignIn() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-12">
-      <div className="rounded-xl border px-6 py-8">
+      <Card className="gap-0 px-6 py-8">
         <h1 className="text-2xl font-bold">Sign in to GlideComp</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Track your flights and enter competitions.
@@ -261,7 +262,7 @@ export function SignIn() {
             {error}
           </p>
         ) : null}
-      </div>
+      </Card>
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         {/* Competitions list is public — an escape hatch that isn't sign-in. */}

@@ -74,6 +74,7 @@ import { underComp } from "../lib/crumbs";
 import { idFromSegment, compPath, taskPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { cn } from "../lib/utils";
+import { Card } from "@/react/rac/card";
 
 export function TaskDetail() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
@@ -401,6 +402,9 @@ export function TaskDetail() {
         />
       ) : null}
 
+      {/* The sections below are cards; the stack owns the rhythm between them
+          (SectionHeader no longer carries a margin of its own). */}
+      <div className="mt-6 flex flex-col gap-6">
       <TurnpointsSection
         xctsk={task.xctsk}
         taskDate={task.task_date}
@@ -473,6 +477,7 @@ export function TaskDetail() {
         />
         </CompNameProvider>
       ) : null}
+      </div>
 
       {isAdmin && comp && editOpen ? (
         <EditTaskDialog
@@ -615,7 +620,7 @@ function TaskSummaryHeader({
   if (!xctsk.sss && !goal) return null;
 
   return (
-    <dl className="mt-2 grid gap-x-6 gap-y-2 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+    <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(min(15rem,100%),1fr))] gap-x-6 gap-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
       {xctsk.sss ? (
         <div>
           <dt className="text-xs text-muted-foreground">Start of speed section</dt>
@@ -669,7 +674,7 @@ function TurnpointsSection({
 
   if (!xctsk && !isAdmin) return null;
   return (
-    <section>
+    <Card>
       <SectionHeader
         title="Route"
         action={
@@ -726,7 +731,7 @@ function TurnpointsSection({
       ) : (
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
-    </section>
+    </Card>
   );
 }
 

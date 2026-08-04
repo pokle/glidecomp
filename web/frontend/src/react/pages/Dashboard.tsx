@@ -8,6 +8,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
 import { ProportionMeter } from "@/react/rac/meter";
 import { Button, buttonVariants } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { FileTrigger } from "react-aria-components";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { parseIGC, parseXCTask } from "@glidecomp/engine";
@@ -161,200 +162,206 @@ export function Dashboard() {
   if (!ready) return <p role="status">Loading…</p>;
 
   return (
-    <section>
+    // A stack of panels, like every other page. Before this the three sections
+    // were unbounded regions floating on the page background, which read as
+    // "clean" while the background was white and as "unfinished" once it was
+    // not — the tint is what made the missing panels visible.
+    <div className="flex flex-col gap-6">
       <NearQuotaWarning tracks={tracks} tasks={tasks} />
 
       <CompetitionFlightsSection />
 
-      {/* The local library below gets its own heading so it reads as a
-          sibling of the Competition flights section above. */}
-      <h2 className="mb-3 text-lg font-bold">Personal flights</h2>
+      <Card>
+        {/* The local library gets its own heading so it reads as a sibling of
+            the Competition flights section above. */}
+        <h2 className="text-lg font-bold">Personal flights</h2>
 
-      <Tabs
-        selectedKey={tab}
-        onSelectionChange={(key) => setTab(key as "tracks" | "tasks")}
-      >
-        {/* The add-files action rides the tab row, right-aligned like the
-            section actions on the comp/task pages. */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <TabList aria-label="Personal flights">
-            <Tab id="tracks">
-              Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
-            </Tab>
-            <Tab id="tasks">Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}</Tab>
-          </TabList>
-          <div className="ml-auto">
-            {tab === "tracks" ? (
-              <AddFilesButton accept=".igc" label="Add .igc track log" onFiles={handleFiles} />
-            ) : (
-              <AddFilesButton accept=".xctsk" label="Add .xctsk task" onFiles={handleFiles} />
-            )}
-          </div>
-        </div>
-
-        <TabPanel id="tracks">
-          {tracks.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">
-              <p className="font-medium">No flight tracks yet</p>
-              <p className="text-sm">Upload IGC files or open tracks in the analysis page</p>
+        <Tabs
+          selectedKey={tab}
+          onSelectionChange={(key) => setTab(key as "tracks" | "tasks")}
+        >
+          {/* The add-files action rides the tab row, right-aligned like the
+              section actions on the comp/task pages. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <TabList aria-label="Personal flights">
+              <Tab id="tracks">
+                Tracks {tracks.length > 0 ? `(${tracks.length})` : ""}
+              </Tab>
+              <Tab id="tasks">Tasks {tasks.length > 0 ? `(${tasks.length})` : ""}</Tab>
+            </TabList>
+            <div className="ml-auto">
+              {tab === "tracks" ? (
+                <AddFilesButton accept=".igc" label="Add .igc track log" onFiles={handleFiles} />
+              ) : (
+                <AddFilesButton accept=".xctsk" label="Add .xctsk task" onFiles={handleFiles} />
+              )}
             </div>
-          ) : (
-            <ul className="mt-3 divide-y rounded-lg border">
-              {tracks.map((track) => (
-                <li key={track.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                  <a
-                    href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`}
-                    className="font-medium underline underline-offset-4"
-                  >
-                    {track.name}
-                  </a>
-                  <span className="text-sm text-muted-foreground">
-                    {[track.summary.glider, track.filename].filter(Boolean).join(" · ")}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {relativeTime(track.lastAccessedAt)}
-                  </span>
-                  <span className="ml-auto flex gap-2">
-                    {/* A plain anchor, not rac LinkButton: the analysis page is a
-                        separate Vite entry, and RacRouterProvider would try to
-                        route it client-side. */}
+          </div>
+
+          <TabPanel id="tracks">
+            {tracks.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                <p className="font-medium">No flight tracks yet</p>
+                <p className="text-sm">Upload IGC files or open tracks in the analysis page</p>
+              </div>
+            ) : (
+              <ul className="mt-3 divide-y rounded-lg border">
+                {tracks.map((track) => (
+                  <li key={track.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
                     <a
                       href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`}
-                      title="View on the analysis map"
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      className="font-medium underline underline-offset-4"
                     >
-                      View
+                      {track.name}
                     </a>
-                    <TooltipTrigger>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onPress={async () => {
-                          const stored = await storage.getTrack(track.id);
-                          if (stored)
-                            downloadFile(
-                              stored.filename,
-                              stored.content,
-                              "application/octet-stream"
-                            );
-                        }}
+                    <span className="text-sm text-muted-foreground">
+                      {[track.summary.glider, track.filename].filter(Boolean).join(" · ")}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {relativeTime(track.lastAccessedAt)}
+                    </span>
+                    <span className="ml-auto flex gap-2">
+                      {/* A plain anchor, not rac LinkButton: the analysis page is a
+                          separate Vite entry, and RacRouterProvider would try to
+                          route it client-side. */}
+                      <a
+                        href={`/analysis.html?storedTrack=${encodeURIComponent(track.id)}`}
+                        title="View on the analysis map"
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
                       >
-                        Download
-                      </Button>
-                      <Tooltip>Download IGC</Tooltip>
-                    </TooltipTrigger>
-                    <TooltipTrigger>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onPress={async () => {
-                          const ok = await confirm({
-                            title: "Remove this flight?",
-                            message: `${track.name} will be deleted from your storage. Tracks already submitted to a competition stay with the competition.`,
-                            confirmLabel: "Remove",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await storage.deleteTrack(track.id);
-                          await refreshLists();
-                        }}
-                      >
-                        Remove
-                      </Button>
-                      <Tooltip>Remove track</Tooltip>
-                    </TooltipTrigger>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-sm text-muted-foreground">
-            You can also drag and drop .igc files anywhere on this page.
-          </p>
-        </TabPanel>
+                        View
+                      </a>
+                      <TooltipTrigger>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={async () => {
+                            const stored = await storage.getTrack(track.id);
+                            if (stored)
+                              downloadFile(
+                                stored.filename,
+                                stored.content,
+                                "application/octet-stream"
+                              );
+                          }}
+                        >
+                          Download
+                        </Button>
+                        <Tooltip>Download IGC</Tooltip>
+                      </TooltipTrigger>
+                      <TooltipTrigger>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={async () => {
+                            const ok = await confirm({
+                              title: "Remove this flight?",
+                              message: `${track.name} will be deleted from your storage. Tracks already submitted to a competition stay with the competition.`,
+                              confirmLabel: "Remove",
+                              destructive: true,
+                            });
+                            if (!ok) return;
+                            await storage.deleteTrack(track.id);
+                            await refreshLists();
+                          }}
+                        >
+                          Remove
+                        </Button>
+                        <Tooltip>Remove track</Tooltip>
+                      </TooltipTrigger>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-sm text-muted-foreground">
+              You can also drag and drop .igc files anywhere on this page.
+            </p>
+          </TabPanel>
 
-        <TabPanel id="tasks">
-          {tasks.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">
-              <p className="font-medium">No competition tasks yet</p>
-              <p className="text-sm">Upload XCTSK files or load tasks in the analysis page</p>
-            </div>
-          ) : (
-            <ul className="mt-3 divide-y rounded-lg border">
-              {tasks.map((task) => (
-                <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                  <a
-                    href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`}
-                    className="font-medium underline underline-offset-4"
-                  >
-                    {task.name}
-                  </a>
-                  <span className="text-sm text-muted-foreground">
-                    {task.task.turnpoints.length} turnpoint
-                    {task.task.turnpoints.length !== 1 ? "s" : ""} · {task.id}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {relativeTime(task.lastAccessedAt)}
-                  </span>
-                  <span className="ml-auto flex gap-2">
-                    {/* A plain anchor, not rac LinkButton: the analysis page is a
-                        separate Vite entry, and RacRouterProvider would try to
-                        route it client-side. */}
+          <TabPanel id="tasks">
+            {tasks.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                <p className="font-medium">No competition tasks yet</p>
+                <p className="text-sm">Upload XCTSK files or load tasks in the analysis page</p>
+              </div>
+            ) : (
+              <ul className="mt-3 divide-y rounded-lg border">
+                {tasks.map((task) => (
+                  <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
                     <a
                       href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`}
-                      title="View on the analysis map"
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      className="font-medium underline underline-offset-4"
                     >
-                      View
+                      {task.name}
                     </a>
-                    <TooltipTrigger>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onPress={async () => {
-                          const stored = await storage.getTask(task.id);
-                          if (stored)
-                            downloadFile(
-                              `${stored.id}.xctsk`,
-                              stored.rawJson,
-                              "application/xctsk+json"
-                            );
-                        }}
+                    <span className="text-sm text-muted-foreground">
+                      {task.task.turnpoints.length} turnpoint
+                      {task.task.turnpoints.length !== 1 ? "s" : ""} · {task.id}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {relativeTime(task.lastAccessedAt)}
+                    </span>
+                    <span className="ml-auto flex gap-2">
+                      {/* A plain anchor, not rac LinkButton: the analysis page is a
+                          separate Vite entry, and RacRouterProvider would try to
+                          route it client-side. */}
+                      <a
+                        href={`/analysis.html?storedTask=${encodeURIComponent(task.id)}`}
+                        title="View on the analysis map"
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
                       >
-                        Download
-                      </Button>
-                      <Tooltip>Download XCTSK</Tooltip>
-                    </TooltipTrigger>
-                    <TooltipTrigger>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onPress={async () => {
-                          const ok = await confirm({
-                            title: "Remove this task?",
-                            message: `${task.name} will be deleted from your storage.`,
-                            confirmLabel: "Remove",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await storage.deleteTask(task.id);
-                          await refreshLists();
-                        }}
-                      >
-                        Remove
-                      </Button>
-                      <Tooltip>Remove task</Tooltip>
-                    </TooltipTrigger>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-sm text-muted-foreground">
-            You can also drag and drop .xctsk files anywhere on this page.
-          </p>
-        </TabPanel>
-      </Tabs>
+                        View
+                      </a>
+                      <TooltipTrigger>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={async () => {
+                            const stored = await storage.getTask(task.id);
+                            if (stored)
+                              downloadFile(
+                                `${stored.id}.xctsk`,
+                                stored.rawJson,
+                                "application/xctsk+json"
+                              );
+                          }}
+                        >
+                          Download
+                        </Button>
+                        <Tooltip>Download XCTSK</Tooltip>
+                      </TooltipTrigger>
+                      <TooltipTrigger>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onPress={async () => {
+                            const ok = await confirm({
+                              title: "Remove this task?",
+                              message: `${task.name} will be deleted from your storage.`,
+                              confirmLabel: "Remove",
+                              destructive: true,
+                            });
+                            if (!ok) return;
+                            await storage.deleteTask(task.id);
+                            await refreshLists();
+                          }}
+                        >
+                          Remove
+                        </Button>
+                        <Tooltip>Remove task</Tooltip>
+                      </TooltipTrigger>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-sm text-muted-foreground">
+              You can also drag and drop .xctsk files anywhere on this page.
+            </p>
+          </TabPanel>
+        </Tabs>
+      </Card>
 
       <StorageSection tracks={tracks} tasks={tasks} />
 
@@ -367,7 +374,7 @@ export function Dashboard() {
           <p className="text-sm font-normal text-muted-foreground">.igc and .xctsk files</p>
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -429,13 +436,13 @@ function CompetitionFlightsSection() {
   if (flights.length === 0) return null;
 
   return (
-    <section className="mb-8">
+    <Card>
       <h2 className="text-lg font-bold">Competition flights</h2>
       <Tree
         aria-label="Competition flights"
         selectionMode="none"
         defaultExpandedKeys={groups.map((g) => g.comp_id)}
-        className="mt-3 divide-y rounded-lg border"
+        className="divide-y rounded-lg border"
       >
         {groups.map((g) => (
           <TreeItem key={g.comp_id} id={g.comp_id} textValue={g.comp_name}>
@@ -491,10 +498,10 @@ function CompetitionFlightsSection() {
           </TreeItem>
         ))}
       </Tree>
-      <p className="mt-3 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         Flights are managed by the competition. Contact the competition admin to delete.
       </p>
-    </section>
+    </Card>
   );
 }
 
@@ -565,7 +572,7 @@ function StorageSection({ tracks, tasks }: { tracks: StoredTrack[]; tasks: Store
   if (tasks.length / MAX_USER_TASKS >= 0.8) parts.push(`${tasks.length} of ${MAX_USER_TASKS} tasks`);
 
   return (
-    <section className="mt-10">
+    <Card>
       <h2 className="text-lg font-bold">Storage</h2>
       {tracks.length > 0 || tasks.length > 0 ? (
         // A Meter, not a ProgressBar: quota used is a *measurement* within a
@@ -587,10 +594,10 @@ function StorageSection({ tracks, tasks }: { tracks: StoredTrack[]; tasks: Store
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">Nothing stored yet.</p>
       )}
-      <p className="mt-3 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         <strong>Heads up.</strong> Files you upload here are visible to anyone with a link. Share
         the link to your flight if you want others to see it.
       </p>
-    </section>
+    </Card>
   );
 }

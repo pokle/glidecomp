@@ -207,7 +207,7 @@ export default function ForgeIgcDialog({
           {offset}).
         </p>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-3">
           <TextField label="Pilot name" value={pilot} onChange={setPilot} />
           <TextField label="Glider" value={glider} onChange={setGlider} />
           <TextField
@@ -293,7 +293,7 @@ export default function ForgeIgcDialog({
                       : "Created, and the engine accepts it"}
               </AlertTitle>
               <AlertDescription>
-                <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+                <dl className="mt-1 grid grid-cols-[repeat(auto-fit,minmax(min(7rem,100%),1fr))] gap-x-6 gap-y-1 text-sm">
                   <Fact label="Flight date" value={verdict.flightDate ?? "—"} />
                   <Fact
                     label={openDistance ? "Open distance" : "Course flown"}

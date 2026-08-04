@@ -32,6 +32,7 @@ import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { TabulatorGrid } from "./TabulatorGrid";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
+import { Card } from "@/react/rac/card";
 import {
   classifyImportRows,
   emptyRow,
@@ -112,7 +113,7 @@ export function PilotsSection({
   }, [loadPilots]);
 
   return (
-    <section>
+    <Card>
       <SectionHeader
         as={headingAs}
         className={headingAs === "h1" ? "mt-2" : undefined}
@@ -211,7 +212,7 @@ export function PilotsSection({
           }}
         />
       ) : null}
-    </section>
+    </Card>
   );
 }
 

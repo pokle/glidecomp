@@ -1068,7 +1068,7 @@ function TrackAccepted({
       </Alert>
 
       {s ? (
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(7rem,100%),1fr))] gap-x-6 gap-y-2 text-sm">
           <Fact label="Date" value={s.flight_date ?? "Not stated in the file"} />
           <Fact label="Take off" value={formatClockInZone(s.takeoff_at, zone)} />
           <Fact label="Landing" value={formatClockInZone(s.landing_at, zone)} />

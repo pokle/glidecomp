@@ -4,6 +4,7 @@ import { Button } from "@/react/rac/button";
 import { useConfirm } from "../lib/confirm";
 import { toast } from "../lib/toast";
 import { useGoToSignIn, useUser } from "../lib/user";
+import { Card } from "@/react/rac/card";
 
 interface NamespaceStats {
   name: string;
@@ -200,14 +201,14 @@ export function AdminCache() {
         </div>
       </div>
 
-      <div className="mb-6 p-4 rounded-lg border border-border bg-card">
+      <Card className="mb-6 gap-1">
         <p className="text-sm text-muted-foreground">Total items</p>
         <p className="text-3xl font-bold tracking-tight">{stats.total_items}</p>
-      </div>
+      </Card>
 
       <div className="space-y-4">
         {stats.namespaces.map((ns) => (
-          <div key={ns.name} className="p-4 rounded-lg border border-border bg-card">
+          <Card key={ns.name} className="gap-2">
             <div className="flex justify-between items-baseline mb-2">
               <h2 className="font-medium">{ns.name}</h2>
               <span className="text-sm text-muted-foreground">
@@ -226,7 +227,7 @@ export function AdminCache() {
             ) : (
               <p className="text-sm text-muted-foreground italic">Empty</p>
             )}
-          </div>
+          </Card>
         ))}
       </div>
     </section>
