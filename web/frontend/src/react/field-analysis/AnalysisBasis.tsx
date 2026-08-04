@@ -14,6 +14,7 @@
  * of the page. This box is meant to be a glance at what was evaluated, and it
  * stops being one the moment a caveat list outgrows the facts.
  */
+import { Card } from "@/react/rac/card";
 import { formatTimeRange } from "@/react/lib/time";
 import { formatAltitude, useUnits } from "@/react/lib/units";
 import { AirtimeSplitBar } from "./charts/AirtimeSplitBar";
@@ -71,7 +72,7 @@ export function AnalysisBasis({
 }) {
   const units = useUnits();
   return (
-    <section aria-label="Analysis basis" className="rounded-lg border p-4">
+    <Card aria-label="Analysis basis">
       {/* Four scalar facts, then the airtime split on a full row of its own at
           every breakpoint — the bars are three shares of one whole read against
           each other, so they need the width rather than a column beside the
@@ -139,6 +140,6 @@ export function AnalysisBasis({
           </a>
         </p>
       ) : null}
-    </section>
+    </Card>
   );
 }

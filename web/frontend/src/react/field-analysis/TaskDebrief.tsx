@@ -8,6 +8,7 @@
  * qualifies, when the comp has too few tasks, or while loading — a debrief
  * that only speaks when it has evidence.
  */
+import { Card } from "@/react/rac/card";
 import { useEffect, useState } from "react";
 import { debriefFindings, debriefSentence, type DebriefFinding } from "./debrief";
 import type { CompFieldAnalysisData } from "./types";
@@ -67,7 +68,7 @@ export function TaskDebrief({
   if (!rendered) return null;
 
   return (
-    <section aria-labelledby="debrief-heading" className="space-y-3">
+    <Card aria-labelledby="debrief-heading" className="gap-3">
       <h2 id="debrief-heading" className="scroll-mt-20 text-lg font-semibold">
         Task debrief
       </h2>
@@ -83,6 +84,6 @@ export function TaskDebrief({
           <li key={f.metricId}>{debriefSentence(f)}</li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }
