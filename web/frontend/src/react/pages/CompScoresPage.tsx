@@ -16,6 +16,7 @@ import { NotFound } from "@/react/components/NotFound";
 import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Card } from "@/react/rac/card";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
@@ -134,47 +135,58 @@ export function CompScoresPage() {
         ) : null}
       </div>
 
-      {state.kind === "loading" ? (
-        <Loading className="mt-2">Loading scores…</Loading>
-      ) : state.kind === "unavailable" ? (
-        <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
-      ) : (
-        <>
-          <ScoreFreshness
-            computedAt={state.scores.computed_at}
-            stale={state.scores.stale}
-            timezone={comp.timezone}
-            etag={state.etag}
-            pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
-          />
-          {state.scores.standings.length === 0 ? (
-            <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
-          ) : (
-            <>
-              <ScoresViews
-                scores={state.scores}
-                compId={compId}
-                compName={comp.name}
-                timezone={comp.timezone}
-                tasks={comp.tasks}
-                defaultTaskId={null}
-                deepLinkTaskId={searchParams.get("task")}
+      {/* One card holds the whole scores apparatus: when it was computed, the
+          view switcher, the table, and the caption under it. A card owns its
+          controls and its caption — tabs that filter a table and a footnote
+          that explains it belong INSIDE the panel they act on, not floating
+          beside it. Only the hero above stays on the page ground, which is
+          what the comp and task pages do too. */}
+      <Card className="mt-6">
+        {state.kind === "loading" ? (
+          <Loading>Loading scores…</Loading>
+        ) : state.kind === "unavailable" ? (
+          <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
+        ) : (
+          <>
+            <ScoreFreshness
+              computedAt={state.scores.computed_at}
+              stale={state.scores.stale}
+              timezone={comp.timezone}
+              etag={state.etag}
+              pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
+            />
+            {state.scores.standings.length === 0 ? (
+              <ScoresEmptyState
+                isAdmin={isAdmin}
+                tasksHref={`${compPath(compId, comp.name)}#tasks`}
               />
-              <p className="mt-4 text-sm text-muted-foreground">
-                Click any score for a step-by-step explanation. Questions about a
-                score?{" "}
-                <Link
-                  to={`${compPath(compId, comp.name)}#admins`}
-                  className="underline underline-offset-4"
-                >
-                  Ask the comp admins
-                </Link>
-                .
-              </p>
-            </>
-          )}
-        </>
-      )}
+            ) : (
+              <>
+                <ScoresViews
+                  scores={state.scores}
+                  compId={compId}
+                  compName={comp.name}
+                  timezone={comp.timezone}
+                  tasks={comp.tasks}
+                  defaultTaskId={null}
+                  deepLinkTaskId={searchParams.get("task")}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Click any score for a step-by-step explanation. Questions about a
+                  score?{" "}
+                  <Link
+                    to={`${compPath(compId, comp.name)}#admins`}
+                    className="underline underline-offset-4"
+                  >
+                    Ask the comp admins
+                  </Link>
+                  .
+                </p>
+              </>
+            )}
+          </>
+        )}
+      </Card>
     </div>
   );
 }
