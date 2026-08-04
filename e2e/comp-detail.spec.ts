@@ -29,7 +29,7 @@
  */
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 import { compScoresCsvPath } from "../web/frontend/src/react/lib/slug";
 

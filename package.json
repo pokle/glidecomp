@@ -40,7 +40,7 @@
     "typecheck:worker": "bun run --filter airscore-api typecheck",
     "typecheck:auth": "bun run --filter auth-api typecheck",
     "typecheck:all": "bun run typecheck && bun run typecheck:engine && bun run typecheck:worker && bun run typecheck:auth && bun run typecheck:comp && bun run typecheck:dev-router",
-    "test": "bun test --cwd . ./web/engine ./web/workers/airscore-api ./web/workers/dev-router ./web/scripts && bun run typecheck:all",
+    "test": "bun test --cwd . ./e2e/fixtures ./web/engine ./web/workers/airscore-api ./web/workers/dev-router ./web/scripts && bun run typecheck:all",
     "test:comp": "bun run --filter competition-api test",
     "test:auth": "bun run --filter auth-api test",
     "test:frontend": "bun run --filter '@glidecomp/frontend' test",

@@ -10,7 +10,7 @@
  * READ-ONLY against the seeded sample comp — nothing is created, so there is
  * nothing to clean up (see the state-hygiene notes in e2e/fixtures/stack.ts).
  */
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "./fixtures/test";
 import { FRONTEND_URL } from "./fixtures/stack";
 import { compScoresPath, pilotPath, taskPath } from "../web/frontend/src/react/lib/slug";
 
