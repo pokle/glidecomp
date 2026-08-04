@@ -625,23 +625,12 @@ export function TaskFieldAnalysis() {
               </Card>
             ) : null}
 
-            {/* The ONE chapter that is deliberately not a Card.
-                SeparationRanking's master-detail pins its chart to the
-                VIEWPORT at narrow widths and bleeds full-width past the page's
-                padding, so that table rows scrolling under it are covered edge
-                to edge. That is the opposite of what a padded panel wants, and
-                putting it in one broke the pinned pane's click targets
-                (e2e/field-analysis.spec.ts's expand test caught it). The
-                behaviour has issue history behind it — #453, plus the WCAG
-                focus work — so the panel loses. Making this one a card means
-                reworking the bleed to cancel the card's padding instead of the
-                page's, which is its own change with its own risk. */}
-            <section aria-labelledby="separation-heading" className="space-y-3">
+            <Card aria-labelledby="separation-heading" className="gap-3">
               <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
                 Which behaviours went with better results
               </h2>
               <SeparationRanking metrics={report.metrics} report={report} />
-            </section>
+            </Card>
 
             <Card aria-labelledby="heatmap-heading" className="gap-3">
               <h2 id="heatmap-heading" className="scroll-mt-20 text-lg font-semibold">
