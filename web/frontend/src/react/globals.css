@@ -4,9 +4,10 @@
  * src/react/rac/ (the sole kit since 2026-07-27; see one-kit.test.ts).
  *
  * Tokens follow the Apple design language (inspired by get-inscribe.com):
- * white / #f5f5f7 surfaces, #1d1d1f labels, iOS system blue as the primary,
- * hairline separators, and Atkinson Hyperlegible Next (falling back to the
- * SF Pro system stack) as the app face. Loaded by the React
+ * white cards on an #f2f2f7 grouped ground, #1d1d1f labels, iOS system blue as
+ * the primary, hairline separators, two elevations, and Atkinson Hyperlegible
+ * Next (falling back to the SF Pro system stack) as the app face. Loaded by the
+ * React
  * entry (react/entry-client.tsx) and imported by src/analysis.css so the
  * vanilla analysis page shares the same tokens.
  */
@@ -24,8 +25,13 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Surfaces */
-  --background: #ffffff;
+  /* Surfaces. The ground is Apple's systemGroupedBackground and a card is
+     white — the iOS Settings relationship, which is what this token set has
+     always named but did not have: --background and --card were BOTH #ffffff,
+     so a card had no figure/ground of its own and leaned entirely on a
+     10%-black hairline to be visible at all. Three signals now separate a
+     card from the page: the tint below it, its border, and --elevation-card. */
+  --background: #f2f2f7;
   --foreground: #1d1d1f;
   --card: #ffffff;
   --card-foreground: #1d1d1f;
@@ -34,18 +40,31 @@
   /* iOS system blue */
   --primary: #007aff;
   --primary-foreground: #ffffff;
-  /* Apple light-gray section / grouped surfaces */
-  --secondary: #f5f5f7;
+  /* Fills that sit ON a surface (hover states, wells, inline code). They have
+     to read as recessed against BOTH the white card and the grey ground, so
+     they are a step darker than the ground rather than a step lighter — the
+     old #f5f5f7 is now lighter than the page and would float, not recede. */
+  --secondary: #e9e9ee;
   --secondary-foreground: #1d1d1f;
-  --muted: #f5f5f7;
-  --muted-foreground: #6e6e73;
-  --accent: #f2f2f7;
+  --muted: #e9e9ee;
+  /* Darkened from #6e6e73 to hold 4.5:1 on the fills above — the old value on
+     the new --muted is 4.19:1, which fails AA. Now 5.24:1 on --muted, 5.68:1
+     on the ground and 6.34:1 on a card, so the 400+ text-muted-foreground call
+     sites all gained margin rather than losing it. */
+  --muted-foreground: #5f5f65;
+  --accent: #e3e3e9;
   --accent-foreground: #1d1d1f;
   --destructive: #ff3b30;
   /* Hairline separators */
-  --border: rgba(0, 0, 0, 0.1);
-  --input: rgba(0, 0, 0, 0.12);
+  --border: rgba(0, 0, 0, 0.12);
+  --input: rgba(0, 0, 0, 0.14);
   --ring: #007aff;
+  /* Elevation. Two layers each: a tight contact shadow that seats the edge,
+     and a wide soft one that lifts it. Apple-restrained on light (the tint is
+     doing most of the separating), heavier on dark where a shadow on a black
+     canvas is nearly invisible and the border carries the edge instead. */
+  --elevation-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 16px -4px rgba(0, 0, 0, 0.06);
+  --elevation-raised: 0 2px 4px rgba(0, 0, 0, 0.05), 0 12px 28px -8px rgba(0, 0, 0, 0.1);
   /* iOS system tones */
   --chart-1: #007aff;
   --chart-2: #34c759;
@@ -78,16 +97,21 @@
   /* iOS system blue (dark variant) */
   --primary: #0a84ff;
   --primary-foreground: #ffffff;
-  --secondary: #1c1c1e;
+  /* Dark already had its figure/ground (#000 canvas, #1c1c1e card), so only
+     the fills move: they were the SAME #1c1c1e as the card, which made every
+     hover state on a card invisible. */
+  --secondary: #2c2c2e;
   --secondary-foreground: #f5f5f7;
-  --muted: #1c1c1e;
+  --muted: #2c2c2e;
   --muted-foreground: #a1a1a6;
-  --accent: #2c2c2e;
+  --accent: #3a3a3c;
   --accent-foreground: #f5f5f7;
   --destructive: #ff453a;
   --border: rgba(255, 255, 255, 0.14);
   --input: rgba(255, 255, 255, 0.16);
   --ring: #0a84ff;
+  --elevation-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -6px rgba(0, 0, 0, 0.4);
+  --elevation-raised: 0 2px 6px rgba(0, 0, 0, 0.55), 0 16px 40px -10px rgba(0, 0, 0, 0.5);
   --chart-1: #0a84ff;
   --chart-2: #30d158;
   --chart-3: #ff9f0a;
@@ -123,7 +147,19 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* `shadow-card` / `shadow-raised` utilities — the app's only two elevations.
+     Reach for a token rather than Tailwind's generic shadow-sm/md/lg so light
+     and dark stay in step; they need very different weights. */
+  --shadow-card: var(--elevation-card);
+  --shadow-raised: var(--elevation-raised);
   --font-sans: var(--font-app);
+  /* The figure face. Numbers in this app are read in columns — scores, task
+     distances, climb rates, times — so they get a mono face and tabular
+     figures via `font-mono tabular-nums`, and the same face carries the small
+     uppercase section labels in rac/card.tsx. */
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
   /* Brand wordmark now uses the same system stack (Inscribe-style: one face,
      weight and tracking do the branding). */
   --font-brand: var(--font-app);

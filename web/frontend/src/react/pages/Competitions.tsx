@@ -24,6 +24,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Link as AriaLink, useFilter } from "react-aria-components";
 import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
+import { cardSurface } from "@/react/rac/card";
+import { cn } from "@/react/lib/utils";
 import {
   Dialog,
   DialogFooter,
@@ -181,7 +183,10 @@ export function Competitions() {
             <li key={comp.comp_id}>
               <AriaLink
                 href={compPath(comp.comp_id, comp.name)}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
+                className={cn(
+                  cardSurface,
+                  "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
+                )}
               >
                 <span>
                   <span className="block font-semibold">

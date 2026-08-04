@@ -100,6 +100,22 @@ screenshots them. Paths below are relative to the repo root.
    `bun run score-task -- --wing HG --field-analysis web/samples/comps/corryong-cup-2026-open-t1/task.xctsk web/samples/comps/corryong-cup-2026-open-t1/`
    — the ρ values must match exactly.
 
+5. **Review a restyle across the whole app** — `shoot-contact-sheet.mjs` shoots
+   every page (static + SPA + the SSR'd comp pages) at desktop and mobile
+   widths in both themes, then writes an HTML index that pairs the passes:
+   ```bash
+   LABEL=before bun .claude/skills/run-glidecomp/shoot-contact-sheet.mjs
+   git switch the-branch
+   LABEL=after  bun .claude/skills/run-glidecomp/shoot-contact-sheet.mjs
+   open .claude/skills/run-glidecomp/shots/sheet/index.html
+   ```
+   19 pages x 2 widths x 2 themes = 76 shots a pass, ~90s. Use it for any token
+   or kit change: those land on dozens of surfaces at once and are **not**
+   reviewable as a diff. `ONLY=settings` filters to one page while iterating;
+   `THEMES` / `WIDTHS` narrow the matrix. Ids are resolved at runtime (the comp
+   sqid changes per seed) and the task/pilot are scraped from the pages that
+   link to them, so nothing is hardcoded.
+
 ## Run (human path)
 
 `bun run dev`, then open `http://localhost:3000/comp` in a browser, pick a

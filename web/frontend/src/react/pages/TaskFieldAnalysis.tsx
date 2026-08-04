@@ -23,6 +23,7 @@
  * separation ranking FIRST, then per-family detail. Which metrics have
  * explanatory power is the finding; the per-pilot numbers are the evidence.
  */
+import { Card } from "@/react/rac/card";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";
@@ -585,7 +586,7 @@ export function TaskFieldAnalysis() {
                 time axis so the predicted day can be read against the day
                 the field actually flew. */}
             {hasWeatherSection ? (
-              <section aria-labelledby="weather-heading" className="space-y-3">
+              <Card aria-labelledby="weather-heading" className="gap-3">
                 <h2 id="weather-heading" className="scroll-mt-20 text-lg font-semibold">
                   What the weather did
                 </h2>
@@ -598,7 +599,7 @@ export function TaskFieldAnalysis() {
                   weather={weather.data?.weather ?? null}
                   weatherPending={weatherPending}
                 />
-              </section>
+              </Card>
             ) : null}
 
             {/* After the weather, before the metrics: the thermals ARE the
@@ -606,7 +607,7 @@ export function TaskFieldAnalysis() {
                 which side worked. Grounding, like the weather section, for
                 everything the metrics then claim about how pilots used it. */}
             {hasThermalsSection && report.thermals ? (
-              <section aria-labelledby="thermals-heading" className="space-y-3">
+              <Card aria-labelledby="thermals-heading" className="gap-3">
                 <h2 id="thermals-heading" className="scroll-mt-20 text-lg font-semibold">
                   The day's thermals
                 </h2>
@@ -621,9 +622,20 @@ export function TaskFieldAnalysis() {
                       : null
                   }
                 />
-              </section>
+              </Card>
             ) : null}
 
+            {/* The ONE chapter that is deliberately not a Card.
+                SeparationRanking's master-detail pins its chart to the
+                VIEWPORT at narrow widths and bleeds full-width past the page's
+                padding, so that table rows scrolling under it are covered edge
+                to edge. That is the opposite of what a padded panel wants, and
+                putting it in one broke the pinned pane's click targets
+                (e2e/field-analysis.spec.ts's expand test caught it). The
+                behaviour has issue history behind it — #453, plus the WCAG
+                focus work — so the panel loses. Making this one a card means
+                reworking the bleed to cancel the card's padding instead of the
+                page's, which is its own change with its own risk. */}
             <section aria-labelledby="separation-heading" className="space-y-3">
               <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
                 Which behaviours went with better results
@@ -631,27 +643,27 @@ export function TaskFieldAnalysis() {
               <SeparationRanking metrics={report.metrics} report={report} />
             </section>
 
-            <section aria-labelledby="heatmap-heading" className="space-y-3">
+            <Card aria-labelledby="heatmap-heading" className="gap-3">
               <h2 id="heatmap-heading" className="scroll-mt-20 text-lg font-semibold">
                 The whole field at a glance
               </h2>
               <PercentileHeatmap report={report} />
-            </section>
+            </Card>
 
-            <section aria-labelledby="clusters-heading" className="space-y-3">
+            <Card aria-labelledby="clusters-heading" className="gap-3">
               <h2 id="clusters-heading" className="scroll-mt-20 text-lg font-semibold">
                 Pilot style clusters
               </h2>
               <StyleClusters report={report} />
-            </section>
+            </Card>
 
             {/* In print, this whole section starts a fresh page and every
                 family after the first breaks onto its own page — the families
                 are the report's chapters. The first family stays under the
                 heading so the heading is never orphaned at a page's end. */}
-            <section
+            <Card
               aria-labelledby="families-heading"
-              className="space-y-2 print:break-before-page"
+              className="gap-2 print:break-before-page"
             >
               <h2 id="families-heading" className="scroll-mt-20 text-lg font-semibold">
                 The metrics in detail
@@ -671,7 +683,7 @@ export function TaskFieldAnalysis() {
                   />
                 )
               )}
-            </section>
+            </Card>
 
             {/* Everything a reader consults once rather than reads: who
                 couldn't be analysed, how the field is compared, and every

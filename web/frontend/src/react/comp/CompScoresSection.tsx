@@ -213,7 +213,6 @@ export function ScoresViews({
     <Tabs
       selectedKey={tab}
       onSelectionChange={(key) => setTab(String(key))}
-      className="mt-4"
     >
       <TabList aria-label="Score views">
         {scores.standings.map((cls) => (
@@ -349,7 +348,7 @@ function SortableTable({
   }, [rows, sort]);
 
   return (
-    <div className="mt-3 overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto rounded-lg border">
       <Table
         aria-label={label}
         sortDescriptor={sort ?? undefined}

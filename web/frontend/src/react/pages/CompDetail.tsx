@@ -13,6 +13,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { Loading } from "@/react/rac/progress";
 import {
   Dialog,
@@ -212,7 +213,7 @@ function CompDetailView({
 
   const tasksSection = (
     // break-before-page: when printing, each major section starts a fresh page.
-    <section id="tasks" className="scroll-mt-24 break-before-page">
+    <Card id="tasks" className="scroll-mt-24 break-before-page">
       <SectionHeader
         title="Tasks"
         action={
@@ -233,7 +234,7 @@ function CompDetailView({
         isAdmin={isAdmin}
         onCreateTask={() => setCreateOpen(true)}
       />
-    </section>
+    </Card>
   );
 
   const scoresSection = (
@@ -313,20 +314,24 @@ function CompDetailView({
         />
       ) : null}
 
-      {finished ? (
-        <>
-          {scoresSection}
-          {tasksSection}
-        </>
-      ) : (
-        <>
-          {tasksSection}
-          {scoresSection}
-        </>
-      )}
+      {/* The card stack owns the rhythm between sections, which is why
+          SectionHeader no longer carries a margin of its own. */}
+      <div className="mt-6 flex flex-col gap-6">
+        {finished ? (
+          <>
+            {scoresSection}
+            {tasksSection}
+          </>
+        ) : (
+          <>
+            {tasksSection}
+            {scoresSection}
+          </>
+        )}
 
-      <div id="activity" className="scroll-mt-24 break-before-page">
-        <ActivitySection compId={compId} collapsible />
+        <Card id="activity" className="scroll-mt-24 break-before-page">
+          <ActivitySection compId={compId} collapsible />
+        </Card>
       </div>
 
       {/* Organizer credit + contact — a footnote, not a section. The scores
@@ -530,7 +535,7 @@ function TasksList({
   const days = groupTasksByDateAndClass(tasks, pilotClasses);
 
   return (
-    <div className="mt-3 divide-y rounded-lg border">
+    <div className="divide-y rounded-lg border">
       {days.map((day) => (
         <Disclosure
           key={day.date}

@@ -27,6 +27,7 @@ import { useNavigate } from "react-router-dom";
 import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
 import { Button, LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
@@ -222,13 +223,13 @@ export function TaskStandings({
   }
   if (scoreState === "no-route") {
     return (
-      <section>
-        <h2 className="mt-8 text-lg font-bold">Manage pilots &amp; tracks</h2>
+      <Card>
+        <h2 className="text-lg font-bold">Manage pilots &amp; tracks</h2>
         <p className="mt-2 text-muted-foreground">
           Set the task route first — pilot statuses and tracks can be managed once
           the task can be scored.
         </p>
-      </section>
+      </Card>
     );
   }
   if (scoreState === "unavailable" || !score) {
@@ -268,8 +269,8 @@ export function TaskStandings({
     activeManualByPilot.get(compPilotId) ?? null;
 
   return (
-    <section>
-      <h2 className="mt-8 text-lg font-bold">Manage pilots &amp; tracks</h2>
+    <Card>
+      <h2 className="text-lg font-bold">Manage pilots &amp; tracks</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Admin tools: pilot statuses, track uploads on behalf, and manual
         flights. Every change here recomputes the task's scores.
@@ -323,7 +324,7 @@ export function TaskStandings({
           turnpoint and point calculation, shown on the map.
         </p>
       ) : null}
-    </section>
+    </Card>
   );
 }
 

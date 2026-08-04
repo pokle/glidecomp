@@ -29,7 +29,7 @@ import { cn } from "@/react/lib/utils";
 import { MinusIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 
 export const inputClass =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground data-focused:border-ring data-focused:ring-3 data-focused:ring-ring/50 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:bg-input/50 data-disabled:opacity-50 data-invalid:border-destructive data-invalid:ring-destructive/20 md:text-sm dark:bg-input/30";
+  "h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-3 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground data-focused:border-ring data-focused:ring-3 data-focused:ring-ring/50 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:bg-input/50 data-disabled:opacity-50 data-invalid:border-destructive data-invalid:ring-destructive/20 md:text-sm dark:bg-input/30";
 
 export function Label({ className, ...props }: React.ComponentProps<typeof AriaLabel>) {
   return (
@@ -137,7 +137,7 @@ export function NumberField({
       {label ? <Label>{label}</Label> : null}
       <Group
         className={cn(
-          "flex h-8 w-full min-w-0 items-stretch overflow-hidden rounded-lg border border-input bg-transparent transition-colors",
+          "flex h-9 w-full min-w-0 items-stretch overflow-hidden rounded-lg border border-input bg-transparent transition-colors",
           "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50",
           "data-disabled:pointer-events-none data-disabled:opacity-50 data-invalid:border-destructive dark:bg-input/30"
         )}
@@ -192,7 +192,7 @@ export function SearchField({
       )}
       <Group
         className={cn(
-          "flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-transparent px-2.5 transition-colors",
+          "flex h-9 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-transparent px-3 transition-colors",
           "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50 dark:bg-input/30"
         )}
       >

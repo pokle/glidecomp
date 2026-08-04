@@ -22,6 +22,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileTrigger } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Label } from "@/react/rac/field";
 import { Input } from "@/react/rac/field";
@@ -675,17 +676,26 @@ function StepBox({
   highlight?: boolean;
   compact?: boolean;
 }) {
+  // `compact` is the dialog flow, where the dialog is already the panel — the
+  // steps must NOT be cards there or it is panels inside a panel. Everywhere
+  // else a step is a real card: these were bordered boxes with no background,
+  // so on the tinted ground they read as three holes rather than three steps.
+  //
+  // A highlighted step keeps the card background and states itself with the
+  // border. A translucent `bg-destructive/5` would have replaced `bg-card`
+  // rather than sitting on it, tinting the page through instead of the panel.
+  const Box = compact ? "section" : Card;
   return (
-    <section
+    <Box
       className={
-        highlight
-          ? "rounded-lg border border-destructive/40 bg-destructive/5 p-4"
-          : compact
-            ? ""
-            : "rounded-lg border p-4"
+        compact
+          ? "flex flex-col gap-4"
+          : highlight
+            ? "border-destructive/40"
+            : undefined
       }
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">
           {compact ? null : (
             <span className="mr-2 text-muted-foreground">{n}.</span>
@@ -703,7 +713,7 @@ function StepBox({
       ) : (
         <div>{children}</div>
       )}
-    </section>
+    </Box>
   );
 }
 
@@ -1068,7 +1078,7 @@ function TrackAccepted({
       </Alert>
 
       {s ? (
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(7rem,100%),1fr))] gap-x-6 gap-y-2 text-sm">
           <Fact label="Date" value={s.flight_date ?? "Not stated in the file"} />
           <Fact label="Take off" value={formatClockInZone(s.takeoff_at, zone)} />
           <Fact label="Landing" value={formatClockInZone(s.landing_at, zone)} />

@@ -23,7 +23,10 @@ export function SectionHeader({
   as?: "h1" | "h2";
 }) {
   return (
-    <div className={cn("mt-8 flex flex-wrap items-center gap-x-4 gap-y-2", className)}>
+    // No top margin of its own. Sections live inside `rac/card`'s Card now, and
+    // the gap between cards is the stack's job — a component that reserves its
+    // own external space fights whatever contains it.
+    <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2", className)}>
       <Heading
         className={cn(
           "min-w-0 flex-1 font-bold",

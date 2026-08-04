@@ -14,6 +14,7 @@
  * of the page. This box is meant to be a glance at what was evaluated, and it
  * stops being one the moment a caveat list outgrows the facts.
  */
+import { Card } from "@/react/rac/card";
 import { formatTimeRange } from "@/react/lib/time";
 import { formatAltitude, useUnits } from "@/react/lib/units";
 import { AirtimeSplitBar } from "./charts/AirtimeSplitBar";
@@ -71,13 +72,13 @@ export function AnalysisBasis({
 }) {
   const units = useUnits();
   return (
-    <section aria-label="Analysis basis" className="rounded-lg border p-4">
+    <Card aria-label="Analysis basis">
       {/* Four scalar facts, then the airtime split on a full row of its own at
           every breakpoint — the bars are three shares of one whole read against
           each other, so they need the width rather than a column beside the
           scalars. Column counts are 2 and 4 (both divide the four facts) so no
           breakpoint leaves a fact orphaned beside empty slots. */}
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-4">
+      <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(9rem,100%),1fr))] gap-x-6 gap-y-3">
         <Fact term="Pilots">{basis.pilotCount}</Fact>
         {/* Both halves are optional (≤ v12 / v13 rows) — fall back to whichever
             half a stale report carries rather than dropping the fact. */}
@@ -139,6 +140,6 @@ export function AnalysisBasis({
           </a>
         </p>
       ) : null}
-    </section>
+    </Card>
   );
 }

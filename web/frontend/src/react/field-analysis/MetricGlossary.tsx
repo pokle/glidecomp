@@ -14,6 +14,7 @@
 import { FAMILY_ORDER, FAMILY_LABELS, type MetricDirection, type MetricFamily } from "./types";
 import { directionWords, unitWords } from "./units";
 import { FootnoteHeading } from "./Footnotes";
+import { Card } from "@/react/rac/card";
 
 /** What one glossary entry needs — a subset of MetricReport/MetricComputer,
  * so both the task page (report metrics) and the comp page (the registry)
@@ -58,11 +59,16 @@ export function MetricGlossary({
     byFamily.set(e.family, list);
   }
 
+  // `nested` means it is already inside someone else's panel (the task
+  // report's footnotes), so it stays a plain section — a panel inside a panel
+  // says the wrong thing. Standalone it is a chapter of the page, so it gets
+  // its own card like every other chapter.
+  const Box = nested ? "section" : Card;
   return (
     // A reference chapter, so print starts it on a fresh page.
-    <section
+    <Box
       aria-labelledby="glossary-heading"
-      className={nested ? "space-y-4" : "space-y-4 print:break-before-page"}
+      className={nested ? "space-y-4" : "gap-4 print:break-before-page"}
     >
       <div>
         {nested ? (
@@ -118,6 +124,6 @@ export function MetricGlossary({
           </div>
         )
       )}
-    </section>
+    </Box>
   );
 }

@@ -22,6 +22,7 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { cn } from "@/react/lib/utils";
+import { Card } from "@/react/rac/card";
 import { VerdictBadge, VerdictLegend } from "../field-analysis/SeparationRanking";
 import { ConsistencyChip } from "../field-analysis/ConsistencyChip";
 import { ConsistencyMap } from "../field-analysis/charts/ConsistencyMap";
@@ -261,79 +262,89 @@ export function CompFieldAnalysis() {
         </p>
       </div>
 
+      {/* The report's masthead: when it was computed, which chapters it has,
+          and which class it is showing. These belong together in one panel —
+          the class select filters the WHOLE report rather than any single
+          table, so it is page furniture and not a table's own control. */}
       {data ? (
-        <ScoreFreshness
-          computedAt={data.computed_at}
-          stale={data.stale}
-          timezone={comp?.timezone ?? null}
-          etag={etag}
-          pollUrl={analysisUrl}
-          variant="analysis"
-        />
-      ) : null}
+        <Card className="mt-4 gap-3">
+          <ScoreFreshness
+            computedAt={data.computed_at}
+            stale={data.stale}
+            timezone={comp?.timezone ?? null}
+            etag={etag}
+            pollUrl={analysisUrl}
+            variant="analysis"
+          />
 
-      {data && data.pending_task_count > 0 ? (
-        <Alert className="mt-3" role="status">
-          <AlertTitle>
-            {data.pending_task_count} of {data.total_task_count} task
-            {data.total_task_count === 1 ? "" : "s"} not analysed yet
-          </AlertTitle>
-          <AlertDescription>
-            GlideComp is computing them in the background, and the figures below
-            leave them out. This page refreshes itself as each one arrives.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+          {data.pending_task_count > 0 ? (
+            <Alert role="status">
+              <AlertTitle>
+                {data.pending_task_count} of {data.total_task_count} task
+                {data.total_task_count === 1 ? "" : "s"} not analysed yet
+              </AlertTitle>
+              <AlertDescription>
+                GlideComp is computing them in the background, and the figures
+                below leave them out. This page refreshes itself as each one
+                arrives.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-      {/* The per-task reports are chapters of this page, so they get a real
-          nav landmark rather than a prose footnote — this is the only way in
-          to them, and each is now a child URL of this one. */}
-      {data && data.tasks.length > 0 ? (
-        <nav
-          aria-label="Per-task field analysis"
-          className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
-        >
-          <span className="text-muted-foreground">Per task:</span>
-          {data.tasks.map((t) => (
-            <Link
-              key={t.task_id}
-              to={taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name)}
-              className="underline underline-offset-4 hover:text-foreground"
+          {/* The per-task reports are chapters of this page, so they get a real
+              nav landmark rather than a prose footnote — this is the only way
+              in to them, and each is now a child URL of this one. */}
+          {data.tasks.length > 0 ? (
+            <nav
+              aria-label="Per-task field analysis"
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
             >
-              {t.label} {t.task_name}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
+              <span className="text-muted-foreground">Per task:</span>
+              {data.tasks.map((t) => (
+                <Link
+                  key={t.task_id}
+                  to={taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name)}
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  {t.label} {t.task_name}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
 
-      {classes.length > 1 ? (
-        <div className="mt-4">
-          {/* The select is a control, so print swaps it for a plain
-              statement of which class this printout covers. */}
-          <div className="print:hidden">
-            <SimpleSelect
-              ariaLabel="Pilot class"
-              value={selectedClass}
-              onChange={(value) => {
-                const next = new URLSearchParams(searchParams);
-                next.set("class", value);
-                setSearchParams(next, { replace: true });
-              }}
-              options={classes.map((c) => ({
-                value: c.pilot_class,
-                label: c.pilot_class,
-              }))}
-            />
-          </div>
-          <p className="hidden text-sm print:block">
-            Pilot class: <strong>{selectedClass}</strong>
-          </p>
-        </div>
+          {classes.length > 1 ? (
+            <div>
+              {/* The select is a control, so print swaps it for a plain
+                  statement of which class this printout covers. */}
+              <div className="print:hidden">
+                <SimpleSelect
+                  ariaLabel="Pilot class"
+                  value={selectedClass}
+                  onChange={(value) => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("class", value);
+                    setSearchParams(next, { replace: true });
+                  }}
+                  options={classes.map((c) => ({
+                    value: c.pilot_class,
+                    label: c.pilot_class,
+                  }))}
+                />
+              </div>
+              <p className="hidden text-sm print:block">
+                Pilot class: <strong>{selectedClass}</strong>
+              </p>
+            </div>
+          ) : null}
+        </Card>
       ) : null}
 
       {active && rankedMetrics.length > 0 ? (
-        <div className="mt-6 space-y-8">
-          <section aria-labelledby="consistency-heading" className="space-y-3">
+        // Each reading is its own panel. The order is deliberately unchanged —
+        // which behaviours have explanatory power IS the finding, so the
+        // separation ranking leads and everything else follows it.
+        <div className="mt-6 flex flex-col gap-6">
+          <Card aria-labelledby="consistency-heading" className="gap-3">
             <h2 id="consistency-heading" className="text-lg font-semibold">
               Which behaviours went with better results, across tasks
             </h2>
@@ -381,37 +392,47 @@ export function CompFieldAnalysis() {
               </p>
             ) : null}
 
-            <div className="space-y-3 pt-2">
-              <h3 className="text-base font-semibold">Consistency map</h3>
+          </Card>
+
+          {/* The map and the outcome checks were h3s nested inside the ranking
+              section. They are peer READINGS of the same data, not sub-parts of
+              the ranking, so each gets its own panel and its own h2 — nesting a
+              panel inside a panel to keep them subordinate would have been the
+              wrong way to say it. */}
+          <Card aria-labelledby="consistency-map-heading" className="gap-3">
+            <h2 id="consistency-map-heading" className="text-lg font-semibold">
+              Consistency map
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              The same table as a picture. It plots how much each behaviour
+              separated the field on each day (across) against how consistently
+              that behaviour pulled one way (up).
+            </p>
+            <ConsistencyMap metrics={rankedMetrics} />
+          </Card>
+
+          {outcomeMetrics.length > 0 ? (
+            <Card aria-labelledby="outcome-heading" className="gap-3">
+              <h2 id="outcome-heading" className="text-lg font-semibold">
+                Outcome checks
+              </h2>
               <p className="text-sm text-muted-foreground">
-                The same table as a picture. It plots how much each behaviour
-                separated the field on each day (across) against how
-                consistently that behaviour pulled one way (up).
+                These are not behaviours. They measure the result itself, so
+                they always follow the places. They are here as a check on the
+                analysis. A weak pattern means that something is wrong in the
+                numbers, and not in the flying of any pilot.
               </p>
-              <ConsistencyMap metrics={rankedMetrics} />
-            </div>
+              <SeparationTable
+                metrics={outcomeMetrics}
+                taskLabels={active.aggregate.taskLabels}
+                ariaLabel="Outcome checks across tasks"
+                subjectLabel="Outcome"
+                fieldSize={active.aggregate.pilots.length}
+              />
+            </Card>
+          ) : null}
 
-            {outcomeMetrics.length > 0 ? (
-              <div className="space-y-3 pt-2">
-                <h3 className="text-base font-semibold">Outcome checks</h3>
-                <p className="text-sm text-muted-foreground">
-                  These are not behaviours. They measure the result itself, so
-                  they always follow the places. They are here as a check on the
-                  analysis. A weak pattern means that something is wrong in the
-                  numbers, and not in the flying of any pilot.
-                </p>
-                <SeparationTable
-                  metrics={outcomeMetrics}
-                  taskLabels={active.aggregate.taskLabels}
-                  ariaLabel="Outcome checks across tasks"
-                  subjectLabel="Outcome"
-                  fieldSize={active.aggregate.pilots.length}
-                />
-              </div>
-            ) : null}
-          </section>
-
-          <section aria-labelledby="standings-heading" className="space-y-3">
+          <Card aria-labelledby="standings-heading" className="gap-3">
             <h2 id="standings-heading" className="text-lg font-semibold">
               Standings behind these figures
             </h2>
@@ -439,7 +460,7 @@ export function CompFieldAnalysis() {
                 ))}
               </TableBody>
             </Table>
-          </section>
+          </Card>
 
           {/* Method descriptions for every metric named above — this page has
               no ⓘ popovers, so the glossary is the one place to read them
