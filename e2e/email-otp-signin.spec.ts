@@ -19,7 +19,7 @@
  * no more — no comp, no track, nothing public — so `bun run kill-state` remains
  * the way to clear them.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/test";
 
 let ipCounter = 0;
 /** Unique per test AND per run (runs seconds apart never collide). */

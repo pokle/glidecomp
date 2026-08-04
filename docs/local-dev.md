@@ -49,11 +49,36 @@ Interleaved output is the cost; each line is prefixed with its package name, and
 
 **A long list of unrelated failures usually means the stack died, not that twelve
 things broke.** `e2e/reporters/stack-health.ts` probes the Workers and the dev
-server after any failure and, if they've stopped answering, prints a banner and
-interrupts the run — only the FIRST failure can be real, the rest ran against a
-dead port. In an older report the same thing shows up as an `error-context.md`
-snapshot of the app **signed out** where an admin control was expected: dev-login
-failing, not a UI regression.
+server after any failure and, if they've stopped answering, says so — only the
+FIRST failure can be real, the rest ran against a dead port. In an older report
+the same thing shows up as an `error-context.md` snapshot of the app **signed
+out** where an admin control was expected: dev-login failing, not a UI
+regression.
+
+**The Workers now come back by themselves, so the usual outcome is one flaky
+test rather than a lost run.** `wrangler dev` exits on its own when a client
+connection is severed mid-request: its ProxyWorker reports
+`Error: Network connection lost.` and its ProxyController treats any ProxyWorker
+error as fatal (still true in wrangler 4.118.0). That cost roughly one CI run in
+eight — a random test failed, then every test after it. Three things now cover
+it, and reading a failure means knowing which one spoke:
+
+- `web/scripts/dev-workers.sh` supervises wrangler and restarts it. It announces
+  every restart with a `dev-workers:` banner, and refuses to restart in the three
+  cases where restarting would only hide the real message: a session that never
+  bound the port at all, ports something else still holds, and more than
+  `DEV_WORKERS_MAX_RESTARTS` (10) deaths.
+- Every test waits for `/__ready` before it starts (`e2e/fixtures/test.ts` — this
+  is why specs import `test`/`expect` from there and **not** from
+  `@playwright/test`). A test scheduled into the restart gap waits it out
+  instead of asserting against a closed port, and the wait is added back to that
+  test's timeout.
+- The reporter interrupts the run only if the stack **stays** down. If it
+  recovers, the reporter prints what happened and lets `retries: 1` re-run the
+  one casualty against the live stack.
+
+So a `dev-workers:` banner or a `[stack]` line in an otherwise green run is not
+noise: it means the workaround fired, and it stays printed on purpose.
 
 **Every failing spec passing in isolation** is the tell for shared-state trouble.
 The e2e suite writes to the *persistent* local D1 (`web/.wrangler/state`), so

@@ -34,7 +34,17 @@ jobs:
         with:
           node-version: 22
 
+      # Two attempts, because the first one is a download from GitHub's release
+      # CDN and that has answered 500 three times in a row (run 30809701372, 33s
+      # and the job was over). The action retries internally on a 15s/17s
+      # schedule; a fourth try a moment later is what actually got past it.
       - name: Setup Bun
+        id: setup-bun
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+
+      - name: Setup Bun (retry)
+        if: steps.setup-bun.outcome == 'failure'
         uses: oven-sh/setup-bun@v2
 
       # Insurance, not speed: a warm install is ~3s, but one run in ten
@@ -70,6 +80,14 @@ jobs:
           node-version: 22
 
       - name: Setup Bun
+        id: setup-bun
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+
+      # See the note on the Test job — the release CDN 500s often enough to
+      # cost a run, and the retry is the whole fix.
+      - name: Setup Bun (retry)
+        if: steps.setup-bun.outcome == 'failure'
         uses: oven-sh/setup-bun@v2
 
       - name: Cache bun dependencies
@@ -164,6 +182,14 @@ jobs:
           node-version: 22
 
       - name: Setup Bun
+        id: setup-bun
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+
+      # See the note on the Test job — the release CDN 500s often enough to
+      # cost a run, and the retry is the whole fix.
+      - name: Setup Bun (retry)
+        if: steps.setup-bun.outcome == 'failure'
         uses: oven-sh/setup-bun@v2
 
       - name: Cache bun dependencies

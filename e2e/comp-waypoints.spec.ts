@@ -25,7 +25,7 @@
  *   state), not by counting .tabulator-row elements.
  */
 import { execSync } from "node:child_process";
-import { test, expect, type Page, type Locator } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 
 const BASE_URL = FRONTEND_URL;

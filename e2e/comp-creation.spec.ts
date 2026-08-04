@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/test";
 import { idFromSegment } from "../web/frontend/src/react/lib/slug";
 import { e2eCompName } from "./fixtures/stack";
 

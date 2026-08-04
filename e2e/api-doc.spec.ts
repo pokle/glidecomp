@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "./fixtures/test";
 import { readFileSync } from "fs";
 import { gzipSync } from "zlib";
 import { resolve, dirname } from "path";
