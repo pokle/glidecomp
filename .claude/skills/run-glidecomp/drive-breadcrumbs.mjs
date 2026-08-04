@@ -22,6 +22,21 @@ function check(label, actual, expected) {
 }
 
 /**
+ * Strip the readable slug off every `${slug}-${id}` segment, leaving the ids.
+ *
+ * Public URLs canonicalise to the slugged form once the names load
+ * (useCanonicalPath + lib/slug.ts), so a path assertion written against bare
+ * ids fails on a page that behaved perfectly. The identity is the id; the slug
+ * is a readable copy of a name that may change. Compare identities.
+ */
+function pathIds(pathname) {
+  return pathname
+    .split("/")
+    .map((seg) => (seg.includes("-") ? seg.slice(seg.lastIndexOf("-") + 1) : seg))
+    .join("/");
+}
+
+/**
  * The visible trail, normalised to "A › B › C".
  *
  * `expect` is the trail we're waiting to settle on: these pages fetch the
@@ -121,7 +136,7 @@ async function main() {
   await page.waitForURL(/\/comp\/[^/]+\/analysis$/);
   check(
     "up-one-level from a chapter",
-    new URL(page.url()).pathname,
+    pathIds(new URL(page.url()).pathname),
     `/comp/${comp.comp_id}/analysis`
   );
 
@@ -143,7 +158,7 @@ async function main() {
   await page.waitForURL(/\/comp\/[^/]+\/task\/[^/]+$/);
   check(
     "View task lands on the task page",
-    new URL(page.url()).pathname,
+    pathIds(new URL(page.url()).pathname),
     `/comp/${comp.comp_id}/task/${task.task_id}`
   );
   const taskTrail = `Competitions › ${comp.name} › ${task.name}`;
