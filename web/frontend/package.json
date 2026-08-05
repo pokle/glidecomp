@@ -52,6 +52,7 @@
     "react-aria-components": "^1.20.0",
     "react-dom": "19.2.8",
     "react-router-dom": "^7.9.5",
+    "shadcn": "^4.16.1",
     "sonner": "^2.0.7",
     "tabulator-tables": "^6.5.2",
     "tailwind-merge": "^3.6.0",
