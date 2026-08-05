@@ -588,10 +588,14 @@ it rather than withheld.
 check. Those files are still VALID — they upload fine and are then withheld
 from scoring, which is the state nobody can otherwise reach on demand.
 
-**Who can see the dialog:** the real super admin, and not while previewing
-another role — `isSuperAdmin && previewRole === "actual"`, the rule
-`Settings.tsx` uses. Deliberately not `useAdminView()`: this is not a
-comp-admin power, and it must vanish under "Preview as" like everything else.
+**Who can see the dialog:** any admin of the competition — `useAdminView()`,
+the same check every other manage action on the task page uses, so the button
+also vanishes while a super admin previews as a pilot
+(`TaskDetail.tsx`). Widened from the original super-admin-only gate once the
+dialog stopped being a script and became a task-page button: the people who
+need a file to test submission and scoring with are the ones running the
+competition. This widens who SEES the button and nothing more — the dialog
+never reaches the server, it only makes a file and offers it as a download.
 The button only appears when the task has a route, because there is nothing to
 fly without one. The component is `lazy()`-loaded so its code stays out of
 everyone else's bundle.
