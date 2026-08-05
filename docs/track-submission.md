@@ -159,6 +159,10 @@ Decided in one place, by whether there is a session:
 The first two are unchanged, so open registration and the existing on-behalf
 rights keep working exactly as they did.
 
+Which of them a given person can actually reach, and what each competition
+setting does to that, is the matrix in
+[What is possible, and when](#what-is-possible-and-when).
+
 ### Open registration
 
 `comp.open_registration` (migration 0027). **On by default**, which is exactly
@@ -198,6 +202,56 @@ shows them the whole list and lets them say which entry is theirs, which is
 precisely a name match performed by the one party entitled to make it. The
 anonymous route cannot offer the same thing, because "pick any name off the
 public roster" is not a claim, it is a menu.
+
+## What is possible, and when
+
+Every rule below is explained on its own further down. This is the one place
+they are shown together, because the question that actually comes up is never
+"what does `open_igc_upload` do" — it is "can this person, in this state, do
+this thing".
+
+The signed-in state does not merely change permissions: it picks a **different
+endpoint**, which is why the columns behave so differently.
+
+| | **Not signed in** | **Signed in — pilot** | **Signed in — comp admin** |
+|---|---|---|---|
+| **My own track — I am already on the roster** (account linked) | ✅ if I can name an identifier the organiser recorded. Needs `open_igc_upload` | ✅ straight through | ✅ straight through |
+| **My own track — registered, but nothing matches me** (mistyped email, no CIVL on my profile) | ✅ if I type the identifier they *did* record | ⚠️ **asked which registration I am**; picking it claims and links it | ⚠️ the same — admin does **not** bypass this |
+| **My own track — genuinely not on the roster** | ❌ `no_pilot_match`, and it names the organiser to email | ✅ self-registers **if `open_registration`**, else ❌ `registration_closed`. If the roster holds unclaimed rows I must decline them explicitly first | as pilot |
+| **Another pilot's track** | ⚠️ possible — name their identifier. The deliberate trade-off (see below), contained by the audit log and the email | ✅ only if `open_igc_upload` **and** I am myself on that roster | ✅ always |
+| **Replace a track already on file** | ✅ same rules as above; the pilot is emailed | ✅ | ✅ |
+| **Task closed for submissions** | ❌ hard stop | ❌ | ✅ bypasses |
+| **Competition past its close date** | ❌ | ❌ | ❌ — nobody bypasses |
+
+### The settings that move those cells
+
+| Setting | Default | What it actually gates |
+|---|---|---|
+| `comp.open_igc_upload` (0005) | **on** | (a) anonymous submission at all; (b) a non-admin uploading for *another* pilot. **Not** your own signed-in upload |
+| `comp.open_registration` (0027) | **on** | Whether a signed-in pilot who is on nobody's roster may add themselves by uploading |
+| `comp.close_date` | none | Closes the whole competition, for everyone including admins |
+| `task.submissions_closed` (0028) | **off** | Closes one task. Admins bypass it on both signed-in routes; a hard stop anonymously |
+
+### Four things that surprise people
+
+**Turning off `open_igc_upload` does not stop pilots submitting.** It stops
+*anonymous* submission and *acting for others*. A signed-in pilot can still file
+their own track — the self route never reads that column. If the intent is "no
+submissions", that is `close_date` or `submissions_closed`.
+
+**Being a comp admin does not bypass the identity question.** Admin gets you
+past a closed task, not past "which registration are you?". An organiser who is
+not on their own roster meets the picker like anybody else. The two are
+deliberately separate: one is about *when* a track may arrive, the other about
+*whose* it is.
+
+**Only the anonymous route hides `test` competitions.** Neither signed-in route
+reads `comp.test`, so somebody who knows a hidden competition's id can upload to
+it. That is an inconsistency rather than a decision — the read routes all gate
+on it.
+
+**`MAX_PILOTS_PER_TASK` is 250** and caps every route. The anonymous one can
+never push it, because it does not create roster rows.
 
 ## Which registration is this?
 
