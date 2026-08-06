@@ -92,6 +92,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@glidecomp/engine": "workspace:*",
+        "hono": "^4.13.0",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260702.1",

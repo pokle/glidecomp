@@ -132,22 +132,19 @@ app.post("/api/auth/set-username", async (c) => {
     );
   }
 
-  // Validate username format
+  // Validate username format. Two rules, and each is checked once: the length,
+  // then the shape (alphanumeric with interior hyphens). There were three
+  // checks here, of which the third was unreachable — the code said so itself
+  // — and the second carried a `&& username.length > 2` guard that the length
+  // check above had already guaranteed.
   if (!username || username.length < 3 || username.length > 20) {
-    return c.json(
-      { error: "Username must be 3-20 characters" },
-      400
-    );
+    return c.json({ error: "Username must be 3-20 characters" }, 400);
   }
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$/.test(username) && username.length > 2) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$/.test(username)) {
     return c.json(
       { error: "Username can only contain letters, numbers, and hyphens (no leading/trailing hyphens)" },
       400
     );
-  }
-  if (/^[a-zA-Z0-9]$/.test(username)) {
-    // Single char already caught by length check, but just in case
-    return c.json({ error: "Username must be 3-20 characters" }, 400);
   }
 
   // Check uniqueness

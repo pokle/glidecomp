@@ -11,7 +11,8 @@
     "clear-cache": "rm -rf .wrangler/state"
   },
   "dependencies": {
-    "@glidecomp/engine": "workspace:*"
+    "@glidecomp/engine": "workspace:*",
+    "hono": "^4.13.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
