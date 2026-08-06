@@ -10,6 +10,7 @@
  * as fact by a pilot.
  */
 
+import { bearingFromComponents } from "../geo";
 import type { WeatherLevel } from "./types";
 
 /** ISA sea-level pressure, hPa. */
@@ -151,6 +152,6 @@ export function windAtHeight(
     v = a.v + (b.v - a.v) * t;
   }
   const speedKmh = Math.hypot(u, v);
-  const directionDeg = ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
+  const directionDeg = bearingFromComponents(u, v);
   return { directionDeg, speedKmh };
 }
