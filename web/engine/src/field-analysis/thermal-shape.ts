@@ -29,7 +29,8 @@ import type { IGCFix } from '../igc-parser';
 import { fixAltitude } from '../igc-parser';
 import type { ThermalSegment } from '../event-types';
 import type { CircleSegment } from '../circle-detector';
-import { localEastNorth } from '../geo';
+import { bearingFromComponents, localEastNorth, metresPerDegree } from '../geo';
+import { percentile } from './stats';
 import {
   clusterSharedThermals,
   type SharedThermal,
@@ -591,14 +592,16 @@ function buildBand(
     pilotSet.add(s.pilot);
 
     // Sector centred on its bearing: sector 0 spans [-22.5°, 22.5°).
-    const bearing = ((Math.atan2(de, dn) * 180) / Math.PI + 360) % 360;
+    const bearing = bearingFromComponents(de, dn);
     const sector = Math.round(bearing / sectorWidth) % options.sectorCount;
     sectorSum[sector] += s.vario;
     sectorN[sector]++;
   }
 
   allDistances.sort((a, b) => a - b);
-  const extentRadius = quantileSorted(allDistances, 0.9);
+  // A band always carries at least one sample, but percentile() answers NaN on
+  // an empty array where this used to answer 0 — keep the 0.
+  const extentRadius = allDistances.length === 0 ? 0 : percentile(allDistances, 90);
   const coreRadius = liftW > 1e-6 ? Math.sqrt(liftR2W / liftW) : extentRadius;
 
   const sectors: ThermalSectorStat[] = [];
@@ -637,7 +640,7 @@ function buildBand(
 function findSubCores(group: ThermalSample[], options: ThermalShapeOptions): ThermalSubCore[] {
   const positive = group.filter((s) => s.vario > 0).map((s) => s.vario).sort((a, b) => a - b);
   if (positive.length === 0) return [];
-  const threshold = Math.max(0.5, quantileSorted(positive, 0.75));
+  const threshold = Math.max(0.5, percentile(positive, 75));
   const strong = group.filter((s) => s.vario >= threshold);
   if (strong.length < options.minSubCoreSamples) return [];
 
@@ -727,7 +730,7 @@ function fitLean(bands: ThermalShapeBand[], samples: ThermalSample[]): ThermalLe
   const slopeEast = sae / saa;
   const slopeNorth = san / saa;
   const metresPerMetre = Math.hypot(slopeEast, slopeNorth);
-  const bearing = ((Math.atan2(slopeEast, slopeNorth) * 180) / Math.PI + 360) % 360;
+  const bearing = bearingFromComponents(slopeEast, slopeNorth);
 
   const timeAltCorrelation = pearson(
     samples.map((s) => s.altitude),
@@ -768,9 +771,9 @@ function averageCircleWinds(circles: CircleSegment[]): ThermalWindEstimate | nul
   }
   if (speeds.length === 0) return null;
   speeds.sort((a, b) => a - b);
-  const direction = ((Math.atan2(u / speeds.length, v / speeds.length) * 180) / Math.PI + 360) % 360;
+  const direction = bearingFromComponents(u / speeds.length, v / speeds.length);
   return {
-    speed: quantileSorted(speeds, 0.5),
+    speed: percentile(speeds, 50),
     direction,
     samples: speeds.length,
   };
@@ -815,16 +818,6 @@ function summariseStrongestSide(
 
 // --- Small helpers ---
 
-/** Quantile of an ascending-sorted array with linear interpolation. */
-function quantileSorted(sorted: number[], q: number): number {
-  if (sorted.length === 0) return 0;
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  if (lo === hi) return sorted[lo];
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-}
-
 function pearson(a: number[], b: number[]): number {
   const n = a.length;
   if (n < 2) return 0;
@@ -850,18 +843,13 @@ function pearson(a: number[], b: number[]): number {
   return sab / Math.sqrt(saa * sbb);
 }
 
-/** Invert localEastNorth for small offsets (same series expansion). */
+/** Invert localEastNorth for small offsets (the same metres per degree). */
 function offsetToLatLon(
   origin: { lat: number; lon: number },
   east: number,
   north: number,
 ): { lat: number; lon: number } {
-  const refLatRad = (origin.lat * Math.PI) / 180;
-  const mPerDegLat =
-    111132.92 - 559.82 * Math.cos(2 * refLatRad) + 1.175 * Math.cos(4 * refLatRad);
-  const mPerDegLon =
-    111412.84 * Math.cos(refLatRad) - 93.5 * Math.cos(3 * refLatRad) +
-    0.118 * Math.cos(5 * refLatRad);
+  const { mPerDegLat, mPerDegLon } = metresPerDegree(origin.lat);
   return {
     lat: origin.lat + north / mPerDegLat,
     lon: origin.lon + east / mPerDegLon,

@@ -124,6 +124,10 @@ export function detectCylinderCrossings(
     // cylinder — this is a pure speed-up with no effect on which fixes are
     // classified inside/outside. (Assumes tasks don't span the ±180° meridian,
     // the same assumption the linear crossing interpolation below already makes.)
+    // Deliberately NOT geo.ts's metresPerDegree(): a pre-filter wants a cheap
+    // number that is certainly too SMALL, and an accurate one — larger than
+    // these near the poles — would shrink the box and could drop a fix the
+    // exact distance call would have accepted.
     const latDelta = (radius / 110540) * 1.01;
     const cosLat = Math.cos((Math.abs(centerLat) + latDelta) * DEG);
     const lonDelta = (radius / (111000 * Math.max(cosLat, 1e-6))) * 1.01;

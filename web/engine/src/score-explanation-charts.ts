@@ -37,16 +37,20 @@
 
 import type { GAPParameters } from './gap-scoring';
 import {
+  bestTimeFrom,
   calculateArrivalPoints,
   calculateDistanceDifficulty,
   calculateLaunchValidity,
   calculateLeadingPoints,
   calculateSpeedFraction,
   calculateTimeValidity,
+  effectiveEssNotGoalFactor,
   resolveTimePointsExponent,
   speedExponentValue,
+  usesDistanceDifficulty,
 } from './gap-scoring';
 import { duration, fmtPoints, km, trimZeros } from './score-explanation-format';
+import { bestTimeCandidate } from './sections/shared';
 import type {
   ClassContextInput,
   ClassPilotInput,
@@ -160,14 +164,13 @@ export function buildTimeChart(
   const available = classContext.available_points.time;
   if (available <= 0) return null;
 
-  // The same best-time source scoreFlights used (see buildTimeSection).
-  const essNotGoalFactor = params.scoring === 'PG' ? 0 : params.essNotGoalFactor;
-  const times = classContext.pilots
-    .filter((p) => (essNotGoalFactor > 0 ? p.reached_ess : p.made_goal))
-    .map((p) => p.speed_section_time)
-    .filter((t): t is number => t !== null && t > 0);
-  if (times.length === 0) return null;
-  const bestTime = Math.min(...times);
+  // Best time (§11.2.1) from the scorer's own function, so the curve's
+  // denominator is the one the field was scored against.
+  const bestTime = bestTimeFrom(
+    classContext.pilots.map(bestTimeCandidate),
+    effectiveEssNotGoalFactor(params),
+  );
+  if (bestTime === null) return null;
 
   const exponent = speedExponentValue(resolveTimePointsExponent(params));
   const f = (t: number) => calculateSpeedFraction(t, bestTime, exponent) * available;
@@ -380,7 +383,7 @@ export function buildDistanceChart(
   const best = Math.max(...scored.map((p) => p.flown_distance), 0);
   if (best <= 0) return null;
 
-  const useDifficulty = params.scoring === 'HG' && params.useDistanceDifficulty;
+  const useDifficulty = usesDistanceDifficulty(params);
   let f: (d: number) => number;
   if (useDifficulty) {
     const difficulty = calculateDistanceDifficulty(

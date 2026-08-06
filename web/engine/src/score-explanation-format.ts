@@ -12,9 +12,10 @@ import type { ClassContextInput } from './score-explanation-types';
 // Formatting helpers (fixed metric — the UI can localise via formatTime)
 // ---------------------------------------------------------------------------
 
-export function km(meters: number, decimals = 1): string {
-  return `${(meters / 1000).toFixed(decimals)} km`;
-}
+// km lives in its own module because track-quality.ts shares it, and that file
+// is a scoring root — see the note in format-distance.ts. Re-exported here so
+// the section builders keep importing their formatting from one place.
+export { km, type KmOptions } from './format-distance';
 
 export function pts(points: number): string {
   return `${fmtPoints(points)} pts`;

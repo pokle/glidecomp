@@ -421,7 +421,12 @@ async function saveTrackAnalyses(
  * edits and (crucially) new track submissions: only the newly-added track
  * misses the store, the rest of the field is reused instead of being
  * re-fetched, re-parsed and re-resolved.
- * Plain numbers/booleans only, so JSON round-trips losslessly. */
+ * Plain numbers/booleans only, so JSON round-trips losslessly.
+ *
+ * This is the backend's OWN storage shape, assembled field by field and
+ * deliberately FLAT — it is not FlightScoringData. The engine's leading input
+ * is a discriminated union; the two are converted at the boundary below, so
+ * the union never reaches D1 and the stored rows need no revive step. */
 interface CachedFlightAnalysis {
   flownDistance: number;
   madeGoal: boolean;
@@ -1315,13 +1320,18 @@ export async function computeTaskScore(
       result,
       false
     );
-    const leadingAggregate = useLeading
-      ? computeLeadingAggregate(
-          fixes, scoringTask, result.sequence,
-          base.sssTimeMs, base.essTimeMs, leadingFormula
-        )
-      : undefined;
-    return leadingAggregate ? { ...base, leadingAggregate } : base;
+    return useLeading
+      ? {
+          ...base,
+          leading: {
+            kind: "aggregate",
+            aggregate: computeLeadingAggregate(
+              fixes, scoringTask, result.sequence,
+              base.sssTimeMs, base.essTimeMs, leadingFormula
+            ),
+          },
+        }
+      : base;
   };
 
   // Gather each pilot's scoring inputs — from the per-track analysis store
@@ -1345,12 +1355,28 @@ export async function computeTaskScore(
 
       const hit = stored.get(track.task_track_id);
       if (known && hit && hit.uploaded_at === track.uploaded_at) {
-        const cached = JSON.parse(hit.payload_json) as CachedFlightAnalysis;
-        flight = {
-          pilotName: track.pilot_name,
-          trackFile: track.igc_filename,
-          ...cached,
-        };
+        // The stored payload is flat (see CachedFlightAnalysis); the scorer's
+        // leading input is a union, so name it here rather than spreading.
+        const { leadingAggregate, ...cached } = JSON.parse(
+          hit.payload_json
+        ) as CachedFlightAnalysis;
+        // A leading comp's rows are written by a leading run, which always
+        // computes the aggregate (the geometry hash keys lead and no-lead
+        // apart, so a hit can't come from the other variant). If one is
+        // missing anyway, the row is not usable: treat it as a miss and
+        // re-resolve from R2 rather than scoring the pilot 0 leading points.
+        // The engine used to throw here; the union made that unrepresentable,
+        // which must not quietly turn a mis-wired input into a wrong score.
+        if (!useLeading || leadingAggregate) {
+          flight = {
+            pilotName: track.pilot_name,
+            trackFile: track.igc_filename,
+            ...cached,
+            leading: leadingAggregate
+              ? { kind: "aggregate", aggregate: leadingAggregate }
+              : { kind: "none" },
+          };
+        }
       }
 
       if (!flight) {
@@ -1394,8 +1420,8 @@ export async function computeTaskScore(
           ...(flight.stoppedAltitudeBonus !== undefined
             ? { stoppedAltitudeBonus: flight.stoppedAltitudeBonus }
             : {}),
-          ...(flight.leadingAggregate
-            ? { leadingAggregate: flight.leadingAggregate }
+          ...(flight.leading.kind === "aggregate"
+            ? { leadingAggregate: flight.leading.aggregate }
             : {}),
         };
         analysisWrites.push({

@@ -25,6 +25,7 @@
 import { getEffectiveSSSIndex, type XCTask } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import { computeGoalLine } from './goal-line';
+import { metresPerDegree } from './geo';
 
 /** Floats stored per vertex in `tracks.bin`: [x, y, z, tRel]. */
 export const FLOATS_PER_VERTEX = 4;
@@ -164,18 +165,6 @@ export interface PackedTracks {
   manifest: TrackManifest;
   /** Interleaved [x, y, z, tRel] × vertexCount. */
   data: Float32Array;
-}
-
-/**
- * Metres per degree of latitude/longitude at a given latitude (WGS84 series).
- * Same formula the brief specifies; good to sub-metre over a competition area.
- */
-export function metresPerDegree(lat0: number): { mPerDegLat: number; mPerDegLon: number } {
-  const lat0r = (lat0 * Math.PI) / 180;
-  const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * lat0r) + 1.175 * Math.cos(4 * lat0r);
-  const mPerDegLon =
-    111412.84 * Math.cos(lat0r) - 93.5 * Math.cos(3 * lat0r) + 0.118 * Math.cos(5 * lat0r);
-  return { mPerDegLat, mPerDegLon };
 }
 
 /**
