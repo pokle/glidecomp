@@ -406,6 +406,70 @@ export function toFlightScoringData(
 }
 
 /**
+ * Whether the field's distance points split into the linear and difficulty
+ * halves (FAI S7F §11.1.1). The spec's difficulty calculation is
+ * hang-gliding only, so paragliding never uses it whatever the parameter
+ * says.
+ *
+ * Exported so the report card prints the split the scorer actually applied —
+ * including for a pilot whose difficulty half is legitimately 0.
+ */
+export function usesDistanceDifficulty(params: GAPParameters): boolean {
+  return params.scoring === 'HG' && params.useDistanceDifficulty;
+}
+
+/**
+ * The ESS-but-not-goal factor in force (FAI S7F §12.1) — the share of time
+ * and arrival points kept by a pilot who reaches ESS but lands before goal.
+ * The spec fixes paragliding at 0 (no goal → no time points), so PG ignores
+ * the configured value.
+ */
+export function effectiveEssNotGoalFactor(params: GAPParameters): number {
+  return params.scoring === 'PG' ? 0 : params.essNotGoalFactor;
+}
+
+/** The per-pilot facts {@link bestTimeFrom} reads. */
+export interface BestTimeCandidate {
+  madeGoal: boolean;
+  reachedESS: boolean;
+  speedSectionTime: number | null;
+}
+
+/**
+ * The speed-section times that count toward the best time (FAI S7F §11.2.1),
+ * in field order.
+ *
+ * Matches AirScore's pilot_speed: while the ESS-but-not-goal factor keeps a
+ * share of time points (HG default 0.8), the best time is the fastest pilot
+ * to reach ESS, goal or not, so the docked pilots' speed fractions stay on
+ * the same scale; when the factor is 0 (always for PG) it is goal-validated
+ * exactly as the spec reads.
+ *
+ * @param essNotGoalFactor - as returned by {@link effectiveEssNotGoalFactor}.
+ */
+export function qualifyingSpeedSectionTimes(
+  candidates: readonly BestTimeCandidate[],
+  essNotGoalFactor: number,
+): number[] {
+  return candidates
+    .filter(c => (essNotGoalFactor > 0 ? c.reachedESS : c.madeGoal))
+    .map(c => c.speedSectionTime)
+    .filter((t): t is number => t !== null && t > 0);
+}
+
+/**
+ * Best speed-section time (§11.2.1) — the denominator of every pilot's speed
+ * fraction — or null when nobody qualifies.
+ */
+export function bestTimeFrom(
+  candidates: readonly BestTimeCandidate[],
+  essNotGoalFactor: number,
+): number | null {
+  const validTimes = qualifyingSpeedSectionTimes(candidates, essNotGoalFactor);
+  return validTimes.length > 0 ? minBy(validTimes, t => t) : null;
+}
+
+/**
  * Whole-field GAP aggregation over compact per-pilot inputs.
  *
  * This is the single source of truth for task validity, weight distribution,
@@ -493,7 +557,7 @@ export function scoreFlights(
 
   // HG distance difficulty (FAI S7F §11.1.1) — built once from the whole
   // field. Never applies to paragliding (the spec excludes PG).
-  const useDifficulty = fullParams.scoring === 'HG' && fullParams.useDistanceDifficulty;
+  const useDifficulty = usesDistanceDifficulty(fullParams);
   const difficulty = useDifficulty
     ? calculateDistanceDifficulty(
         scoredDistances,
@@ -505,23 +569,11 @@ export function scoreFlights(
   const numInGoal = effFlights.reduce((n, f) => n + (f.madeGoal ? 1 : 0), 0);
   const numReachedESS = effFlights.reduce((n, f) => n + (f.reachedESS ? 1 : 0), 0);
 
-  // §12.1: the ESS-but-not-goal factor — the share of time and arrival
-  // points kept by a pilot who reaches ESS but lands before goal. The spec
-  // fixes paragliding at 0 (no goal → no time points), so PG ignores the
-  // configured value.
-  const essNotGoalFactor =
-    fullParams.scoring === 'PG' ? 0 : fullParams.essNotGoalFactor;
+  // §12.1: the ESS-but-not-goal factor in force for this field.
+  const essNotGoalFactor = effectiveEssNotGoalFactor(fullParams);
 
-  // Best time (§11.2.1) — matching AirScore's pilot_speed: while the
-  // ESS-but-not-goal factor keeps a share of time points (HG default 0.8),
-  // the best time is the fastest pilot to reach ESS, goal or not, so the
-  // docked pilots' speed fractions stay on the same scale; when the factor
-  // is 0 (always for PG) it is goal-validated exactly as the spec reads.
-  const validTimes = effFlights
-    .filter(f => (essNotGoalFactor > 0 ? f.reachedESS : f.madeGoal))
-    .map(f => f.speedSectionTime)
-    .filter((t): t is number => t !== null && t > 0);
-  const bestTime = validTimes.length > 0 ? minBy(validTimes, t => t) : null;
+  // Best time (§11.2.1) — the denominator of every speed fraction.
+  const bestTime = bestTimeFrom(effFlights, essNotGoalFactor);
 
   const taskDistance = calculateOptimizedTaskDistance(scoringTask);
 
@@ -720,7 +772,7 @@ export function scoreFlights(
       exponent: timeExponent,
       essNotGoalFactor,
     });
-    stopped.timePointsReduction = Math.round(stopTimeReduction * 10) / 10;
+    stopped.timePointsReduction = roundToTenth(stopTimeReduction);
   }
 
   const anyJtgPenalty = earlyOutcomes.some(o => o === 'hg_penalty');
@@ -810,12 +862,12 @@ export function scoreFlights(
       speedSectionTime: f.speedSectionTime,
       madeGoal: f.madeGoal,
       reachedESS: f.reachedESS,
-      distancePoints: Math.round(distPts * 10) / 10,
-      distanceLinearPoints: Math.round(distScore.linear * 10) / 10,
-      distanceDifficultyPoints: Math.round(distScore.difficulty * 10) / 10,
-      timePoints: Math.round(timePts * 10) / 10,
-      leadingPoints: Math.round(leadPts * 10) / 10,
-      arrivalPoints: Math.round(arrPts * 10) / 10,
+      distancePoints: roundToTenth(distPts),
+      distanceLinearPoints: roundToTenth(distScore.linear),
+      distanceDifficultyPoints: roundToTenth(distScore.difficulty),
+      timePoints: roundToTenth(timePts),
+      leadingPoints: roundToTenth(leadPts),
+      arrivalPoints: roundToTenth(arrPts),
       totalScore: total,
       rank: 0, // assigned after sorting
       leadingCoefficient: leadingCoefficients[idx],
@@ -828,7 +880,7 @@ export function scoreFlights(
         : {}),
       ...(outcome ? { earlyStartOutcome: outcome } : {}),
       ...(jtgPenalty > 0
-        ? { jumpTheGunPenalty: Math.round(jtgPenalty * 10) / 10 }
+        ? { jumpTheGunPenalty: roundToTenth(jtgPenalty) }
         : {}),
       ...(f.stoppedAltitudeBonus && f.stoppedAltitudeBonus > 0
         ? { stoppedAltitudeBonus: f.stoppedAltitudeBonus }

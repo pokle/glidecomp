@@ -9,13 +9,17 @@
 import type { XCTask, Turnpoint } from './xctsk-parser';
 import { getEffectiveSSSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-sequence';
-import type { GAPParameters } from './gap-scoring';
+import type { BestTimeCandidate, GAPParameters } from './gap-scoring';
 import {
   DEFAULT_GAP_PARAMETERS,
+  bestTimeFrom,
   calculateArrivalPoints,
   calculateSpeedFraction,
+  effectiveEssNotGoalFactor,
+  qualifyingSpeedSectionTimes,
   resolveTimePointsExponent,
   speedExponentValue,
+  usesDistanceDifficulty,
 } from './gap-scoring';
 import type { ManualFlightGeometry } from './manual-flight';
 import { calculateOptimizedTaskLine, computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
@@ -45,6 +49,20 @@ import {
   availableTotalDetail,
   defaultFormatTime,
 } from './score-explanation-format';
+
+/**
+ * Read a published class pilot as a {@link BestTimeCandidate}, so the report
+ * card's best time (FAI S7F §11.2.1) comes from {@link bestTimeFrom} — the
+ * scorer's own function — rather than a hand-copied filter. Only the field
+ * names differ between the scored shape and the published one.
+ */
+export function bestTimeCandidate(pilot: ClassPilotInput): BestTimeCandidate {
+  return {
+    madeGoal: pilot.made_goal,
+    reachedESS: pilot.reached_ess,
+    speedSectionTime: pilot.speed_section_time,
+  };
+}
 
 /** Human label for a task position: Takeoff / Start / TP3 / ESS / Goal. */
 export function turnpointLabel(task: XCTask, taskIndex: number): string {
@@ -771,12 +789,12 @@ export function buildDistanceSection(
 ): ScoreExplanationSection {
   const ap = classContext.available_points;
   const best = Math.max(...classContext.pilots.map((p) => p.flown_distance), 0);
-  // Mirror scoreFlights' predicate exactly — the engine applies the linear/
-  // difficulty split for every HG pilot when useDistanceDifficulty is on,
-  // including one whose difficulty half is legitimately 0. Gating on the
-  // point value would drop such a pilot into the pure-linear branch, whose
-  // printed equation omits the 0.5 factor the engine actually applied.
-  const useDifficulty = params.scoring === 'HG' && params.useDistanceDifficulty;
+  // The engine applies the linear/difficulty split for every HG pilot when
+  // useDistanceDifficulty is on, including one whose difficulty half is
+  // legitimately 0. Gating on the point value would drop such a pilot into
+  // the pure-linear branch, whose printed equation omits the 0.5 factor the
+  // engine actually applied.
+  const useDifficulty = usesDistanceDifficulty(params);
 
   const items: ScoreExplanationItem[] = [];
 
@@ -939,11 +957,10 @@ export function buildTimeSection(
   const ap = classContext.available_points;
   const items: ScoreExplanationItem[] = [];
 
-  // Mirrors calculateTimePoints / scoreFlights: PG requires goal (the spec
-  // fixes its ESS-but-not-goal factor at 0); HG requires ESS, and a pilot
-  // who lands before goal keeps only the essNotGoalFactor share (§12.1).
-  const essNotGoalFactor =
-    params.scoring === 'PG' ? 0 : params.essNotGoalFactor;
+  // PG requires goal (the spec fixes its ESS-but-not-goal factor at 0); HG
+  // requires ESS, and a pilot who lands before goal keeps only the
+  // essNotGoalFactor share (§12.1).
+  const essNotGoalFactor = effectiveEssNotGoalFactor(params);
   const qualifies =
     params.scoring === 'PG'
       ? entry.made_goal
@@ -955,13 +972,11 @@ export function buildTimeSection(
     !entry.made_goal &&
     essNotGoalFactor > 0;
 
-  // Best time — same source scoreFlights used: goal-validated when the
-  // factor is 0 (always for PG, §11.2.1), otherwise the fastest ESS pilot.
-  const bestTimes = classContext.pilots
-    .filter((p) => (essNotGoalFactor > 0 ? p.reached_ess : p.made_goal))
-    .map((p) => p.speed_section_time)
-    .filter((t): t is number => t !== null && t > 0);
-  const bestTime = bestTimes.length > 0 ? Math.min(...bestTimes) : null;
+  // Best time (§11.2.1) — the scorer's own functions over the published class
+  // field; only the field names have to be translated.
+  const candidates = classContext.pilots.map(bestTimeCandidate);
+  const bestTimes = qualifyingSpeedSectionTimes(candidates, essNotGoalFactor);
+  const bestTime = bestTimeFrom(candidates, essNotGoalFactor);
   let rank: string | undefined;
 
   if (!qualifies || entry.speed_section_time === null || bestTime === null) {
