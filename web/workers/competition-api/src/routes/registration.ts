@@ -31,6 +31,7 @@ import {
   type PilotIdentifierKind,
 } from "../pilot-linker";
 import { maskEmail } from "../submission-gate";
+import { hiddenFromCaller } from "../comp-visibility";
 import { RESOLVE_PER_USER, chargeBudget } from "../rate-limit";
 
 type Variables = {
@@ -82,10 +83,25 @@ export const registrationRoutes = new Hono<HonoEnv>().post(
     }
 
     const comp = await db
-      .prepare("SELECT comp_id, name, open_registration FROM comp WHERE comp_id = ?")
+      .prepare(
+        "SELECT comp_id, name, open_registration, test FROM comp WHERE comp_id = ?"
+      )
       .bind(compId)
-      .first<{ comp_id: number; name: string; open_registration: number }>();
+      .first<{
+        comp_id: number;
+        name: string;
+        open_registration: number;
+        test: number;
+      }>();
     if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+    // A hidden test comp answers exactly as a missing one does. This route
+    // reads out a roster — names, classes, masked addresses — so the gate the
+    // read routes apply has to hold here too, and answering 403 would still
+    // confirm the competition exists.
+    if (await hiddenFromCaller(db, compId, comp.test, user)) {
+      return c.json({ error: "Competition not found" }, 404);
+    }
 
     const mayRegister = !!comp.open_registration;
 

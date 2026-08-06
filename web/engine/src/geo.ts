@@ -85,6 +85,21 @@ export function calculateBearing(
 }
 
 /**
+ * Compass bearing of a vector already expressed in local east/north metres.
+ *
+ * The sibling of {@link calculateBearing} for the components case: a drift, a
+ * slope or a wind vector projected into a tangent frame (see
+ * {@link localEastNorth}) rather than a pair of coordinates.
+ *
+ * @param east - East component (+E)
+ * @param north - North component (+N)
+ * @returns Bearing in degrees, in [0, 360) clockwise from north
+ */
+export function bearingFromComponents(east: number, north: number): number {
+  return ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+}
+
+/**
  * Calculate bearing from point 1 to point 2 in radians.
  * Used internally by xctsk-parser for task optimization.
  *
@@ -243,9 +258,30 @@ export function calculateTrackDistance(
 }
 
 /**
+ * Metres per degree of latitude and of longitude at a given latitude, from the
+ * WGS84 series expansion. Good to sub-metre over a competition-task area.
+ *
+ * This is the ONE spelling of the formula in the engine: {@link localEastNorth},
+ * the track packer's ENU projection and the thermal-shape inverse all read it
+ * from here.
+ *
+ * @param lat - Latitude in degrees
+ * @returns `mPerDegLat` and `mPerDegLon` at that latitude
+ */
+export function metresPerDegree(lat: number): { mPerDegLat: number; mPerDegLon: number } {
+  const latRad = (lat * Math.PI) / 180;
+  const mPerDegLat =
+    111132.92 - 559.82 * Math.cos(2 * latRad) + 1.175 * Math.cos(4 * latRad);
+  const mPerDegLon =
+    111412.84 * Math.cos(latRad) - 93.5 * Math.cos(3 * latRad) +
+    0.118 * Math.cos(5 * latRad);
+  return { mPerDegLat, mPerDegLon };
+}
+
+/**
  * Project a point into a local east/north tangent frame around a reference
- * point, in metres. Uses an equirectangular approximation with the WGS84
- * metres-per-degree series at the reference latitude — sub-metre accurate
+ * point, in metres. Uses an equirectangular approximation with
+ * {@link metresPerDegree} at the reference latitude — sub-metre accurate
  * within a few kilometres of the reference. Intended for local intersection
  * tests (e.g. a track segment against a goal line), NOT for long-range
  * distances — use {@link andoyerDistance} for those.
@@ -262,15 +298,7 @@ export function localEastNorth(
   lat: number,
   lon: number
 ): { east: number; north: number } {
-  const refLatRad = (refLat * Math.PI) / 180;
-  // WGS84 series expansion for metres per degree at the reference latitude
-  // (same formula as the track packer's projection; good to sub-metre over
-  // a competition-task area).
-  const mPerDegLat =
-    111132.92 - 559.82 * Math.cos(2 * refLatRad) + 1.175 * Math.cos(4 * refLatRad);
-  const mPerDegLon =
-    111412.84 * Math.cos(refLatRad) - 93.5 * Math.cos(3 * refLatRad) +
-    0.118 * Math.cos(5 * refLatRad);
+  const { mPerDegLat, mPerDegLon } = metresPerDegree(refLat);
   return {
     east: (lon - refLon) * mPerDegLon,
     north: (lat - refLat) * mPerDegLat,

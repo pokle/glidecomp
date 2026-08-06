@@ -222,6 +222,7 @@ endpoint**, which is why the columns behave so differently.
 | **Replace a track already on file** | ✅ same rules as above; the pilot is emailed | ✅ | ✅ |
 | **Task closed for submissions** | ❌ hard stop | ❌ | ✅ bypasses |
 | **Competition past its close date** | ❌ | ❌ | ❌ — nobody bypasses |
+| **A hidden `test` competition** | ❌ 404, as if it did not exist | ❌ the same 404 | ✅ — the flag hides a rehearsal, it does not stop the organiser rehearsing |
 
 ### The settings that move those cells
 
@@ -231,6 +232,7 @@ endpoint**, which is why the columns behave so differently.
 | `comp.open_registration` (0027) | **on** | Whether a signed-in pilot who is on nobody's roster may add themselves by uploading |
 | `comp.close_date` | none | Closes the whole competition, for everyone including admins |
 | `task.submissions_closed` (0028) | **off** | Closes one task. Admins bypass it on both signed-in routes; a hard stop anonymously |
+| `comp.test` (hidden comp) | **off** | Hides the competition from everyone but its admins. Every submission route — including `registration/resolve` — answers a non-admin with its own not-found body, never a 403 |
 
 ### Four things that surprise people
 
@@ -245,10 +247,19 @@ not on their own roster meets the picker like anybody else. The two are
 deliberately separate: one is about *when* a track may arrive, the other about
 *whose* it is.
 
-**Only the anonymous route hides `test` competitions.** Neither signed-in route
-reads `comp.test`, so somebody who knows a hidden competition's id can upload to
-it. That is an inconsistency rather than a decision — the read routes all gate
-on it.
+**A hidden `test` competition takes tracks from its admins and nobody else.**
+Every route reads `comp.test` now — anonymous, self, on-behalf, manual flight,
+the `registration/resolve` pre-flight, and the pilot-status writes beside them
+— through one `hiddenFromCaller()` (`comp-visibility.ts`, next to the search
+filter that answers the same question for a query rather than an id). Every one
+of them answers a non-admin exactly as a missing competition does, in its own
+not-found wording.
+A 403 would still concede that the competition exists, which is the one thing
+the flag is there to withhold. Admins are the exception the flag is for: an
+organiser rehearsing an unpublished comp has to be able to submit to it, or the
+rehearsal proves nothing. Until 2026-08-06 the three signed-in routes read
+`close_date` but not `test`, so any account that knew the ids could read a
+hidden roster and write a track into it (SEC-37/38).
 
 **`MAX_PILOTS_PER_TASK` is 250** and caps every route. The anonymous one can
 never push it, because it does not create roster rows.
@@ -426,16 +437,41 @@ is mitigated by the notice and the audit trail rather than prevented.
 0017 already ships. The unit worth protecting is *a pilot's track*, not a
 request.
 
-| Key | Budget | Why |
-|---|---|---|
-| `anon-igc:cp:<comp_pilot_id>` | 6 / 24 h | Enough to fix a genuinely wrong upload several times; not enough to sit there overwriting somebody else's. |
-| `anon-igc:comp:<comp_id>` | 300 / 24 h | Above anything a real comp does, below a flood. |
-| `anon-igc:miss:<ip>` | 20 / 24 h | Charged **only** on `no_pilot_match`, so the endpoint cannot become a fast way to test whether an address is registered. National IDs are already public; email addresses are not. |
+| Key | Budget | Charged | Why |
+|---|---|---|---|
+| `anon-igc:cp:<comp_pilot_id>` | 6 / 24 h | on a stored track | Enough to fix a genuinely wrong upload several times; not enough to sit there overwriting somebody else's. |
+| `anon-igc:comp:<comp_id>` | 300 / 24 h | on a stored track | Above anything a real comp does, below a flood. |
+| `anon-igc:futile:<ip>` | 40 / 24 h | on every request that stores nothing | Bounds wasted work, and is what keeps the endpoint from answering "is this address registered?" as fast as anyone can ask. National IDs are already public; email addresses are not. |
 
-Order of work is a cost decision: the comp budget and the header parse run
-before any lookup, the pilot budget after the match (an attacker cannot burn a
-real pilot's allowance without an identifier that resolves), and the file is
-only read once all of that has passed.
+**What is charged, and when, is the security property** (SEC-39). The first two
+are *damage* budgets: they are keyed on the thing being protected, so they are
+charged at the far end, once a track is actually in R2. The third is an *effort*
+budget: it is keyed on the caller, so it is charged for work that produced
+nothing.
+
+Getting that backwards is what SEC-39 was. Everything an attacker needs to name
+a competition or a registration is public by design — the comp id is in the
+comp's own URL, and `GET /api/comp/:comp_id/pilot` publishes every pilot's
+national IDs — so charging on arrival let anyone spend a competition's or a
+pilot's whole day without ever uploading a file. Six a day made the pilot case
+sharp: six empty POSTs naming a real CIVL id took that pilot's landing day.
+
+Order of work is still a cost decision, and `peekBudget` is what keeps it one:
+the damage budgets are **peeked** early — a read, where this used to do a write
+— so something already at its cap is turned away before the body is read, while
+the counter itself stays unmovable by anyone who is not really uploading. The
+peek admits a small race (concurrent requests can all pass it), which is bounded
+by concurrency and harmless against 6 and 300 a day.
+
+A 429 never charges the effort budget: a caller already being turned away by one
+budget should not also spend another, or a pilot who hits their own six-a-day
+would burn allowance shared with everyone else at the comp.
+
+The effort budget is the only per-IP budget here, and it is safe to be one
+*because* it is charged on failure. A submission that lands costs nothing, so a
+hillside of pilots behind one connection or a CGNAT address can all submit; only
+somebody generating failures pays. A budget on every submission instead would
+429 real pilots on exactly the day this route exists for.
 
 ### Errors are repairable
 
@@ -616,9 +652,10 @@ everyone else's bundle.
 | Submission notice email | `web/workers/competition-api/src/track-notice-email.ts` |
 | Registration resolve | `web/workers/competition-api/src/routes/registration.ts` |
 | Closed-task gate | `web/workers/competition-api/src/submission-gate.ts` |
+| Hidden-comp gate | `web/workers/competition-api/src/comp-visibility.ts` (`hiddenFromCaller`) |
 | Open competitions | `web/workers/competition-api/src/routes/open-comps.ts` |
 | Flight summary | `web/engine/src/flight-summary.ts` |
 | Forging a test tracklog | `web/engine/src/forge-igc.ts` |
 | IGC Forge dialog | `src/react/comp/ForgeIgcDialog.tsx` |
 | IGC Forge CLI | `web/scripts/forge-igc.ts` |
-| Coverage | `test/igc-anon.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |
+| Coverage | `test/igc-anon.test.ts`, `test/igc-routes.test.ts`, `test/registration-resolve.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |

@@ -255,7 +255,13 @@ export interface TaskScoringConfig extends TaskScoringGeometry {
  * edits and (crucially) new track submissions: only the newly-added track
  * misses the store, the rest of the field is reused instead of being
  * re-fetched, re-parsed and re-resolved.
- * Plain numbers/booleans only, so JSON round-trips losslessly. */
+ * Plain numbers/booleans only, so JSON round-trips losslessly.
+ *
+ * This is the backend's OWN storage shape, assembled field by field and
+ * deliberately FLAT — it is not FlightScoringData. The engine's leading input
+ * is a discriminated union; the two are converted at the boundary in
+ * task-score.ts, so the union never reaches D1 and the stored rows need no
+ * revive step. */
 export interface CachedFlightAnalysis {
   flownDistance: number;
   madeGoal: boolean;

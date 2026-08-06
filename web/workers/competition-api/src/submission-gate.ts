@@ -5,7 +5,9 @@
  * A competition has `close_date`, which closes everything. A single task has
  * `submissions_closed` (migration 0028), which is what an organiser reaches for
  * at the end of the day: "task 3 is done, stop sending me files" while task 4
- * is still flying.
+ * is still flying. (A competition's `test` flag hides it from everyone but its
+ * own admins; that rule is `hiddenFromCaller` in `comp-visibility.ts`, since it
+ * governs reads and writes alike.)
  *
  * Lives in its own module because the same rule has to hold at FOUR call sites
  * in three files — the self upload, the on-behalf upload, the anonymous

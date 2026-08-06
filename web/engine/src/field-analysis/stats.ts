@@ -1,13 +1,15 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
 /**
- * Small dependency-free statistics helpers for field analysis.
+ * Small statistics helpers for field analysis.
  *
  * Spearman correlation is the field-analysis eval: each behavioural metric is
  * correlated against GAP rank to find which behaviours separate the
  * leaderboard. Ties get average ranks (the standard Spearman treatment), so a
  * field where many pilots share a value doesn't fabricate correlation.
  */
+
+import { bearingFromComponents } from '../geo';
 
 /**
  * Linear-interpolated percentile of an ASCENDING-sorted array.
@@ -141,7 +143,7 @@ export function circularMeanWind(samples: WindSample[]): MeanWind | null {
   u /= samples.length;
   v /= samples.length;
   const speed = Math.hypot(u, v);
-  const direction = ((Math.atan2(-u, -v) * 180) / Math.PI + 360) % 360;
+  const direction = bearingFromComponents(-u, -v);
   return { speed, direction, n: samples.length };
 }
 

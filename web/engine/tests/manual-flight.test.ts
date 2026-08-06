@@ -271,7 +271,7 @@ describe('manualFlightScoringData', () => {
       pilotName: 'Manual', trackFile: 'manual:m',
       lastReachedIndex: 2, landing: { lat: 0, lon: 0.25 },
     });
-    expect(manual.trackless).toBe(true);
+    expect(manual.leading).toEqual({ kind: 'none' });
 
     const result = scoreFlights(TASK, [trackedData, manual], {
       scoring: 'HG', useLeading: true,

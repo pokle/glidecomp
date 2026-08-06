@@ -258,11 +258,12 @@ export function manualFlightScoringData(
     reachedESS: madeGoal,
     speedSectionTime,
     // No tracklog → no timestamps for leading / gate anchoring, and no
-    // leading scan is possible: mark it track-less so scoreFlights awards it
-    // no leading points instead of demanding a (nonexistent) aggregate.
+    // leading scan is possible: the flight declares it has nothing to lead
+    // with, so scoreFlights awards it no leading points instead of demanding
+    // a (nonexistent) aggregate.
     sssTimeMs: null,
     essTimeMs: null,
-    trackless: true,
+    leading: { kind: 'none' },
   };
 }
 
