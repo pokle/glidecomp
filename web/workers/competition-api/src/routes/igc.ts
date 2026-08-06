@@ -37,11 +37,11 @@ import {
   toUploadResult,
 } from "../track-upload";
 import {
-  hiddenFromSubmitter,
   maskEmail,
   organisersOf,
   submissionsClosedBody,
 } from "../submission-gate";
+import { hiddenFromCaller } from "../comp-visibility";
 import { noticeOnUpload } from "../track-notice-email";
 
 type Variables = {
@@ -306,7 +306,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // A hidden test comp answers exactly as a missing one does — being
       // signed in is not a claim to somebody's rehearsal.
-      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
         return c.json({ error: "Competition not found" }, 404);
       }
 
@@ -613,7 +613,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // As the self route: a hidden test comp is missing to everyone but its
       // admins, whichever pilot the track is being filed for.
-      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
         return c.json({ error: "Competition not found" }, 404);
       }
 

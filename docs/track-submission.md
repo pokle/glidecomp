@@ -249,8 +249,11 @@ deliberately separate: one is about *when* a track may arrive, the other about
 
 **A hidden `test` competition takes tracks from its admins and nobody else.**
 Every route reads `comp.test` now — anonymous, self, on-behalf, manual flight,
-and the `registration/resolve` pre-flight — and every one of them answers a
-non-admin exactly as a missing competition does, in its own not-found wording.
+the `registration/resolve` pre-flight, and the pilot-status writes beside them
+— through one `hiddenFromCaller()` (`comp-visibility.ts`, next to the search
+filter that answers the same question for a query rather than an id). Every one
+of them answers a non-admin exactly as a missing competition does, in its own
+not-found wording.
 A 403 would still concede that the competition exists, which is the one thing
 the flag is there to withhold. Admins are the exception the flag is for: an
 organiser rehearsing an unpublished comp has to be able to submit to it, or the
@@ -648,7 +651,8 @@ everyone else's bundle.
 | Budgets | `web/workers/competition-api/src/rate-limit.ts` |
 | Submission notice email | `web/workers/competition-api/src/track-notice-email.ts` |
 | Registration resolve | `web/workers/competition-api/src/routes/registration.ts` |
-| Closed-task gate + hidden-comp gate | `web/workers/competition-api/src/submission-gate.ts` |
+| Closed-task gate | `web/workers/competition-api/src/submission-gate.ts` |
+| Hidden-comp gate | `web/workers/competition-api/src/comp-visibility.ts` (`hiddenFromCaller`) |
 | Open competitions | `web/workers/competition-api/src/routes/open-comps.ts` |
 | Flight summary | `web/engine/src/flight-summary.ts` |
 | Forging a test tracklog | `web/engine/src/forge-igc.ts` |

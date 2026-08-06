@@ -18,10 +18,10 @@ import {
 } from "../manual-flight-store";
 import { mergeStoredGapParamsJson } from "../scoring";
 import {
-  hiddenFromSubmitter,
   submissionsBlockedFor,
   submissionsClosedBody,
 } from "../submission-gate";
+import { hiddenFromCaller } from "../comp-visibility";
 
 type Variables = {
   user: AuthUser;
@@ -232,7 +232,7 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
 
       // A manual flight is evidence for a task exactly as a tracklog is, so a
       // hidden test comp answers it as a missing one — same rule, same gate.
-      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
         return c.json({ error: "Competition not found" }, 404);
       }
 
@@ -378,7 +378,7 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
 
       // Same gate as the record route above: a hidden test comp is missing to
       // everyone but its admins, on the way in and on the way back out.
-      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
         return c.json({ error: "Competition not found" }, 404);
       }
 
@@ -463,7 +463,7 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
 
       // Same gate as the record route above: a hidden test comp is missing to
       // everyone but its admins, on the way in and on the way back out.
-      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
         return c.json({ error: "Competition not found" }, 404);
       }
 
