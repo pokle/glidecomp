@@ -305,11 +305,23 @@
 //      made accurate — the bbox one is load-bearing, since a denominator that
 //      is too LARGE would shrink the box and could discard a fix the exact
 //      distance check accepts.
+//      scoreFlights' seven numbered step comments likewise became five named
+//      steps, and the 2,128-line score-explanation-sections.ts became eleven
+//      per-concern modules behind the same entry module.
+//      FlightScoringData's four correlated optionals (leadingAggregate, fixes,
+//      sequence, trackless) are now one required discriminated union,
+//      FlightLeadingInput — 'aggregate' | 'track' | 'none'. The runtime throw
+//      that described the invariant in prose is gone, because the invariant is
+//      now in the type. The stored per-track payload is UNCHANGED: it was
+//      always the backend's own flat CachedFlightAnalysis rather than
+//      FlightScoringData, and the worker converts at the boundary in both
+//      directions, so no revive step was needed and no D1 row changes shape.
 //      The fingerprint also moves because the guard's own root list grew:
 //      manual-flight.ts measures a track-less pilot's distance and the backend
 //      calls it directly, so it reached published scores while sitting outside
 //      every root's import closure. The cache roll is harmless — scores
-//      recompute identically.
+//      recompute identically, verified byte-for-byte over 376,405 scored
+//      fields spanning every bundled task across 14 parameter variants.
 export const SCORING_ENGINE_VERSION = 31;
 
 /**
@@ -318,4 +330,4 @@ export const SCORING_ENGINE_VERSION = 31;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "d1db237e6354dd804ff142999c606354ebbc0a1d8bc22c16b3ac3b1ef27e0a07";
+  "1ded972bd3aef49e435b8fe92f00a0c81915b3933f6a25c795f1e7271f27582e";

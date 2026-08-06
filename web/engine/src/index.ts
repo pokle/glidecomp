@@ -324,6 +324,7 @@ export {
   toFlightScoringData,
   type AvailablePoints,
   type DistanceOrigin,
+  type FlightLeadingInput,
   type FlightScoringData,
   type GAPParameters,
   type LeadingAggregate,

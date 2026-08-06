@@ -135,7 +135,7 @@ for (const g of gzipped) {
         "weighted"
       );
       tLeading += now() - t;
-      flights.push({ ...base, leadingAggregate: agg });
+      flights.push({ ...base, leading: { kind: "aggregate", aggregate: agg } });
     } else {
       flights.push(base);
     }
