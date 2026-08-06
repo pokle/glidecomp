@@ -28,12 +28,12 @@
 
 import { SCORING_ENGINE_VERSION, FIELD_ANALYSIS_VERSION } from "@glidecomp/engine";
 import type { Env } from "./env";
+import { computeScoreStateKey } from "./scoring";
 import {
-  computeScoreStateKey,
   computeTaskFieldAnalysis,
   FieldAnalysisUnsupported,
   type TaskFieldAnalysisResponse,
-} from "./scoring";
+} from "./field-analysis";
 
 /**
  * A BLOB as D1 hands it back. D1 accepts an ArrayBuffer on the way in but

@@ -25,9 +25,7 @@
  * not something to hand a crawler; `?slug=` narrows the dump to one list.
  */
 import { Hono } from "hono";
-import type { Env } from "../env";
-
-type HonoEnv = { Bindings: Env };
+import type { BareEnv, Env } from "../env";
 
 /** Rows per D1 query while streaming. Large enough that the whole table is a
  *  handful of queries, small enough that one page is a small allocation. */
@@ -69,7 +67,7 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
-export const civlRankingsRoutes = new Hono<HonoEnv>().get(
+export const civlRankingsRoutes = new Hono<BareEnv>().get(
   "/api/civl-rankings.csv",
   async (c) => {
     // `caches.default` is a Workers extension the DOM lib doesn't declare, and

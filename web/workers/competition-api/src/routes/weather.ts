@@ -34,7 +34,7 @@
 
 import { Hono } from "hono";
 import type { Context } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
@@ -56,20 +56,13 @@ import {
   weatherQueryKey,
 } from "@glidecomp/engine";
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
-
 /**
  * Who may read task weather. Public for a normal comp; a hidden `test` comp
  * stays admin-only. Mirrors canViewFieldAnalysis exactly — if that rule
  * changes, this one changes with it.
  */
 async function canViewWeather(
-  c: Context<HonoEnv>,
+  c: Context<AuthedEnv>,
   compId: number,
   isTest: boolean
 ): Promise<boolean> {
@@ -87,7 +80,7 @@ async function canViewWeather(
  * shared cache for an hour. A signed-in viewer still gets `no-store`, since
  * the same URL serves hidden test comps to admins.
  */
-function cacheControl(c: Context<HonoEnv>, stale: boolean): string {
+function cacheControl(c: Context<AuthedEnv>, stale: boolean): string {
   if (c.var.user) return "private, no-store";
   if (stale) return "public, max-age=60, must-revalidate";
   return "public, max-age=3600, must-revalidate";
@@ -102,7 +95,7 @@ interface TaskRow {
   weather_notes: string | null;
 }
 
-export const weatherRoutes = new Hono<HonoEnv>()
+export const weatherRoutes = new Hono<AuthedEnv>()
 
   // ── GET /api/comp/:comp_id/task/:task_id/weather ──
   .get(

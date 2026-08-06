@@ -14,9 +14,9 @@
 
 import { packTracksFromIgc, type GAPParameters, type PilotIgc } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
+import { mapWithConcurrency } from "./lib/concurrency";
 import {
   hardFindingTitles,
-  mapWithConcurrency,
   mergeStoredGapParamsJson,
   resolveTaskScoringConfig,
 } from "./scoring";

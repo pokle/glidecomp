@@ -92,6 +92,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@glidecomp/engine": "workspace:*",
+        "hono": "^4.13.0",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260702.1",
@@ -104,6 +105,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@better-auth/api-key": "^1.6.25",
+        "@glidecomp/worker-kit": "workspace:*",
         "better-auth": "^1.6.25",
         "hono": "^4.13.0",
         "kysely": "^0.28.17",
@@ -122,6 +124,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@glidecomp/engine": "workspace:*",
+        "@glidecomp/worker-kit": "workspace:*",
         "@hono/zod-validator": "^0.9.0",
         "hono": "^4.13.0",
         "sqids": "^0.3.0",
@@ -142,6 +145,13 @@
         "@cloudflare/workers-types": "^4.20260702.1",
         "typescript": "^7.0.2",
         "wrangler": "4.116.0",
+      },
+    },
+    "web/workers/shared": {
+      "name": "@glidecomp/worker-kit",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@cloudflare/workers-types": "^4.20260702.1",
       },
     },
   },
@@ -367,6 +377,8 @@
     "@glidecomp/frontend": ["@glidecomp/frontend@workspace:web/frontend"],
 
     "@glidecomp/samples": ["@glidecomp/samples@workspace:web/samples"],
+
+    "@glidecomp/worker-kit": ["@glidecomp/worker-kit@workspace:web/workers/shared"],
 
     "@hono/node-server": ["@hono/node-server@2.1.0", "", { "peerDependencies": { "hono": "^4" } }, "sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg=="],
 

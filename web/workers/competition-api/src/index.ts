@@ -1,8 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+// credentials:true means we MUST NOT reflect arbitrary origins — the
+// allowlist is shared with the other Workers so it cannot drift.
+import { allowedOrigin } from "@glidecomp/worker-kit/cors";
 import { bodyLimit } from "hono/body-limit";
 import { MAX_BODY_BYTES } from "./igc-validation";
-import type { Env, AuthUser } from "./env";
+import type { AuthedEnv, Env } from "./env";
 import { compRoutes } from "./routes/comp";
 import { lookupRoutes } from "./routes/lookup";
 import { searchRoutes } from "./routes/search";
@@ -14,6 +17,7 @@ import { igcAnonRoutes } from "./routes/igc-anon";
 import { openCompsRoutes } from "./routes/open-comps";
 import { registrationRoutes } from "./routes/registration";
 import { pilotRoutes } from "./routes/pilot";
+import { pilotProfileRoutes } from "./routes/pilot-profile";
 import { pilotStatusRoutes } from "./routes/pilot-status";
 import { manualFlightRoutes } from "./routes/manual-flight";
 import { scoreRoutes } from "./routes/score";
@@ -26,30 +30,11 @@ import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
 import { civlRankingsRoutes } from "./routes/civl-rankings";
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
+const app = new Hono<AuthedEnv>();
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
-
-// CORS — credentials:true means we MUST NOT reflect arbitrary origins, or any
-// site the user visits can make authenticated requests. Allowlist is prod +
-// Pages preview deploys + localhost (for bun run dev against a live backend).
-const PAGES_PREVIEW = /^https:\/\/[a-z0-9-]+\.glidecomp\.pages\.dev$/;
-function isAllowedOrigin(origin: string): boolean {
-  if (origin === "https://glidecomp.com") return true;
-  if (PAGES_PREVIEW.test(origin)) return true;
-  try {
-    if (new URL(origin).hostname === "localhost") return true;
-  } catch {
-    /* malformed Origin — reject */
-  }
-  return false;
-}
 
 const corsConfig = cors({
-  origin: (origin) => (origin && isAllowedOrigin(origin) ? origin : ""),
+  origin: allowedOrigin,
   credentials: true,
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   // x-pilot-ident-kind / x-pilot-ident carry the identifier on the anonymous
@@ -144,6 +129,9 @@ const routes = app
   .route("/", igcAnonRoutes)
   .route("/", igcRoutes)
   .route("/", visualizationRoutes)
+  // Ahead of pilotRoutes: the account's own /api/comp/pilot must win over
+  // the roster's /api/comp/:comp_id/pilot.
+  .route("/", pilotProfileRoutes)
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", manualFlightRoutes)

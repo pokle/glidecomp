@@ -1,18 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { Env, AuthUser } from "../env";
+import type { PublicEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { validated } from "../validators";
-
-type Variables = {
-  user: AuthUser | null;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const auditQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -22,7 +15,7 @@ const auditQuerySchema = z.object({
 
 const DEFAULT_LIMIT = 50;
 
-export const auditRoutes = new Hono<HonoEnv>()
+export const auditRoutes = new Hono<PublicEnv>()
   // ── GET /api/comp/:comp_id/audit ── List audit entries
   .get(
     "/api/comp/:comp_id/audit",

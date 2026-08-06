@@ -22,7 +22,7 @@
  * a lookup must not become the way to discover a hidden competition.
  */
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { PublicEnv } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { optionalAuth } from "../middleware/auth";
 import { visibleCompsFilter } from "../comp-visibility";
@@ -32,9 +32,6 @@ import { searchTokens } from "../search-terms";
 // tokeniser by this name. It is shared with /api/comp/search — see
 // ../search-terms.ts for why the two must agree.
 export { searchTokens };
-
-type Variables = { user: AuthUser | null };
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 // ── Abuse limits ───────────────────────────────────────────────────────────
 // Every one of these bounds a scan over a table nobody has authenticated to
@@ -94,7 +91,7 @@ function nameFilter(
   };
 }
 
-export const lookupRoutes = new Hono<HonoEnv>().get(
+export const lookupRoutes = new Hono<PublicEnv>().get(
   // Mounted ahead of compRoutes so this static segment wins over
   // /api/comp/:comp_id, the same way /api/comp/pilot does.
   "/api/comp/lookup",

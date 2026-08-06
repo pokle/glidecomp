@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
@@ -16,40 +16,18 @@ import {
   linkExistingRegistrations,
   orderByLikelihood,
 } from "../pilot-linker";
-import { applyStatusOnTrackUpload } from "./pilot-status";
 import {
   supersedeActiveManualFlights,
   markLandedFromEvidence,
 } from "../manual-flight-store";
+import { ingestTrackSubmission } from "../track-upload";
 import {
-  validateAndDecompressIgc,
-  IgcValidationException,
-} from "../igc-validation";
-import {
-  TaskPilotLimitError,
-  assessUploadedTrack,
-  flightSummaryOf,
-  formatBytes,
-  igcPilotNameOf,
-  parseUploadedIgc,
-  qualityAuditLine,
-  storeUploadedTrack,
-  toUploadResult,
-} from "../track-upload";
-import {
+  isCompClosed,
   maskEmail,
   organisersOf,
   submissionsClosedBody,
 } from "../submission-gate";
 import { hiddenFromCaller } from "../comp-visibility";
-import { noticeOnUpload } from "../track-notice-email";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 /**
  * Ensure a `pilot` row exists for the given user. Returns the pilot_id.
@@ -274,7 +252,7 @@ async function ensureCompPilot(
   };
 }
 
-export const igcRoutes = new Hono<HonoEnv>()
+export const igcRoutes = new Hono<AuthedEnv>()
   // ── POST /api/comp/:comp_id/task/:task_id/igc ── Upload IGC
   .post(
     "/api/comp/:comp_id/task/:task_id/igc",
@@ -310,17 +288,11 @@ export const igcRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
-      if (comp.close_date) {
-        // Treat date-only close_date (e.g. "2026-12-31") as end-of-day UTC
-        const closeDateTime = comp.close_date.includes("T")
-          ? comp.close_date
-          : comp.close_date + "T23:59:59Z";
-        if (new Date() > new Date(closeDateTime)) {
-          return c.json(
-            { error: "Competition is closed for track submissions" },
-            400
-          );
-        }
+      if (isCompClosed(comp.close_date)) {
+        return c.json(
+          { error: "Competition is closed for track submissions" },
+          400
+        );
       }
 
       // Verify task exists and belongs to comp
@@ -422,22 +394,10 @@ export const igcRoutes = new Hono<HonoEnv>()
           ? ensured.preRegName
           : user.name;
 
-      // Read and validate the gzip-compressed IGC body. SEC-11: caps
-      // both compressed and decompressed size and rejects non-gzip blobs
-      // before touching R2.
       const body = await c.req.arrayBuffer();
-      let igcText: string;
-      try {
-        igcText = await validateAndDecompressIgc(body);
-      } catch (err) {
-        if (err instanceof IgcValidationException) {
-          return c.json({ error: err.detail.message }, 400);
-        }
-        throw err;
-      }
 
       if (ensured.outcome === "claimed") {
-        await audit(c.env.DB, c.var.user, compId, {
+        await audit(c.env.DB, user, compId, {
           subject_type: "pilot",
           subject_id: compPilotId,
           subject_name: ensured.preRegName,
@@ -447,7 +407,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         // Says it was the PILOT'S assertion, not a match the server made. That
         // distinction is the whole basis of the permissive model: nothing here
         // was verified, so the record has to show who claimed what.
-        await audit(c.env.DB, c.var.user, compId, {
+        await audit(c.env.DB, user, compId, {
           subject_type: "pilot",
           subject_id: compPilotId,
           subject_name: ensured.preRegName,
@@ -462,7 +422,7 @@ export const igcRoutes = new Hono<HonoEnv>()
         const declined = ensured.declined
           ? `, declining ${ensured.declined} unclaimed registration${ensured.declined === 1 ? "" : "s"} already on the roster`
           : "";
-        await audit(c.env.DB, c.var.user, compId, {
+        await audit(c.env.DB, user, compId, {
           subject_type: "pilot",
           subject_id: compPilotId,
           subject_name: user.name,
@@ -470,116 +430,25 @@ export const igcRoutes = new Hono<HonoEnv>()
         });
       }
 
-      // ONE parse, shared by the header name, the quality assessment and the
-      // flight summary.
-      const igc = parseUploadedIgc(igcText);
-      const igcPilotName = igcPilotNameOf(igc);
-
-      // Data quality (FAI S7A §4.4.2). Never blocks the upload.
-      const quality = await assessUploadedTrack(c.env.DB, taskId, igc);
-
-      let stored;
-      try {
-        stored = await storeUploadedTrack(c.env.DB, c.env.R2, {
-          compId,
-          taskId,
-          compPilotId,
-          body,
-          igcPilotName,
-          uploader: { userId: user.id, name: user.name },
-        });
-      } catch (err) {
-        if (err instanceof TaskPilotLimitError) {
-          return c.json({ error: err.message }, 400);
-        }
-        throw err;
-      }
-
-      await bumpAndRevalidateScores(c, [taskId]);
-      await audit(c.env.DB, c.var.user, compId, {
-        subject_type: "track",
-        subject_id: stored.taskTrackId,
-        subject_name: user.name,
-        description: `${stored.replaced ? "Replaced" : "Uploaded"} IGC for ${user.name} (${formatBytes(stored.fileSize)})`,
+      const ingested = await ingestTrackSubmission(c, {
+        compId,
+        taskId,
+        compPilotId,
+        comp,
+        task,
+        body,
+        filedForName,
+        actor: user,
+        uploader: { userId: user.id, name: user.name },
+        submitter: { kind: "person", name: user.name },
+        claimedRegistration: ensured.outcome === "claimed-by-choice",
+        submitterEmail: user.email,
+        describeUpload: ({ replaced, size, previously }) =>
+          `${replaced ? "Replaced" : "Uploaded"} IGC for ${filedForName} (${size})${previously}`,
       });
-      const qualityLine = quality && qualityAuditLine(user.name, quality);
-      if (qualityLine) {
-        await audit(c.env.DB, c.var.user, compId, {
-          subject_type: "track",
-          subject_id: stored.taskTrackId,
-          subject_name: user.name,
-          description: qualityLine,
-        });
-      }
+      if (!ingested.ok) return c.json({ error: ingested.rejection.message }, 400);
 
-      // A hard-failed file is not evidence that this pilot flew this task,
-      // so it must not stamp them "Landed" — and, critically, must not
-      // supersede an existing scorekeeper-entered manual flight, which
-      // would destroy a real result on the strength of a rejected upload.
-      if (!quality?.hardFailed) {
-        await applyStatusOnTrackUpload(
-          c.env.DB,
-          user,
-          compId,
-          taskId,
-          compPilotId,
-          user.name
-        );
-      }
-
-      // Tell the registered pilot. Suppressed only when the address IS the
-      // submitter's own — writing to somebody about a thing they just did, at
-      // the address they are signed in with, on the screen that already says
-      // it. Every other case is a notice worth having.
-      const origin = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
-      const notified = await noticeOnUpload(
-        {
-          db: c.env.DB,
-          email: c.env.EMAIL,
-          waitUntil: (p) => c.executionCtx.waitUntil(p),
-          origin,
-        },
-        {
-          compId,
-          taskId,
-          compPilotId,
-          taskUrl: `${origin}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
-          compName: comp.name,
-          taskName: task.name,
-          pilotName: filedForName,
-          submitter: { kind: "person", name: user.name },
-          replaced: stored.replaced,
-          claimedRegistration: ensured.outcome === "claimed-by-choice",
-          organisers: await organisersOf(c.env.DB, compId),
-          submitterEmail: user.email,
-          audit: (description) =>
-            audit(c.env.DB, c.var.user, compId, {
-              subject_type: "track",
-              subject_id: stored.taskTrackId,
-              subject_name: filedForName,
-              description,
-            }),
-        }
-      );
-
-      return c.json(
-        {
-          task_track_id: encodeId(alphabet, stored.taskTrackId),
-          comp_pilot_id: encodeId(alphabet, compPilotId),
-          igc_filename: stored.r2Key,
-          uploaded_at: stored.uploadedAt,
-          file_size: stored.fileSize,
-          replaced: stored.replaced,
-          track_quality: toUploadResult(quality),
-          flight_summary: flightSummaryOf(igc),
-          notified,
-          // The name it was FILED under, which is not always the account's —
-          // a pilot who just claimed "Jane Smith" needs the confirmation to
-          // say Jane Smith, because that is the thing worth checking.
-          pilot_name: filedForName,
-        },
-        stored.replaced ? 200 : 201
-      );
+      return c.json(ingested.result, ingested.status);
     }
   )
 
@@ -617,17 +486,11 @@ export const igcRoutes = new Hono<HonoEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
-      // Enforce close_date
-      if (comp.close_date) {
-        const closeDateTime = comp.close_date.includes("T")
-          ? comp.close_date
-          : comp.close_date + "T23:59:59Z";
-        if (new Date() > new Date(closeDateTime)) {
-          return c.json(
-            { error: "Competition is closed for track submissions" },
-            400
-          );
-        }
+      if (isCompClosed(comp.close_date)) {
+        return c.json(
+          { error: "Competition is closed for track submissions" },
+          400
+        );
       }
 
       // Authorisation: admin OR registered pilot (when open_igc_upload enabled)
@@ -685,123 +548,28 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       const targetPilotName = cp.registered_pilot_name;
 
-      // Read and validate the gzip-compressed IGC body. SEC-11 mitigation
-      // — same constraints as the self-upload route.
-      const body = await c.req.arrayBuffer();
-      let igcText: string;
-      try {
-        igcText = await validateAndDecompressIgc(body);
-      } catch (err) {
-        if (err instanceof IgcValidationException) {
-          return c.json({ error: err.detail.message }, 400);
-        }
-        throw err;
-      }
-
-      // ONE parse, shared by the header name, the quality assessment and the
-      // flight summary.
-      const igc = parseUploadedIgc(igcText);
-      const igcPilotName = igcPilotNameOf(igc);
-
-      // Data quality (FAI S7A §4.4.2). Never blocks the upload.
-      const quality = await assessUploadedTrack(c.env.DB, taskId, igc);
-
-      let stored;
-      try {
-        stored = await storeUploadedTrack(c.env.DB, c.env.R2, {
-          compId,
-          taskId,
-          compPilotId,
-          body,
-          igcPilotName,
-          uploader: { userId: user.id, name: user.name },
-        });
-      } catch (err) {
-        if (err instanceof TaskPilotLimitError) {
-          return c.json({ error: err.message }, 400);
-        }
-        throw err;
-      }
-
-      await bumpAndRevalidateScores(c, [taskId]);
-      await audit(c.env.DB, c.var.user, compId, {
-        subject_type: "track",
-        subject_id: stored.taskTrackId,
-        subject_name: targetPilotName,
-        description: `${stored.replaced ? "Replaced" : "Uploaded"} IGC for ${targetPilotName} on behalf (${formatBytes(stored.fileSize)})`,
+      const ingested = await ingestTrackSubmission(c, {
+        compId,
+        taskId,
+        compPilotId,
+        comp,
+        task,
+        body: await c.req.arrayBuffer(),
+        filedForName: targetPilotName,
+        actor: user,
+        uploader: { userId: user.id, name: user.name },
+        // Tell the pilot somebody else filed for them. Until this route was
+        // brought onto the shared pipeline it was the biggest silent gap in
+        // the flow: a STRANGER'S anonymous replacement emailed you, but a
+        // fellow registered pilot overwriting your track did not.
+        submitter: { kind: "person", name: user.name },
+        submitterEmail: user.email,
+        describeUpload: ({ replaced, size, previously }) =>
+          `${replaced ? "Replaced" : "Uploaded"} IGC for ${targetPilotName} on behalf (${size})${previously}`,
       });
-      const qualityLine = quality && qualityAuditLine(targetPilotName, quality);
-      if (qualityLine) {
-        await audit(c.env.DB, c.var.user, compId, {
-          subject_type: "track",
-          subject_id: stored.taskTrackId,
-          subject_name: targetPilotName,
-          description: qualityLine,
-        });
-      }
+      if (!ingested.ok) return c.json({ error: ingested.rejection.message }, 400);
 
-      // See the note in the self-upload route: a hard-failed file must not
-      // stamp the pilot "Landed" or supersede a manual flight.
-      if (!quality?.hardFailed) {
-        await applyStatusOnTrackUpload(
-          c.env.DB,
-          user,
-          compId,
-          taskId,
-          compPilotId,
-          targetPilotName
-        );
-      }
-
-      // Tell the pilot somebody else filed for them. Until now this was the
-      // biggest silent gap in the whole flow: a STRANGER'S anonymous
-      // replacement emailed you, but a fellow registered pilot overwriting
-      // your track did not. Under a trust-plus-notice model that is backwards.
-      const origin2 = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
-      const notified = await noticeOnUpload(
-        {
-          db: c.env.DB,
-          email: c.env.EMAIL,
-          waitUntil: (p) => c.executionCtx.waitUntil(p),
-          origin: origin2,
-        },
-        {
-          compId,
-          taskId,
-          compPilotId,
-          taskUrl: `${origin2}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
-          compName: comp.name,
-          taskName: task.name,
-          pilotName: targetPilotName,
-          submitter: { kind: "person", name: user.name },
-          replaced: stored.replaced,
-          organisers: await organisersOf(c.env.DB, compId),
-          submitterEmail: user.email,
-          audit: (description) =>
-            audit(c.env.DB, c.var.user, compId, {
-              subject_type: "track",
-              subject_id: stored.taskTrackId,
-              subject_name: targetPilotName,
-              description,
-            }),
-        }
-      );
-
-      return c.json(
-        {
-          task_track_id: encodeId(alphabet, stored.taskTrackId),
-          comp_pilot_id: encodeId(alphabet, compPilotId),
-          igc_filename: stored.r2Key,
-          uploaded_at: stored.uploadedAt,
-          file_size: stored.fileSize,
-          replaced: stored.replaced,
-          track_quality: toUploadResult(quality),
-          flight_summary: flightSummaryOf(igc),
-          notified,
-          pilot_name: targetPilotName,
-        },
-        stored.replaced ? 200 : 201
-      );
+      return c.json(ingested.result, ingested.status);
     }
   )
 

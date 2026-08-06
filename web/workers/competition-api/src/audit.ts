@@ -75,6 +75,53 @@ export async function audit(
 }
 
 /**
+ * Insert several audit entries for one competition, in one round trip.
+ *
+ * A field-by-field PATCH produces one sentence per changed field, and the
+ * handlers used to `await audit()` in a loop — N serialized D1 writes on the
+ * response path, none of them in the same transaction as the update they
+ * describe. `db.batch()` is one transaction, so the entries describing a
+ * change now land together or not at all.
+ *
+ * Best-effort like {@link audit}: an audit failure must never fail the
+ * mutation it describes.
+ */
+export async function auditAll(
+  db: D1Database,
+  user: AuthUser | null | undefined,
+  compId: number,
+  entries: AuditEntry[]
+): Promise<void> {
+  if (entries.length === 0) return;
+  const timestamp = new Date().toISOString();
+  try {
+    await db.batch(
+      entries.map((entry) =>
+        db
+          .prepare(
+            `INSERT INTO audit_log (
+              comp_id, timestamp, actor_user_id, actor_name,
+              subject_type, subject_id, subject_name, description
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            compId,
+            timestamp,
+            user?.id ?? null,
+            user?.name ?? "system",
+            entry.subject_type,
+            entry.subject_id ?? null,
+            entry.subject_name ?? null,
+            entry.description
+          )
+      )
+    );
+  } catch (err) {
+    console.error("audit batch write failed", err, { compId, entries });
+  }
+}
+
+/**
  * Convenience: describe a single field change in the form used by
  * field-by-field PATCH audits. Returns a human-readable sentence.
  *

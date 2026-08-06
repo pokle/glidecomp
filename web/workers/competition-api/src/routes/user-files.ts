@@ -17,16 +17,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { parseIGC, parseXCTask, type XCTask, type IGCFile } from "@glidecomp/engine";
-import type { Env, AuthUser } from "../env";
+import type { PublicEnv } from "../env";
 import { requireAuth, optionalAuth } from "../middleware/auth";
 import { xctskSchema, validated } from "../validators";
 import {
   validateAndDecompressIgc,
   IgcValidationException,
 } from "../igc-validation";
-
-type Variables = { user: AuthUser | null };
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 // ── Quotas ──────────────────────────────────────────────────────────────────
 
@@ -237,7 +234,7 @@ function serializeAnnotation(row: AnnotationRow) {
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 
-export const userFilesRoutes = new Hono<HonoEnv>()
+export const userFilesRoutes = new Hono<PublicEnv>()
   // ── POST /api/user/tracks ── Upload a track
   .post("/api/user/tracks", requireAuth, async (c) => {
     const user = c.var.user!;

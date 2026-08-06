@@ -5,12 +5,9 @@
  * admin equivalent, since this spans every user in the system.
  */
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { requireAuth } from "../middleware/auth";
 import { isSuperAdmin } from "../super-admin";
-
-type Variables = { user: AuthUser };
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 type UserRow = {
   id: string;
@@ -26,7 +23,7 @@ type UserRow = {
   pilot_comp_count: number;
 };
 
-export const adminRoutes = new Hono<HonoEnv>()
+export const adminRoutes = new Hono<AuthedEnv>()
   // ── GET /api/admin/whoami ── Cheap super-admin check (no DB query) for
   // gating UI, e.g. whether the dashboard shows a link to /api/admin/users.
   .get("/api/admin/whoami", requireAuth, async (c) => {

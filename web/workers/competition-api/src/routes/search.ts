@@ -21,7 +21,7 @@
  * stay invisible to anyone who cannot already see them.
  */
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthUser, PublicEnv } from "../env";
 import { encodeId } from "../sqids";
 import { optionalAuth } from "../middleware/auth";
 import { visibleCompsFilter } from "../comp-visibility";
@@ -31,9 +31,6 @@ import {
   buildChildMatchExpression,
 } from "../search-terms";
 import { scheduleSearchIndexDrain, type TaskDocExtra } from "../search-index";
-
-type Variables = { user: AuthUser | null };
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 // ── Caps ───────────────────────────────────────────────────────────────────
 // The page shows a readable handful; nothing here is a pagination boundary a
@@ -193,7 +190,7 @@ function hitsQuery(
     .bind(match, kind, ...visible.binds, HITS_PER_KIND);
 }
 
-export const searchRoutes = new Hono<HonoEnv>().get(
+export const searchRoutes = new Hono<PublicEnv>().get(
   // Mounted ahead of compRoutes so this static segment wins over
   // /api/comp/:comp_id, the same way /api/comp/lookup does.
   "/api/comp/search",

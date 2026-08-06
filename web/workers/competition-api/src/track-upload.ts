@@ -1,21 +1,41 @@
 /**
- * The parts of a track upload that every upload route shares.
+ * Track upload: the one pipeline every submission route runs.
  *
- * There are three of them now — self, on-behalf and anonymous — and the
- * storage half of each was already the same forty lines copied twice. A third
- * copy is how this file's behaviour starts to differ per caller without
- * anybody deciding that it should, so the R2 put, the insert-or-replace, and
- * the assessment that runs beside them live here instead.
+ * There are three routes — self, on-behalf and anonymous — and they differ
+ * entirely in the part before the file: who may upload, whose registration
+ * this is, and what vocabulary the refusals use. From the moment the body is
+ * read they are the same eleven steps, and they used to be the same eleven
+ * steps written out three times.
  *
- * What deliberately does NOT live here: `audit()` and
- * `bumpAndRevalidateScores()`. Both are "part of done" for a mutating route
- * and both must stay visible at the call site, where a reviewer can see that
- * they happen — burying them in a helper is how a future route silently skips
- * one and serves stale scores forever.
+ * That cost real behaviour, not just lines. The anonymous route learned to say
+ * how long the track it replaced had stood ("replacing a track uploaded 11
+ * minutes earlier"); the two signed-in routes never did, though the value was
+ * returned to all three. Nobody decided that — it is just where the paste
+ * landed. The audit log is the competition's public transparency record, and
+ * it was quietly better for anonymous overwrites than for the organiser's own.
+ *
+ * So {@link ingestTrackSubmission} owns the pipeline, including `audit()` and
+ * `bumpAndRevalidateScores()`. Those two are "part of done" for a mutating
+ * route and the earlier rule here was that they must stay written out at the
+ * call site so a reviewer can see them happen. That rule protects against the
+ * wrong failure: with three hand-composed copies, a fourth route can forget
+ * one and nothing notices. With one pipeline it cannot — the invariant is
+ * structural rather than remembered. What the call site still supplies, and a
+ * reviewer still sees, is the audit SENTENCE: the routes genuinely say
+ * different things ("on behalf", "by anonymous submission, matched on CIVL
+ * ID"), and that is the part worth reading at the call site.
  */
 
 import { parseIGC, parseXCTask, assessTrackQuality, summariseFlight } from "@glidecomp/engine";
 import type { IGCFile, TrackQualityReport, FlightSummary } from "@glidecomp/engine";
+import { audit, type AuditEntry } from "./audit";
+import { bumpAndRevalidateScores, type ScoreStoreContext } from "./score-store";
+import { encodeId } from "./sqids";
+import type { AuthUser, Env } from "./env";
+import { applyStatusOnTrackUpload } from "./routes/pilot-status";
+import { validateAndDecompressIgc, IgcValidationException } from "./igc-validation";
+import { noticeOnUpload, type NoticeSubmitter } from "./track-notice-email";
+import { organisersOf } from "./submission-gate";
 
 /** Above this a task stops being a competition and starts being a denial of service. */
 export const MAX_PILOTS_PER_TASK = 250;
@@ -353,5 +373,225 @@ export async function storeUploadedTrack(
     fileSize: body.byteLength,
     replaced: false,
     previousUploadedAt: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The pipeline
+// ---------------------------------------------------------------------------
+
+/**
+ * How long the track being replaced had been up.
+ *
+ * The audit log is read by people, so it says "eleven minutes earlier" rather
+ * than printing an ISO timestamp mid-sentence. Relative, because what matters
+ * to somebody scanning the log is whether this was a pilot fixing their own
+ * upload or somebody overwriting a track that had stood all day.
+ */
+export function describePrevious(previousAt: string | null, now: string): string {
+  if (!previousAt) return "";
+  const gapMs = new Date(now).getTime() - new Date(previousAt).getTime();
+  if (!Number.isFinite(gapMs) || gapMs < 0) return "";
+  const minutes = Math.round(gapMs / 60_000);
+  if (minutes < 1) return " — replacing a track uploaded moments earlier";
+  if (minutes < 60) {
+    return ` — replacing a track uploaded ${minutes} minute${minutes === 1 ? "" : "s"} earlier`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) {
+    return ` — replacing a track uploaded ${hours} hour${hours === 1 ? "" : "s"} earlier`;
+  }
+  const days = Math.round(hours / 24);
+  return ` — replacing a track uploaded ${days} days earlier`;
+}
+
+/** Everything a route knows that the pipeline does not. */
+export interface TrackSubmission {
+  compId: number;
+  taskId: number;
+  compPilotId: number;
+  comp: { name: string };
+  task: { name: string };
+  /** The gzip-compressed request body, already read. */
+  body: ArrayBuffer;
+  /**
+   * The name the track is FILED under, which is not always the submitter's: a
+   * pilot who just claimed "Jane Smith" is Jane Smith on this roster. Every
+   * audit sentence and the notice email use this.
+   */
+  filedForName: string;
+  /** Who is recorded as having done it — null user for anonymous. */
+  actor: AuthUser | null;
+  uploader: TrackUploader;
+  submitter: NoticeSubmitter;
+  /**
+   * How the upload audit line reads, given whether it replaced a track. The
+   * routes genuinely differ here, and this is the part of the transparency
+   * record worth seeing at the call site.
+   */
+  describeUpload: (opts: { replaced: boolean; size: string; previously: string }) => string;
+  /** Set when the pilot claimed this registration in the same request. */
+  claimedRegistration?: boolean;
+  /** Suppresses the notice when the address is provably the submitter's own. */
+  submitterEmail?: string | null;
+}
+
+/** What the routes echo back to the client, plus each route's own extras. */
+export interface TrackSubmissionResult {
+  task_track_id: string;
+  comp_pilot_id: string;
+  igc_filename: string;
+  uploaded_at: string;
+  file_size: number;
+  replaced: boolean;
+  track_quality: TrackQualityUploadResult;
+  flight_summary: FlightSummaryWire | null;
+  notified: Awaited<ReturnType<typeof noticeOnUpload>>;
+  pilot_name: string;
+}
+
+/** A refusal the pipeline itself produces, for the route to phrase. */
+export type TrackSubmissionRejection =
+  | { kind: "invalid_file"; message: string; reason: string }
+  | { kind: "task_pilot_limit"; message: string };
+
+/**
+ * Validate, store, score, log and announce one track submission.
+ *
+ * The eleven steps, in the order they have to happen: decompress (SEC-11 caps
+ * both compressed and decompressed size and rejects non-gzip blobs before
+ * touching R2) → parse ONCE → assess data quality → store → mark scores stale
+ * → audit the upload → audit any quality finding → set the pilot's status →
+ * email the registered pilot → answer.
+ *
+ * Returns either the wire result or a rejection for the caller to phrase in
+ * its own vocabulary — the three routes answer with different codes and
+ * different repair affordances, and that is the half that belongs to them.
+ */
+export async function ingestTrackSubmission(
+  c: ScoreStoreContext & { env: Env; executionCtx: { waitUntil(p: Promise<unknown>): void } },
+  sub: TrackSubmission
+): Promise<{ ok: true; result: TrackSubmissionResult; status: 200 | 201 } | { ok: false; rejection: TrackSubmissionRejection }> {
+  const db = c.env.DB;
+  const alphabet = c.env.SQIDS_ALPHABET;
+  const { compId, taskId, compPilotId, filedForName } = sub;
+
+  let igcText: string;
+  try {
+    igcText = await validateAndDecompressIgc(sub.body);
+  } catch (err) {
+    if (err instanceof IgcValidationException) {
+      return {
+        ok: false,
+        rejection: {
+          kind: "invalid_file",
+          message: err.detail.message,
+          reason: err.detail.kind,
+        },
+      };
+    }
+    throw err;
+  }
+
+  // ONE parse, shared by the header name, the quality assessment and the
+  // flight summary.
+  const igc = parseUploadedIgc(igcText);
+
+  // Data quality (FAI S7A §4.4.2). Never blocks the upload.
+  const quality = await assessUploadedTrack(db, taskId, igc);
+
+  let stored: StoredTrack;
+  try {
+    stored = await storeUploadedTrack(db, c.env.R2, {
+      compId,
+      taskId,
+      compPilotId,
+      body: sub.body,
+      igcPilotName: igcPilotNameOf(igc),
+      uploader: sub.uploader,
+    });
+  } catch (err) {
+    if (err instanceof TaskPilotLimitError) {
+      return { ok: false, rejection: { kind: "task_pilot_limit", message: err.message } };
+    }
+    throw err;
+  }
+
+  await bumpAndRevalidateScores(c, [taskId]);
+
+  const auditTrack = (description: string): Promise<void> =>
+    audit(db, sub.actor, compId, {
+      subject_type: "track",
+      subject_id: stored.taskTrackId,
+      subject_name: filedForName,
+      description,
+    } satisfies AuditEntry);
+
+  await auditTrack(
+    sub.describeUpload({
+      replaced: stored.replaced,
+      size: formatBytes(stored.fileSize),
+      previously: stored.replaced
+        ? describePrevious(stored.previousUploadedAt, stored.uploadedAt)
+        : "",
+    })
+  );
+
+  const qualityLine = quality && qualityAuditLine(filedForName, quality);
+  if (qualityLine) await auditTrack(qualityLine);
+
+  // A hard-failed file is not evidence that this pilot flew this task, so it
+  // must not stamp them "Landed" — and, critically, must not supersede an
+  // existing scorekeeper-entered manual flight, which would destroy a real
+  // result on the strength of a rejected upload.
+  if (!quality?.hardFailed) {
+    await applyStatusOnTrackUpload(db, sub.actor, compId, taskId, compPilotId, filedForName);
+  }
+
+  // Tell the registered pilot. On EVERY submission, not only replacements:
+  // the submit form promises the notice unconditionally, and a first upload
+  // against somebody's registration is exactly as unverified as a replacement.
+  const origin = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
+  const notified = await noticeOnUpload(
+    {
+      db,
+      email: c.env.EMAIL,
+      waitUntil: (p) => c.executionCtx.waitUntil(p),
+      origin,
+    },
+    {
+      compId,
+      taskId,
+      compPilotId,
+      // Bare-id paths are valid URLs on their own — building a slugged one
+      // would put URL knowledge in the worker, which is where it drifts.
+      taskUrl: `${origin}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
+      compName: sub.comp.name,
+      taskName: sub.task.name,
+      pilotName: filedForName,
+      submitter: sub.submitter,
+      replaced: stored.replaced,
+      claimedRegistration: sub.claimedRegistration,
+      organisers: await organisersOf(db, compId),
+      submitterEmail: sub.submitterEmail,
+      audit: auditTrack,
+    }
+  );
+
+  return {
+    ok: true,
+    status: stored.replaced ? 200 : 201,
+    result: {
+      task_track_id: encodeId(alphabet, stored.taskTrackId),
+      comp_pilot_id: encodeId(alphabet, compPilotId),
+      igc_filename: stored.r2Key,
+      uploaded_at: stored.uploadedAt,
+      file_size: stored.fileSize,
+      replaced: stored.replaced,
+      track_quality: toUploadResult(quality),
+      flight_summary: flightSummaryOf(igc),
+      notified,
+      pilot_name: filedForName,
+    },
   };
 }

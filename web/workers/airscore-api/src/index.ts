@@ -9,152 +9,86 @@
  * Endpoints:
  * - GET /api/airscore/task?comPk={comPk}&tasPk={tasPk}
  * - GET /api/airscore/track?trackId={trackId}
+ *
+ * On Hono, like every other Worker here. It used to hand-roll its routing and
+ * its responses — a URL switch plus four helpers for CORS, preflight, 404 and
+ * 405 — which is a lot of surface for a proxy with two endpoints, and it was
+ * the one Worker whose conventions a reader had to learn separately.
  */
 
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { handleTaskRequest } from './handlers/task';
 import { handleTrackRequest } from './handlers/track';
 import { getCacheStats, clearCache } from './cache';
 import type { Env } from './types';
 
-// CORS headers for browser requests
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+const app = new Hono<{ Bindings: Env }>();
 
 /**
- * Add CORS headers to a response
+ * Wide-open CORS, deliberately and unlike the other Workers.
+ *
+ * This proxy is anonymous by construction: it carries no cookie, reads no
+ * session, and serves only public AirScore competition results. There is no
+ * caller identity for an allowlist to protect, so `credentials` stays off and
+ * the origin is unrestricted — the reason the shared allowlist in
+ * @glidecomp/worker-kit/cors does NOT apply here.
  */
-function addCorsHeaders(response: Response): Response {
-  const newHeaders = new Headers(response.headers);
-  Object.entries(CORS_HEADERS).forEach(([key, value]) => {
-    newHeaders.set(key, value);
-  });
+app.use('/api/airscore/*', cors({ origin: '*', allowMethods: ['GET', 'OPTIONS'] }));
 
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: newHeaders,
-  });
-}
+// Surface uncaught handler errors as JSON — mirrors the other Workers, so any
+// 500 in CI traces or `wrangler tail` points at the real cause. The stack is
+// logged server-side; only the message goes to the client.
+app.onError((err, c) => {
+  console.error('[airscore-api] unhandled error', err);
+  return c.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, 500);
+});
 
-/**
- * Handle preflight OPTIONS request
- */
-function handleOptions(): Response {
-  return new Response(null, {
-    status: 204,
-    headers: CORS_HEADERS,
-  });
-}
-
-/**
- * Handle 404 Not Found
- */
-function handleNotFound(): Response {
-  return new Response(
-    JSON.stringify({
+app.notFound((c) =>
+  c.json(
+    {
       error: 'Not found',
       code: 'NOT_FOUND',
       endpoints: [
         'GET /api/airscore/task?comPk={comPk}&tasPk={tasPk}',
         'GET /api/airscore/track?trackId={trackId}',
       ],
-    }),
-    {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    }
-  );
-}
+    },
+    404
+  )
+);
 
-/**
- * Handle 405 Method Not Allowed
- */
-function handleMethodNotAllowed(): Response {
-  return new Response(
-    JSON.stringify({
-      error: 'Method not allowed',
-      code: 'METHOD_NOT_ALLOWED',
-    }),
-    {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    }
-  );
-}
+// Cache admin, called only via service binding from competition-api's
+// superadmin-gated /api/admin/cache routes — not on the public
+// `/api/airscore/*` route pattern, so unreachable from the internet.
+app.get('/internal/cache/stats', async (c) =>
+  c.json(await getCacheStats(c.env.AIRSCORE_CACHE))
+);
+app.post('/internal/cache/clear', async (c) =>
+  c.json({ cleared: await clearCache(c.env.AIRSCORE_CACHE) })
+);
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
+// The two proxied endpoints. The handlers already speak Request/Response, and
+// what they do — validate the query, hit the cache, transform — is the part
+// worth keeping untouched.
+app.get('/api/airscore/task', (c) =>
+  handleTaskRequest(c.req.raw, c.env)
+);
+app.get('/api/airscore/track', (c) =>
+  handleTrackRequest(c.req.raw, c.env)
+);
 
-    // Handle preflight
-    if (request.method === 'OPTIONS') {
-      return handleOptions();
-    }
+// Health check / info endpoint
+const info = (c: { json: (v: unknown) => Response }) =>
+  c.json({
+    name: 'AirScore API Worker',
+    version: '1.0.0',
+    endpoints: [
+      'GET /api/airscore/task?comPk={comPk}&tasPk={tasPk}',
+      'GET /api/airscore/track?trackId={trackId}',
+    ],
+  });
+app.get('/', info);
+app.get('/api/airscore', info);
 
-    // Cache admin, called only via service binding from competition-api's
-    // superadmin-gated /api/admin/cache routes — not on the public
-    // `/api/airscore/*` route pattern, so unreachable from the internet.
-    if (url.pathname === '/internal/cache/stats' && request.method === 'GET') {
-      const stats = await getCacheStats(env.AIRSCORE_CACHE);
-      return Response.json(stats);
-    }
-    if (url.pathname === '/internal/cache/clear' && request.method === 'POST') {
-      const cleared = await clearCache(env.AIRSCORE_CACHE);
-      return Response.json({ cleared });
-    }
-
-    // Only allow GET requests
-    if (request.method !== 'GET') {
-      return addCorsHeaders(handleMethodNotAllowed());
-    }
-
-    try {
-      let response: Response;
-
-      // Route to appropriate handler
-      if (url.pathname === '/api/airscore/task') {
-        response = await handleTaskRequest(request, env, ctx);
-      } else if (url.pathname === '/api/airscore/track') {
-        response = await handleTrackRequest(request, env, ctx);
-      } else if (url.pathname === '/' || url.pathname === '/api/airscore') {
-        // Health check / info endpoint
-        response = new Response(
-          JSON.stringify({
-            name: 'AirScore API Worker',
-            version: '1.0.0',
-            endpoints: [
-              'GET /api/airscore/task?comPk={comPk}&tasPk={tasPk}',
-              'GET /api/airscore/track?trackId={trackId}',
-            ],
-          }),
-          {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        );
-      } else {
-        response = handleNotFound();
-      }
-
-      return addCorsHeaders(response);
-    } catch (error) {
-      console.error('Unhandled worker error:', error);
-
-      return addCorsHeaders(
-        new Response(
-          JSON.stringify({
-            error: 'Internal server error',
-            code: 'INTERNAL_ERROR',
-          }),
-          {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        )
-      );
-    }
-  },
-};
+export default app;

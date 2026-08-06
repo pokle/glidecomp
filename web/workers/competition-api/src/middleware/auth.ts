@@ -34,11 +34,15 @@ async function resolveUser(
   env: Env,
   headers: Headers
 ): Promise<AuthUser | null> {
+  // Every credential this doc comment promises to forward, actually forwarded.
+  // `authorization` used to be named here and dropped, so a caller sending
+  // `Authorization: Bearer <key>` resolved as anonymous with nothing to say
+  // why — the failure mode issue #481 is about, arriving by a different road.
   const forward = new Headers();
-  const cookie = headers.get("cookie");
-  if (cookie) forward.set("cookie", cookie);
-  const apiKey = headers.get("x-api-key");
-  if (apiKey) forward.set("x-api-key", apiKey);
+  for (const name of ["cookie", "x-api-key", "authorization"]) {
+    const value = headers.get(name);
+    if (value) forward.set(name, value);
+  }
 
   if (![...forward.keys()].length) return null;
 

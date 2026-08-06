@@ -22,10 +22,8 @@
  */
 
 import { Hono } from "hono";
-import type { Env } from "../env";
+import type { BareEnv, Env } from "../env";
 import { encodeId } from "../sqids";
-
-type HonoEnv = { Bindings: Env };
 
 /**
  * How far either side of today a competition still counts as "on".
@@ -70,7 +68,7 @@ interface OpenTask {
   has_xctsk: boolean;
 }
 
-export const openCompsRoutes = new Hono<HonoEnv>().get(
+export const openCompsRoutes = new Hono<BareEnv>().get(
   // Hyphenated so it can never collide with a real comp sqid (the alphabet is
   // a–z only) and shadow `/api/comp/:comp_id`.
   "/api/comp/open-now",

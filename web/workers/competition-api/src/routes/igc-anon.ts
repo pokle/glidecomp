@@ -32,11 +32,10 @@
  */
 
 import { Hono } from "hono";
-import type { Env } from "../env";
+import type { AnonEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
-import { ANONYMOUS_ACTOR_NAME, audit } from "../audit";
-import { bumpAndRevalidateScores } from "../score-store";
+import { ANONYMOUS_ACTOR_NAME } from "../audit";
 import {
   PILOT_IDENTIFIER_LABELS,
   findCompPilotsByIdentifier,
@@ -44,19 +43,7 @@ import {
   type CompPilotMatch,
   type PilotIdentifierKind,
 } from "../pilot-linker";
-import { applyStatusOnTrackUpload } from "./pilot-status";
-import { validateAndDecompressIgc, IgcValidationException } from "../igc-validation";
-import {
-  TaskPilotLimitError,
-  assessUploadedTrack,
-  flightSummaryOf,
-  formatBytes,
-  igcPilotNameOf,
-  parseUploadedIgc,
-  qualityAuditLine,
-  storeUploadedTrack,
-  toUploadResult,
-} from "../track-upload";
+import { ingestTrackSubmission } from "../track-upload";
 import {
   ANON_SUBMIT_FUTILE,
   ANON_SUBMIT_PER_COMP,
@@ -64,18 +51,11 @@ import {
   chargeBudget,
   peekBudget,
 } from "../rate-limit";
-import { noticeOnUpload } from "../track-notice-email";
 import {
-  maskEmail,
+  isCompClosed,
   organisersOf,
   submissionsClosedBody,
 } from "../submission-gate";
-
-type Variables = {
-  ids: { comp_id?: number; task_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 /**
  * How the submitter names the pilot. Headers, not the query string: the value
@@ -138,14 +118,7 @@ function readIdentifier(
   return { kind: rawKind, value };
 }
 
-/** Date-only close_date means end of day, same rule as the signed-in routes. */
-function isClosed(closeDate: string | null): boolean {
-  if (!closeDate) return false;
-  const at = closeDate.includes("T") ? closeDate : closeDate + "T23:59:59Z";
-  return new Date() > new Date(at);
-}
-
-export const igcAnonRoutes = new Hono<HonoEnv>().post(
+export const igcAnonRoutes = new Hono<AnonEnv>().post(
   // "open-submit" rather than a bare word: the sqid alphabet is a–z only, so a
   // hyphenated segment can never collide with a real comp_pilot_id and shadow
   // the sibling on-behalf route.
@@ -263,7 +236,7 @@ export const igcAnonRoutes = new Hono<HonoEnv>().post(
       );
     }
 
-    if (isClosed(comp.close_date)) {
+    if (isCompClosed(comp.close_date)) {
       return futile(
         c.json(
           {
@@ -374,63 +347,56 @@ export const igcAnonRoutes = new Hono<HonoEnv>().post(
       return rateLimited(pilotBudget.retryAfterSeconds, "pilot");
     }
 
-    // ── The file.
+    // ── The file. From here on this is the same pipeline the signed-in
+    // routes run — see track-upload.ts.
 
-    const body = await c.req.arrayBuffer();
-    let igcText: string;
-    try {
-      igcText = await validateAndDecompressIgc(body);
-    } catch (err) {
-      if (err instanceof IgcValidationException) {
-        return futile(
-          c.json(
-            {
-              error: err.detail.message,
-              code: "invalid_file" satisfies AnonSubmitCode,
-              reason: err.detail.kind,
-            },
-            400
-          )
-        );
-      }
-      throw err;
+    const ingested = await ingestTrackSubmission(c, {
+      compId,
+      taskId,
+      compPilotId: pilot.comp_pilot_id,
+      comp,
+      task,
+      body: await c.req.arrayBuffer(),
+      filedForName: pilotName,
+      // No user: there is no account to point at, and inventing one would make
+      // the record lie. `audit()` records actor_name "system" for a null user,
+      // so the sentence below carries the anonymity itself.
+      actor: null,
+      uploader: { userId: null, name: ANONYMOUS_ACTOR_NAME },
+      submitter: { kind: "anonymous", identifierLabel: label },
+      // Identifier LABEL only, never the value — the log is public, and the
+      // value is either personal data or the key that granted the action.
+      describeUpload: ({ replaced, size, previously }) =>
+        `${replaced ? "Replaced" : "Uploaded"} IGC for ${pilotName} by anonymous ` +
+        `submission, matched on ${label} (${size})${previously}`,
+    });
+
+    if (!ingested.ok) {
+      const { rejection } = ingested;
+      return futile(
+        rejection.kind === "invalid_file"
+          ? c.json(
+              {
+                error: rejection.message,
+                code: "invalid_file" satisfies AnonSubmitCode,
+                reason: rejection.reason,
+              },
+              400
+            )
+          : c.json(
+              {
+                error: rejection.message,
+                code: "task_pilot_limit" satisfies AnonSubmitCode,
+                organisers: await organisersOf(db, compId),
+              },
+              400
+            )
+      );
     }
 
-    const igc = parseUploadedIgc(igcText);
-    const igcPilotName = igcPilotNameOf(igc);
-    const quality = await assessUploadedTrack(db, taskId, igc);
-
-    let stored;
-    try {
-      stored = await storeUploadedTrack(db, c.env.R2, {
-        compId,
-        taskId,
-        compPilotId: pilot.comp_pilot_id,
-        body,
-        igcPilotName,
-        // No user id: there is no account to point at, and inventing one
-        // would make the record lie.
-        uploader: { userId: null, name: ANONYMOUS_ACTOR_NAME },
-      });
-    } catch (err) {
-      if (err instanceof TaskPilotLimitError) {
-        return futile(
-          c.json(
-            {
-              error: err.message,
-              code: "task_pilot_limit" satisfies AnonSubmitCode,
-              organisers: await organisersOf(db, compId),
-            },
-            400
-          )
-        );
-      }
-      throw err;
-    }
-
-    // ── The track is in. THIS is the damage the two budgets above bound, so
-    // this is where they are charged — not on arrival, where a caller who
-    // never uploaded anything could spend them (SEC-39).
+    // ── The track is in. THIS is the damage the two budgets peeked at above
+    // bound, so this is where they are charged — not on arrival, where a
+    // caller who never uploaded anything could spend them (SEC-39).
     //
     // The verdicts are deliberately ignored: the peeks admitted this request,
     // the file is already stored, and turning it away now would leave a track
@@ -438,127 +404,17 @@ export const igcAnonRoutes = new Hono<HonoEnv>().post(
     await chargeBudget(db, "comp", compId, ANON_SUBMIT_PER_COMP);
     await chargeBudget(db, "cp", pilot.comp_pilot_id, ANON_SUBMIT_PER_PILOT);
 
-    await bumpAndRevalidateScores(c, [taskId]);
-
-    // `audit()` records actor_name "system" for a null user, so the sentence
-    // has to carry the anonymity itself. Identifier LABEL only, never the
-    // value — the log is public, and the value is either personal data or the
-    // key that granted the action.
-    await audit(db, null, compId, {
-      subject_type: "track",
-      subject_id: stored.taskTrackId,
-      subject_name: pilotName,
-      description: stored.replaced
-        ? `Replaced IGC for ${pilotName} by anonymous submission, matched on ${label} (${formatBytes(stored.fileSize)})` +
-          describePrevious(stored.previousUploadedAt, stored.uploadedAt)
-        : `Uploaded IGC for ${pilotName} by anonymous submission, matched on ${label} (${formatBytes(stored.fileSize)})`,
-    });
-
-    const qualityLine = quality && qualityAuditLine(pilotName, quality);
-    if (qualityLine) {
-      await audit(db, null, compId, {
-        subject_type: "track",
-        subject_id: stored.taskTrackId,
-        subject_name: pilotName,
-        description: qualityLine,
-      });
-    }
-
-    // A hard-failed file is not evidence that this pilot flew, so it must not
-    // stamp them "Landed" or supersede a scorekeeper's manual flight.
-    if (!quality?.hardFailed) {
-      await applyStatusOnTrackUpload(
-        db,
-        null,
-        compId,
-        taskId,
-        pilot.comp_pilot_id,
-        pilotName
-      );
-    }
-
-    // ── Tell the pilot. On EVERY submission, not only replacements: an
-    // anonymous first upload against somebody's registration is exactly as
-    // unverified as an anonymous replacement, and the submit form promises
-    // the notice unconditionally.
-
-    const origin = c.env.SITE_ORIGIN ?? "https://glidecomp.com";
-    const notified = await noticeOnUpload(
-      {
-        db,
-        email: c.env.EMAIL,
-        waitUntil: (p) => c.executionCtx.waitUntil(p),
-        origin,
-      },
-      {
-        compId,
-        taskId,
-        compPilotId: pilot.comp_pilot_id,
-        // Bare-id paths are valid URLs on their own — building a slugged one
-        // would put URL knowledge in the worker, which is where it drifts.
-        taskUrl: `${origin}/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
-        compName: comp.name,
-        taskName: task.name,
-        pilotName,
-        submitter: { kind: "anonymous", identifierLabel: label },
-        replaced: stored.replaced,
-        organisers: await organisersOf(db, compId),
-        audit: (description) =>
-          audit(db, null, compId, {
-            subject_type: "track",
-            subject_id: stored.taskTrackId,
-            subject_name: pilotName,
-            description,
-          }),
-      }
-    );
-
     return c.json(
       {
-        task_track_id: encodeId(alphabet, stored.taskTrackId),
-        comp_pilot_id: encodeId(alphabet, pilot.comp_pilot_id),
+        ...ingested.result,
         comp_id: encodeId(alphabet, compId),
         task_id: encodeId(alphabet, taskId),
         // Echoed so the dialog can ask "submitting for Jane Smith — is that
         // you?" before the pilot walks away from the screen.
-        pilot_name: pilotName,
         pilot_class: pilot.pilot_class,
         matched_on: identifier.kind,
-        igc_filename: stored.r2Key,
-        uploaded_at: stored.uploadedAt,
-        file_size: stored.fileSize,
-        replaced: stored.replaced,
-        notified,
-        track_quality: toUploadResult(quality),
-        flight_summary: flightSummaryOf(igc),
       },
-      stored.replaced ? 200 : 201
+      ingested.status
     );
   }
 );
-
-/**
- * How long the track being replaced had been up.
- *
- * The audit log is read by people, so it says "eleven minutes earlier" rather
- * than printing an ISO timestamp mid-sentence. Relative, because what matters
- * to somebody scanning the log is whether this was a pilot fixing their own
- * upload or somebody overwriting a track that had stood all day.
- */
-function describePrevious(previousAt: string | null, now: string): string {
-  if (!previousAt) return "";
-  const gapMs = new Date(now).getTime() - new Date(previousAt).getTime();
-  if (!Number.isFinite(gapMs) || gapMs < 0) return "";
-  const minutes = Math.round(gapMs / 60_000);
-  if (minutes < 1) return " — replacing a track uploaded moments earlier";
-  if (minutes < 60) {
-    return ` — replacing a track uploaded ${minutes} minute${minutes === 1 ? "" : "s"} earlier`;
-  }
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) {
-    return ` — replacing a track uploaded ${hours} hour${hours === 1 ? "" : "s"} earlier`;
-  }
-  const days = Math.round(hours / 24);
-  return ` — replacing a track uploaded ${days} days earlier`;
-}
-

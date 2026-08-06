@@ -1,3 +1,5 @@
+import { chargeBudgetKey } from "@glidecomp/worker-kit/rate-limit";
+
 /**
  * API-key rate limit — single source of truth.
  *
@@ -46,29 +48,19 @@ export function normalizeEmail(email: string): string {
 
 /**
  * Record one OTP send for `email` and report whether it is within the
- * per-address throttle. Fixed window anchored at the first send:
- * `lastRequest` holds the window-start timestamp and `count` the sends in
- * that window; a send after the window expires resets both.
- *
- * Single atomic upsert (UNIQUE index on "key") so concurrent sends can't
- * both read a stale count and slip past the cap.
+ * per-address throttle. The counter is the shared fixed-window one (see
+ * @glidecomp/worker-kit/rate-limit); this names the key and the budget.
  */
 export async function registerOtpEmailSend(
   db: D1Database,
   email: string,
   now: number = Date.now()
 ): Promise<boolean> {
-  const key = OTP_EMAIL_KEY_PREFIX + normalizeEmail(email);
-  const windowStart = now - OTP_EMAIL_SEND_THROTTLE.windowMs;
-  const row = await db
-    .prepare(
-      `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?1, ?2, 1, ?3)
-       ON CONFLICT("key") DO UPDATE SET
-         "count" = CASE WHEN "rateLimit"."lastRequest" <= ?4 THEN 1 ELSE "rateLimit"."count" + 1 END,
-         "lastRequest" = CASE WHEN "rateLimit"."lastRequest" <= ?4 THEN excluded."lastRequest" ELSE "rateLimit"."lastRequest" END
-       RETURNING "count"`
-    )
-    .bind(crypto.randomUUID(), key, now, windowStart)
-    .first<{ count: number }>();
-  return (row?.count ?? 1) <= OTP_EMAIL_SEND_THROTTLE.maxSends;
+  const verdict = await chargeBudgetKey(
+    db,
+    OTP_EMAIL_KEY_PREFIX + normalizeEmail(email),
+    { max: OTP_EMAIL_SEND_THROTTLE.maxSends, windowMs: OTP_EMAIL_SEND_THROTTLE.windowMs },
+    now
+  );
+  return verdict.allowed;
 }

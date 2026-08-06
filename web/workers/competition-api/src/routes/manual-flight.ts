@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth } from "../middleware/auth";
@@ -22,13 +22,6 @@ import {
   submissionsClosedBody,
 } from "../submission-gate";
 import { hiddenFromCaller } from "../comp-visibility";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 interface ManualFlightRow {
   task_manual_flight_id: number;
@@ -117,7 +110,7 @@ function turnpointName(
   }
 }
 
-export const manualFlightRoutes = new Hono<HonoEnv>()
+export const manualFlightRoutes = new Hono<AuthedEnv>()
   // ── GET .../manual-flight ── List active manual flights for a task.
   // Public with the same visibility rules as scores/statuses (test comps
   // require admin).
