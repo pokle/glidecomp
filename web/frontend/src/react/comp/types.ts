@@ -380,8 +380,15 @@ const FETCH_RETRY_DELAY_MS = 400;
  * The comp/task GET right after this same session's create/update write can
  * transiently 500 (e.g. D1 lock contention under the write that just
  * happened) even though the write itself succeeded. Retry before treating it
- * as a real failure — a 404 is left alone since that's a genuine "not found",
- * not a transient error.
+ * as a real failure.
+ *
+ * Only 5xx and dropped requests are retried. **Every 4xx is a real answer** and
+ * is handed straight back: the server understood the request and declined it,
+ * and asking twice more changes nothing. This used to read
+ * `res.ok || res.status === 404` — 404 was the only 4xx spared, so a 401, a 403
+ * or the 429 an API key gets when rate-limited cost three round trips and two
+ * delays before returning the same verdict, and the retries pushed a
+ * rate-limited caller further past its limit.
  *
  * A *dropped* request is retried too (issue #481). It used to escape as a
  * rejected promise: every caller wraps this in a try/catch that renders
@@ -407,7 +414,7 @@ export async function fetchWithRetry<T extends { ok: boolean; status: number }>(
     }
     try {
       const res = await fetcher();
-      if (res.ok || res.status === 404) return res;
+      if (res.status < 500) return res;
       lastRes = res;
     } catch (err) {
       if (options.signal?.aborted) throw err;

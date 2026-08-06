@@ -31,6 +31,7 @@ import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { SimpleSelect } from "@/react/rac/select";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
+import { useUnits } from "../lib/units";
 import { pilotPath } from "../lib/slug";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
 import {
@@ -39,9 +40,9 @@ import {
   NOT_AN_IGC_MESSAGE,
   formatClockInZone,
   formatDuration,
-  formatKm,
-  formatMetres,
   formatRetryAfter,
+  formatTrackAltitude,
+  formatTrackDistance,
   inferIdentifierKind,
   needsSignIn,
   pickDefaultTask,
@@ -1060,6 +1061,7 @@ function TrackAccepted({
   const s = result.flightSummary;
   const findings = result.trackQuality.findings;
   const zone = result.timezone;
+  const units = useUnits();
 
   return (
     <div className="flex flex-col gap-4">
@@ -1083,8 +1085,14 @@ function TrackAccepted({
           <Fact label="Take off" value={formatClockInZone(s.takeoff_at, zone)} />
           <Fact label="Landing" value={formatClockInZone(s.landing_at, zone)} />
           <Fact label="Airborne" value={formatDuration(s.duration_seconds)} />
-          <Fact label="Track length" value={formatKm(s.track_length_m)} />
-          <Fact label="Highest point" value={formatMetres(s.max_altitude_m)} />
+          <Fact
+            label="Track length"
+            value={formatTrackDistance(s.track_length_m, units)}
+          />
+          <Fact
+            label="Highest point"
+            value={formatTrackAltitude(s.max_altitude_m, units)}
+          />
           {s.header_glider_type ? (
             <Fact label="Glider" value={s.header_glider_type} />
           ) : null}

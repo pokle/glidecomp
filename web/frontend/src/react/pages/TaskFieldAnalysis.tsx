@@ -77,7 +77,11 @@ import {
   type MetricReport,
   type TaskFieldAnalysisData,
 } from "../field-analysis/types";
-import type { CompDetailData, TaskDetailData } from "../comp/types";
+import {
+  fetchWithRetry,
+  type CompDetailData,
+  type TaskDetailData,
+} from "../comp/types";
 
 export function TaskFieldAnalysis() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
@@ -138,7 +142,14 @@ export function TaskFieldAnalysis() {
     (async () => {
       if (refetchTick === 0) setStatus("loading");
       try {
-        const res = await fetch(analysisUrl, { credentials: "include" });
+        // Through fetchWithRetry, not a bare fetch: this page is public and
+        // SSR'd, and its "error" branch is a dead end — nothing re-fetches it
+        // (the pending poll below only runs once status is "ready"). A dropped
+        // request would otherwise turn a millisecond blip into a page that
+        // stays broken until someone reloads by hand.
+        const res = await fetchWithRetry(() =>
+          fetch(analysisUrl, { credentials: "include" })
+        );
         if (cancelled) return;
         // 404 = missing (or a test comp hidden from this visitor); 400 = an id
         // sqid that doesn't decode at all. Both mean "no such page", and both

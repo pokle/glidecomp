@@ -7,6 +7,11 @@
  * through a rendered dialog — and so the same rules hold whether the flow is
  * rendered as the /submit page or as the compact dialog on a task page.
  */
+import {
+  formatAltitude,
+  formatDistance,
+  type UnitPreferences,
+} from "@glidecomp/engine";
 
 /** How the submitter names themselves. Mirrors the worker's kind union. */
 export type IdentifierKind =
@@ -499,12 +504,31 @@ export function formatClockInZone(
   }).format(date);
 }
 
-export function formatKm(metres: number | null): string {
+/**
+ * The two figures on the submission receipt, in the pilot's own units.
+ *
+ * These used to be `formatKm` and `formatMetres`, which re-derived
+ * `(metres / 1000).toFixed(1)` and `Math.round(metres)` and hard-coded "km"
+ * and "m". Every other surface in the app reads the pilot's distance and
+ * altitude preferences through the engine's formatters, so a pilot who had
+ * chosen feet and miles was shown kilometres and metres here — on the one
+ * screen that confirms what was just filed for them.
+ *
+ * All they add over `formatDistance`/`formatAltitude` is the em dash for a
+ * figure the IGC file didn't carry.
+ */
+export function formatTrackDistance(
+  metres: number | null,
+  prefs: UnitPreferences
+): string {
   if (metres === null) return "—";
-  return `${(metres / 1000).toFixed(1)} km`;
+  return formatDistance(metres, { decimals: 1, prefs }).withUnit;
 }
 
-export function formatMetres(metres: number | null): string {
+export function formatTrackAltitude(
+  metres: number | null,
+  prefs: UnitPreferences
+): string {
   if (metres === null) return "—";
-  return `${Math.round(metres).toLocaleString("en-AU")} m`;
+  return formatAltitude(metres, { prefs }).withUnit;
 }
