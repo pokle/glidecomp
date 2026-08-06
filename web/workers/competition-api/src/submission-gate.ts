@@ -1,20 +1,49 @@
 /**
- * Whether a task is still accepting evidence, and who to write to when it is
- * not.
+ * Whether a competition is visible to a submitter at all, whether a task is
+ * still accepting evidence, and who to write to when it is not.
  *
  * A competition has `close_date`, which closes everything. A single task has
  * `submissions_closed` (migration 0028), which is what an organiser reaches for
  * at the end of the day: "task 3 is done, stop sending me files" while task 4
- * is still flying.
+ * is still flying. A competition also has `test`, which hides it from everyone
+ * but its own admins — the write side of that rule lives here too.
  *
- * Lives in its own module because the same rule has to hold at FOUR call sites
- * in three files — the self upload, the on-behalf upload, the anonymous
- * submit, and the manual flight. A rule copied four times is a rule that is
- * three-quarters enforced by the second time somebody edits it.
+ * Lives in its own module because the same rules have to hold at every
+ * submission call site across three files — the self upload, the on-behalf
+ * upload, the anonymous submit, and the manual flight. A rule copied four
+ * times is a rule that is three-quarters enforced by the second time somebody
+ * edits it.
  */
 
 import type { AuthUser } from "./env";
 import { isCompAdmin } from "./super-admin";
+
+/**
+ * Whether a hidden `test` competition must answer this caller as a missing one.
+ *
+ * A `test` comp is the organiser's own staging area — a pre-publish rehearsal,
+ * or one of the synthetic fixtures `docs/sample-data.md` seeds. Every READ
+ * route already gates on it, and so does the anonymous submit. The signed-in
+ * submission routes did not (SEC-37/38): being signed in is not a claim to a
+ * competition, so any account that knew or guessed the id could read a hidden
+ * roster through `registration/resolve` and write a track into a hidden task.
+ *
+ * The answer is a 404 in the caller's own not-found wording rather than a 403,
+ * because "you may not" still says the competition exists. `test` is precisely
+ * the flag that says it does not — to you.
+ *
+ * Admins are the exception the flag is for: an organiser rehearsing a
+ * competition has to be able to submit to it, or the rehearsal proves nothing.
+ */
+export async function hiddenFromSubmitter(
+  db: D1Database,
+  compId: number,
+  test: number | boolean,
+  user: Pick<AuthUser, "id" | "email"> | null | undefined
+): Promise<boolean> {
+  if (!test) return false;
+  return !(await isCompAdmin(db, compId, user));
+}
 
 /**
  * Enough of an address to recognise, not enough to learn.

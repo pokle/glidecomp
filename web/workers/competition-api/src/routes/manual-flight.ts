@@ -18,6 +18,7 @@ import {
 } from "../manual-flight-store";
 import { mergeStoredGapParamsJson } from "../scoring";
 import {
+  hiddenFromSubmitter,
   submissionsBlockedFor,
   submissionsClosedBody,
 } from "../submission-gate";
@@ -223,11 +224,17 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // A manual flight is evidence for a task exactly as a tracklog is, so a
+      // hidden test comp answers it as a missing one — same rule, same gate.
+      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const taskRow = await loadScoringTask(c.env.DB, compId, taskId);
       if (!taskRow) return c.json({ error: "Task not found" }, 404);
@@ -363,11 +370,17 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       const user = c.var.user;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the record route above: a hidden test comp is missing to
+      // everyone but its admins, on the way in and on the way back out.
+      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const cp = await c.env.DB.prepare(
         "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
@@ -442,11 +455,17 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       }
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the record route above: a hidden test comp is missing to
+      // everyone but its admins, on the way in and on the way back out.
+      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const taskRow = await loadScoringTask(c.env.DB, compId, taskId);
       if (!taskRow) return c.json({ error: "Task not found" }, 404);

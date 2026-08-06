@@ -37,6 +37,7 @@ import {
   toUploadResult,
 } from "../track-upload";
 import {
+  hiddenFromSubmitter,
   maskEmail,
   organisersOf,
   submissionsClosedBody,
@@ -287,7 +288,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Verify comp exists and check close_date
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, name, close_date, default_pilot_class, open_registration FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, name, close_date, default_pilot_class, open_registration, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
@@ -296,9 +297,16 @@ export const igcRoutes = new Hono<HonoEnv>()
           close_date: string | null;
           default_pilot_class: string;
           open_registration: number;
+          test: number;
         }>();
 
       if (!comp) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
+
+      // A hidden test comp answers exactly as a missing one does — being
+      // signed in is not a claim to somebody's rehearsal.
+      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
         return c.json({ error: "Competition not found" }, 404);
       }
 
@@ -591,7 +599,7 @@ export const igcRoutes = new Hono<HonoEnv>()
 
       // Look up the comp once — need open_igc_upload to gate authorisation
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, name, close_date, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, name, close_date, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
@@ -599,8 +607,15 @@ export const igcRoutes = new Hono<HonoEnv>()
           name: string;
           close_date: string | null;
           open_igc_upload: number;
+          test: number;
         }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // As the self route: a hidden test comp is missing to everyone but its
+      // admins, whichever pilot the track is being filed for.
+      if (await hiddenFromSubmitter(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       // Enforce close_date
       if (comp.close_date) {

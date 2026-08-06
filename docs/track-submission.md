@@ -222,6 +222,7 @@ endpoint**, which is why the columns behave so differently.
 | **Replace a track already on file** | ✅ same rules as above; the pilot is emailed | ✅ | ✅ |
 | **Task closed for submissions** | ❌ hard stop | ❌ | ✅ bypasses |
 | **Competition past its close date** | ❌ | ❌ | ❌ — nobody bypasses |
+| **A hidden `test` competition** | ❌ 404, as if it did not exist | ❌ the same 404 | ✅ — the flag hides a rehearsal, it does not stop the organiser rehearsing |
 
 ### The settings that move those cells
 
@@ -231,6 +232,7 @@ endpoint**, which is why the columns behave so differently.
 | `comp.open_registration` (0027) | **on** | Whether a signed-in pilot who is on nobody's roster may add themselves by uploading |
 | `comp.close_date` | none | Closes the whole competition, for everyone including admins |
 | `task.submissions_closed` (0028) | **off** | Closes one task. Admins bypass it on both signed-in routes; a hard stop anonymously |
+| `comp.test` (hidden comp) | **off** | Hides the competition from everyone but its admins. Every submission route — including `registration/resolve` — answers a non-admin with its own not-found body, never a 403 |
 
 ### Four things that surprise people
 
@@ -245,10 +247,16 @@ not on their own roster meets the picker like anybody else. The two are
 deliberately separate: one is about *when* a track may arrive, the other about
 *whose* it is.
 
-**Only the anonymous route hides `test` competitions.** Neither signed-in route
-reads `comp.test`, so somebody who knows a hidden competition's id can upload to
-it. That is an inconsistency rather than a decision — the read routes all gate
-on it.
+**A hidden `test` competition takes tracks from its admins and nobody else.**
+Every route reads `comp.test` now — anonymous, self, on-behalf, manual flight,
+and the `registration/resolve` pre-flight — and every one of them answers a
+non-admin exactly as a missing competition does, in its own not-found wording.
+A 403 would still concede that the competition exists, which is the one thing
+the flag is there to withhold. Admins are the exception the flag is for: an
+organiser rehearsing an unpublished comp has to be able to submit to it, or the
+rehearsal proves nothing. Until 2026-08-06 the three signed-in routes read
+`close_date` but not `test`, so any account that knew the ids could read a
+hidden roster and write a track into it (SEC-37/38).
 
 **`MAX_PILOTS_PER_TASK` is 250** and caps every route. The anonymous one can
 never push it, because it does not create roster rows.
@@ -640,10 +648,10 @@ everyone else's bundle.
 | Budgets | `web/workers/competition-api/src/rate-limit.ts` |
 | Submission notice email | `web/workers/competition-api/src/track-notice-email.ts` |
 | Registration resolve | `web/workers/competition-api/src/routes/registration.ts` |
-| Closed-task gate | `web/workers/competition-api/src/submission-gate.ts` |
+| Closed-task gate + hidden-comp gate | `web/workers/competition-api/src/submission-gate.ts` |
 | Open competitions | `web/workers/competition-api/src/routes/open-comps.ts` |
 | Flight summary | `web/engine/src/flight-summary.ts` |
 | Forging a test tracklog | `web/engine/src/forge-igc.ts` |
 | IGC Forge dialog | `src/react/comp/ForgeIgcDialog.tsx` |
 | IGC Forge CLI | `web/scripts/forge-igc.ts` |
-| Coverage | `test/igc-anon.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |
+| Coverage | `test/igc-anon.test.ts`, `test/igc-routes.test.ts`, `test/registration-resolve.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |
