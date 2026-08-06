@@ -70,6 +70,72 @@ Interleaved output is the cost; each line is prefixed with its package name, and
 - If dev servers are already running from a previous session, `bun run kill-dev`
   clears them.
 
+## Mapbox in the e2e suite
+
+`e2e/fixtures/mapbox.ts` stands between the browser and Mapbox for every spec
+that loads a map (`e2e/analysis-map.spec.ts` today). It solves two separate
+problems, and they are worth keeping apart.
+
+**The browser may have no route to Mapbox at all.** In a sandboxed container —
+Claude Code's web containers are the case that forced this — Chromium's egress
+is closed: every external HTTPS request dies with `net::ERR_CONNECTION_RESET`
+after ~13s, whatever the destination. A bare IP fails identically, so it is
+neither DNS nor TLS nor anything Mapbox-specific, and pointing Chromium at the
+agent proxy does not help. Playwright's **Node** side can reach the network and
+`route.fetch()` runs there, so the handler fetches Node-side and fulfils into
+the browser. That is free on a normal runner, so it is unconditional.
+
+Know the shape of this failure, because it is silent and total. With no route to
+Mapbox the page still *looks* alive: `.mapboxgl-canvas` mounts, the zoom and
+compass controls render, the Mapbox logo appears, and **nothing is logged**. The
+style request simply never returns. `expect(canvas).toBeVisible()` passes against
+a blank map for ever. The two things that do give it away are the scale bar — a
+map that never moved sits at world zoom and reads in thousands of kilometres —
+and the attribution, which Mapbox writes only once the style is parsed. Assert
+one of those, never the canvas alone.
+
+**Live tiles are not deterministic.** A full analysis page pulls 7–27 MB over
+100–350 requests, and the tile set is a function of the camera: one zoom-in
+click asked for 48 tiles nobody had seen before. So the APIs are split by what
+their URL is keyed by:
+
+| Handling | APIs | Why |
+|---|---|---|
+| Recorded | `/styles/v1` (style JSON + iconsets), `/fonts/v1`, `/search/geocode/v6` , `/v4/mapbox.terrain-rgb` | Keyed by something the test controls. `analysis/elevation.ts` pins zoom 13 and derives the tile from lat/lon alone, so camera, viewport and window size cannot shift it. |
+| Synthesised | `/v4/<vector tilesets>` (empty tile), `/raster/v1` (flat Terrain-RGB PNG), `/3dtiles/v1` | Keyed by the camera. No recording survives a pan, a zoom or a different viewport. |
+| Dropped | `events.mapbox.com`, `/map-sessions` | Telemetry and billing. |
+
+Stubbing the basemap costs less than it sounds, because everything worth
+asserting on — track geometry, turnpoint circles, glide labels, hover and click
+picking, layer toggles — is drawn by *us*, in GeoJSON layers on top. Those need
+the style to load so the map fires `load` and accepts layers; they do not need
+the imagery underneath. The result is a suite that runs offline in ~2.3 MB of
+recordings instead of 27 MB of tiles, and that can pan and zoom freely.
+
+The one real exception is `queryTerrainElevation()` (`mapbox-provider.ts:190`,
+`:433`, `:1592`), which reads actual DEM pixels and reads 0 m everywhere against
+the flat stub. A test that depends on it wants `MAPBOX_LIVE=1`, or should assert
+through `analysis/elevation.ts`, whose tiles *are* recorded.
+
+```bash
+bunx playwright test e2e/analysis-map.spec.ts              # offline, default
+MAPBOX_RECORD=1 VITE_MAPBOX_TOKEN=… bunx playwright test … # refresh recordings
+MAPBOX_LIVE=1 VITE_MAPBOX_TOKEN=… bunx playwright test …   # live, incl. the smoke test
+```
+
+A recording that is missing **fails the test** rather than quietly reaching the
+network (which, in a sandboxed container, would hang for 13s and then fail for
+the wrong reason). The handler prints `[mapbox] no recording for …` the moment
+it happens, because a missing recording normally breaks a product assertion
+first — the geocoder renders "Search is unavailable right now." and the test
+fails on *that*, describing the symptom and never the cause.
+
+Re-record when the custom Studio style `poklet/cmkceyuoc00ha01svg6lb767k`
+changes, when a spec asks the geocoder something new, or when a waypoint moves
+to a different terrain tile. `e2e/fixtures/mapbox-recordings.test.ts` guards the
+split — it fails if a camera-keyed family ever lands on the recorded side, or if
+the directory outgrows its 4 MB budget.
+
 ## Before you trust an e2e failure (issue #477)
 
 **A long list of unrelated failures usually means the stack died, not that twelve
