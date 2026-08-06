@@ -50,7 +50,7 @@ import {
   usesDistanceDifficulty,
 } from './gap-scoring';
 import { duration, fmtPoints, km, trimZeros } from './score-explanation-format';
-import { bestTimeCandidate } from './score-explanation-sections';
+import { bestTimeCandidate } from './sections/shared';
 import type {
   ClassContextInput,
   ClassPilotInput,
