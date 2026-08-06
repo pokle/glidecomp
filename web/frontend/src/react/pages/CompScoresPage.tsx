@@ -10,7 +10,6 @@
  * comp/CompScoresSection so this page and the comp summary share one
  * implementation.
  */
-import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Button } from "@/react/rac/button";
@@ -22,6 +21,7 @@ import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compPath, compScoresPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { useSeededResource } from "../lib/use-seeded-resource";
 import {
   ScoresEmptyState,
   ScoresViews,
@@ -29,7 +29,7 @@ import {
 } from "../comp/CompScoresSection";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { ScoresDownload } from "../comp/ScoresDownload";
-import { fetchWithRetry, type CompDetailData } from "../comp/types";
+import type { CompDetailData } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { CompScoresLoaderData } from "../loaders";
 
@@ -41,8 +41,12 @@ export function CompScoresPage() {
   // SSR seed: the server ran loadCompScores for this URL. Null on client
   // boot / SPA navigations, where the effects below fetch instead.
   const initial = useInitialData<CompScoresLoaderData>();
-  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
-  const [notFound, setNotFound] = useState(false);
+  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+    ids: [compId],
+    seed: initial?.comp ?? null,
+    load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
+    title: (c) => `GlideComp - ${c.name} scores`,
+  });
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
   useCanonicalPath(comp ? compScoresPath(compId, comp.name) : null);
@@ -52,47 +56,6 @@ export function CompScoresPage() {
     initial?.scores ?? undefined,
     initial?.scoresEtag ?? undefined
   );
-
-  useEffect(() => {
-    // Clear any previous verdict first. react-router keeps this component
-    // mounted when only the id in the path changes, so a "not found" left over
-    // from the old id would mask whatever the new one loads. That is not
-    // hypothetical: the 404 page's own "did you mean" links point back at this
-    // very route, so clicking one changed the URL and nothing else.
-    setNotFound(false);
-    if (!compId) {
-      setNotFound(true);
-      return;
-    }
-    if (initial) {
-      document.title = `GlideComp - ${initial.comp.name} scores`;
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchWithRetry(() =>
-          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } })
-        );
-        if (cancelled) return;
-        if (!res.ok) {
-          setNotFound(true);
-          return;
-        }
-        const data = (await res.json()) as unknown as CompDetailData;
-        if (cancelled) return;
-        setComp(data);
-        document.title = `GlideComp - ${data.name} scores`;
-      } catch {
-        if (!cancelled) setNotFound(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // `initial` is stable for the life of the SSR'd URL; compId is the real key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compId]);
 
   const isAdmin = useAdminView(
     user != null && comp != null && comp.admins.some((a) => a.email === user.email)

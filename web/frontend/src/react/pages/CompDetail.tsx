@@ -47,6 +47,7 @@ import {
   taskPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { useSeededResource } from "../lib/use-seeded-resource";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSummary } from "../comp/CompScoresSummary";
@@ -54,7 +55,6 @@ import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
 import {
-  fetchWithRetry,
   isPastCloseDate,
   type CompDetailData,
   type TaskSummary,
@@ -72,9 +72,14 @@ export function CompDetail() {
   // SSR seed: the server ran loadCompDetail for this URL, so render the comp in
   // the first paint and hydrate the same markup. Null on client boot / SPA nav.
   const initial = useInitialData<CompDetailLoaderData>();
-  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
-  const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+    ids: [compId],
+    seed: initial?.comp ?? null,
+    load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
+    title: (c) => `GlideComp - ${c.name}`,
+    refresh,
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -87,47 +92,6 @@ export function CompDetail() {
     if (!comp || !location.hash) return;
     document.getElementById(location.hash.slice(1))?.scrollIntoView();
   }, [comp, location.hash]);
-
-  useEffect(() => {
-    // Clear any previous verdict first. react-router keeps this component
-    // mounted when only the id in the path changes, so a "not found" left over
-    // from the old id would mask whatever the new one loads. That is not
-    // hypothetical: the 404 page's own "did you mean" links point back at this
-    // very route, so clicking one changed the URL and nothing else.
-    setNotFound(false);
-    if (!compId) {
-      setNotFound(true);
-      return;
-    }
-    // Seeded from SSR on the first render — set the title and skip the fetch.
-    // A mutation bumps `refresh`, which re-runs this and fetches fresh data.
-    if (initial && refresh === 0) {
-      document.title = `GlideComp - ${initial.comp.name}`;
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchWithRetry(() =>
-          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } })
-        );
-        if (cancelled) return;
-        if (!res.ok) {
-          setNotFound(true);
-          return;
-        }
-        const data = (await res.json()) as unknown as CompDetailData;
-        if (cancelled) return;
-        setComp(data);
-        document.title = `GlideComp - ${data.name}`;
-      } catch {
-        if (!cancelled) setNotFound(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [compId, refresh]);
 
   if (notFound || !compId) {
     return <NotFound title="Competition not found" />;

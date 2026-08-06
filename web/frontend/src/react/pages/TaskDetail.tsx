@@ -62,7 +62,6 @@ import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDial
 // Comp admins only, so its code has no business in every pilot's bundle.
 const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
 import {
-  fetchWithRetry,
   isPastCloseDate,
   type CompDetailData,
   type TaskDetailData,
@@ -73,6 +72,7 @@ import type { TaskDetailLoaderData } from "../loaders";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compPath, taskPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
 import { Card } from "@/react/rac/card";
 
@@ -89,16 +89,32 @@ export function TaskDetail() {
   // SSR seed for the public half of the page (header, route, scores). Null on
   // client boot / SPA navigations, where the effect below fetches instead.
   const initial = useInitialData<TaskDetailLoaderData>();
-  const [task, setTask] = useState<TaskDetailData | null>(initial?.task ?? null);
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
+
+  const [refresh, setRefresh] = useState(0);
+  // The task is the page. A dead task id is a dead URL; the comp above is
+  // supporting detail the page degrades without.
+  const {
+    data: task,
+    notFound,
+    setData: setTask,
+  } = useSeededResource<TaskDetailData>({
+    ids: [compId, taskId],
+    seed: initial?.task ?? null,
+    load: ([comp_id, task_id]) =>
+      api.api.comp[":comp_id"].task[":task_id"].$get({
+        param: { comp_id, task_id },
+      }),
+    title: (t) => `GlideComp - ${t.name}`,
+    refresh,
+  });
 
   // Canonicalise once both names are known (comp is a non-critical fetch, so
   // wait for it rather than 301-ing to a bare comp segment).
   useCanonicalPath(
     comp && task ? taskPath(compId, comp.name, taskId, task.name) : null
   );
-  const [notFound, setNotFound] = useState(false);
-  const [refresh, setRefresh] = useState(0);
+
   const [scoresRefresh, setScoresRefresh] = useState(0);
   // Bumped when the admin manage grid mutates, so the public results (a
   // separate component with its own score fetch) pick up the change too.
@@ -109,61 +125,32 @@ export function TaskDetail() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [forgeOpen, setForgeOpen] = useState(false);
 
+  // The comp, for the admin check and the comp name in the trail. Non-critical
+  // and deliberately its own request: it used to run only after the task
+  // resolved, inside the same async block, so a page that works without it
+  // waited for it anyway. A failure here costs the admin controls, not the page.
   useEffect(() => {
-    // Clear any previous verdict first. react-router keeps this component
-    // mounted when only the id in the path changes, so a "not found" left over
-    // from the old id would mask whatever the new one loads. That is not
-    // hypothetical: the 404 page's own "did you mean" links point back at this
-    // very route, so clicking one changed the URL and nothing else.
-    setNotFound(false);
-    if (!compId || !taskId) {
-      setNotFound(true);
-      return;
-    }
-    // Seeded from SSR on the first render — set the title, skip the fetch.
-    if (initial && refresh === 0) {
-      document.title = `GlideComp - ${initial.task.name}`;
-      return;
-    }
+    if (!compId) return;
+    if (initial?.comp && refresh === 0) return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
-        // Fetch task first — this is the primary data we need
-        const taskRes = await fetchWithRetry(() =>
-          api.api.comp[":comp_id"].task[":task_id"].$get({
-            param: { comp_id: compId, task_id: taskId },
-          })
-        );
-        if (cancelled) return;
-        if (!taskRes.ok) {
-          setNotFound(true);
-          return;
-        }
-        const taskData = (await taskRes.json()) as unknown as TaskDetailData;
-        if (cancelled) return;
-        setTask(taskData);
-        document.title = `GlideComp - ${taskData.name}`;
-
-        // Fetch comp for admin check + comp name (non-critical)
-        try {
-          const compRes = await api.api.comp[":comp_id"].$get({
-            param: { comp_id: compId },
-          });
-          if (compRes.ok) {
-            const compData = (await compRes.json()) as unknown as CompDetailData;
-            if (!cancelled) setComp(compData);
-          }
-        } catch {
-          // Comp fetch failed — degrade gracefully (no admin features)
+        const res = await api.api.comp[":comp_id"].$get({
+          param: { comp_id: compId },
+        });
+        if (!cancelled && res.ok) {
+          setComp((await res.json()) as unknown as CompDetailData);
         }
       } catch {
-        if (!cancelled) setNotFound(true);
+        // Degrade gracefully — no admin features.
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [compId, taskId, refresh]);
+    // `initial` is stable for the life of the SSR'd URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compId, refresh]);
 
   const isAdmin = useAdminView(
     user != null && comp != null && comp.admins.some((a) => a.email === user.email)
