@@ -30,10 +30,31 @@ export interface Budget {
 const DAY_MS = 24 * 60 * 60_000;
 
 /**
+ * ── Damage budgets ──────────────────────────────────────────────────────────
+ *
+ * Keyed on the thing being protected, so they are charged when the damage
+ * happens — AFTER a track is stored, never on an attempt (SEC-39). A budget
+ * keyed on a value the caller chooses and charged before the work it bounds is
+ * a denial-of-service weapon against whoever owns that value: the identifiers
+ * that name a competition and a registration are all public by design (the
+ * comp id is in its own URL, and `GET /api/comp/:comp_id/pilot` publishes
+ * every pilot's national IDs), so anyone could have spent someone else's
+ * allowance without ever uploading a file.
+ *
+ * `peekBudget` is what preserves "cheapest rejections first" through that
+ * move: a comp or pilot already at its cap is still turned away before the
+ * body is read, on a read rather than the write this used to cost.
+ */
+
+/**
  * Per registration. Six is chosen from the pilot's side: land, upload the
  * wrong file, upload the right one, discover the logger split the flight,
  * upload again — that is four on a bad day. Six leaves room and still stops a
  * griefer.
+ *
+ * Six is small enough that charging it on attempt was the sharper half of
+ * SEC-39: six empty POSTs naming one pilot's public CIVL id took that pilot's
+ * whole day, on the one day the route exists for.
  */
 export const ANON_SUBMIT_PER_PILOT: Budget = { max: 6, windowMs: DAY_MS };
 
@@ -44,14 +65,30 @@ export const ANON_SUBMIT_PER_PILOT: Budget = { max: 6, windowMs: DAY_MS };
 export const ANON_SUBMIT_PER_COMP: Budget = { max: 300, windowMs: DAY_MS };
 
 /**
- * Per client address, charged ONLY when an identifier matched nobody.
+ * ── Effort budget ───────────────────────────────────────────────────────────
  *
- * Without this, the endpoint answers "is this email registered for this
- * comp?" as fast as you can ask. National IDs are already public on the
- * roster so nothing leaks there, but email addresses are not, and a miss
- * budget is what keeps the endpoint from becoming a way to test them.
+ * Per client address, charged on every request that ends WITHOUT a track
+ * stored — a bad identifier, a comp or task that isn't there, a closed one, an
+ * identifier matching nobody or too many, a file that won't parse.
+ *
+ * Keyed on the caller and charged on wasted work, which is what makes it safe
+ * to be the only per-IP budget here. A successful submission costs nothing, so
+ * a whole gaggle behind one landing-field connection or a CGNAT address can
+ * submit all afternoon; only somebody generating failures pays. A budget on
+ * every submission instead would 429 real pilots on exactly the day they need
+ * this route.
+ *
+ * Supersedes the narrower miss-only budget, whose job it still does: without
+ * it the endpoint answers "is this email registered for this comp?" as fast as
+ * anyone can ask. National IDs are already public on the roster so nothing
+ * leaks there, but email addresses are not.
+ *
+ * Forty rather than the old twenty because it now covers honest fumbling as
+ * well as probing — a pilot who mistypes an identifier twice and then feeds it
+ * a file their logger wrote badly should not be spending a probe allowance.
+ * Still far below what an enumeration sweep needs.
  */
-export const ANON_SUBMIT_MISSES: Budget = { max: 20, windowMs: DAY_MS };
+export const ANON_SUBMIT_FUTILE: Budget = { max: 40, windowMs: DAY_MS };
 
 /**
  * Per signed-in account, on the registration resolver.
@@ -70,6 +107,52 @@ export interface BudgetVerdict {
   retryAfterSeconds: number;
 }
 
+/** Where a budget's row lives. One place, so peek and charge cannot drift. */
+function keyFor(scope: string, identity: string | number): string {
+  return `${KEY_PREFIX}${scope}:${identity}`;
+}
+
+function retryAfter(windowOpenedAt: number, budget: Budget, now: number) {
+  return Math.max(1, Math.ceil((windowOpenedAt + budget.windowMs - now) / 1000));
+}
+
+/**
+ * Is there room for one more charge against `key`? Reads, never writes.
+ *
+ * This is how a damage budget can be charged late (only once a track is
+ * actually stored) without giving up the route's cost rule: something already
+ * at its cap is turned away here, before the body is read, and the caller
+ * cannot move the counter by asking.
+ *
+ * Deliberately admits a small race — several concurrent requests can pass the
+ * same peek and all go on to store. That is bounded by request concurrency and
+ * harmless against budgets of 6 and 300 a day, which still converge; the
+ * alternative is a lock on a counter whose whole point is to be cheap.
+ */
+export async function peekBudget(
+  db: D1Database,
+  scope: string,
+  identity: string | number,
+  budget: Budget,
+  now: number = Date.now()
+): Promise<BudgetVerdict> {
+  const row = await db
+    .prepare('SELECT "count", "lastRequest" FROM "rateLimit" WHERE "key" = ?')
+    .bind(keyFor(scope, identity))
+    .first<{ count: number; lastRequest: number }>();
+
+  // No row, or one whose window has expired, is a clean slate: the next charge
+  // resets it, so it cannot be over budget.
+  if (!row || row.lastRequest <= now - budget.windowMs) {
+    return { allowed: true, retryAfterSeconds: 1 };
+  }
+
+  return {
+    allowed: row.count < budget.max,
+    retryAfterSeconds: retryAfter(row.lastRequest, budget, now),
+  };
+}
+
 /**
  * Charge one attempt against `key` and report whether it is within budget.
  *
@@ -85,7 +168,7 @@ export async function chargeBudget(
   budget: Budget,
   now: number = Date.now()
 ): Promise<BudgetVerdict> {
-  const key = `${KEY_PREFIX}${scope}:${identity}`;
+  const key = keyFor(scope, identity);
   const windowStart = now - budget.windowMs;
 
   const row = await db
@@ -101,10 +184,9 @@ export async function chargeBudget(
 
   const count = row?.count ?? 1;
   const windowOpenedAt = row?.lastRequest ?? now;
-  const retryAfterSeconds = Math.max(
-    1,
-    Math.ceil((windowOpenedAt + budget.windowMs - now) / 1000)
-  );
 
-  return { allowed: count <= budget.max, retryAfterSeconds };
+  return {
+    allowed: count <= budget.max,
+    retryAfterSeconds: retryAfter(windowOpenedAt, budget, now),
+  };
 }

@@ -426,16 +426,41 @@ is mitigated by the notice and the audit trail rather than prevented.
 0017 already ships. The unit worth protecting is *a pilot's track*, not a
 request.
 
-| Key | Budget | Why |
-|---|---|---|
-| `anon-igc:cp:<comp_pilot_id>` | 6 / 24 h | Enough to fix a genuinely wrong upload several times; not enough to sit there overwriting somebody else's. |
-| `anon-igc:comp:<comp_id>` | 300 / 24 h | Above anything a real comp does, below a flood. |
-| `anon-igc:miss:<ip>` | 20 / 24 h | Charged **only** on `no_pilot_match`, so the endpoint cannot become a fast way to test whether an address is registered. National IDs are already public; email addresses are not. |
+| Key | Budget | Charged | Why |
+|---|---|---|---|
+| `anon-igc:cp:<comp_pilot_id>` | 6 / 24 h | on a stored track | Enough to fix a genuinely wrong upload several times; not enough to sit there overwriting somebody else's. |
+| `anon-igc:comp:<comp_id>` | 300 / 24 h | on a stored track | Above anything a real comp does, below a flood. |
+| `anon-igc:futile:<ip>` | 40 / 24 h | on every request that stores nothing | Bounds wasted work, and is what keeps the endpoint from answering "is this address registered?" as fast as anyone can ask. National IDs are already public; email addresses are not. |
 
-Order of work is a cost decision: the comp budget and the header parse run
-before any lookup, the pilot budget after the match (an attacker cannot burn a
-real pilot's allowance without an identifier that resolves), and the file is
-only read once all of that has passed.
+**What is charged, and when, is the security property** (SEC-39). The first two
+are *damage* budgets: they are keyed on the thing being protected, so they are
+charged at the far end, once a track is actually in R2. The third is an *effort*
+budget: it is keyed on the caller, so it is charged for work that produced
+nothing.
+
+Getting that backwards is what SEC-39 was. Everything an attacker needs to name
+a competition or a registration is public by design — the comp id is in the
+comp's own URL, and `GET /api/comp/:comp_id/pilot` publishes every pilot's
+national IDs — so charging on arrival let anyone spend a competition's or a
+pilot's whole day without ever uploading a file. Six a day made the pilot case
+sharp: six empty POSTs naming a real CIVL id took that pilot's landing day.
+
+Order of work is still a cost decision, and `peekBudget` is what keeps it one:
+the damage budgets are **peeked** early — a read, where this used to do a write
+— so something already at its cap is turned away before the body is read, while
+the counter itself stays unmovable by anyone who is not really uploading. The
+peek admits a small race (concurrent requests can all pass it), which is bounded
+by concurrency and harmless against 6 and 300 a day.
+
+A 429 never charges the effort budget: a caller already being turned away by one
+budget should not also spend another, or a pilot who hits their own six-a-day
+would burn allowance shared with everyone else at the comp.
+
+The effort budget is the only per-IP budget here, and it is safe to be one
+*because* it is charged on failure. A submission that lands costs nothing, so a
+hillside of pilots behind one connection or a CGNAT address can all submit; only
+somebody generating failures pays. A budget on every submission instead would
+429 real pilots on exactly the day this route exists for.
 
 ### Errors are repairable
 

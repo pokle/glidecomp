@@ -1,8 +1,11 @@
 # SEC-39 — proposed solutions
 
-**Status:** proposal, awaiting a decision. Nothing here is implemented.
+**Status:** **decided — Options A + B + C implemented** in
+[#556](https://github.com/pokle/glidecomp/pull/556) (2026-08-06). Option D was
+considered and rejected; Option E is carried as gap #21. This document is kept
+as the reasoning behind the shape of the fix, not as a live proposal.
 **Finding:** `docs/security-review.md` → *SEC-39 — Anonymous-submission
-rate-limit budgets chargeable before any legitimacy check* — Medium — Open.
+rate-limit budgets chargeable before any legitimacy check* — Medium.
 **Code:** `web/workers/competition-api/src/routes/igc-anon.ts`,
 `web/workers/competition-api/src/rate-limit.ts`.
 
@@ -194,6 +197,12 @@ Two decisions are the owner's, not the implementer's:
 
 1. The `ANON_SUBMIT_FUTILE` number (suggested 40/24 h, up from 20).
 2. Whether Option D is wanted on top of C, despite the CGNAT exposure.
+
+**Decided (2026-08-06):** A + B + C shipped as one change in
+[#556](https://github.com/pokle/glidecomp/pull/556). `ANON_SUBMIT_FUTILE` went
+in at the suggested 40/24 h — the one number here with no production evidence
+behind it, so the next review round should check it is not turning real pilots
+away. Option D was not taken. Option E is gap #21.
 
 ## 6. Test coverage the change should carry
 
