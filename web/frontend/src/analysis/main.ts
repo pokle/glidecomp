@@ -81,10 +81,10 @@ interface FeatureToggleConfig {
   urlParam: string;
   /** Whether the feature is on by default (affects URL param parsing) */
   defaultOn: boolean;
-  /** Optional mapRenderer property that must be truthy; menu is hidden if unsupported */
-  supportsProp?: keyof MapProvider;
-  /** mapRenderer method name to call with the boolean state */
-  providerMethod: keyof MapProvider;
+  /** Optional capability check; the menu item is hidden when it returns false */
+  isSupported?: (map: MapProvider) => boolean;
+  /** Push the new state to the map */
+  apply: (map: MapProvider, enabled: boolean) => void;
   /** Called after each toggle with the new state */
   onToggle?: (enabled: boolean) => void;
 }
@@ -224,8 +224,8 @@ async function init(): Promise<void> {
       statusId: '3d-track-status',
       urlParam: '3d',
       defaultOn: false,
-      supportsProp: 'supports3D',
-      providerMethod: 'set3DMode',
+      isSupported: (map) => map.supports3D,
+      apply: (map, enabled) => map.set3DMode(enabled),
       onToggle: () => analysisPanel?.clearSelection(),
     },
     {
@@ -233,14 +233,14 @@ async function init(): Promise<void> {
       statusId: 'task-visibility-status',
       urlParam: 'task-visible',
       defaultOn: true,
-      providerMethod: 'setTaskVisibility',
+      apply: (map, enabled) => map.setTaskVisibility(enabled),
     },
     {
       menuId: 'menu-toggle-track',
       statusId: 'track-visibility-status',
       urlParam: 'track-visible',
       defaultOn: true,
-      providerMethod: 'setTrackVisibility',
+      apply: (map, enabled) => map.setTrackVisibility(enabled),
       onToggle: (enabled) => { if (!enabled) analysisPanel?.clearSelection(); },
     },
     {
@@ -248,7 +248,7 @@ async function init(): Promise<void> {
       statusId: 'show-speed-status',
       urlParam: 'speed',
       defaultOn: false,
-      providerMethod: 'setSpeedOverlay',
+      apply: (map, enabled) => map.setSpeedOverlay(enabled),
       onToggle: (enabled) => {
         if (showSpeedLabel) {
           showSpeedLabel.textContent = enabled ? 'Hide track metrics' : 'Show track metrics';
@@ -266,7 +266,7 @@ async function init(): Promise<void> {
     const statusEl = document.getElementById(toggle.statusId);
 
     // If the feature requires provider support and it's missing, hide the menu item
-    if (toggle.supportsProp && !mapRenderer[toggle.supportsProp]) {
+    if (toggle.isSupported && !toggle.isSupported(mapRenderer)) {
       if (menuEl) menuEl.style.display = 'none';
       continue;
     }
@@ -282,10 +282,7 @@ async function init(): Promise<void> {
     updateFeatureStatus(statusEl, enabled);
 
     // Apply initial state to provider
-    const method = mapRenderer[toggle.providerMethod];
-    if (typeof method === 'function') {
-      (method as (v: boolean) => void).call(mapRenderer, enabled);
-    }
+    toggle.apply(mapRenderer, enabled);
 
     // Apply initial side-effects (e.g. speed label text)
     if (enabled) {
@@ -298,16 +295,20 @@ async function init(): Promise<void> {
       featureState[toggle.urlParam] = newState;
       updateFeatureStatus(statusEl, newState);
 
-      const providerFn = mapRenderer?.[toggle.providerMethod];
-      if (typeof providerFn === 'function') {
-        (providerFn as (v: boolean) => void).call(mapRenderer, newState);
-        // For on-by-default features, remove param when on (default); set '0' when off
-        // For off-by-default features, set '1' when on; remove param when off (default)
-        const urlValue = toggle.defaultOn
-          ? (newState ? null : '0')
-          : (newState ? '1' : null);
-        updateUrlParam(toggle.urlParam, urlValue);
-      }
+      if (mapRenderer) toggle.apply(mapRenderer, newState);
+
+      // The URL is updated whatever the map did with the state. It used to sit
+      // inside a `typeof providerFn === 'function'` guard, so a toggle whose
+      // provider method was missing reported itself on, recorded itself on, and
+      // left the URL saying otherwise. With the method required there is no such
+      // case left, and no reason to make the address bar wait on the map.
+      //
+      // For on-by-default features, remove param when on (default); set '0' when off
+      // For off-by-default features, set '1' when on; remove param when off (default)
+      const urlValue = toggle.defaultOn
+        ? (newState ? null : '0')
+        : (newState ? '1' : null);
+      updateUrlParam(toggle.urlParam, urlValue);
 
       toggle.onToggle?.(newState);
       commandDialog?.close();
@@ -318,7 +319,7 @@ async function init(): Promise<void> {
   const annotateStatusEl = document.getElementById('annotate-status');
 
   function toggleAnnotation() {
-    const layer = mapRenderer?.getAnnotationLayer?.();
+    const layer = mapRenderer?.getAnnotationLayer();
     if (!layer) return;
     const newState = !layer.isEnabled();
     layer.setEnabled(newState);
@@ -328,7 +329,7 @@ async function init(): Promise<void> {
   }
 
   // Sync menu status when annotation is toggled via the map button
-  mapRenderer?.getAnnotationLayer?.()?.onToggle((on) => {
+  mapRenderer?.getAnnotationLayer()?.onToggle((on) => {
     if (annotateStatusEl) {
       annotateStatusEl.textContent = on ? '(on) D' : '(off) D';
     }
@@ -583,7 +584,7 @@ async function init(): Promise<void> {
       computeCompetitionScore();
       pushCompetitionScoreToPanel();
       const pilotScores = state.compScore?.pilotScores ?? [];
-      mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+      mapRenderer?.setMultiTrack(state.tracks, pilotScores);
       updateOpenDistanceMapLines(state.tracks);
     }
   }
@@ -610,13 +611,13 @@ async function init(): Promise<void> {
       mapRenderer.clearTrack();
       mapRenderer.clearTask();
       mapRenderer.clearEvents();
-      mapRenderer.clearMultiTrack?.();
-      mapRenderer.clearOpenDistanceLines?.();
+      mapRenderer.clearMultiTrack();
+      mapRenderer.clearOpenDistanceLines();
     }
 
     // Reset speed overlay state (must call setSpeedOverlay to clear provider flag)
     featureState['speed'] = false;
-    mapRenderer?.setSpeedOverlay?.(false);
+    mapRenderer?.setSpeedOverlay(false);
     updateFeatureStatus(document.getElementById('show-speed-status'), false);
     if (showSpeedLabel) showSpeedLabel.textContent = 'Show track metrics';
     updateUrlParam('speed', null);
@@ -927,7 +928,7 @@ async function init(): Promise<void> {
 
   // Handle map click mode request from the task editor
   const handleMapClickModeRequest = (enabled: boolean) => {
-    mapRenderer?.setInteractionMode?.(enabled ? 'add-waypoint' : 'view');
+    mapRenderer?.setInteractionMode(enabled ? 'add-waypoint' : 'view');
   };
 
   // Initialize analysis panel with hide/show callbacks for sidebar visibility
@@ -953,7 +954,7 @@ async function init(): Promise<void> {
       if (selected === null) {
         // All selected — show all tracks, no event markers
         mapRenderer?.clearEvents();
-        mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+        mapRenderer?.setMultiTrack(state.tracks, pilotScores);
         updateOpenDistanceMapLines(state.tracks);
       } else {
         const filteredTracks = state.tracks.filter(t => selected.has(t.pilotName));
@@ -964,7 +965,7 @@ async function init(): Promise<void> {
         } else {
           mapRenderer?.clearEvents();
         }
-        mapRenderer?.setMultiTrack?.(filteredTracks, filteredScores);
+        mapRenderer?.setMultiTrack(filteredTracks, filteredScores);
         updateOpenDistanceMapLines(filteredTracks);
       }
     },
@@ -977,23 +978,23 @@ async function init(): Promise<void> {
   }
 
   // Wire multi-track click handler
-  mapRenderer.onMultiTrackClick?.((trackIndex: number, fixIndex: number) => {
+  mapRenderer.onMultiTrackClick((trackIndex: number, fixIndex: number) => {
     const track = state.tracks[trackIndex];
     if (!track) return;
     // Show HUD with pilot name for the clicked track
-    mapRenderer?.showTrackPointHUDWithName?.(fixIndex, track.pilotName);
+    mapRenderer?.showTrackPointHUDWithName(fixIndex, track.pilotName);
   });
 
   // Wire map click handler for task editor "click on map" mode
-  mapRenderer.onMapClick?.((lat: number, lon: number) => {
+  mapRenderer.onMapClick((lat: number, lon: number) => {
     analysisPanel?.addTurnpoint(lat, lon);
   });
 
   // Wire native map control buttons
-  mapRenderer.onMenuButtonClick?.(() => {
+  mapRenderer.onMenuButtonClick(() => {
     commandDialog?.showModal();
   });
-  mapRenderer.onPanelToggleClick?.(() => {
+  mapRenderer.onPanelToggleClick(() => {
     analysisPanel?.show();
   });
 
@@ -1026,7 +1027,7 @@ async function init(): Promise<void> {
   }
 
   // Register track click handler to select events when clicking on the track
-  mapRenderer.onTrackClick?.((fixIndex: number) => {
+  mapRenderer.onTrackClick((fixIndex: number) => {
     // Don't allow glide segment selection when speed overlay is active,
     // but still allow HUD stats
     if (!featureState['speed']) {
@@ -1051,7 +1052,7 @@ async function init(): Promise<void> {
   });
 
   // Register turnpoint click handler to open Task tab when clicking on a turnpoint on the map
-  mapRenderer.onTurnpointClick?.((turnpointIndex: number) => {
+  mapRenderer.onTurnpointClick((turnpointIndex: number) => {
     if (analysisPanel?.isHidden()) {
       analysisPanel.show();
     }
@@ -1220,7 +1221,7 @@ async function init(): Promise<void> {
     }
 
     // --- Annotation keyboard shortcuts ---
-    const layer = mapRenderer?.getAnnotationLayer?.();
+    const layer = mapRenderer?.getAnnotationLayer();
 
     // Undo/redo only when annotation mode is active (avoid hijacking browser undo)
     if (layer?.isEnabled()) {
@@ -1304,7 +1305,7 @@ async function init(): Promise<void> {
       computeCompetitionScore();
       pushCompetitionScoreToPanel();
       const pilotScores = state.compScore?.pilotScores ?? [];
-      mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+      mapRenderer?.setMultiTrack(state.tracks, pilotScores);
       updateOpenDistanceMapLines(state.tracks);
     }
   }
@@ -1328,7 +1329,7 @@ async function init(): Promise<void> {
     trackId: string | null,
     options?: { readonly?: boolean }
   ): void {
-    const layer = mapRenderer?.getAnnotationLayer?.();
+    const layer = mapRenderer?.getAnnotationLayer();
     void layer?.setTrack(trackId, options);
   }
 
@@ -1349,7 +1350,7 @@ async function init(): Promise<void> {
     state.compScore = null;
 
     // Clear any multi-track rendering
-    mapRenderer?.clearMultiTrack?.();
+    mapRenderer?.clearMultiTrack();
     analysisPanel?.setMultiTrackMode(false);
 
     mapRenderer?.setTrack(igcFile.fixes);
@@ -1358,7 +1359,7 @@ async function init(): Promise<void> {
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
 
     // Pulse the Analysis button to draw attention to the newly available data
-    mapRenderer?.highlightPanelToggle?.();
+    mapRenderer?.highlightPanelToggle();
   }
 
   /**
@@ -1516,7 +1517,7 @@ async function init(): Promise<void> {
     state.events = track.events;
 
     // Clear multi-track rendering
-    mapRenderer?.clearMultiTrack?.();
+    mapRenderer?.clearMultiTrack();
 
     // Render single track
     mapRenderer?.setTrack(track.fixes);
@@ -1569,7 +1570,7 @@ async function init(): Promise<void> {
     mapRenderer?.clearEvents();
 
     // Render all tracks on map with rank colors
-    mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+    mapRenderer?.setMultiTrack(state.tracks, pilotScores);
     updateOpenDistanceMapLines(state.tracks);
 
     // Push score + format before entering multi-track mode, which switches to
@@ -1681,7 +1682,7 @@ async function init(): Promise<void> {
    */
   function updateOpenDistanceMapLines(visibleTracks: LoadedTrack[]): void {
     if (!state.task || !isOpenDistanceMode()) {
-      mapRenderer?.clearOpenDistanceLines?.();
+      mapRenderer?.clearOpenDistanceLines();
       return;
     }
 
@@ -1700,7 +1701,7 @@ async function init(): Promise<void> {
         distance: geometry.distance,
       });
     }
-    mapRenderer?.setOpenDistanceLines?.(lines);
+    mapRenderer?.setOpenDistanceLines(lines);
   }
 
   /**
