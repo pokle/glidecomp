@@ -1085,7 +1085,7 @@ export function createMapBoxProvider(
           // the scrubbed view.
           const scrub = trackScrubIndex;
           renderer.setTrack(currentFixes);
-          if (scrub != null) renderer.setTrackScrub?.(scrub);
+          if (scrub != null) renderer.setTrackScrub(scrub);
         }
         if (currentTask) {
           renderer.setTask(currentTask);
@@ -1094,13 +1094,13 @@ export function createMapBoxProvider(
           renderer.setEvents(currentEvents);
         }
         if (openDistanceLineData.length > 0) {
-          renderer.setOpenDistanceLines?.(openDistanceLineData);
+          renderer.setOpenDistanceLines(openDistanceLineData);
         }
         if (bestProgressRouteData) {
-          renderer.setBestProgressRoute?.(bestProgressRouteData);
+          renderer.setBestProgressRoute(bestProgressRouteData);
         }
         if (waypointsData.length > 0) {
-          renderer.setWaypoints?.(waypointsData);
+          renderer.setWaypoints(waypointsData);
         }
         updateTrackRendering();
       }

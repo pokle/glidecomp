@@ -10,6 +10,9 @@ Snapshot: 259 TypeScript/TSX files, 67,612 lines, taken at `14dd816`.
 analysis app. The React SPA is in materially better health — its problems are
 duplication, not architecture.
 
+**Status: B4 and B5 are fixed on this branch** (see "Leaflet's shadow" below).
+B1, B2 and B3 remain open.
+
 ---
 
 ## Blockers
@@ -85,7 +88,7 @@ Note `react/pages/Settings.tsx` (847 lines, eight named `*Section` components)
 as the counter-example already in the repository — it is large but every part is
 addressable. Size is not the complaint; undifferentiated size is.
 
-### B4. `MapProvider` declares 38 optional members for one implementation
+### B4. `MapProvider` declares 38 optional members for one implementation — FIXED
 
 `web/frontend/src/analysis/map-provider.ts`. Of ~45 members, **38 are `?:`** —
 `set3DMode?`, `setTaskVisibility?`, `setMultiTrack?`, `onWaypointClick?`,
@@ -112,7 +115,10 @@ them become required and no-op in a provider that does not support them. The
 `?.` guards then delete themselves, and a second provider — if one ever
 arrives — gets a compiler-enforced contract rather than a suggestion.
 
-### B5. Dynamic dispatch by `keyof MapProvider`
+**Done.** All 33 optional methods were already implemented by the one provider,
+so every `?` came off and the 44 `?.` guards went with them.
+
+### B5. Dynamic dispatch by `keyof MapProvider` — FIXED
 
 `main.ts:78`–`94` and `:284`–`:316`. The feature-toggle table stores a method
 *name* and calls it reflectively:
@@ -138,6 +144,36 @@ The reflection also hides a live inconsistency. In the click handler
 label are updated **outside** it. If the method is ever absent, the toggle
 reports itself as on, records itself as on, and the URL disagrees. Nobody would
 write that branch deliberately; it is an artefact of the indirection.
+
+**Done.** `providerMethod: keyof MapProvider` became
+`apply: (map: MapProvider, enabled: boolean) => void` and `supportsProp` became
+`isSupported: (map) => boolean`. The string index, the runtime `typeof` and both
+casts are gone, and `updateUrlParam` now runs outside the dead guard so the
+address bar can no longer disagree with the label.
+
+---
+
+## Leaflet's shadow
+
+The obvious way to shrink `mapbox-provider.ts` before refactoring it is to
+delete the other provider. There isn't one: Leaflet went in
+[#358](https://github.com/pokle/glidecomp/issues/358) — no `leaflet-provider.ts`,
+no `leaflet` dependency in any `package.json`, nothing in `bun.lock`, nothing in
+`node_modules`. The only surviving mentions are in point-in-time snapshots
+(`docs/audit-2026-03-04.md`, `docs/security-review.md`,
+`docs/dependency-review-log.md`), which record what was true when written and are
+left alone.
+
+What that removal did leave was its shape. B4 and B5 *are* the leaflet
+provider — the optionality only ever meant "Mapbox does this, Leaflet doesn't",
+and the reflective dispatch existed to tiptoe around it. Two comments still
+described the vanished twin (*"Options shared by both provider factories"*,
+*"Get the annotation layer (Mapbox only)"*). `createMapProvider` remains as the
+dynamic-import seam that keeps the map in its own chunk — it is earning that
+keep, not the abstraction.
+
+So the removal the refactor needed had already happened in the file listing and
+not yet in the types. It has now.
 
 ---
 
@@ -299,9 +335,10 @@ Worth stating plainly, because it constrains the recommendations above:
 Sequenced so each step makes the next cheaper, and so nothing large moves before
 its call sites are typed.
 
-1. **B4 + B5** — make `MapProvider` members required; delete the `?.` guards and
-   the reflective toggle dispatch. Smallest diff, largest immediate safety gain,
-   and it is the prerequisite for B1 (the compiler starts checking the extraction).
+1. ~~**B4 + B5** — make `MapProvider` members required; delete the `?.` guards
+   and the reflective toggle dispatch.~~ **Done on this branch.** Smallest diff,
+   largest immediate safety gain, and the prerequisite for B1: the compiler now
+   checks the extraction.
 2. **R1 + R2** — two one-line rule fixes, independent of everything else.
 3. **S1** — `useSeededResource`. Unblocks S2 and S4, and removes the three
    competing load-state models.

@@ -104,8 +104,8 @@ export default function RouteMap({
           return;
         }
         created = p;
-        p.onWaypointClick?.((wp) => onWaypointPickRef.current(wp));
-        p.onMapClick?.((lat, lon, details) => onMapPickRef.current(lat, lon, details));
+        p.onWaypointClick((wp) => onWaypointPickRef.current(wp));
+        p.onMapClick((lat, lon, details) => onMapPickRef.current(lat, lon, details));
         setProvider(p);
       })
       .catch((err) => {
@@ -142,9 +142,9 @@ export default function RouteMap({
 
   useEffect(() => {
     if (!provider) return;
-    provider.setWaypoints?.(waypoints);
+    provider.setWaypoints(waypoints);
     return () => {
-      if (!destroyedRef.current) provider.clearWaypoints?.();
+      if (!destroyedRef.current) provider.clearWaypoints();
     };
   }, [provider, waypoints]);
 
@@ -155,13 +155,13 @@ export default function RouteMap({
     if (!provider || waypoints.length === 0) return;
     if (fitNonce !== lastFitNonce.current) {
       lastFitNonce.current = fitNonce;
-      provider.fitToWaypoints?.();
+      provider.fitToWaypoints();
     }
   }, [provider, fitNonce, waypoints]);
 
   useEffect(() => {
     if (!provider) return;
-    provider.setInteractionMode?.(addMode ? "add-waypoint" : "view");
+    provider.setInteractionMode(addMode ? "add-waypoint" : "view");
   }, [provider, addMode]);
 
   // Fly to a waypoint when a table row asks to (keyed so repeat clicks re-centre).
@@ -170,7 +170,7 @@ export default function RouteMap({
     if (!provider || !focus) return;
     if (focus.key === lastFocusKey.current) return;
     lastFocusKey.current = focus.key;
-    provider.panTo?.(focus.lat, focus.lon);
+    provider.panTo(focus.lat, focus.lon);
   }, [provider, focus]);
 
   // Keep the map painted correctly as the responsive layout resizes it.
@@ -195,8 +195,8 @@ export default function RouteMap({
             isDisabled={!provider}
             onPick={(place) => {
               if (!provider) return;
-              if (place.bounds) provider.fitToBounds?.(place.bounds);
-              else provider.panTo?.(place.lat, place.lon, PLACE_FALLBACK_ZOOM);
+              if (place.bounds) provider.fitToBounds(place.bounds);
+              else provider.panTo(place.lat, place.lon, PLACE_FALLBACK_ZOOM);
             }}
           />
         </div>
