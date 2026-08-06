@@ -36,8 +36,20 @@ Interleaved output is the cost; each line is prefixed with its package name, and
 
 ## E2E on a fresh clone
 
-- Playwright browsers must be installed first: `bunx playwright install chromium`
-  (CI uses `--with-deps`).
+- Playwright's Chromium installs itself. `test:e2e` and `test:e2e:ssr` run
+  `web/scripts/ensure-playwright-browsers.sh` first, which downloads the build
+  the PINNED Playwright asks for if it is absent (~300 MB, about a minute) and
+  is otherwise a silent ~1s no-op. CI installs its own with `--with-deps` and
+  caches it, so the check costs nothing there.
+  - Playwright ties the browser revision to the library version, so a machine
+    that already has *a* Chromium usually still lacks *this* one — the web
+    containers pre-bake revision 1194 (Chromium 141) while 1.62.1 wants 1234
+    (Chrome for Testing 151). Without the script that surfaces as
+    `Executable doesn't exist at .../chromium_headless_shell-1234/...` two
+    minutes into the run, once the dev servers have finished booting.
+  - Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` to opt out (for an image that
+    supplies browsers out-of-band). Calling `bunx playwright test` directly
+    skips the check, the same way it skips `bun install`.
 - The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it
   `BETTER_AUTH_URL` defaults to production, `isLocalDev()` is false, and
   `/api/auth/dev-login` 404s — every test fails at sign-in. The `test:e2e` script

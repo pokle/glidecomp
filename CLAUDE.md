@@ -53,7 +53,10 @@ always absent).
 **If you invoke a tool directly — `bun test ./web/engine`, `bunx playwright`,
 `tsc` — you skip those guards.** On a fresh tree the unresolved imports surface
 as ordinary *test failures*, not as a missing install, so run `bun install`
-first or go through `bun run`.
+first or go through `bun run`. `bunx playwright test` skips a second guard:
+`test:e2e` and `test:e2e:ssr` also fetch the Chromium build the pinned
+Playwright wants, which no environment is guaranteed to pre-bake — see
+[docs/local-dev.md](docs/local-dev.md).
 
 For dev servers, the e2e suite and its failure modes, the isolated container
 preview, and the dev tunnel: **[docs/local-dev.md](docs/local-dev.md)**. Read its
