@@ -123,6 +123,69 @@ describe("the close date is the end of its day", () => {
   });
 });
 
+describe("a hidden test comp only takes tracks from its admins", () => {
+  // SEC-38: both signed-in upload routes read close_date but not `test`, so
+  // any account that knew the two ids could write a track into somebody's
+  // unpublished rehearsal. Being signed in is not a claim to a competition.
+  async function countsFor(): Promise<{ tracks: number; pilots: number }> {
+    const t = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM task_track"
+    ).first<{ n: number }>();
+    const p = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM comp_pilot"
+    ).first<{ n: number }>();
+    return { tracks: t!.n, pilots: p!.n };
+  }
+
+  test("the self route answers a non-admin as a missing comp", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+
+    const res = await uploadIgc(compId, taskId, "user-2");
+    expect(res.status).toBe(404);
+    // Nothing written: not the track, and not the roster row the route would
+    // otherwise have created on the way to writing it.
+    expect(await countsFor()).toEqual({ tracks: 0, pilots: 0 });
+  });
+
+  test("the on-behalf route answers a non-admin as a missing comp", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+    const pilotRes = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bob Behalf",
+      pilot_class: "open",
+    });
+    const { comp_pilot_id } = (await pilotRes.json()) as { comp_pilot_id: string };
+
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc/${comp_pilot_id}`,
+      fakeIgcPayload(),
+      { user: "user-2" }
+    );
+    expect(res.status).toBe(404);
+    expect((await countsFor()).tracks).toBe(0);
+  });
+
+  test("its own admin submits to it as usual", async () => {
+    // The flag hides a rehearsal; it does not stop the organiser rehearsing.
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+    expect((await uploadIgc(compId, taskId, "user-1")).status).toBe(201);
+  });
+
+  test("a super admin submits to somebody else's hidden comp", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+    expect((await uploadIgc(compId, taskId, "user-super")).status).toBe(201);
+  });
+
+  test("an ordinary comp is unaffected", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    expect((await uploadIgc(compId, taskId, "user-2")).status).toBe(201);
+  });
+});
+
 describe("POST .../igc — open registration is on the record", () => {
   test("audits the pilot joining, not just the track arriving", async () => {
     // Uploading to a comp you are not registered for silently creates your

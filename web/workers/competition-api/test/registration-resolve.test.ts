@@ -234,6 +234,41 @@ describe("who may ask", () => {
     const res = await resolve("zzzzzz", "user-2");
     expect([400, 404]).toContain(res.status);
   });
+
+  test("a hidden test comp answers a non-admin as a missing one (SEC-37)", async () => {
+    // Knowing the id is not a claim to the comp: the roster it would read out
+    // is exactly what `test` exists to keep from non-admins.
+    const compId = await createComp({ test: true });
+    await preRegister(compId, "Jane Smith", {
+      registered_pilot_email: "jane@elsewhere.example",
+    });
+
+    const res = await resolve(compId, "user-2");
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.state).toBeUndefined();
+    expect(body.candidates).toBeUndefined();
+    // Not even the name, which is what a 403 would have conceded.
+    expect(JSON.stringify(body)).not.toContain("Jane Smith");
+  });
+
+  test("its own admin still gets an answer for a hidden test comp", async () => {
+    const compId = await createComp({ test: true });
+    await preRegister(compId, "Jane Smith");
+
+    const body = (await (await resolve(compId, "user-1")).json()) as any;
+    expect(body.state).toBe("choose");
+    expect(body.candidates[0].registered_pilot_name).toBe("Jane Smith");
+  });
+
+  test("a super admin gets an answer for somebody else's hidden comp", async () => {
+    const compId = await createComp({ test: true });
+    await preRegister(compId, "Jane Smith");
+
+    const res = await resolve(compId, "user-super");
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).state).toBe("choose");
+  });
 });
 
 describe("the answer agrees with what the upload will do", () => {
