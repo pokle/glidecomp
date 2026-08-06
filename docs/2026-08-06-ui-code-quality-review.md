@@ -10,14 +10,16 @@ Snapshot: 259 TypeScript/TSX files, 67,612 lines, taken at `14dd816`.
 analysis app. The React SPA is in materially better health — its problems are
 duplication, not architecture.
 
-**Status: B4 and B5 are fixed on this branch** (see "Leaflet's shadow" below).
-B1, B2 and B3 remain open.
+**Status (2026-08-06).** Fixed: **B2**, **B4**, **B5**, **S1**, **S2**, **S3**,
+**R1**, **R2**, and the file-size work on `PilotScoreDetail` and
+`SubmitTrackForm`. Still open: **B1**, **B3**, **S4**, and the rest of
+`RouteEditorDialog` — see "What is left, and why" at the end.
 
 ---
 
 ## Blockers
 
-### B1. `createMapBoxProvider` is a 3,230-line function
+### B1. `createMapBoxProvider` is a 3,230-line function — OPEN
 
 `web/frontend/src/analysis/mapbox-provider.ts:207`–`3436`.
 
@@ -50,7 +52,7 @@ Presumptive reject: a file this size is not a place where the next change can be
 made safely, and the 52-variable shared mutable scope means no extraction is
 locally verifiable today.
 
-### B2. `resolve(renderer)` runs 884 lines before `renderer` exists
+### B2. `resolve(renderer)` runs 884 lines before `renderer` exists — FIXED
 
 `mapbox-provider.ts:1610` calls `resolve(renderer)` inside the
 `map.on('load', …)` handler opened at `:1433`. `const renderer` is declared at
@@ -62,10 +64,15 @@ a test double, a future Mapbox version — turns it into a `ReferenceError` at
 startup with no static warning. It is also unreadable: the reader at `:1610` has
 no way to know what is being resolved without scrolling nearly a thousand lines.
 
-This is a symptom of B1, and disappears with it: a class instance exists before
-its `load` handler is attached.
+**Done.** The handler now records that the style is up and the resolve happens
+at the bottom of the function, where the provider object demonstrably exists —
+resolving immediately if `load` already fired. The ordering is no longer
+load-bearing in either direction. The remaining forward references to `renderer`
+are inside `restoreData()`, which runs on a basemap change: call-time, not
+construction-time, and the ordinary way a helper and the object it serves refer
+to each other.
 
-### B3. `init()` in `analysis/main.ts` is 2,244 lines
+### B3. `init()` in `analysis/main.ts` is 2,244 lines — OPEN
 
 `web/frontend/src/analysis/main.ts:95`–`2338`, containing **44 nested function
 declarations**.
@@ -179,7 +186,7 @@ not yet in the types. It has now.
 
 ## Simplification opportunities
 
-### S1. The SSR-seeded page-load effect is copy-pasted seven times, three ways
+### S1. The SSR-seeded page-load effect is copy-pasted seven times, three ways — FIXED
 
 Every SSR'd comp page repeats the same 25–70 line shape: `useInitialData` seed →
 `useState` mirrors → effect with a `cancelled` flag → status branches →
@@ -205,18 +212,37 @@ draw.
 
 **The judo move**: one `useSeededResource<T>` hook in `react/lib/` owning the
 seed, the fetch, cancellation, the retry policy and the canonical result union.
-Pages keep their rendering; they stop re-deciding how loading works. This is the
-single highest-yield change on the React side — it removes several hundred lines
-and makes the retry rule below enforceable in one place instead of seven.
+Pages keep their rendering; they stop re-deciding how loading works.
 
-### S2. The pending-poll effect is byte-identical in two files
+**Done** for the four pages that share the model — `CompDetail`, `TaskDetail`,
+`CompScoresPage`, `CompPilotsPage` — 177 lines of page code down to 60.
+`TaskDetail`'s comp fetch moved out to its own effect; it used to run only after
+the task resolved, so a page that works without it waited for it anyway.
+
+Three loaders deliberately keep their own, and this finding was wrong to imply
+one hook should swallow all of them. The field-analysis pages answer with a
+five-way status (`forbidden` for a hidden test comp, a synthetic body for the
+422), `PilotScoreDetail` resolves four requests into one narrative and tells
+"still computing" from "no such pilot", and `CompWaypoints` fetches two
+resources in parallel to write five pieces of state. Those are different
+questions, not the same question written differently.
+
+### S2. The pending-poll effect is byte-identical in two files — FIXED
 
 `pages/CompFieldAnalysis.tsx` and `pages/TaskFieldAnalysis.tsx` carry the same
 ~18-line backoff poll (3s → 10s, `document.hidden` check, give up at 120s). A
 `diff` of the two blocks differs only in the predicate's name (`pendingTasks` vs
 `pending`). Extract as `usePollWhile(active, tick)`.
 
-### S3. `formatKm` duplicates the engine's unit formatting — and ignores the user's units
+**Done — and the extraction found a bug both copies shared.** `startedAt` and
+`delay` were locals of the effect, and the effect listed the refetch counter in
+its deps, so every tick rebuilt it with the clock back at zero. The backoff never
+grew past its first step and the two-minute deadline never arrived: an analysis
+that stayed pending was refetched every three seconds for as long as the tab was
+open, under a comment describing a backoff that could not happen. Both values now
+live in refs that survive the re-run.
+
+### S3. `formatKm` duplicates the engine's unit formatting — and ignores the user's units — FIXED
 
 `comp/submit-track.ts:502` hard-codes kilometres:
 
@@ -236,7 +262,11 @@ So a pilot who has chosen miles is shown kilometres on the track submission
 confirmation — a behavioural inconsistency created purely by the duplicate
 helper. Route these through `formatDistance` and delete `formatKm`.
 
-### S4. `(await res.json()) as unknown as T` — 33 occurrences
+**Done.** `formatMetres` one line below had the same defect for altitude and went
+with it. Both are replaced by unit-aware equivalents whose only remaining job is
+the em dash for a figure the IGC file did not carry.
+
+### S4. `(await res.json()) as unknown as T` — 33 occurrences — PARTLY FIXED
 
 Hono's RPC client types force a double cast at every page load
 (`pages/CompDetail.tsx`, `TaskDetail.tsx`, `CompWaypoints.tsx`, `comp/csv.ts` ×5
@@ -246,11 +276,15 @@ casts is 33 places where the wrong `T` compiles silently. One
 single reviewable line. Folding it into `useSeededResource` (S1) removes most of
 them outright.
 
+**Partly done**: the four converted pages no longer cast — `useSeededResource`
+does it once, in one place. The rest are in the loaders that keep their own
+fetch, and in `comp/csv.ts`.
+
 ---
 
 ## Rule compliance
 
-### R1. The field-analysis pages bypass `fetchWithRetry`
+### R1. The field-analysis pages bypass `fetchWithRetry` — FIXED
 
 `CLAUDE.md` — *"A failure to ask is not an answer"* — requires comp/task page
 loads to go through `fetchWithRetry` (`react/comp/types.ts:397`) so a transient
@@ -264,9 +298,9 @@ pending-poll that would otherwise re-fetch is gated on `status === "ready"`, so
 nothing recovers it. A millisecond blip becomes a broken page until manual
 reload, which is precisely the failure the rule was written for.
 
-One-line fix each; permanently fixed by S1.
+**Done** — both now go through `fetchWithRetry`.
 
-### R2. `fetchWithRetry` retries 4xx responses
+### R2. `fetchWithRetry` retries 4xx responses — FIXED
 
 `comp/types.ts:410` returns early on `res.ok || res.status === 404` and retries
 everything else — including 400, 401, 403 and 429. `CLAUDE.md` states a 4xx is a
@@ -278,36 +312,30 @@ network failures and 5xx". Inverting it to `if (res.status < 500) return res`
 states the actual rule and stops the helper hammering an endpoint that has
 already said no.
 
+**Done**, with a test for each of the 400, 401, 403 and 429 cases that were
+being retried.
+
 ---
 
 ## File size
 
-Eight UI files exceed the 1,000-line threshold:
+Eight UI files exceeded the 1,000-line threshold at the time of the review.
+Three have come down:
 
-| Lines | File | Assessment |
-|---:|---|---|
-| 3,437 | `analysis/mapbox-provider.ts` | B1 — one function |
-| 2,433 | `analysis/main.ts` | B3 — one function |
-| 1,889 | `analysis/analysis-panel.ts` | One `createAnalysisPanel` from `:277` |
-| 1,445 | `react/comp/RouteEditorDialog.tsx` | ~1,080-line component, 25 `useState` |
-| 1,431 | `react/pages/PilotScoreDetail.tsx` | Well sectioned; extract the sub-components |
-| 1,345 | `replay/main.ts` | Same shape as `analysis/main.ts` |
-| 1,172 | `react/comp/SubmitTrackForm.tsx` | ~560-line component, 22 `useState` |
-| 1,049 | `analysis/map-provider-shared.ts` | Cohesive pure helpers — lowest concern |
+| Then | Now | File | Assessment |
+|---:|---:|---|---|
+| 3,437 | 3,460 | `analysis/mapbox-provider.ts` | B1 — still one function |
+| 2,433 | 2,434 | `analysis/main.ts` | B3 — still one function |
+| 1,889 | 1,889 | `analysis/analysis-panel.ts` | One `createAnalysisPanel` from `:277` |
+| 1,445 | **1,161** | `react/comp/RouteEditorDialog.tsx` | Turnpoint dialog + draft vocabulary split out; body still 25 `useState` |
+| 1,431 | **964** | `react/pages/PilotScoreDetail.tsx` | Sub-components moved to `react/score-detail/` |
+| 1,345 | 1,345 | `replay/main.ts` | Same shape as `analysis/main.ts` |
+| 1,172 | **648** | `react/comp/SubmitTrackForm.tsx` | Steps and outcomes moved to `SubmitTrackSteps.tsx` |
+| 1,049 | 1,049 | `analysis/map-provider-shared.ts` | Cohesive pure helpers — lowest concern |
 
-`RouteEditorDialog` and `SubmitTrackForm` deserve separate attention: 25 and 22
-`useState` calls in one component body is a state model asking to be a reducer.
-Both have natural seams already marked by their own comment banners
-(`SubmitTrackForm`: *what we are submitting to* / *who it is for* / *the file* /
-*outcome* — four independent state groups in one component).
-
-`PilotScoreDetail` is the mildest of the four: it already extracts
-`TrackScrubber`, `TrackQualityNote`, `TrackDataCleaningNote`,
-`ExplanationSection` and `ExplanationItem` as named components. Moving those to
-`react/comp/` or a `score-detail/` folder drops the file under 1,000 without
-touching behaviour.
-
----
+`mapbox-provider.ts` grew by 23 lines: the B2 fix trades a one-line
+`resolve(renderer)` for a latch and the comment explaining why it exists. The
+file gets smaller when B1 lands, not before.
 
 ## What is in good shape
 
@@ -330,26 +358,45 @@ Worth stating plainly, because it constrains the recommendations above:
 
 ---
 
-## Suggested order
+## What is left, and why
 
-Sequenced so each step makes the next cheaper, and so nothing large moves before
-its call sites are typed.
+Four things are open. Two are open on purpose.
 
-1. ~~**B4 + B5** — make `MapProvider` members required; delete the `?.` guards
-   and the reflective toggle dispatch.~~ **Done on this branch.** Smallest diff,
-   largest immediate safety gain, and the prerequisite for B1: the compiler now
-   checks the extraction.
-2. **R1 + R2** — two one-line rule fixes, independent of everything else.
-3. **S1** — `useSeededResource`. Unblocks S2 and S4, and removes the three
-   competing load-state models.
-4. **S3** — delete `formatKm`, route through `formatDistance`. Fixes a
-   user-visible units inconsistency.
-5. **B1 + B2** — `MapboxProvider` class plus feature-module extraction. B2 is
-   resolved as a consequence.
-6. **B3** — split `analysis/main.ts` by concern. Same move afterwards for
+**B1 (`MapboxProvider` class) and B3 (splitting `analysis/main.ts`) are not
+blocked on effort — they are blocked on evidence.** Between them they are 5,700
+lines of stateful browser code, and this repository has no automated coverage of
+either: `/analysis.html` is not driven by any e2e spec, and the one map spec
+(`e2e/lazy-map-in-view.spec.ts`) says in its own header that it asserts the
+component mounts, not that anything paints — deliberately, so it needs no Mapbox
+token. A `tsc` pass over a rewritten `createMapBoxProvider` would prove almost
+nothing about a 52-variable mutable scope, event ordering, or object lifetimes.
+
+So the honest sequence is coverage first: a spec that loads a track and a task
+on `/analysis.html` and asserts the panel, the turnpoint list and the score
+render; then the extraction, one feature cluster at a time, against it. Doing it
+the other way round produces a green typecheck and an unverified map.
+
+B4 and B5 were the part of this that could be done blind, and they were worth
+doing first for exactly that reason: the provider contract is now checked, so
+the extraction the compiler could not previously verify, it now can.
+
+**`RouteEditorDialog` stops at 1,161 lines** for the same reason at smaller
+scale. Its remaining bulk is the component body — 25 `useState` hooks and the
+SSS, goal, grid and import panels inline — and breaking those out means lifting
+state in a dialog nothing in e2e drives.
+
+**S4** is partly done and the remainder is not worth a dedicated pass; it will
+fall out of whatever touches those loaders next.
+
+## Suggested order for what remains
+
+1. **Cover the analysis page.** One e2e spec that loads a track and a task and
+   asserts what renders. This is the prerequisite for the two blockers, and it
+   is worth having regardless — the largest surface in the app currently has
+   none.
+2. **B1** — `MapboxProvider` class plus feature-module extraction, one cluster
+   at a time against that spec.
+3. **B3** — split `analysis/main.ts` by concern; then the same move for
    `replay/main.ts` and `analysis-panel.ts`.
-7. **File size** — reducers for `RouteEditorDialog` and `SubmitTrackForm`;
-   component extraction for `PilotScoreDetail`.
-
-Steps 1–4 are mechanical and independently shippable. Steps 5–7 want their own
-branches and e2e runs.
+4. **`RouteEditorDialog`** — a reducer for the 25 hooks, and the panels out to
+   their own components.

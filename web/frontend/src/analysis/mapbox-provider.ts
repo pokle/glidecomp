@@ -324,6 +324,14 @@ export function createMapBoxProvider(
       // Annotation layer (created after map loads)
       let annotationLayer: MapAnnotationLayer | null = null;
 
+      // The 'load' latch. The provider object cannot be handed back until the
+      // style is up AND the object itself exists, and those two happen at
+      // opposite ends of this function. Recording that 'load' fired — rather
+      // than reaching forward for a `const` that may not be initialised yet —
+      // makes the order between them irrelevant.
+      let mapLoaded = false;
+      let onMapLoaded: (() => void) | null = null;
+
       /** Hide glide speed labels when zoomed out and resolve screen-space collisions. */
       function updateGlideLabelVisibility(): void {
         const zoom = map.getZoom();
@@ -1607,7 +1615,16 @@ export function createMapBoxProvider(
         // Create annotation overlay
         annotationLayer = createMapAnnotationLayer(map, container);
 
-        resolve(renderer);
+        // The provider object is declared ~900 lines below this handler. Do
+        // NOT resolve with it here: this line used to read `resolve(renderer)`
+        // and only worked because Mapbox fires 'load' asynchronously, so the
+        // `const` had been reached by the time the handler ran. A synchronous
+        // 'load' — a cached style, a test double, a future Mapbox version —
+        // would have thrown a ReferenceError before the map ever appeared.
+        // Handing the resolve to the bottom of the function removes the
+        // ordering assumption entirely.
+        mapLoaded = true;
+        onMapLoaded?.();
       });
 
       map.on('error', (e) => {
@@ -3428,6 +3445,12 @@ export function createMapBoxProvider(
         },
       };
 
+      // `renderer` exists now, so it is safe to hand back. If 'load' already
+      // fired while this function was still building — which nothing here
+      // guarantees it did not — resolve straight away rather than waiting for
+      // an event that has been and gone.
+      if (mapLoaded) resolve(renderer);
+      else onMapLoaded = () => resolve(renderer);
     } catch (err) {
       reject(err);
     }

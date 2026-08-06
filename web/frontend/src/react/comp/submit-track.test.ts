@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { DEFAULT_UNITS } from "@glidecomp/engine";
 import {
   IDENTIFIER_KINDS,
   LAST_SUBMISSION_KEY,
@@ -9,8 +10,9 @@ import {
   formatClockInZone,
   tooLargeReason,
   formatDuration,
-  formatKm,
   formatRetryAfter,
+  formatTrackAltitude,
+  formatTrackDistance,
   inferIdentifierKind,
   needsSignIn,
   pickDefaultTask,
@@ -509,9 +511,27 @@ describe("formatting the summary", () => {
     expect(formatClockInZone("not a date", null)).toBe("—");
   });
 
-  test("distances read in kilometres", () => {
-    expect(formatKm(143820)).toBe("143.8 km");
-    expect(formatKm(null)).toBe("—");
+  // The receipt is the one screen that confirms what was just filed for a
+  // pilot, so it reads in the units they chose — it used to hard-code km and m
+  // whatever the account said.
+  test("the receipt reads in the pilot's own units", () => {
+    const metric = { ...DEFAULT_UNITS, distance: "km", altitude: "m" } as const;
+    const imperial = { ...DEFAULT_UNITS, distance: "mi", altitude: "ft" } as const;
+
+    // The engine joins value and unit with a non-breaking space, so a
+    // figure never wraps away from its unit. Written as an escape here:
+    // an invisible character in a test literal is a trap for the next
+    // reader, who cannot tell it from a plain space.
+    expect(formatTrackDistance(143820, metric)).toBe("143.8\u00a0km");
+    expect(formatTrackDistance(143820, imperial)).toBe("89.4\u00a0mi");
+
+    expect(formatTrackAltitude(2130, metric)).toBe("2130\u00a0m");
+    expect(formatTrackAltitude(2130, imperial)).toBe("6989\u00a0ft");
+  });
+
+  test("a figure the file did not carry is a dash, never a fake zero", () => {
+    expect(formatTrackDistance(null, DEFAULT_UNITS)).toBe("—");
+    expect(formatTrackAltitude(null, DEFAULT_UNITS)).toBe("—");
   });
 
   test("a daily budget does not tell the pilot to wait 1440 minutes", () => {
