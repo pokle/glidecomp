@@ -29,6 +29,8 @@ bun audit
 
 `bun run test:e2e` is mandatory and easy to skip — it's the only thing that exercises `wrangler dev` startup, and it's what would have caught the May 2026 outage. If e2e fails locally, fix the root cause; do not push and "see if CI catches it."
 
+**A Playwright bump does not need a manual browser install, and this is not a lesson worth relearning.** Four cycles in a row logged `Executable doesn't exist at …chromium_headless_shell-<rev>…` as a fresh discovery and hand-ran `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell`, because Playwright pins the browser revision to the library version and the containers pre-bake a stale one. `bun run test:e2e` now installs the pinned build itself (`web/scripts/ensure-playwright-browsers.sh`). Record a Playwright bump's *revision change* if you like — it explains a slow first run — but don't re-derive the workaround, and don't reach for `--with-deps` (it wants root/apt; the OS packages are already validated in these images).
+
 ## 4. Push, then watch CI to green
 
 After pushing, wait for the Deploy run to complete. On Claude Code on the web there is **no `gh` CLI** — watch CI with the GitHub MCP tools instead: `mcp__github__actions_list` (find the latest `deploy.yml` run for your branch/head SHA), then poll `mcp__github__actions_get` until it concludes, and `mcp__github__get_job_logs` (with `failed_only`) to read failures. Do **not** poll with Bash `sleep`; if you need to wait between checks, end the turn and use the `send_later` MCP tool to resume. (On a local terminal with `gh` available, `gh run watch <run-id> --exit-status` is the equivalent.)

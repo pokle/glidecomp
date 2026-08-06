@@ -28,9 +28,16 @@ set -euo pipefail
 
 # Honoured by Playwright's own postinstall, and by images that ship browsers
 # out-of-band and do not want a download attempted. Leave those alone.
-if [ -n "${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-}" ]; then
-  exit 0
-fi
+#
+# `0` and `false` mean DO NOT SKIP, matching playwright-core's
+# getAsBooleanFromENV() — a plain `-n` test would read `=0` as "skip", which is
+# backwards, and `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install …`
+# is exactly the incantation docs/dependency-review-log.md records sessions
+# reaching for on an image that sets the variable to 1.
+case "${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-}" in
+  "" | 0 | false) ;;
+  *) exit 0 ;;
+esac
 
 # Probe with `--dry-run` rather than by building paths ourselves: its output
 # names the locations Playwright ALREADY resolved, so this never has to know
