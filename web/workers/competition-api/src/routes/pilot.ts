@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
@@ -13,15 +13,9 @@ import {
 } from "../validators";
 import { resolvePilotId } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
-import { audit, describeChange } from "../audit";
+import { audit, auditAll, describeChange } from "../audit";
+import { mapWithConcurrency } from "../lib/concurrency";
 import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const PROFILE_COLUMNS = [
   "name",
@@ -41,6 +35,9 @@ const PROFILE_COLUMNS = [
 type ProfileRow = {
   [K in (typeof PROFILE_COLUMNS)[number]]: string | null;
 };
+
+/** How many pilot-link lookups to run at once on a bulk roster import. */
+const PILOT_RESOLVE_CONCURRENCY = 10;
 
 const MAX_PILOTS_PER_COMP = 250;
 
@@ -325,7 +322,7 @@ function serializeProfile(row: ProfileRow | null, fallbackName: string) {
   };
 }
 
-export const pilotRoutes = new Hono<HonoEnv>()
+export const pilotRoutes = new Hono<AuthedEnv>()
   // ── GET /api/comp/pilot ── Get current user's pilot profile
   // (literal path — must be registered before /api/comp/:comp_id/pilot)
   .get("/api/comp/pilot", requireAuth, async (c) => {
@@ -686,34 +683,44 @@ export const pilotRoutes = new Hono<HonoEnv>()
       if (!comp) return c.json({ error: "Competition not found" }, 404);
       const compClasses = JSON.parse(comp.pilot_classes) as string[];
 
+      // Decode every row's id ONCE, up front, into a plan that says what each
+      // row IS. Everything downstream — the delete set, the score-affected
+      // set, the statements, the audit — reads the plan rather than decoding
+      // the same sqid again behind another `!`, which is how the handler used
+      // to do it six times per row.
+      type PlannedRow =
+        | { kind: "update"; index: number; id: number; row: (typeof pilots)[number] }
+        | { kind: "insert"; index: number; row: (typeof pilots)[number] };
+
+      const errors: { index: number; error: string }[] = [];
+      const planned: PlannedRow[] = [];
+      const idsSeen = new Set<number>();
+
       // Validate every row up front. Return all errors at once so the admin
       // can fix them in one pass.
-      const errors: { index: number; error: string }[] = [];
-      const idsSeen = new Set<number>();
-      for (let i = 0; i < pilots.length; i++) {
-        const row = pilots[i];
+      for (const [index, row] of pilots.entries()) {
         if (!compClasses.includes(row.pilot_class)) {
           errors.push({
-            index: i,
+            index,
             error: `Invalid pilot class "${row.pilot_class}". Must be one of: ${compClasses.join(", ")}`,
           });
           continue;
         }
-        if (row.comp_pilot_id) {
-          const decoded = decodeId(alphabet, row.comp_pilot_id);
-          if (decoded === null) {
-            errors.push({ index: i, error: "Invalid comp_pilot_id" });
-            continue;
-          }
-          if (idsSeen.has(decoded)) {
-            errors.push({
-              index: i,
-              error: "Duplicate comp_pilot_id in payload",
-            });
-            continue;
-          }
-          idsSeen.add(decoded);
+        if (!row.comp_pilot_id) {
+          planned.push({ kind: "insert", index, row });
+          continue;
         }
+        const id = decodeId(alphabet, row.comp_pilot_id);
+        if (id === null) {
+          errors.push({ index, error: "Invalid comp_pilot_id" });
+          continue;
+        }
+        if (idsSeen.has(id)) {
+          errors.push({ index, error: "Duplicate comp_pilot_id in payload" });
+          continue;
+        }
+        idsSeen.add(id);
+        planned.push({ kind: "update", index, id, row });
       }
 
       if (errors.length > 0) {
@@ -729,74 +736,62 @@ export const pilotRoutes = new Hono<HonoEnv>()
         .bind(compId)
         .all<CompPilotRow & { linked_email: null }>();
 
-      const existingById = new Map<number, CompPilotRow>();
-      for (const row of existingRows.results) {
-        existingById.set(row.comp_pilot_id, row);
-      }
+      const existingById = new Map<number, CompPilotRow>(
+        existingRows.results.map((row) => [row.comp_pilot_id, row])
+      );
 
-      // Validate all referenced comp_pilot_ids exist
-      for (let i = 0; i < pilots.length; i++) {
-        const row = pilots[i];
-        if (row.comp_pilot_id) {
-          const decoded = decodeId(alphabet, row.comp_pilot_id)!;
-          if (!existingById.has(decoded)) {
-            errors.push({
-              index: i,
-              error: "comp_pilot_id does not exist in this competition",
-            });
-          }
+      for (const p of planned) {
+        if (p.kind === "update" && !existingById.has(p.id)) {
+          errors.push({
+            index: p.index,
+            error: "comp_pilot_id does not exist in this competition",
+          });
         }
       }
       if (errors.length > 0) {
         return c.json({ errors }, 400);
       }
 
-      // Compute: keep IDs (updates), new inserts, and deletions.
-      const keepIds = new Set<number>();
-      for (const row of pilots) {
-        if (row.comp_pilot_id) {
-          keepIds.add(decodeId(alphabet, row.comp_pilot_id)!);
-        }
-      }
+      const keepIds = new Set(
+        planned.flatMap((p) => (p.kind === "update" ? [p.id] : []))
+      );
+      const toDelete = [...existingById.keys()].filter((id) => !keepIds.has(id));
 
-      const toDelete: number[] = [];
-      for (const id of existingById.keys()) {
-        if (!keepIds.has(id)) toDelete.push(id);
-      }
+      // Resolve linking for each row that needs one. Each resolution is an
+      // independent D1 read, so they overlap rather than queueing: a 250-row
+      // roster paste used to be 250 strictly serialized round trips.
+      const resolvedPilotIds = await mapWithConcurrency(
+        planned,
+        PILOT_RESOLVE_CONCURRENCY,
+        async ({ row }) =>
+          (
+            await resolvePilotId(c.env.DB, {
+              name: row.registered_pilot_name,
+              email: row.registered_pilot_email,
+              civl_id: row.registered_pilot_civl_id,
+              safa_id: row.registered_pilot_safa_id,
+              ushpa_id: row.registered_pilot_ushpa_id,
+              bhpa_id: row.registered_pilot_bhpa_id,
+              dhv_id: row.registered_pilot_dhv_id,
+              ffvl_id: row.registered_pilot_ffvl_id,
+              fai_id: row.registered_pilot_fai_id,
+            })
+          ).pilot_id
+      );
 
-      // Resolve linking for each row that needs one (new rows, or existing
-      // rows whose identity fields may have changed).
-      const resolvedPilotIds: (number | null)[] = [];
-      for (const row of pilots) {
-        const resolved = await resolvePilotId(c.env.DB, {
-          name: row.registered_pilot_name,
-          email: row.registered_pilot_email,
-          civl_id: row.registered_pilot_civl_id,
-          safa_id: row.registered_pilot_safa_id,
-          ushpa_id: row.registered_pilot_ushpa_id,
-          bhpa_id: row.registered_pilot_bhpa_id,
-          dhv_id: row.registered_pilot_dhv_id,
-          ffvl_id: row.registered_pilot_ffvl_id,
-          fai_id: row.registered_pilot_fai_id,
-        });
-        resolvedPilotIds.push(resolved.pilot_id);
-      }
-
-      // Enforce partial unique index: no two rows in the payload may resolve
-      // to the same linked pilot_id. Also: don't clobber a linked row that
-      // exists in this comp but whose comp_pilot_id is absent from the
-      // payload (handled by the delete step, but guard against conflicts).
+      // Enforce the partial unique index: no two rows in the payload may
+      // resolve to the same linked pilot_id.
       const linkedSeen = new Map<number, number>(); // pilot_id → row index
-      for (let i = 0; i < pilots.length; i++) {
-        const pid = resolvedPilotIds[i];
-        if (pid === null) continue;
-        if (linkedSeen.has(pid)) {
+      for (const [i, pilotId] of resolvedPilotIds.entries()) {
+        if (pilotId === null) continue;
+        const first = linkedSeen.get(pilotId);
+        if (first !== undefined) {
           errors.push({
-            index: i,
-            error: `Two rows resolved to the same pilot (also row ${linkedSeen.get(pid)})`,
+            index: planned[i].index,
+            error: `Two rows resolved to the same pilot (also row ${first})`,
           });
         } else {
-          linkedSeen.set(pid, i);
+          linkedSeen.set(pilotId, planned[i].index);
         }
       }
       if (errors.length > 0) {
@@ -804,8 +799,8 @@ export const pilotRoutes = new Hono<HonoEnv>()
       }
 
       // Enforce cap on post-write size
-      const finalSize = existingById.size - toDelete.length +
-        pilots.filter((p) => !p.comp_pilot_id).length;
+      const inserts = planned.filter((p) => p.kind === "insert").length;
+      const finalSize = existingById.size - toDelete.length + inserts;
       if (finalSize > MAX_PILOTS_PER_COMP) {
         return c.json(
           { error: `Maximum ${MAX_PILOTS_PER_COMP} pilots per competition` },
@@ -816,54 +811,37 @@ export const pilotRoutes = new Hono<HonoEnv>()
       // Scores embed each pilot's name and class, and deleting a pilot
       // cascade-deletes their tracks — resolve which tasks that touches
       // BEFORE the batch runs (the cascade removes the task_track rows this
-      // looks at), then mark them stale after it commits.
-      const scoreAffectedPilotIds = [
+      // looks at), then mark them stale after it commits. A new pilot has no
+      // tracks yet, so only updates that move a name or class count.
+      const scoreAffectedTaskIds = await taskIdsForPilots(c.env.DB, [
         ...toDelete,
-        ...pilots
-          .filter((row) => {
-            if (!row.comp_pilot_id) return false; // new pilots have no tracks yet
-            const old = existingById.get(decodeId(alphabet, row.comp_pilot_id)!)!;
-            return (
-              old.registered_pilot_name !== row.registered_pilot_name ||
-              old.pilot_class !== row.pilot_class
-            );
-          })
-          .map((row) => decodeId(alphabet, row.comp_pilot_id!)!),
-      ];
-      const scoreAffectedTaskIds = await taskIdsForPilots(
-        c.env.DB,
-        scoreAffectedPilotIds
-      );
+        ...planned.flatMap((p) => {
+          if (p.kind !== "update") return [];
+          const old = existingById.get(p.id)!;
+          return old.registered_pilot_name !== p.row.registered_pilot_name ||
+            old.pilot_class !== p.row.pilot_class
+            ? [p.id]
+            : [];
+        }),
+      ]);
 
       // Build the batch. All statements execute atomically in D1.batch().
-      const statements: D1PreparedStatement[] = [];
-
-      for (const id of toDelete) {
-        statements.push(
+      const statements: D1PreparedStatement[] = [
+        ...toDelete.map((id) =>
           c.env.DB.prepare(
             "DELETE FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
           ).bind(id, compId)
-        );
-      }
-
-      for (let i = 0; i < pilots.length; i++) {
-        const row = pilots[i];
-        const pilotId = resolvedPilotIds[i];
-        if (row.comp_pilot_id) {
-          const decoded = decodeId(alphabet, row.comp_pilot_id)!;
-          statements.push(
-            c.env.DB.prepare(UPDATE_COMP_PILOT_SQL).bind(
-              ...buildUpdateValues(pilotId, row, decoded, compId)
-            )
-          );
-        } else {
-          statements.push(
-            c.env.DB.prepare(INSERT_COMP_PILOT_SQL).bind(
-              ...buildInsertValues(compId, pilotId, row)
-            )
-          );
-        }
-      }
+        ),
+        ...planned.map((p, i) =>
+          p.kind === "update"
+            ? c.env.DB.prepare(UPDATE_COMP_PILOT_SQL).bind(
+                ...buildUpdateValues(resolvedPilotIds[i], p.row, p.id, compId)
+              )
+            : c.env.DB.prepare(INSERT_COMP_PILOT_SQL).bind(
+                ...buildInsertValues(compId, resolvedPilotIds[i], p.row)
+              )
+        ),
+      ];
 
       if (statements.length > 0) {
         await c.env.DB.batch(statements);
@@ -872,51 +850,46 @@ export const pilotRoutes = new Hono<HonoEnv>()
       await bumpAndRevalidateScores(c, scoreAffectedTaskIds);
 
       // Audit: one per change up to 5 total, otherwise a single rollup.
-      const inserts = pilots.filter((p) => !p.comp_pilot_id).length;
-      const updates = pilots.length - inserts;
-      const totalChanges = inserts + updates + toDelete.length;
-      if (totalChanges === 0) {
-        // idempotent replay — nothing to audit
-      } else if (totalChanges <= 5) {
-        for (let i = 0; i < pilots.length; i++) {
-          const row = pilots[i];
-          if (row.comp_pilot_id) {
-            const decoded = decodeId(alphabet, row.comp_pilot_id)!;
-            await audit(c.env.DB, c.var.user, compId, {
-              subject_type: "pilot",
-              subject_id: decoded,
-              subject_name: row.registered_pilot_name,
-              description: `Updated pilot "${row.registered_pilot_name}"`,
-            });
-          } else {
-            await audit(c.env.DB, c.var.user, compId, {
-              subject_type: "pilot",
-              subject_id: null,
-              subject_name: row.registered_pilot_name,
-              description: `Registered pilot "${row.registered_pilot_name}" (class: ${row.pilot_class})`,
-            });
-          }
-        }
-        for (const id of toDelete) {
-          const old = existingById.get(id)!;
-          await audit(c.env.DB, c.var.user, compId, {
-            subject_type: "pilot",
-            subject_id: id,
-            subject_name: old.registered_pilot_name,
-            description: `Removed pilot "${old.registered_pilot_name}"`,
-          });
-        }
-      } else {
-        const parts: string[] = [];
-        if (inserts > 0) parts.push(`${inserts} added`);
-        if (updates > 0) parts.push(`${updates} updated`);
-        if (toDelete.length > 0) parts.push(`${toDelete.length} removed`);
-        await audit(c.env.DB, c.var.user, compId, {
-          subject_type: "pilot",
-          subject_id: null,
-          subject_name: null,
-          description: `Bulk pilot update: ${parts.join(", ")}`,
-        });
+      const updates = planned.length - inserts;
+      const totalChanges = planned.length + toDelete.length;
+      if (totalChanges > 0) {
+        await auditAll(
+          c.env.DB,
+          c.var.user,
+          compId,
+          totalChanges <= 5
+            ? [
+                ...planned.map((p) => ({
+                  subject_type: "pilot" as const,
+                  subject_id: p.kind === "update" ? p.id : null,
+                  subject_name: p.row.registered_pilot_name,
+                  description:
+                    p.kind === "update"
+                      ? `Updated pilot "${p.row.registered_pilot_name}"`
+                      : `Registered pilot "${p.row.registered_pilot_name}" (class: ${p.row.pilot_class})`,
+                })),
+                ...toDelete.map((id) => ({
+                  subject_type: "pilot" as const,
+                  subject_id: id,
+                  subject_name: existingById.get(id)!.registered_pilot_name,
+                  description: `Removed pilot "${existingById.get(id)!.registered_pilot_name}"`,
+                })),
+              ]
+            : [
+                {
+                  subject_type: "pilot" as const,
+                  subject_id: null,
+                  subject_name: null,
+                  description: `Bulk pilot update: ${[
+                    inserts > 0 ? `${inserts} added` : null,
+                    updates > 0 ? `${updates} updated` : null,
+                    toDelete.length > 0 ? `${toDelete.length} removed` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}`,
+                },
+              ]
+        );
       }
 
       // Return the new state of all pilots in the comp.

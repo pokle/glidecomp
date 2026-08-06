@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthUser, AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
@@ -17,13 +17,6 @@ import type { z } from "zod";
 import { bumpAndRevalidateScores } from "../score-store";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_TASKS_PER_COMP = 50;
 
@@ -85,7 +78,6 @@ async function deriveCompTimezone(
     description: `Set timezone to "${zone}" (derived from the task location; adjustable in Competition Settings)`,
   });
 }
-
 
 /**
  * What each updatable task field means: where it is stored, and what a change
@@ -186,7 +178,7 @@ function taskFieldTable(
   };
 }
 
-export const taskRoutes = new Hono<HonoEnv>()
+export const taskRoutes = new Hono<AuthedEnv>()
   // ── POST /api/comp/:comp_id/task ── Create task
   .post(
     "/api/comp/:comp_id/task",

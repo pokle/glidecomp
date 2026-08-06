@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthUser, AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth } from "../middleware/auth";
@@ -18,13 +18,6 @@ import {
   supersedeActiveManualFlights,
   markLandedFromEvidence,
 } from "../manual-flight-store";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 interface StatusRow {
   task_pilot_status_id: number;
@@ -115,7 +108,7 @@ export async function authorizeStatusMutation(
   return null;
 }
 
-export const pilotStatusRoutes = new Hono<HonoEnv>()
+export const pilotStatusRoutes = new Hono<AuthedEnv>()
   // ── GET /api/comp/:comp_id/task/:task_id/pilot-status ── List all statuses
   // Public (same visibility rules as scores): test comps require admin.
   // Only pilots marked away from the Present default (absent/dnf/landed) have

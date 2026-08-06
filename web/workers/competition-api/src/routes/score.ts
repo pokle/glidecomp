@@ -6,7 +6,7 @@ import {
   computeFtvForPilot,
   type FtvTaskStatus,
 } from "@glidecomp/engine";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
@@ -40,13 +40,6 @@ import {
  * never hit this path. */
 const COMP_TASK_CONCURRENCY = 3;
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
-
 /**
  * Cache-Control for score responses (matches the SSR plan): signed-in
  * viewers must never see another session's cached body; anonymous readers
@@ -56,7 +49,7 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
  * while a live one stays near-realtime; a stale row always gets 0.
  */
 function cacheControl(
-  c: Context<HonoEnv>,
+  c: Context<AuthedEnv>,
   computedAt: string | null,
   stale: boolean
 ): string {
@@ -65,7 +58,7 @@ function cacheControl(
   return `public, max-age=${maxAge}, must-revalidate`;
 }
 
-export const scoreRoutes = new Hono<HonoEnv>()
+export const scoreRoutes = new Hono<AuthedEnv>()
 
   // ── GET /api/comp/:comp_id/task/:task_id/score ── Task scores (public for non-test)
   //

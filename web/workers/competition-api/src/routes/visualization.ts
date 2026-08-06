@@ -1,19 +1,12 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv, Env } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { SAMPLE_COMP_NAME } from "../sample";
 import { buildTask3dvisBundle, compute3dvisCacheKey } from "../visualization";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 /**
  * These bundles are multi-megabyte (the bundled sample is ~3 MB), so the
@@ -97,7 +90,7 @@ function etagMatches(ifNoneMatch: string, cacheKey: string): boolean {
     .some((t) => t === mine || t === "*");
 }
 
-export const visualizationRoutes = new Hono<HonoEnv>()
+export const visualizationRoutes = new Hono<AuthedEnv>()
 
   // ── GET /api/comp/sample-3dvis ── the public sample, resolved by name so the
   // sample page needs no environment-specific ids. Registered before the param

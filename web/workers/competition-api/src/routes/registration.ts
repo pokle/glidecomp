@@ -19,7 +19,7 @@
  */
 
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth } from "../middleware/auth";
@@ -34,13 +34,6 @@ import { maskEmail } from "../submission-gate";
 import { hiddenFromCaller } from "../comp-visibility";
 import { RESOLVE_PER_USER, chargeBudget } from "../rate-limit";
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
-
 const MAX_IDENTIFIER_CHARS = 190;
 
 interface Candidate {
@@ -50,7 +43,7 @@ interface Candidate {
   notify_email_masked: string | null;
 }
 
-export const registrationRoutes = new Hono<HonoEnv>().post(
+export const registrationRoutes = new Hono<AuthedEnv>().post(
   // Hyphen-free static segment under a comp, mounted ahead of compRoutes so it
   // beats `/api/comp/:comp_id` — same placement as lookup and search.
   "/api/comp/:comp_id/registration/resolve",

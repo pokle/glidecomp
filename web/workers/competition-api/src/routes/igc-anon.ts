@@ -32,7 +32,7 @@
  */
 
 import { Hono } from "hono";
-import type { Env } from "../env";
+import type { AnonEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { ANONYMOUS_ACTOR_NAME } from "../audit";
@@ -56,12 +56,6 @@ import {
   organisersOf,
   submissionsClosedBody,
 } from "../submission-gate";
-
-type Variables = {
-  ids: { comp_id?: number; task_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 /**
  * How the submitter names the pilot. Headers, not the query string: the value
@@ -124,7 +118,7 @@ function readIdentifier(
   return { kind: rawKind, value };
 }
 
-export const igcAnonRoutes = new Hono<HonoEnv>().post(
+export const igcAnonRoutes = new Hono<AnonEnv>().post(
   // "open-submit" rather than a bare word: the sqid alphabet is a–z only, so a
   // hyphenated segment can never collide with a real comp_pilot_id and shadow
   // the sibling on-behalf route.

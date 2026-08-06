@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
@@ -28,13 +28,6 @@ import {
   submissionsClosedBody,
 } from "../submission-gate";
 import { hiddenFromCaller } from "../comp-visibility";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 /**
  * Ensure a `pilot` row exists for the given user. Returns the pilot_id.
@@ -259,7 +252,7 @@ async function ensureCompPilot(
   };
 }
 
-export const igcRoutes = new Hono<HonoEnv>()
+export const igcRoutes = new Hono<AuthedEnv>()
   // ── POST /api/comp/:comp_id/task/:task_id/igc ── Upload IGC
   .post(
     "/api/comp/:comp_id/task/:task_id/igc",

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
@@ -18,13 +18,6 @@ import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal, taskRouteSummary } from "../xctsk-summary";
 import { DEFAULT_GAP_PARAMETERS, resolveTimePointsExponent, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_COMPS_PER_ACCOUNT = 50;
 
@@ -326,7 +319,7 @@ function compFieldTable(
   };
 }
 
-export const compRoutes = new Hono<HonoEnv>()
+export const compRoutes = new Hono<AuthedEnv>()
   // ── POST /api/comp ── Create competition
   .post(
     "/api/comp",

@@ -15,7 +15,7 @@
  */
 import { Hono } from "hono";
 import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { requireAuth } from "../middleware/auth";
 import { isSuperAdmin } from "../super-admin";
 import { mapWithConcurrency } from "../lib/concurrency";
@@ -24,9 +24,6 @@ import {
   reindexAllSearchDocs,
   searchIndexStats,
 } from "../search-index";
-
-type Variables = { user: AuthUser };
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 type CacheStats = { item_count: number; by_prefix: Record<string, number> };
 type NamespaceStats = CacheStats & { name: string };
@@ -146,7 +143,7 @@ async function clearAirscoreCache(airscoreApi: Fetcher): Promise<number> {
   }
 }
 
-export const cacheRoutes = new Hono<HonoEnv>()
+export const cacheRoutes = new Hono<AuthedEnv>()
   // ── GET /api/admin/cache/stats ── Row/item counts across the score stores,
   // broken down within each store.
   .get("/api/admin/cache/stats", requireAuth, async (c) => {

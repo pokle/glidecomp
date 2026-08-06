@@ -5,7 +5,7 @@ import { cors } from "hono/cors";
 import { allowedOrigin } from "@glidecomp/worker-kit/cors";
 import { bodyLimit } from "hono/body-limit";
 import { MAX_BODY_BYTES } from "./igc-validation";
-import type { Env, AuthUser } from "./env";
+import type { AuthedEnv, Env } from "./env";
 import { compRoutes } from "./routes/comp";
 import { lookupRoutes } from "./routes/lookup";
 import { searchRoutes } from "./routes/search";
@@ -29,12 +29,7 @@ import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
 import { civlRankingsRoutes } from "./routes/civl-rankings";
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+const app = new Hono<AuthedEnv>();
 
 
 const corsConfig = cors({
