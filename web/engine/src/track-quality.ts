@@ -55,12 +55,7 @@ import type { XCTask } from './xctsk-parser';
 
 const HOUR_MS = 3_600_000;
 
-/**
- * How a finding's prose prints a distance: one decimal, but whole
- * thousands-separated kilometres above 100 km. A track at the wrong
- * competition is thousands of kilometres from the course, where a tenth of a
- * kilometre is noise — see {@link KmOptions.wholeAbove100}.
- */
+/** How a finding prints a distance — see {@link KmOptions.wholeAbove100}. */
 const FINDING_KM: KmOptions = { wholeAbove100: true };
 
 export type TrackQualityCheckId =

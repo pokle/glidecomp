@@ -485,7 +485,7 @@ export function bestTimeFrom(
  *
  * Returns the reshaped flights the rest of the scorer reads, plus the outcome
  * per pilot (index-aligned, undefined for a normal start) — steps 5 and 7 both
- * need to know who was neutralized.
+ * need to know who was neutralised.
  */
 function applyEarlyStarts(
   scoringTask: XCTask,
@@ -547,7 +547,7 @@ function applyEarlyStarts(
  * dock read it.
  *
  * @param numFlying - launched pilots, i.e. the count BEFORE early-start
- *   reshaping (a neutralized pilot still flew).
+ *   reshaping (a neutralised pilot still flew).
  */
 function gatherFieldStats(
   scoringTask: XCTask,
