@@ -30,6 +30,7 @@ import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlos
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compAnalysisPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { usePollWhile } from "../lib/use-poll-while";
 import { api } from "../../comp/api";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { useInitialData } from "../lib/initial-data";
@@ -128,25 +129,9 @@ export function CompFieldAnalysis() {
   }, [compId, analysisUrl, refetchTick]);
 
   // While any task's first analysis computes in the background, refetch so
-  // the aggregate fills in as reports land — mirrors the task page's pending
-  // poll. Backs off 3s → 10s, gives up after ~2 minutes.
+  // the aggregate fills in as reports land — same poll the task page runs.
   const pendingTasks = status === "ready" && (data?.pending_task_count ?? 0) > 0;
-  useEffect(() => {
-    if (!pendingTasks) return;
-    const startedAt = Date.now();
-    let delay = 3_000;
-    let timer: number | undefined;
-    const schedule = () => {
-      if (Date.now() - startedAt > 120_000) return;
-      timer = window.setTimeout(() => {
-        if (!document.hidden) setRefetchTick((t) => t + 1);
-        else schedule();
-      }, delay);
-      delay = Math.min(delay * 1.5, 10_000);
-    };
-    schedule();
-    return () => window.clearTimeout(timer);
-  }, [pendingTasks, refetchTick]);
+  usePollWhile(pendingTasks, () => setRefetchTick((t) => t + 1), refetchTick);
 
   useEffect(() => {
     if (!compId) return;

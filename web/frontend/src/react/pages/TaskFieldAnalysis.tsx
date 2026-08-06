@@ -35,6 +35,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { underCompAnalysis } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { usePollWhile } from "../lib/use-poll-while";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { toast } from "../lib/toast";
@@ -198,28 +199,11 @@ export function TaskFieldAnalysis() {
   }, [compId, taskId, analysisUrl, refetchTick]);
 
   // While the first-ever compute runs in the background (the cold path never
-  // computes on the request), poll by refetching — the pending banner
-  // promises "this page refreshes itself". Backs off 3s → 10s and gives up
-  // after ~2 minutes (the banner stays; a manual reload picks up whatever is
-  // newest). The ScoreFreshness ETag poll can't cover this: the pending
-  // response has no stored body to validate against.
+  // computes on the request), poll by refetching — the pending banner promises
+  // "this page refreshes itself". The ScoreFreshness ETag poll can't cover
+  // this: the pending response has no stored body to validate against.
   const pending = status === "ready" && data?.pending === true;
-  useEffect(() => {
-    if (!pending) return;
-    const startedAt = Date.now();
-    let delay = 3_000;
-    let timer: number | undefined;
-    const schedule = () => {
-      if (Date.now() - startedAt > 120_000) return;
-      timer = window.setTimeout(() => {
-        if (!document.hidden) setRefetchTick((t) => t + 1);
-        else schedule();
-      }, delay);
-      delay = Math.min(delay * 1.5, 10_000);
-    };
-    schedule();
-    return () => window.clearTimeout(timer);
-  }, [pending, refetchTick]);
+  usePollWhile(pending, () => setRefetchTick((t) => t + 1), refetchTick);
 
   // Task + comp names for the heading and breadcrumbs. Non-critical: the
   // analysis renders fine without them.
