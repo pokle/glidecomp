@@ -17,6 +17,21 @@ import type { AuthUser } from "./env";
 import { isCompAdmin } from "./super-admin";
 
 /**
+ * Has the competition closed for submissions?
+ *
+ * A date-only `close_date` (e.g. "2026-12-31") means the END of that day, so a
+ * pilot landing on the last afternoon is not turned away by a boundary nobody
+ * told them about. Every submission route asks this question and each used to
+ * answer it with its own copy of the same three lines — including the two in
+ * igc.ts that were identical to each other.
+ */
+export function isCompClosed(closeDate: string | null): boolean {
+  if (!closeDate) return false;
+  const at = closeDate.includes("T") ? closeDate : closeDate + "T23:59:59Z";
+  return new Date() > new Date(at);
+}
+
+/**
  * Enough of an address to recognise, not enough to learn.
  *
  * Used wherever a pilot is shown an address that is not provably theirs: the

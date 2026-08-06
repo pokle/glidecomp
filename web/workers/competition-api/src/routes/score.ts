@@ -12,9 +12,9 @@ import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth"
 import { isCompAdmin } from "../super-admin";
 import { audit } from "../audit";
 import { encodeId } from "../sqids";
+import { mapWithConcurrency } from "../lib/concurrency";
+import { computePilotAnalysis } from "../pilot-analysis";
 import {
-  computePilotAnalysis,
-  mapWithConcurrency,
   rankByTotalScore,
   shortHash,
   type TaskScoreResponse,

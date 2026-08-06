@@ -18,7 +18,7 @@ import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
 import type { Env, AuthUser } from "../env";
 import { requireAuth } from "../middleware/auth";
 import { isSuperAdmin } from "../super-admin";
-import { mapWithConcurrency } from "../scoring";
+import { mapWithConcurrency } from "../lib/concurrency";
 import {
   drainSearchIndex,
   reindexAllSearchDocs,
