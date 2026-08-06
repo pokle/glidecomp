@@ -14,6 +14,14 @@ interface Comp {
   name: string;
 }
 
+interface JsonResponse {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+}
+
+type Load = (ids: string[]) => Promise<JsonResponse>;
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -26,7 +34,10 @@ function res(status: number, body?: Comp) {
 }
 
 /** Render the hook and expose what it returned, plus a way to re-render. */
-function mount(initialProps: { id: string | undefined; seed: Comp | null; refresh?: number }, load: ReturnType<typeof vi.fn>) {
+function mount(
+  initialProps: { id: string | undefined; seed: Comp | null; refresh?: number },
+  load: Load
+) {
   const seen: { data: Comp | null; notFound: boolean }[] = [];
   function Probe({ id, seed, refresh }: { id: string | undefined; seed: Comp | null; refresh?: number }) {
     const r = useSeededResource<Comp>({
@@ -75,7 +86,7 @@ afterEach(() => {
 
 describe("useSeededResource", () => {
   it("renders the server's copy without asking for it again", async () => {
-    const load = vi.fn();
+    const load = vi.fn<Load>();
     const probe = mount({ id: "abc", seed: { name: "Bright Open" } }, load);
     await settle();
 
@@ -85,7 +96,7 @@ describe("useSeededResource", () => {
   });
 
   it("fetches when there is no seed, and names the tab from what arrives", async () => {
-    const load = vi.fn().mockResolvedValue(res(200, { name: "Corryong" }));
+    const load = vi.fn<Load>().mockResolvedValue(res(200, { name: "Corryong" }));
     const probe = mount({ id: "abc", seed: null }, load);
     await settle();
 
@@ -96,14 +107,14 @@ describe("useSeededResource", () => {
   });
 
   it("passes the resolved ids to the loader", async () => {
-    const load = vi.fn().mockResolvedValue(res(200, { name: "X" }));
+    const load = vi.fn<Load>().mockResolvedValue(res(200, { name: "X" }));
     mount({ id: "abc", seed: null }, load);
     await settle();
     expect(load).toHaveBeenCalledWith(["abc"]);
   });
 
   it("answers a missing id without spending a request", async () => {
-    const load = vi.fn();
+    const load = vi.fn<Load>();
     const probe = mount({ id: undefined, seed: null }, load);
     await settle();
 
@@ -112,7 +123,7 @@ describe("useSeededResource", () => {
   });
 
   it("reports a 404 as a dead URL", async () => {
-    const load = vi.fn().mockResolvedValue(res(404));
+    const load = vi.fn<Load>().mockResolvedValue(res(404));
     const probe = mount({ id: "gone", seed: null }, load);
     await settle();
 
@@ -127,7 +138,7 @@ describe("useSeededResource", () => {
     // 404 page's "did you mean" links point back at these very routes — so a
     // verdict left over from the old id would mask what the new one loads.
     const load = vi
-      .fn()
+      .fn<Load>()
       .mockResolvedValueOnce(res(404))
       .mockResolvedValueOnce(res(200, { name: "The Real One" }));
 
@@ -142,7 +153,7 @@ describe("useSeededResource", () => {
   });
 
   it("fetches past the seed once a mutation bumps refresh", async () => {
-    const load = vi.fn().mockResolvedValue(res(200, { name: "Renamed" }));
+    const load = vi.fn<Load>().mockResolvedValue(res(200, { name: "Renamed" }));
     const seed = { name: "Original" };
 
     const probe = mount({ id: "abc", seed, refresh: 0 }, load);
@@ -158,7 +169,7 @@ describe("useSeededResource", () => {
 
   it("treats a dropped request as a page that is not there, not as empty data", async () => {
     // Rendering an empty page would look like a real, empty competition.
-    const load = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const load = vi.fn<Load>().mockRejectedValue(new TypeError("Failed to fetch"));
     const probe = mount({ id: "abc", seed: null }, load);
     await act(async () => {
       // fetchWithRetry spends its attempts before giving up.
