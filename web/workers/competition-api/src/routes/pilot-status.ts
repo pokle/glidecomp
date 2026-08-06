@@ -4,6 +4,7 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
+import { hiddenFromCaller } from "../comp-visibility";
 import {
   upsertPilotStatusSchema,
   updatePilotStatusNoteSchema,
@@ -188,11 +189,19 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // A hidden test comp answers as a missing one, exactly as this file's
+      // own GET does. A status is a scoring input — absent/DNF/landed feed
+      // launch validity (S7F §9.1) — so writing one into somebody's
+      // unpublished rehearsal is not the harmless annotation it looks like.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       // Verify task belongs to this comp
       const task = await c.env.DB.prepare(
@@ -352,11 +361,17 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the upsert above: a hidden test comp is missing to
+      // everyone but its admins.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const cp = await c.env.DB.prepare(
         "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
@@ -441,11 +456,17 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
       const user = c.var.user;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the upsert above: a hidden test comp is missing to
+      // everyone but its admins.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const cp = await c.env.DB.prepare(
         "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"

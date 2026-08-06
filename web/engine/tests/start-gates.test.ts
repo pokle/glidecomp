@@ -279,6 +279,7 @@ function flight(overrides: Partial<FlightScoringData>): FlightScoringData {
     flownDistance: 16000, madeGoal: true, reachedESS: true,
     speedSectionTime: 3600,
     sssTimeMs: gate1 + 5 * 60 * 1000, essTimeMs: gate1 + 65 * 60 * 1000,
+    leading: { kind: 'none' },
     ...overrides,
   };
 }

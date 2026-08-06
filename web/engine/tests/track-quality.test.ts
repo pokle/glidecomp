@@ -341,6 +341,18 @@ describe('track quality: wrong-place', () => {
     expect(finding.evidence.nearestTurnpointName).toBe('ELLIOT');
   });
 
+  // Above 100 km the prose drops to whole thousands-separated kilometres
+  // (score-explanation-format's `km` with wholeAbove100): a track at the
+  // wrong competition is thousands of kilometres out, where a tenth of a
+  // kilometre is noise. Below it the same formatter keeps one decimal — see
+  // the never-left-takeoff finding.
+  it('states a huge nearest approach in whole kilometres', () => {
+    const igc = mckirdyFixes();
+    const report = assessTrackQuality(igc.fixes, igc.header, CORRYONG_CONTEXT);
+    const finding = report.findings.find((f) => f.id === 'wrong-place');
+    expect(finding?.detail).toMatch(/turnpoint is \d,\d{3} km \(to ELLIOT\)/);
+  });
+
   it('does not fire on an honest track at the task', () => {
     const fixes = straightTrack({
       startISO: '2025-01-11T00:09:00Z',
@@ -416,6 +428,8 @@ describe('track quality: never-left-takeoff', () => {
     const report = assessTrackQuality(fixes, { date: new Date('2025-01-11T00:00:00Z') }, CORRYONG_CONTEXT);
     const finding = report.findings.find((f) => f.id === 'never-left-takeoff');
     expect(finding?.severity).toBe('soft');
+    // Under 100 km the finding keeps one decimal (the 1 km cylinder).
+    expect(finding?.detail).toContain('1.0 km ELLIOT take-off cylinder');
     expect(report.hardFailed).toBe(false);
   });
 

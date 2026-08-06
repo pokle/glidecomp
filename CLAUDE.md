@@ -43,9 +43,17 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
 
 ## Build & Development
 
-If `node_modules/` is missing or a dependency can't be resolved, run
-`bun install`. Build commands are in `package.json`; the key ones are
-`bun run dev`, `bun run test`, `bun run typecheck:all`, `bun run test:all`.
+Build commands are in `package.json`; the key ones are `bun run dev`,
+`bun run test`, `bun run typecheck:all`, `bun run test:all`. These install
+dependencies for you — the `dev`/`preview`/`test`/`typecheck:all` entry points
+all run `bun install` first, and `.claude/hooks/session-start.sh` does it once
+per Claude Code session (the web containers clone fresh, so `node_modules/` is
+always absent).
+
+**If you invoke a tool directly — `bun test ./web/engine`, `bunx playwright`,
+`tsc` — you skip those guards.** On a fresh tree the unresolved imports surface
+as ordinary *test failures*, not as a missing install, so run `bun install`
+first or go through `bun run`.
 
 For dev servers, the e2e suite and its failure modes, the isolated container
 preview, and the dev tunnel: **[docs/local-dev.md](docs/local-dev.md)**. Read its

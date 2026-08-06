@@ -27,7 +27,16 @@ const MAX_BEARING_RATE = 50;
 /** Maximum reasonable wind speed (m/s) — reject estimates above this. */
 const MAX_REASONABLE_WIND_SPEED = 30;
 
-/** Approximate meters per degree of latitude at the Earth's surface. */
+/**
+ * Approximate meters per degree of latitude at the Earth's surface.
+ *
+ * Deliberately flat, NOT `metresPerDegree()` from geo.ts: both users below —
+ * the Kasa circle fit and the centre-drift wind estimate — work over a circle
+ * a hundred metres wide, where the 0.2% the WGS84 series would correct is far
+ * below the metre-scale GPS noise they are fitting through. Switching the
+ * constant would move every fitted radius and drift speed in the engine's
+ * stored analyses for no gain in truth.
+ */
 const METERS_PER_DEGREE_LAT = 111320;
 
 /** Minimum ground speed variation (m/s) needed for a meaningful wind estimate. */
@@ -642,7 +651,10 @@ function estimateWindFromCenterDrift(params: CenterDriftParams): WindEstimate | 
 
   if (speed > maxWindSpeed) return undefined; // Reject unreasonable
 
-  // Direction wind is blowing TO (atan2 gives angle from north)
+  // Direction wind is blowing TO (atan2 gives angle from north).
+  // Left as-is rather than folded into geo.ts's bearingFromComponents(): that
+  // helper's `+ 360) % 360` rounds differently, so the swap would shift stored
+  // wind directions by ~1e-13° for no reader's benefit.
   const dirTo = Math.atan2(dLon, dLat) * 180 / Math.PI;
   // Convert to FROM direction
   let direction = normalizeBearingDelta(dirTo + 180);

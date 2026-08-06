@@ -339,6 +339,84 @@ describe("DELETE pilot-status", () => {
   });
 });
 
+// ── Hidden comps ────────────────────────────────────────────────────────────
+
+describe("a hidden test comp only takes statuses from its admins", () => {
+  // The same gate the submission routes carry. A status is a scoring input —
+  // absent/DNF/landed feed launch validity (S7F §9.1) — so a non-admin writing
+  // one into a hidden comp is a write into somebody's unpublished rehearsal.
+  async function statusRows(): Promise<number> {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM task_pilot_status"
+    ).first<{ n: number }>();
+    return row!.n;
+  }
+
+  test("a non-admin's PUT answers as a missing comp and writes nothing", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+    const compPilotId = await registerLinkedUser3Pilot(compId);
+
+    // user-3 IS the pilot in question, which on a visible comp is the one
+    // non-admin case the route allows. The comp being hidden outranks it.
+    const res = await request(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
+      { body: { status_key: "dnf" }, user: "user-3" }
+    );
+    expect(res.status).toBe(404);
+    expect(await statusRows()).toBe(0);
+  });
+
+  test("a non-admin's PATCH and DELETE answer the same way", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+    const compPilotId = await registerLinkedUser3Pilot(compId);
+    await authRequest(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
+      { status_key: "dnf", note: "Set by the organiser" }
+    );
+
+    const patched = await request(
+      "PATCH",
+      `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
+      { body: { note: "Not mine to edit" }, user: "user-3" }
+    );
+    expect(patched.status).toBe(404);
+
+    const deleted = await request(
+      "DELETE",
+      `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
+      { user: "user-3" }
+    );
+    expect(deleted.status).toBe(404);
+
+    // The organiser's own row is untouched by either attempt.
+    const row = await env.DB.prepare(
+      "SELECT status_key, note FROM task_pilot_status"
+    ).first<{ status_key: string; note: string }>();
+    expect(row).toMatchObject({
+      status_key: "dnf",
+      note: "Set by the organiser",
+    });
+  });
+
+  test("its own admin sets a status as usual", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId);
+    const compPilotId = await registerPilot(compId);
+
+    const res = await authRequest(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/pilot-status/${compPilotId}`,
+      { status_key: "absent" }
+    );
+    expect(res.status).toBe(200);
+    expect(await statusRows()).toBe(1);
+  });
+});
+
 // ── GET pilot status list ───────────────────────────────────────────────────
 
 describe("GET pilot-status", () => {

@@ -23,8 +23,12 @@ import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
 import { andoyerDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
-import { calculateOptimizedTaskLine, computeTurnpointDirections } from './task-optimizer';
-import { computeGoalLine, isInGoalSemicircle } from './goal-line';
+import {
+  calculateOptimizedTaskLine,
+  computeTurnpointDirections,
+  type TurnpointDirection,
+} from './task-optimizer';
+import { computeGoalLine, isInGoalSemicircle, type GoalLine } from './goal-line';
 import {
   resolveStartGates,
   gateIndexForCrossing,
@@ -209,21 +213,175 @@ interface StopClip {
   altitudeBonus: { glideRatio: number; goalAltitude: number } | null;
 }
 
-/** One resolution pass — the stop-unaware algorithm (see the public wrapper). */
+/**
+ * One resolution pass — the stop-unaware algorithm (see the public wrapper).
+ *
+ * The body is the pipeline the algorithm summary on
+ * {@link resolveTurnpointSequence} sets out. Each phase is one of the private
+ * steps below it, which carries the FAI citation for the rule it applies.
+ */
 function resolveSequenceOnce(
   task: XCTask,
   fixes: IGCFix[],
   stopClip: StopClip | null,
 ): TurnpointSequenceResult {
-  // Optimized task line (one tag point per turnpoint), computed once. The
-  // tag points feed best-progress so a pilot's remaining distance to goal
-  // is measured to each cylinder's optimal tag — consistent with the leg
-  // distances — rather than its nearest edge. It also determines each
-  // turnpoint's crossing direction: a cylinder containing the previous tag
-  // point is an EXIT cylinder, reached by flying out of it.
+  const geometry = computeTaskGeometry(task);
+  const anchors = resolveTaskAnchors(task);
+  const { directions, segmentDistances, taskDistance } = geometry;
+  const allCrossings = detectCylinderCrossings(task, fixes, directions);
+
+  // Build legs with default completed = false
+  const legs: LegDistance[] = segmentDistances.map((dist, i) => ({
+    fromTaskIndex: i,
+    toTaskIndex: i + 1,
+    distance: dist,
+    completed: false,
+  }));
+
+  const startedInsideTP = resolveTrackStartInside(task, fixes, geometry, anchors);
+  const directionSSSCrossings = filterStartCrossingsByDirection(task, allCrossings, anchors);
+  const timing = resolveTimingWindow({ task, fixes, anchors, directionSSSCrossings, stopClip });
+  const { gates, deadlineMs, clipMs } = timing;
+
+  // The crossings the sequence may be built from: everything at or before
+  // the scored-flight end. The full list (allCrossings) is still returned
+  // for transparency — the explanation shows ignored crossings with the
+  // reason. Dropping only the time-sorted tail never corrupts the
+  // inside/outside state the presence-based reaching logic derives from
+  // earlier crossings.
+  const scoredCrossings = clipMs === null
+    ? allCrossings
+    : allCrossings.filter(c => c.time.getTime() <= clipMs);
+  const deadlineInfo = describeTaskDeadline(deadlineMs, allCrossings, fixes);
+  const crossingsByTP = groupCrossingsByTurnpoint(scoredCrossings);
+
+  const { sssCrossings, launchWindowInfo, startSelectionReason } = resolveStartCrossings({
+    task, fixes, anchors, directionSSSCrossings, timing,
+  });
+
+  const startFallback = anchors.sssIsFallback
+    ? (startSelectionReason === 'track_start' ? 'track_start' as const : 'first_turnpoint' as const)
+    : undefined;
+
+  if (sssCrossings.length === 0) {
+    return {
+      crossings: allCrossings,
+      sequence: [],
+      sssReaching: null,
+      essReaching: null,
+      madeGoal: false,
+      lastTurnpointReached: -1,
+      bestProgress: null,
+      taskDistance,
+      flownDistance: 0,
+      legs,
+      speedSectionTime: null,
+      ...(startFallback ? { startFallback } : {}),
+      ...(anchors.essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
+      ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
+      ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
+    };
+  }
+
+  const scan: ProgressScan = {
+    task,
+    fixes,
+    geometry,
+    goalIdx: anchors.goalIdx,
+    nextMeasureFor: nextTPMeasurer(geometry, anchors),
+    clipMs,
+    altitudeBonus: stopClip?.altitudeBonus ?? null,
+  };
+
+  const sequence = chooseBestSequence({
+    sssCrossings, crossingsByTP, anchors, geometry,
+    startedInsideTP, startSelectionReason, scan,
+  });
+  const reachedTaskIndices = new Set(sequence.map(r => r.taskIndex));
+
+  // Mark completed legs
+  for (const leg of legs) {
+    leg.completed = reachedTaskIndices.has(leg.toTaskIndex);
+  }
+
+  // Extract SSS and ESS reachings
+  const sssReaching = sequence.find(r => r.taskIndex === anchors.sssIdx) ?? null;
+  const essReaching = sequence.find(r => r.taskIndex === anchors.essIdx) ?? null;
+
+  const madeGoal = sequence.length > 0 &&
+    sequence[sequence.length - 1].taskIndex === anchors.goalIdx;
+
+  const lastTurnpointReached = sequence.length > 0
+    ? sequence[sequence.length - 1].taskIndex
+    : -1;
+
+  // Flown distance, with the best-progress fix a non-goal pilot is measured to
+  const { bestProgress, flownDistance } = measureSequenceDistance(scan, sequence);
+
+  const gateTaken = gates && sssReaching ? snapToStartGate(gates, sssReaching) : null;
+  const startGate = gateTaken?.startGate;
+  const earlyStart = gateTaken?.earlyStart;
+
+  // Speed section time: from the start gate taken when the race has gates
+  // (§8.7), otherwise from the pilot's actual crossing (elapsed time).
+  let speedSectionTime: number | null = null;
+  if (sssReaching && essReaching) {
+    const startMs = startGate ? startGate.time.getTime() : sssReaching.time.getTime();
+    speedSectionTime = (essReaching.time.getTime() - startMs) / 1000;
+  }
+
+  return {
+    crossings: allCrossings,
+    sequence,
+    sssReaching,
+    essReaching,
+    madeGoal,
+    lastTurnpointReached,
+    bestProgress,
+    taskDistance,
+    flownDistance,
+    legs,
+    speedSectionTime,
+    ...(startGate ? { startGate } : {}),
+    ...(earlyStart ? { earlyStart } : {}),
+    ...(startFallback ? { startFallback } : {}),
+    ...(anchors.essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
+    ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
+    ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The pipeline's steps. Each is private to this module and pure in its
+// inputs; the FAI citation for a step lives with the step.
+// ---------------------------------------------------------------------------
+
+/**
+ * The task's fixed geometry — the same for every pilot, computed once per
+ * resolution pass.
+ */
+interface TaskGeometry {
+  /** The optimized task line: one optimal tag point per turnpoint. */
+  optimizedLine: { lat: number; lon: number }[];
+  /** Per task index: the direction a crossing must have to count. */
+  directions: TurnpointDirection[];
+  /** segmentDistances[i] = optimized distance from task TP[i] to TP[i+1]. */
+  segmentDistances: number[];
+  /** The optimized task distance — the sum of the segments. */
+  taskDistance: number;
+}
+
+/**
+ * Optimized task line (one tag point per turnpoint), computed once. The
+ * tag points feed best-progress so a pilot's remaining distance to goal
+ * is measured to each cylinder's optimal tag — consistent with the leg
+ * distances — rather than its nearest edge. It also determines each
+ * turnpoint's crossing direction: a cylinder containing the previous tag
+ * point is an EXIT cylinder, reached by flying out of it.
+ */
+function computeTaskGeometry(task: XCTask): TaskGeometry {
   const optimizedLine = calculateOptimizedTaskLine(task);
   const directions = computeTurnpointDirections(task, optimizedLine);
-  const allCrossings = detectCylinderCrossings(task, fixes, directions);
   const segmentDistances: number[] = [];
   for (let i = 1; i < optimizedLine.length; i++) {
     segmentDistances.push(andoyerDistance(
@@ -232,6 +390,26 @@ function resolveSequenceOnce(
     ));
   }
   const taskDistance = segmentDistances.reduce((sum, d) => sum + d, 0);
+  return { optimizedLine, directions, segmentDistances, taskDistance };
+}
+
+/** Where the scored flight starts and ends on the route. */
+interface TaskAnchors {
+  sssIdx: number;
+  /** The first turnpoint is standing in for a start the task never declared. */
+  sssIsFallback: boolean;
+  essIdx: number;
+  /** Goal is standing in for an end of speed section the task never declared. */
+  essIsFallback: boolean;
+  goalIdx: number;
+  /**
+   * Non-null when the task ends at a goal LINE (S7F §6.3.1): reaching and
+   * remaining-distance for the goal position use line geometry.
+   */
+  goalLine: GoalLine | null;
+}
+
+function resolveTaskAnchors(task: XCTask): TaskAnchors {
   // Tasks are supposed to mark one turnpoint as SSS, but hand-built tasks
   // often omit it. Without a start anchor every pilot would score zero, so
   // when the SSS is missing the first turnpoint (usually the take-off) acts
@@ -246,26 +424,27 @@ function resolveSequenceOnce(
   const essIdx = getEffectiveESSIndex(task);
   const essIsFallback = explicitESSIdx < 0 && essIdx >= 0;
   const goalIdx = getGoalIndex(task);
-  // Non-null when the task ends at a goal LINE (S7F §6.3.1): reaching and
-  // remaining-distance for the goal position use line geometry.
   const goalLine = computeGoalLine(task);
+  return { sssIdx, sssIsFallback, essIdx, essIsFallback, goalIdx, goalLine };
+}
 
-  // Build legs with default completed = false
-  const legs: LegDistance[] = segmentDistances.map((dist, i) => ({
-    fromTaskIndex: i,
-    toTaskIndex: i + 1,
-    distance: dist,
-    completed: false,
-  }));
-
-  // Where the track began relative to each cylinder's detection edge.
-  // Feeds the presence-based reaching check in buildForwardPath for the
-  // cylinder-never-crossed case (e.g. a goal cylinder so large the whole
-  // flight stays inside it). The edge matches crossing detection: outer for
-  // ENTER cylinders, inner for EXIT cylinders — so the state machine and
-  // the track-start state always agree on which side of the band a fix is.
+/**
+ * Where the track began relative to each cylinder's detection edge.
+ *
+ * Feeds the presence-based reaching check in buildForwardPath for the
+ * cylinder-never-crossed case (e.g. a goal cylinder so large the whole
+ * flight stays inside it). The edge matches crossing detection: outer for
+ * ENTER cylinders, inner for EXIT cylinders — so the state machine and
+ * the track-start state always agree on which side of the band a fix is.
+ */
+function resolveTrackStartInside(
+  task: XCTask,
+  fixes: IGCFix[],
+  { directions }: TaskGeometry,
+  { goalIdx, goalLine }: TaskAnchors,
+): boolean[] {
   const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
-  const startedInsideTP = task.turnpoints.map((tp, tpIdx) => {
+  return task.turnpoints.map((tp, tpIdx) => {
     if (fixes.length === 0) return false;
     // A LINE goal has no interior; "inside" is the control semicircle.
     if (goalLine && tpIdx === goalIdx) {
@@ -279,20 +458,55 @@ function resolveSequenceOnce(
       tp.waypoint.lat, tp.waypoint.lon,
     ) <= edge;
   });
+}
 
-  // Filter SSS crossings by the required direction (e.g. EXIT for paragliding races).
-  // If no SSS config or direction is unspecified, accept all crossings for backward compat.
-  // The direction rule describes the explicit SSS cylinder; in fallback mode the
-  // anchor is the first turnpoint (not a configured start), so no filter applies.
+/**
+ * Filter SSS crossings by the required direction (e.g. EXIT for paragliding
+ * races). If no SSS config or direction is unspecified, accept all crossings
+ * for backward compat. The direction rule describes the explicit SSS
+ * cylinder; in fallback mode the anchor is the first turnpoint (not a
+ * configured start), so no filter applies.
+ */
+function filterStartCrossingsByDirection(
+  task: XCTask,
+  allCrossings: CylinderCrossing[],
+  { sssIdx, sssIsFallback }: TaskAnchors,
+): CylinderCrossing[] {
   const requiredDirection = sssIsFallback
     ? undefined
     : task.sss?.direction?.toLowerCase() as 'enter' | 'exit' | undefined;
   const allSSSCrossings = sssIdx >= 0
     ? allCrossings.filter(c => c.taskIndex === sssIdx)
     : [];
-  const directionSSSCrossings = requiredDirection
+  return requiredDirection
     ? allSSSCrossings.filter(c => c.direction === requiredDirection)
     : allSSSCrossings;
+}
+
+/** The times that bound one pilot's scored flight. */
+interface TimingWindow {
+  /** Sorted absolute start-gate times (§6.3.3/§8.3); null when ungated. */
+  gates: number[] | null;
+  /** The goal deadline (§8.3.c); null when there is none or it is mis-set. */
+  deadlineMs: number | null;
+  /** The launch window's open time (§8.6.1); null when it doesn't apply. */
+  windowOpenMs: number | null;
+  /** The scored-flight end: the deadline and a stop's window end, whichever is first. */
+  clipMs: number | null;
+}
+
+interface TimingWindowParams {
+  task: XCTask;
+  fixes: IGCFix[];
+  anchors: TaskAnchors;
+  /** SSS crossings that passed the direction rule, in time order. */
+  directionSSSCrossings: CylinderCrossing[];
+  stopClip: StopClip | null;
+}
+
+function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
+  const { task, fixes, anchors, directionSSSCrossings, stopClip } = params;
+  const { sssIsFallback } = anchors;
 
   // Start gates (RACE tasks, §6.3.3/§8.3): resolved before the timing clips
   // below — the deadline's mis-set guard compares against the first gate.
@@ -342,31 +556,35 @@ function resolveSequenceOnce(
       ? deadlineMs
       : Math.min(deadlineMs, stopEndMs);
 
-  // The crossings the sequence may be built from: everything at or before
-  // the scored-flight end. The full list (allCrossings) is still returned
-  // for transparency — the explanation shows ignored crossings with the
-  // reason. Dropping only the time-sorted tail never corrupts the
-  // inside/outside state the presence-based reaching logic derives from
-  // earlier crossings.
-  const scoredCrossings = clipMs === null
-    ? allCrossings
-    : allCrossings.filter(c => c.time.getTime() <= clipMs);
-  const crossingsAfterDeadline = deadlineMs === null
-    ? 0
-    : allCrossings.reduce(
-        (n, c) => n + (c.time.getTime() > deadlineMs ? 1 : 0), 0,
-      );
+  return { gates, deadlineMs, windowOpenMs, clipMs };
+}
 
-  const deadlineInfo: TaskDeadlineInfo | undefined = deadlineMs !== null
-    ? {
-        time: new Date(deadlineMs),
-        crossingsAfter: crossingsAfterDeadline,
-        trackContinuesPastDeadline:
-          fixes.length > 0 && fixes[fixes.length - 1].time.getTime() > deadlineMs,
-      }
-    : undefined;
+/**
+ * The deadline as the explanation reports it (§8.3.c): how many crossings it
+ * ignored, and whether the pilot kept flying past it. Counted over ALL
+ * crossings, not the scored ones — the ignored crossings are the finding.
+ */
+function describeTaskDeadline(
+  deadlineMs: number | null,
+  allCrossings: CylinderCrossing[],
+  fixes: IGCFix[],
+): TaskDeadlineInfo | undefined {
+  if (deadlineMs === null) return undefined;
+  const crossingsAfter = allCrossings.reduce(
+    (n, c) => n + (c.time.getTime() > deadlineMs ? 1 : 0), 0,
+  );
+  return {
+    time: new Date(deadlineMs),
+    crossingsAfter,
+    trackContinuesPastDeadline:
+      fixes.length > 0 && fixes[fixes.length - 1].time.getTime() > deadlineMs,
+  };
+}
 
-  // Group scored crossings by taskIndex
+/** Group scored crossings by taskIndex, each list left in time order. */
+function groupCrossingsByTurnpoint(
+  scoredCrossings: CylinderCrossing[],
+): Map<number, CylinderCrossing[]> {
   const crossingsByTP = new Map<number, CylinderCrossing[]>();
   for (const crossing of scoredCrossings) {
     const arr = crossingsByTP.get(crossing.taskIndex);
@@ -376,14 +594,39 @@ function resolveSequenceOnce(
       crossingsByTP.set(crossing.taskIndex, [crossing]);
     }
   }
+  return crossingsByTP;
+}
 
-  // Start validation order: deadline clip (above), direction, launch-window
-  // open, then gates. Pre-window crossings are dropped outright (§8.6.1 —
-  // launching before the window has no scored-with-penalty provision);
-  // pre-gate crossings are kept only when EVERY crossing is pre-gate, the
-  // §12.2 "jumped the gun" case (HG scores the complete flight with a
-  // penalty; the PG launch→SSS clamp happens in the scorer) with earlyStart
-  // reporting the facts.
+interface StartCrossingsParams {
+  task: XCTask;
+  fixes: IGCFix[];
+  anchors: TaskAnchors;
+  directionSSSCrossings: CylinderCrossing[];
+  timing: TimingWindow;
+}
+
+interface StartCrossings {
+  /** The start crossings a sequence may be built from, in time order. */
+  sssCrossings: CylinderCrossing[];
+  launchWindowInfo: LaunchWindowInfo | undefined;
+  /** How the chosen start reaching is explained on the report card. */
+  startSelectionReason: TurnpointReaching['selectionReason'];
+}
+
+/**
+ * Start validation order: deadline clip (the caller's), direction (already
+ * applied), launch-window open, then gates. Pre-window crossings are dropped
+ * outright (§8.6.1 — launching before the window has no scored-with-penalty
+ * provision); pre-gate crossings are kept only when EVERY crossing is
+ * pre-gate, the §12.2 "jumped the gun" case (HG scores the complete flight
+ * with a penalty; the PG launch→SSS clamp happens in the scorer) with
+ * earlyStart reporting the facts.
+ */
+function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
+  const { task, fixes, anchors, directionSSSCrossings, timing } = params;
+  const { sssIdx, sssIsFallback } = anchors;
+  const { gates, windowOpenMs, clipMs } = timing;
+
   let sssCrossings = clipMs === null
     ? directionSSSCrossings
     : directionSSSCrossings.filter(c => c.time.getTime() <= clipMs);
@@ -433,37 +676,22 @@ function resolveSequenceOnce(
     }
   }
 
-  const startFallback = sssIsFallback
-    ? (startSelectionReason === 'track_start' ? 'track_start' as const : 'first_turnpoint' as const)
-    : undefined;
+  return { sssCrossings, launchWindowInfo, startSelectionReason };
+}
 
-  if (sssCrossings.length === 0) {
-    return {
-      crossings: allCrossings,
-      sequence: [],
-      sssReaching: null,
-      essReaching: null,
-      madeGoal: false,
-      lastTurnpointReached: -1,
-      bestProgress: null,
-      taskDistance,
-      flownDistance: 0,
-      legs,
-      speedSectionTime: null,
-      ...(startFallback ? { startFallback } : {}),
-      ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
-      ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
-      ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
-    };
-  }
-
-  // How best-progress measures the fix→next-turnpoint distance for a pilot
-  // whose last reached turnpoint is lastReachedIdx — see NextTPMeasure.
-  // The nearest-edge rule after an exit cylinder applies only to INFERRED
-  // exit turnpoints, not the declared-EXIT start: after a normal exit start
-  // the onward route is asymmetric and well-determined, and measuring to
-  // the tag point there is what matches AirScore's flown distances.
-  const nextMeasureFor = (lastReachedIdx: number): NextTPMeasure => {
+/**
+ * How best-progress measures the fix→next-turnpoint distance for a pilot
+ * whose last reached turnpoint is lastReachedIdx — see NextTPMeasure.
+ * The nearest-edge rule after an exit cylinder applies only to INFERRED
+ * exit turnpoints, not the declared-EXIT start: after a normal exit start
+ * the onward route is asymmetric and well-determined, and measuring to
+ * the tag point there is what matches AirScore's flown distances.
+ */
+function nextTPMeasurer(
+  { directions, optimizedLine }: TaskGeometry,
+  { sssIdx, goalIdx, goalLine }: TaskAnchors,
+): (lastReachedIdx: number) => NextTPMeasure {
+  return (lastReachedIdx: number): NextTPMeasure => {
     const nextIdx = lastReachedIdx + 1;
     if (directions[nextIdx] === 'exit') return { kind: 'exit-boundary' };
     if (nextIdx >= goalIdx) {
@@ -474,6 +702,84 @@ function resolveSequenceOnce(
     }
     return { kind: 'tag', point: optimizedLine[nextIdx] };
   };
+}
+
+/**
+ * Everything the flown-distance measurement depends on, fixed for the whole
+ * pass — so the candidate loop and the final answer measure identically.
+ */
+interface ProgressScan {
+  task: XCTask;
+  fixes: IGCFix[];
+  geometry: TaskGeometry;
+  goalIdx: number;
+  nextMeasureFor: (lastReachedIdx: number) => NextTPMeasure;
+  /** The scored-flight end (§11.1, §12.3.4): the scan stops there. */
+  clipMs: number | null;
+  /** The §12.3.6 stopped-task altitude bonus; null when none applies. */
+  altitudeBonus: { glideRatio: number; goalAltitude: number } | null;
+}
+
+/**
+ * How far along the task a resolved sequence flew.
+ *
+ * A goal pilot flew the whole task. Anyone who reached at least one
+ * turnpoint is credited to their best progress — the scanned fix with the
+ * least remaining distance to goal — and gets that fix returned for the
+ * explanation. A pilot with no reaching flew no scored distance.
+ */
+function measureSequenceDistance(
+  scan: ProgressScan,
+  sequence: TurnpointReaching[],
+): { bestProgress: BestProgress | null; flownDistance: number } {
+  const { task, fixes, geometry, goalIdx, nextMeasureFor, clipMs, altitudeBonus } = scan;
+  const madeGoal = sequence.length > 0 &&
+    sequence[sequence.length - 1].taskIndex === goalIdx;
+  if (madeGoal) return { bestProgress: null, flownDistance: geometry.taskDistance };
+  if (sequence.length === 0) return { bestProgress: null, flownDistance: 0 };
+
+  const lastReaching = sequence[sequence.length - 1];
+  const { remainingTPs, remainingLegDistances } =
+    buildRemainingPath(task, lastReaching.taskIndex, geometry.segmentDistances);
+  const bestProgress = computeBestProgress({
+    fixes,
+    lastReachingTime: lastReaching.time.getTime(),
+    remainingTPs,
+    remainingLegDistances,
+    nextMeasure: nextMeasureFor(lastReaching.taskIndex),
+    deadlineMs: clipMs,
+    altitudeBonus,
+  });
+  return {
+    bestProgress,
+    flownDistance: bestProgress
+      ? geometry.taskDistance - bestProgress.distanceToGoal
+      : 0,
+  };
+}
+
+interface BestSequenceParams {
+  /** Non-empty: the caller returns the no-start result before getting here. */
+  sssCrossings: CylinderCrossing[];
+  crossingsByTP: Map<number, CylinderCrossing[]>;
+  anchors: TaskAnchors;
+  geometry: TaskGeometry;
+  startedInsideTP: boolean[];
+  startSelectionReason: TurnpointReaching['selectionReason'];
+  scan: ProgressScan;
+}
+
+/**
+ * For multi-gate/elapsed-time starts: iterate the SSS crossings, try each,
+ * and keep the best path — most TPs reached, then most flown distance, then
+ * latest SSS (step 8 of the algorithm on {@link resolveTurnpointSequence}).
+ */
+function chooseBestSequence(params: BestSequenceParams): TurnpointReaching[] {
+  const {
+    sssCrossings, crossingsByTP, anchors, geometry,
+    startedInsideTP, startSelectionReason, scan,
+  } = params;
+  const { sssIdx, essIdx, goalIdx } = anchors;
 
   // Iterate SSS crossings backwards, try each, keep best path
   let bestSequence: TurnpointReaching[] | null = null;
@@ -485,36 +791,12 @@ function resolveSequenceOnce(
     const sssCrossing = sssCrossings[i];
     const candidateSequence = buildForwardPath({
       sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx,
-      startedInsideTP, directions, startSelectionReason,
+      startedInsideTP, directions: geometry.directions, startSelectionReason,
     });
 
     const tpsReached = candidateSequence.length;
-    const madeGoal = tpsReached > 0 &&
-      candidateSequence[tpsReached - 1].taskIndex === goalIdx;
-
-    let candidateFlownDist: number;
-    if (madeGoal) {
-      candidateFlownDist = taskDistance;
-    } else if (tpsReached > 0) {
-      const lastReaching = candidateSequence[tpsReached - 1];
-      const { remainingTPs, remainingLegDistances } =
-        buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
-      const progress = computeBestProgress({
-        fixes,
-        lastReachingTime: lastReaching.time.getTime(),
-        remainingTPs,
-        remainingLegDistances,
-        nextMeasure: nextMeasureFor(lastReaching.taskIndex),
-        deadlineMs: clipMs,
-        altitudeBonus: stopClip?.altitudeBonus ?? null,
-      });
-      candidateFlownDist = progress
-        ? taskDistance - progress.distanceToGoal
-        : 0;
-    } else {
-      candidateFlownDist = 0;
-    }
-
+    const { flownDistance: candidateFlownDist } =
+      measureSequenceDistance(scan, candidateSequence);
     const candidateSSSTime = sssCrossing.time.getTime();
 
     // Compare: most TPs → most distance → latest SSS
@@ -531,95 +813,32 @@ function resolveSequenceOnce(
     }
   }
 
-  const sequence = bestSequence!;
-  const reachedTaskIndices = new Set(sequence.map(r => r.taskIndex));
+  return bestSequence!;
+}
 
-  // Mark completed legs
-  for (const leg of legs) {
-    leg.completed = reachedTaskIndices.has(leg.toTaskIndex);
-  }
-
-  // Extract SSS and ESS reachings
-  const sssReaching = sequence.find(r => r.taskIndex === sssIdx) ?? null;
-  const essReaching = sequence.find(r => r.taskIndex === essIdx) ?? null;
-
-  const madeGoal = sequence.length > 0 &&
-    sequence[sequence.length - 1].taskIndex === goalIdx;
-
-  const lastTurnpointReached = sequence.length > 0
-    ? sequence[sequence.length - 1].taskIndex
-    : -1;
-
-  // Compute bestProgress for non-goal pilots
-  let bestProgress: BestProgress | null = null;
-  let flownDistance = 0;
-
-  if (madeGoal) {
-    flownDistance = taskDistance;
-  } else if (sequence.length > 0) {
-    const lastReaching = sequence[sequence.length - 1];
-    const { remainingTPs, remainingLegDistances } =
-      buildRemainingPath(task, lastReaching.taskIndex, segmentDistances);
-    bestProgress = computeBestProgress({
-      fixes,
-      lastReachingTime: lastReaching.time.getTime(),
-      remainingTPs,
-      remainingLegDistances,
-      nextMeasure: nextMeasureFor(lastReaching.taskIndex),
-      deadlineMs: clipMs,
-      altitudeBonus: stopClip?.altitudeBonus ?? null,
-    });
-    flownDistance = bestProgress
-      ? taskDistance - bestProgress.distanceToGoal
-      : 0;
-  }
-
-  // Start-gate snapping (§8.3.1): the pilot's official start time is the
-  // last gate at or before their crossing; a crossing after the last gate
-  // takes the last gate; an early starter is anchored to the first gate.
-  let startGate: StartGateTaken | undefined;
-  let earlyStart: EarlyStart | undefined;
-  if (gates && sssReaching) {
-    const crossingMs = sssReaching.time.getTime();
-    const gateIdx = gateIndexForCrossing(gates, crossingMs);
-    if (gateIdx < 0) {
-      earlyStart = {
+/**
+ * Start-gate snapping (§8.3.1): the pilot's official start time is the
+ * last gate at or before their crossing; a crossing after the last gate
+ * takes the last gate; an early starter is anchored to the first gate.
+ */
+function snapToStartGate(
+  gates: number[],
+  sssReaching: TurnpointReaching,
+): { startGate: StartGateTaken; earlyStart?: EarlyStart } {
+  const crossingMs = sssReaching.time.getTime();
+  const gateIdx = gateIndexForCrossing(gates, crossingMs);
+  if (gateIdx < 0) {
+    return {
+      startGate: { time: new Date(gates[0]), index: 0, gateCount: gates.length },
+      earlyStart: {
         crossingTime: sssReaching.time,
         firstGateTime: new Date(gates[0]),
         secondsEarly: (gates[0] - crossingMs) / 1000,
-      };
-      startGate = { time: new Date(gates[0]), index: 0, gateCount: gates.length };
-    } else {
-      startGate = { time: new Date(gates[gateIdx]), index: gateIdx, gateCount: gates.length };
-    }
+      },
+    };
   }
-
-  // Speed section time: from the start gate taken when the race has gates
-  // (§8.7), otherwise from the pilot's actual crossing (elapsed time).
-  let speedSectionTime: number | null = null;
-  if (sssReaching && essReaching) {
-    const startMs = startGate ? startGate.time.getTime() : sssReaching.time.getTime();
-    speedSectionTime = (essReaching.time.getTime() - startMs) / 1000;
-  }
-
   return {
-    crossings: allCrossings,
-    sequence,
-    sssReaching,
-    essReaching,
-    madeGoal,
-    lastTurnpointReached,
-    bestProgress,
-    taskDistance,
-    flownDistance,
-    legs,
-    speedSectionTime,
-    ...(startGate ? { startGate } : {}),
-    ...(earlyStart ? { earlyStart } : {}),
-    ...(startFallback ? { startFallback } : {}),
-    ...(essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
-    ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
-    ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
+    startGate: { time: new Date(gates[gateIdx]), index: gateIdx, gateCount: gates.length },
   };
 }
 

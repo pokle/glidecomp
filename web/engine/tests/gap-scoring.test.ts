@@ -26,6 +26,7 @@ import {
   type GAPParameters,
   type PilotFlight,
   type FlightScoringData,
+  type LeadingAggregate,
   type LeadingFormula,
 } from '../src/gap-scoring';
 import { resolveTurnpointSequence } from '../src/turnpoint-sequence';
@@ -1167,8 +1168,19 @@ describe('scoreFlights (cache-equivalent path)', () => {
           data.sssTimeMs, data.essTimeMs, formula,
         );
       }
-      const compact = JSON.parse(JSON.stringify(payload));
-      return { pilotName: p.pilotName, trackFile: p.trackFile, ...compact };
+      // The store holds the FLAT shape (the worker's CachedFlightAnalysis);
+      // the scorer's leading input is a union, built back at this boundary.
+      const compact = JSON.parse(JSON.stringify(payload)) as
+        Record<string, unknown> & { leadingAggregate?: LeadingAggregate };
+      const { leadingAggregate, ...rest } = compact;
+      return {
+        pilotName: p.pilotName,
+        trackFile: p.trackFile,
+        ...rest,
+        leading: leadingAggregate
+          ? { kind: 'aggregate', aggregate: leadingAggregate }
+          : { kind: 'none' },
+      } as FlightScoringData;
     });
   }
 
@@ -1225,15 +1237,23 @@ describe('scoreFlights (cache-equivalent path)', () => {
     });
   }
 
-  it('throws if leading is enabled but a flight lacks both tracklog and aggregate', () => {
+  it('awards no leading points to a flight that declares nothing to lead with', () => {
     const pilots = buildPilots();
     const scoringTask = taskForDistanceOrigin(standardTask, DEFAULT_GAP_PARAMETERS.distanceOrigin);
-    // Compact inputs with no fixes/sequence AND no leadingAggregate + useLeading
-    // is a programming error.
+    // Compact inputs built for a no-leading comp carry `leading: {kind:'none'}`.
+    // Scoring them WITH leading on used to throw, because the three cases were
+    // four correlated optional fields and the scorer could only tell them
+    // apart at run time. They are now a discriminated union, so a mis-wired
+    // tracked flight is a compile error at the call site and 'none' means
+    // exactly what it says: no tracklog, hence no leading points (§11.3).
     const compact = cachedInputs(standardTask, pilots, false);
-    expect(() =>
-      scoreFlights(scoringTask, compact, { nominalDistance: 10000, useLeading: true }),
-    ).toThrow();
+    const scored = scoreFlights(
+      scoringTask, compact, { nominalDistance: 10000, useLeading: true },
+    );
+    for (const ps of scored.pilotScores) {
+      expect(ps.leadingCoefficient).toBe(Infinity);
+      expect(ps.leadingPoints).toBe(0);
+    }
   });
 });
 
