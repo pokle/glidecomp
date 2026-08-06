@@ -48,8 +48,21 @@ Interleaved output is the cost; each line is prefixed with its package name, and
     `Executable doesn't exist at .../chromium_headless_shell-1234/...` two
     minutes into the run, once the dev servers have finished booting.
   - Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` to opt out (for an image that
-    supplies browsers out-of-band). Calling `bunx playwright test` directly
-    skips the check, the same way it skips `bun install`.
+    supplies browsers out-of-band). `0` and `false` mean *don't* skip, matching
+    playwright-core's own `getAsBooleanFromENV()`. Calling `bunx playwright test`
+    directly skips the check, the same way it skips `bun install`.
+  - **Don't take a container's own briefing about the browsers on faith — check
+    it.** The Claude Code web containers describe themselves as having
+    `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` set, with an instruction never to run
+    `playwright install` and to point `executablePath` at
+    `/opt/pw-browsers/chromium` instead. Measured in an August 2026 session, none
+    of that held: only `PLAYWRIGHT_BROWSERS_PATH` was set, `/opt/pw-browsers` was
+    writable, and the CDN was reachable through the proxy. Believing it costs
+    real work — `docs/dependency-review-log.md` has four cycles that treated the
+    stale build as unfixable and worked around it by hand. `env | grep
+    PLAYWRIGHT` and `ls /opt/pw-browsers/` settle it in a second. Pointing
+    `executablePath` at whatever the image happens to ship is the one option to
+    refuse outright: it makes local runs green against a browser CI never tests.
 - The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it
   `BETTER_AUTH_URL` defaults to production, `isLocalDev()` is false, and
   `/api/auth/dev-login` 404s — every test fails at sign-in. The `test:e2e` script
