@@ -17,6 +17,7 @@ import { igcAnonRoutes } from "./routes/igc-anon";
 import { openCompsRoutes } from "./routes/open-comps";
 import { registrationRoutes } from "./routes/registration";
 import { pilotRoutes } from "./routes/pilot";
+import { pilotProfileRoutes } from "./routes/pilot-profile";
 import { pilotStatusRoutes } from "./routes/pilot-status";
 import { manualFlightRoutes } from "./routes/manual-flight";
 import { scoreRoutes } from "./routes/score";
@@ -128,6 +129,9 @@ const routes = app
   .route("/", igcAnonRoutes)
   .route("/", igcRoutes)
   .route("/", visualizationRoutes)
+  // Ahead of pilotRoutes: the account's own /api/comp/pilot must win over
+  // the roster's /api/comp/:comp_id/pilot.
+  .route("/", pilotProfileRoutes)
   .route("/", pilotRoutes)
   .route("/", pilotStatusRoutes)
   .route("/", manualFlightRoutes)
