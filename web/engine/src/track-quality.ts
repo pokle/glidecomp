@@ -49,10 +49,19 @@
 import { andoyerDistance, getBoundingBox, isInsideCylinder } from './geo';
 import { fixAltitude, type IGCFix, type IGCHeader } from './igc-parser';
 import { detectTakeoffLanding } from './takeoff-landing-detector';
+import { km, type KmOptions } from './score-explanation-format';
 import { DEFAULT_THRESHOLDS } from './thresholds';
 import type { XCTask } from './xctsk-parser';
 
 const HOUR_MS = 3_600_000;
+
+/**
+ * How a finding's prose prints a distance: one decimal, but whole
+ * thousands-separated kilometres above 100 km. A track at the wrong
+ * competition is thousands of kilometres from the course, where a tenth of a
+ * kilometre is noise — see {@link KmOptions.wholeAbove100}.
+ */
+const FINDING_KM: KmOptions = { wholeAbove100: true };
 
 export type TrackQualityCheckId =
   | 'wrong-day'
@@ -668,7 +677,7 @@ function checkWrongPlace(
     severity: 'hard',
     title: 'Track is not at the task location',
     detail:
-      `The closest this track comes to any task turnpoint is ${formatKm(best.meters)} ` +
+      `The closest this track comes to any task turnpoint is ${km(best.meters, 1, FINDING_KM)} ` +
       `(to ${tpName}). A track this far from the whole course cannot be a flight of ` +
       `this task.`,
     evidence: {
@@ -680,12 +689,6 @@ function checkWrongPlace(
       thresholdMeters: WRONG_PLACE_MAX_APPROACH_M,
     },
   };
-}
-
-function formatKm(meters: number): string {
-  const km = meters / 1000;
-  if (km >= 100) return `${Math.round(km).toLocaleString('en-GB')} km`;
-  return `${km.toFixed(1)} km`;
 }
 
 // ---------------------------------------------------------------------------
@@ -738,8 +741,8 @@ function checkNeverLeftTakeoff(
     severity: 'soft',
     title: 'Track never left the take-off cylinder',
     detail:
-      `Every fix is inside the ${formatKm(takeoff.radius)} ${name} take-off cylinder ` +
-      `(furthest ${formatKm(maxDistance)} from the centre over ` +
+      `Every fix is inside the ${km(takeoff.radius, 1, FINDING_KM)} ${name} take-off cylinder ` +
+      `(furthest ${km(maxDistance, 1, FINDING_KM)} from the centre over ` +
       `${Math.round(durationSeconds / 60)} minutes). That is what a pilot who launched ` +
       `and landed straight back looks like — and it is also what a logger left running ` +
       `on launch looks like.`,

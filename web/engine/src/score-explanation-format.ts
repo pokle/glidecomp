@@ -12,8 +12,27 @@ import type { ClassContextInput } from './score-explanation-types';
 // Formatting helpers (fixed metric — the UI can localise via formatTime)
 // ---------------------------------------------------------------------------
 
-export function km(meters: number, decimals = 1): string {
-  return `${(meters / 1000).toFixed(decimals)} km`;
+/** Options for {@link km}. */
+export interface KmOptions {
+  /**
+   * At 100 km and above, print whole thousands-separated kilometres
+   * ("2,186 km") instead of the fixed decimals.
+   *
+   * For prose about a distance that can run to thousands of kilometres — a
+   * track-quality finding says how far from the course the track is — where
+   * a tenth of a kilometre is noise. Off by default, so a scored distance
+   * keeps its decimal at every magnitude.
+   */
+  wholeAbove100?: boolean;
+}
+
+/** A distance in kilometres at fixed metric precision. */
+export function km(meters: number, decimals = 1, options?: KmOptions): string {
+  const value = meters / 1000;
+  if (options?.wholeAbove100 && value >= 100) {
+    return `${Math.round(value).toLocaleString('en-GB')} km`;
+  }
+  return `${value.toFixed(decimals)} km`;
 }
 
 export function pts(points: number): string {
