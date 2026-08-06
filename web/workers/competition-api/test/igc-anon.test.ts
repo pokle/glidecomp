@@ -8,6 +8,7 @@ import {
   createTask,
   uploadRequest,
 } from "./helpers";
+import { encodeId } from "../src/sqids";
 
 /** Minimal gzip-compressed IGC (manufacturer record + HFDTE), as in igc-routes. */
 function fakeIgcPayload(): Uint8Array {
@@ -461,12 +462,12 @@ describe("POST .../igc/open-submit — budgets", () => {
   });
 
   test("stops a run of probes at somebody's address", async () => {
-    // ANON_SUBMIT_MISSES is 20/day. Without it, the endpoint answers "is this
+    // ANON_SUBMIT_FUTILE is 40/day. Without it, the endpoint answers "is this
     // address registered for this comp?" as fast as anyone can ask — and
     // email is the one identifier NOT already on the public roster.
     const { compId, taskId } = await openCompWithPilot();
     let last: Response | undefined;
-    for (let i = 0; i < 21; i++) {
+    for (let i = 0; i < 41; i++) {
       last = await submit(compId, taskId, {
         kind: "email",
         value: `guess-${i}@example.com`,
@@ -474,25 +475,131 @@ describe("POST .../igc/open-submit — budgets", () => {
     }
     expect(last!.status).toBe(429);
     const data = (await last!.json()) as Record<string, any>;
-    expect(data.scope).toBe("probe");
+    expect(data.scope).toBe("attempts");
     expect(last!.headers.get("Retry-After")).toBeTruthy();
   });
 
-  test("charges the probe budget only when nothing matched", async () => {
+  test("charges the effort budget only when nothing was stored", async () => {
     const { compId, taskId } = await openCompWithPilot();
 
-    // Successful submissions must not consume the miss budget, or a pilot
-    // re-uploading would lock themselves out of ever mistyping.
+    // A submission that lands must cost nothing per-IP, or a comp sharing one
+    // landing-field connection would lock itself out by succeeding.
     await submit(compId, taskId, { kind: "civl_id", value: "12345" });
-    const charged = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM "rateLimit" WHERE "key" LIKE 'anon-igc:miss:%'`
-    ).first<{ n: number }>();
-    expect(charged?.n).toBe(0);
+    expect(await futileCount()).toBe(0);
 
     await submit(compId, taskId, { kind: "civl_id", value: "99999" });
-    const afterMiss = await env.DB.prepare(
-      `SELECT "count" FROM "rateLimit" WHERE "key" LIKE 'anon-igc:miss:%'`
-    ).first<{ count: number }>();
-    expect(afterMiss?.count).toBe(1);
+    expect(await futileCount()).toBe(1);
+  });
+
+  // ── SEC-39. The budgets bound damage, so nothing that failed to do damage
+  // may move them, and nothing a caller merely NAMES may move them either.
+
+  test("a competition that does not exist cannot spend anybody's allowance", async () => {
+    // The id only has to DECODE to reach the old charge — it never had to
+    // resolve to a row, which is what made a competition's allowance spendable
+    // by anyone who could form a URL.
+    const { taskId } = await openCompWithPilot();
+    const res = await anonUploadRequest(
+      encodeId(env.SQIDS_ALPHABET, 99999),
+      taskId,
+      fakeIgcPayload(),
+      { kind: "civl_id", value: "12345" }
+    );
+    expect(res.status).toBe(404);
+    expect(await budgetRows("comp")).toBe(0);
+  });
+
+  test("a task that is not part of the comp cannot spend its allowance", async () => {
+    const { compId } = await openCompWithPilot();
+    const res = await anonUploadRequest(
+      compId,
+      encodeId(env.SQIDS_ALPHABET, 99999),
+      fakeIgcPayload(),
+      { kind: "civl_id", value: "12345" }
+    );
+    expect(res.status).toBe(404);
+    expect(await budgetRows("comp")).toBe(0);
+  });
+
+  test("a rejected file spends neither the comp nor the pilot allowance", async () => {
+    const { compId, taskId } = await openCompWithPilot();
+
+    const res = await anonUploadRequest(compId, taskId, garbage(), {
+      kind: "civl_id",
+      value: "12345",
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("invalid_file");
+
+    expect(await budgetRows("comp")).toBe(0);
+    expect(await budgetRows("cp")).toBe(0);
+    // It was still work somebody made us do.
+    expect(await futileCount()).toBe(1);
+  });
+
+  test("a closed competition charges the effort budget, not its own", async () => {
+    const { compId, taskId } = await openCompWithPilot({}, { close_date: "2020-01-01" });
+
+    const res = await submit(compId, taskId, { kind: "civl_id", value: "12345" });
+    expect(res.status).toBe(400);
+    expect(await budgetRows("comp")).toBe(0);
+    expect(await futileCount()).toBe(1);
+  });
+
+  test("garbage naming a pilot cannot take that pilot's landing day", async () => {
+    // The sharpest version of SEC-39: six a day is a small allowance, and an
+    // identifier that resolves is public on the roster, so six empty POSTs
+    // used to leave the named pilot unable to submit at all.
+    const { compId, taskId } = await openCompWithPilot();
+
+    for (let i = 0; i < 6; i++) {
+      const junk = await anonUploadRequest(compId, taskId, garbage(), {
+        kind: "civl_id",
+        value: "12345",
+      });
+      expect(junk.status).toBe(400);
+    }
+
+    const real = await submit(compId, taskId, { kind: "civl_id", value: "12345" });
+    expect(real.status).toBe(201);
+  });
+
+  test("a stored track charges each budget exactly once", async () => {
+    const { compId, taskId } = await openCompWithPilot();
+
+    await submit(compId, taskId, { kind: "civl_id", value: "12345" });
+
+    expect(await budgetCount("comp")).toBe(1);
+    expect(await budgetCount("cp")).toBe(1);
+    expect(await futileCount()).toBe(0);
   });
 });
+
+/** How many budget rows exist in a namespace — 0 means never charged. */
+async function budgetRows(scope: string): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM "rateLimit" WHERE "key" LIKE ?`
+  )
+    .bind(`anon-igc:${scope}:%`)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** What a namespace's single budget row has been charged. */
+async function budgetCount(scope: string): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT "count" FROM "rateLimit" WHERE "key" LIKE ?`
+  )
+    .bind(`anon-igc:${scope}:%`)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+async function futileCount(): Promise<number> {
+  return budgetCount("futile");
+}
+
+/** A body that is not an IGC file, and cannot be mistaken for one. */
+function garbage(): Uint8Array {
+  return new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+}
