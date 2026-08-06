@@ -2,6 +2,9 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+// credentials:true means we MUST NOT reflect arbitrary origins — the
+// allowlist is shared with the other Workers so it cannot drift.
+import { allowedOrigin } from "@glidecomp/worker-kit/cors";
 import { bodyLimit } from "hono/body-limit";
 import { APIError } from "better-auth/api";
 import { createAuth, getDevOtp, isLocalDev, type AuthEnv } from "./auth";
@@ -9,25 +12,11 @@ import { mountPreferencesRoutes } from "./routes/preferences";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
-// CORS — credentials:true means we MUST NOT reflect arbitrary origins, or any
-// site the user visits can read their session. Allowlist is prod + Pages
-// preview deploys + localhost (for bun run dev against a live backend).
-const PAGES_PREVIEW = /^https:\/\/[a-z0-9-]+\.glidecomp\.pages\.dev$/;
-function isAllowedOrigin(origin: string): boolean {
-  if (origin === "https://glidecomp.com") return true;
-  if (PAGES_PREVIEW.test(origin)) return true;
-  try {
-    if (new URL(origin).hostname === "localhost") return true;
-  } catch {
-    /* malformed Origin — reject */
-  }
-  return false;
-}
 
 app.use(
   "/api/auth/*",
   cors({
-    origin: (origin) => (origin && isAllowedOrigin(origin) ? origin : ""),
+    origin: allowedOrigin,
     credentials: true,
     allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
