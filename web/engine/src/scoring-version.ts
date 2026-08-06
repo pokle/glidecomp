@@ -291,7 +291,26 @@
 //      inside parseIGC on every upload. Only tracks whose timestamps jump
 //      backwards — already corrupt — can score differently, and only via the
 //      rate path.
-export const SCORING_ENGINE_VERSION = 30;
+// v31: NO behaviour change — the 2026-08-06 engine code quality review. The
+//      scorer's three derived predicates (distance difficulty, the effective
+//      ESS-not-goal factor, the best-time source) are exported and called by
+//      the explainers instead of being re-typed by hand in each of them; the
+//      WGS84 metres-per-degree series and the radians→compass conversion each
+//      collapse to one definition in geo.ts; resolveSequenceOnce becomes the
+//      named pipeline its FAI-citing comments already described; and the eight
+//      inline S7F §11 roundings in the scorer call the helper that file
+//      defined. Every arithmetic expression was carried across unchanged, and
+//      the two coarse metres-per-degree approximations (the circle fit, the
+//      crossings bounding-box pre-filter) were deliberately KEPT rather than
+//      made accurate — the bbox one is load-bearing, since a denominator that
+//      is too LARGE would shrink the box and could discard a fix the exact
+//      distance check accepts.
+//      The fingerprint also moves because the guard's own root list grew:
+//      manual-flight.ts measures a track-less pilot's distance and the backend
+//      calls it directly, so it reached published scores while sitting outside
+//      every root's import closure. The cache roll is harmless — scores
+//      recompute identically.
+export const SCORING_ENGINE_VERSION = 31;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -299,4 +318,4 @@ export const SCORING_ENGINE_VERSION = 30;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "4de39e3953fac44fa2649c2803a5e3d90eaeadfbbb4fa4335580d8e75ada076a";
+  "d1db237e6354dd804ff142999c606354ebbc0a1d8bc22c16b3ac3b1ef27e0a07";

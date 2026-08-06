@@ -49,7 +49,7 @@
 import { andoyerDistance, getBoundingBox, isInsideCylinder } from './geo';
 import { fixAltitude, type IGCFix, type IGCHeader } from './igc-parser';
 import { detectTakeoffLanding } from './takeoff-landing-detector';
-import { km, type KmOptions } from './score-explanation-format';
+import { km, type KmOptions } from './format-distance';
 import { DEFAULT_THRESHOLDS } from './thresholds';
 import type { XCTask } from './xctsk-parser';
 
