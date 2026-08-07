@@ -123,6 +123,17 @@ MAPBOX_RECORD=1 VITE_MAPBOX_TOKEN=… bunx playwright test … # refresh recordi
 MAPBOX_LIVE=1 VITE_MAPBOX_TOKEN=… bunx playwright test …   # live, incl. the smoke test
 ```
 
+**The suite needs a token to exist, but not a real one.** `playwright.config.ts`
+gives the frontend server a fake `VITE_MAPBOX_TOKEN` when the environment has
+none, so the map specs run for anyone with no credentials — and CI has none.
+Without any token mapbox-gl refuses to construct a `Map` at all (no canvas, no
+controls, no scale bar), `PLACE_SEARCH_AVAILABLE` is false so the geocoder
+combobox never renders, and `analysis/elevation.ts` throws "Mapbox access token
+is not configured". None of those name the missing variable, which is how a
+suite green on a developer's machine — where the real token is usually
+exported — went red on the runner. A real token still wins when present, which
+is what `MAPBOX_RECORD=1` and `MAPBOX_LIVE=1` need.
+
 A recording that is missing **fails the test** rather than quietly reaching the
 network (which, in a sandboxed container, would hang for 13s and then fail for
 the wrong reason). The handler prints `[mapbox] no recording for …` the moment

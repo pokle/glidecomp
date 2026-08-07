@@ -78,6 +78,29 @@ export default defineConfig({
       url: FRONTEND_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      env: {
+        // The map specs serve every Mapbox response from recordings and
+        // synthetic tiles (e2e/fixtures/mapbox.ts), so they need no real token
+        // — but they DO need a non-empty one, and that is easy to miss because
+        // a developer's shell usually has the real thing exported.
+        //
+        // With the variable absent, mapbox-gl refuses to construct a Map at
+        // all: no canvas, no controls, no scale bar, so every map assertion
+        // fails on `element(s) not found`, PLACE_SEARCH_AVAILABLE is false so
+        // the geocoder combobox never renders, and analysis/elevation.ts
+        // throws "Mapbox access token is not configured". None of that names
+        // the missing variable, and CI has no VITE_MAPBOX_TOKEN — which is how
+        // a suite that was green on six machines went red on the runner.
+        //
+        // A FAKE token is the right default rather than a secret: it keeps the
+        // suite runnable by anyone with no credentials, spends no Mapbox quota,
+        // and proves the offline path really is offline. A real one still wins
+        // when it is present, which is what MAPBOX_RECORD=1 and MAPBOX_LIVE=1
+        // need.
+        VITE_MAPBOX_TOKEN:
+          process.env.VITE_MAPBOX_TOKEN ||
+          "pk.eyJ1IjoiZTJlLWZpeHR1cmUiLCJhIjoiZTJlIn0.not-a-real-token",
+      },
     },
   ],
 });
