@@ -10,10 +10,12 @@ import {
   createCompPilotSchema,
   bulkPilotsSchema,
   civlRankingLookupSchema,
+  civlPilotSearchSchema,
   validated,
 } from "../validators";
 import {
   defaultListSlug,
+  preferredListSlug,
   matchList,
   type ListInfo,
   type RankingRow,
@@ -28,6 +30,10 @@ import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
 const PILOT_RESOLVE_CONCURRENCY = 10;
 
 const MAX_PILOTS_PER_COMP = 250;
+
+/** Suggestions per keystroke. Long enough to hold every Smith worth choosing
+ *  between, short enough that a two-letter term is not a page of names. */
+const CIVL_SEARCH_LIMIT = 20;
 
 /**
  * Values per statement in the CIVL ranking lookup. D1 rejects a statement with
@@ -661,6 +667,93 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         pilots: after.results.map((p) => serializeCompPilot(alphabet, p)),
         deleted: toDelete.length,
         total: after.results.length,
+      });
+    }
+  )
+
+  // ── GET /api/comp/:comp_id/pilot/civl-search ── Admin: ranked pilots whose
+  // name contains `q`, for the roster editor's name typeahead.
+  //
+  // The roster is a spreadsheet an organiser types into, and most of what they
+  // type is a name they already know how CIVL spells. Offering the ranked
+  // pilots as they type is what lets the id and the rank arrive WITH the name
+  // instead of being reconciled afterwards — the same match the fill button
+  // makes, made one row at a time and before the ambiguity exists.
+  //
+  // Deliberately NOT the matcher: this suggests, and a human chooses. The
+  // matcher's refusal to act on an ambiguous name is about filling cells
+  // unattended; here two pilots called the same thing are simply two rows in
+  // the list, told apart by their id, nation and rank.
+  .get(
+    "/api/comp/:comp_id/pilot/civl-search",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    validated("query", civlPilotSearchSchema),
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const { q, slug } = c.req.valid("query");
+
+      const comp = await c.env.DB.prepare(
+        "SELECT category FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ category: "hg" | "pg" }>();
+      if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Which list to read. The caller passes the one showing in the picker;
+      // a grid that has not been near the picker gets the discipline's own,
+      // so the first name typed into a fresh roster still suggests something.
+      const slugs = await c.env.DB.prepare(
+        "SELECT DISTINCT ranking_slug FROM pilot_ranking ORDER BY ranking_slug"
+      ).all<{ ranking_slug: string }>();
+      const held = slugs.results.map((r) => r.ranking_slug);
+      if (held.length === 0) return c.json({ list: null, pilots: [] });
+
+      const listSlug =
+        slug && held.includes(slug) ? slug : preferredListSlug(held, comp.category);
+      if (!listSlug) return c.json({ list: null, pilots: [] });
+
+      // LIKE's own wildcards have to be neutralised or a name containing '%'
+      // would match the table. ESCAPE names the character that does it.
+      const term = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+
+      // Latest snapshot only: the table transiently holds two months for a
+      // list while the importer swaps them (migration 0025), and suggesting a
+      // pilot twice at two different ranks would be worse than useless.
+      const rows = await c.env.DB.prepare(
+        `SELECT civl_id, pilot_name, rank, points, nation, ranking_slug, ranking_date
+           FROM pilot_ranking
+          WHERE ranking_slug = ?1
+            AND ranking_date = (
+              SELECT MAX(ranking_date) FROM pilot_ranking WHERE ranking_slug = ?1
+            )
+            AND pilot_name LIKE ?2 ESCAPE '\\'
+          ORDER BY rank ASC, pilot_name ASC
+          LIMIT ?3`
+      )
+        .bind(listSlug, term, CIVL_SEARCH_LIMIT)
+        .all<{
+          civl_id: string;
+          pilot_name: string;
+          rank: number;
+          points: number;
+          nation: string;
+          ranking_slug: string;
+          ranking_date: string;
+        }>();
+
+      // The month is the LIST's, not the first hit's — an empty result still
+      // has to be able to say which snapshot it found nothing in.
+      const snapshot = await c.env.DB.prepare(
+        "SELECT MAX(ranking_date) AS ranking_date FROM pilot_ranking WHERE ranking_slug = ?"
+      )
+        .bind(listSlug)
+        .first<{ ranking_date: string | null }>();
+
+      return c.json({
+        list: { slug: listSlug, ranking_date: snapshot?.ranking_date ?? null },
+        pilots: rows.results,
       });
     }
   )

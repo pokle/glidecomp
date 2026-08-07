@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fillCivlIds,
   fillRankings,
+  pilotDetails,
   formatRankingMonth,
   listLabel,
   rankingSource,
@@ -190,5 +191,39 @@ describe("listLabel", () => {
   it("makes an unknown list readable rather than dropping it", () => {
     // CIVL adding an eleventh list must not blank out a stored ranking's source.
     expect(listLabel("paragliding-speed-run")).toBe("Paragliding Speed Run");
+  });
+});
+
+describe("pilotDetails", () => {
+  const picked = {
+    civl_id: "2231",
+    pilot_name: "Jonny Durand",
+    rank: 7,
+    points: 281,
+    nation: "Australia",
+    ranking_slug: "hang-gliding-class-1-xc",
+    ranking_date: "2026-08-01",
+  };
+
+  it("brings the id, the rank, and where the rank came from", () => {
+    expect(pilotDetails(picked)).toEqual({
+      name: "Jonny Durand",
+      civl_id: "2231",
+      civl_ranking: "7",
+      civl_ranking_slug: "hang-gliding-class-1-xc",
+      civl_ranking_date: "2026-08-01",
+    });
+  });
+
+  it("takes CIVL's spelling of the name, not the organiser's", () => {
+    // The half-typed "Durand" that opened the list is replaced by the full
+    // name, which is what makes the NEXT lookup match this row by name too.
+    expect(pilotDetails(picked).name).toBe("Jonny Durand");
+  });
+
+  it("writes the rank as the string the grid's cells hold", () => {
+    // ParsedRow is the spreadsheet's shape: every cell is text, so a number
+    // here would compare unequal to a typed one and re-render oddly.
+    expect(pilotDetails(picked).civl_ranking).toBe("7");
   });
 });

@@ -6,6 +6,7 @@ import {
   type ListInfo,
   type ListMatches,
   type RankingRow,
+  preferredListSlug,
 } from "../src/civl-ranking-match";
 
 /**
@@ -211,5 +212,40 @@ describe("defaultListSlug", () => {
 
   test("no lists held at all", () => {
     expect(defaultListSlug([], "pg")).toBeNull();
+  });
+});
+
+describe("preferredListSlug", () => {
+  const HELD = [
+    "hang-gliding-class-1-sport-xc",
+    "hang-gliding-class-1-xc",
+    "hang-gliding-class-5-xc",
+    "paragliding-accuracy",
+    "paragliding-xc",
+  ];
+
+  test("gives an HG comp the main Class 1 list, not the Sport one", () => {
+    // The bug this exists to stop: picking the first HG slug alphabetically is
+    // the SPORT list, so a comp looking up its field would read a ranking
+    // almost none of them are in and quietly find nobody.
+    expect(preferredListSlug(HELD, "hg")).toBe("hang-gliding-class-1-xc");
+  });
+
+  test("gives a PG comp the XC list", () => {
+    expect(preferredListSlug(HELD, "pg")).toBe("paragliding-xc");
+  });
+
+  test("falls back to the discipline's own list when the main one is absent", () => {
+    expect(preferredListSlug(["hang-gliding-class-5-xc", "paragliding-xc"], "hg")).toBe(
+      "hang-gliding-class-5-xc"
+    );
+  });
+
+  test("would rather answer with the wrong discipline than nothing", () => {
+    expect(preferredListSlug(["paragliding-xc"], "hg")).toBe("paragliding-xc");
+  });
+
+  test("has nothing to offer when we hold no lists", () => {
+    expect(preferredListSlug([], "hg")).toBeNull();
   });
 });

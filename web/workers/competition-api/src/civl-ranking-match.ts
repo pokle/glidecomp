@@ -214,11 +214,42 @@ export function defaultListSlug(
 }
 
 /**
+ * The list a discipline means when nobody has said which — its main XC
+ * ranking, which is what "the world ranking" refers to in either sport.
+ *
+ * Picking the first slug of the right discipline alphabetically does NOT work:
+ * that is 'hang-gliding-class-1-sport-xc', the Sport list, so an HG comp
+ * looking up its field would quietly read a ranking almost none of them are
+ * in. Named, in preference order, rather than sorted.
+ */
+const MAIN_LIST: Record<"hg" | "pg", string[]> = {
+  hg: ["hang-gliding-class-1-xc", "hang-gliding-class-5-xc", "hang-gliding-class-2-xc"],
+  pg: ["paragliding-xc", "paragliding-accuracy"],
+};
+
+/**
+ * Which of the lists we hold to read when the caller named none.
+ *
+ * Unlike `defaultListSlug` this has no roster to count matches against — it is
+ * for the name typeahead, which runs before there is anything to match.
+ */
+export function preferredListSlug(
+  held: string[],
+  category: "hg" | "pg"
+): string | null {
+  if (held.length === 0) return null;
+  for (const slug of MAIN_LIST[category]) {
+    if (held.includes(slug)) return slug;
+  }
+  return held.find((s) => disciplineOf(s) === category) ?? held[0];
+}
+
+/**
  * The discipline a list slug belongs to. The slugs are civlcomps.org's own
  * ('hang-gliding-class-1-xc', 'paragliding-xc'), so the prefix is the
  * discipline; anything unrecognised is treated as paragliding-side only for
  * the purpose of NOT matching an 'hg' comp.
  */
-function disciplineOf(slug: string): "hg" | "pg" {
+export function disciplineOf(slug: string): "hg" | "pg" {
   return slug.startsWith("hang-gliding") ? "hg" : "pg";
 }

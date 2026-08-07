@@ -123,7 +123,7 @@ test.beforeEach(async ({ page }) => {
   await signIn(page);
 });
 
-test("fills IDs by name, then rankings by ID, and shows where they came from", async ({
+test("one press fills IDs by name and then rankings by ID, and shows where they came from", async ({
   page,
 }) => {
   await page.goto(`/comp/${compId}/pilots`);
@@ -138,13 +138,14 @@ test("fills IDs by name, then rankings by ID, and shows where they came from", a
   // are not.
   await expect(picker).toHaveText(new RegExp(`3 of ${ROSTER.length} pilots`));
 
-  await page.getByRole("button", { name: "Fill CIVL IDs" }).click();
-  await expect(page.getByText(/CIVL IDs? filled in from Sample World Ranking/)).toBeVisible();
-  // Ada and Cleo only — Bruno already had one, and Twin Ambiguity is refused.
-  await expect(page.getByText(/^2 CIVL IDs filled in/)).toBeVisible();
-
-  await page.getByRole("button", { name: "Fill rankings" }).click();
-  await expect(page.getByText(/^3 rankings filled in/)).toBeVisible();
+  // ONE button. Ids first, then the ranks that only become fillable once the
+  // ids are in — the ordering the organiser used to have to know about.
+  await page.getByRole("button", { name: "Fill from CIVL" }).click();
+  // Ada and Cleo gain ids (Bruno already had one, Twin Ambiguity is refused);
+  // all three are then ranked BY ID, including the two just filled.
+  await expect(
+    page.getByText(/From Sample World Ranking .*2 CIVL IDs and 3 rankings filled in/)
+  ).toBeVisible({ timeout: 20_000 });
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden({ timeout: 20_000 });
@@ -156,6 +157,42 @@ test("fills IDs by name, then rankings by ID, and shows where they came from", a
   await expect(page.getByRole("row", { name: /Twin Ambiguity/ })).not.toContainText(
     "Sample World Ranking"
   );
+});
+
+test("typing a name suggests ranked pilots, and picking one brings its id and rank", async ({
+  page,
+}) => {
+  await page.goto(`/comp/${compId}/pilots`);
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("button", { name: /Sample World Ranking/ })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  // The grid sorts by name, so row one is Ada Thermal — in the list, and with
+  // no id yet. Retyping her name is the path this feature exists for: the
+  // organiser knows who they mean, and the id should arrive WITH the name
+  // rather than be reconciled afterwards.
+  const nameCell = page
+    .locator('#pilots-grid .tabulator-row .tabulator-cell[tabulator-field="name"]')
+    .first();
+  // Tabulator opens its editor on a SINGLE click; a double click reopens it
+  // and loses the first keystrokes.
+  await nameCell.click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("Ada", { delay: 60 });
+
+  // The suggestion says who they are, not just what they are called — nation
+  // and world rank are what tell two pilots of one name apart.
+  const suggestion = page.locator(".tabulator-edit-list-item", { hasText: "Ada Thermal" });
+  await expect(suggestion.first()).toBeVisible({ timeout: 20_000 });
+  await suggestion.first().click();
+
+  // The row now carries what the list knows: CIVL's spelling, the id, the rank.
+  const row = page
+    .locator("#pilots-grid .tabulator-row", { hasText: "Ada Thermal" })
+    .first();
+  await expect(row.locator('[tabulator-field="civl_id"]')).not.toHaveText("");
+  await expect(row.locator('[tabulator-field="civl_ranking"]')).not.toHaveText("");
 });
 
 test("the roster sorts by ranking, unranked pilots last either way", async ({

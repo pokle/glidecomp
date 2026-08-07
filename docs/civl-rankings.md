@@ -195,17 +195,35 @@ Both source columns being NULL is what the roster renders as "set by
 organiser" — an override (a pilot the list has missed, or has wrong) must not
 be indistinguishable from an import.
 
-**The two fill buttons** live in the pilots editor (`/comp/:id/pilots` → Edit,
-`src/react/comp/PilotsSection.tsx` + `civl-rankings.ts`), beside a picker
-listing every list we hold with its month and how many of these pilots it
-places. They are used in that order:
+**Filling the roster in** happens two ways in the pilots editor
+(`/comp/:id/pilots` → Edit, `src/react/comp/PilotsSection.tsx` +
+`civl-rankings.ts`), and both apply the same rules.
 
-1. **Fill CIVL IDs** — for an EMPTY id cell whose name exactly one pilot in the
-   list answers to. This is the one place a name decides anything.
-2. **Fill rankings** — matched on **CIVL ID only**. A rank against the wrong
-   human silently sets the wrong launch order, and a shared name is not
-   evidence of a shared identity (the same rule `pilot-resolver.ts` and
-   `pilot-linker.ts` refuse to link accounts on).
+**One button, "Fill from CIVL"**, beside a picker listing every list we hold
+with its month and how many of these pilots it places. It does two passes,
+in this order and for this reason:
+
+1. **Ids** — into an EMPTY id cell whose name exactly one pilot in the list
+   answers to. This is the one place a name decides anything.
+2. **Ranks** — matched on **CIVL ID only**. A rank against the wrong human
+   silently sets the wrong launch order, and a shared name is not evidence of
+   a shared identity (the same rule `pilot-resolver.ts` and `pilot-linker.ts`
+   refuse to link accounts on).
+
+The lookup is re-run **between** the passes: rows that just gained an id are
+matched by it on the second, which is what makes their ranks fillable at all.
+This was two buttons, and the ordering was the organiser's to know — pressing
+them the other way round simply did less.
+
+**A name typeahead**, on the name column. Typing two or more characters offers
+ranked pilots from the list showing in the picker, labelled with nation and
+world rank because that is what tells two pilots of one name apart. Picking one
+takes CIVL's spelling of the name and brings the id and the rank with it — the
+same match the button makes, made one row at a time and before the ambiguity
+exists. The column stays **freetext**: most rosters have pilots who have never
+been ranked, and a name cell that refused to hold them would be worse than one
+with no suggestions. It reads `GET /api/comp/:comp_id/pilot/civl-search`
+(admin only), and an id already in the row is never overwritten.
 
 Every ambiguity is refused rather than resolved: two ranked pilots sharing a
 name, two roster rows claiming one ranked pilot, or a ranked pilot whose id
@@ -214,11 +232,17 @@ are **not** folded, because SQLite's `NOCASE` is ASCII-only and the fold would
 claim matches the query could never fetch. Rules and reasoning:
 `web/workers/competition-api/src/civl-ranking-match.ts`.
 
-Both buttons read `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
+The button reads `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
 which answers about the rows in the **grid** — the organiser is mid-edit when
 they press it — and returns every list we hold, including ones that place
 nobody, so a wrong-discipline pick shows as "0 of 24" instead of vanishing.
 Nothing is written until Save.
+
+The typeahead's route defaults to the discipline's **main** XC list when the
+caller names none (`preferredListSlug`). Taking the first slug of the right
+discipline alphabetically does not work: that is
+`hang-gliding-class-1-sport-xc`, so an HG comp would quietly search a list
+almost none of its field is in.
 
 Writes go through the ordinary roster save, so they are `audit()`ed like any
 other roster change. They take **no** `bumpAndRevalidateScores()` call: a world

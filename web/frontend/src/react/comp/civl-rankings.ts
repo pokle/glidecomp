@@ -63,6 +63,48 @@ export async function lookupRankings(
   return (await res.json()) as RankingLookup;
 }
 
+/** One ranked pilot offered to the name typeahead. */
+export interface RankedPilot {
+  civl_id: string;
+  pilot_name: string;
+  rank: number;
+  points: number;
+  nation: string;
+  ranking_slug: string;
+  ranking_date: string;
+}
+
+/**
+ * Ranked pilots whose name contains `term`, for the roster editor's typeahead.
+ *
+ * `slug` is the list showing in the picker; the server falls back to the
+ * comp's own discipline when it is null, so the first name typed into a fresh
+ * roster still suggests something.
+ *
+ * Returns [] on any failure. A typeahead that cannot reach the server has
+ * nothing to offer, and saying so on every keystroke would be worse than
+ * offering nothing — the organiser types the name themselves either way.
+ */
+export async function searchRankedPilots(
+  compId: string,
+  term: string,
+  slug: string | null
+): Promise<RankedPilot[]> {
+  const q = term.trim();
+  if (q.length < 2) return [];
+  try {
+    const res = await api.api.comp[":comp_id"].pilot["civl-search"].$get({
+      param: { comp_id: compId },
+      query: { q, ...(slug ? { slug } : {}) },
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { pilots: RankedPilot[] };
+    return body.pilots ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Display names for the ten lists CIVL publishes, so a stored ranking can say
  * where it came from without a round trip (the snapshot's own `ranking_name`
@@ -135,6 +177,26 @@ export function rankingSource(pilot: {
   if (pilot.civl_ranking === null) return "";
   if (!pilot.civl_ranking_slug) return "set by organiser";
   return `${listLabel(pilot.civl_ranking_slug)} · ${formatRankingMonth(pilot.civl_ranking_date)}`;
+}
+
+/**
+ * Everything one chosen pilot brings with them.
+ *
+ * The name is CIVL's spelling, not the organiser's half-typed one: having
+ * picked this human out of a list, the roster should agree with the list about
+ * how they are spelled — that is what makes the next lookup match by name too.
+ *
+ * The rank travels with the list and month it came from, exactly as the fill
+ * button's does, so the roster can say where the number came from.
+ */
+export function pilotDetails(pilot: RankedPilot): Partial<ParsedRow> {
+  return {
+    name: pilot.pilot_name,
+    civl_id: pilot.civl_id,
+    civl_ranking: String(pilot.rank),
+    civl_ranking_slug: pilot.ranking_slug,
+    civl_ranking_date: pilot.ranking_date,
+  };
 }
 
 /** What a fill did, for the status line under the grid. */
