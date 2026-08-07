@@ -1,0 +1,58 @@
+{
+  "GET api.mapbox.com/search/geocode/v6/forward?limit=6&q=Corryong&types=country%2Cregion%2Cdistrict%2Cplace%2Clocality%2Cneighborhood": {
+    "url": "https://api.mapbox.com/search/geocode/v6/forward?limit=6&q=Corryong&types=country%2Cregion%2Cdistrict%2Cplace%2Clocality%2Cneighborhood",
+    "status": 200,
+    "contentType": "application/vnd.geo+json; charset=utf-8",
+    "file": "search-geocode-v6-forward_5fe52fd2bfa9.json",
+    "bytes": 1913
+  },
+  "GET api.mapbox.com/styles/v1/mapbox/standard/7ixcpyhbhz67em71mmpln1klo/iconset.pbf": {
+    "url": "https://api.mapbox.com/styles/v1/mapbox/standard/7ixcpyhbhz67em71mmpln1klo/iconset.pbf",
+    "status": 200,
+    "contentType": "application/x-protobuf",
+    "file": "styles-v1-mapbox-standard-7ixcpyhbhz67em71mmpln1klo-iconset-_b32596f2bf2e.pbf",
+    "bytes": 293547
+  },
+  "GET api.mapbox.com/styles/v1/poklet/cmkceyuoc00ha01svg6lb767k": {
+    "url": "https://api.mapbox.com/styles/v1/poklet/cmkceyuoc00ha01svg6lb767k",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "file": "styles-v1-poklet-cmkceyuoc00ha01svg6lb767k_f3eae430e920.json",
+    "bytes": 348608
+  },
+  "GET api.mapbox.com/styles/v1/poklet/cmkceyuoc00ha01svg6lb767k/ekhs3dcuv5r9q7oec7g99s8qj/iconset.pbf": {
+    "url": "https://api.mapbox.com/styles/v1/poklet/cmkceyuoc00ha01svg6lb767k/ekhs3dcuv5r9q7oec7g99s8qj/iconset.pbf",
+    "status": 200,
+    "contentType": "application/x-protobuf",
+    "file": "styles-v1-poklet-cmkceyuoc00ha01svg6lb767k-ekhs3dcuv5r9q7oec_6aab3c3e3328.pbf",
+    "bytes": 304364
+  },
+  "GET api.mapbox.com/v4/mapbox.terrain-rgb/13/7459/4986@2x.pngraw": {
+    "url": "https://api.mapbox.com/v4/mapbox.terrain-rgb/13/7459/4986@2x.pngraw",
+    "status": 200,
+    "contentType": "image/png",
+    "file": "v4-mapbox-terrain-rgb-13-7459-4986-2x-pngraw_9047287e96c9.png",
+    "bytes": 414835
+  },
+  "GET api.mapbox.com/v4/mapbox.terrain-rgb/13/7461/4980@2x.pngraw": {
+    "url": "https://api.mapbox.com/v4/mapbox.terrain-rgb/13/7461/4980@2x.pngraw",
+    "status": 200,
+    "contentType": "image/png",
+    "file": "v4-mapbox-terrain-rgb-13-7461-4980-2x-pngraw_b683de11b328.png",
+    "bytes": 245291
+  },
+  "GET api.mapbox.com/v4/mapbox.terrain-rgb/13/7462/4982@2x.pngraw": {
+    "url": "https://api.mapbox.com/v4/mapbox.terrain-rgb/13/7462/4982@2x.pngraw",
+    "status": 200,
+    "contentType": "image/png",
+    "file": "v4-mapbox-terrain-rgb-13-7462-4982-2x-pngraw_8177eaa66e36.png",
+    "bytes": 361852
+  },
+  "GET api.mapbox.com/v4/mapbox.terrain-rgb/13/7464/4978@2x.pngraw": {
+    "url": "https://api.mapbox.com/v4/mapbox.terrain-rgb/13/7464/4978@2x.pngraw",
+    "status": 200,
+    "contentType": "image/png",
+    "file": "v4-mapbox-terrain-rgb-13-7464-4978-2x-pngraw_3147311428c0.png",
+    "bytes": 361194
+  }
+}
