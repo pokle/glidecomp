@@ -419,6 +419,24 @@ function gridColumns(
   return [remove, ...dataCols];
 }
 
+/**
+ * The editor's panel size. A spreadsheet wants the screen.
+ *
+ * It fills the overlay's content box: the overlay's own `p-4` is the whole
+ * inset and is deliberately not overridable (rac/dialog.tsx), so the only
+ * thing between the grid and the screen edge is 16px of backdrop.
+ *
+ *   * `max-w-full` overrides the panel's usual `max-w-[calc(100%-2rem)]`,
+ *     which was costing a phone another 32px of the little width it has.
+ *   * `dvh`, not `vh`: on mobile Safari `vh` counts the collapsing toolbar, so
+ *     a `vh` height puts the footer's Save button underneath it.
+ *   * Wide screens keep a cap. Past about 1400px the fourteen columns have all
+ *     the room they can use, and a panel the width of a monitor stops reading
+ *     as a dialog.
+ */
+const EDITOR_PANEL_CLASS =
+  "h-[calc(100dvh-2rem)] max-w-full sm:h-[calc(100dvh-3rem)] sm:max-w-[min(88rem,100%)]";
+
 function EditPilotsDialog({
   compId,
   compName,
@@ -718,7 +736,7 @@ function EditPilotsDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      className="h-[min(700px,85vh)] sm:max-w-6xl"
+      className={EDITOR_PANEL_CLASS}
     >
       {/* min-w-0: the panel and this Dialog are grid containers, and grid
           items default to min-width:auto — without the override the Tabulator's
