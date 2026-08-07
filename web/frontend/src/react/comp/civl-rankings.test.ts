@@ -177,9 +177,14 @@ describe("formatRankingMonth", () => {
 });
 
 describe("listLabel", () => {
-  it("labels the lists CIVL publishes", () => {
+  it("labels the lists with CIVL's own names", () => {
+    // Taken from a real import's ranking_name column, not guessed from the
+    // slug: the picker shows the snapshot's name and the roster shows this
+    // one, so "paragliding-accuracy" has to be "PGA" in both.
     expect(listLabel("paragliding-xc")).toBe("PG XC");
     expect(listLabel("hang-gliding-class-1-sport-xc")).toBe("HG Class 1 Sport");
+    expect(listLabel("paragliding-accuracy")).toBe("PGA");
+    expect(listLabel("paragliding-aerobatics")).toBe("PG Acro Solo");
   });
 
   it("makes an unknown list readable rather than dropping it", () => {

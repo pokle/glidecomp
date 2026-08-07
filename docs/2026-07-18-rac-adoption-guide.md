@@ -559,6 +559,22 @@ Points worth knowing before you reach for one:
     `AbortError` in the catch or your own cancellation renders as an error.
     And do not retry a failed search — the next keystroke is already a fresh
     request, and each one is billed.
+22. **A popover that flips UPWARDS lands off-screen on a long page, unless it
+    is `position: fixed`.** RAC portals popovers to `<body>` and positions them
+    with **viewport-relative** offsets under an inline `position: absolute`.
+    Our `body` is `position: relative` (globals.css — iOS 26+ Safari needs it
+    for dialog backdrops), so the containing block is the *body box*: a
+    popover placed with `bottom:` — which is what RAC emits whenever it flips
+    upwards, i.e. whenever the trigger sits low on screen — is displaced by
+    exactly `scrollHeight - innerHeight`. On a short page it is fine; on a long
+    one the control opens onto nothing, with `aria-expanded="true"` and every
+    option in the DOM. **Diagnose by rect, not by eye**: the popover is there,
+    just thousands of pixels down.
+    `popoverClass` (rac/select.tsx, reused by ComboBox/Menu/Popover), the date
+    picker's calendar and the Tooltip therefore all carry `fixed!` — the
+    important modifier is needed because RAC's `position` is an inline style.
+    Found by the CIVL ranking picker, which sits low in a tall dialog on the
+    64-pilot roster page and so flipped every time.
 
 ## Verification playbook (all part of "done" for RAC work)
 

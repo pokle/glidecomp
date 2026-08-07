@@ -36,13 +36,25 @@ const COMP_NAME = e2eCompName("CIVL Rankings");
  *   in for them;
  * - Unranked Nobody is in no list at all.
  */
-const ROSTER = [
+const MATCHING_ROSTER = [
   { registered_pilot_name: "Bruno Ridge", registered_pilot_civl_id: "9000002" },
   { registered_pilot_name: "Ada Thermal" },
   { registered_pilot_name: "Cleo Vario" },
   { registered_pilot_name: "Twin Ambiguity" },
   { registered_pilot_name: "Unranked Nobody" },
 ];
+
+/**
+ * Padding, and load-bearing: the popover test below needs a roster page TALLER
+ * THAN THE WINDOW, which is the only condition under which a body-portalled
+ * popover is displaced (gotcha #22). None of these names is in any ranking
+ * list, so every match count stays about the five pilots above.
+ */
+const FILLER_ROSTER = Array.from({ length: 30 }, (_, i) => ({
+  registered_pilot_name: `Filler Pilot ${String(i + 1).padStart(2, "0")}`,
+}));
+
+const ROSTER = [...MATCHING_ROSTER, ...FILLER_ROSTER];
 
 let compId: string;
 
@@ -121,9 +133,10 @@ test("fills IDs by name, then rankings by ID, and shows where they came from", a
   // about the grid, so it doubles as "the grid is loaded".
   const picker = page.getByRole("button", { name: /Sample World Ranking/ });
   await expect(picker).toBeVisible({ timeout: 20_000 });
-  // Four of the five are placeable: Bruno by his ID, Ada and Cleo by name.
-  // Twin Ambiguity and Unranked Nobody are not.
-  await expect(picker).toHaveText(/3 of 5 pilots/);
+  // Three are placeable: Bruno by his ID, Ada and Cleo by name. Twin
+  // Ambiguity (two ranked pilots, one name), Unranked Nobody and every filler
+  // are not.
+  await expect(picker).toHaveText(new RegExp(`3 of ${ROSTER.length} pilots`));
 
   await page.getByRole("button", { name: "Fill CIVL IDs" }).click();
   await expect(page.getByText(/CIVL IDs? filled in from Sample World Ranking/)).toBeVisible();
@@ -164,16 +177,51 @@ test("the roster sorts by ranking, unranked pilots last either way", async ({
   await expect(rankHeader).toHaveAttribute("aria-sort", "ascending");
   const ascending = await names();
   // Ranked pilots first, in ranking order (the seed ranks by name, so Ada
-  // outranks Bruno outranks Cleo); the two unrankable ones bring up the rear.
+  // outranks Bruno outranks Cleo); everyone unranked is behind them.
   expect(ascending.slice(0, 3)).toEqual(["Ada Thermal", "Bruno Ridge", "Cleo Vario"]);
-  expect(ascending.slice(3).sort()).toEqual(["Twin Ambiguity", "Unranked Nobody"]);
+  expect(ascending.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
+  expect(ascending.indexOf("Unranked Nobody")).toBeGreaterThan(2);
 
   await rankHeader.click();
   await expect(rankHeader).toHaveAttribute("aria-sort", "descending");
   const descending = await names();
   expect(descending.slice(0, 3)).toEqual(["Cleo Vario", "Bruno Ridge", "Ada Thermal"]);
   // Pinned last in BOTH directions: no ranking is not a bad ranking.
-  expect(descending.slice(3).sort()).toEqual(["Twin Ambiguity", "Unranked Nobody"]);
+  expect(descending.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
+  expect(descending.indexOf("Unranked Nobody")).toBeGreaterThan(2);
+});
+
+test("the list picker opens ON SCREEN when the page is taller than the window", async ({
+  page,
+}) => {
+  // RAC portals the popover to <body> and positions it with viewport-relative
+  // offsets under `position: absolute`; our body is `position: relative` (iOS
+  // Safari backdrops), so the containing block is the body BOX. A popover that
+  // flips upwards — which this one does, sitting low in a tall dialog — was
+  // displaced by exactly `scrollHeight - innerHeight`: open, focusable, every
+  // option in the DOM, and thousands of pixels below the fold. See gotcha #22
+  // in docs/2026-07-18-rac-adoption-guide.md.
+  //
+  // A short window is what makes the page taller than the viewport here; on
+  // the 64-pilot roster it needed no help at all.
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.goto(`/comp/${compId}/pilots`);
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  const picker = page.getByRole("button", { name: /Sample World Ranking/ });
+  await expect(picker).toBeVisible({ timeout: 20_000 });
+  await picker.click();
+
+  const listbox = page.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+  const box = await listbox.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeLessThan(viewport.height);
+  // toBeVisible() alone would NOT have caught this: an off-screen popover is
+  // still "visible" to Playwright. The rect is the assertion.
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1);
 });
 
 test("a rank typed over by hand stops claiming a source", async ({ page }) => {

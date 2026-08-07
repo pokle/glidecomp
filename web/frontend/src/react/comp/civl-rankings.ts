@@ -67,8 +67,17 @@ export async function lookupRankings(
  * Display names for the ten lists CIVL publishes, so a stored ranking can say
  * where it came from without a round trip (the snapshot's own `ranking_name`
  * is only in hand once a lookup has run, and the pilots table renders before
- * any of that). An unknown slug — CIVL adding an eleventh list — falls back to
- * a readable form of the slug itself rather than disappearing.
+ * any of that).
+ *
+ * These are CIVL's OWN labels, copied from the `ranking_name` column of a real
+ * import (`web/samples/civl-rankings/civl-rankings-2026-08.csv`) rather than
+ * guessed from the slug — the picker shows the snapshot's name and the roster
+ * shows this one, and a reader comparing the two must not find "PG Accuracy"
+ * in one place and "PGA" in the other. Refresh them from that column whenever
+ * the snapshot is refreshed.
+ *
+ * An unknown slug — CIVL adding an eleventh list — falls back to a readable
+ * form of the slug itself rather than disappearing.
  */
 const LIST_LABELS: Record<string, string> = {
   "hang-gliding-class-1-xc": "HG Class 1",
@@ -77,10 +86,10 @@ const LIST_LABELS: Record<string, string> = {
   "hang-gliding-class-5-xc": "HG Class 5",
   "paragliding-xc": "PG XC",
   "paragliding-xc-sport": "PG XC Sport",
-  "paragliding-accuracy": "PG Accuracy",
-  "paragliding-aerobatics": "PG Aerobatics",
-  "paragliding-acro-syncro": "PG Acro Syncro",
-  "paragliding-hike-fly": "PG Hike and Fly",
+  "paragliding-accuracy": "PGA",
+  "paragliding-aerobatics": "PG Acro Solo",
+  "paragliding-acro-syncro": "PG Acro Synchro",
+  "paragliding-hike-fly": "PG Hike & Fly",
 };
 
 export function listLabel(slug: string): string {

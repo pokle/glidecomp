@@ -226,14 +226,35 @@ ranking is not a scoring input and cannot change a task score.
 
 ### Rankings on a development database
 
-A fresh local D1 holds no rankings, and the real import is a network round trip
-whose contents change monthly — no test can assert against it. `bun run
-seed-civl-rankings` writes a synthetic list instead: slug
-`sample-world-ranking` (never one of the ten real ones, so it cannot collide
-with an import), named "Sample World Ranking" wherever it appears, ranking
-every pilot already in the database plus the fixed pilots
-`e2e/civl-rankings.spec.ts` registers. Run `bun run civl-rankings` as well and
-both appear in the picker, side by side.
+`bun run fresh-dev` wipes D1, and the import runs against **production** on a
+GitHub Actions cron — so a fresh local database has no rankings at all and the
+roster editor correctly offers nothing to fill from. `bun run
+seed-civl-rankings` (which `fresh-dev` now calls) fixes that with two things:
+
+1. **A real snapshot** —
+   `web/samples/civl-rankings/civl-rankings-2026-08.csv`, all ten lists as
+   published for August 2026, taken verbatim from production's own
+   `/civl-rankings.csv` dump. Rows keep their `civl_ranking_id` and
+   `fetched_at`, so a locally-filled roster carries exactly the provenance
+   production would have given it. 37 of the seeded Corryong Cup's 64 pilots
+   are genuinely in HG Class 1, which is what makes the local roster a real
+   test of the feature rather than a mock of it.
+2. **A synthetic list** of invented pilots (`sample-world-ranking` — never one
+   of the ten, and named "Sample World Ranking" wherever it appears) that
+   `e2e/civl-rankings.spec.ts` matches against. The e2e cannot key on the real
+   data: it is a point-in-time copy whose ranks move every month.
+
+It deliberately does NOT invent rankings for the real pilots on the sample
+comps. A fabricated number against a real name, displayed with a list and a
+month beside it, is indistinguishable from a published one.
+
+Refresh the snapshot by downloading `/civl-rankings.csv` from production over
+the top of it — same format, no code change — or run `bun run civl-rankings`
+for a live import. **When you refresh it, re-check `LIST_LABELS` in
+`src/react/comp/civl-rankings.ts` against the file's `ranking_name` column**:
+the roster labels a stored rank from that map while the picker shows the
+snapshot's own name, and the two must agree (CIVL calls
+`paragliding-accuracy` "PGA", not "PG Accuracy").
 
 ## Adding a list
 
