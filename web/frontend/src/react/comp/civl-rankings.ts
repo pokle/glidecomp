@@ -14,14 +14,14 @@
 import { api } from "../../comp/api";
 import type { ParsedRow } from "./csv";
 
-/** What the rankings offer one roster row: their best rank, and where it is from. */
+/** What the rankings offer one roster row: a rank, and the list it is from. */
 export interface RowMatch {
   /** Only a `civl_id` match may fill a RANK — a name never decides one. */
   matched_by: "civl_id" | "name";
   civl_id: string;
   /** The name as CIVL spells it. */
   pilot_name: string;
-  /** The pilot's LOWEST rank across every list, and the list it is from. */
+  /** Their rank in the list where their WPRS score is highest. */
   rank: number;
   points: number;
   ranking_slug: string;
@@ -65,7 +65,7 @@ export async function lookupRankings(
   return (await res.json()) as RankingLookup;
 }
 
-/** One ranked pilot offered to the name typeahead, at their best rank. */
+/** One ranked pilot offered to the name typeahead, from their best-scoring list. */
 export interface RankedPilot {
   civl_id: string;
   pilot_name: string;
@@ -80,8 +80,8 @@ export interface RankedPilot {
 /**
  * Ranked pilots whose name contains `term`, for the roster editor's typeahead.
  *
- * Every list is searched and each pilot offered once, at their best rank —
- * the same number the fill button would give them.
+ * Every list is searched and each pilot offered once, from the list where
+ * they score the most WPRS points — the same number the fill button gives.
  *
  * Returns [] on any failure. A typeahead that cannot reach the server has
  * nothing to offer, and saying so on every keystroke would be worse than

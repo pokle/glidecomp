@@ -19,6 +19,9 @@ async function seedRanking(rows: {
   rank: number;
   civlId: string;
   pilotName: string;
+  /** WPRS score. Defaults to a function of rank; pass it where a test needs
+   *  points and rank to DISAGREE, which is the whole point of the rule. */
+  points?: number;
 }[]): Promise<void> {
   for (const r of rows) {
     await env.DB.prepare(
@@ -34,7 +37,7 @@ async function seedRanking(rows: {
         r.rank,
         r.civlId,
         r.pilotName,
-        1000 - r.rank
+        r.points ?? 1000 - r.rank
       )
       .run();
   }
@@ -217,19 +220,22 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
     expect(rankable_count).toBe(0);
   });
 
-  test("takes a pilot's BEST rank, whichever list it is from", async () => {
-    // The rule this endpoint exists to apply now: CIVL publishes no overall
-    // ranking, so a pilot in two lists is given their lowest number and the
-    // list it came from travels with it.
+  test("takes a pilot from the list where they score the most WPRS points", async () => {
+    // The rule this endpoint exists to apply: CIVL publishes no overall
+    // ranking, so a pilot in two lists needs one chosen. Points are the same
+    // quantity in every list; a rank is only a position within one pool, and
+    // a small pool flatters. Here #1 in the Sport list on 120 points loses to
+    // #106 in PG XC on 261.5.
     const compId = await createComp({ category: "hg" });
     await seedRanking([
-      { rank: 106, civlId: "25161", pilotName: "Luke Nicol" },
+      { rank: 106, civlId: "25161", pilotName: "Luke Nicol", points: 261.5 },
       {
         slug: "paragliding-xc-sport",
         name: "PG XC Sport",
         rank: 1,
         civlId: "25161",
         pilotName: "Luke Nicol",
+        points: 120,
       },
     ]);
 
@@ -237,12 +243,12 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
       { name: "Luke Nicol", civl_id: "25161" },
     ]);
     expect(matches["0"]).toMatchObject({
-      rank: 1,
-      ranking_slug: "paragliding-xc-sport",
-      ranking_name: "PG XC Sport",
+      rank: 106,
+      ranking_slug: "hang-gliding-class-1-xc",
+      ranking_name: "HG Class 1",
     });
     // Only the lists the numbers actually came from are named.
-    expect(lists).toEqual(["PG XC Sport"]);
+    expect(lists).toEqual(["HG Class 1"]);
   });
 
   test("names every list a roster's numbers came from", async () => {
@@ -360,19 +366,20 @@ describe("GET /api/comp/:comp_id/pilot/civl-search", () => {
     };
   }
 
-  test("offers a pilot ONCE, at the same best rank the fill would give them", async () => {
+  test("offers a pilot ONCE, with the same number the fill would give them", async () => {
     // The typeahead and the button have to agree: suggesting a per-list rank
-    // here while the button filled a cross-list best would put two different
-    // numbers in front of the organiser for one pilot.
+    // here while the button filled the best-scoring list's would put two
+    // different numbers in front of the organiser for one pilot.
     const compId = await createComp();
     await seedRanking([
-      { rank: 106, civlId: "25161", pilotName: "Luke Nicol" },
+      { rank: 106, civlId: "25161", pilotName: "Luke Nicol", points: 261.5 },
       {
         slug: "paragliding-xc-sport",
         name: "PG XC Sport",
         rank: 1,
         civlId: "25161",
         pilotName: "Luke Nicol",
+        points: 120,
       },
     ]);
 
@@ -380,8 +387,8 @@ describe("GET /api/comp/:comp_id/pilot/civl-search", () => {
     expect(pilots).toHaveLength(1);
     expect(pilots[0]).toMatchObject({
       civl_id: "25161",
-      rank: 1,
-      ranking_name: "PG XC Sport",
+      rank: 106,
+      ranking_name: "HG Class 1",
     });
   });
 

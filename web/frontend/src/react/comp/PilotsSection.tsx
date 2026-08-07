@@ -904,9 +904,9 @@ function listSentence(names: string[]): string {
  *
  * It had a list picker, because a pilot can hold a different rank in each of
  * CIVL's ten lists and something had to choose. Now the choice is made for
- * them — every list is read and each pilot takes their best rank, whichever
- * list it is from (see civl-ranking-match.ts, which also records what that
- * costs) — so the dialog is a sentence and a button.
+ * them — every list is read and each pilot is taken from the one where their
+ * WPRS score is highest (see civl-ranking-match.ts for why points and not
+ * rank) — so the dialog is a sentence and a button.
  */
 function CivlFillDialog({
   lookup,
@@ -959,8 +959,8 @@ function CivlFillDialog({
               {lookup.matched_count} of {rosterSize}{" "}
               {rosterSize === 1 ? "pilot is" : "pilots are"} in{" "}
               {lookup.lists.length === 1 ? "the " : ""}
-              {listSentence(lookup.lists)}. Each takes their best ranking — the
-              lowest number — whichever list it is from.
+              {listSentence(lookup.lists)}. Each is taken from the list where
+              they score the most WPRS points.
             </p>
           </>
         )}

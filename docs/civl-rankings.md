@@ -231,8 +231,8 @@ row that was left alone is counted separately (`already_set`) from one the
 list has never heard of.
 
 **A name typeahead**, on the name column. Typing two or more characters offers
-ranked pilots — each once, at their best rank — labelled with nation and world
-rank because that is what tells two pilots of one name apart. Picking one
+ranked pilots — each once, from their best-scoring list — labelled with nation
+and world rank because that is what tells two pilots of one name apart. Picking one
 takes CIVL's spelling of the name and brings the id and the rank with it — the
 same match the button makes, made one row at a time and before the ambiguity
 exists. The column stays **freetext**: most rosters have pilots who have never
@@ -264,25 +264,26 @@ Writes go through the ordinary roster save, so they are `audit()`ed like any
 other roster change. They take **no** `bumpAndRevalidateScores()` call: a world
 ranking is not a scoring input and cannot change a task score.
 
-### One number per pilot: the best rank, from any list
+### One number per pilot: WPRS points choose the list
 
 CIVL publishes ten lists and **no overall ranking** — every row of every list
 is `region=World, selection=Overall`, where "Overall" is CIVL's own selection
 filter rather than an aggregate. A pilot in more than one list therefore has no
 single published number, and the roster needs one.
 
-The rule is their **best rank — the lowest number** — whichever list it comes
-from, with that list recorded on the row (`civl_ranking_slug`), so two pilots
-on one roster are routinely ranked from two different lists. Equal ranks go to
-the more points; an exact tie falls to the slug so a re-run answers the same.
-`bestPerPilot()` in `civl-ranking-match.ts` does the collapsing, and doing it
-BEFORE the matching is also what stops one pilot in four lists reading as four
-rivals for a name.
+The rule: take the list where the pilot scores the most **WPRS points** (the
+World Pilot Ranking Scheme score CIVL computes from their results, and sorts
+each list by), and copy their **rank in that list** onto the roster, recording
+the list in `civl_ranking_slug`. Two pilots on one roster are routinely ranked
+from two different lists. Equal points go to the lower rank; an exact tie falls
+to the slug so a re-run answers the same. `bestPerPilot()` in
+`civl-ranking-match.ts` does the collapsing, and doing it BEFORE the matching
+is also what stops one pilot in four lists reading as four rivals for a name.
 
-**Know what this costs.** A rank is a position within one pool, and the pools
-differ enormously — HG Class 2 holds six pilots, PG XC holds 6,875 — so the
-smaller the list, the flatter the rank it hands out. In the August 2026
-snapshot:
+**Points and not the lowest rank**, because a rank is only a position within
+one pool and the pools differ enormously — HG Class 2 holds six pilots, PG XC
+holds 6,875 — so the smaller the list, the flatter the rank it hands out. In
+the August 2026 snapshot:
 
 | | |
 |---|---|
@@ -291,10 +292,14 @@ snapshot:
 | pilots whose best rank and best points are in different lists | 3,457 |
 
 Luke Nicol is **#1 in PG XC Sport and #106 in PG XC on identical points**,
-because Sport is a subset pool; best-rank gives him #1. If that bias ever
-matters more than the simplicity, ranking by `points` — which is the WPRS
-score, and comparable across lists in a way ranks are not — is a one-line
-change to `isBetter()`.
+because Sport is a subset of the same field; picking the lowest number would
+call him first in the world. Points are the same quantity in every list, so
+"which list has this pilot achieved most in" is a question they can answer and
+ranks cannot.
+
+What the roster holds is still a **rank**, because that is what a launch order
+is set from — but it is now their rank in their strongest discipline rather
+than in their smallest.
 
 ### Rankings on a development database
 

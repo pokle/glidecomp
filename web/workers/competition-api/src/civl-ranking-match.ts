@@ -24,18 +24,22 @@
  * a pilot in more than one list (41% of ranked pilots are, up to four lists)
  * has no single published number, and one has to be chosen.
  *
- * We take their **best rank — the lowest number** — whichever list it comes
- * from, and record that list on the row so the number stays checkable.
+ * We take the list where they score the most **WPRS points** — the World Pilot
+ * Ranking Scheme score, which is what CIVL computes from a pilot's results and
+ * then sorts each list by — and copy their rank IN THAT LIST onto the roster,
+ * recording the list so the number stays checkable.
  *
- * Know what that costs, because it is not small: a rank is a position within
- * one pool, and the pools differ enormously (HG Class 2 holds six pilots, PG
- * XC holds 6,875). Luke Nicol is #1 in PG XC Sport and #106 in PG XC on
- * IDENTICAL points, because Sport is a subset; best-rank gives him #1. Across
- * the August 2026 snapshot, 3,457 pilots' best rank and best points come from
- * different lists. Ranking by `points` instead would be comparable across
- * lists in a way ranks are not — it is a one-line change to `isBetter` below —
- * but the rule an organiser asked for is the lowest number, and it is at least
- * a number CIVL really published about that pilot.
+ * Points rather than the lowest rank, because a rank is only a position within
+ * one pool and the pools differ enormously: HG Class 2 holds six pilots, PG XC
+ * holds 6,875, so the smaller the list the flatter the rank it hands out. Luke
+ * Nicol is #1 in PG XC Sport and #106 in PG XC on IDENTICAL points, because
+ * Sport is a subset of the same field; lowest-rank would call him first in the
+ * world. Points are the same quantity in every list, so "the list where this
+ * pilot has achieved most" is a question they can answer and ranks cannot.
+ *
+ * What the roster gets is still a RANK, because that is what an organiser sets
+ * a launch order from — but it is now their rank in their strongest discipline
+ * rather than in their smallest.
  *
  * ── What is refused ───────────────────────────────────────────────────────
  *
@@ -47,8 +51,8 @@
  *     as "two rows resolved to the same pilot" anyway).
  *
  * One pilot appearing in several lists is NOT an ambiguity: it is one human,
- * and collapsing them to their best rank before any of this happens is what
- * keeps it from looking like two.
+ * and collapsing them to one entry before any of this happens is what keeps
+ * it from looking like two.
  *
  * Name comparison is exact up to case and surrounding/among whitespace.
  * Accents are NOT folded: 'Jose' does not match 'José'. Folding would have to
@@ -73,7 +77,8 @@ export interface RosterEntry {
 /**
  * One `pilot_ranking` row, carrying the list it belongs to. Unlike before
  * there is no per-list call: every candidate row from every list arrives in
- * one array, because a pilot's best rank is a fact about all of them.
+ * one array, because which list a pilot is taken from is a fact about all of
+ * them.
  */
 export interface RankedEntry {
   rank: number;
@@ -115,13 +120,13 @@ function idKey(civlId: string): string {
 }
 
 /**
- * Is `a` the entry to keep for this pilot? Lowest rank wins; equal ranks go to
- * the more points (the same standing in a bigger pool), and an exact tie falls
- * to the slug so a re-run answers identically.
+ * Is `a` the entry to keep for this pilot? **Most WPRS points wins** — see the
+ * module header. Equal points go to the lower rank, and an exact tie falls to
+ * the slug so a re-run answers identically.
  */
 function isBetter(a: RankedEntry, b: RankedEntry): boolean {
-  if (a.rank !== b.rank) return a.rank < b.rank;
   if (a.points !== b.points) return a.points > b.points;
+  if (a.rank !== b.rank) return a.rank < b.rank;
   return a.ranking_slug < b.ranking_slug;
 }
 

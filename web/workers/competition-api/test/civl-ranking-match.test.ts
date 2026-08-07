@@ -10,8 +10,9 @@ import {
  * The rules the roster editor's fill button runs on. Read the module header
  * for why each refusal is a refusal — in short, a rank follows a CIVL ID and
  * nothing else, a name may only propose an ID when exactly one human answers
- * to it, and a pilot who appears in several lists is one human at their best
- * rank rather than several claimants to a name.
+ * to it, and a pilot who appears in several lists is one human — taken from
+ * the list where they score the most WPRS points — rather than several
+ * claimants to a name.
  */
 
 const HG = { ranking_slug: "hang-gliding-class-1-xc", ranking_name: "HG Class 1" };
@@ -33,23 +34,37 @@ function ranked(
 }
 
 describe("bestPerPilot — one number per human", () => {
-  test("keeps the lowest rank across lists", () => {
+  test("keeps the list where the pilot scores the most WPRS points", () => {
+    // Not the lowest rank: Luke Nicol is #1 in the Sport list and #106 in PG
+    // XC on IDENTICAL points, because Sport is a subset of the same field.
+    // Points are the same quantity in both, so they are what can be compared.
     const best = bestPerPilot([
-      ranked(PG, 106, "25161", "Luke Nicol"),
-      ranked(SPORT, 1, "25161", "Luke Nicol"),
+      ranked(PG, 106, "25161", "Luke Nicol", 261.5),
+      ranked(SPORT, 1, "25161", "Luke Nicol", 261.5),
     ]);
     expect(best.size).toBe(1);
+    // Equal points fall to the lower rank, which here is the Sport list.
     expect(best.get("25161")).toMatchObject({ rank: 1, ranking_name: "PG XC Sport" });
   });
 
-  test("an equal rank in two lists goes to the one with more points", () => {
-    // Same position in two pools is not the same achievement; the WPRS score
-    // is the tiebreak that means something.
+  test("a flattering rank in a small list loses to a real score in a big one", () => {
     const best = bestPerPilot([
-      ranked(SPORT, 5, "900", "Twin Rank", 120),
-      ranked(HG, 5, "900", "Twin Rank", 250),
+      ranked(SPORT, 1, "900", "Small Pond", 30),
+      ranked(PG, 415, "900", "Small Pond", 400),
     ]);
-    expect(best.get("900")).toMatchObject({ ranking_name: "HG Class 1", points: 250 });
+    expect(best.get("900")).toMatchObject({
+      rank: 415,
+      points: 400,
+      ranking_name: "PG XC",
+    });
+  });
+
+  test("equal points go to the lower rank", () => {
+    const best = bestPerPilot([
+      ranked(PG, 40, "900", "Twin Points", 250),
+      ranked(HG, 5, "900", "Twin Points", 250),
+    ]);
+    expect(best.get("900")).toMatchObject({ rank: 5, ranking_name: "HG Class 1" });
   });
 
   test("an exact tie is broken by slug, so a re-run answers identically", () => {
@@ -67,16 +82,19 @@ describe("bestPerPilot — one number per human", () => {
 });
 
 describe("matchRoster — by CIVL ID", () => {
-  test("a row carrying an id gets that pilot's best rank, and the list it is from", () => {
+  test("a row carrying an id gets their rank from their best-scoring list", () => {
     const result = matchRoster(
       [{ name: "Luke Nicol", civl_id: "25161" }],
-      [ranked(PG, 106, "25161", "Luke Nicol"), ranked(SPORT, 1, "25161", "Luke Nicol")]
+      [
+        ranked(PG, 106, "25161", "Luke Nicol", 261.5),
+        ranked(SPORT, 1, "25161", "Luke Nicol", 120),
+      ]
     );
     expect(result.matches[0]).toMatchObject({
       matched_by: "civl_id",
-      rank: 1,
-      ranking_slug: "paragliding-xc-sport",
-      ranking_name: "PG XC Sport",
+      rank: 106,
+      ranking_slug: "paragliding-xc",
+      ranking_name: "PG XC",
       ranking_date: DATE,
     });
     expect(result.rankable_count).toBe(1);
@@ -125,18 +143,18 @@ describe("matchRoster — by name", () => {
   });
 
   test("ONE pilot in several lists is not an ambiguity", () => {
-    // The whole reason the picker could be removed: collapsing to the best
-    // rank first means four appearances read as one human, not four rivals
-    // for a name.
+    // The whole reason the picker could be removed: collapsing to one entry
+    // first means three appearances read as one human, not three rivals for
+    // a name.
     const result = matchRoster(
       [{ name: "Luke Nicol", civl_id: null }],
       [
-        ranked(PG, 106, "25161", "Luke Nicol"),
-        ranked(SPORT, 1, "25161", "Luke Nicol"),
-        ranked(HG, 40, "25161", "Luke Nicol"),
+        ranked(PG, 106, "25161", "Luke Nicol", 261.5),
+        ranked(SPORT, 1, "25161", "Luke Nicol", 120),
+        ranked(HG, 40, "25161", "Luke Nicol", 90),
       ]
     );
-    expect(result.matches[0]).toMatchObject({ civl_id: "25161", rank: 1 });
+    expect(result.matches[0]).toMatchObject({ civl_id: "25161", rank: 106 });
   });
 
   test("two DIFFERENT humans sharing a name are still refused, across lists", () => {
