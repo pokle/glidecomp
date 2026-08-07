@@ -1,74 +1,119 @@
 import { describe, expect, test } from "vitest";
 import {
-  defaultListSlug,
-  matchList,
+  bestPerPilot,
+  matchRoster,
   nameKey,
-  type ListInfo,
-  type ListMatches,
-  type RankingRow,
-  preferredListSlug,
+  type RankedEntry,
 } from "../src/civl-ranking-match";
 
 /**
- * The rules the roster editor's two fill buttons run on. Read the module
- * header for why each refusal is a refusal — in short, a rank follows a CIVL
- * ID and nothing else, and a name may only propose an ID when exactly one
- * human on both sides answers to it.
+ * The rules the roster editor's fill button runs on. Read the module header
+ * for why each refusal is a refusal — in short, a rank follows a CIVL ID and
+ * nothing else, a name may only propose an ID when exactly one human answers
+ * to it, and a pilot who appears in several lists is one human at their best
+ * rank rather than several claimants to a name.
  */
 
-const HG: ListInfo = {
-  slug: "hang-gliding-class-1-xc",
-  name: "HG Class 1",
-  ranking_date: "2026-07-01",
+const HG = { ranking_slug: "hang-gliding-class-1-xc", ranking_name: "HG Class 1" };
+const PG = { ranking_slug: "paragliding-xc", ranking_name: "PG XC" };
+const SPORT = {
+  ranking_slug: "paragliding-xc-sport",
+  ranking_name: "PG XC Sport",
 };
+const DATE = "2026-08-01";
 
-function ranked(rank: number, civl_id: string, pilot_name: string): RankingRow {
-  return { rank, civl_id, pilot_name, points: 100 - rank };
+function ranked(
+  list: { ranking_slug: string; ranking_name: string },
+  rank: number,
+  civl_id: string,
+  pilot_name: string,
+  points = 100 - rank
+): RankedEntry {
+  return { ...list, ranking_date: DATE, rank, civl_id, pilot_name, points };
 }
 
-describe("matchList — by CIVL ID", () => {
-  test("a row carrying an id gets that pilot's rank", () => {
-    const result = matchList(HG, [{ name: "Ana Silva", civl_id: "25161" }], [
-      ranked(12, "25161", "Ana Silva"),
+describe("bestPerPilot — one number per human", () => {
+  test("keeps the lowest rank across lists", () => {
+    const best = bestPerPilot([
+      ranked(PG, 106, "25161", "Luke Nicol"),
+      ranked(SPORT, 1, "25161", "Luke Nicol"),
     ]);
+    expect(best.size).toBe(1);
+    expect(best.get("25161")).toMatchObject({ rank: 1, ranking_name: "PG XC Sport" });
+  });
+
+  test("an equal rank in two lists goes to the one with more points", () => {
+    // Same position in two pools is not the same achievement; the WPRS score
+    // is the tiebreak that means something.
+    const best = bestPerPilot([
+      ranked(SPORT, 5, "900", "Twin Rank", 120),
+      ranked(HG, 5, "900", "Twin Rank", 250),
+    ]);
+    expect(best.get("900")).toMatchObject({ ranking_name: "HG Class 1", points: 250 });
+  });
+
+  test("an exact tie is broken by slug, so a re-run answers identically", () => {
+    const forwards = bestPerPilot([
+      ranked(PG, 5, "900", "Twin Rank", 100),
+      ranked(HG, 5, "900", "Twin Rank", 100),
+    ]);
+    const backwards = bestPerPilot([
+      ranked(HG, 5, "900", "Twin Rank", 100),
+      ranked(PG, 5, "900", "Twin Rank", 100),
+    ]);
+    expect(forwards.get("900")).toEqual(backwards.get("900"));
+    expect(forwards.get("900")?.ranking_slug).toBe("hang-gliding-class-1-xc");
+  });
+});
+
+describe("matchRoster — by CIVL ID", () => {
+  test("a row carrying an id gets that pilot's best rank, and the list it is from", () => {
+    const result = matchRoster(
+      [{ name: "Luke Nicol", civl_id: "25161" }],
+      [ranked(PG, 106, "25161", "Luke Nicol"), ranked(SPORT, 1, "25161", "Luke Nicol")]
+    );
     expect(result.matches[0]).toMatchObject({
       matched_by: "civl_id",
-      rank: 12,
-      pilot_name: "Ana Silva",
+      rank: 1,
+      ranking_slug: "paragliding-xc-sport",
+      ranking_name: "PG XC Sport",
+      ranking_date: DATE,
     });
     expect(result.rankable_count).toBe(1);
   });
 
   test("the id wins even when the roster spells the name differently", () => {
-    // The id identifies the human; the roster's spelling of their name is not
-    // evidence against it.
-    const result = matchList(HG, [{ name: "A. Silva", civl_id: "25161" }], [
-      ranked(12, "25161", "Ana Silva"),
-    ]);
+    const result = matchRoster(
+      [{ name: "A. Silva", civl_id: "25161" }],
+      [ranked(HG, 12, "25161", "Ana Silva")]
+    );
     expect(result.matches[0]).toMatchObject({ matched_by: "civl_id", rank: 12 });
   });
 
-  test("an id this list has never ranked matches nothing", () => {
-    const result = matchList(HG, [{ name: "Ana Silva", civl_id: "99999" }], [
-      ranked(12, "25161", "Ana Silva"),
-    ]);
+  test("an id no list has ranked matches nothing", () => {
+    const result = matchRoster(
+      [{ name: "Ana Silva", civl_id: "99999" }],
+      [ranked(HG, 12, "25161", "Ana Silva")]
+    );
     expect(result.matches[0]).toBeUndefined();
     expect(result.matched_count).toBe(0);
   });
 
   test("surrounding whitespace in an id is ignored", () => {
-    const result = matchList(HG, [{ name: "Ana", civl_id: " 25161 " }], [
-      ranked(12, "25161", "Ana Silva"),
-    ]);
+    const result = matchRoster(
+      [{ name: "Ana", civl_id: " 25161 " }],
+      [ranked(HG, 12, "25161", "Ana Silva")]
+    );
     expect(result.matches[0]?.rank).toBe(12);
   });
 });
 
-describe("matchList — by name", () => {
+describe("matchRoster — by name", () => {
   test("an empty id cell is offered the uniquely-named pilot's id", () => {
-    const result = matchList(HG, [{ name: "Ana Silva", civl_id: null }], [
-      ranked(12, "25161", "Ana Silva"),
-    ]);
+    const result = matchRoster(
+      [{ name: "Ana Silva", civl_id: null }],
+      [ranked(HG, 12, "25161", "Ana Silva")]
+    );
     expect(result.matches[0]).toMatchObject({
       matched_by: "name",
       civl_id: "25161",
@@ -79,77 +124,84 @@ describe("matchList — by name", () => {
     expect(result.rankable_count).toBe(0);
   });
 
+  test("ONE pilot in several lists is not an ambiguity", () => {
+    // The whole reason the picker could be removed: collapsing to the best
+    // rank first means four appearances read as one human, not four rivals
+    // for a name.
+    const result = matchRoster(
+      [{ name: "Luke Nicol", civl_id: null }],
+      [
+        ranked(PG, 106, "25161", "Luke Nicol"),
+        ranked(SPORT, 1, "25161", "Luke Nicol"),
+        ranked(HG, 40, "25161", "Luke Nicol"),
+      ]
+    );
+    expect(result.matches[0]).toMatchObject({ civl_id: "25161", rank: 1 });
+  });
+
+  test("two DIFFERENT humans sharing a name are still refused, across lists", () => {
+    const result = matchRoster(
+      [{ name: "John Smith", civl_id: null }],
+      [ranked(HG, 20, "1001", "John Smith"), ranked(PG, 51, "1002", "John Smith")]
+    );
+    expect(result.matches[0]).toBeUndefined();
+  });
+
   test("case and inner whitespace do not matter", () => {
-    const result = matchList(HG, [{ name: "  ana   SILVA ", civl_id: null }], [
-      ranked(12, "25161", "Ana Silva"),
-    ]);
+    const result = matchRoster(
+      [{ name: "  ana   SILVA ", civl_id: null }],
+      [ranked(HG, 12, "25161", "Ana Silva")]
+    );
     expect(result.matches[0]?.civl_id).toBe("25161");
   });
 
   test("accents are not folded — the row is left alone", () => {
     // Documented limit: SQLite's NOCASE is ASCII-only, so folding here would
     // claim a match the query could never have fetched.
-    const result = matchList(HG, [{ name: "Jose Garcia", civl_id: null }], [
-      ranked(3, "40001", "José García"),
-    ]);
-    expect(result.matches[0]).toBeUndefined();
-  });
-
-  test("two ranked pilots sharing a name are both refused", () => {
-    const result = matchList(HG, [{ name: "John Smith", civl_id: null }], [
-      ranked(20, "1001", "John Smith"),
-      ranked(51, "1002", "John Smith"),
-    ]);
+    const result = matchRoster(
+      [{ name: "Jose Garcia", civl_id: null }],
+      [ranked(HG, 3, "40001", "José García")]
+    );
     expect(result.matches[0]).toBeUndefined();
   });
 
   test("two roster rows naming the same pilot are both refused", () => {
-    // One of the two is not that person, and nothing here can say which.
-    const result = matchList(
-      HG,
+    const result = matchRoster(
       [
         { name: "Ana Silva", civl_id: null },
         { name: "ana silva", civl_id: null },
       ],
-      [ranked(12, "25161", "Ana Silva")]
+      [ranked(HG, 12, "25161", "Ana Silva")]
     );
     expect(result.matches[0]).toBeUndefined();
     expect(result.matches[1]).toBeUndefined();
   });
 
   test("an id already held by another row is never handed out again", () => {
-    // Otherwise the bulk save rejects the roster with "two rows resolved to
-    // the same pilot" — after the organiser has typed the rest of it.
-    const result = matchList(
-      HG,
+    const result = matchRoster(
       [
         { name: "Ana Silva", civl_id: "25161" },
         { name: "Ana Silva", civl_id: null },
       ],
-      [ranked(12, "25161", "Ana Silva")]
+      [ranked(HG, 12, "25161", "Ana Silva")]
     );
     expect(result.matches[0]).toMatchObject({ matched_by: "civl_id" });
     expect(result.matches[1]).toBeUndefined();
   });
 
   test("a row that already has an id is never name-matched", () => {
-    const result = matchList(HG, [{ name: "Ana Silva", civl_id: "99999" }], [
-      ranked(12, "25161", "Ana Silva"),
-    ]);
+    const result = matchRoster(
+      [{ name: "Ana Silva", civl_id: "99999" }],
+      [ranked(HG, 12, "25161", "Ana Silva")]
+    );
     expect(result.matches[0]).toBeUndefined();
   });
 });
 
-describe("matchList — a list that places nobody", () => {
-  test("still reports itself, with zero counts", () => {
-    const result = matchList(HG, [{ name: "Ana Silva", civl_id: null }], []);
-    expect(result).toMatchObject({
-      slug: "hang-gliding-class-1-xc",
-      name: "HG Class 1",
-      ranking_date: "2026-07-01",
-      matched_count: 0,
-      rankable_count: 0,
-    });
+describe("matchRoster — nothing to match against", () => {
+  test("no rankings imported at all", () => {
+    const result = matchRoster([{ name: "Ana Silva", civl_id: "25161" }], []);
+    expect(result).toEqual({ matches: {}, matched_count: 0, rankable_count: 0 });
   });
 });
 
@@ -157,95 +209,5 @@ describe("nameKey", () => {
   test("normalises case and whitespace only", () => {
     expect(nameKey("  Ana   SILVA\t")).toBe("ana silva");
     expect(nameKey("José")).toBe("josé");
-  });
-});
-
-describe("defaultListSlug", () => {
-  const list = (
-    slug: string,
-    matched_count: number
-  ): ListMatches => ({
-    slug,
-    name: slug,
-    ranking_date: "2026-07-01",
-    matches: {},
-    matched_count,
-    rankable_count: 0,
-  });
-
-  test("prefers the comp's own discipline over a bigger match elsewhere", () => {
-    // A hang gliding comp defaults to a hang gliding list even when more of
-    // its pilots happen to be ranked in a paragliding one.
-    const slug = defaultListSlug(
-      [list("hang-gliding-class-1-xc", 3), list("paragliding-xc", 9)],
-      "hg"
-    );
-    expect(slug).toBe("hang-gliding-class-1-xc");
-  });
-
-  test("within the discipline, the list that places the most pilots wins", () => {
-    const slug = defaultListSlug(
-      [
-        list("hang-gliding-class-1-xc", 4),
-        list("hang-gliding-class-1-sport-xc", 18),
-      ],
-      "hg"
-    );
-    expect(slug).toBe("hang-gliding-class-1-sport-xc");
-  });
-
-  test("falls back across disciplines rather than offering an empty list", () => {
-    const slug = defaultListSlug(
-      [list("hang-gliding-class-1-xc", 0), list("paragliding-xc", 6)],
-      "hg"
-    );
-    expect(slug).toBe("paragliding-xc");
-  });
-
-  test("with no matches anywhere it still opens on the right discipline", () => {
-    const slug = defaultListSlug(
-      [list("paragliding-xc", 0), list("hang-gliding-class-1-xc", 0)],
-      "hg"
-    );
-    expect(slug).toBe("hang-gliding-class-1-xc");
-  });
-
-  test("no lists held at all", () => {
-    expect(defaultListSlug([], "pg")).toBeNull();
-  });
-});
-
-describe("preferredListSlug", () => {
-  const HELD = [
-    "hang-gliding-class-1-sport-xc",
-    "hang-gliding-class-1-xc",
-    "hang-gliding-class-5-xc",
-    "paragliding-accuracy",
-    "paragliding-xc",
-  ];
-
-  test("gives an HG comp the main Class 1 list, not the Sport one", () => {
-    // The bug this exists to stop: picking the first HG slug alphabetically is
-    // the SPORT list, so a comp looking up its field would read a ranking
-    // almost none of them are in and quietly find nobody.
-    expect(preferredListSlug(HELD, "hg")).toBe("hang-gliding-class-1-xc");
-  });
-
-  test("gives a PG comp the XC list", () => {
-    expect(preferredListSlug(HELD, "pg")).toBe("paragliding-xc");
-  });
-
-  test("falls back to the discipline's own list when the main one is absent", () => {
-    expect(preferredListSlug(["hang-gliding-class-5-xc", "paragliding-xc"], "hg")).toBe(
-      "hang-gliding-class-5-xc"
-    );
-  });
-
-  test("would rather answer with the wrong discipline than nothing", () => {
-    expect(preferredListSlug(["paragliding-xc"], "hg")).toBe("paragliding-xc");
-  });
-
-  test("has nothing to offer when we hold no lists", () => {
-    expect(preferredListSlug([], "hg")).toBeNull();
   });
 });

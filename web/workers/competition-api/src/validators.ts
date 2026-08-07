@@ -313,13 +313,12 @@ export const civlRankingLookupSchema = z.object({
  * Query for the roster editor's name typeahead.
  *
  * `q` has a floor of two characters so a stray keystroke cannot ask for a scan
- * of every ranked pilot, and a ceiling because a name is a name. The list is
- * optional: with no slug the route answers from the one the comp's discipline
- * suggests, which is what a grid that has not been near the picker wants.
+ * of every ranked pilot, and a ceiling because a name is a name. There is no
+ * list to name: every list is searched, and each pilot is offered once at
+ * their best rank.
  */
 export const civlPilotSearchSchema = z.object({
   q: z.string().trim().min(2).max(MAX_TEXT),
-  slug: optionalText,
 });
 
 // ── Task validators ──

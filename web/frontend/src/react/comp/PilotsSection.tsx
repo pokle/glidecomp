@@ -50,9 +50,8 @@ import {
   listLabel,
   lookupRankings,
   rankingSource,
-  type RankingList,
+  type RankingLookup,
 } from "./civl-rankings";
-import { Select, SelectItem } from "@/react/rac/select";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
 import { Card } from "@/react/rac/card";
@@ -457,16 +456,14 @@ function EditPilotsDialog({
   const [status, setStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  // What the CIVL lists make of the rows currently in the grid. Null until the
-  // first lookup answers; an empty array means we hold no rankings at all,
-  // which is a different thing and says so in the UI.
-  const [lists, setLists] = useState<RankingList[] | null>(null);
-  const [listSlug, setListSlug] = useState<string | null>(null);
+  // What the CIVL rankings make of the rows currently in the grid. Null until
+  // the first lookup answers; a lookup with no matches and no lists is a
+  // database with nothing imported, which the dialog says out loud.
+  const [lookup, setLookup] = useState<RankingLookup | null>(null);
   const [looking, setLooking] = useState(false);
   // How many rows that answer was about, so "18 of 24" counts the same rows
   // the matches came from rather than whatever the grid holds a moment later.
   const [lookupSize, setLookupSize] = useState(0);
-  const selectedList = lists?.find((l) => l.slug === listSlug) ?? null;
   // The fill lives in its own dialog: on a phone its picker and label took a
   // fifth of the editor's height whether or not anyone was filling anything,
   // and the grid is what the screen is for.
@@ -481,32 +478,26 @@ function EditPilotsDialog({
   }
 
   /**
-   * Re-ask the lists about the grid as it stands now.
+   * Re-ask the rankings about the grid as it stands now.
    *
    * Run when the grid is ready and again after ids are filled — the matches
    * are keyed by row index, so an answer about a previous state of the grid
-   * would fill the wrong rows. Returns the lists so a caller can act on the
-   * fresh answer rather than on state React has not committed yet.
+   * would fill the wrong rows. Returns the answer so a caller can act on it
+   * rather than on state React has not committed yet.
    *
    * A failure is reported and nothing else: the rest of the editor works
    * perfectly well without rankings.
    */
   const refreshLookup = useCallback(
-    async (rows: ParsedRow[]): Promise<RankingList[] | null> => {
+    async (rows: ParsedRow[]): Promise<RankingLookup | null> => {
       setLooking(true);
       try {
         const result = await lookupRankings(compId, rows);
-        setLists(result.lists);
+        setLookup(result);
         setLookupSize(rows.length);
-        setListSlug((current) => {
-          // Keep the organiser's choice across a refresh; only fall back to
-          // the suggested list when they have not picked one.
-          if (current && result.lists.some((l) => l.slug === current)) return current;
-          return result.default_slug;
-        });
-        return result.lists;
+        return result;
       } catch {
-        setLists([]);
+        setLookup({ matches: {}, matched_count: 0, rankable_count: 0, lists: [] });
         setErrors((e) => [
           ...e,
           "Could not read the CIVL rankings. The rest of the editor still works.",
@@ -527,12 +518,10 @@ function EditPilotsDialog({
    * until the edit lands and the pilot is recovered from them.
    */
   const suggestionsRef = useRef<RankedPilot[]>([]);
-  const listSlugRef = useRef<string | null>(null);
-  listSlugRef.current = listSlug;
 
   const suggestPilots = useCallback(
     async (term: string): Promise<RankedPilot[]> => {
-      const pilots = await searchRankedPilots(compId, term, listSlugRef.current);
+      const pilots = await searchRankedPilots(compId, term);
       suggestionsRef.current = pilots;
       return pilots;
     },
@@ -609,21 +598,19 @@ function EditPilotsDialog({
    */
   async function fillFromCivl() {
     const table = tableRef.current;
-    if (!table || !selectedList) return;
-    const list = selectedList;
+    if (!table || !lookup) return;
 
-    const ids = fillCivlIds(gridRows(), list);
+    const ids = fillCivlIds(gridRows(), lookup);
     await table.setData(ids.rows);
 
     // Re-ask about the grid as it now stands. On failure the ids are still in
     // (they are already in the grid) and the ranks are simply not attempted —
     // refreshLookup has reported the problem itself.
-    const fresh = await refreshLookup(ids.rows);
-    const refreshed = fresh?.find((l) => l.slug === list.slug) ?? null;
+    const refreshed = await refreshLookup(ids.rows);
     if (!refreshed) {
       setStatus(
-        `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} filled in from ` +
-          `${list.name}. Could not read the rankings again, so no ranks were filled.`
+        `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} filled in. ` +
+          `Could not read the rankings again, so no rankings were filled.`
       );
       return;
     }
@@ -633,12 +620,24 @@ function EditPilotsDialog({
 
     const noId = ranks.rows.filter((r) => !r.civl_id).length;
     setStatus(
-      `From ${list.name} (${formatRankingMonth(list.ranking_date)}): ` +
-        `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} and ` +
-        `${ranks.filled} ranking${ranks.filled === 1 ? "" : "s"} filled in. ` +
+      `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} and ` +
+        `${ranks.filled} ranking${ranks.filled === 1 ? "" : "s"} filled in` +
+        // Each pilot is taken from whichever list ranks them best, so a
+        // roster's numbers can come from several at once. Naming them is what
+        // makes a rank checkable against civlcomps.org.
+        (refreshed.lists.length > 0 ? ` from ${listSentence(refreshed.lists)}` : "") +
+        ". " +
+        // Only missing cells are written, so a roster that is already ranked
+        // gets "0 filled in" — which reads as a failure unless the reason is
+        // said out loud, along with what to do about a newer month.
+        (ranks.already_set > 0
+          ? `${ranks.already_set} pilot${ranks.already_set === 1 ? "" : "s"} ` +
+            `already had a ranking and ${ranks.already_set === 1 ? "was" : "were"} ` +
+            `left alone — clear a ranking to take this month's instead. `
+          : "") +
         (noId > 0
-          ? `${noId} row${noId === 1 ? " has" : "s have"} no ID — that list has ` +
-            `nobody by that exact name, or more than one. `
+          ? `${noId} row${noId === 1 ? " has" : "s have"} no ID — no list has ` +
+            `anybody by that exact name, or more than one does. `
           : "") +
         "Rankings are copied, not looked up later: they stay as they are now."
     );
@@ -879,9 +878,7 @@ function EditPilotsDialog({
           list chosen here is also the one the name typeahead searches. */}
       {civlOpen ? (
         <CivlFillDialog
-          lists={lists}
-          selected={selectedList}
-          onSelect={setListSlug}
+          lookup={lookup}
           rosterSize={lookupSize}
           isBusy={looking || filling}
           onClose={() => setCivlOpen(false)}
@@ -893,38 +890,39 @@ function EditPilotsDialog({
 }
 
 /**
- * The CIVL fill, in a dialog of its own: which list to read, what reading it
- * will do, and the button that does it.
+ * The lists a set of matches came from, as prose: "HG Class 1", "HG Class 1
+ * and PG XC", "HG Class 1, PG XC and PGA".
+ */
+function listSentence(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The CIVL fill, in a dialog of its own: what filling will do, and the button
+ * that does it.
  *
- * It was a bar under the grid, and on a phone its label, picker and button
- * cost about a fifth of the editor's height — permanently, for a step most
- * rosters take once. Behind a button the grid gets that space back, and the
- * explanation gets room to be a sentence rather than a tooltip nobody on a
- * touchscreen can open.
- *
- * The picker shows every list we hold with the month it was published and how
- * many of these pilots it places. That count is the whole reason it is a
- * picker: it is how an organiser discovers they are looking at the Sport list
- * rather than being quietly given the wrong ranks.
+ * It had a list picker, because a pilot can hold a different rank in each of
+ * CIVL's ten lists and something had to choose. Now the choice is made for
+ * them — every list is read and each pilot takes their best rank, whichever
+ * list it is from (see civl-ranking-match.ts, which also records what that
+ * costs) — so the dialog is a sentence and a button.
  */
 function CivlFillDialog({
-  lists,
-  selected,
-  onSelect,
+  lookup,
   rosterSize,
   isBusy,
   onClose,
   onFill,
 }: {
-  lists: RankingList[] | null;
-  selected: RankingList | null;
-  onSelect: (slug: string) => void;
+  lookup: RankingLookup | null;
   /** Rows the last lookup asked about — the denominator of "18 of 24". */
   rosterSize: number;
   isBusy: boolean;
   onClose: () => void;
   onFill: () => void;
 }) {
+  const holdsNothing = lookup !== null && lookup.lists.length === 0 && lookup.matched_count === 0;
   return (
     <Modal
       isOpen
@@ -938,42 +936,32 @@ function CivlFillDialog({
           <DialogTitle>Fill from CIVL rankings</DialogTitle>
         </DialogHeader>
 
-        {lists === null ? (
+        {lookup === null ? (
           <Loading className="text-sm">Reading the CIVL world rankings…</Loading>
-        ) : lists.length === 0 ? (
-          // Nothing imported yet — a local database, or the daily import has
-          // never run. Say so plainly rather than showing an empty picker.
+        ) : holdsNothing ? (
+          // Either nothing is imported (a local database, or the daily import
+          // has never run) or this roster simply matches nobody. Both mean the
+          // button has nothing to do, and neither is worth two messages.
           <p className="text-sm text-muted-foreground">
-            No CIVL world rankings have been imported yet, so there is nothing
-            to fill from. You can still type rankings in by hand.
+            The CIVL rankings have nothing to add to this roster — either none
+            have been imported yet, or no pilot here is in one. You can still
+            type rankings in by hand.
           </p>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
               Add CIVL IDs and rankings when missing
             </p>
-            <Select
-              label="CIVL list"
-              aria-label="CIVL ranking list"
-              selectedKey={selected?.slug ?? null}
-              onSelectionChange={(key) => onSelect(String(key))}
-              className="gap-1"
-            >
-              {lists.map((list) => (
-                <SelectItem
-                  key={list.slug}
-                  id={list.slug}
-                  // textValue is what the closed button and typeahead read, so
-                  // it carries the counts too — they are the reason to choose
-                  // a list.
-                  textValue={`${list.name} · ${formatRankingMonth(list.ranking_date)} · ${list.matched_count} of ${rosterSize}`}
-                >
-                  {list.name} · {formatRankingMonth(list.ranking_date)} ·{" "}
-                  {list.matched_count} of {rosterSize}{" "}
-                  {rosterSize === 1 ? "pilot" : "pilots"}
-                </SelectItem>
-              ))}
-            </Select>
+            {/* The count is what the picker's "n of N" used to carry, and it
+                is the part worth keeping: it says what pressing the button is
+                about to be worth before it is pressed. */}
+            <p className="text-sm text-muted-foreground">
+              {lookup.matched_count} of {rosterSize}{" "}
+              {rosterSize === 1 ? "pilot is" : "pilots are"} in{" "}
+              {lookup.lists.length === 1 ? "the " : ""}
+              {listSentence(lookup.lists)}. Each takes their best ranking — the
+              lowest number — whichever list it is from.
+            </p>
           </>
         )}
 
@@ -981,9 +969,8 @@ function CivlFillDialog({
           <Button slot="close" variant="outline">
             Cancel
           </Button>
-          {lists !== null && lists.length > 0 ? (
+          {lookup !== null && !holdsNothing ? (
             <Button
-              isDisabled={!selected}
               isPending={isBusy}
               pendingLabel="Filling from the rankings"
               onPress={onFill}
@@ -996,3 +983,4 @@ function CivlFillDialog({
     </Modal>
   );
 }
+

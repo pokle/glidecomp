@@ -10,7 +10,8 @@
  * `sample-world-ranking`, never one of CIVL's ten). The real rankings arrive
  * from civlcomps.org monthly and change under us, so nothing here could assert
  * against them; the fixture pilots below are the ones that script ranks, and
- * the two files have to agree.
+ * the two files have to agree. The fixture pilots are in no other list, so
+ * their best rank is that list's rank whatever else has been imported.
  *
  * Creates its own comp, named through e2eCompName so a killed run is swept
  * (fixtures/stack.ts), and deletes it afterwards.
@@ -45,10 +46,9 @@ const MATCHING_ROSTER = [
 ];
 
 /**
- * Padding, and load-bearing: the popover test below needs a roster page TALLER
- * THAN THE WINDOW, which is the only condition under which a body-portalled
- * popover is displaced (gotcha #22). None of these names is in any ranking
- * list, so every match count stays about the five pilots above.
+ * Padding: a roster long enough to be a realistic grid, and to keep the
+ * "3 of N" count honest about a roster most of which the rankings cannot
+ * place. None of these names is in any ranking list.
  */
 const FILLER_ROSTER = Array.from({ length: 30 }, (_, i) => ({
   registered_pilot_name: `Filler Pilot ${String(i + 1).padStart(2, "0")}`,
@@ -160,14 +160,12 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   await page.getByRole("button", { name: "Edit" }).click();
   await openCivlDialog(page);
 
-  // The picker only appears once the lookup has answered — and it answers
-  // about the grid, so it doubles as "the grid is loaded".
-  const picker = page.getByRole("button", { name: /Sample World Ranking/ });
-  await expect(picker).toBeVisible({ timeout: 20_000 });
   // Three are placeable: Bruno by his ID, Ada and Cleo by name. Twin
-  // Ambiguity (two ranked pilots, one name), Unranked Nobody and every filler
-  // are not.
-  await expect(picker).toHaveText(new RegExp(`3 of ${ROSTER.length} pilots`));
+  // Ambiguity (two DIFFERENT ranked humans, one name), Unranked Nobody and
+  // every filler are not. The dialog says so before anything is pressed.
+  await expect(
+    page.getByText(new RegExp(`3 of ${ROSTER.length} pilots are in`))
+  ).toBeVisible({ timeout: 20_000 });
 
   // ONE press. Ids first, then the ranks that only become fillable once the
   // ids are in — the ordering the organiser used to have to know about.
@@ -180,7 +178,7 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
     page.getByRole("heading", { name: "Fill from CIVL rankings" })
   ).toBeHidden({ timeout: 20_000 });
   await expect(
-    page.getByText(/From Sample World Ranking .*2 CIVL IDs and 3 rankings filled in/)
+    page.getByText(/2 CIVL IDs and 3 rankings filled in from Sample World Ranking/)
   ).toBeVisible({ timeout: 20_000 });
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -192,6 +190,25 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   await expect(brunoRow).toContainText("Sample World Ranking");
   await expect(page.getByRole("row", { name: /Twin Ambiguity/ })).not.toContainText(
     "Sample World Ranking"
+  );
+  const brunoRank = (await brunoRow.innerText()).match(/\b(\d+)\b/)?.[1];
+  expect(brunoRank).toBeTruthy();
+
+  // Press it again on the same roster. "Add when missing" means exactly that:
+  // nothing is rewritten, and the outcome says why rather than leaving
+  // "0 rankings filled in" to be read as a failure.
+  await page.getByRole("button", { name: "Edit" }).click();
+  await openCivlDialog(page);
+  await page.getByRole("button", { name: "Fill", exact: true }).click();
+  await expect(
+    page.getByText(/3 pilots already had a ranking and were left alone/)
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/0 CIVL IDs and 0 rankings filled in/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByRole("row", { name: /Bruno Ridge/ })).toContainText(
+    brunoRank!
   );
 });
 
@@ -260,40 +277,6 @@ test("the roster sorts by ranking, unranked pilots last either way", async ({
   // Pinned last in BOTH directions: no ranking is not a bad ranking.
   expect(descending.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
   expect(descending.indexOf("Unranked Nobody")).toBeGreaterThan(2);
-});
-
-test("the list picker opens ON SCREEN when the page is taller than the window", async ({
-  page,
-}) => {
-  // RAC portals the popover to <body> and positions it with viewport-relative
-  // offsets under `position: absolute`; our body is `position: relative` (iOS
-  // Safari backdrops), so the containing block is the body BOX. A popover that
-  // flips upwards — which this one does, sitting low in a tall dialog — was
-  // displaced by exactly `scrollHeight - innerHeight`: open, focusable, every
-  // option in the DOM, and thousands of pixels below the fold. See gotcha #22
-  // in docs/2026-07-18-rac-adoption-guide.md.
-  //
-  // A short window is what makes the page taller than the viewport here; on
-  // the 64-pilot roster it needed no help at all.
-  await page.setViewportSize({ width: 1280, height: 500 });
-  await page.goto(`/comp/${compId}/pilots`);
-  await page.getByRole("button", { name: "Edit" }).click();
-  await openCivlDialog(page);
-
-  const picker = page.getByRole("button", { name: /Sample World Ranking/ });
-  await expect(picker).toBeVisible({ timeout: 20_000 });
-  await picker.click();
-
-  const listbox = page.getByRole("listbox");
-  await expect(listbox).toBeVisible();
-  const box = await listbox.boundingBox();
-  const viewport = page.viewportSize()!;
-  expect(box).not.toBeNull();
-  expect(box!.y).toBeGreaterThanOrEqual(0);
-  expect(box!.y).toBeLessThan(viewport.height);
-  // toBeVisible() alone would NOT have caught this: an off-screen popover is
-  // still "visible" to Playwright. The rect is the assertion.
-  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1);
 });
 
 test("a rank typed over by hand stops claiming a source", async ({ page }) => {

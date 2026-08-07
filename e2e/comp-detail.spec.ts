@@ -398,6 +398,66 @@ test("activity: collapsed digest expands, filter tabs switch and re-fetch", asyn
   await expect(panel.getByText("Could not load activity")).toHaveCount(0);
 });
 
+/**
+ * RAC gotcha #22, and the reason `popoverClass` carries `fixed!`.
+ *
+ * RAC portals a popover to <body> and positions it with viewport-relative
+ * offsets under `position: absolute`; our body is `position: relative` (iOS
+ * Safari backdrops), so the containing block is the body BOX. A popover that
+ * flips UPWARDS — which any select low in a tall dialog does — was displaced
+ * by exactly `scrollHeight - innerHeight`: open, focusable, every option in
+ * the DOM, and far below the fold.
+ *
+ * This lived on the pilots editor's CIVL list picker until that picker was
+ * removed (one number per pilot, no list to choose). The settings dialog's
+ * advanced scoring selects are the same geometry — deep inside a tall modal —
+ * so the kit fix keeps its coverage here.
+ */
+test("a select low in a tall dialog opens ON SCREEN, not below the fold", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  // A short window is what makes the page taller than the viewport, which is
+  // the only condition under which the displacement happens.
+  await page.setViewportSize({ width: 1280, height: 600 });
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("Advanced scoring settings").click();
+
+  // The trigger has to sit LOW in the window, because that is what makes RAC
+  // flip the popover upwards and emit the `bottom:` placement the bug
+  // displaces — opened higher up it opens downward and lands correctly even
+  // when broken. Verified: at ~70px from the bottom RAC emits `bottom: 78px`,
+  // which without the fix put the list 735px below the fold.
+  const select = dialog.getByRole("button", { name: "Time points exponent" });
+  await select.scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const trigger = document.querySelector<HTMLElement>(
+      'button[aria-label="Time points exponent"]'
+    );
+    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+      ?.parentElement;
+    if (!trigger || !overlay) throw new Error("settings dialog not laid out as expected");
+    overlay.scrollTop += trigger.getBoundingClientRect().y - (window.innerHeight - 70);
+  });
+  await select.click();
+
+  const listbox = page.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+  const box = await listbox.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(box).not.toBeNull();
+  // toBeVisible() alone would NOT catch this: an off-screen popover is still
+  // "visible" to Playwright. The rect is the assertion.
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeLessThan(viewport.height);
+
+  await page.keyboard.press("Escape");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  expect(mutated()).toBe(false);
+});
+
 test("settings dialog: stored GAP values, timezone combobox filter, cancel", async ({
   page,
 }) => {

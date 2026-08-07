@@ -40,26 +40,35 @@ async function seedRanking(rows: {
   }
 }
 
-interface LookupList {
-  slug: string;
-  name: string;
-  ranking_date: string;
+interface Lookup {
+  matches: Record<
+    string,
+    {
+      matched_by: string;
+      civl_id: string;
+      rank: number;
+      ranking_slug: string;
+      ranking_name: string;
+      ranking_date: string;
+    }
+  >;
   matched_count: number;
   rankable_count: number;
-  matches: Record<string, { matched_by: string; civl_id: string; rank: number }>;
+  /** Display names of the lists the matches came from. */
+  lists: string[];
 }
 
 async function lookup(
   compId: string,
   pilots: { name: string; civl_id?: string | null }[]
-): Promise<{ lists: LookupList[]; default_slug: string | null }> {
+): Promise<Lookup> {
   const res = await authRequest(
     "POST",
     `/api/comp/${compId}/pilot/civl-rankings`,
     { pilots }
   );
   expect(res.status).toBe(200);
-  return (await res.json()) as { lists: LookupList[]; default_slug: string | null };
+  return (await res.json()) as Lookup;
 }
 
 beforeEach(async () => {
@@ -190,31 +199,54 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
     const compId = await createComp();
     await seedRanking([{ rank: 12, civlId: "25161", pilotName: "Ana Silva" }]);
 
-    const { lists } = await lookup(compId, [
+    const { matches } = await lookup(compId, [
       { name: "Ana Silva", civl_id: "25161" },
     ]);
-    expect(lists).toHaveLength(1);
-    expect(lists[0].matches["0"]).toMatchObject({
-      matched_by: "civl_id",
-      rank: 12,
-    });
+    expect(matches["0"]).toMatchObject({ matched_by: "civl_id", rank: 12 });
   });
 
   test("offers an id for an unambiguous name, and no rank with it", async () => {
     const compId = await createComp();
     await seedRanking([{ rank: 12, civlId: "25161", pilotName: "Ana Silva" }]);
 
-    const { lists } = await lookup(compId, [{ name: "ana silva", civl_id: null }]);
-    expect(lists[0].matches["0"]).toMatchObject({
-      matched_by: "name",
-      civl_id: "25161",
-    });
-    expect(lists[0].matched_count).toBe(1);
-    expect(lists[0].rankable_count).toBe(0);
+    const { matches, matched_count, rankable_count } = await lookup(compId, [
+      { name: "ana silva", civl_id: null },
+    ]);
+    expect(matches["0"]).toMatchObject({ matched_by: "name", civl_id: "25161" });
+    expect(matched_count).toBe(1);
+    expect(rankable_count).toBe(0);
   });
 
-  test("every list we hold is returned, including the ones that place nobody", async () => {
+  test("takes a pilot's BEST rank, whichever list it is from", async () => {
+    // The rule this endpoint exists to apply now: CIVL publishes no overall
+    // ranking, so a pilot in two lists is given their lowest number and the
+    // list it came from travels with it.
     const compId = await createComp({ category: "hg" });
+    await seedRanking([
+      { rank: 106, civlId: "25161", pilotName: "Luke Nicol" },
+      {
+        slug: "paragliding-xc-sport",
+        name: "PG XC Sport",
+        rank: 1,
+        civlId: "25161",
+        pilotName: "Luke Nicol",
+      },
+    ]);
+
+    const { matches, lists } = await lookup(compId, [
+      { name: "Luke Nicol", civl_id: "25161" },
+    ]);
+    expect(matches["0"]).toMatchObject({
+      rank: 1,
+      ranking_slug: "paragliding-xc-sport",
+      ranking_name: "PG XC Sport",
+    });
+    // Only the lists the numbers actually came from are named.
+    expect(lists).toEqual(["PG XC Sport"]);
+  });
+
+  test("names every list a roster's numbers came from", async () => {
+    const compId = await createComp();
     await seedRanking([
       { rank: 12, civlId: "25161", pilotName: "Ana Silva" },
       {
@@ -226,36 +258,28 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
       },
     ]);
 
-    const { lists, default_slug } = await lookup(compId, [
+    const { lists, matched_count } = await lookup(compId, [
       { name: "Ana Silva", civl_id: "25161" },
+      { name: "Someone Else", civl_id: "70001" },
     ]);
-    expect(lists.map((l) => l.slug).sort()).toEqual([
-      "hang-gliding-class-1-xc",
-      "paragliding-xc",
-    ]);
-    const pg = lists.find((l) => l.slug === "paragliding-xc")!;
-    expect(pg.matched_count).toBe(0);
-    expect(pg.ranking_date).toBe("2026-07-01");
-    // An HG comp opens on the HG list.
-    expect(default_slug).toBe("hang-gliding-class-1-xc");
+    expect(matched_count).toBe(2);
+    expect(lists).toEqual(["HG Class 1", "PG XC"]);
   });
 
   test("only the newest snapshot of a list is matched against", async () => {
     // The importer writes the new month before deleting the old one, so the
-    // table transiently holds both. A rank from the outgoing month would be
-    // stamped with a date the pilot no longer holds.
+    // table transiently holds both. Last month's rank is one the pilot no
+    // longer holds — and, being lower, would otherwise win outright.
     const compId = await createComp();
     await seedRanking([
-      { date: "2026-06-01", rank: 40, civlId: "25161", pilotName: "Ana Silva" },
+      { date: "2026-06-01", rank: 4, civlId: "25161", pilotName: "Ana Silva" },
       { date: "2026-07-01", rank: 12, civlId: "25161", pilotName: "Ana Silva" },
     ]);
 
-    const { lists } = await lookup(compId, [
+    const { matches } = await lookup(compId, [
       { name: "Ana Silva", civl_id: "25161" },
     ]);
-    expect(lists).toHaveLength(1);
-    expect(lists[0].ranking_date).toBe("2026-07-01");
-    expect(lists[0].matches["0"].rank).toBe(12);
+    expect(matches["0"]).toMatchObject({ rank: 12, ranking_date: "2026-07-01" });
   });
 
   test("a full-sized roster does not blow D1's bound-parameter limit", async () => {
@@ -272,10 +296,10 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
       pilots.map((p, i) => ({ rank: i + 1, civlId: p.civl_id, pilotName: p.name }))
     );
 
-    const { lists } = await lookup(compId, pilots);
-    expect(lists[0].matched_count).toBe(120);
-    expect(lists[0].rankable_count).toBe(120);
-    expect(lists[0].matches["119"]).toMatchObject({ rank: 120 });
+    const { matches, matched_count, rankable_count } = await lookup(compId, pilots);
+    expect(matched_count).toBe(120);
+    expect(rankable_count).toBe(120);
+    expect(matches["119"]).toMatchObject({ rank: 120 });
   });
 
   test("a pilot matched by BOTH id and name is not mistaken for two people", async () => {
@@ -285,17 +309,21 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
     const compId = await createComp();
     await seedRanking([{ rank: 12, civlId: "25161", pilotName: "Ana Silva" }]);
 
-    const { lists } = await lookup(compId, [
+    const { matches } = await lookup(compId, [
       { name: "Ana Silva", civl_id: "25161" },
     ]);
-    expect(lists[0].matches["0"]).toMatchObject({ matched_by: "civl_id", rank: 12 });
+    expect(matches["0"]).toMatchObject({ matched_by: "civl_id", rank: 12 });
   });
 
   test("with nothing imported it answers empty rather than failing", async () => {
     const compId = await createComp();
-    const { lists, default_slug } = await lookup(compId, [{ name: "Ana Silva" }]);
-    expect(lists).toEqual([]);
-    expect(default_slug).toBeNull();
+    const result = await lookup(compId, [{ name: "Ana Silva" }]);
+    expect(result).toEqual({
+      matches: {},
+      matched_count: 0,
+      rankable_count: 0,
+      lists: [],
+    });
   });
 
   test("a non-admin cannot read it", async () => {
@@ -314,5 +342,92 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
       body: { pilots: [{ name: "Ana Silva" }] },
     });
     expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/comp/:comp_id/pilot/civl-search", () => {
+  async function search(
+    compId: string,
+    q: string
+  ): Promise<{ pilots: { civl_id: string; rank: number; ranking_name: string; nation: string }[] }> {
+    const res = await authRequest(
+      "GET",
+      `/api/comp/${compId}/pilot/civl-search?q=${encodeURIComponent(q)}`
+    );
+    expect(res.status).toBe(200);
+    return (await res.json()) as {
+      pilots: { civl_id: string; rank: number; ranking_name: string; nation: string }[];
+    };
+  }
+
+  test("offers a pilot ONCE, at the same best rank the fill would give them", async () => {
+    // The typeahead and the button have to agree: suggesting a per-list rank
+    // here while the button filled a cross-list best would put two different
+    // numbers in front of the organiser for one pilot.
+    const compId = await createComp();
+    await seedRanking([
+      { rank: 106, civlId: "25161", pilotName: "Luke Nicol" },
+      {
+        slug: "paragliding-xc-sport",
+        name: "PG XC Sport",
+        rank: 1,
+        civlId: "25161",
+        pilotName: "Luke Nicol",
+      },
+    ]);
+
+    const { pilots } = await search(compId, "Luke");
+    expect(pilots).toHaveLength(1);
+    expect(pilots[0]).toMatchObject({
+      civl_id: "25161",
+      rank: 1,
+      ranking_name: "PG XC Sport",
+    });
+  });
+
+  test("two different humans of one name are two suggestions", async () => {
+    // Unlike the fill, which refuses an ambiguous name outright: here a human
+    // chooses, and their nation and rank are what tell the two apart.
+    const compId = await createComp();
+    await seedRanking([
+      { rank: 20, civlId: "1001", pilotName: "John Smith" },
+      { slug: "paragliding-xc", name: "PG XC", rank: 51, civlId: "1002", pilotName: "John Smith" },
+    ]);
+
+    const { pilots } = await search(compId, "john smith");
+    expect(pilots.map((p) => p.civl_id).sort()).toEqual(["1001", "1002"]);
+  });
+
+  test("last month's rank is never suggested", async () => {
+    const compId = await createComp();
+    await seedRanking([
+      { date: "2026-06-01", rank: 4, civlId: "25161", pilotName: "Ana Silva" },
+      { date: "2026-07-01", rank: 12, civlId: "25161", pilotName: "Ana Silva" },
+    ]);
+
+    const { pilots } = await search(compId, "Ana");
+    expect(pilots).toHaveLength(1);
+    expect(pilots[0].rank).toBe(12);
+  });
+
+  test("a name containing LIKE's own wildcards is matched literally", async () => {
+    const compId = await createComp();
+    await seedRanking([
+      { rank: 5, civlId: "3001", pilotName: "100% Nutty" },
+      { rank: 6, civlId: "3002", pilotName: "Someone Else" },
+    ]);
+
+    const { pilots } = await search(compId, "100%");
+    expect(pilots.map((p) => p.civl_id)).toEqual(["3001"]);
+  });
+
+  test("a non-admin cannot read it", async () => {
+    const compId = await createComp();
+    const res = await request(
+      "GET",
+      `/api/comp/${compId}/pilot/civl-search?q=Ana`,
+      { user: "user-2" }
+    );
+    expect(res.status).toBe(403);
   });
 });

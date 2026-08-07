@@ -200,32 +200,39 @@ be indistinguishable from an import.
 `civl-rankings.ts`), and both apply the same rules.
 
 **"Fill from CIVL…"**, in the editor's footer with the other grid-wide
-actions. It opens a dialog of its own (`CivlFillDialog`) holding the list
-picker — every list we hold, with its month and how many of these pilots it
-places — an explanation of what filling does, and the button that does it. It
-was a bar under the grid, and on a phone its label, picker and button cost
-about a fifth of the editor's height permanently, for a step most rosters take
-once; the dialog also gives the explanation room to be a sentence rather than
-a tooltip a touchscreen cannot open. It closes on the way out so the outcome
-lands under the grid, beside the rows it changed.
+actions. It opens a dialog of its own (`CivlFillDialog`) saying how many of
+these pilots the rankings can place, and the button that places them. It was
+a bar under the grid, and on a phone it cost about a fifth of the editor's
+height permanently, for a step most rosters take once. It closes on the way
+out so the outcome lands under the grid, beside the rows it changed.
 
 The fill does two passes, in this order and for this reason:
 
-1. **Ids** — into an EMPTY id cell whose name exactly one pilot in the list
+1. **Ids** — into an EMPTY id cell whose name exactly one ranked pilot
    answers to. This is the one place a name decides anything.
-2. **Ranks** — matched on **CIVL ID only**. A rank against the wrong human
-   silently sets the wrong launch order, and a shared name is not evidence of
-   a shared identity (the same rule `pilot-resolver.ts` and `pilot-linker.ts`
-   refuse to link accounts on).
+2. **Ranks** — into an EMPTY ranking cell, matched on **CIVL ID only**. A rank
+   against the wrong human silently sets the wrong launch order, and a shared
+   name is not evidence of a shared identity (the same rule
+   `pilot-resolver.ts` and `pilot-linker.ts` refuse to link accounts on).
 
 The lookup is re-run **between** the passes: rows that just gained an id are
 matched by it on the second, which is what makes their ranks fillable at all.
 This was two buttons, and the ordering was the organiser's to know — pressing
 them the other way round simply did less.
 
+**Neither pass overwrites.** The dialog promises "Add CIVL IDs and rankings
+when missing", and a number already in the grid is somebody's answer — typed
+for a pilot the list has wrong or has missed, or filled from a list chosen
+earlier. The cost is the refresh path: when CIVL publishes a new month,
+filling again adds nothing to a roster that is already ranked, and **clearing
+a ranking is how an organiser asks for the newer one**. The outcome line says
+so, because "0 rankings filled in" otherwise reads as a failure — a matched
+row that was left alone is counted separately (`already_set`) from one the
+list has never heard of.
+
 **A name typeahead**, on the name column. Typing two or more characters offers
-ranked pilots from the list showing in the picker, labelled with nation and
-world rank because that is what tells two pilots of one name apart. Picking one
+ranked pilots — each once, at their best rank — labelled with nation and world
+rank because that is what tells two pilots of one name apart. Picking one
 takes CIVL's spelling of the name and brings the id and the rank with it — the
 same match the button makes, made one row at a time and before the ambiguity
 exists. The column stays **freetext**: most rosters have pilots who have never
@@ -233,9 +240,10 @@ been ranked, and a name cell that refused to hold them would be worse than one
 with no suggestions. It reads `GET /api/comp/:comp_id/pilot/civl-search`
 (admin only), and an id already in the row is never overwritten.
 
-Every ambiguity is refused rather than resolved: two ranked pilots sharing a
-name, two roster rows claiming one ranked pilot, or a ranked pilot whose id
-another row already holds. Names match on case and whitespace only — accents
+Every ambiguity is refused rather than resolved: two DIFFERENT ranked humans
+sharing a name, two roster rows claiming one ranked pilot, or a ranked pilot
+whose id another row already holds. One pilot appearing in several lists is
+not an ambiguity — see below. Names match on case and whitespace only — accents
 are **not** folded, because SQLite's `NOCASE` is ASCII-only and the fold would
 claim matches the query could never fetch. Rules and reasoning:
 `web/workers/competition-api/src/civl-ranking-match.ts`.
@@ -255,6 +263,38 @@ almost none of its field is in.
 Writes go through the ordinary roster save, so they are `audit()`ed like any
 other roster change. They take **no** `bumpAndRevalidateScores()` call: a world
 ranking is not a scoring input and cannot change a task score.
+
+### One number per pilot: the best rank, from any list
+
+CIVL publishes ten lists and **no overall ranking** — every row of every list
+is `region=World, selection=Overall`, where "Overall" is CIVL's own selection
+filter rather than an aggregate. A pilot in more than one list therefore has no
+single published number, and the roster needs one.
+
+The rule is their **best rank — the lowest number** — whichever list it comes
+from, with that list recorded on the row (`civl_ranking_slug`), so two pilots
+on one roster are routinely ranked from two different lists. Equal ranks go to
+the more points; an exact tie falls to the slug so a re-run answers the same.
+`bestPerPilot()` in `civl-ranking-match.ts` does the collapsing, and doing it
+BEFORE the matching is also what stops one pilot in four lists reading as four
+rivals for a name.
+
+**Know what this costs.** A rank is a position within one pool, and the pools
+differ enormously — HG Class 2 holds six pilots, PG XC holds 6,875 — so the
+smaller the list, the flatter the rank it hands out. In the August 2026
+snapshot:
+
+| | |
+|---|---|
+| ranked pilots in more than one list | 4,140 of 10,019 (41%), up to 4 lists |
+| median spread between a pilot's ranks | 1,835 places |
+| pilots whose best rank and best points are in different lists | 3,457 |
+
+Luke Nicol is **#1 in PG XC Sport and #106 in PG XC on identical points**,
+because Sport is a subset pool; best-rank gives him #1. If that bias ever
+matters more than the simplicity, ranking by `points` — which is the WPRS
+score, and comparable across lists in a way ranks are not — is a one-line
+change to `isBetter()`.
 
 ### Rankings on a development database
 

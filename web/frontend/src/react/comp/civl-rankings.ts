@@ -14,34 +14,36 @@
 import { api } from "../../comp/api";
 import type { ParsedRow } from "./csv";
 
-/** What one ranking list offers one roster row. */
+/** What the rankings offer one roster row: their best rank, and where it is from. */
 export interface RowMatch {
   /** Only a `civl_id` match may fill a RANK — a name never decides one. */
   matched_by: "civl_id" | "name";
   civl_id: string;
   /** The name as CIVL spells it. */
   pilot_name: string;
+  /** The pilot's LOWEST rank across every list, and the list it is from. */
   rank: number;
   points: number;
+  ranking_slug: string;
+  ranking_name: string;
+  ranking_date: string;
 }
 
-/** One ranking list, and what it has to say about the roster we sent. */
-export interface RankingList {
-  slug: string;
-  /** The sheet's own label, e.g. 'HG Class 1'. */
-  name: string;
-  /** ISO 'YYYY-MM-01' — the month this snapshot was published. */
-  ranking_date: string;
+/** What the rankings have to say about the roster we sent. */
+export interface RankingLookup {
   /** Roster index → match. Indices with no entry are unmatched. */
   matches: Record<number, RowMatch>;
+  /** Roster rows the rankings can place at all. */
   matched_count: number;
+  /** Of those, the ones that can fill a rank right now (id already present). */
   rankable_count: number;
-}
-
-export interface RankingLookup {
-  lists: RankingList[];
-  /** The list the picker should open on, or null when we hold none. */
-  default_slug: string | null;
+  /**
+   * The lists those matches actually came from, by display name. A roster's
+   * numbers routinely come from several at once now — a pilot is taken from
+   * whichever list ranks them best — so the outcome line names them rather
+   * than claiming one.
+   */
+  lists: string[];
 }
 
 /**
@@ -63,7 +65,7 @@ export async function lookupRankings(
   return (await res.json()) as RankingLookup;
 }
 
-/** One ranked pilot offered to the name typeahead. */
+/** One ranked pilot offered to the name typeahead, at their best rank. */
 export interface RankedPilot {
   civl_id: string;
   pilot_name: string;
@@ -71,15 +73,15 @@ export interface RankedPilot {
   points: number;
   nation: string;
   ranking_slug: string;
+  ranking_name: string;
   ranking_date: string;
 }
 
 /**
  * Ranked pilots whose name contains `term`, for the roster editor's typeahead.
  *
- * `slug` is the list showing in the picker; the server falls back to the
- * comp's own discipline when it is null, so the first name typed into a fresh
- * roster still suggests something.
+ * Every list is searched and each pilot offered once, at their best rank —
+ * the same number the fill button would give them.
  *
  * Returns [] on any failure. A typeahead that cannot reach the server has
  * nothing to offer, and saying so on every keystroke would be worse than
@@ -87,15 +89,14 @@ export interface RankedPilot {
  */
 export async function searchRankedPilots(
   compId: string,
-  term: string,
-  slug: string | null
+  term: string
 ): Promise<RankedPilot[]> {
   const q = term.trim();
   if (q.length < 2) return [];
   try {
     const res = await api.api.comp[":comp_id"].pilot["civl-search"].$get({
       param: { comp_id: compId },
-      query: { q, ...(slug ? { slug } : {}) },
+      query: { q },
     });
     if (!res.ok) return [];
     const body = (await res.json()) as { pilots: RankedPilot[] };
@@ -113,10 +114,9 @@ export async function searchRankedPilots(
  *
  * These are CIVL's OWN labels, copied from the `ranking_name` column of a real
  * import (`web/samples/civl-rankings/civl-rankings-2026-08.csv`) rather than
- * guessed from the slug — the picker shows the snapshot's name and the roster
- * shows this one, and a reader comparing the two must not find "PG Accuracy"
- * in one place and "PGA" in the other. Refresh them from that column whenever
- * the snapshot is refreshed.
+ * guessed from the slug — a reader comparing the roster against civlcomps.org
+ * must not find "PG Accuracy" here and "PGA" there. Refresh them from that
+ * column whenever the snapshot is refreshed.
  *
  * An unknown slug — CIVL adding an eleventh list — falls back to a readable
  * form of the slug itself rather than disappearing.
@@ -203,53 +203,78 @@ export function pilotDetails(pilot: RankedPilot): Partial<ParsedRow> {
 export interface FillOutcome {
   rows: ParsedRow[];
   filled: number;
-  /** Rows the list had nothing to say about — left exactly as they were. */
+  /** Rows the rankings had nothing to say about — left exactly as they were. */
   skipped: number;
+  /**
+   * Rows the rankings DID match but which already held a value, so nothing
+   * was written. Distinct from `skipped`, because "we know this pilot and you
+   * already have their number" and "no list has heard of them" are
+   * different answers, and only one of them means "clear it to get the newer
+   * number". Always 0 for the id pass, which cannot match a filled cell.
+   */
+  already_set: number;
 }
 
 /**
- * Fill empty CIVL ID cells from the list's name matches.
+ * Fill empty CIVL ID cells from the rankings' name matches.
  *
  * Only `name` matches are used, and only into an EMPTY cell: an id already in
  * the grid is someone's deliberate answer and is never second-guessed. The
  * server has already refused every ambiguous name, so anything offered here
  * is a single ranked pilot no other row is claiming.
  */
-export function fillCivlIds(rows: ParsedRow[], list: RankingList): FillOutcome {
+export function fillCivlIds(rows: ParsedRow[], lookup: RankingLookup): FillOutcome {
   let filled = 0;
   const out = rows.map((row, index) => {
-    const match = list.matches[index];
+    const match = lookup.matches[index];
     if (row.civl_id || !match || match.matched_by !== "name") return row;
     filled++;
     return { ...row, civl_id: match.civl_id };
   });
-  return { rows: out, filled, skipped: rows.length - filled };
+  // A row that already carries an id is never name-matched in the first place
+  // (the server declines to offer one), so nothing can be "already set" here.
+  return { rows: out, filled, skipped: rows.length - filled, already_set: 0 };
 }
 
 /**
- * Fill the ranking column from the list's CIVL ID matches.
+ * Fill the ranking column from the rankings' CIVL ID matches.
  *
  * Matched BY ID ONLY, which is why the organiser fills the ids first: a rank
  * attached to the wrong human silently sets the wrong launch order, and a
  * shared name is not evidence of a shared identity. The list and month travel
  * with the number so the roster can show where it came from.
  *
- * Overwrites a rank that is already there — this is the button that says "use
- * what CIVL published", and an organiser who wants their own number types it
- * back afterwards (which drops the source, as it should).
+ * **Only into an empty cell**, the same rule the id pass follows. A rank in
+ * the grid is somebody's answer — typed by an organiser for a pilot the list
+ * has wrong or has missed, or filled from a list they chose earlier — and a
+ * button labelled "add when missing" may not quietly replace it.
+ *
+ * The cost is the refresh path: when CIVL publishes a new month, filling
+ * again adds nothing to a roster that is already ranked. Clearing the column
+ * (or the rows in question) is what asks for the newer numbers, and
+ * `already_set` is reported so the UI can say that is what happened rather
+ * than leaving "0 filled" to be read as a failure.
  */
-export function fillRankings(rows: ParsedRow[], list: RankingList): FillOutcome {
+export function fillRankings(rows: ParsedRow[], lookup: RankingLookup): FillOutcome {
   let filled = 0;
+  let alreadySet = 0;
   const out = rows.map((row, index) => {
-    const match = list.matches[index];
+    const match = lookup.matches[index];
     if (!match || match.matched_by !== "civl_id") return row;
+    if (row.civl_ranking) {
+      alreadySet++;
+      return row;
+    }
     filled++;
     return {
       ...row,
       civl_ranking: String(match.rank),
-      civl_ranking_slug: list.slug,
-      civl_ranking_date: list.ranking_date,
+      // The pilot's own best list, not one list for the whole roster: two
+      // pilots on one roster can now be ranked from two different lists, and
+      // each number has to say which one it is.
+      civl_ranking_slug: match.ranking_slug,
+      civl_ranking_date: match.ranking_date,
     };
   });
-  return { rows: out, filled, skipped: rows.length - filled };
+  return { rows: out, filled, skipped: rows.length - filled, already_set: alreadySet };
 }
