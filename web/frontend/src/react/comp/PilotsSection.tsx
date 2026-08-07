@@ -733,10 +733,13 @@ function EditPilotsDialog({
         <DialogHeader>
           <DialogTitle>Edit pilots</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Tap a cell to edit. Rows without a name are ignored on save.
-        </p>
 
+        {/* No standing prose above the grid: on a phone every line here is a
+            row of the roster the organiser cannot see. What it used to say —
+            tap a cell to edit it, nameless rows are dropped — the grid says
+            better by being a grid, and by naming the row on save if a row
+            with content has no name. The empty-grid placeholder still
+            onboards a first-time admin, which is when it is worth the space. */}
         <TabulatorGrid
           id="pilots-grid"
           className="gc-grid min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden rounded border border-border"
@@ -784,13 +787,6 @@ function EditPilotsDialog({
             {extraErrors > 0 ? <li>… and {extraErrors} more</li> : null}
           </ul>
         ) : null}
-        <p className="text-sm text-muted-foreground">
-          Need a sporting body ID column not listed?{" "}
-          <a className="underline underline-offset-4" href="mailto:tushar.pokle@gmail.com">
-            Contact me
-          </a>
-          .
-        </p>
 
         <DialogFooter>
           <div className="flex flex-wrap gap-2 sm:mr-auto">
