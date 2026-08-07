@@ -164,6 +164,10 @@ These are the standing imperatives. Each links to the reference that explains it
     competition data: `task_weather` ([docs/weather.md](docs/weather.md)) and
     `pilot_ranking` ([docs/civl-rankings.md](docs/civl-rankings.md)). Neither
     takes an `audit()` call either.
+    - The roster's own copy of a world ranking (`comp_pilot.civl_ranking` and
+      its source columns, migration 0029) is the other way round: it IS
+      competition data an organiser entered, so it is audited — but it feeds
+      launch order, never a score, so it takes no bump.
 - **A failure to ask is not an answer** (issue #481). Identity and page data are
   each fetched once per page load, and every downstream decision keys off the
   result — so a *transient* failure must never be recorded as a *fact*. A dropped

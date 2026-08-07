@@ -134,7 +134,14 @@ test.beforeEach(async ({ page }) => {
 function trackMutations(page: Page): () => boolean {
   let mutated = false;
   page.on("request", (r) => {
-    if (r.method() !== "GET" && r.url().includes("/api/comp")) mutated = true;
+    if (r.method() === "GET" || !r.url().includes("/api/comp")) return;
+    // One exception, and it has to be an exception: the CIVL ranking lookup
+    // is a READ that takes a body, because what it reads about is the roster
+    // sitting unsaved in the editor's grid (routes/pilot.ts). Method alone
+    // cannot tell it apart from a write, so it is named here rather than the
+    // rule being loosened to "POST is fine".
+    if (r.url().includes("/pilot/civl-rankings")) return;
+    mutated = true;
   });
   return () => mutated;
 }

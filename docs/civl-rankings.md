@@ -2,12 +2,16 @@
 
 How GlideComp gets the FAI/CIVL world pilot rankings, and what it does with them.
 
-**Scope today: acquisition and storage only.** The `pilot_ranking` table is
-standalone — nothing joins it to `pilot` or `comp_pilot`, and no page reads it.
-Launch order (task 1 in reverse world-ranking order, subsequent tasks in reverse
-of the previous task's scores) is a separate, later piece of work; see
-`docs/competition-spec.md` Iteration 10 and the prior implementation in
-[pokle/taskmaster](https://github.com/pokle/taskmaster).
+**Scope: acquisition and storage, plus one reader — the pilot roster.** The
+`pilot_ranking` table is still standalone (no foreign keys, nothing joins it),
+but an organiser can now copy a ranking onto each of their pilots from the
+roster editor. See [The roster's copy](#the-rosters-copy) below.
+
+Launch order itself (task 1 in reverse world-ranking order, subsequent tasks in
+reverse of the previous task's scores) is still a separate, later piece of work;
+see `docs/competition-spec.md` Iteration 10 and the prior implementation in
+[pokle/taskmaster](https://github.com/pokle/taskmaster). This gives that work,
+and the organiser doing it by hand today, the numbers to run on.
 
 **This is not competition data**, so — like `task_weather` — the import takes
 neither an `audit()` call nor a `bumpScoreInputs()` bump. A world ranking cannot
@@ -172,6 +176,64 @@ Served by `functions/civl-rankings.csv.ts` → `routes/civl-rankings.ts` over th
 service binding. Under `bun run dev` the Pages Function doesn't run, so
 `vite.config.ts` rewrites the same URL to `/api/civl-rankings.csv` on the
 dev-router; the one public URL works in both.
+
+## The roster's copy
+
+A competition wants the rankings **as they stood when the roster was built** —
+a launch order that reshuffles itself when CIVL publishes next month is not a
+launch order. So nothing reads `pilot_ranking` at page-render time. The number
+is COPIED onto `comp_pilot` once, by an organiser pressing a button, and stays
+put:
+
+| Column | |
+|---|---|
+| `civl_ranking` | the rank. Existed unused since migration 0001; real since 0029 |
+| `civl_ranking_slug` | which list it came from, NULL when set by hand |
+| `civl_ranking_date` | that list's snapshot month, NULL when set by hand |
+
+Both source columns being NULL is what the roster renders as "set by
+organiser" — an override (a pilot the list has missed, or has wrong) must not
+be indistinguishable from an import.
+
+**The two fill buttons** live in the pilots editor (`/comp/:id/pilots` → Edit,
+`src/react/comp/PilotsSection.tsx` + `civl-rankings.ts`), beside a picker
+listing every list we hold with its month and how many of these pilots it
+places. They are used in that order:
+
+1. **Fill CIVL IDs** — for an EMPTY id cell whose name exactly one pilot in the
+   list answers to. This is the one place a name decides anything.
+2. **Fill rankings** — matched on **CIVL ID only**. A rank against the wrong
+   human silently sets the wrong launch order, and a shared name is not
+   evidence of a shared identity (the same rule `pilot-resolver.ts` and
+   `pilot-linker.ts` refuse to link accounts on).
+
+Every ambiguity is refused rather than resolved: two ranked pilots sharing a
+name, two roster rows claiming one ranked pilot, or a ranked pilot whose id
+another row already holds. Names match on case and whitespace only — accents
+are **not** folded, because SQLite's `NOCASE` is ASCII-only and the fold would
+claim matches the query could never fetch. Rules and reasoning:
+`web/workers/competition-api/src/civl-ranking-match.ts`.
+
+Both buttons read `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
+which answers about the rows in the **grid** — the organiser is mid-edit when
+they press it — and returns every list we hold, including ones that place
+nobody, so a wrong-discipline pick shows as "0 of 24" instead of vanishing.
+Nothing is written until Save.
+
+Writes go through the ordinary roster save, so they are `audit()`ed like any
+other roster change. They take **no** `bumpAndRevalidateScores()` call: a world
+ranking is not a scoring input and cannot change a task score.
+
+### Rankings on a development database
+
+A fresh local D1 holds no rankings, and the real import is a network round trip
+whose contents change monthly — no test can assert against it. `bun run
+seed-civl-rankings` writes a synthetic list instead: slug
+`sample-world-ranking` (never one of the ten real ones, so it cannot collide
+with an import), named "Sample World Ranking" wherever it appears, ranking
+every pilot already in the database plus the fixed pilots
+`e2e/civl-rankings.spec.ts` registers. Run `bun run civl-rankings` as well and
+both appear in the picker, side by side.
 
 ## Adding a list
 
