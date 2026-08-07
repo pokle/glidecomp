@@ -949,12 +949,8 @@ function CivlFillDialog({
           </p>
         ) : (
           <>
-            {/* What the tooltip used to say, where a phone can read it. */}
             <p className="text-sm text-muted-foreground">
-              Puts a CIVL ID against every name only one pilot in this list
-              answers to, then copies those pilots' rankings. Existing IDs are
-              never changed; rankings are overwritten with what CIVL published.
-              Nothing is saved until you save the roster.
+              Add CIVL IDs and rankings when missing
             </p>
             <Select
               label="CIVL list"
@@ -992,7 +988,7 @@ function CivlFillDialog({
               pendingLabel="Filling from the rankings"
               onPress={onFill}
             >
-              Fill roster
+              Fill
             </Button>
           ) : null}
         </DialogFooter>

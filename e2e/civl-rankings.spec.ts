@@ -171,7 +171,7 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
 
   // ONE press. Ids first, then the ranks that only become fillable once the
   // ids are in — the ordering the organiser used to have to know about.
-  await page.getByRole("button", { name: "Fill roster" }).click();
+  await page.getByRole("button", { name: "Fill", exact: true }).click();
   // Ada and Cleo gain ids (Bruno already had one, Twin Ambiguity is refused);
   // all three are then ranked BY ID, including the two just filled.
   // The fill dialog closes on its way out, so the outcome lands under the
