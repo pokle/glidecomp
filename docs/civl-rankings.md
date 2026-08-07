@@ -187,13 +187,19 @@ put:
 
 | Column | |
 |---|---|
-| `civl_ranking` | the rank. Existed unused since migration 0001; real since 0029 |
+| `wprs_points` | the pilot's WPRS score (migration 0030) |
 | `civl_ranking_slug` | which list it came from, NULL when set by hand |
 | `civl_ranking_date` | that list's snapshot month, NULL when set by hand |
 
 Both source columns being NULL is what the roster renders as "set by
 organiser" — an override (a pilot the list has missed, or has wrong) must not
 be indistinguishable from an import.
+
+**Points and not a rank.** 0029 stored the rank and 0030 replaced it, because
+a rank is only a position within one list's pool and the pools run from six
+pilots to 6,875 — see [One number per pilot](#one-number-per-pilot-wprs-points-choose-the-list)
+below. The migration converts every stored rank back to the points it came
+from, by the (list, month, pilot) it recorded.
 
 **Filling the roster in** happens two ways in the pilots editor
 (`/comp/:id/pilots` → Edit, `src/react/comp/PilotsSection.tsx` +
@@ -210,7 +216,7 @@ The fill does two passes, in this order and for this reason:
 
 1. **Ids** — into an EMPTY id cell whose name exactly one ranked pilot
    answers to. This is the one place a name decides anything.
-2. **Ranks** — into an EMPTY ranking cell, matched on **CIVL ID only**. A rank
+2. **Points** — into an EMPTY score cell, matched on **CIVL ID only**. A score
    against the wrong human silently sets the wrong launch order, and a shared
    name is not evidence of a shared identity (the same rule
    `pilot-resolver.ts` and `pilot-linker.ts` refuse to link accounts on).
@@ -222,10 +228,10 @@ them the other way round simply did less.
 
 **Neither pass overwrites.** The dialog promises "Add CIVL IDs and rankings
 when missing", and a number already in the grid is somebody's answer — typed
-for a pilot the list has wrong or has missed, or filled from a list chosen
-earlier. The cost is the refresh path: when CIVL publishes a new month,
-filling again adds nothing to a roster that is already ranked, and **clearing
-a ranking is how an organiser asks for the newer one**. The outcome line says
+for a pilot the lists have wrong or have missed, or filled from an earlier
+import. The cost is the refresh path: when CIVL publishes a new month, filling
+again adds nothing to a roster that is already scored, and **clearing a score
+is how an organiser asks for the newer one**. The outcome line says
 so, because "0 rankings filled in" otherwise reads as a failure — a matched
 row that was left alone is counted separately (`already_set`) from one the
 list has never heard of.
@@ -273,8 +279,8 @@ single published number, and the roster needs one.
 
 The rule: take the list where the pilot scores the most **WPRS points** (the
 World Pilot Ranking Scheme score CIVL computes from their results, and sorts
-each list by), and copy their **rank in that list** onto the roster, recording
-the list in `civl_ranking_slug`. Two pilots on one roster are routinely ranked
+each list by), and copy **those points** onto the roster, recording the list
+in `civl_ranking_slug`. Two pilots on one roster are routinely ranked
 from two different lists. Equal points go to the lower rank; an exact tie falls
 to the slug so a re-run answers the same. `bestPerPilot()` in
 `civl-ranking-match.ts` does the collapsing, and doing it BEFORE the matching
@@ -297,9 +303,11 @@ call him first in the world. Points are the same quantity in every list, so
 "which list has this pilot achieved most in" is a question they can answer and
 ranks cannot.
 
-What the roster holds is still a **rank**, because that is what a launch order
-is set from — but it is now their rank in their strongest discipline rather
-than in their smallest.
+The roster holds the **points**, not the rank from that list: the rank would
+carry the pool back in with it. Two pilots taken from different lists can then
+be compared — sorting the roster's column ascending is the task-1 launch order
+(reverse ranking order, fewest points first), which is the whole reason the
+number is there.
 
 ### Rankings on a development database
 

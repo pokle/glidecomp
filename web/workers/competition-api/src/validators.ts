@@ -247,11 +247,16 @@ export const compPilotFieldsSchema = z.object({
   pilot_class: pilotClassString,
   team_name: optionalText,
   driver_contact: optionalText,
-  // WPRS world ranking, copied onto the roster (never looked up live — see
-  // migration 0029) and overridable by the organiser. The two source fields
-  // say which CIVL list and which monthly snapshot it came from; both null
-  // means a hand-entered rank.
-  civl_ranking: z.number().int().positive().nullable().optional(),
+  // The pilot's WPRS score, copied onto the roster (never looked up live —
+  // see migrations 0029/0030) and overridable by the organiser. The two source
+  // fields say which CIVL list and which monthly snapshot it came from; both
+  // null means a hand-entered number.
+  //
+  // REAL and not an integer: CIVL publishes one decimal, and near the top of a
+  // list that decimal is the whole difference between two pilots. The ceiling
+  // is far above the best score ever published (431.2 in August 2026) and only
+  // exists so the column cannot be used as free numeric storage.
+  wprs_points: z.number().positive().max(10000).nullable().optional(),
   civl_ranking_slug: z
     .string()
     .max(MAX_TEXT)

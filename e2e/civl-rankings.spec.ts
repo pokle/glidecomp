@@ -2,8 +2,8 @@
  * CIVL world rankings on the pilot roster (/comp/:id/pilots).
  *
  * The organiser's workflow, end to end: open the roster editor, fill the CIVL
- * IDs the ranking list can identify by name, fill each pilot's ranking from
- * their ID, save, and read the roster down the ranking column to build a
+ * IDs the ranking list can identify by name, fill each pilot's WPRS score
+ * from their ID, save, and read the roster down the points column to build a
  * launch order.
  *
  * Runs against a SYNTHETIC list (`bun run seed-civl-rankings` — slug
@@ -191,8 +191,8 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   await expect(page.getByRole("row", { name: /Twin Ambiguity/ })).not.toContainText(
     "Sample World Ranking"
   );
-  const brunoRank = (await brunoRow.innerText()).match(/\b(\d+)\b/)?.[1];
-  expect(brunoRank).toBeTruthy();
+  const brunoScore = (await brunoRow.innerText()).match(/\b(\d+(?:\.\d+)?)\b/)?.[1];
+  expect(brunoScore).toBeTruthy();
 
   // Press it again on the same roster. "Add when missing" means exactly that:
   // nothing is rewritten, and the outcome says why rather than leaving
@@ -208,11 +208,11 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toBeHidden({ timeout: 20_000 });
   await expect(page.getByRole("row", { name: /Bruno Ridge/ })).toContainText(
-    brunoRank!
+    brunoScore!
   );
 });
 
-test("typing a name suggests ranked pilots, and picking one brings its id and rank", async ({
+test("typing a name suggests ranked pilots, and picking one brings its id and score", async ({
   page,
 }) => {
   await page.goto(`/comp/${compId}/pilots`);
@@ -238,19 +238,19 @@ test("typing a name suggests ranked pilots, and picking one brings its id and ra
   await expect(suggestion.first()).toBeVisible({ timeout: 20_000 });
   await suggestion.first().click();
 
-  // The row now carries what the list knows: CIVL's spelling, the id, the rank.
+  // The row now carries what the lists know: CIVL's spelling, the id, the score.
   const row = page
     .locator("#pilots-grid .tabulator-row", { hasText: "Ada Thermal" })
     .first();
   await expect(row.locator('[tabulator-field="civl_id"]')).not.toHaveText("");
-  await expect(row.locator('[tabulator-field="civl_ranking"]')).not.toHaveText("");
+  await expect(row.locator('[tabulator-field="wprs_points"]')).not.toHaveText("");
 });
 
-test("the roster sorts by ranking, unranked pilots last either way", async ({
+test("the roster sorts by WPRS points, unscored pilots last either way", async ({
   page,
 }) => {
   await page.goto(`/comp/${compId}/pilots`);
-  const rankHeader = page.getByRole("columnheader", { name: "CIVL rank" });
+  const rankHeader = page.getByRole("columnheader", { name: "WPRS points" });
   await expect(rankHeader).toBeVisible({ timeout: 20_000 });
 
   const names = async (): Promise<string[]> => {
@@ -259,34 +259,36 @@ test("the roster sorts by ranking, unranked pilots last either way", async ({
   };
 
   // aria-sort is the sync point. Reading the rows straight after the click
-  // races the re-render — and the roster's default order is by name, which
-  // here happens to equal ranking order, so the race passes silently.
+  // races the re-render, and the roster's default order is by name — which
+  // here is also points order, so the race would pass silently.
+  //
+  // The fixture ranks by name, so Ada scores MOST and Cleo least. Ascending
+  // therefore puts Cleo first: fewest points, which is also the task-1 launch
+  // order (reverse ranking order).
   await rankHeader.click();
   await expect(rankHeader).toHaveAttribute("aria-sort", "ascending");
   const ascending = await names();
-  // Ranked pilots first, in ranking order (the seed ranks by name, so Ada
-  // outranks Bruno outranks Cleo); everyone unranked is behind them.
-  expect(ascending.slice(0, 3)).toEqual(["Ada Thermal", "Bruno Ridge", "Cleo Vario"]);
+  expect(ascending.slice(0, 3)).toEqual(["Cleo Vario", "Bruno Ridge", "Ada Thermal"]);
   expect(ascending.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
   expect(ascending.indexOf("Unranked Nobody")).toBeGreaterThan(2);
 
   await rankHeader.click();
   await expect(rankHeader).toHaveAttribute("aria-sort", "descending");
   const descending = await names();
-  expect(descending.slice(0, 3)).toEqual(["Cleo Vario", "Bruno Ridge", "Ada Thermal"]);
-  // Pinned last in BOTH directions: no ranking is not a bad ranking.
+  expect(descending.slice(0, 3)).toEqual(["Ada Thermal", "Bruno Ridge", "Cleo Vario"]);
+  // Pinned last in BOTH directions: no score is not a bad score.
   expect(descending.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
   expect(descending.indexOf("Unranked Nobody")).toBeGreaterThan(2);
 });
 
-test("a rank typed over by hand stops claiming a source", async ({ page }) => {
+test("a score typed over by hand stops claiming a source", async ({ page }) => {
   await page.goto(`/comp/${compId}/pilots`);
   await page.getByRole("button", { name: "Edit" }).click();
   await expectGridReady(page);
 
-  // Tabulator edits on a cell click; the ranking column is a plain input.
+  // Tabulator edits on a cell click; the points column is a plain input.
   const cell = page.locator('.tabulator-row', { hasText: "Ada Thermal" }).first()
-    .locator('[tabulator-field="civl_ranking"]');
+    .locator('[tabulator-field="wprs_points"]');
   await cell.click();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("99");

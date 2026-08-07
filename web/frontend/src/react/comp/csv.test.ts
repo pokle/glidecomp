@@ -16,7 +16,7 @@ function makeRow(overrides: Partial<ParsedRow> = {}): ParsedRow {
 }
 
 describe("COLUMNS order", () => {
-  it("puts the sporting-body IDs after the everyday columns, ranking beside civl_id", () => {
+  it("puts the sporting-body IDs after the everyday columns, points beside civl_id", () => {
     expect(COLUMNS.map((c) => c.header)).toEqual([
       "name",
       "email",
@@ -24,7 +24,7 @@ describe("COLUMNS order", () => {
       "class",
       "team",
       "driver",
-      "civl_ranking",
+      "wprs_points",
       "civl_id",
       "safa_id",
       "ushpa_id",
@@ -39,7 +39,7 @@ describe("COLUMNS order", () => {
 describe("exportCsvContent", () => {
   it("writes the header row alone for an empty table (fillable template)", () => {
     expect(exportCsvContent([])).toBe(
-      "name,email,glider,class,team,driver,civl_ranking,civl_id,safa_id,ushpa_id,bhpa_id,dhv_id,ffvl_id,fai_id\n"
+      "name,email,glider,class,team,driver,wprs_points,civl_id,safa_id,ushpa_id,bhpa_id,dhv_id,ffvl_id,fai_id\n"
     );
   });
 
@@ -191,12 +191,12 @@ describe("validateRows", () => {
   });
 });
 
-describe("the CIVL ranking column", () => {
-  it("sends the rank as a number, with the list and month it came from", () => {
+describe("the WPRS points column", () => {
+  it("sends the score as a number, with the list and month it came from", () => {
     const { payload, errors } = validateRows(
       [
         makeRow({
-          civl_ranking: "12",
+          wprs_points: "261.5",
           civl_ranking_slug: "hang-gliding-class-1-xc",
           civl_ranking_date: "2026-07-01",
         }),
@@ -205,28 +205,36 @@ describe("the CIVL ranking column", () => {
     );
     expect(errors).toEqual([]);
     expect(payload[0]).toMatchObject({
-      civl_ranking: 12,
+      wprs_points: 261.5,
       civl_ranking_slug: "hang-gliding-class-1-xc",
       civl_ranking_date: "2026-07-01",
     });
   });
 
-  it("sends a hand-typed rank with no source", () => {
+  it("keeps the decimal CIVL publishes", () => {
+    // Near the top of a list that decimal is the whole difference between two
+    // pilots, so rounding here would silently merge them in a launch order.
+    const { payload, errors } = validateRows([makeRow({ wprs_points: "261.5" })], CLASSES);
+    expect(errors).toEqual([]);
+    expect(payload[0].wprs_points).toBe(261.5);
+  });
+
+  it("sends a hand-typed score with no source", () => {
     // The organiser's own number is not something CIVL published, so it must
     // not carry a list and a month that would make it look imported.
-    const { payload } = validateRows([makeRow({ civl_ranking: "30" })], CLASSES);
+    const { payload } = validateRows([makeRow({ wprs_points: "30" })], CLASSES);
     expect(payload[0]).toMatchObject({
-      civl_ranking: 30,
+      wprs_points: 30,
       civl_ranking_slug: null,
       civl_ranking_date: null,
     });
   });
 
-  it("drops the source when the rank is cleared", () => {
+  it("drops the source when the score is cleared", () => {
     const { payload } = validateRows(
       [
         makeRow({
-          civl_ranking: "",
+          wprs_points: "",
           civl_ranking_slug: "hang-gliding-class-1-xc",
           civl_ranking_date: "2026-07-01",
         }),
@@ -234,51 +242,53 @@ describe("the CIVL ranking column", () => {
       CLASSES
     );
     expect(payload[0]).toMatchObject({
-      civl_ranking: null,
+      wprs_points: null,
       civl_ranking_slug: null,
       civl_ranking_date: null,
     });
   });
 
-  it("refuses anything that is not a place in a list", () => {
+  it("refuses anything that is not a number", () => {
     const { errors } = validateRows(
       [
-        makeRow({ name: "Jane", civl_ranking: "12th" }),
-        makeRow({ name: "Bob", civl_ranking: "12.5" }),
-        makeRow({ name: "Cara", civl_ranking: "0" }),
+        makeRow({ name: "Jane", wprs_points: "261.5 pts" }),
+        makeRow({ name: "Bob", wprs_points: "~261" }),
+        makeRow({ name: "Cara", wprs_points: "0" }),
       ],
       CLASSES
     );
     expect(errors).toEqual([
-      'Row 1 (Jane): CIVL ranking "12th" is not a whole number above 0',
-      'Row 2 (Bob): CIVL ranking "12.5" is not a whole number above 0',
-      'Row 3 (Cara): CIVL ranking "0" is not a whole number above 0',
+      'Row 1 (Jane): WPRS points "261.5 pts" is not a number above 0',
+      'Row 2 (Bob): WPRS points "~261" is not a number above 0',
+      'Row 3 (Cara): WPRS points "0" is not a number above 0',
     ]);
   });
 
-  it("imports from a CSV under its own header or an alias", () => {
+  it("still reads a roster exported while the column held a RANK", () => {
+    // Those files are on organisers' disks. A header we refused to read would
+    // import as an empty column without complaining.
     const { rows, errors } = parseImportedCsv(
-      "name,class,ranking\nJane Doe,open,12\n",
+      "name,class,civl_ranking\nJane Doe,open,12\n",
       CLASSES
     );
     expect(errors).toEqual([]);
-    expect(rows[0].civl_ranking).toBe("12");
+    expect(rows[0].wprs_points).toBe("12");
   });
 
-  it("a CSV round trip returns the rank as hand-set", () => {
+  it("a CSV round trip returns the score as hand-set", () => {
     // The export has no source columns — nothing about a spreadsheet can
     // vouch for which CIVL list a number came out of.
     const exported = exportCsvContent([
       makeRow({
-        civl_ranking: "12",
+        wprs_points: "261.5",
         civl_ranking_slug: "hang-gliding-class-1-xc",
         civl_ranking_date: "2026-07-01",
       }),
     ]);
-    expect(exported).toContain("12");
+    expect(exported).toContain("261.5");
     expect(exported).not.toContain("hang-gliding-class-1-xc");
     const { rows } = parseImportedCsv(exported, CLASSES);
-    expect(rows[0].civl_ranking).toBe("12");
+    expect(rows[0].wprs_points).toBe("261.5");
     expect(rows[0].civl_ranking_slug).toBeNull();
   });
 });

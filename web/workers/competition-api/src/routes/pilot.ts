@@ -127,7 +127,7 @@ const COMP_PILOT_COLUMNS = [
   "cp.pilot_class",
   "cp.team_name",
   "cp.driver_contact",
-  "cp.civl_ranking",
+  "cp.wprs_points",
   "cp.civl_ranking_slug",
   "cp.civl_ranking_date",
   "cp.first_start_order",
@@ -150,7 +150,7 @@ interface CompPilotRow {
   pilot_class: string;
   team_name: string | null;
   driver_contact: string | null;
-  civl_ranking: number | null;
+  wprs_points: number | null;
   civl_ranking_slug: string | null;
   civl_ranking_date: string | null;
   first_start_order: number | null;
@@ -178,11 +178,11 @@ function serializeCompPilot(
     pilot_class: row.pilot_class,
     team_name: row.team_name,
     driver_contact: row.driver_contact,
-    // The WPRS ranking the organiser is running this comp off, plus where it
-    // came from. Both source fields are null when the rank was typed in by
+    // The WPRS score the organiser is running this comp off, plus where it
+    // came from. Both source fields are null when the number was typed in by
     // hand — that difference is what the roster renders as "set by organiser",
     // so it must survive the round trip.
-    civl_ranking: row.civl_ranking,
+    wprs_points: row.wprs_points,
     civl_ranking_slug: row.civl_ranking_slug,
     civl_ranking_date: row.civl_ranking_date,
     first_start_order: row.first_start_order,
@@ -228,7 +228,7 @@ const COMP_PILOT_WRITE_COLUMNS = [
   "pilot_class",
   "team_name",
   "driver_contact",
-  "civl_ranking",
+  "wprs_points",
   "civl_ranking_slug",
   "civl_ranking_date",
   "first_start_order",
@@ -248,7 +248,7 @@ interface WritableFields {
   pilot_class: string;
   team_name?: string | null;
   driver_contact?: string | null;
-  civl_ranking?: number | null;
+  wprs_points?: number | null;
   civl_ranking_slug?: string | null;
   civl_ranking_date?: string | null;
   first_start_order?: number | null;
@@ -283,7 +283,7 @@ function buildInsertValues(
     row.pilot_class,
     row.team_name ?? null,
     row.driver_contact ?? null,
-    row.civl_ranking ?? null,
+    row.wprs_points ?? null,
     row.civl_ranking_slug ?? null,
     row.civl_ranking_date ?? null,
     row.first_start_order ?? null,
@@ -311,7 +311,7 @@ function buildUpdateValues(
     row.pilot_class,
     row.team_name ?? null,
     row.driver_contact ?? null,
-    row.civl_ranking ?? null,
+    row.wprs_points ?? null,
     row.civl_ranking_slug ?? null,
     row.civl_ranking_date ?? null,
     row.first_start_order ?? null,
@@ -911,16 +911,16 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         pilot_class: body.pilot_class ?? existing.pilot_class,
         team_name: body.team_name ?? existing.team_name,
         driver_contact: body.driver_contact ?? existing.driver_contact,
-        civl_ranking: body.civl_ranking ?? existing.civl_ranking,
-        // The source travels with the number: a PATCH that moves the rank
+        wprs_points: body.wprs_points ?? existing.wprs_points,
+        // The source travels with the number: a PATCH that moves the score
         // without naming a list is a hand override, and leaving the old list
         // and month attached would date-stamp a value CIVL never published.
         civl_ranking_slug:
-          body.civl_ranking !== undefined
+          body.wprs_points !== undefined
             ? (body.civl_ranking_slug ?? null)
             : (body.civl_ranking_slug ?? existing.civl_ranking_slug),
         civl_ranking_date:
-          body.civl_ranking !== undefined
+          body.wprs_points !== undefined
             ? (body.civl_ranking_date ?? null)
             : (body.civl_ranking_date ?? existing.civl_ranking_date),
         first_start_order:
@@ -1000,7 +1000,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         ["pilot_class", "class"],
         ["team_name", "team"],
         ["driver_contact", "driver"],
-        ["civl_ranking", "CIVL ranking"],
+        ["wprs_points", "WPRS points"],
       ];
       const subjectName = merged.registered_pilot_name;
       for (const [key, label] of auditFields) {

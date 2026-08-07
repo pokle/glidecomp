@@ -165,16 +165,16 @@ export function formatRankingMonth(date: string | null): string {
 }
 
 /**
- * Where a stored ranking came from, for the pilots table. A rank with no
- * source was typed in by an organiser — that is a fact about the number, not
- * a missing value, so it is said out loud rather than left blank.
+ * Where a stored score came from, for the pilots table. A number with no
+ * source was typed in by an organiser — that is a fact about it, not a
+ * missing value, so it is said out loud rather than left blank.
  */
 export function rankingSource(pilot: {
-  civl_ranking: number | null;
+  wprs_points: number | null;
   civl_ranking_slug: string | null;
   civl_ranking_date: string | null;
 }): string {
-  if (pilot.civl_ranking === null) return "";
+  if (pilot.wprs_points === null) return "";
   if (!pilot.civl_ranking_slug) return "set by organiser";
   return `${listLabel(pilot.civl_ranking_slug)} · ${formatRankingMonth(pilot.civl_ranking_date)}`;
 }
@@ -186,14 +186,14 @@ export function rankingSource(pilot: {
  * picked this human out of a list, the roster should agree with the list about
  * how they are spelled — that is what makes the next lookup match by name too.
  *
- * The rank travels with the list and month it came from, exactly as the fill
+ * The score travels with the list and month it came from, exactly as the fill
  * button's does, so the roster can say where the number came from.
  */
 export function pilotDetails(pilot: RankedPilot): Partial<ParsedRow> {
   return {
     name: pilot.pilot_name,
     civl_id: pilot.civl_id,
-    civl_ranking: String(pilot.rank),
+    wprs_points: String(pilot.points),
     civl_ranking_slug: pilot.ranking_slug,
     civl_ranking_date: pilot.ranking_date,
   };
@@ -237,7 +237,7 @@ export function fillCivlIds(rows: ParsedRow[], lookup: RankingLookup): FillOutco
 }
 
 /**
- * Fill the ranking column from the rankings' CIVL ID matches.
+ * Fill the WPRS points column from the rankings' CIVL ID matches.
  *
  * Matched BY ID ONLY, which is why the organiser fills the ids first: a rank
  * attached to the wrong human silently sets the wrong launch order, and a
@@ -261,14 +261,14 @@ export function fillRankings(rows: ParsedRow[], lookup: RankingLookup): FillOutc
   const out = rows.map((row, index) => {
     const match = lookup.matches[index];
     if (!match || match.matched_by !== "civl_id") return row;
-    if (row.civl_ranking) {
+    if (row.wprs_points) {
       alreadySet++;
       return row;
     }
     filled++;
     return {
       ...row,
-      civl_ranking: String(match.rank),
+      wprs_points: String(match.points),
       // The pilot's own best list, not one list for the whole roster: two
       // pilots on one roster can now be ranked from two different lists, and
       // each number has to say which one it is.

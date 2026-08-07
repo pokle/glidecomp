@@ -40,22 +40,22 @@ const SPORT = {
   ranking_name: "PG XC Sport",
 };
 
-const byName = (civl_id: string, rank: number, list = HG): RowMatch => ({
+const byName = (civl_id: string, rank: number, list = HG, points = 100): RowMatch => ({
   matched_by: "name",
   civl_id,
   pilot_name: "Jane Doe",
   rank,
-  points: 100,
+  points,
   ...list,
   ranking_date: "2026-07-01",
 });
 
-const byId = (civl_id: string, rank: number, list = HG): RowMatch => ({
+const byId = (civl_id: string, rank: number, list = HG, points = 100): RowMatch => ({
   matched_by: "civl_id",
   civl_id,
   pilot_name: "Jane Doe",
   rank,
-  points: 100,
+  points,
   ...list,
   ranking_date: "2026-07-01",
 });
@@ -87,40 +87,42 @@ describe("fillCivlIds", () => {
   it("does not touch the ranking column", () => {
     // A name match knows a rank, but a name is not allowed to decide one.
     const outcome = fillCivlIds([row()], LOOKUP({ 0: byName("25161", 12) }));
-    expect(outcome.rows[0].civl_ranking).toBeNull();
+    expect(outcome.rows[0].wprs_points).toBeNull();
   });
 });
 
 describe("fillRankings", () => {
-  it("copies the rank with the list and month it came from", () => {
+  it("copies the WPRS score, not the rank, with the list it came from", () => {
+    // The rank is a position inside one list's pool; the points are the same
+    // quantity in all of them, which is why the roster keeps those.
     const outcome = fillRankings(
       [row({ civl_id: "25161" })],
-      LOOKUP({ 0: byId("25161", 12) })
+      LOOKUP({ 0: byId("25161", 12, HG, 261.5) })
     );
     expect(outcome.rows[0]).toMatchObject({
-      civl_ranking: "12",
+      wprs_points: "261.5",
       civl_ranking_slug: "hang-gliding-class-1-xc",
       civl_ranking_date: "2026-07-01",
     });
     expect(outcome.filled).toBe(1);
   });
 
-  it("ignores a name match — a rank follows the CIVL ID only", () => {
+  it("ignores a name match — a score follows the CIVL ID only", () => {
     // This is why the buttons are used in order: fill the ids, then the ranks.
     const outcome = fillRankings([row()], LOOKUP({ 0: byName("25161", 12) }));
-    expect(outcome.rows[0].civl_ranking).toBeNull();
+    expect(outcome.rows[0].wprs_points).toBeNull();
     expect(outcome.filled).toBe(0);
     expect(outcome.skipped).toBe(1);
   });
 
-  it("leaves a rank that is already there, source and all", () => {
+  it("leaves a score that is already there, source and all", () => {
     // "Add when missing" is the promise the dialog makes, so a number an
-    // organiser typed — or took from another list a moment ago — survives.
+    // organiser typed — or took from an earlier import — survives.
     const outcome = fillRankings(
       [
         row({
           civl_id: "25161",
-          civl_ranking: "40",
+          wprs_points: "40",
           civl_ranking_slug: "hang-gliding-class-1-sport-xc",
           civl_ranking_date: "2026-06-01",
         }),
@@ -128,7 +130,7 @@ describe("fillRankings", () => {
       LOOKUP({ 0: byId("25161", 12) })
     );
     expect(outcome.rows[0]).toMatchObject({
-      civl_ranking: "40",
+      wprs_points: "40",
       civl_ranking_slug: "hang-gliding-class-1-sport-xc",
       civl_ranking_date: "2026-06-01",
     });
@@ -138,13 +140,13 @@ describe("fillRankings", () => {
     expect(outcome.already_set).toBe(1);
   });
 
-  it("keeps a hand-typed rank even though it carries no source", () => {
+  it("keeps a hand-typed score even though it carries no source", () => {
     const outcome = fillRankings(
-      [row({ civl_id: "25161", civl_ranking: "7" })],
+      [row({ civl_id: "25161", wprs_points: "7" })],
       LOOKUP({ 0: byId("25161", 12) })
     );
     expect(outcome.rows[0]).toMatchObject({
-      civl_ranking: "7",
+      wprs_points: "7",
       civl_ranking_slug: null,
       civl_ranking_date: null,
     });
@@ -155,18 +157,18 @@ describe("fillRankings", () => {
     // The refresh path: clearing the column is how an organiser asks for the
     // newer numbers, now that the fill will not overwrite.
     const outcome = fillRankings(
-      [row({ civl_id: "25161", civl_ranking: "" })],
-      LOOKUP({ 0: byId("25161", 12) })
+      [row({ civl_id: "25161", wprs_points: "" })],
+      LOOKUP({ 0: byId("25161", 12, HG, 261.5) })
     );
-    expect(outcome.rows[0].civl_ranking).toBe("12");
+    expect(outcome.rows[0].wprs_points).toBe("261.5");
     expect(outcome.filled).toBe(1);
     expect(outcome.already_set).toBe(0);
   });
 
-  it("stamps each row with the list ITS rank came from", () => {
-    // Two pilots on one roster, ranked from two different lists, because each
-    // takes their own best. One list per roster stopped being true when the
-    // picker went.
+  it("stamps each row with the list ITS score came from", () => {
+    // Two pilots on one roster, scored from two different lists, because each
+    // is taken from where they score most. One list per roster stopped being
+    // true when the picker went.
     const outcome = fillRankings(
       [row({ civl_id: "25161" }), row({ name: "Bob", civl_id: "70001" })],
       LOOKUP({ 0: byId("25161", 12), 1: byId("70001", 3, SPORT) })
@@ -187,30 +189,30 @@ describe("fillRankings", () => {
 });
 
 describe("rankingSource", () => {
-  it("names the list and the month for an imported rank", () => {
+  it("names the list and the month for an imported score", () => {
     expect(
       rankingSource({
-        civl_ranking: 12,
+        wprs_points: 261.5,
         civl_ranking_slug: "hang-gliding-class-1-xc",
         civl_ranking_date: "2026-07-01",
       })
     ).toBe("HG Class 1 · Jul 2026");
   });
 
-  it("says a hand-set rank is hand-set rather than leaving it bare", () => {
+  it("says a hand-set score is hand-set rather than leaving it bare", () => {
     expect(
       rankingSource({
-        civl_ranking: 30,
+        wprs_points: 30,
         civl_ranking_slug: null,
         civl_ranking_date: null,
       })
     ).toBe("set by organiser");
   });
 
-  it("says nothing at all when there is no rank", () => {
+  it("says nothing at all when there is no score", () => {
     expect(
       rankingSource({
-        civl_ranking: null,
+        wprs_points: null,
         civl_ranking_slug: null,
         civl_ranking_date: null,
       })
@@ -260,11 +262,11 @@ describe("pilotDetails", () => {
     ranking_date: "2026-08-01",
   };
 
-  it("brings the id, the rank, and where the rank came from", () => {
+  it("brings the id, the score, and where the score came from", () => {
     expect(pilotDetails(picked)).toEqual({
       name: "Jonny Durand",
       civl_id: "2231",
-      civl_ranking: "7",
+      wprs_points: "281",
       civl_ranking_slug: "hang-gliding-class-1-xc",
       civl_ranking_date: "2026-08-01",
     });
@@ -276,9 +278,9 @@ describe("pilotDetails", () => {
     expect(pilotDetails(picked).name).toBe("Jonny Durand");
   });
 
-  it("writes the rank as the string the grid's cells hold", () => {
+  it("writes the score as the string the grid's cells hold", () => {
     // ParsedRow is the spreadsheet's shape: every cell is text, so a number
     // here would compare unequal to a typed one and re-render oddly.
-    expect(pilotDetails(picked).civl_ranking).toBe("7");
+    expect(pilotDetails(picked).wprs_points).toBe("281");
   });
 });

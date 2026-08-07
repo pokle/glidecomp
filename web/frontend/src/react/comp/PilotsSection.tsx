@@ -73,8 +73,8 @@ import {
 /**
  * Sort a copy of the roster by the RAC sort descriptor.
  *
- * The ranking sorts numerically with unranked pilots pinned last in BOTH
- * directions: "no ranking" is not a very good or a very bad one, and an
+ * WPRS points sort numerically with unscored pilots pinned last in BOTH
+ * directions: "no score" is not a very good or a very bad one, and an
  * organiser sorting to find their top seeds should not have to scroll past
  * everyone who has never been ranked. Every other column is locale text.
  */
@@ -83,11 +83,14 @@ function sortPilots(pilots: CompPilot[], sort: SortDescriptor | undefined): Comp
   const dir = sort.direction === "descending" ? -1 : 1;
   const col = String(sort.column);
   return [...pilots].sort((a, b) => {
-    if (col === "civl_ranking") {
-      if (a.civl_ranking === null && b.civl_ranking === null) return 0;
-      if (a.civl_ranking === null) return 1;
-      if (b.civl_ranking === null) return -1;
-      return (a.civl_ranking - b.civl_ranking) * dir;
+    if (col === "wprs_points") {
+      if (a.wprs_points === null && b.wprs_points === null) return 0;
+      if (a.wprs_points === null) return 1;
+      if (b.wprs_points === null) return -1;
+      // Natural order, so `aria-sort="ascending"` describes what is on screen
+      // — and ascending happens to BE the task-1 launch order, which runs in
+      // reverse world-ranking order: fewest points launches first.
+      return (a.wprs_points - b.wprs_points) * dir;
     }
     const text = (p: CompPilot): string => {
       if (col === "account") return p.linked_username ?? "";
@@ -233,8 +236,8 @@ export function PilotsSection({
             {/* The reason the roster is sortable at all: launch order is set
                 in ranking order, so this is the column an organiser reads the
                 table down. Right-aligned as a plain quantity. */}
-            <Column id="civl_ranking" allowsSorting className="text-right">
-              CIVL rank
+            <Column id="wprs_points" allowsSorting className="text-right">
+              WPRS points
             </Column>
             <Column id="civl_id" allowsSorting>
               CIVL
@@ -267,14 +270,14 @@ export function PilotsSection({
                   ) : null}
                 </Cell>
                 <Cell className="text-right tabular-nums">
-                  {p.civl_ranking === null ? (
+                  {p.wprs_points === null ? (
                     ""
                   ) : (
                     <>
-                      {p.civl_ranking}{" "}
-                      {/* A rank nobody can trace is a rank nobody can check —
-                          the list and month it came from, or the fact that it
-                          was set by hand. */}
+                      {p.wprs_points}{" "}
+                      {/* A score nobody can trace is a score nobody can check
+                          — the list and month it came from, or the fact that
+                          it was set by hand. */}
                       <span className="ml-1 text-xs font-normal text-muted-foreground">
                         {rankingSource(p)}
                       </span>
@@ -400,13 +403,13 @@ function gridColumns(
       def.editor = "list";
       def.editorParams = { values: compClasses };
     }
-    if (c.key === "civl_ranking") {
-      // A place in a list reads right-aligned, and the tooltip is where the
-      // provenance the row is carrying invisibly becomes visible.
+    if (c.key === "wprs_points") {
+      // A score reads right-aligned, and the tooltip is where the provenance
+      // the row is carrying invisibly becomes visible.
       def.hozAlign = "right";
       def.tooltip = (_e: MouseEvent, cell: CellComponent) => {
         const row = cell.getRow().getData() as ParsedRow;
-        if (!row.civl_ranking) return "";
+        if (!row.wprs_points) return "";
         return row.civl_ranking_slug
           ? `From ${listLabel(row.civl_ranking_slug)}, ${formatRankingMonth(row.civl_ranking_date ?? null)}`
           : "Set by an organiser";
@@ -778,11 +781,11 @@ function EditPilotsDialog({
                 applyPickedPilot(cell.getRow(), String(cell.getValue() ?? ""));
                 return;
               }
-              // Typing over a ranking makes it the organiser's number, so the
+              // Typing over a score makes it the organiser's number, so the
               // list and month it used to carry stop being true of it. They
               // are cleared here rather than at save time so the cell's
               // tooltip tells the truth the moment the edit lands.
-              if (cell.getField() !== "civl_ranking") return;
+              if (cell.getField() !== "wprs_points") return;
               cell.getRow().update({
                 civl_ranking_slug: null,
                 civl_ranking_date: null,

@@ -83,19 +83,19 @@ afterEach(async () => {
   await env.DB.prepare("DELETE FROM pilot_ranking").run();
 });
 
-describe("comp_pilot.civl_ranking round trip", () => {
-  test("a rank stores the list and month it came from", async () => {
+describe("comp_pilot.wprs_points round trip", () => {
+  test("a score stores the list and month it came from", async () => {
     const compId = await createComp();
     const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
       registered_pilot_name: "Ana Silva",
       pilot_class: "open",
-      civl_ranking: 12,
+      wprs_points: 261.5,
       civl_ranking_slug: "hang-gliding-class-1-xc",
       civl_ranking_date: "2026-07-01",
     });
     expect(res.status).toBe(201);
     const created = (await res.json()) as Record<string, unknown>;
-    expect(created.civl_ranking).toBe(12);
+    expect(created.wprs_points).toBe(261.5);
     expect(created.civl_ranking_slug).toBe("hang-gliding-class-1-xc");
     expect(created.civl_ranking_date).toBe("2026-07-01");
 
@@ -104,18 +104,18 @@ describe("comp_pilot.civl_ranking round trip", () => {
       user: "user-1",
     });
     const { pilots } = (await list.json()) as { pilots: Record<string, unknown>[] };
-    expect(pilots[0].civl_ranking).toBe(12);
+    expect(pilots[0].wprs_points).toBe(261.5);
     expect(pilots[0].civl_ranking_date).toBe("2026-07-01");
   });
 
   test("an organiser's hand override drops the source", async () => {
-    // A rank CIVL never published must not keep CIVL's name and month on it —
-    // that is the difference the roster shows as "set by organiser".
+    // A score CIVL never published must not keep CIVL's name and month on it
+    // — that is the difference the roster shows as "set by organiser".
     const compId = await createComp();
     const created = await authRequest("POST", `/api/comp/${compId}/pilot`, {
       registered_pilot_name: "Ana Silva",
       pilot_class: "open",
-      civl_ranking: 12,
+      wprs_points: 261.5,
       civl_ranking_slug: "hang-gliding-class-1-xc",
       civl_ranking_date: "2026-07-01",
     });
@@ -124,42 +124,42 @@ describe("comp_pilot.civl_ranking round trip", () => {
     const patched = await authRequest(
       "PATCH",
       `/api/comp/${compId}/pilot/${comp_pilot_id}`,
-      { civl_ranking: 5 }
+      { wprs_points: 300 }
     );
     const after = (await patched.json()) as Record<string, unknown>;
-    expect(after.civl_ranking).toBe(5);
+    expect(after.wprs_points).toBe(300);
     expect(after.civl_ranking_slug).toBeNull();
     expect(after.civl_ranking_date).toBeNull();
   });
 
-  test("changing a rank is audit-logged with both values", async () => {
+  test("changing a score is audit-logged with both values", async () => {
     const compId = await createComp();
     const created = await authRequest("POST", `/api/comp/${compId}/pilot`, {
       registered_pilot_name: "Ana Silva",
       pilot_class: "open",
-      civl_ranking: 12,
+      wprs_points: 261.5,
     });
     const { comp_pilot_id } = (await created.json()) as { comp_pilot_id: string };
     await authRequest("PATCH", `/api/comp/${compId}/pilot/${comp_pilot_id}`, {
-      civl_ranking: 5,
+      wprs_points: 300,
     });
 
     const log = await request("GET", `/api/comp/${compId}/audit`, { user: "user-1" });
     const { entries } = (await log.json()) as { entries: { description: string }[] };
-    const ranking = entries.find((e) => e.description.includes("CIVL ranking"));
-    expect(ranking?.description).toContain("Ana Silva");
-    expect(ranking?.description).toContain("12");
-    expect(ranking?.description).toContain("5");
+    const scored = entries.find((e) => e.description.includes("WPRS points"));
+    expect(scored?.description).toContain("Ana Silva");
+    expect(scored?.description).toContain("261.5");
+    expect(scored?.description).toContain("300");
   });
 
-  test("the bulk save round-trips the rank and its source", async () => {
+  test("the bulk save round-trips the score and its source", async () => {
     const compId = await createComp();
     const res = await authRequest("POST", `/api/comp/${compId}/pilot/bulk`, {
       pilots: [
         {
           registered_pilot_name: "Ana Silva",
           pilot_class: "open",
-          civl_ranking: 12,
+          wprs_points: 261.5,
           civl_ranking_slug: "hang-gliding-class-1-xc",
           civl_ranking_date: "2026-07-01",
         },
@@ -167,18 +167,31 @@ describe("comp_pilot.civl_ranking round trip", () => {
     });
     expect(res.status).toBe(200);
     const { pilots } = (await res.json()) as { pilots: Record<string, unknown>[] };
-    expect(pilots[0].civl_ranking).toBe(12);
+    expect(pilots[0].wprs_points).toBe(261.5);
     expect(pilots[0].civl_ranking_slug).toBe("hang-gliding-class-1-xc");
   });
 
-  test("a ranking that is not a positive whole number is refused", async () => {
+  test("a score that is not a positive number is refused", async () => {
     const compId = await createComp();
     const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
       registered_pilot_name: "Ana Silva",
       pilot_class: "open",
-      civl_ranking: 0,
+      wprs_points: 0,
     });
     expect(res.status).toBe(400);
+  });
+
+  test("the decimal CIVL publishes survives the round trip", async () => {
+    // 261.5 and 261.4 are two different pilots near the top of a list; an
+    // integer column would have merged them.
+    const compId = await createComp();
+    const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Ana Silva",
+      pilot_class: "open",
+      wprs_points: 261.5,
+    });
+    const created = (await res.json()) as Record<string, unknown>;
+    expect(created.wprs_points).toBe(261.5);
   });
 
   test("a source list that is not a CIVL slug is refused", async () => {
@@ -188,7 +201,7 @@ describe("comp_pilot.civl_ranking round trip", () => {
     const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
       registered_pilot_name: "Ana Silva",
       pilot_class: "open",
-      civl_ranking: 12,
+      wprs_points: 261.5,
       civl_ranking_slug: "Trust me bro",
     });
     expect(res.status).toBe(400);
