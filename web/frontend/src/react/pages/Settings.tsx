@@ -795,6 +795,12 @@ function SuperadminSection() {
         <LinkButton variant="outline" href="/admin/cache">
           Cache
         </LinkButton>
+        {/* A Pages Function, not a react-router route. `download` (no value)
+            forces a save under the server's Content-Disposition filename, and
+            keeps RAC from client-navigating a URL the SPA has no route for. */}
+        <LinkButton variant="outline" href="/civl-rankings.csv" download="">
+          CIVL rankings (CSV)
+        </LinkButton>
       </div>
     </Card>
   );
