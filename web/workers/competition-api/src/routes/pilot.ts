@@ -9,8 +9,17 @@ import {
   updateCompPilotSchema,
   createCompPilotSchema,
   bulkPilotsSchema,
+  civlRankingLookupSchema,
+  civlPilotSearchSchema,
   validated,
 } from "../validators";
+import {
+  defaultListSlug,
+  preferredListSlug,
+  matchList,
+  type ListInfo,
+  type RankingRow,
+} from "../civl-ranking-match";
 import { resolvePilotId } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { audit, auditAll, describeChange } from "../audit";
@@ -21,6 +30,25 @@ import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
 const PILOT_RESOLVE_CONCURRENCY = 10;
 
 const MAX_PILOTS_PER_COMP = 250;
+
+/** Suggestions per keystroke. Long enough to hold every Smith worth choosing
+ *  between, short enough that a two-letter term is not a page of names. */
+const CIVL_SEARCH_LIMIT = 20;
+
+/**
+ * Values per statement in the CIVL ranking lookup. D1 rejects a statement with
+ * more than 100 bound parameters ("too many SQL variables"), and a full roster
+ * carries 250 names and 250 ids — so the IN lists are chunked, comfortably
+ * under the limit.
+ */
+const LOOKUP_CHUNK = 90;
+
+/** Split into runs of at most `size`. Empty in, empty out (no empty IN list). */
+function chunk<T>(values: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < values.length; i += size) out.push(values.slice(i, i + size));
+  return out;
+}
 
 const COMP_PILOT_COLUMNS = [
   "cp.comp_pilot_id",
@@ -40,6 +68,8 @@ const COMP_PILOT_COLUMNS = [
   "cp.team_name",
   "cp.driver_contact",
   "cp.civl_ranking",
+  "cp.civl_ranking_slug",
+  "cp.civl_ranking_date",
   "cp.first_start_order",
 ] as const;
 
@@ -61,6 +91,8 @@ interface CompPilotRow {
   team_name: string | null;
   driver_contact: string | null;
   civl_ranking: number | null;
+  civl_ranking_slug: string | null;
+  civl_ranking_date: string | null;
   first_start_order: number | null;
 }
 
@@ -86,6 +118,13 @@ function serializeCompPilot(
     pilot_class: row.pilot_class,
     team_name: row.team_name,
     driver_contact: row.driver_contact,
+    // The WPRS ranking the organiser is running this comp off, plus where it
+    // came from. Both source fields are null when the rank was typed in by
+    // hand — that difference is what the roster renders as "set by organiser",
+    // so it must survive the round trip.
+    civl_ranking: row.civl_ranking,
+    civl_ranking_slug: row.civl_ranking_slug,
+    civl_ranking_date: row.civl_ranking_date,
     first_start_order: row.first_start_order,
   };
 }
@@ -129,6 +168,9 @@ const COMP_PILOT_WRITE_COLUMNS = [
   "pilot_class",
   "team_name",
   "driver_contact",
+  "civl_ranking",
+  "civl_ranking_slug",
+  "civl_ranking_date",
   "first_start_order",
 ] as const;
 
@@ -146,6 +188,9 @@ interface WritableFields {
   pilot_class: string;
   team_name?: string | null;
   driver_contact?: string | null;
+  civl_ranking?: number | null;
+  civl_ranking_slug?: string | null;
+  civl_ranking_date?: string | null;
   first_start_order?: number | null;
 }
 
@@ -178,6 +223,9 @@ function buildInsertValues(
     row.pilot_class,
     row.team_name ?? null,
     row.driver_contact ?? null,
+    row.civl_ranking ?? null,
+    row.civl_ranking_slug ?? null,
+    row.civl_ranking_date ?? null,
     row.first_start_order ?? null,
   ];
 }
@@ -203,6 +251,9 @@ function buildUpdateValues(
     row.pilot_class,
     row.team_name ?? null,
     row.driver_contact ?? null,
+    row.civl_ranking ?? null,
+    row.civl_ranking_slug ?? null,
+    row.civl_ranking_date ?? null,
     row.first_start_order ?? null,
     compPilotId,
     compId,
@@ -620,6 +671,199 @@ export const pilotRoutes = new Hono<AuthedEnv>()
     }
   )
 
+  // ── GET /api/comp/:comp_id/pilot/civl-search ── Admin: ranked pilots whose
+  // name contains `q`, for the roster editor's name typeahead.
+  //
+  // The roster is a spreadsheet an organiser types into, and most of what they
+  // type is a name they already know how CIVL spells. Offering the ranked
+  // pilots as they type is what lets the id and the rank arrive WITH the name
+  // instead of being reconciled afterwards — the same match the fill button
+  // makes, made one row at a time and before the ambiguity exists.
+  //
+  // Deliberately NOT the matcher: this suggests, and a human chooses. The
+  // matcher's refusal to act on an ambiguous name is about filling cells
+  // unattended; here two pilots called the same thing are simply two rows in
+  // the list, told apart by their id, nation and rank.
+  .get(
+    "/api/comp/:comp_id/pilot/civl-search",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    validated("query", civlPilotSearchSchema),
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const { q, slug } = c.req.valid("query");
+
+      const comp = await c.env.DB.prepare(
+        "SELECT category FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ category: "hg" | "pg" }>();
+      if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Which list to read. The caller passes the one showing in the picker;
+      // a grid that has not been near the picker gets the discipline's own,
+      // so the first name typed into a fresh roster still suggests something.
+      const slugs = await c.env.DB.prepare(
+        "SELECT DISTINCT ranking_slug FROM pilot_ranking ORDER BY ranking_slug"
+      ).all<{ ranking_slug: string }>();
+      const held = slugs.results.map((r) => r.ranking_slug);
+      if (held.length === 0) return c.json({ list: null, pilots: [] });
+
+      const listSlug =
+        slug && held.includes(slug) ? slug : preferredListSlug(held, comp.category);
+      if (!listSlug) return c.json({ list: null, pilots: [] });
+
+      // LIKE's own wildcards have to be neutralised or a name containing '%'
+      // would match the table. ESCAPE names the character that does it.
+      const term = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+
+      // Latest snapshot only: the table transiently holds two months for a
+      // list while the importer swaps them (migration 0025), and suggesting a
+      // pilot twice at two different ranks would be worse than useless.
+      const rows = await c.env.DB.prepare(
+        `SELECT civl_id, pilot_name, rank, points, nation, ranking_slug, ranking_date
+           FROM pilot_ranking
+          WHERE ranking_slug = ?1
+            AND ranking_date = (
+              SELECT MAX(ranking_date) FROM pilot_ranking WHERE ranking_slug = ?1
+            )
+            AND pilot_name LIKE ?2 ESCAPE '\\'
+          ORDER BY rank ASC, pilot_name ASC
+          LIMIT ?3`
+      )
+        .bind(listSlug, term, CIVL_SEARCH_LIMIT)
+        .all<{
+          civl_id: string;
+          pilot_name: string;
+          rank: number;
+          points: number;
+          nation: string;
+          ranking_slug: string;
+          ranking_date: string;
+        }>();
+
+      // The month is the LIST's, not the first hit's — an empty result still
+      // has to be able to say which snapshot it found nothing in.
+      const snapshot = await c.env.DB.prepare(
+        "SELECT MAX(ranking_date) AS ranking_date FROM pilot_ranking WHERE ranking_slug = ?"
+      )
+        .bind(listSlug)
+        .first<{ ranking_date: string | null }>();
+
+      return c.json({
+        list: { slug: listSlug, ranking_date: snapshot?.ranking_date ?? null },
+        pilots: rows.results,
+      });
+    }
+  )
+
+  // ── POST /api/comp/:comp_id/pilot/civl-rankings ── Admin: what the CIVL
+  // world ranking lists say about this roster.
+  //
+  // A read that takes a body, because what it reads about is the roster
+  // sitting UNSAVED in the editor's grid: an organiser types names and ids,
+  // then asks what the rankings make of them. Answering from the stored roster
+  // instead would answer about a state they are in the middle of leaving.
+  //
+  // Every list we hold is returned, matched or not, so the picker can show
+  // "0 of 24" for the wrong discipline rather than hiding it.
+  .post(
+    "/api/comp/:comp_id/pilot/civl-rankings",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    validated("json", civlRankingLookupSchema),
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const roster = c.req.valid("json").pilots;
+
+      const comp = await c.env.DB.prepare(
+        "SELECT category FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ category: "hg" | "pg" }>();
+      if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // The catalogue first: one row per list, at its latest snapshot. The
+      // table transiently holds two months for a list (the importer writes the
+      // new one before deleting the old — migration 0025), so "latest" is a
+      // MAX, not an assumption.
+      const catalogue = await c.env.DB.prepare(
+        `SELECT ranking_slug, ranking_date, ranking_name FROM pilot_ranking
+         WHERE ranking_date = (
+           SELECT MAX(latest.ranking_date) FROM pilot_ranking latest
+           WHERE latest.ranking_slug = pilot_ranking.ranking_slug
+         )
+         GROUP BY ranking_slug
+         ORDER BY ranking_slug`
+      ).all<{ ranking_slug: string; ranking_date: string; ranking_name: string }>();
+
+      const lists: ListInfo[] = catalogue.results.map((row) => ({
+        slug: row.ranking_slug,
+        name: row.ranking_name,
+        ranking_date: row.ranking_date,
+      }));
+
+      if (lists.length === 0 || roster.length === 0) {
+        return c.json({ lists: [], default_slug: null });
+      }
+
+      // Fetch only the ranked pilots this roster could possibly match, across
+      // every list at once. Chunked because D1 allows at most 100 bound
+      // parameters per statement and a full roster is 250 names plus 250 ids —
+      // the whole batch is still one round trip.
+      const names = [...new Set(roster.map((p) => p.name.trim()).filter(Boolean))];
+      const ids = [
+        ...new Set(roster.flatMap((p) => (p.civl_id ? [p.civl_id.trim()] : []))),
+      ];
+      const candidateSql = (column: string, count: number) =>
+        `SELECT ranking_slug, ranking_date, "rank", points, civl_id, pilot_name
+         FROM pilot_ranking
+         WHERE ${column} IN (${Array(count).fill("?").join(",")})`;
+      const statements = [
+        ...chunk(ids, LOOKUP_CHUNK).map((values) =>
+          c.env.DB.prepare(candidateSql("civl_id", values.length)).bind(...values)
+        ),
+        ...chunk(names, LOOKUP_CHUNK).map((values) =>
+          c.env.DB.prepare(
+            candidateSql("pilot_name COLLATE NOCASE", values.length)
+          ).bind(...values)
+        ),
+      ];
+      type CandidateRow = RankingRow & { ranking_slug: string; ranking_date: string };
+      const batched =
+        statements.length > 0 ? await c.env.DB.batch<CandidateRow>(statements) : [];
+
+      const rowsBySlug = new Map<string, RankingRow[]>();
+      // A pilot matched by BOTH their id and their name comes back from two
+      // chunks. Left in, the duplicate would look like two ranked pilots
+      // sharing a name and the matcher would refuse them — so it is dropped
+      // on the table's own unique key.
+      const seen = new Set<string>();
+      for (const row of batched.flatMap((r) => r.results)) {
+        const list = lists.find((l) => l.slug === row.ranking_slug);
+        // Drops the outgoing month's rows during the importer's write window.
+        if (!list || list.ranking_date !== row.ranking_date) continue;
+        const key = `${row.ranking_slug}|${row.ranking_date}|${row.civl_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const bucket = rowsBySlug.get(row.ranking_slug) ?? [];
+        bucket.push(row);
+        rowsBySlug.set(row.ranking_slug, bucket);
+      }
+
+      const matched = lists.map((list) =>
+        matchList(list, roster, rowsBySlug.get(list.slug) ?? [])
+      );
+
+      return c.json({
+        lists: matched,
+        default_slug: defaultListSlug(matched, comp.category),
+      });
+    }
+  )
+
   // ── PATCH /api/comp/:comp_id/pilot/:comp_pilot_id ── Admin: sparse update
   .patch(
     "/api/comp/:comp_id/pilot/:comp_pilot_id",
@@ -686,6 +930,18 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         pilot_class: body.pilot_class ?? existing.pilot_class,
         team_name: body.team_name ?? existing.team_name,
         driver_contact: body.driver_contact ?? existing.driver_contact,
+        civl_ranking: body.civl_ranking ?? existing.civl_ranking,
+        // The source travels with the number: a PATCH that moves the rank
+        // without naming a list is a hand override, and leaving the old list
+        // and month attached would date-stamp a value CIVL never published.
+        civl_ranking_slug:
+          body.civl_ranking !== undefined
+            ? (body.civl_ranking_slug ?? null)
+            : (body.civl_ranking_slug ?? existing.civl_ranking_slug),
+        civl_ranking_date:
+          body.civl_ranking !== undefined
+            ? (body.civl_ranking_date ?? null)
+            : (body.civl_ranking_date ?? existing.civl_ranking_date),
         first_start_order:
           body.first_start_order ?? existing.first_start_order,
       };
@@ -763,6 +1019,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         ["pilot_class", "class"],
         ["team_name", "team"],
         ["driver_contact", "driver"],
+        ["civl_ranking", "CIVL ranking"],
       ];
       const subjectName = merged.registered_pilot_name;
       for (const [key, label] of auditFields) {

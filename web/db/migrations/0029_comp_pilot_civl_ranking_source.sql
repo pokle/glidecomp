@@ -1,0 +1,46 @@
+-- Where a comp_pilot's CIVL ranking came from.
+--
+-- `comp_pilot.civl_ranking` has existed since 0001 (inherited from the
+-- predecessor project's schema) and has never been written or read — the
+-- roster editor had no column for it and the API selected it into a row type
+-- that never serialised it. It becomes real now: organisers use the WPRS
+-- world ranking to set a fair launch order (task 1 in reverse ranking order),
+-- so the roster is where the number belongs.
+--
+-- ── Why the number is COPIED rather than looked up ────────────────────────
+--
+-- `pilot_ranking` (0025) keeps the LATEST snapshot per list and replaces it
+-- every month. A competition wants the ranking as it stood when the roster
+-- was built — a launch order that silently reshuffles when CIVL publishes is
+-- not a launch order. So the fill button copies the number onto comp_pilot,
+-- and nothing re-reads `pilot_ranking` afterwards. That also makes the
+-- organiser's override (a pilot missing from the list, or ranked wrongly) a
+-- plain edit of a column rather than a special case.
+--
+-- ── Why two more columns ──────────────────────────────────────────────────
+--
+-- A bare rank is unfalsifiable: 42 in which list, from which month, or typed
+-- in by hand? A pilot can hold a different rank in each of the ten lists, so
+-- without the source the number cannot be checked against civlcomps.org, and
+-- an organiser's deliberate override is indistinguishable from an import.
+-- Both are NULL when the rank was set by hand, which is exactly the signal
+-- the pilots table renders as "set by organiser".
+--
+--   * `civl_ranking_slug` — the list's civlcomps.org URL segment, the same
+--     identity `pilot_ranking.ranking_slug` uses ('hang-gliding-class-1-xc').
+--     The list's display name is not stored: it belongs to the ranking
+--     snapshot, and copying it here would let the two drift.
+--   * `civl_ranking_date` — the snapshot's ISO 'YYYY-MM-01', copied from
+--     `pilot_ranking.ranking_date`. This is what makes the number a
+--     point-in-time fact rather than an undated claim.
+--
+-- ── Not a scoring input ───────────────────────────────────────────────────
+--
+-- A world ranking cannot change a task score, so writes here take no
+-- `bumpScoreInputs()` call (see the scoring-input list in CLAUDE.md). They ARE
+-- audit-logged, unlike `pilot_ranking` itself: this is competition data an
+-- organiser entered, and a launch order it feeds is exactly the kind of
+-- decision the audit log exists to explain.
+
+ALTER TABLE comp_pilot ADD COLUMN civl_ranking_slug TEXT;
+ALTER TABLE comp_pilot ADD COLUMN civl_ranking_date TEXT;

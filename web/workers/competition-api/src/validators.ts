@@ -221,6 +221,9 @@ export const trackQualityOverrideSchema = z.object({
 
 // ── Comp pilot validators ──
 
+/** Shared by the comp-pilot ranking date and the task validators below. */
+const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
 const optionalText = z.string().max(MAX_TEXT).nullable().optional();
 
 /**
@@ -244,6 +247,25 @@ export const compPilotFieldsSchema = z.object({
   pilot_class: pilotClassString,
   team_name: optionalText,
   driver_contact: optionalText,
+  // WPRS world ranking, copied onto the roster (never looked up live — see
+  // migration 0029) and overridable by the organiser. The two source fields
+  // say which CIVL list and which monthly snapshot it came from; both null
+  // means a hand-entered rank.
+  civl_ranking: z.number().int().positive().nullable().optional(),
+  civl_ranking_slug: z
+    .string()
+    .max(MAX_TEXT)
+    // A civlcomps.org URL segment ('hang-gliding-class-1-xc'). Constrained
+    // because it is rendered as the source of a published number; free text
+    // here would let a roster import label a rank with anything at all.
+    .regex(/^[a-z0-9-]+$/, "must be a CIVL ranking list slug")
+    .nullable()
+    .optional(),
+  civl_ranking_date: z
+    .string()
+    .regex(isoDateRegex, "must be an ISO date (YYYY-MM-DD)")
+    .nullable()
+    .optional(),
   first_start_order: z.number().int().positive().nullable().optional(),
 });
 
@@ -270,9 +292,37 @@ export const bulkPilotsSchema = z.object({
     .max(250),
 });
 
-// ── Task validators ──
+/**
+ * The roster to look up against the CIVL ranking lists — the grid's CURRENT
+ * contents, which is why it is a body rather than the stored roster. Only the
+ * two fields the matching uses are accepted; the same 250-row cap applies, and
+ * it bounds the bound-parameter count of the lookup's single query.
+ */
+export const civlRankingLookupSchema = z.object({
+  pilots: z
+    .array(
+      z.object({
+        name: z.string().max(MAX_TEXT),
+        civl_id: optionalText,
+      })
+    )
+    .max(250),
+});
 
-const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * Query for the roster editor's name typeahead.
+ *
+ * `q` has a floor of two characters so a stray keystroke cannot ask for a scan
+ * of every ranked pilot, and a ceiling because a name is a name. The list is
+ * optional: with no slug the route answers from the one the comp's discipline
+ * suggests, which is what a grid that has not been near the picker wants.
+ */
+export const civlPilotSearchSchema = z.object({
+  q: z.string().trim().min(2).max(MAX_TEXT),
+  slug: optionalText,
+});
+
+// ── Task validators ──
 
 // ── XCTask (xctsk) — strict schema, SEC-12 ──
 //

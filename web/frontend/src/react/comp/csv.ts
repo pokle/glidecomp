@@ -35,6 +35,17 @@ export interface CompPilot {
   pilot_class: string;
   team_name: string | null;
   driver_contact: string | null;
+  /**
+   * The pilot's WPRS world ranking as the organiser is running this comp off
+   * it — copied from `pilot_ranking`, or typed in. Launch order is set from
+   * it, so it is a competition's own record and never re-read from the live
+   * list (migration 0029).
+   */
+  civl_ranking: number | null;
+  /** The CIVL list the rank came from, or null when it was set by hand. */
+  civl_ranking_slug: string | null;
+  /** That list's snapshot month (ISO 'YYYY-MM-01'), or null when hand-set. */
+  civl_ranking_date: string | null;
   first_start_order: number | null;
 }
 
@@ -58,6 +69,17 @@ export interface ParsedRow {
   team_name: string | null;
   driver_contact: string | null;
   glider: string | null;
+  /** Editable as text like every other cell; parsed to an integer on save. */
+  civl_ranking: string | null;
+  /**
+   * Where the rank came from. NOT columns — they are carried invisibly
+   * through the grid so a save keeps the provenance a fill established, and
+   * the grid clears them the moment someone types over the rank (see
+   * PilotsSection's cellEdited). A CSV round trip drops them, which is the
+   * honest answer: a rank that came back through a spreadsheet is hand-set.
+   */
+  civl_ranking_slug?: string | null;
+  civl_ranking_date?: string | null;
 }
 
 /** Request body row sent to POST /api/comp/:comp_id/pilot/bulk. */
@@ -76,11 +98,17 @@ export interface BulkPilotRow {
   pilot_class: string;
   team_name?: string | null;
   driver_contact?: string | null;
+  civl_ranking?: number | null;
+  civl_ranking_slug?: string | null;
+  civl_ranking_date?: string | null;
 }
 
 /** Column metadata for CSV serialisation. Kept as a single source of truth. */
 export interface ColumnDef {
-  key: keyof Omit<ParsedRow, "comp_pilot_id">;
+  key: keyof Omit<
+    ParsedRow,
+    "comp_pilot_id" | "civl_ranking_slug" | "civl_ranking_date"
+  >;
   /** External name used in CSV headers and in user-facing hints. */
   header: string;
   /** Accepted aliases when parsing an imported header row (case-insensitive). */
@@ -94,6 +122,15 @@ export const COLUMNS: ColumnDef[] = [
   { key: "pilot_class", header: "class", aliases: ["pilot_class"] },
   { key: "team_name", header: "team", aliases: ["team_name"] },
   { key: "driver_contact", header: "driver", aliases: ["driver_contact"] },
+  // Sits beside civl_id — not because it is an ID, but because the two are
+  // filled in together (ids first, then the ranks that follow from them), and
+  // a column you fill from the one next to it should not be nine columns of
+  // horizontal scrolling away. It stays out of the ID block itself.
+  {
+    key: "civl_ranking",
+    header: "civl_ranking",
+    aliases: ["ranking", "rank", "wprs", "civl_rank", "world_ranking"],
+  },
   { key: "civl_id", header: "civl_id", aliases: ["civl", "civlid"] },
   { key: "safa_id", header: "safa_id", aliases: ["safa"] },
   { key: "ushpa_id", header: "ushpa_id", aliases: ["ushpa"] },
@@ -123,6 +160,9 @@ export function emptyRow(compClasses: string[]): ParsedRow {
     team_name: null,
     driver_contact: null,
     glider: null,
+    civl_ranking: null,
+    civl_ranking_slug: null,
+    civl_ranking_date: null,
   };
 }
 
@@ -142,10 +182,19 @@ export function pilotToRow(p: CompPilot): ParsedRow {
     team_name: p.team_name,
     driver_contact: p.driver_contact,
     glider: p.glider,
+    civl_ranking: p.civl_ranking === null ? null : String(p.civl_ranking),
+    civl_ranking_slug: p.civl_ranking_slug,
+    civl_ranking_date: p.civl_ranking_date,
   };
 }
 
-/** Normalise a row: trim everything; empty optionals become null. */
+/**
+ * Normalise a row: trim everything; empty optionals become null.
+ *
+ * The ranking's source travels with it rather than through COLUMNS: it is not
+ * a cell, and clearing the rank clears the source, because a list and a month
+ * attached to no number describe nothing.
+ */
 export function normalizeRow(raw: ParsedRow): ParsedRow {
   const row = emptyRow([]);
   if (raw.comp_pilot_id) row.comp_pilot_id = raw.comp_pilot_id;
@@ -157,6 +206,10 @@ export function normalizeRow(raw: ParsedRow): ParsedRow {
     } else {
       (row as unknown as Record<string, unknown>)[c.key] = value || null;
     }
+  }
+  if (row.civl_ranking) {
+    row.civl_ranking_slug = raw.civl_ranking_slug ?? null;
+    row.civl_ranking_date = raw.civl_ranking_date ?? null;
   }
   return row;
 }
@@ -193,6 +246,13 @@ export function validateRows(
         `Row ${i + 1} (${row.name}): class "${row.pilot_class}" is not valid for this competition (valid: ${compClasses.join(", ")})`
       );
     }
+    // A ranking is a place in a list — 1st, 2nd, 412th. Caught here rather
+    // than by the server's 400 so the message names the row and the value.
+    if (row.civl_ranking !== null && parseRanking(row.civl_ranking) === null) {
+      errors.push(
+        `Row ${i + 1} (${row.name}): CIVL ranking "${row.civl_ranking}" is not a whole number above 0`
+      );
+    }
     kept.push(row);
   });
 
@@ -203,7 +263,21 @@ export function validateRows(
   return { payload: kept.map(parsedRowToBulk), errors };
 }
 
+/**
+ * A CIVL ranking cell as a number, or null when it is blank or not a place in
+ * a list. Deliberately strict — "12th", "~12" and "12.5" are all refused
+ * rather than silently becoming 12, because the number decides launch order.
+ */
+export function parseRanking(value: string | null): number | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 export function parsedRowToBulk(row: ParsedRow): BulkPilotRow {
+  const ranking = parseRanking(row.civl_ranking);
   return {
     ...(row.comp_pilot_id ? { comp_pilot_id: row.comp_pilot_id } : {}),
     registered_pilot_name: row.name,
@@ -219,6 +293,11 @@ export function parsedRowToBulk(row: ParsedRow): BulkPilotRow {
     pilot_class: row.pilot_class,
     team_name: row.team_name,
     driver_contact: row.driver_contact,
+    civl_ranking: ranking,
+    // No number, no source. And a rank that survived a CSV round trip has
+    // lost its source columns, so it goes back as hand-set — which it is.
+    civl_ranking_slug: ranking === null ? null : (row.civl_ranking_slug ?? null),
+    civl_ranking_date: ranking === null ? null : (row.civl_ranking_date ?? null),
   };
 }
 

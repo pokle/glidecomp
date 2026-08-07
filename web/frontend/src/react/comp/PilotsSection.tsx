@@ -14,8 +14,18 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FileTrigger, Link as AriaLink } from "react-aria-components";
-import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
+import {
+  FileTrigger,
+  Link as AriaLink,
+  type SortDescriptor,
+} from "react-aria-components";
+import type {
+  CellComponent,
+  ColumnDefinition,
+  RowComponent,
+  RowRangeLookup,
+  Tabulator,
+} from "tabulator-tables";
 import { Badge } from "@/react/rac/badge";
 import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
@@ -30,6 +40,19 @@ import {
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { TabulatorGrid } from "./TabulatorGrid";
+import {
+  fillCivlIds,
+  pilotDetails,
+  searchRankedPilots,
+  type RankedPilot,
+  fillRankings,
+  formatRankingMonth,
+  listLabel,
+  lookupRankings,
+  rankingSource,
+  type RankingList,
+} from "./civl-rankings";
+import { Select, SelectItem } from "@/react/rac/select";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
 import { Card } from "@/react/rac/card";
@@ -47,6 +70,33 @@ import {
   type CompPilot,
   type ParsedRow,
 } from "./csv";
+
+/**
+ * Sort a copy of the roster by the RAC sort descriptor.
+ *
+ * The ranking sorts numerically with unranked pilots pinned last in BOTH
+ * directions: "no ranking" is not a very good or a very bad one, and an
+ * organiser sorting to find their top seeds should not have to scroll past
+ * everyone who has never been ranked. Every other column is locale text.
+ */
+function sortPilots(pilots: CompPilot[], sort: SortDescriptor | undefined): CompPilot[] {
+  if (!sort) return pilots;
+  const dir = sort.direction === "descending" ? -1 : 1;
+  const col = String(sort.column);
+  return [...pilots].sort((a, b) => {
+    if (col === "civl_ranking") {
+      if (a.civl_ranking === null && b.civl_ranking === null) return 0;
+      if (a.civl_ranking === null) return 1;
+      if (b.civl_ranking === null) return -1;
+      return (a.civl_ranking - b.civl_ranking) * dir;
+    }
+    const text = (p: CompPilot): string => {
+      if (col === "account") return p.linked_username ?? "";
+      return String((p as unknown as Record<string, unknown>)[col] ?? "");
+    };
+    return text(a).localeCompare(text(b)) * dir;
+  });
+}
 
 export function PilotsSection({
   compId,
@@ -73,6 +123,10 @@ export function PilotsSection({
   const [pilots, setPilots] = useState<CompPilot[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  // Undefined until a header is clicked: the server already returns the roster
+  // by name, and re-sorting it here on mount would only move rows for no
+  // reason. See sortPilots for what each column compares.
+  const [sort, setSort] = useState<SortDescriptor | undefined>(undefined);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -163,18 +217,44 @@ export function PilotsSection({
           ) : null}
         </div>
       ) : (
-        <Table aria-label="Pilots" scrollLabel="Pilots" className="mt-2">
+        <Table
+          aria-label="Pilots"
+          scrollLabel="Pilots"
+          className="mt-2"
+          sortDescriptor={sort}
+          onSortChange={setSort}
+        >
           <TableHeader>
-            <Column isRowHeader>Name</Column>
-            <Column>GlideComp account</Column>
-            <Column>CIVL</Column>
-            <Column>SAFA</Column>
-            <Column>Class</Column>
-            <Column>Team</Column>
-            <Column>Driver</Column>
+            <Column id="name" isRowHeader allowsSorting>
+              Name
+            </Column>
+            <Column id="account" allowsSorting>
+              GlideComp account
+            </Column>
+            {/* The reason the roster is sortable at all: launch order is set
+                in ranking order, so this is the column an organiser reads the
+                table down. Right-aligned as a plain quantity. */}
+            <Column id="civl_ranking" allowsSorting className="text-right">
+              CIVL rank
+            </Column>
+            <Column id="civl_id" allowsSorting>
+              CIVL
+            </Column>
+            <Column id="safa_id" allowsSorting>
+              SAFA
+            </Column>
+            <Column id="pilot_class" allowsSorting>
+              Class
+            </Column>
+            <Column id="team_name" allowsSorting>
+              Team
+            </Column>
+            <Column id="driver_contact" allowsSorting>
+              Driver
+            </Column>
           </TableHeader>
           <TableBody>
-            {pilots.map((p) => (
+            {sortPilots(pilots, sort).map((p) => (
               <Row key={p.comp_pilot_id} id={p.comp_pilot_id}>
                 <Cell>{p.name}</Cell>
                 <Cell>
@@ -186,6 +266,21 @@ export function PilotsSection({
                       @{p.linked_username}
                     </AriaLink>
                   ) : null}
+                </Cell>
+                <Cell className="text-right tabular-nums">
+                  {p.civl_ranking === null ? (
+                    ""
+                  ) : (
+                    <>
+                      {p.civl_ranking}{" "}
+                      {/* A rank nobody can trace is a rank nobody can check —
+                          the list and month it came from, or the fact that it
+                          was set by hand. */}
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">
+                        {rankingSource(p)}
+                      </span>
+                    </>
+                  )}
                 </Cell>
                 <Cell>{p.civl_id ?? ""}</Cell>
                 <Cell>{p.safa_id ?? ""}</Cell>
@@ -239,9 +334,14 @@ const EMPTY_GRID_PLACEHOLDER = `
  * Tabulator column definitions: a frozen remove button, then one editable
  * column per CSV column. The class column is a list editor limited to the
  * comp's classes; the name column is frozen so horizontal scrolling never
- * loses track of whose row is being edited.
+ * loses track of whose row is being edited, and suggests ranked pilots as the
+ * organiser types (see `suggest`).
  */
-function gridColumns(compClasses: string[]): ColumnDefinition[] {
+function gridColumns(
+  compClasses: string[],
+  /** Ranked pilots matching what has been typed so far, for the name column. */
+  suggest: (term: string) => Promise<RankedPilot[]>
+): ColumnDefinition[] {
   const remove: ColumnDefinition = {
     title: "",
     width: 36,
@@ -268,10 +368,50 @@ function gridColumns(compClasses: string[]): ColumnDefinition[] {
     if (c.key === "name") {
       def.frozen = true;
       def.minWidth = 140;
+      // An autocomplete over the CIVL rankings, and NOT a closed list:
+      // freetext is what keeps the column a name field. Most rosters have
+      // pilots who have never been ranked, and a cell that refused to hold
+      // them would be a worse column than one with no suggestions at all.
+      def.editor = "list";
+      def.editorParams = {
+        autocomplete: true,
+        freetext: true,
+        allowEmpty: true,
+        // Ask the server per keystroke rather than filtering a cached list:
+        // the rankings are ~2,000 names per list, and which list is being read
+        // can change between one cell and the next.
+        filterRemote: true,
+        // @types/tabulator-tables types `valuesLookup` as RowRangeLookup (the
+        // "active"/"visible"/"all" strings) only. Tabulator 6 also accepts a
+        // (cell, filterTerm) function, which is the whole point of
+        // filterRemote — so the ONE field is cast, leaving the rest checked.
+        valuesLookup: (async (_cell: CellComponent, term: string) => {
+          const pilots = await suggest(term ?? "");
+          // The label carries what tells two pilots of the same name apart —
+          // nation and world rank — while the VALUE stays the bare name,
+          // because the cell is a name and has to read like one.
+          return pilots.map((p) => ({
+            label: `${p.pilot_name} · ${p.nation || "—"} · #${p.rank}`,
+            value: p.pilot_name,
+          }));
+        }) as unknown as RowRangeLookup,
+      };
     }
     if (c.key === "pilot_class") {
       def.editor = "list";
       def.editorParams = { values: compClasses };
+    }
+    if (c.key === "civl_ranking") {
+      // A place in a list reads right-aligned, and the tooltip is where the
+      // provenance the row is carrying invisibly becomes visible.
+      def.hozAlign = "right";
+      def.tooltip = (_e: MouseEvent, cell: CellComponent) => {
+        const row = cell.getRow().getData() as ParsedRow;
+        if (!row.civl_ranking) return "";
+        return row.civl_ranking_slug
+          ? `From ${listLabel(row.civl_ranking_slug)}, ${formatRankingMonth(row.civl_ranking_date ?? null)}`
+          : "Set by an organiser";
+      };
     }
     return def;
   });
@@ -299,12 +439,102 @@ function EditPilotsDialog({
   const [status, setStatus] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  // What the CIVL lists make of the rows currently in the grid. Null until the
+  // first lookup answers; an empty array means we hold no rankings at all,
+  // which is a different thing and says so in the UI.
+  const [lists, setLists] = useState<RankingList[] | null>(null);
+  const [listSlug, setListSlug] = useState<string | null>(null);
+  const [looking, setLooking] = useState(false);
+  // How many rows that answer was about, so "18 of 24" counts the same rows
+  // the matches came from rather than whatever the grid holds a moment later.
+  const [lookupSize, setLookupSize] = useState(0);
+  const selectedList = lists?.find((l) => l.slug === listSlug) ?? null;
 
   /** Current grid contents, normalised (trimmed, empty optionals → null). */
   function gridRows(): ParsedRow[] {
     const table = tableRef.current;
     if (!table) return [];
     return (table.getData() as ParsedRow[]).map(normalizeRow);
+  }
+
+  /**
+   * Re-ask the lists about the grid as it stands now.
+   *
+   * Run when the grid is ready and again after ids are filled — the matches
+   * are keyed by row index, so an answer about a previous state of the grid
+   * would fill the wrong rows. Returns the lists so a caller can act on the
+   * fresh answer rather than on state React has not committed yet.
+   *
+   * A failure is reported and nothing else: the rest of the editor works
+   * perfectly well without rankings.
+   */
+  const refreshLookup = useCallback(
+    async (rows: ParsedRow[]): Promise<RankingList[] | null> => {
+      setLooking(true);
+      try {
+        const result = await lookupRankings(compId, rows);
+        setLists(result.lists);
+        setLookupSize(rows.length);
+        setListSlug((current) => {
+          // Keep the organiser's choice across a refresh; only fall back to
+          // the suggested list when they have not picked one.
+          if (current && result.lists.some((l) => l.slug === current)) return current;
+          return result.default_slug;
+        });
+        return result.lists;
+      } catch {
+        setLists([]);
+        setErrors((e) => [
+          ...e,
+          "Could not read the CIVL rankings. The rest of the editor still works.",
+        ]);
+        return null;
+      } finally {
+        setLooking(false);
+      }
+    },
+    [compId]
+  );
+
+  /**
+   * The name column's typeahead, and the memory that lets a pick fill a row.
+   *
+   * Tabulator's list editor hands `cellEdited` the chosen VALUE — here the
+   * bare name — and not the item it came from, so the suggestions are kept
+   * until the edit lands and the pilot is recovered from them.
+   */
+  const suggestionsRef = useRef<RankedPilot[]>([]);
+  const listSlugRef = useRef<string | null>(null);
+  listSlugRef.current = listSlug;
+
+  const suggestPilots = useCallback(
+    async (term: string): Promise<RankedPilot[]> => {
+      const pilots = await searchRankedPilots(compId, term, listSlugRef.current);
+      suggestionsRef.current = pilots;
+      return pilots;
+    },
+    [compId]
+  );
+
+  /**
+   * A name that came from the typeahead brings its pilot's details with it.
+   *
+   * Only an UNAMBIGUOUS name is acted on. Two ranked pilots sharing a name is
+   * rare but real, and the cell records the name rather than which of them was
+   * highlighted — so rather than guess, the row keeps the name and the
+   * organiser fills the id themselves. Same rule the fill button follows.
+   *
+   * An id already in the row is never overwritten: it is someone's deliberate
+   * answer, and a name is not evidence against it.
+   */
+  function applyPickedPilot(row: RowComponent, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const hits = suggestionsRef.current.filter((p) => p.pilot_name === trimmed);
+    if (hits.length !== 1) return;
+    const current = row.getData() as ParsedRow;
+    if (current.civl_id) return;
+    row.update(pilotDetails(hits[0]));
   }
 
   function addRow() {
@@ -338,6 +568,57 @@ function EditPilotsDialog({
       });
     }
     void table.addRow(rows);
+  }
+
+  /**
+   * Fill in everything the chosen list can say about the grid, in one press.
+   *
+   * Ids first, then the rest — because the rest is matched by ID ONLY, and a
+   * rank attached to the wrong human silently sets the wrong launch order. So
+   * the lookup is re-run in between: rows that just gained an id are matched
+   * by it on the second pass, which is what makes their rankings fillable at
+   * all. Two buttons made the organiser perform that ordering by hand, and
+   * pressing them in the other order simply did less.
+   *
+   * Both steps are on the SPREADSHEET, not the competition: nothing is written
+   * until the organiser saves, so a fill they disagree with is undone by
+   * cancelling.
+   */
+  async function fillFromCivl() {
+    const table = tableRef.current;
+    if (!table || !selectedList) return;
+    const list = selectedList;
+
+    const ids = fillCivlIds(gridRows(), list);
+    await table.setData(ids.rows);
+
+    // Re-ask about the grid as it now stands. On failure the ids are still in
+    // (they are already in the grid) and the ranks are simply not attempted —
+    // refreshLookup has reported the problem itself.
+    const fresh = await refreshLookup(ids.rows);
+    const refreshed = fresh?.find((l) => l.slug === list.slug) ?? null;
+    if (!refreshed) {
+      setStatus(
+        `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} filled in from ` +
+          `${list.name}. Could not read the rankings again, so no ranks were filled.`
+      );
+      return;
+    }
+
+    const ranks = fillRankings(ids.rows, refreshed);
+    await table.setData(ranks.rows);
+
+    const noId = ranks.rows.filter((r) => !r.civl_id).length;
+    setStatus(
+      `From ${list.name} (${formatRankingMonth(list.ranking_date)}): ` +
+        `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} and ` +
+        `${ranks.filled} ranking${ranks.filled === 1 ? "" : "s"} filled in. ` +
+        (noId > 0
+          ? `${noId} row${noId === 1 ? " has" : "s have"} no ID — that list has ` +
+            `nobody by that exact name, or more than one. `
+          : "") +
+        "Rankings are copied, not looked up later: they stay as they are now."
+    );
   }
 
   async function importCsv(files: FileList | null) {
@@ -437,7 +718,7 @@ function EditPilotsDialog({
         <TabulatorGrid
           id="pilots-grid"
           className="gc-grid min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden rounded border border-border"
-          initialColumns={() => gridColumns(compClasses)}
+          initialColumns={() => gridColumns(compClasses, suggestPilots)}
           initialData={() => pilots.map(pilotToRow)}
           options={{
             layout: "fitDataStretch",
@@ -448,7 +729,38 @@ function EditPilotsDialog({
             popupContainer: "#pilots-edit-dialog",
           }}
           tableRef={tableRef}
-          onReady={() => setGridReady(true)}
+          events={{
+            cellEdited: (cell) => {
+              // A name picked from the typeahead brings its id and ranking.
+              if (cell.getField() === "name") {
+                applyPickedPilot(cell.getRow(), String(cell.getValue() ?? ""));
+                return;
+              }
+              // Typing over a ranking makes it the organiser's number, so the
+              // list and month it used to carry stop being true of it. They
+              // are cleared here rather than at save time so the cell's
+              // tooltip tells the truth the moment the edit lands.
+              if (cell.getField() !== "civl_ranking") return;
+              cell.getRow().update({
+                civl_ranking_slug: null,
+                civl_ranking_date: null,
+              });
+            },
+          }}
+          onReady={() => {
+            setGridReady(true);
+            void refreshLookup(gridRows());
+          }}
+        />
+
+        <CivlRankingBar
+          lists={lists}
+          selected={selectedList}
+          onSelect={setListSlug}
+          looking={looking}
+          isDisabled={!gridReady}
+          rosterSize={lookupSize}
+          onFill={() => void fillFromCivl()}
         />
 
         {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
@@ -523,5 +835,96 @@ function EditPilotsDialog({
         </DialogFooter>
       </Dialog>
     </Modal>
+  );
+}
+
+/**
+ * The CIVL rankings toolbar under the grid: which list to read, and the one
+ * fill that reads it.
+ *
+ * The button names what it does to the SPREADSHEET rather than to the
+ * competition, because that is what it does — nothing is written until the
+ * organiser saves, so a fill they disagree with is undone by cancelling.
+ *
+ * The picker shows every list we hold with the month it was published and how
+ * many of these pilots it places. That count is the whole reason it is a
+ * picker: it is how an organiser discovers they are looking at the Sport list
+ * rather than being quietly given the wrong ranks.
+ */
+function CivlRankingBar({
+  lists,
+  selected,
+  onSelect,
+  looking,
+  isDisabled,
+  rosterSize,
+  onFill,
+}: {
+  lists: RankingList[] | null;
+  selected: RankingList | null;
+  onSelect: (slug: string) => void;
+  looking: boolean;
+  isDisabled: boolean;
+  /** Rows the last lookup asked about — the denominator of "18 of 24". */
+  rosterSize: number;
+  onFill: () => void;
+}) {
+  if (lists === null) {
+    return <Loading className="text-sm">Reading the CIVL world rankings…</Loading>;
+  }
+  if (lists.length === 0) {
+    // Nothing imported yet — a local database, or the daily import has never
+    // run. Say so plainly rather than showing an empty picker.
+    return (
+      <p className="text-sm text-muted-foreground">
+        No CIVL world rankings have been imported yet, so there is nothing to
+        fill from. You can still type rankings in by hand.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <Select
+        label="CIVL list"
+        aria-label="CIVL ranking list"
+        selectedKey={selected?.slug ?? null}
+        onSelectionChange={(key) => onSelect(String(key))}
+        className="min-w-64 gap-1"
+      >
+        {lists.map((list) => (
+          <SelectItem
+            key={list.slug}
+            id={list.slug}
+            // textValue is what the closed button and typeahead read, so it
+            // carries the counts too — they are the reason to choose a list.
+            textValue={`${list.name} · ${formatRankingMonth(list.ranking_date)} · ${list.matched_count} of ${rosterSize}`}
+          >
+            {list.name} · {formatRankingMonth(list.ranking_date)} ·{" "}
+            {list.matched_count} of {rosterSize}{" "}
+            {rosterSize === 1 ? "pilot" : "pilots"}
+          </SelectItem>
+        ))}
+      </Select>
+      <div className="flex flex-wrap gap-2 pb-0.5">
+        <TooltipTrigger>
+          <Button
+            variant="outline"
+            size="sm"
+            isDisabled={isDisabled || !selected}
+            isPending={looking}
+            pendingLabel="Reading the rankings"
+            onPress={onFill}
+          >
+            Fill from CIVL
+          </Button>
+          <Tooltip>
+            Puts a CIVL ID against every name only one pilot in this list
+            answers to, then copies those pilots' rankings. Existing IDs are
+            never changed; rankings are overwritten with what CIVL published.
+          </Tooltip>
+        </TooltipTrigger>
+      </div>
+    </div>
   );
 }

@@ -16,7 +16,7 @@ function makeRow(overrides: Partial<ParsedRow> = {}): ParsedRow {
 }
 
 describe("COLUMNS order", () => {
-  it("puts the sporting-body IDs after the everyday columns", () => {
+  it("puts the sporting-body IDs after the everyday columns, ranking beside civl_id", () => {
     expect(COLUMNS.map((c) => c.header)).toEqual([
       "name",
       "email",
@@ -24,6 +24,7 @@ describe("COLUMNS order", () => {
       "class",
       "team",
       "driver",
+      "civl_ranking",
       "civl_id",
       "safa_id",
       "ushpa_id",
@@ -38,7 +39,7 @@ describe("COLUMNS order", () => {
 describe("exportCsvContent", () => {
   it("writes the header row alone for an empty table (fillable template)", () => {
     expect(exportCsvContent([])).toBe(
-      "name,email,glider,class,team,driver,civl_id,safa_id,ushpa_id,bhpa_id,dhv_id,ffvl_id,fai_id\n"
+      "name,email,glider,class,team,driver,civl_ranking,civl_id,safa_id,ushpa_id,bhpa_id,dhv_id,ffvl_id,fai_id\n"
     );
   });
 
@@ -187,5 +188,97 @@ describe("validateRows", () => {
       "Row 1: name is required",
       "Row 2 (Bob): class is required",
     ]);
+  });
+});
+
+describe("the CIVL ranking column", () => {
+  it("sends the rank as a number, with the list and month it came from", () => {
+    const { payload, errors } = validateRows(
+      [
+        makeRow({
+          civl_ranking: "12",
+          civl_ranking_slug: "hang-gliding-class-1-xc",
+          civl_ranking_date: "2026-07-01",
+        }),
+      ],
+      CLASSES
+    );
+    expect(errors).toEqual([]);
+    expect(payload[0]).toMatchObject({
+      civl_ranking: 12,
+      civl_ranking_slug: "hang-gliding-class-1-xc",
+      civl_ranking_date: "2026-07-01",
+    });
+  });
+
+  it("sends a hand-typed rank with no source", () => {
+    // The organiser's own number is not something CIVL published, so it must
+    // not carry a list and a month that would make it look imported.
+    const { payload } = validateRows([makeRow({ civl_ranking: "30" })], CLASSES);
+    expect(payload[0]).toMatchObject({
+      civl_ranking: 30,
+      civl_ranking_slug: null,
+      civl_ranking_date: null,
+    });
+  });
+
+  it("drops the source when the rank is cleared", () => {
+    const { payload } = validateRows(
+      [
+        makeRow({
+          civl_ranking: "",
+          civl_ranking_slug: "hang-gliding-class-1-xc",
+          civl_ranking_date: "2026-07-01",
+        }),
+      ],
+      CLASSES
+    );
+    expect(payload[0]).toMatchObject({
+      civl_ranking: null,
+      civl_ranking_slug: null,
+      civl_ranking_date: null,
+    });
+  });
+
+  it("refuses anything that is not a place in a list", () => {
+    const { errors } = validateRows(
+      [
+        makeRow({ name: "Jane", civl_ranking: "12th" }),
+        makeRow({ name: "Bob", civl_ranking: "12.5" }),
+        makeRow({ name: "Cara", civl_ranking: "0" }),
+      ],
+      CLASSES
+    );
+    expect(errors).toEqual([
+      'Row 1 (Jane): CIVL ranking "12th" is not a whole number above 0',
+      'Row 2 (Bob): CIVL ranking "12.5" is not a whole number above 0',
+      'Row 3 (Cara): CIVL ranking "0" is not a whole number above 0',
+    ]);
+  });
+
+  it("imports from a CSV under its own header or an alias", () => {
+    const { rows, errors } = parseImportedCsv(
+      "name,class,ranking\nJane Doe,open,12\n",
+      CLASSES
+    );
+    expect(errors).toEqual([]);
+    expect(rows[0].civl_ranking).toBe("12");
+  });
+
+  it("a CSV round trip returns the rank as hand-set", () => {
+    // The export has no source columns — nothing about a spreadsheet can
+    // vouch for which CIVL list a number came out of.
+    const exported = exportCsvContent([
+      makeRow({
+        civl_ranking: "12",
+        civl_ranking_slug: "hang-gliding-class-1-xc",
+        civl_ranking_date: "2026-07-01",
+      }),
+    ]);
+    expect(exported).toContain("12");
+    expect(exported).not.toContain("hang-gliding-class-1-xc");
+    const { rows } = parseImportedCsv(exported, CLASSES);
+    expect(rows[0].civl_ranking).toBe("12");
+    expect(rows[0].civl_ranking_slug).toBeNull();
   });
 });
