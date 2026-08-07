@@ -419,6 +419,24 @@ function gridColumns(
   return [remove, ...dataCols];
 }
 
+/**
+ * The editor's panel size. A spreadsheet wants the screen.
+ *
+ * It fills the overlay's content box: the overlay's own `p-4` is the whole
+ * inset and is deliberately not overridable (rac/dialog.tsx), so the only
+ * thing between the grid and the screen edge is 16px of backdrop.
+ *
+ *   * `max-w-full` overrides the panel's usual `max-w-[calc(100%-2rem)]`,
+ *     which was costing a phone another 32px of the little width it has.
+ *   * `dvh`, not `vh`: on mobile Safari `vh` counts the collapsing toolbar, so
+ *     a `vh` height puts the footer's Save button underneath it.
+ *   * Wide screens keep a cap. Past about 1400px the fourteen columns have all
+ *     the room they can use, and a panel the width of a monitor stops reading
+ *     as a dialog.
+ */
+const EDITOR_PANEL_CLASS =
+  "h-[calc(100dvh-2rem)] max-w-full sm:h-[calc(100dvh-3rem)] sm:max-w-[min(88rem,100%)]";
+
 function EditPilotsDialog({
   compId,
   compName,
@@ -449,6 +467,11 @@ function EditPilotsDialog({
   // the matches came from rather than whatever the grid holds a moment later.
   const [lookupSize, setLookupSize] = useState(0);
   const selectedList = lists?.find((l) => l.slug === listSlug) ?? null;
+  // The fill lives in its own dialog: on a phone its picker and label took a
+  // fifth of the editor's height whether or not anyone was filling anything,
+  // and the grid is what the screen is for.
+  const [civlOpen, setCivlOpen] = useState(false);
+  const [filling, setFilling] = useState(false);
 
   /** Current grid contents, normalised (trimmed, empty optionals → null). */
   function gridRows(): ParsedRow[] {
@@ -621,6 +644,23 @@ function EditPilotsDialog({
     );
   }
 
+  /**
+   * Run the fill, then close the dialog it was started from.
+   *
+   * Closing on the way out is what puts the result in front of the organiser:
+   * the outcome is a sentence under the grid, next to the rows it changed,
+   * and a dialog still sitting over them would be hiding the answer.
+   */
+  async function confirmFill() {
+    setFilling(true);
+    try {
+      await fillFromCivl();
+    } finally {
+      setFilling(false);
+      setCivlOpen(false);
+    }
+  }
+
   async function importCsv(files: FileList | null) {
     const file = files?.[0];
     if (!file) return;
@@ -696,7 +736,7 @@ function EditPilotsDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      className="h-[min(700px,85vh)] sm:max-w-6xl"
+      className={EDITOR_PANEL_CLASS}
     >
       {/* min-w-0: the panel and this Dialog are grid containers, and grid
           items default to min-width:auto — without the override the Tabulator's
@@ -711,10 +751,13 @@ function EditPilotsDialog({
         <DialogHeader>
           <DialogTitle>Edit pilots</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Tap a cell to edit. Rows without a name are ignored on save.
-        </p>
 
+        {/* No standing prose above the grid: on a phone every line here is a
+            row of the roster the organiser cannot see. What it used to say —
+            tap a cell to edit it, nameless rows are dropped — the grid says
+            better by being a grid, and by naming the row on save if a row
+            with content has no name. The empty-grid placeholder still
+            onboards a first-time admin, which is when it is worth the space. */}
         <TabulatorGrid
           id="pilots-grid"
           className="gc-grid min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden rounded border border-border"
@@ -753,16 +796,6 @@ function EditPilotsDialog({
           }}
         />
 
-        <CivlRankingBar
-          lists={lists}
-          selected={selectedList}
-          onSelect={setListSlug}
-          looking={looking}
-          isDisabled={!gridReady}
-          rosterSize={lookupSize}
-          onFill={() => void fillFromCivl()}
-        />
-
         {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
         {shownErrors.length > 0 ? (
           <ul className="list-disc pl-5 text-sm text-destructive">
@@ -772,13 +805,6 @@ function EditPilotsDialog({
             {extraErrors > 0 ? <li>… and {extraErrors} more</li> : null}
           </ul>
         ) : null}
-        <p className="text-sm text-muted-foreground">
-          Need a sporting body ID column not listed?{" "}
-          <a className="underline underline-offset-4" href="mailto:tushar.pokle@gmail.com">
-            Contact me
-          </a>
-          .
-        </p>
 
         <DialogFooter>
           <div className="flex flex-wrap gap-2 sm:mr-auto">
@@ -820,6 +846,19 @@ function EditPilotsDialog({
             >
               Export CSV
             </Button>
+            {/* The trailing "…" is the app's mark for an action that asks
+                something before it acts (see ScoresDownload's "Open in Google
+                Sheets…"). It sits with the other grid-wide actions rather
+                than above the footer, where its picker and label used to cost
+                a phone a fifth of the dialog whether or not anyone used it. */}
+            <Button
+              variant="outline"
+              size="sm"
+              isDisabled={!gridReady}
+              onPress={() => setCivlOpen(true)}
+            >
+              Fill from CIVL…
+            </Button>
           </div>
           <Button slot="close" variant="outline">
             Cancel
@@ -834,97 +873,130 @@ function EditPilotsDialog({
           </Button>
         </DialogFooter>
       </Dialog>
+
+      {/* Nested inside the editor's Modal, the way RouteEditorDialog nests
+          AddWaypointDialog. It reads and writes the SAME lookup state, so the
+          list chosen here is also the one the name typeahead searches. */}
+      {civlOpen ? (
+        <CivlFillDialog
+          lists={lists}
+          selected={selectedList}
+          onSelect={setListSlug}
+          rosterSize={lookupSize}
+          isBusy={looking || filling}
+          onClose={() => setCivlOpen(false)}
+          onFill={() => void confirmFill()}
+        />
+      ) : null}
     </Modal>
   );
 }
 
 /**
- * The CIVL rankings toolbar under the grid: which list to read, and the one
- * fill that reads it.
+ * The CIVL fill, in a dialog of its own: which list to read, what reading it
+ * will do, and the button that does it.
  *
- * The button names what it does to the SPREADSHEET rather than to the
- * competition, because that is what it does — nothing is written until the
- * organiser saves, so a fill they disagree with is undone by cancelling.
+ * It was a bar under the grid, and on a phone its label, picker and button
+ * cost about a fifth of the editor's height — permanently, for a step most
+ * rosters take once. Behind a button the grid gets that space back, and the
+ * explanation gets room to be a sentence rather than a tooltip nobody on a
+ * touchscreen can open.
  *
  * The picker shows every list we hold with the month it was published and how
  * many of these pilots it places. That count is the whole reason it is a
  * picker: it is how an organiser discovers they are looking at the Sport list
  * rather than being quietly given the wrong ranks.
  */
-function CivlRankingBar({
+function CivlFillDialog({
   lists,
   selected,
   onSelect,
-  looking,
-  isDisabled,
   rosterSize,
+  isBusy,
+  onClose,
   onFill,
 }: {
   lists: RankingList[] | null;
   selected: RankingList | null;
   onSelect: (slug: string) => void;
-  looking: boolean;
-  isDisabled: boolean;
   /** Rows the last lookup asked about — the denominator of "18 of 24". */
   rosterSize: number;
+  isBusy: boolean;
+  onClose: () => void;
   onFill: () => void;
 }) {
-  if (lists === null) {
-    return <Loading className="text-sm">Reading the CIVL world rankings…</Loading>;
-  }
-  if (lists.length === 0) {
-    // Nothing imported yet — a local database, or the daily import has never
-    // run. Say so plainly rather than showing an empty picker.
-    return (
-      <p className="text-sm text-muted-foreground">
-        No CIVL world rankings have been imported yet, so there is nothing to
-        fill from. You can still type rankings in by hand.
-      </p>
-    );
-  }
-
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <Select
-        label="CIVL list"
-        aria-label="CIVL ranking list"
-        selectedKey={selected?.slug ?? null}
-        onSelectionChange={(key) => onSelect(String(key))}
-        className="min-w-64 gap-1"
-      >
-        {lists.map((list) => (
-          <SelectItem
-            key={list.slug}
-            id={list.slug}
-            // textValue is what the closed button and typeahead read, so it
-            // carries the counts too — they are the reason to choose a list.
-            textValue={`${list.name} · ${formatRankingMonth(list.ranking_date)} · ${list.matched_count} of ${rosterSize}`}
-          >
-            {list.name} · {formatRankingMonth(list.ranking_date)} ·{" "}
-            {list.matched_count} of {rosterSize}{" "}
-            {rosterSize === 1 ? "pilot" : "pilots"}
-          </SelectItem>
-        ))}
-      </Select>
-      <div className="flex flex-wrap gap-2 pb-0.5">
-        <TooltipTrigger>
-          <Button
-            variant="outline"
-            size="sm"
-            isDisabled={isDisabled || !selected}
-            isPending={looking}
-            pendingLabel="Reading the rankings"
-            onPress={onFill}
-          >
-            Fill from CIVL
+    <Modal
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      className="sm:max-w-lg"
+    >
+      <Dialog id="civl-fill-dialog" className="gap-3">
+        <DialogHeader>
+          <DialogTitle>Fill from CIVL rankings</DialogTitle>
+        </DialogHeader>
+
+        {lists === null ? (
+          <Loading className="text-sm">Reading the CIVL world rankings…</Loading>
+        ) : lists.length === 0 ? (
+          // Nothing imported yet — a local database, or the daily import has
+          // never run. Say so plainly rather than showing an empty picker.
+          <p className="text-sm text-muted-foreground">
+            No CIVL world rankings have been imported yet, so there is nothing
+            to fill from. You can still type rankings in by hand.
+          </p>
+        ) : (
+          <>
+            {/* What the tooltip used to say, where a phone can read it. */}
+            <p className="text-sm text-muted-foreground">
+              Puts a CIVL ID against every name only one pilot in this list
+              answers to, then copies those pilots' rankings. Existing IDs are
+              never changed; rankings are overwritten with what CIVL published.
+              Nothing is saved until you save the roster.
+            </p>
+            <Select
+              label="CIVL list"
+              aria-label="CIVL ranking list"
+              selectedKey={selected?.slug ?? null}
+              onSelectionChange={(key) => onSelect(String(key))}
+              className="gap-1"
+            >
+              {lists.map((list) => (
+                <SelectItem
+                  key={list.slug}
+                  id={list.slug}
+                  // textValue is what the closed button and typeahead read, so
+                  // it carries the counts too — they are the reason to choose
+                  // a list.
+                  textValue={`${list.name} · ${formatRankingMonth(list.ranking_date)} · ${list.matched_count} of ${rosterSize}`}
+                >
+                  {list.name} · {formatRankingMonth(list.ranking_date)} ·{" "}
+                  {list.matched_count} of {rosterSize}{" "}
+                  {rosterSize === 1 ? "pilot" : "pilots"}
+                </SelectItem>
+              ))}
+            </Select>
+          </>
+        )}
+
+        <DialogFooter>
+          <Button slot="close" variant="outline">
+            Cancel
           </Button>
-          <Tooltip>
-            Puts a CIVL ID against every name only one pilot in this list
-            answers to, then copies those pilots' rankings. Existing IDs are
-            never changed; rankings are overwritten with what CIVL published.
-          </Tooltip>
-        </TooltipTrigger>
-      </div>
-    </div>
+          {lists !== null && lists.length > 0 ? (
+            <Button
+              isDisabled={!selected}
+              isPending={isBusy}
+              pendingLabel="Filling from the rankings"
+              onPress={onFill}
+            >
+              Fill roster
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </Dialog>
+    </Modal>
   );
 }

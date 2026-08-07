@@ -199,9 +199,17 @@ be indistinguishable from an import.
 (`/comp/:id/pilots` → Edit, `src/react/comp/PilotsSection.tsx` +
 `civl-rankings.ts`), and both apply the same rules.
 
-**One button, "Fill from CIVL"**, beside a picker listing every list we hold
-with its month and how many of these pilots it places. It does two passes,
-in this order and for this reason:
+**"Fill from CIVL…"**, in the editor's footer with the other grid-wide
+actions. It opens a dialog of its own (`CivlFillDialog`) holding the list
+picker — every list we hold, with its month and how many of these pilots it
+places — an explanation of what filling does, and the button that does it. It
+was a bar under the grid, and on a phone its label, picker and button cost
+about a fifth of the editor's height permanently, for a step most rosters take
+once; the dialog also gives the explanation room to be a sentence rather than
+a tooltip a touchscreen cannot open. It closes on the way out so the outcome
+lands under the grid, beside the rows it changed.
+
+The fill does two passes, in this order and for this reason:
 
 1. **Ids** — into an EMPTY id cell whose name exactly one pilot in the list
    answers to. This is the one place a name decides anything.

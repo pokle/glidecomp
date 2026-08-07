@@ -123,11 +123,42 @@ test.beforeEach(async ({ page }) => {
   await signIn(page);
 });
 
+/**
+ * Wait for the editor's grid to be built and its ranking lookup answered.
+ *
+ * The lookup is what the typeahead and the fill both read, and it is fired
+ * when the grid reports ready — so "the Fill button is enabled" is the one
+ * signal that covers both. It used to be "the picker shows a list name", which
+ * stopped existing when the picker moved into its own dialog.
+ */
+async function expectGridReady(page: Page): Promise<void> {
+  await expect(page.locator("#pilots-grid .tabulator-row").first()).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole("button", { name: "Fill from CIVL…" })).toBeEnabled({
+    timeout: 20_000,
+  });
+}
+
+/**
+ * Open the fill's own dialog from the roster editor.
+ *
+ * The picker and its button used to sit under the grid, where on a phone they
+ * cost about a fifth of the editor whether or not anyone was filling anything.
+ */
+async function openCivlDialog(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Fill from CIVL…" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Fill from CIVL rankings" })
+  ).toBeVisible({ timeout: 20_000 });
+}
+
 test("one press fills IDs by name and then rankings by ID, and shows where they came from", async ({
   page,
 }) => {
   await page.goto(`/comp/${compId}/pilots`);
   await page.getByRole("button", { name: "Edit" }).click();
+  await openCivlDialog(page);
 
   // The picker only appears once the lookup has answered — and it answers
   // about the grid, so it doubles as "the grid is loaded".
@@ -138,11 +169,16 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   // are not.
   await expect(picker).toHaveText(new RegExp(`3 of ${ROSTER.length} pilots`));
 
-  // ONE button. Ids first, then the ranks that only become fillable once the
+  // ONE press. Ids first, then the ranks that only become fillable once the
   // ids are in — the ordering the organiser used to have to know about.
-  await page.getByRole("button", { name: "Fill from CIVL" }).click();
+  await page.getByRole("button", { name: "Fill roster" }).click();
   // Ada and Cleo gain ids (Bruno already had one, Twin Ambiguity is refused);
   // all three are then ranked BY ID, including the two just filled.
+  // The fill dialog closes on its way out, so the outcome lands under the
+  // grid rather than behind the dialog that started it.
+  await expect(
+    page.getByRole("heading", { name: "Fill from CIVL rankings" })
+  ).toBeHidden({ timeout: 20_000 });
   await expect(
     page.getByText(/From Sample World Ranking .*2 CIVL IDs and 3 rankings filled in/)
   ).toBeVisible({ timeout: 20_000 });
@@ -164,9 +200,7 @@ test("typing a name suggests ranked pilots, and picking one brings its id and ra
 }) => {
   await page.goto(`/comp/${compId}/pilots`);
   await page.getByRole("button", { name: "Edit" }).click();
-  await expect(page.getByRole("button", { name: /Sample World Ranking/ })).toBeVisible({
-    timeout: 20_000,
-  });
+  await expectGridReady(page);
 
   // The grid sorts by name, so row one is Ada Thermal — in the list, and with
   // no id yet. Retyping her name is the path this feature exists for: the
@@ -244,6 +278,7 @@ test("the list picker opens ON SCREEN when the page is taller than the window", 
   await page.setViewportSize({ width: 1280, height: 500 });
   await page.goto(`/comp/${compId}/pilots`);
   await page.getByRole("button", { name: "Edit" }).click();
+  await openCivlDialog(page);
 
   const picker = page.getByRole("button", { name: /Sample World Ranking/ });
   await expect(picker).toBeVisible({ timeout: 20_000 });
@@ -264,9 +299,7 @@ test("the list picker opens ON SCREEN when the page is taller than the window", 
 test("a rank typed over by hand stops claiming a source", async ({ page }) => {
   await page.goto(`/comp/${compId}/pilots`);
   await page.getByRole("button", { name: "Edit" }).click();
-  await expect(page.getByRole("button", { name: /Sample World Ranking/ })).toBeVisible({
-    timeout: 20_000,
-  });
+  await expectGridReady(page);
 
   // Tabulator edits on a cell click; the ranking column is a plain input.
   const cell = page.locator('.tabulator-row', { hasText: "Ada Thermal" }).first()
