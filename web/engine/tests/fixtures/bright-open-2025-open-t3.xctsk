@@ -1,0 +1,92 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "07:00:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "ENTER",
+    "timeGates": [
+      "01:30:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.7578773,
+        "lon": 146.9653922,
+        "altSmoothed": 800,
+        "name": "MYS080",
+        "description": "MysticTO"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 33500,
+      "waypoint": {
+        "lat": -36.5675345,
+        "lon": 146.7230031,
+        "altSmoothed": 210,
+        "name": "MCR021",
+        "description": "McnamaraRsve"
+      },
+      "type": "SSS"
+    },
+    {
+      "radius": 800,
+      "waypoint": {
+        "lat": -36.5675345,
+        "lon": 146.7230031,
+        "altSmoothed": 210,
+        "name": "MCR021",
+        "description": "McnamaraRsve"
+      }
+    },
+    {
+      "radius": 5000,
+      "waypoint": {
+        "lat": -36.6305078,
+        "lon": 146.9153848,
+        "altSmoothed": 920,
+        "name": "HVP092",
+        "description": "HavilahPyramid"
+      }
+    },
+    {
+      "radius": 23000,
+      "waypoint": {
+        "lat": -36.3675478,
+        "lon": 147.2967639,
+        "altSmoothed": 220,
+        "name": "HLY022",
+        "description": "HealysRoad"
+      }
+    },
+    {
+      "radius": 1000,
+      "waypoint": {
+        "lat": -36.717739105225,
+        "lon": 146.89027404785,
+        "altSmoothed": 290,
+        "name": "6L-029",
+        "description": "PorepunkAir"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.717739105225,
+        "lon": 146.89027404785,
+        "altSmoothed": 290,
+        "name": "6L-029",
+        "description": "PorepunkAir"
+      }
+    }
+  ],
+  "version": 1,
+  "cylinderTolerance": 0.0005
+}

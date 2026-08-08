@@ -101,10 +101,14 @@ describe.if(archiveDirs.length > 0)('archive corpus (glidecomp-archive)', () => 
       // published (its fixed-pass search did not converge on this
       // geometry); the per-waypoint cumulatives bracket the published ones.
       'forbes-flatlands-2025-open-t5': 'legacy optimiser convergence (engine 989 m shorter)',
-      // ENTER-direction start cylinder concentric with the next turnpoint —
-      // a start-geometry question independent of distance optimisation,
-      // tracked as a follow-up issue.
-      'dalby-big-air-2026-floater-t2': 'ENTER start geometry follow-up',
+      // Scored by legacy AirScore, which optimises the whole route globally
+      // instead of pinning the ESS (Annex A §3.2.4): the engine matches the
+      // published cumulatives to metres up to the ESS, then the pin
+      // deliberately kinks the path (+403 m total). Same class of
+      // divergence as forbes-flatlands-2025-open-t5. (Originally suspected
+      // to be the issue-#577 ENTER-start geometry; the sweep that fixed
+      // #577 showed it is not.)
+      'dalby-big-air-2026-floater-t2': 'legacy optimiser does not pin the ESS (engine +403 m)',
       'forbes-flatlands-2026-open-t5': 'task.xctsk does not match the flown task (95 km apart)',
     };
     let checked = 0;

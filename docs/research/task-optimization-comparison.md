@@ -183,7 +183,7 @@ GlideComp works directly in geographic coordinates (lat/lon), computing WGS84 el
 
 2. ~~**Use WGS84 ellipsoid distances**~~ — **Done.** Replaced haversine with Andoyer-Lambert (WGS84 ellipsoid) for all distance calculations, and Vincenty direct formula for destination point computation. Removed `@turf/distance` and `@turf/destination` dependencies. Accuracy: ~2 ppm vs Vincenty reference, validated against 33 real IGC tracks.
 
-3. ~~**Add cylinder tolerance**~~ — **Done.** `XCTask.cylinderTolerance` field controls the tolerance fraction (default 0.5% for Cat 2). Applied in `detectCylinderCrossings` by expanding the effective radius for crossing detection, while interpolating to the nominal radius for the crossing point.
+3. ~~**Add cylinder tolerance**~~ — **Done.** `XCTask.cylinderTolerance` field controls the tolerance fraction (default 0.5% for Cat 2). Applied in `detectCylinderCrossings` by expanding the effective radius for crossing detection, while interpolating to the nominal radius for the crossing point. Since 2026-08-08 (issue #577) `parseXCTask` reads the field from the task file — the AirScore importer writes each comp's `error_margin` there — so a declared band is honoured instead of the default.
 
 4. ~~**Measure from the launch centre**~~ — **Done (2026-08-08).** Every route is measured from the first turnpoint's CENTRE regardless of its type or radius (Annex A §2.2). SSS-first tasks — common in AirScore imports — previously lost exactly their start radius (5–10 km on ~60 archive tasks).
 
@@ -208,7 +208,7 @@ GlideComp is intended for scoring HG and PG competitions. The algorithm now matc
 **Nice to have:**
 - UTM projection for the optimization loop (would match the spec exactly, but geographic coordinates + Andoyer produce equivalent results)
 
-**Known legacy divergences** (documented in `web/engine/tests/distance-corpus.test.ts`): pre-2025 comps on xc.highcloud.net were scored by a legacy AirScore that did not fully converge, did not pin the ESS, and measured an identical concentric ESS/goal to the goal CENTRE — their published distances are not a reference for the current spec.
+**Known legacy divergences** (documented in `web/engine/tests/distance-corpus.test.ts`): pre-2025 comps on xc.highcloud.net were scored by a legacy AirScore that did not fully converge, did not pin the ESS, and measured an identical concentric ESS/goal to the goal CENTRE — their published distances are not a reference for the current spec. On some of them (forbes-flatlands-2024-sports-t3, dalby-big-air-2024-sports-t1) the published task distance is not a route optimisation at all but the radius-subtraction shortcut — centre-to-centre legs minus both radii — with a start ring concentric with launch published at a NEGATIVE cumulative (−(R_start − R_launch)); those distances sit ~9 km below any correct optimisation of the same route.
 
 ## References
 

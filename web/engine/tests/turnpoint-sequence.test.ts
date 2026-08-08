@@ -10,6 +10,7 @@ import {
   computeTurnpointDirections,
 } from '../src/task-optimizer';
 import { isInsideCylinder, andoyerDistance, calculateBearingRadians, destinationPoint } from '../src/geo';
+import { parseXCTask } from '../src/xctsk-parser';
 import type { XCTask, Turnpoint, SSSConfig, GoalConfig } from '../src/xctsk-parser';
 import { createFix as createFixSeconds, BASE_TIME, type IGCFix } from './test-helpers';
 
@@ -1731,6 +1732,66 @@ describe('resolveTurnpointSequence', () => {
       expect(ring!.toleranceCredited).toBe(true);
       expect(result.madeGoal).toBe(true);
     });
+  });
+});
+
+describe('ENTER start concentric with the next turnpoint (issue #577)', () => {
+  // Modelled on bright-open-2025-open-t3: a 33.5 km ENTER start ring with an
+  // 800 m turnpoint at the same centre, and the takeoff INSIDE the ring
+  // (~3.2 km from its boundary). Pilots must fly out past the ring and
+  // re-enter to start, and the excursion is shallow — ~100 m past the
+  // boundary — so the width of the §8.1 band decides whether the state
+  // machine ever sees them outside. The comp scored with a declared
+  // tolerance of 0.05% (16.75 m at this radius); the engine's 0.5% default
+  // band (167.5 m) swallows the whole excursion.
+  const C = { lat: -36.5675, lon: 146.723 }; // ring centre = next TP = goal
+  const BEARING = 2.0; // where the takeoff (and the excursion) sits, from C
+
+  const at = (metres: number) => destinationPoint(C.lat, C.lon, metres, BEARING);
+
+  // Radial track: takeoff → out past the ring by 100 m → back in → through
+  // the 800 m turnpoint to the 400 m goal at the centre.
+  const trackFixes = (): IGCFix[] =>
+    [30300, 32000, 33400, 33600, 33600, 33400, 30000, 20000, 10000, 2000, 700, 300, 100]
+      .map((d, i) => {
+        const p = at(d);
+        return createFix(i, p.lat, p.lon);
+      });
+
+  const taskJson = (cylinderTolerance?: number): string => {
+    const t = at(30300);
+    return JSON.stringify({
+      taskType: 'CLASSIC',
+      version: 1,
+      earthModel: 'WGS84',
+      turnpoints: [
+        { type: 'TAKEOFF', radius: 1000, waypoint: { name: 'TO', lat: t.lat, lon: t.lon } },
+        { type: 'SSS', radius: 33500, waypoint: { name: 'RING', lat: C.lat, lon: C.lon } },
+        { radius: 800, waypoint: { name: 'RING', lat: C.lat, lon: C.lon } },
+        { radius: 400, waypoint: { name: 'GOAL', lat: C.lat, lon: C.lon } },
+      ],
+      sss: { type: 'RACE', direction: 'ENTER' },
+      goal: { type: 'CYLINDER' },
+      ...(cylinderTolerance !== undefined ? { cylinderTolerance } : {}),
+    });
+  };
+
+  it("honours the task's declared tolerance: a 100 m excursion past the ring starts the task", () => {
+    const task = parseXCTask(taskJson(0.0005));
+    const result = resolveTurnpointSequence(task, trackFixes());
+    expect(result.sssReaching).not.toBeNull();
+    expect(result.sequence.map(r => r.taskIndex)).toEqual([1, 2, 3]);
+    expect(result.madeGoal).toBe(true);
+  });
+
+  it('without a declared tolerance the 0.5% default band swallows the excursion', () => {
+    // Documents the band semantics the fix depends on: the detection edge IS
+    // the state boundary, so a pilot who never passes the outer edge is
+    // never outside an ENTER cylinder and no enter crossing can exist.
+    const task = parseXCTask(taskJson());
+    const result = resolveTurnpointSequence(task, trackFixes());
+    expect(result.sssReaching).toBeNull();
+    expect(result.flownDistance).toBe(0);
   });
 });
 
