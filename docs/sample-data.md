@@ -103,7 +103,7 @@ because the two sources identify a pilot differently — an IGC filename carries
 the federation id, a published result row carries only a name. Keying them apart
 split anyone who flew one day and had an unusable tracklog on another (a
 header-only "Failed security check" file) into **two** `comp_pilot` rows: twice
-in the standings with a share of their tasks each, and twice in the S7F §9.1
+in the scores with a share of their tasks each, and twice in the S7F §9.1
 launch-validity buckets. It was 15 of Corryong 2026's 80 registrations.
 
 Two edges:

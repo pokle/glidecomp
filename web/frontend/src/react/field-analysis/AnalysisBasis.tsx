@@ -130,7 +130,7 @@ export function AnalysisBasis({
       {excluded.length > 0 ? (
         <p className="mt-4 border-t pt-3 text-sm">
           <strong>{excluded.length}</strong> pilot
-          {excluded.length === 1 ? " is" : "s are"} in the standings but not in
+          {excluded.length === 1 ? " is" : "s are"} in the scores but not in
           this analysis.{" "}
           <a
             href={`#${EXCLUDED_PILOTS_ID}`}

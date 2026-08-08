@@ -865,9 +865,8 @@ function CivlFillDialog({
           // has never run) or this roster simply matches nobody. Both mean the
           // button has nothing to do, and neither is worth two messages.
           <p className="text-sm text-muted-foreground">
-            The CIVL rankings have nothing to add to this roster — either none
-            have been imported yet, or no pilot here is in one. You can still
-            type rankings in by hand.
+            No CIVL rankings match this roster. You can still type them in by
+            hand.
           </p>
         ) : (
           <>

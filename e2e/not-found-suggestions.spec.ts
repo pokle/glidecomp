@@ -43,7 +43,7 @@ async function findLivePilotScore(request: APIRequestContext): Promise<Live> {
     const scoresRes = await request.get(`/api/comp/${comp.comp_id}/scores`);
     if (!scoresRes.ok()) continue;
     const scores = (await scoresRes.json()) as {
-      standings: Array<{
+      class_scores: Array<{
         pilots: Array<{
           comp_pilot_id: string;
           pilot_name: string;
@@ -51,7 +51,7 @@ async function findLivePilotScore(request: APIRequestContext): Promise<Live> {
         }>;
       }>;
     };
-    const pilot = scores.standings.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
+    const pilot = scores.class_scores.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
     if (!pilot) continue;
     const taskId = pilot.tasks[0].task_id;
     const taskRes = await request.get(`/api/comp/${comp.comp_id}/task/${taskId}`);

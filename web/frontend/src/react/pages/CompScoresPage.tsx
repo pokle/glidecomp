@@ -1,9 +1,9 @@
 /**
  * Dedicated competition scores page (/comp/:id/scores) — the canonical public
- * scores surface. The comp page keeps only a compact standings summary that
- * links here; this page holds the full apparatus: per-class standings tabs,
- * Top 3 per task & class, Teams, and Results by task (which is the public
- * per-task results surface — task pages link here with ?task=<id>).
+ * scores surface. The comp page keeps only a compact scores summary that
+ * links here; this page holds the full apparatus: per-class scores tabs,
+ * Top 3 per task & class, Teams, and Scores by task (which is the public
+ * per-task scores surface — task pages link here with ?task=<id>).
  *
  * Server-rendered like the other public comp pages (loadCompScores +
  * functions/comp/[[path]].ts); the views themselves live in
@@ -80,7 +80,7 @@ export function CompScoresPage() {
           <h1 className="text-2xl font-bold">Scores</h1>
           <p className="text-sm text-muted-foreground">{comp.name}</p>
         </div>
-        {state.kind === "ready" && state.scores.standings.length > 0 ? (
+        {state.kind === "ready" && state.scores.class_scores.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
             <ScoresDownload compId={compId} compName={comp.name} isTestComp={comp.test} />
             {isAdmin ? (
@@ -118,7 +118,7 @@ export function CompScoresPage() {
               etag={state.etag}
               pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
             />
-            {state.scores.standings.length === 0 ? (
+            {state.scores.class_scores.length === 0 ? (
               <ScoresEmptyState
                 isAdmin={isAdmin}
                 tasksHref={`${compPath(compId, comp.name)}#tasks`}
@@ -135,8 +135,10 @@ export function CompScoresPage() {
                   deepLinkTaskId={searchParams.get("task")}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Click any score for a step-by-step explanation. Questions about a
-                  score?{" "}
+                  {/* "Click any score for a step-by-step explanation" was
+                      here too — the tables ScoresViews renders each already
+                      say it directly under themselves. */}
+                  Questions about a score?{" "}
                   <Link
                     to={`${compPath(compId, comp.name)}#admins`}
                     className="underline underline-offset-4"

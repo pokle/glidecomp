@@ -173,7 +173,7 @@ instance only exists a tick after mount, so gate anything that drives it on
   discoverable affordance. Callers: the waypoint QR, the task route glyph, the
   field-analysis metric chart).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
-  turnpoints table), `comp/TaskStandings.tsx`, `comp/RouteEditorDialog.tsx`
+  turnpoints table), `comp/TaskScores.tsx`, `comp/RouteEditorDialog.tsx`
   (Tabulator grid → RAC Table → GridList card list → **RAC Table again**, via
   the shared read-only `comp/TurnpointsTable.tsx` the task page also renders —
   see the superseded section below for how that went),

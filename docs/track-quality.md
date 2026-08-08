@@ -23,7 +23,7 @@ rendered as a sentence.
 Soft checks only annotate because a short honest flight still earns the S7F
 §5.3/§8.6.1 minimum distance.
 
-## A withheld pilot is never deleted from the standings
+## A withheld pilot is never deleted from the scores
 
 `buildClassScore` seats them last at 0 with the reasons
 (`PilotScoreEntry.track_excluded`).

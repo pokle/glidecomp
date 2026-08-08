@@ -6,7 +6,7 @@
  * already known, so those steps collapse and what is left is the two-field
  * form this dialog has always been. That is also why the dialog is the TASK
  * page's form only — its two callers are pages/TaskDetail.tsx and
- * comp/TaskResults.tsx, both on that page; the comp page still has to ask
+ * comp/TaskScoresPublic.tsx, both on that page; the comp page still has to ask
  * which task, so it links to /submit?comp= instead.
  *
  * The one behavioural difference between the two presentations lives here: a

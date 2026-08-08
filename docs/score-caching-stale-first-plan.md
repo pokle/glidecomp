@@ -90,7 +90,7 @@ CREATE TABLE track_analysis (
 revalidation a real CAS token (below). Foreign-key cascades mean deleted
 tasks/tracks clean up their materialized rows — no TTLs, no orphan garbage.
 
-**No `comp_scores` table.** Comp standings are pure aggregation over the
+**No `comp_scores` table.** Comp scores are pure aggregation over the
 per-task blobs plus team assignments: the comp endpoint reads all
 `task_scores` rows for the comp in one query, aggregates in the worker
 (cheap JS over already-computed numbers), reads teams fresh from
@@ -185,9 +185,9 @@ ETag makes must-revalidate cheap).
 ### UI: make freshness visible
 
 - Every scores surface (the `/comp/:id/scores` page and the comp hub's
-  standings summary via `CompScoresSection.tsx`'s shared hook, the task
-  page's results podium `TaskResults.tsx`, and the admin manage grid
-  `TaskStandings.tsx`) renders the timestamp next to the tables — e.g.
+  scores summary via `CompScoresSection.tsx`'s shared hook, the task
+  page's scores podium `TaskScoresPublic.tsx`, and the admin manage grid
+  `TaskScores.tsx`) renders the timestamp next to the tables — e.g.
   "Scores computed 7 Jul 2026, 14:32 UTC" (absolute, in the comp timezone,
   so SSR output is deterministic — no relative "2 min ago" on the
   server-rendered path, per the SSR plan's hydration-mismatch rule).
@@ -288,7 +288,7 @@ delete — a better admin story than blind key deletion.
    fresh read, stale read serves old body + schedules revalidation, lock
    admits one winner, CAS refuses to mark a mid-mutation result fresh, 304
    on matching ETag.
-2. **Comp endpoint** — aggregate standings from `task_scores` rows + live
+2. **Comp endpoint** — aggregate scores from `task_scores` rows + live
    team reads; comp-level ETag; drop the comp-level hash/envelope entirely.
 3. **UI freshness** — timestamps on all scores surfaces; the re-score
    banner: "Hold tight, scores are being re-scored…" on `stale: true`,

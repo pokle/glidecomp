@@ -35,7 +35,7 @@ The app is live at **[glidecomp.com](https://glidecomp.com)**.
 - **Task weather** — modelled wind, climb and timing for the task's day from an outside provider, plus the organizer's own weather notes, read against what the field actually flew
 - **Track quality checks** — every tracklog assessed against its task (FAI S7A §4.4.2); hard findings withhold a track from scoring, and every verdict is overridable by the organizer
 - **Competition management** — create competitions, register pilots, upload IGC tracks, manage tasks, apply penalties, with full audit logging
-- **Scores export** — the full standings as a pivot-ready CSV, downloadable or opened live in Google Sheets
+- **Scores export** — the full scores as a pivot-ready CSV, downloadable or opened live in Google Sheets
 - **Waypoints** — a per-competition waypoint list, editable and exportable to flight instruments
 - **Authentication** — sign in with Google, or passwordless email one-time codes
 - **Task editor** — create and edit tasks with drag-to-reorder turnpoints, waypoint database search, and click-on-map placement

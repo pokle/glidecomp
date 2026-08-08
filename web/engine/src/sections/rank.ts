@@ -27,9 +27,9 @@ export function rankLabel(
   r: { position: number; of: number; tied: boolean },
   superlative: string,
 ): string {
-  const place =
+  const rankPhrase =
     r.position === 1 ? superlative : `${ordinal(r.position)} ${superlative}`;
-  const label = `${r.tied ? 'equal ' : ''}${place} of ${r.of}`;
+  const label = `${r.tied ? 'equal ' : ''}${rankPhrase} of ${r.of}`;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 

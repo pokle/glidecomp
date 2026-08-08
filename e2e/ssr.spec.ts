@@ -71,11 +71,11 @@ async function discover(request: APIRequestContext): Promise<Discovered> {
       continue;
     }
     const scores = (await scoresRes.json()) as {
-      standings: Array<{
+      class_scores: Array<{
         pilots: Array<{ comp_pilot_id: string; pilot_name: string; tasks: Array<{ task_id: string }> }>;
       }>;
     };
-    const pilot = scores.standings.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
+    const pilot = scores.class_scores.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
     if (!pilot) {
       skipped.push(`${comp.name} (no scored pilots)`);
       continue;
@@ -113,7 +113,7 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).not.toContain('rel="canonical"');
   });
 
-  test("/comp/:id shows the standings summary and links to the scores page", async ({ request }) => {
+  test("/comp/:id shows the scores summary and links to the scores page", async ({ request }) => {
     const { compId, compName, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}`);
     expect(res.ok()).toBeTruthy();
@@ -126,20 +126,20 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain(`<title>${compName} — GlideComp</title>`);
   });
 
-  test("/comp/:id/scores shows standings and links to pilot narrative pages", async ({ request }) => {
+  test("/comp/:id/scores shows scores and links to pilot narrative pages", async ({ request }) => {
     const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}/scores`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(pilotName);
-    // The standings pilot links are canonical `${slug}-${id}` at every level.
+    // The scores pilot links are canonical `${slug}-${id}` at every level.
     expect(html).toMatch(
       new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
     );
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
   });
 
-  test("/comp/:id/scores.csv serves the standings as long-form CSV", async ({ request }) => {
+  test("/comp/:id/scores.csv serves the scores as long-form CSV", async ({ request }) => {
     const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}/scores.csv`);
     expect(res.ok()).toBeTruthy();
@@ -360,7 +360,7 @@ test.describe("SSR — field analysis (public)", () => {
     expect(html).toContain("Field analysis —");
     // Branch on the actual server HTML (race-free): warm renders the ranking
     // heading and is indexable; cold renders the pending notice and is noindex.
-    if (html.includes("Which behaviours went with better results")) {
+    if (html.includes("Which behaviours went with better ranks")) {
       expect(html).not.toContain('name="robots" content="noindex"');
     } else {
       expect(html.toLowerCase()).toContain("pending");

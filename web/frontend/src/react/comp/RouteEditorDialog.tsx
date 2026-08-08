@@ -28,6 +28,7 @@ import {
 } from "@glidecomp/engine";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
+import { Explain } from "@/react/rac/explain";
 import {
   Dialog,
   DialogFooter,
@@ -1064,10 +1065,19 @@ export function RouteEditorDialog({
                 </span>
               </div>
               {goalType === "LINE" ? (
+                // Geometry an organiser reads once, so it sits on the ⓘ rather
+                // than under the control every time the dialog opens.
                 <p className="mt-2 text-sm text-muted-foreground">
-                  The goal line is centred on the last turnpoint, perpendicular
-                  to the final leg, and extends the turnpoint&apos;s radius to
-                  each side (total length 2 × radius).
+                  <span className="inline-flex items-baseline gap-1">
+                    <span>Line length is 2 × the turnpoint&apos;s radius.</span>
+                    <Explain label="Goal line geometry" className="self-center">
+                      <p>
+                        The goal line is centred on the last turnpoint,
+                        perpendicular to the final leg, and extends the
+                        turnpoint&apos;s radius to each side.
+                      </p>
+                    </Explain>
+                  </span>
                 </p>
               ) : null}
             </Disclosure>
