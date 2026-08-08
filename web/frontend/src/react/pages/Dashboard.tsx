@@ -275,7 +275,7 @@ export function Dashboard() {
               </ul>
             )}
             <p className="mt-3 text-sm text-muted-foreground">
-              You can also drag and drop .igc files anywhere on this page.
+              Or drag and drop .igc files anywhere.
             </p>
           </TabPanel>
 
@@ -357,7 +357,7 @@ export function Dashboard() {
               </ul>
             )}
             <p className="mt-3 text-sm text-muted-foreground">
-              You can also drag and drop .xctsk files anywhere on this page.
+              Or drag and drop .xctsk files anywhere.
             </p>
           </TabPanel>
         </Tabs>

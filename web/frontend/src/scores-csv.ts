@@ -16,7 +16,7 @@
  * what that task actually contributed (0 for a discarded task), and under
  * plain total scoring it equals `score` — so that sum is the published total
  * under either method. `pilot_rank` is the one pilot-level column left (a
- * standings position isn't derivable from the rows), and it repeats on each
+ * classScores position isn't derivable from the rows), and it repeats on each
  * of that pilot's rows, so a pivot takes it with MAX rather than SUM.
  *
  * Known rounding drift: the columns carry the PUBLISHED (rounded) points, so a
@@ -33,14 +33,14 @@
  * PURE (no React, no DOM) so both the Pages Function that serves
  * /comp/:id/scores.csv and its dev-server mirror build the exact same bytes.
  */
-import type { ClassStanding, TaskInfo } from "./scores-views";
+import type { CompClassScore, TaskInfo } from "./scores-views";
 import { compPath, pilotPath, slugify, taskPath } from "./react/lib/slug";
 
 /** The `/api/comp/:id/scores` fields this needs — CompScores satisfies it. */
 export interface ScoresCsvInput {
   comp_id: string;
   tasks: TaskInfo[];
-  standings: ClassStanding[];
+  class_scores: CompClassScore[];
 }
 
 export interface ScoresCsvOptions {
@@ -76,7 +76,7 @@ export const SCORES_CSV_COLUMNS = [
 const EMPTY_TASK_CELLS = ["", "", "", "", "", "", "", ""];
 
 /**
- * Serialise the whole-comp standings as one long CSV: every class, every
+ * Serialise the whole-comp classScores as one long CSV: every class, every
  * pilot, every task they were scored on. Scores are the published (rounded)
  * points, so a column of them adds up to what the scoreboard shows.
  *
@@ -92,7 +92,7 @@ export function buildScoresCsv(
   const compUrl = url(compPath(scores.comp_id, compName));
   const lines = [SCORES_CSV_COLUMNS.join(",")];
 
-  for (const cls of scores.standings) {
+  for (const cls of scores.class_scores) {
     for (const pilot of cls.pilots) {
       const pilotCells = [
         compName,
@@ -119,7 +119,7 @@ export function buildScoresCsv(
       ];
 
       for (const entry of ordered) {
-        // A task the standings name but the task list doesn't can still be
+        // A task the classScores name but the task list doesn't can still be
         // linked — the slug is decorative, the id is the identity.
         const taskName = taskById.get(entry.task_id)?.task_name ?? "";
         lines.push(

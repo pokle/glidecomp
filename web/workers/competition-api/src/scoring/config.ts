@@ -301,7 +301,7 @@ export function partitionByQuality(
   return { scored, excluded };
 }
 
-/** The hard findings' titles — what the standings and the analysis basis show
+/** The hard findings' titles — what the scores and the analysis basis show
  * as the reason a track was withheld. */
 export function hardFindingTitles(report: TrackQualityReport): string[] {
   return report.findings.filter((f) => f.severity === "hard").map((f) => f.title);
@@ -309,7 +309,7 @@ export function hardFindingTitles(report: TrackQualityReport): string[] {
 
 /**
  * The withheld pilots of each class, ready to be seated at the bottom of the
- * standings. Call AFTER the per-track pass has filled `quality.byTrackId`.
+ * scores. Call AFTER the per-track pass has filled `quality.byTrackId`.
  */
 export function excludedPilotsByClass(
   quality: TaskQualityMemo,

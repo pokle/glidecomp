@@ -13,9 +13,9 @@ review comments there, and aligns with
 > it. Where this doc and the shipped app now differ, the app is right:
 >
 > - **Scores are no longer inline.** `/comp/:id/scores` is the canonical,
->   SSR'd scores page (per-class tabs, Top 3, Teams, Results by task —
+>   SSR'd scores page (per-class tabs, Top 3, Teams, Scores by task —
 >   `?task=<id>` deep-links a task's results). The comp page keeps a compact
->   top-3-per-class Standings summary linking there. `/scores?comp_id=X` now
+>   top-3-per-class Scores summary linking there. `/scores?comp_id=X` now
 >   redirects to `/comp/X/scores`, not `/comp/X#scores`.
 > - **Pilots moved to an admin-only page**, `/comp/:id/pilots` (noindex shell;
 >   `#edit-pilots` opens the editor). The public roster section is gone —
@@ -26,7 +26,7 @@ review comments there, and aligns with
 >   first, the hero date rendered as the featured card in place; Share/QR/
 >   downloads folded into a single Share menu; per-row Submit track / 3D
 >   replay removed (they live on the task page). Finished comps lead with the
->   standings summary before the task list.
+>   scores summary before the task list.
 >   **Superseded (2026-07-30, [#514](https://github.com/pokle/glidecomp/issues/514),
 >   "Every task alike: the comp hub groups them by day and class, no hero"):**
 >   the featured card is gone too. There is no hero and no privileged task —
@@ -36,7 +36,7 @@ review comments there, and aligns with
 >   several classes gets a row under each. Rows carry only the link, the setup
 >   badges and the route glyph; every action lives on the task page.
 > - **The task page split public results from management**: a public top-3
->   podium + link to the scores page; the old standings grid is the admin-only
+>   podium + link to the scores page; the old scores grid is the admin-only
 >   "Manage pilots & tracks" section.
 > - Activity is a 3-entry digest ("Show all activity" expands); Admins is an
 >   "Organized by …" footnote (the `#admins` anchor survives). The section nav
@@ -74,7 +74,7 @@ a bookmarked comp URL:
 | J3 | See scores, understand them, dispute with the comp admin | Pilot |
 | J4 | Set up a competition quickly; add tasks day by day | Admin |
 | J5 | Help pilots submit their tracks | Admin |
-| J6 | View scores/standings and announce them at the daily briefing | Admin |
+| J6 | View scores/scores and announce them at the daily briefing | Admin |
 | J7 | Make quick task changes as conditions dictate | Admin |
 | J8 | Crawl up-to-date comp info and scores; pilots/friends can Google the comp | Search engines |
 
@@ -204,8 +204,8 @@ scores forever after:
    3D replay, Submit track). Default tap → task workroom. Admin: **New task**
    button, date pre-filled with today (J4's "day by day").
 4. **Scores** (inline — the `/scores` page content moves here, J3/J6):
-   tabs = one per class (standings) · Top 3 per task & class · Teams (when
-   teams exist) · **Results by task** (the per-task tables, one task at a
+   tabs = one per class (scores) · Top 3 per task & class · Teams (when
+   teams exist) · **Scores by task** (the per-task tables, one task at a
    time via a task picker — all-tasks-at-once is too heavy to SSR for a
    10-task comp). Keeps the ScoreFreshness re-score banner and CSV export.
    Every score links to the explainer. Deep-linkable anchors
@@ -350,7 +350,7 @@ typing. Cheap, offline-generatable, purely presentational.
    on the same day (Corryong scores as open + floater): show two hero cards,
    or one hero per class tab? Suggest: one hero listing both tasks for today.
    *(Resolved in implementation: one hero listing every task on that date.)*
-2. Should "Results by task" default to today's/latest task (matching the
+2. Should "Scores by task" default to today's/latest task (matching the
    hero) rather than task 1? Suggest: yes. *(Resolved: defaults to the hero
    task.)*
 3. Does the comp hub need in-page section anchors in the header (Tasks ·

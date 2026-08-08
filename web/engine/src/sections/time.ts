@@ -106,7 +106,7 @@ export function buildTimeSection(
           }.`
         : undefined,
     });
-    // The header's standing, and the gap behind the fastest pilot: the two
+    // The header's rank, and the gap behind the fastest pilot: the two
     // facts a reader otherwise has to derive by subtracting the rows above.
     if (bestTimes.length >= 2) {
       rank = `${rankLabel(

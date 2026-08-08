@@ -2,7 +2,7 @@
  * Version of the scoring engine's observable behaviour.
  *
  * The competition API folds this into every scoring cache key (task scores,
- * comp standings, per-track analysis, per-pilot transparency), so results
+ * comp scores, per-track analysis, per-pilot transparency), so results
  * computed by two different engine generations can never be served side by
  * side: a deploy that changes scoring behaviour rolls every key at once.
  * Because the engine is deterministic, a cached score and a cached analysis

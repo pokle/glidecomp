@@ -12,7 +12,7 @@ import type {
 /** How a competition's tasks are scored (see competition-api migration 0009). */
 export type ScoringFormat = "gap" | "open_distance";
 
-/** How a competition's per-task scores are aggregated into standings
+/** How a competition's per-task scores are aggregated into scores
  * (migration 0022). "total" = sum of task scores; "ftv" = Fixed Total
  * Validity (S7F §15) — best tasks kept up to a fixed validity. */
 export type SeriesScoring = "total" | "ftv";
@@ -40,7 +40,7 @@ export interface CompDetailData {
   default_pilot_class: string;
   gap_params: CompGapParams | null;
   scoring_format: ScoringFormat;
-  /** Series-scoring method for standings (migration 0022). */
+  /** Series-scoring method for scores (migration 0022). */
   series_scoring: SeriesScoring;
   /** FTV discard fraction (0<f<1); null = auto-derive from task count. */
   ftv_factor: number | null;
@@ -187,7 +187,7 @@ export interface PilotScoreEntry {
    * wall-clock time, not speed. */
   ess_time_ms?: number | null;
   /** Set when a HARD data-quality check withheld this pilot's tracklog from
-   * scoring: they hold a place in the standings at 0 rather than vanishing.
+   * scoring: they hold a place in the scores at 0 rather than vanishing.
    * Null/absent for every normally-scored pilot. */
   track_excluded?: { reasons: string[] } | null;
 }
@@ -257,7 +257,7 @@ export interface TaskScoreData {
   comp_id: string;
   task_date: string;
   scoring_format: ScoringFormat;
-  classes: ClassScore[];
+  class_scores: ClassScore[];
   /** ISO timestamp of when these scores were computed (stale-first store). */
   computed_at: string;
   /** True when newer inputs exist and a re-score is in flight or pending. */

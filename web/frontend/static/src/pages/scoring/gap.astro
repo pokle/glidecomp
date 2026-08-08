@@ -143,7 +143,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             Not every task day is worth the full 1000 points. If the conditions were bad, and
-            most pilots landed near launch, the scores count for less in the overall standings.
+            most pilots landed near launch, the scores count for less in the competition total.
             GAP does this with <strong>task validity</strong>. Task validity is a multiplier
             between 0 and 1 that scales the available points.
           </p>
@@ -657,7 +657,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <strong> min(1 hour, half the nominal time)</strong>. GlideComp measures it from
                 the race start with one start gate, or from the last pilot's start with multiple
                 gates or elapsed time. A task stopped before that time scores zero for every
-                pilot, and the standings give the reason.
+                pilot, and the scores give the reason.
               </p>
             </div>
             <div>
@@ -723,7 +723,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            The overall standings of a competition combine the task scores of each pilot. There
+            A competition's overall scores combine each pilot's task scores. There
             are two methods, and each competition selects one in its scoring settings.
           </p>
 
@@ -983,7 +983,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Multi-task series scoring</td>
-                  <td class="py-2">Implemented. A competition total is the sum of the task scores of each pilot, ranked for each class, with top-3-per-task and team standings. See the <a href="/comp" class="underline hover:text-foreground">competition scores pages</a>.</td>
+                  <td class="py-2">Implemented. A competition total is the sum of the task scores of each pilot, ranked for each class, with top-3-per-task and team scores. See the <a href="/comp" class="underline hover:text-foreground">competition scores pages</a>.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">FTV (fixed total validity) for series</td>
@@ -1018,7 +1018,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Nation sub-ranking / national teams (S7A §5.2.4.3, §5.2.5.3)</td>
-                  <td class="py-2">Not implemented, on purpose. It ranks the nations by the sum of their best three pilots, or two pilots at the Women's Worlds. It needs national-team entries. It is not the same as GlideComp's <a href="/comp" class="underline hover:text-foreground">team standings</a>, which any competition can use.</td>
+                  <td class="py-2">Not implemented, on purpose. It ranks the nations by the sum of their best three pilots, or two pilots at the Women's Worlds. It needs national-team entries. It is not the same as GlideComp's <a href="/comp" class="underline hover:text-foreground">team scores</a>, which any competition can use.</td>
                 </tr>
               </tbody>
             </table>

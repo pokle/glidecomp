@@ -1,7 +1,7 @@
 /**
  * Comp detail page (/comp/:id) — interaction coverage for its RAC surfaces
  * (converted 2026-07-21, see docs/2026-07-18-rac-adoption-guide.md):
- * scores view tabs + sortable standings tables + the results-by-task Select,
+ * scores view tabs + sortable scores tables + the scores-by-task Select,
  * the pilots section (read-only RAC grid + the kept-by-policy Tabulator edit
  * grid inside a RAC dialog shell), the activity filter tabs, and the settings
  * dialog (Advanced GAP NumberFields, timezone combobox).
@@ -146,11 +146,11 @@ function trackMutations(page: Page): () => boolean {
   return () => mutated;
 }
 
-test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
+test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   page,
 }) => {
   // The full score views live on the dedicated scores page now; the comp page
-  // keeps a compact standings summary linking there.
+  // keeps a compact scores summary linking there.
   await page.goto(`/comp/${compId}/scores`);
   await expect(page.getByRole("heading", { level: 1, name: "Scores" })).toBeVisible();
   const scores = page.locator("main");
@@ -158,41 +158,41 @@ test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
   await expect(tablist).toBeVisible({ timeout: 15_000 });
 
   // ── Class tab switching. Only the selected TabPanel renders its content,
-  // so the other class's standings grid must leave the tree entirely.
+  // so the other class's scores grid must leave the tree entirely.
   const [classA, classB] = comp.pilot_classes;
   expect(classB).toBeTruthy();
   await tablist.getByRole("tab", { name: classB, exact: true }).click();
   await expect(
-    scores.getByRole("grid", { name: `Standings — ${classB}` })
+    scores.getByRole("grid", { name: `Scores — ${classB}` })
   ).toBeVisible();
   await expect(
-    scores.getByRole("grid", { name: `Standings — ${classA}` })
+    scores.getByRole("grid", { name: `Scores — ${classA}` })
   ).toHaveCount(0);
   await tablist.getByRole("tab", { name: classA, exact: true }).click();
-  const standings = scores.getByRole("grid", { name: `Standings — ${classA}` });
-  await expect(standings).toBeVisible();
+  const classScores = scores.getByRole("grid", { name: `Scores — ${classA}` });
+  await expect(scores).toBeVisible();
   await expect(
-    scores.getByRole("grid", { name: `Standings — ${classB}` })
+    scores.getByRole("grid", { name: `Scores — ${classB}` })
   ).toHaveCount(0);
 
   // ── SortableTable per-column first-click directions (RAC gotcha #15: RAC
   // itself always starts ascending; the app overrides per column).
   // "Pilot" first click sorts ASCENDING…
-  const pilotHeader = standings.getByRole("columnheader", { name: /^Pilot/ });
+  const pilotHeader = scores.getByRole("columnheader", { name: /^Pilot/ });
   await pilotHeader.click();
   await expect(pilotHeader).toHaveAttribute("aria-sort", "ascending");
-  const names = await standings.getByRole("rowheader").allTextContents();
+  const names = await scores.getByRole("rowheader").allTextContents();
   expect(names.length).toBeGreaterThan(1);
   expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
 
   // …while "Total" first click sorts DESCENDING (scores read best-first).
-  const totalHeader = standings.getByRole("columnheader", { name: /^Total/ });
+  const totalHeader = scores.getByRole("columnheader", { name: /^Total/ });
   await totalHeader.click();
   await expect(totalHeader).toHaveAttribute("aria-sort", "descending");
   await expect(pilotHeader).not.toHaveAttribute("aria-sort", "ascending");
   // The Pilot column renders as rowheader <th>, so the last <td> is Total.
   const totals = (
-    await standings.locator("tbody tr td:last-child").allTextContents()
+    await scores.locator("tbody tr td:last-child").allTextContents()
   ).map((t) => Number(t.replace(/,/g, "")));
   expect(totals.length).toBeGreaterThan(1);
   for (let i = 1; i < totals.length; i++) {
@@ -207,10 +207,10 @@ test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
   await expect(overall.getByRole("rowheader", { name: "Total", exact: true })).toBeVisible();
   await expect(scores.getByRole("grid", { name: `Top 3 — ${classA}` })).toBeVisible();
 
-  // ── Results by task: the Select defaults to the first scorable task;
+  // ── Scores by task: the Select defaults to the first scorable task;
   // picking a task flown by the other class swaps the embedded grid
   // (aria-label + rows).
-  await tablist.getByRole("tab", { name: "Results by task" }).click();
+  await tablist.getByRole("tab", { name: "Scores by task" }).click();
   const panel = scores.getByRole("tabpanel");
   const scorable = comp.tasks.filter((t) => t.has_xctsk);
   const defaultClass = scorable[0].pilot_classes[0];

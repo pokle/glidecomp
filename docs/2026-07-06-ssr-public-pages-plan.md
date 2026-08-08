@@ -12,8 +12,8 @@ tables already moved onto the comp page in IA v2 before SSR landed).
 
 > **Update (2026-07-23):** SSR now covers **six** public routes — the four
 > above plus the task page and a new `/comp/:id/scores` page, which became the
-> canonical scores surface (the comp page keeps only a top-3 standings
-> summary, so "curl the comp page for full standings" no longer holds — curl
+> canonical scores surface (the comp page keeps only a top-3 scores
+> summary, so "curl the comp page for full scores" no longer holds — curl
 > `/comp/:id/scores` instead). `/scores?comp_id=X` now redirects to
 > `/comp/X/scores`. The admin-only `/comp/:id/pilots` roster editor joined the
 > noindex-shell routes alongside field analysis.
@@ -61,7 +61,7 @@ The exploration that informed this plan (see file references throughout):
   Public GETs, `optionalAuth`, JSON-serializable:
   - `GET /api/comp` — comp list (`routes/comp.ts:260`)
   - `GET /api/comp/:comp_id` — comp detail (`routes/comp.ts:324`)
-  - `GET /api/comp/:comp_id/scores` — comp standings, aggregated from `task_scores` (`routes/score.ts:144`)
+  - `GET /api/comp/:comp_id/scores` — comp scores, aggregated from `task_scores` (`routes/score.ts:144`)
   - `GET /api/comp/:comp_id/task/:task_id` — task detail (`routes/task.ts:191`)
   - `GET /api/comp/:comp_id/task/:task_id/score` — task scores, served from `task_scores` (`routes/score.ts:60`)
   - `GET .../pilot/:comp_pilot_id/analysis` — narrative input, cached in `track_analysis` (`routes/score.ts:337`)
@@ -202,8 +202,8 @@ routes fall back to the SPA shell.
    loader, hydration, title/meta ("Hanggliding & paragliding competitions —
    GlideComp"), `ItemList` JSON-LD.
 2. **`/comp/:compId` (competition page) — the flow change.** Today
-   `CompDetail.tsx` shows tasks/pilots/admins; comp-level standings live on
-   `/scores?comp_id=`. Change: embed the standings from
+   `CompDetail.tsx` shows tasks/pilots/admins; comp-level scores live on
+   `/scores?comp_id=`. Change: embed the scores from
    `GET /api/comp/:comp_id/scores` directly on the comp page — per class:
    rank, pilot, total, and per-task points where **each task cell links to
    that pilot's narrative page** (same `detailHref` pattern as
@@ -283,7 +283,7 @@ routes fall back to the SPA shell.
 1. `curl https://glidecomp.com/comp` returns HTML containing every public
    competition name and link — no JS required.
 2. `curl https://glidecomp.com/comp/:id` returns HTML containing the comp's
-   standings (pilot names, totals) with anchor tags to narrative pages.
+   scores (pilot names, totals) with anchor tags to narrative pages.
 3. `curl` on a narrative page returns the full explanation text (headline,
    sections, point values); the map loads only in a browser.
 4. Every SSR page has a unique `<title>`, meta description, and canonical URL;

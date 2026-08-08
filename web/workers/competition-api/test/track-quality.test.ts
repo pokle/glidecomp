@@ -38,7 +38,7 @@ function restampedTenDaysLater(igcText: string): string {
 
 interface ScoreBody {
   stale: boolean;
-  classes: Array<{
+  class_scores: Array<{
     pilot_class: string;
     task_validity: { launch: number; distance: number; time: number; task: number };
     pilots: Array<{
@@ -191,8 +191,8 @@ describe("a rejected tracklog must not claim the pilot flew", () => {
   });
 });
 
-describe("hard-failed tracks in the standings", () => {
-  // THE regression guard. Before the standings fix, removing a track from
+describe("hard-failed tracks in the scores", () => {
+  // THE regression guard. Before the scores fix, removing a track from
   // scoring removed its pilot from the results entirely: uploading a track
   // auto-stamps the pilot "Landed", which counts in neither numFlying nor
   // numDNF, so they appeared in no pilots[] array at all and their score page
@@ -201,7 +201,7 @@ describe("hard-failed tracks in the standings", () => {
     const { compId, taskId } = await seedTask({ good: 2, bad: true });
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
 
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(3);
 
     const withheld = open.pilots.filter((p) => p.track_excluded);
@@ -234,8 +234,8 @@ describe("hard-failed tracks in the standings", () => {
       `/api/comp/${clean.compId}/task/${clean.taskId}/score`
     );
 
-    const withBadOpen = badData.classes.find((c) => c.pilot_class === "open")!;
-    const cleanOpen = cleanData.classes.find((c) => c.pilot_class === "open")!;
+    const withBadOpen = badData.class_scores.find((c) => c.pilot_class === "open")!;
+    const cleanOpen = cleanData.class_scores.find((c) => c.pilot_class === "open")!;
 
     expect(withBadOpen.task_validity).toEqual(cleanOpen.task_validity);
     expect(withBadOpen.pilots.filter((p) => !p.track_excluded).map((p) => p.total_score)).toEqual(
@@ -246,7 +246,7 @@ describe("hard-failed tracks in the standings", () => {
   test("a class whose only track is withheld still seats that pilot", async () => {
     const { compId, taskId } = await seedTask({ good: 0, bad: true });
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(1);
     expect(open.pilots[0].total_score).toBe(0);
     expect(open.pilots[0].track_excluded!.reasons.length).toBeGreaterThan(0);
@@ -257,7 +257,7 @@ describe("hard-failed tracks in the standings", () => {
   test("a scorekeeper override puts the track back into scoring", async () => {
     const { compId, taskId } = await seedTask({ good: 2, bad: true });
     const before = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const withheld = before.classes
+    const withheld = before.class_scores
       .find((c) => c.pilot_class === "open")!
       .pilots.find((p) => p.track_excluded)!;
 
@@ -269,7 +269,7 @@ describe("hard-failed tracks in the standings", () => {
     expect(res.status).toBe(200);
 
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(3);
     expect(open.pilots.some((p) => p.track_excluded)).toBe(false);
     // It scores like any other short flight — the S7F §5.3 minimum distance,
@@ -299,7 +299,7 @@ describe("the quality cache interlock", () => {
     await env.DB.prepare("UPDATE task_scores SET inputs_rev = inputs_rev + 1").run();
 
     const again = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = again.classes.find((c) => c.pilot_class === "open")!;
+    const open = again.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots.filter((p) => p.track_excluded)).toHaveLength(1);
 
     const relearned = await env.DB.prepare(
@@ -370,7 +370,7 @@ describe("hard-failed tracks in the 3D replay bundle", () => {
     const before = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
     expect(await fetchManifest(compId, taskId)).toHaveProperty("pilots.length", 2);
 
-    const withheld = before.classes
+    const withheld = before.class_scores
       .find((c) => c.pilot_class === "open")!
       .pilots.find((p) => p.track_excluded)!;
     const res = await authRequest(
