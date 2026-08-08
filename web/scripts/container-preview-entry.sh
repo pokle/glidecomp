@@ -49,7 +49,7 @@ PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-http://localhost:3000}"
 cat > web/workers/auth-api/.dev.vars <<EOF
 GOOGLE_CLIENT_ID=dummy-for-dev
 GOOGLE_CLIENT_SECRET=dummy-for-dev
-BETTER_AUTH_SECRET=dev-secret-not-for-production
+BETTER_AUTH_SECRET=dev-only-not-for-production-udYkKa80ccUbQLHAOdqAcnFfUEiHBA51YLpwgpwYZcSA
 BETTER_AUTH_URL=${PUBLIC_ORIGIN}
 EOF
 
