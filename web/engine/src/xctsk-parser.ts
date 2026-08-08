@@ -172,6 +172,21 @@ function parseV1(data: Record<string, unknown>): XCTask {
     turnpoints,
   };
 
+  // Cylinder tolerance is a SCORING input (§8.1): the AirScore importer
+  // writes the comp's error_margin here, and dropping it runs crossing
+  // detection with the 0.5% default — up to 10× the band the comp scored
+  // with, wide enough to swallow a shallow excursion past a big ENTER
+  // start ring (issue #577). Bounds mirror the API validator's ([0, 0.1]);
+  // an explicit 0 is a real declaration (only the ±5 m minimum applies).
+  if (
+    typeof data.cylinderTolerance === 'number' &&
+    Number.isFinite(data.cylinderTolerance) &&
+    data.cylinderTolerance >= 0 &&
+    data.cylinderTolerance <= 0.1
+  ) {
+    task.cylinderTolerance = data.cylinderTolerance;
+  }
+
   // Parse takeoff times
   if (typeof data.takeoff === 'object' && data.takeoff !== null) {
     const takeoff = data.takeoff as Record<string, unknown>;

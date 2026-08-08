@@ -185,6 +185,22 @@ describe('ESS pin (Annex A §3.2.4)', () => {
     expect(calculateOptimizedTaskDistance(task) / 1000).toBeCloseTo(78.846, 2);
   });
 
+  it('bright-open-2025-open-t3 (ENTER start concentric with the next TP): out-and-back route matches published', () => {
+    // The takeoff sits INSIDE the 33.5 km ENTER start ring, so the optimised
+    // route must go out to the ring boundary (published cumulative 3 243 m)
+    // and come back through the whole course. AirScore's task_dist 101.72 km
+    // includes that out-and-back; per-waypoint mid-route tags on the big
+    // cylinders can differ while the total agrees, so only the SSS leg and
+    // the total are pinned. The same file carries cylinderTolerance 0.0005 —
+    // the declared band the sequence resolution must honour (issue #577).
+    const task = fixture('bright-open-2025-open-t3.xctsk');
+    expect(task.cylinderTolerance).toBe(0.0005);
+    const segs = getOptimizedSegmentDistances(task);
+    expect(Math.abs(segs[0] - 3243)).toBeLessThan(30);
+    const total = segs.reduce((a, b) => a + b, 0);
+    expect(Math.abs(total - 101722)).toBeLessThan(60);
+  });
+
   it('feeds the leading coefficient the pinned speed-section length', () => {
     // ssKm inside computeLeadingAggregate must be the pinned slice — equal
     // to the independent launch→ESS optimisation minus the pre-SSS portion.

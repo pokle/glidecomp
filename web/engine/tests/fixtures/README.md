@@ -14,6 +14,18 @@ distance 2.5 km long. Exercises the Annex A §3.2.4 ESS pin in
 `comps/bright-open-2023-open-t1/` (AirScore reference numbers quoted in the
 test come from that folder's `airscore-result-raw.json`).
 
+## `bright-open-2025-open-t3.xctsk`
+
+The task behind issue #577: a 33.5 km ENTER start ring concentric with the
+800 m turnpoint after it, and the takeoff INSIDE the ring — pilots must fly
+out past the boundary (~100 m excursions) and re-enter to start. The file
+declares `cylinderTolerance: 0.0005`; before the parser read that field the
+engine's 0.5% default band (167.5 m at this radius) swallowed every exit
+and scored the whole field landed out at the start. Exercises the tolerance
+parsing and the out-and-back route geometry (`spec-distances.test.ts`;
+published cumulatives from the archive folder's `airscore-result-raw.json`).
+Same archive provenance, `comps/bright-open-2025-open-t3/`.
+
 ## `corryong-cup-2022-open-t1.xctsk`
 
 A task whose route begins directly at the start cylinder — no TAKEOFF row —
