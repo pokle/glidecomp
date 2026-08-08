@@ -16,7 +16,7 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 |---|---|
 | `/comp` | |
 | `/comp/:id` | hub: merged task list + top-3 scores summary |
-| `/comp/:id/scores` | the canonical full-scores page; `?task=` deep-links the results-by-task view |
+| `/comp/:id/scores` | the canonical full-scores page; `?task=` deep-links the scores-by-task view |
 | `/comp/:id/waypoints` | |
 | `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
 | `/comp/:id/task/:id/pilot/:id` | the report card |

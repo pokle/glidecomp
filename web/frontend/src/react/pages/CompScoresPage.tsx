@@ -2,8 +2,8 @@
  * Dedicated competition scores page (/comp/:id/scores) — the canonical public
  * scores surface. The comp page keeps only a compact scores summary that
  * links here; this page holds the full apparatus: per-class scores tabs,
- * Top 3 per task & class, Teams, and Results by task (which is the public
- * per-task results surface — task pages link here with ?task=<id>).
+ * Top 3 per task & class, Teams, and Scores by task (which is the public
+ * per-task scores surface — task pages link here with ?task=<id>).
  *
  * Server-rendered like the other public comp pages (loadCompScores +
  * functions/comp/[[path]].ts); the views themselves live in

@@ -139,7 +139,7 @@ export function buildClassScore(
   // Pilots whose tracklogs a HARD data-quality finding withheld from
   // scoring. Appended AFTER the sort, so the scored field's ranks are exactly
   // what they would be if these tracks had never been uploaded, and the
-  // withheld pilots take the places below them.
+  // withheld pilots take the ranks below them.
   excluded: ExcludedPilot[] = [],
   // Transparency extras the GAP path supplies and the open-distance path does
   // not (it has no validity story and ignores GAP parameters).

@@ -3,8 +3,8 @@
  * (pages/CompScoresPage — the canonical scores surface) and the comp hub's
  * compact scores summary (CompScoresSummary): the SSR-seedable fetch +
  * rescore state machine (useCompScores) and the score views (per-class
- * scores, top-3, teams, results-by-task). View transforms (class rollups,
- * top-3, teams) come from the shared scores-views module; the "Results by
+ * scores, top-3, teams, scores-by-task). View transforms (class rollups,
+ * top-3, teams) come from the shared scores-views module; the "Scores by
  * task" tab reuses the task page's ScoresSection one task at a time. Built on
  * the RAC kit: the view tabs are ARIA tabs, and each view is a sortable
  * ARIA-grid table (RAC sorting with per-column first-click directions —
@@ -177,15 +177,15 @@ export function ScoresViews({
   tasks: TaskSummary[];
   defaultTaskId: string | null;
   /**
-   * ?task= deep link (task pages link "Results" here): opens the
-   * "Results by task" tab on that task. Applied in an effect, so the first
+   * ?task= deep link (task pages link "Scores" here): opens the
+   * "Scores by task" tab on that task. Applied in an effect, so the first
    * render is the default tab on both sides and only then switches.
    *
    * That used to be forced: the server rendered the pathname alone, so a
    * query-driven tab in the first render was guaranteed to mismatch. The
    * server now renders the query too (entry-server.tsx), so selecting the tab
    * in the first render would be safe — and would put the deep-linked task's
-   * results in the server HTML, which is the reason to do it. Deliberately not
+   * scores in the server HTML, which is the reason to do it. Deliberately not
    * done here: it is a behaviour change to the tab logic, not part of the SSR
    * fix.
    */
@@ -223,7 +223,7 @@ export function ScoresViews({
         ))}
         <Tab id="top3">Top 3 per task &amp; class</Tab>
         {teams.length > 0 ? <Tab id="teams">Teams</Tab> : null}
-        {scorableTasks.length > 0 ? <Tab id="bytask">Results by task</Tab> : null}
+        {scorableTasks.length > 0 ? <Tab id="bytask">Scores by task</Tab> : null}
       </TabList>
 
       {scores.class_scores.map((cls) => (
@@ -619,7 +619,7 @@ function Top3Table({
   const compName = useCompName();
   const rows = computeTop3Rows(group, scores.tasks);
 
-  // Left-aligned throughout: the place columns read "PilotName · score", so the
+  // Left-aligned throughout: the rank columns read "PilotName · score", so the
   // number sits behind a name of varying length and right-aligning it would not
   // line the scores up anyway.
   const columns: ColumnSpec[] = [
@@ -636,8 +636,8 @@ function Top3Table({
         sort: row.label,
         node: isTotal ? <strong title={row.task_date ?? undefined}>{row.label}</strong> : row.label,
       },
-      ...[0, 1, 2].map((place): CellSpec => {
-        const entry = row.entries[place];
+      ...[0, 1, 2].map((rankIndex): CellSpec => {
+        const entry = row.entries[rankIndex];
         if (!entry) return { sort: "", node: "—" };
         const content = (
           <>

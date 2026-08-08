@@ -13,7 +13,7 @@ review comments there, and aligns with
 > it. Where this doc and the shipped app now differ, the app is right:
 >
 > - **Scores are no longer inline.** `/comp/:id/scores` is the canonical,
->   SSR'd scores page (per-class tabs, Top 3, Teams, Results by task —
+>   SSR'd scores page (per-class tabs, Top 3, Teams, Scores by task —
 >   `?task=<id>` deep-links a task's results). The comp page keeps a compact
 >   top-3-per-class Scores summary linking there. `/scores?comp_id=X` now
 >   redirects to `/comp/X/scores`, not `/comp/X#scores`.
@@ -205,7 +205,7 @@ scores forever after:
    button, date pre-filled with today (J4's "day by day").
 4. **Scores** (inline — the `/scores` page content moves here, J3/J6):
    tabs = one per class (scores) · Top 3 per task & class · Teams (when
-   teams exist) · **Results by task** (the per-task tables, one task at a
+   teams exist) · **Scores by task** (the per-task tables, one task at a
    time via a task picker — all-tasks-at-once is too heavy to SSR for a
    10-task comp). Keeps the ScoreFreshness re-score banner and CSV export.
    Every score links to the explainer. Deep-linkable anchors
@@ -350,7 +350,7 @@ typing. Cheap, offline-generatable, purely presentational.
    on the same day (Corryong scores as open + floater): show two hero cards,
    or one hero per class tab? Suggest: one hero listing both tasks for today.
    *(Resolved in implementation: one hero listing every task on that date.)*
-2. Should "Results by task" default to today's/latest task (matching the
+2. Should "Scores by task" default to today's/latest task (matching the
    hero) rather than task 1? Suggest: yes. *(Resolved: defaults to the hero
    task.)*
 3. Does the comp hub need in-page section anchors in the header (Tasks ·

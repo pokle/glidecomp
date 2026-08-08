@@ -1,7 +1,7 @@
 /**
  * Comp detail page (/comp/:id) — interaction coverage for its RAC surfaces
  * (converted 2026-07-21, see docs/2026-07-18-rac-adoption-guide.md):
- * scores view tabs + sortable scores tables + the results-by-task Select,
+ * scores view tabs + sortable scores tables + the scores-by-task Select,
  * the pilots section (read-only RAC grid + the kept-by-policy Tabulator edit
  * grid inside a RAC dialog shell), the activity filter tabs, and the settings
  * dialog (Advanced GAP NumberFields, timezone combobox).
@@ -146,7 +146,7 @@ function trackMutations(page: Page): () => boolean {
   return () => mutated;
 }
 
-test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
+test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   page,
 }) => {
   // The full score views live on the dedicated scores page now; the comp page
@@ -207,10 +207,10 @@ test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
   await expect(overall.getByRole("rowheader", { name: "Total", exact: true })).toBeVisible();
   await expect(scores.getByRole("grid", { name: `Top 3 — ${classA}` })).toBeVisible();
 
-  // ── Results by task: the Select defaults to the first scorable task;
+  // ── Scores by task: the Select defaults to the first scorable task;
   // picking a task flown by the other class swaps the embedded grid
   // (aria-label + rows).
-  await tablist.getByRole("tab", { name: "Results by task" }).click();
+  await tablist.getByRole("tab", { name: "Scores by task" }).click();
   const panel = scores.getByRole("tabpanel");
   const scorable = comp.tasks.filter((t) => t.has_xctsk);
   const defaultClass = scorable[0].pilot_classes[0];

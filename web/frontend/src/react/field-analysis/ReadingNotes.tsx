@@ -38,7 +38,7 @@ export function VerdictLegend() {
       and <strong>faint pattern</strong> below — each only once the coefficient is
       bigger than chance alone produces at that many pilots (its noise floor).{" "}
       <strong>could be chance</strong> (in the statistics: within noise) means
-      shuffling the placings produces a coefficient that size more than 5% of the
+      shuffling the ranks produces a coefficient that size more than 5% of the
       time, so it cannot be told apart from luck however big it looks.{" "}
       <strong>too few pilots</strong> is fewer than {MIN_CORRELATION_N} pilots with a
       value — not enough to tell either way.
@@ -95,7 +95,7 @@ export function AgainstCompScoresNote() {
   return (
     <p>
       A separate reading. It takes the average of each pilot for that behaviour
-      over the whole competition, and correlates it against their overall place.
+      over the whole competition, and correlates it against their overall rank.
       The verdict and the pilot count belong to that reading.
     </p>
   );
@@ -108,8 +108,8 @@ export function StrengthNote() {
     <>
       <p>
         Spearman&rsquo;s rank correlation, ρ, between the behaviour and the
-        published placings. A bigger bar means the behaviour tracked the
-        placings more closely on this task.
+        published ranks. A bigger bar means the behaviour tracked the
+        ranks more closely on this task.
       </p>
       <RankDirectionNote />
     </>
@@ -129,7 +129,7 @@ export function PilotsMeasuredNote() {
 export function OneDayCaveatNote({ behaviourCount }: { behaviourCount: number }) {
   return (
     <p>
-      Rank {behaviourCount} behaviours against one day&rsquo;s results and a few
+      Rank {behaviourCount} behaviours against one day&rsquo;s ranks and a few
       will look strong on luck alone — the ones worth believing are those that
       repeat across tasks in the competition-level analysis.
     </p>

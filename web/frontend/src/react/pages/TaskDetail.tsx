@@ -51,7 +51,7 @@ import { WeatherSection } from "../weather/WeatherSection";
 import { useTaskWeather } from "../weather/use-task-weather";
 import { taskWindFromWeather, type TaskWind } from "../comp/task-wind";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
-import { TaskResults } from "../comp/TaskResults";
+import { TaskScoresPublic } from "../comp/TaskScoresPublic";
 import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
@@ -418,7 +418,7 @@ export function TaskDetail() {
       />
 
       {/* Public results: top-3 podium per class + the link to the comp's
-          scores page (the canonical results surface), plus pilot self-service
+          scores page (the canonical scores surface), plus pilot self-service
           (Submit track, your-submission line). The management grid below is
           admin-only.
 
@@ -427,7 +427,7 @@ export function TaskDetail() {
           pilots, and this section renders its OWN Submit action, so gating the
           action row alone would leave a button here the server refuses. */}
       <CompNameProvider value={comp?.name ?? null}>
-        <TaskResults
+        <TaskScoresPublic
           compId={compId}
           taskId={taskId}
           taskName={task.name}

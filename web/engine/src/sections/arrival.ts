@@ -40,10 +40,10 @@ import { ordinal } from './rank';
  *    early start gate can cross ahead of a faster pilot on a later gate and
  *    take more arrival points for it. Nothing on the site said so, and it is
  *    the detail most likely to be disputed.
- *  - **What one place was worth on this day.** The marginal value of moving up
+ *  - **What one rank was worth on this day.** The marginal value of moving up
  *    one is exact, and varies enormously with position — near the front a
- *    place is worth a lot, at the back almost nothing. That turns a bare
- *    placing into something a pilot can weigh.
+ *    rank is worth a lot, at the back almost nothing. That turns a bare
+ *    rank into something a pilot can weigh.
  */
 export function buildArrivalSection(
   entry: ScoreEntryInput,
@@ -97,7 +97,7 @@ export function buildArrivalSection(
       params.essNotGoalFactor < 1;
     items.push({
       id: 'arrival-formula',
-      text: 'Arrival points fall off steeply with each place',
+      text: 'Arrival points fall off steeply with each rank',
       value: pts(entry.arrival_points),
       detail:
         `arrival ratio = 1 − (${position} − 1) ÷ ${atEss} = ${trimZeros(

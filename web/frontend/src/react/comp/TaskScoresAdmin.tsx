@@ -1,14 +1,14 @@
 /**
  * Admin task management grid — "Manage pilots & tracks" (issues #306, then
- * split from the public results surface). One row per pilot with their
+ * split from the public scores surface). One row per pilot with their
  * outcome on the task: ranked scorers first, then a per-class "did not
  * score" tail (present-not-flown / DNF / absent). Columns: rank · pilot ·
  * outcome (badge + evidence) · distance · points · Manage.
  *
  * This is the management tool, admin-only by design: opening a pilot's score
  * card, statuses, uploads on behalf, manual flights and restores. The PUBLIC
- * results live in
- * TaskResults (top 3 + link to the comp scores page) — this grid is never
+ * scores live in
+ * TaskScoresPublic (top 3 + link to the comp scores page) — this grid is never
  * server-rendered and mounts only after the admin check resolves.
  *
  * Built on the RAC kit (src/react/rac/) — see
@@ -115,7 +115,7 @@ export function TaskScoresAdmin({
   submissionsClosed?: boolean;
   /** Parent bump to refetch scores (route edits). */
   refresh: number;
-  /** Notify the parent a mutation happened, so the public results refetch too. */
+  /** Notify the parent a mutation happened, so the public scores refetch too. */
   onMutated?: () => void;
 }) {
   // Client-data gate (this grid is never server-rendered, but the roster /

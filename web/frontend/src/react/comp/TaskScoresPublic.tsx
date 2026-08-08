@@ -1,7 +1,7 @@
 /**
- * Public per-task results: a compact top-3 podium per class plus the link to
+ * Public per-task scores: a compact top-3 podium per class plus the link to
  * the competition's full scores page (/comp/:id/scores?task=:id), which is the
- * canonical public results surface.
+ * canonical public scores surface.
  *
  * This deliberately is NOT the management grid — statuses, uploads on behalf
  * and manual flights live in TaskScoresAdmin, which the task page renders for
@@ -37,7 +37,7 @@ import type {
 } from "./types";
 
 /**
- * Task-level stopped notice (FAI S7F §12.3): shown above the results when the
+ * Task-level stopped notice (FAI S7F §12.3): shown above the scores when the
  * task was scored as stopped — the scored-back stop time, and (when the stop
  * came before the minimum scoring time) why every pilot reads 0. The comp
  * zone (or UTC) keeps the SSR markup deterministic.
@@ -74,7 +74,7 @@ type MySubmission =
   | { registered: false }
   | { registered: true; hasTrack: boolean; uploadedAt: string | null };
 
-export function TaskResults({
+export function TaskScoresPublic({
   compId,
   taskId,
   taskName = null,
@@ -209,9 +209,9 @@ export function TaskResults({
   const scoresHref = `/comp/${encodeURIComponent(compId)}/scores?task=${encodeURIComponent(taskId)}`;
 
   return (
-    <Card id="results" className="scroll-mt-4">
+    <Card id="scores" className="scroll-mt-4">
       <SectionHeader
-        title="Results"
+        title="Scores"
         action={
           // No longer gated on a session: submitting is open to anyone the
           // comp's roster knows. Still mount-gated, because what the dialog
@@ -257,13 +257,13 @@ export function TaskResults({
       ) : null}
 
       {scoreState === "loading" ? (
-        <Loading className="mt-2">Loading results…</Loading>
+        <Loading className="mt-2">Loading scores…</Loading>
       ) : scoreState === "no-route" ? (
         <p className="mt-2 text-muted-foreground">
-          No results yet — the task route hasn't been set.
+          No scores yet — the task route hasn't been set.
         </p>
       ) : scoreState === "unavailable" || !score ? (
-        <p className="mt-2 text-muted-foreground">Results not available</p>
+        <p className="mt-2 text-muted-foreground">Scores not available</p>
       ) : (
         <>
           <ScoreFreshness
@@ -276,7 +276,7 @@ export function TaskResults({
           <StoppedTaskNotice score={score} timezone={timezone} />
           {score.class_scores.every((c) => c.pilots.length === 0) ? (
             <p className="mt-2 text-muted-foreground">
-              No scored pilots yet — results appear once tracks are submitted.
+              No scored pilots yet — scores appear once tracks are submitted.
             </p>
           ) : (
             <>

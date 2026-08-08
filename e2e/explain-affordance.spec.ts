@@ -21,7 +21,7 @@ import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "./fixtures/test";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
-const RANKING_HEADING = /Which behaviours went with better results/;
+const RANKING_HEADING = /Which behaviours went with better scores/;
 
 /** The seeded sample comp's analysis URLs, and its first analysed task's. */
 async function analysisUrls(request: APIRequestContext) {
@@ -108,7 +108,7 @@ test("print carries every note that moved behind a ⓘ", async ({ page, request 
     "How to read the table",
     "A behaviour that keeps its sign and its size",
     "weighted by n, with the signs kept",
-    "correlates it against their overall place",
+    "correlates it against their overall rank",
     "clear pattern",
   ]) {
     await expect(page.getByText(phrase, { exact: false }).first()).toBeVisible();

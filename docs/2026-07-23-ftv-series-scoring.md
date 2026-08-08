@@ -56,7 +56,7 @@ never change silently) and via `PATCH /api/comp/:id` (SettingsDialog).
 
 Deliberate departure from `scoring_format`: these two fields change the
 **scores** but not any per-task score. So they are **audit-logged** (they
-change published results) but do **not** call `bumpAndRevalidateScores` — bumping
+change published scores) but do **not** call `bumpAndRevalidateScores` — bumping
 every task's materialized score would be wasted work. Cache correctness comes
 from folding `series_scoring` + `ftv_factor` into the `/scores` comp ETag, so a
 toggle invalidates the cached response.

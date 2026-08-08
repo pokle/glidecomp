@@ -335,7 +335,7 @@ export function TaskFieldAnalysis() {
       ...(hasThermalsSection
         ? [{ id: "thermals-heading", label: "The day's thermals" }]
         : []),
-      { id: "separation-heading", label: "Which behaviours went with better results" },
+      { id: "separation-heading", label: "Which behaviours went with better scores" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
       { id: "clusters-heading", label: "Pilot style clusters" },
       { id: "families-heading", label: "The metrics in detail" },
@@ -629,7 +629,7 @@ export function TaskFieldAnalysis() {
                 id="separation-heading"
                 className="flex items-center gap-1 scroll-mt-20 text-lg font-semibold"
               >
-                Which behaviours went with better results
+                Which behaviours went with better scores
                 {/* Why a strong-looking coefficient on ONE task is not yet a
                     finding — a caveat about the whole section, so it hangs off
                     the section's heading rather than a column. */}

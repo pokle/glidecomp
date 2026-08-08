@@ -186,7 +186,7 @@ ETag makes must-revalidate cheap).
 
 - Every scores surface (the `/comp/:id/scores` page and the comp hub's
   scores summary via `CompScoresSection.tsx`'s shared hook, the task
-  page's results podium `TaskResults.tsx`, and the admin manage grid
+  page's scores podium `TaskScoresPublic.tsx`, and the admin manage grid
   `TaskScores.tsx`) renders the timestamp next to the tables — e.g.
   "Scores computed 7 Jul 2026, 14:32 UTC" (absolute, in the comp timezone,
   so SSR output is deterministic — no relative "2 min ago" on the

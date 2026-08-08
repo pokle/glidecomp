@@ -2,7 +2,7 @@
  * Compact whole-comp scores summary for the comp hub: the top 3 of each
  * class (overall totals) and the link to the full scores page — the hub
  * answers "who's winning?" at a glance, /comp/:id/scores holds the full
- * apparatus (all pilots, per-task results, Top 3 per task, Teams).
+ * apparatus (all pilots, per-task scores, Top 3 per task, Teams).
  *
  * That last sentence used to be printed under the list, in prose. It said
  * nothing the section header's "Full scores" button and the "+ N more pilots"
