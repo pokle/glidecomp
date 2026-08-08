@@ -87,6 +87,13 @@ checked-in TODO file (`docs/TODO.md` was deleted as stale; don't recreate it).
 `docs/` holds specs, plans, and reference. Treat the dated ones (`docs/2026-*.md`)
 as point-in-time snapshots rather than current status.
 
+**Python runs with uv.** The stack is TypeScript/bun, but where a Python
+script earns its keep (e.g. the S7F PDF extraction pipeline in
+`docs/reference/fai-s7f-xc-scoring-2024/`), it declares its dependencies
+inline in a PEP 723 `# /// script` block and is invoked with
+`uv run <script.py>` — never `pip install` into the environment, and no
+`requirements.txt`.
+
 **Branch previews:** every branch gets a Cloudflare Pages branch-alias URL.
 **When you open or push to a PR, always include it in the PR body and show it in
 the chat** — and get it from `bun run preview-url`, **never by deriving it in

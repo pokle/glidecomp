@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pypdfium2",
+#     "pdfplumber",
+#     "pillow",
+# ]
+# ///
 """Extraction pipeline for the FAI Sporting Code Section 7F (XC scoring) PDF.
 
 Produces, in an output directory:
@@ -16,9 +24,8 @@ Produces, in an output directory:
                         clustered, padded, minimum-size filtered)
   summary.json       -- page count, per-page highlight/figure tallies
 
-Usage:  python3 extract_s7f.py <input.pdf> <outdir>
-
-Requires: pypdfium2, pdfplumber, Pillow  (pip install pypdfium2 pdfplumber pillow cffi)
+Usage:  uv run extract_s7f.py <input.pdf> <outdir>
+(dependencies are declared inline above; uv resolves them on first run)
 
 Colour classification (RGB fills observed in the 2024 edition):
   blue  (0.573, 0.804, 0.863) -> hang-gliding only
