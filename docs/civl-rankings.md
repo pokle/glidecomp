@@ -187,7 +187,7 @@ put:
 
 | Column | |
 |---|---|
-| `civl_ranking` | the rank. Existed unused since migration 0001; real since 0029 |
+| `wprs_points` | the pilot's WPRS score (migration 0030) |
 | `civl_ranking_slug` | which list it came from, NULL when set by hand |
 | `civl_ranking_date` | that list's snapshot month, NULL when set by hand |
 
@@ -195,66 +195,104 @@ Both source columns being NULL is what the roster renders as "set by
 organiser" — an override (a pilot the list has missed, or has wrong) must not
 be indistinguishable from an import.
 
-**Filling the roster in** happens two ways in the pilots editor
-(`/comp/:id/pilots` → Edit, `src/react/comp/PilotsSection.tsx` +
-`civl-rankings.ts`), and both apply the same rules.
+**Points and not a rank.** 0029 stored the rank and 0030 replaced it, because
+a rank is only a position within one list's pool and the pools run from six
+pilots to 6,875 — see [One number per pilot](#one-number-per-pilot-wprs-points-choose-the-list)
+below. The migration converts every stored rank back to the points it came
+from, by the (list, month, pilot) it recorded.
+
+**Filling the roster in** happens in the pilots editor (`/comp/:id/pilots` →
+Edit, `src/react/comp/PilotsSection.tsx` + `civl-rankings.ts`).
 
 **"Fill from CIVL…"**, in the editor's footer with the other grid-wide
-actions. It opens a dialog of its own (`CivlFillDialog`) holding the list
-picker — every list we hold, with its month and how many of these pilots it
-places — an explanation of what filling does, and the button that does it. It
-was a bar under the grid, and on a phone its label, picker and button cost
-about a fifth of the editor's height permanently, for a step most rosters take
-once; the dialog also gives the explanation room to be a sentence rather than
-a tooltip a touchscreen cannot open. It closes on the way out so the outcome
-lands under the grid, beside the rows it changed.
+actions. It opens a dialog of its own (`CivlFillDialog`) saying how many of
+these pilots the rankings can place, and the button that places them. It was
+a bar under the grid, and on a phone it cost about a fifth of the editor's
+height permanently, for a step most rosters take once. It closes on the way
+out so the outcome lands under the grid, beside the rows it changed.
 
 The fill does two passes, in this order and for this reason:
 
-1. **Ids** — into an EMPTY id cell whose name exactly one pilot in the list
+1. **Ids** — into an EMPTY id cell whose name exactly one ranked pilot
    answers to. This is the one place a name decides anything.
-2. **Ranks** — matched on **CIVL ID only**. A rank against the wrong human
-   silently sets the wrong launch order, and a shared name is not evidence of
-   a shared identity (the same rule `pilot-resolver.ts` and `pilot-linker.ts`
-   refuse to link accounts on).
+2. **Points** — into an EMPTY score cell, matched on **CIVL ID only**. A score
+   against the wrong human silently sets the wrong launch order, and a shared
+   name is not evidence of a shared identity (the same rule
+   `pilot-resolver.ts` and `pilot-linker.ts` refuse to link accounts on).
 
 The lookup is re-run **between** the passes: rows that just gained an id are
 matched by it on the second, which is what makes their ranks fillable at all.
 This was two buttons, and the ordering was the organiser's to know — pressing
 them the other way round simply did less.
 
-**A name typeahead**, on the name column. Typing two or more characters offers
-ranked pilots from the list showing in the picker, labelled with nation and
-world rank because that is what tells two pilots of one name apart. Picking one
-takes CIVL's spelling of the name and brings the id and the rank with it — the
-same match the button makes, made one row at a time and before the ambiguity
-exists. The column stays **freetext**: most rosters have pilots who have never
-been ranked, and a name cell that refused to hold them would be worse than one
-with no suggestions. It reads `GET /api/comp/:comp_id/pilot/civl-search`
-(admin only), and an id already in the row is never overwritten.
+**Neither pass overwrites.** The dialog promises "Add CIVL IDs and rankings
+when missing", and a number already in the grid is somebody's answer — typed
+for a pilot the lists have wrong or have missed, or filled from an earlier
+import. The cost is the refresh path: when CIVL publishes a new month, filling
+again adds nothing to a roster that is already scored, and **clearing a score
+is how an organiser asks for the newer one**. The outcome line says so, because
+"0 filled in" otherwise reads as a failure — a matched row that was left alone
+is counted separately (`already_set`) from one no list has heard of.
 
-Every ambiguity is refused rather than resolved: two ranked pilots sharing a
-name, two roster rows claiming one ranked pilot, or a ranked pilot whose id
-another row already holds. Names match on case and whitespace only — accents
+Every ambiguity is refused rather than resolved: two DIFFERENT ranked humans
+sharing a name, two roster rows claiming one ranked pilot, or a ranked pilot
+whose id another row already holds. One pilot appearing in several lists is
+not an ambiguity — see below. Names match on case and whitespace only — accents
 are **not** folded, because SQLite's `NOCASE` is ASCII-only and the fold would
 claim matches the query could never fetch. Rules and reasoning:
 `web/workers/competition-api/src/civl-ranking-match.ts`.
 
 The button reads `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
 which answers about the rows in the **grid** — the organiser is mid-edit when
-they press it — and returns every list we hold, including ones that place
-nobody, so a wrong-discipline pick shows as "0 of 24" instead of vanishing.
-Nothing is written until Save.
-
-The typeahead's route defaults to the discipline's **main** XC list when the
-caller names none (`preferredListSlug`). Taking the first slug of the right
-discipline alphabetically does not work: that is
-`hang-gliding-class-1-sport-xc`, so an HG comp would quietly search a list
-almost none of its field is in.
+they press it, and asking about the SAVED roster would answer about a state
+they are in the middle of leaving. The dialog asks again every time it opens,
+for the same reason: a name corrected since the grid loaded is the commonest
+reason to press the button at all, and the matches are keyed by row index, so
+a stale answer does not merely miss — it can put one pilot's id on another
+pilot's row. Nothing is written until Save.
 
 Writes go through the ordinary roster save, so they are `audit()`ed like any
 other roster change. They take **no** `bumpAndRevalidateScores()` call: a world
 ranking is not a scoring input and cannot change a task score.
+
+### One number per pilot: WPRS points choose the list
+
+CIVL publishes ten lists and **no overall ranking** — every row of every list
+is `region=World, selection=Overall`, where "Overall" is CIVL's own selection
+filter rather than an aggregate. A pilot in more than one list therefore has no
+single published number, and the roster needs one.
+
+The rule: take the list where the pilot scores the most **WPRS points** (the
+World Pilot Ranking Scheme score CIVL computes from their results, and sorts
+each list by), and copy **those points** onto the roster, recording the list
+in `civl_ranking_slug`. Two pilots on one roster are routinely ranked
+from two different lists. Equal points go to the lower rank; an exact tie falls
+to the slug so a re-run answers the same. `bestPerPilot()` in
+`civl-ranking-match.ts` does the collapsing, and doing it BEFORE the matching
+is also what stops one pilot in four lists reading as four rivals for a name.
+
+**Points and not the lowest rank**, because a rank is only a position within
+one pool and the pools differ enormously — HG Class 2 holds six pilots, PG XC
+holds 6,875 — so the smaller the list, the flatter the rank it hands out. In
+the August 2026 snapshot:
+
+| | |
+|---|---|
+| ranked pilots in more than one list | 4,140 of 10,019 (41%), up to 4 lists |
+| median spread between a pilot's ranks | 1,835 places |
+| pilots whose best rank and best points are in different lists | 3,457 |
+
+Luke Nicol is **#1 in PG XC Sport and #106 in PG XC on identical points**,
+because Sport is a subset of the same field; picking the lowest number would
+call him first in the world. Points are the same quantity in every list, so
+"which list has this pilot achieved most in" is a question they can answer and
+ranks cannot.
+
+The roster holds the **points**, not the rank from that list: the rank would
+carry the pool back in with it. Two pilots taken from different lists can then
+be compared — sorting the roster's column ascending is the task-1 launch order
+(reverse ranking order, fewest points first), which is the whole reason the
+number is there.
 
 ### Rankings on a development database
 

@@ -1,14 +1,13 @@
 /**
  * Matching a competition roster against the CIVL world ranking lists.
  *
- * The roster editor has two fill buttons, and this module decides what each
- * one is allowed to offer. Both rules come straight from what an organiser is
- * doing: they know who is flying, they want the WPRS ranking beside each name
- * so they can set a fair launch order, and they need the result to be
- * checkable afterwards.
+ * The roster editor has one fill button, and this module decides what it is
+ * allowed to offer. The rules come from what an organiser is doing: they know
+ * who is flying, they want the WPRS ranking beside each name so they can set a
+ * fair launch order, and they need the result to be checkable afterwards.
  *
- *   * **A rank is only ever matched by CIVL ID.** An id identifies a human;
- *     a name does not. This mirrors `pilot-resolver.ts` and `pilot-linker.ts`,
+ *   * **A rank is only ever matched by CIVL ID.** An id identifies a human; a
+ *     name does not. This mirrors `pilot-resolver.ts` and `pilot-linker.ts`,
  *     which refuse to link an account on a name, and it is why the fill leaves
  *     a rank alone rather than guessing when the id is missing.
  *   * **An ID may be matched by name, but only when the name is unambiguous.**
@@ -17,15 +16,43 @@
  *     and every ambiguity is refused rather than resolved (see below). It only
  *     ever fills an EMPTY cell, so it cannot overwrite an id someone entered.
  *
- * Everything an ambiguity could hide is dropped instead:
+ * ── One number per pilot, across every list ────────────────────────────────
  *
- *   * two ranked pilots whose names match the same roster row → no suggestion
- *     (the list itself cannot say which human this is);
- *   * two roster rows matching the same ranked pilot → neither is offered
- *     (one of the two would be given someone else's id);
+ * CIVL publishes ten lists — one per discipline and class — and **no overall
+ * ranking**: every row of every list is `region=World, selection=Overall`,
+ * where "Overall" is CIVL's own selection filter rather than an aggregate. So
+ * a pilot in more than one list (41% of ranked pilots are, up to four lists)
+ * has no single published number, and one has to be chosen.
+ *
+ * We take the list where they score the most **WPRS points** — the World Pilot
+ * Ranking Scheme score, which is what CIVL computes from a pilot's results and
+ * then sorts each list by — and copy their rank IN THAT LIST onto the roster,
+ * recording the list so the number stays checkable.
+ *
+ * Points rather than the lowest rank, because a rank is only a position within
+ * one pool and the pools differ enormously: HG Class 2 holds six pilots, PG XC
+ * holds 6,875, so the smaller the list the flatter the rank it hands out. Luke
+ * Nicol is #1 in PG XC Sport and #106 in PG XC on IDENTICAL points, because
+ * Sport is a subset of the same field; lowest-rank would call him first in the
+ * world. Points are the same quantity in every list, so "the list where this
+ * pilot has achieved most" is a question they can answer and ranks cannot.
+ *
+ * What the roster gets is still a RANK, because that is what an organiser sets
+ * a launch order from — but it is now their rank in their strongest discipline
+ * rather than in their smallest.
+ *
+ * ── What is refused ───────────────────────────────────────────────────────
+ *
+ *   * two DIFFERENT ranked humans whose names match the same roster row → no
+ *     suggestion (the lists cannot say which of them this is);
+ *   * two roster rows matching the same ranked pilot → neither is offered;
  *   * a ranked pilot whose id is already on another roster row → not offered
  *     (that would produce two rows with one id, which the bulk save rejects
  *     as "two rows resolved to the same pilot" anyway).
+ *
+ * One pilot appearing in several lists is NOT an ambiguity: it is one human,
+ * and collapsing them to one entry before any of this happens is what keeps
+ * it from looking like two.
  *
  * Name comparison is exact up to case and surrounding/among whitespace.
  * Accents are NOT folded: 'Jose' does not match 'José'. Folding would have to
@@ -47,45 +74,36 @@ export interface RosterEntry {
   civl_id?: string | null;
 }
 
-/** One `pilot_ranking` row, already narrowed to a list's latest snapshot. */
-export interface RankingRow {
+/**
+ * One `pilot_ranking` row, carrying the list it belongs to. Unlike before
+ * there is no per-list call: every candidate row from every list arrives in
+ * one array, because which list a pilot is taken from is a fact about all of
+ * them.
+ */
+export interface RankedEntry {
   rank: number;
   points: number;
   civl_id: string;
   pilot_name: string;
-}
-
-/**
- * A list we hold a snapshot of. Carried separately from its rows because a
- * list that matches nobody still has to appear in the picker — showing "0 of
- * 24" is how an organiser learns they picked the wrong discipline, rather
- * than the list silently not being there.
- */
-export interface ListInfo {
-  slug: string;
+  /** civlcomps.org URL segment — the list's identity. */
+  ranking_slug: string;
   /** The sheet's own label, e.g. 'HG Class 1'. */
-  name: string;
-  /** ISO 'YYYY-MM-01' — the month this snapshot was published. */
+  ranking_name: string;
+  /** ISO 'YYYY-MM-01' — the month that snapshot was published. */
   ranking_date: string;
 }
 
-/** What one ranking list offers one roster row. */
-export interface RowMatch {
+/** What the rankings offer one roster row. */
+export interface RowMatch extends RankedEntry {
   /** How this row was found. Only `civl_id` matches may fill a RANK. */
   matched_by: "civl_id" | "name";
-  /** The ranked pilot's CIVL ID — what a `name` match offers to fill in. */
-  civl_id: string;
-  /** The name as CIVL spells it, so the UI can show what it matched. */
-  pilot_name: string;
-  rank: number;
-  points: number;
 }
 
-/** One ranking list, and what it has to say about this roster. */
-export interface ListMatches extends ListInfo {
+/** What the rankings have to say about a whole roster. */
+export interface RosterMatches {
   /** Roster index → match. Indices with no entry are unmatched. */
   matches: Record<number, RowMatch>;
-  /** Roster rows this list can place at all — the picker's "n of N". */
+  /** Roster rows the rankings can place at all. */
   matched_count: number;
   /** Of those, the ones that can fill a rank right now (id already present). */
   rankable_count: number;
@@ -102,27 +120,58 @@ function idKey(civlId: string): string {
 }
 
 /**
- * Match one list's rows against the roster.
- *
- * `rows` must already be narrowed to this list and its latest snapshot; the
- * caller owns that because "latest" is a property of the table, not of the
- * matching. An empty `rows` is normal — that is a list that places nobody.
+ * Is `a` the entry to keep for this pilot? **Most WPRS points wins** — see the
+ * module header. Equal points go to the lower rank, and an exact tie falls to
+ * the slug so a re-run answers identically.
  */
-export function matchList(
-  list: ListInfo,
-  roster: RosterEntry[],
-  rows: RankingRow[]
-): ListMatches {
-  const byId = new Map<string, RankingRow>();
-  // A name that two ranked pilots share is recorded as ambiguous and then
-  // never offered — the map holds `null` for it rather than losing the fact.
-  const byName = new Map<string, RankingRow | null>();
+function isBetter(a: RankedEntry, b: RankedEntry): boolean {
+  if (a.points !== b.points) return a.points > b.points;
+  if (a.rank !== b.rank) return a.rank < b.rank;
+  return a.ranking_slug < b.ranking_slug;
+}
 
-  for (const row of rows) {
-    byId.set(idKey(row.civl_id), row);
-    const key = nameKey(row.pilot_name);
-    if (byName.has(key)) byName.set(key, null);
-    else byName.set(key, row);
+/**
+ * One entry per ranked pilot: their best across every list they appear in.
+ *
+ * Done BEFORE any matching so that a pilot in four lists reads as one human
+ * rather than as four ranked pilots sharing a name — which the ambiguity rule
+ * would otherwise refuse outright, and which was the whole reason the picker
+ * existed.
+ */
+export function bestPerPilot(entries: RankedEntry[]): Map<string, RankedEntry> {
+  const best = new Map<string, RankedEntry>();
+  for (const entry of entries) {
+    const key = idKey(entry.civl_id);
+    const held = best.get(key);
+    if (!held || isBetter(entry, held)) best.set(key, entry);
+  }
+  return best;
+}
+
+/**
+ * Match the rankings against the roster.
+ *
+ * `entries` are candidate rows from every list, already narrowed to each
+ * list's latest snapshot — the caller owns "latest" because it is a property
+ * of the table, not of the matching. An empty array is normal: that is a
+ * database with no rankings imported.
+ */
+export function matchRoster(
+  roster: RosterEntry[],
+  entries: RankedEntry[]
+): RosterMatches {
+  const byId = bestPerPilot(entries);
+
+  // A name two DIFFERENT humans answer to is recorded as ambiguous and then
+  // never offered — the map holds `null` for it rather than losing the fact.
+  const byName = new Map<string, RankedEntry | null>();
+  for (const entry of byId.values()) {
+    const key = nameKey(entry.pilot_name);
+    const held = byName.get(key);
+    if (held === undefined) byName.set(key, entry);
+    else if (held !== null && idKey(held.civl_id) !== idKey(entry.civl_id)) {
+      byName.set(key, null);
+    }
   }
 
   // Ids already on the roster are spoken for: a name match must never hand a
@@ -133,27 +182,19 @@ export function matchList(
 
   // First pass: id matches (authoritative), and the name candidates.
   const matches: Record<number, RowMatch> = {};
-  const nameCandidates = new Map<number, RankingRow>();
+  const nameCandidates = new Map<number, RankedEntry>();
   const claimedByName = new Map<string, number[]>();
 
   for (const [index, entry] of roster.entries()) {
     if (entry.civl_id) {
       const hit = byId.get(idKey(entry.civl_id));
-      if (hit) {
-        matches[index] = {
-          matched_by: "civl_id",
-          civl_id: hit.civl_id,
-          pilot_name: hit.pilot_name,
-          rank: hit.rank,
-          points: hit.points,
-        };
-      }
+      if (hit) matches[index] = { ...hit, matched_by: "civl_id" };
       // A row that already carries an id is never name-matched: the id is the
       // answer, and disagreeing with it is not this button's business.
       continue;
     }
     const hit = byName.get(nameKey(entry.name));
-    if (!hit) continue; // absent, or ambiguous within the list
+    if (!hit) continue; // absent, or answered to by more than one human
     if (idsInUse.has(idKey(hit.civl_id))) continue; // another row holds this id
     nameCandidates.set(index, hit);
     const claimants = claimedByName.get(idKey(hit.civl_id)) ?? [];
@@ -165,91 +206,13 @@ export function matchList(
   // named the same person). Neither gets the id — one of them is not them.
   for (const [index, hit] of nameCandidates) {
     if ((claimedByName.get(idKey(hit.civl_id)) ?? []).length > 1) continue;
-    matches[index] = {
-      matched_by: "name",
-      civl_id: hit.civl_id,
-      pilot_name: hit.pilot_name,
-      rank: hit.rank,
-      points: hit.points,
-    };
+    matches[index] = { ...hit, matched_by: "name" };
   }
 
   const all = Object.values(matches);
   return {
-    ...list,
     matches,
     matched_count: all.length,
     rankable_count: all.filter((m) => m.matched_by === "civl_id").length,
   };
-}
-
-/**
- * Which list the picker should open on.
- *
- * The comp's own discipline goes first — a hang gliding comp has no business
- * defaulting to a paragliding list even if more of its pilots happen to be
- * ranked there — and within the discipline, the list that places the most
- * pilots. Falls back to the best list of any discipline (an organiser running
- * an HG comp with a PG-ranked field still gets something useful), then to the
- * first list we hold, and to null when we hold none.
- */
-export function defaultListSlug(
-  lists: ListMatches[],
-  category: "hg" | "pg"
-): string | null {
-  if (lists.length === 0) return null;
-  const ofDiscipline = lists.filter((l) => disciplineOf(l.slug) === category);
-  const best = (candidates: ListMatches[]): ListMatches | null =>
-    candidates.reduce<ListMatches | null>(
-      (acc, l) => (acc === null || l.matched_count > acc.matched_count ? l : acc),
-      null
-    );
-  const bestOfDiscipline = best(ofDiscipline);
-  if (bestOfDiscipline && bestOfDiscipline.matched_count > 0) {
-    return bestOfDiscipline.slug;
-  }
-  const bestOverall = best(lists);
-  if (bestOverall && bestOverall.matched_count > 0) return bestOverall.slug;
-  return bestOfDiscipline?.slug ?? lists[0].slug;
-}
-
-/**
- * The list a discipline means when nobody has said which — its main XC
- * ranking, which is what "the world ranking" refers to in either sport.
- *
- * Picking the first slug of the right discipline alphabetically does NOT work:
- * that is 'hang-gliding-class-1-sport-xc', the Sport list, so an HG comp
- * looking up its field would quietly read a ranking almost none of them are
- * in. Named, in preference order, rather than sorted.
- */
-const MAIN_LIST: Record<"hg" | "pg", string[]> = {
-  hg: ["hang-gliding-class-1-xc", "hang-gliding-class-5-xc", "hang-gliding-class-2-xc"],
-  pg: ["paragliding-xc", "paragliding-accuracy"],
-};
-
-/**
- * Which of the lists we hold to read when the caller named none.
- *
- * Unlike `defaultListSlug` this has no roster to count matches against — it is
- * for the name typeahead, which runs before there is anything to match.
- */
-export function preferredListSlug(
-  held: string[],
-  category: "hg" | "pg"
-): string | null {
-  if (held.length === 0) return null;
-  for (const slug of MAIN_LIST[category]) {
-    if (held.includes(slug)) return slug;
-  }
-  return held.find((s) => disciplineOf(s) === category) ?? held[0];
-}
-
-/**
- * The discipline a list slug belongs to. The slugs are civlcomps.org's own
- * ('hang-gliding-class-1-xc', 'paragliding-xc'), so the prefix is the
- * discipline; anything unrecognised is treated as paragliding-side only for
- * the purpose of NOT matching an 'hg' comp.
- */
-export function disciplineOf(slug: string): "hg" | "pg" {
-  return slug.startsWith("hang-gliding") ? "hg" : "pg";
 }

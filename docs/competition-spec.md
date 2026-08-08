@@ -79,8 +79,8 @@ Tables referenced from the auth-api worker:
   - pilot_class (TEXT NOT NULL) — e.g. 'open', 'novice', 'sport', 'floater'. Must be one of the comp's `pilot_classes` values. A pilot belongs to exactly one class per competition. Set to `comp.default_pilot_class` when auto-registered.
   - team_name (TEXT)
   - driver_contact (TEXT) — driver name, phone, radio channel
-  - civl_ranking (INTEGER) — CIVL world ranking snapshot at time of competition
-  - first_start_order (INTEGER) — pilot's starting order for the first competition day only (typically reverse CIVL ranking). For subsequent days, starting order is computed on-demand: reverse the previous day's top N scores for the same pilot classes, where N = the number of pilots with a day-1 `starting_order` set.
+  - wprs_points (REAL) — the pilot's WPRS score, copied from the CIVL rankings when the roster was built (migrations 0029/0030; `civl_ranking_slug` / `civl_ranking_date` record which list and month, NULL when an organiser typed the number). The score rather than a rank because a rank is only a position within one list's pool, and two pilots taken from different lists cannot be compared by it — see [civl-rankings.md](civl-rankings.md).
+  - first_start_order (INTEGER) — pilot's starting order for the first competition day only (typically reverse WPRS order). For subsequent days, starting order is computed on-demand: reverse the previous day's top N scores for the same pilot classes, where N = the number of pilots with a day-1 `starting_order` set.
 
   **Linking priority** (used at admin import and user signup): CIVL ID → any of SAFA/USHPA/BHPA/DHV/FFVL/FAI IDs → email → exact name. Name-only matches must be confirmed by an admin; they do not auto-link.
 
