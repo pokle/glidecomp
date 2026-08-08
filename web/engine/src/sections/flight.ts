@@ -438,18 +438,24 @@ function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[]
     const nextIsExit = !nextIsGoal && directions[nextIdx] === 'exit';
     const nextName = turnpointName(task, nextIdx);
     const nextDesc = `${turnpointLabel(task, nextIdx)}${nextName ? ` (${nextName})` : ''}`;
-    // The remaining routed line: from the best-progress point, through each
-    // un-reached turnpoint's optimal tag point, to goal. calculateOptimizedTaskLine
-    // returns one tag point per turnpoint, index-aligned to task.turnpoints, so
-    // slice(nextIdx) is exactly the un-reached tail (next TP … goal).
-    const remainingTags = calculateOptimizedTaskLine(task).slice(nextIdx);
-    const path: Array<{ latitude: number; longitude: number }> = [
-      {
-        latitude: result.bestProgress.latitude,
-        longitude: result.bestProgress.longitude,
-      },
-      ...remainingTags.map((p) => ({ latitude: p.lat, longitude: p.lon })),
-    ];
+    // The remaining routed line: the §8.6.1 measured route carried on the
+    // result (first element = the best-progress point). Payloads cached
+    // before the field existed fall back to the task line's tag points —
+    // an approximation of the measured route, but still a truthful "on
+    // through the remaining turnpoints" picture.
+    const path: Array<{ latitude: number; longitude: number }> =
+      result.bestProgress.remainingRoute?.map((p) => ({
+        latitude: p.lat,
+        longitude: p.lon,
+      })) ?? [
+        {
+          latitude: result.bestProgress.latitude,
+          longitude: result.bestProgress.longitude,
+        },
+        ...calculateOptimizedTaskLine(task)
+          .slice(nextIdx)
+          .map((p) => ({ latitude: p.lat, longitude: p.lon })),
+      ];
     out.push({
       id: 'best-progress',
       text: `Landed out — best distance made good along the task, ${km(result.bestProgress.distanceToGoal)} short of goal`,

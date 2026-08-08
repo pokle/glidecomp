@@ -66,6 +66,18 @@ export interface XCTask {
    * Default: 0.005 (0.5%) — the Cat 2 maximum.
    */
   cylinderTolerance?: number;
+
+  /**
+   * Optimizer directive, never parsed from a file: measure the route from
+   * the first turnpoint's BOUNDARY (its optimal tag point) instead of its
+   * centre. Annex A §2.2 measures every route from the first point's centre
+   * regardless of radius; the one caller that wants edge semantics is
+   * `taskForDistanceOrigin('start')` (gap-scoring.ts), whose trimmed task
+   * starts at the start cylinder and must not gain the centre→edge
+   * kilometres — scored distance under that origin begins at the start
+   * crossing.
+   */
+  firstTurnpointAtBoundary?: boolean;
 }
 
 /**

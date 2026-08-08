@@ -190,6 +190,16 @@ export interface BestProgress {
   distanceToGoal: number;
 
   /**
+   * The measured remaining route (§8.6.1/§6.4.1): the optimised line from
+   * this point through each un-reached control zone to goal — the very
+   * geometry {@link distanceToGoal} was summed over, exported so the map
+   * draws exactly what the scorer measured. First element is this point.
+   * Absent on payloads cached before the field existed; consumers fall
+   * back to the task line's tag points.
+   */
+  remainingRoute?: { lat: number; lon: number }[];
+
+  /**
    * Stopped tasks only (§12.3.6): the altitude-bonus distance credited at
    * this point — glideRatio × (GNSS altitude − goal altitude), clamped to
    * the geometric remaining distance. Absent when no bonus applied.

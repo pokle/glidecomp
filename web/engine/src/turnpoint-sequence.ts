@@ -727,10 +727,18 @@ interface ProgressScan {
  * turnpoint is credited to their best progress — the scanned fix with the
  * least remaining distance to goal — and gets that fix returned for the
  * explanation. A pilot with no reaching flew no scored distance.
+ *
+ * `mode` selects the remaining-distance measurement (see
+ * {@link computeBestProgress}): 'exact' — the §8.6.1 per-fix shortest-path
+ * optimisation — for the sequence that scores; 'approx' — the cheap
+ * tag/edge measure — for ranking candidate start choices against each
+ * other, where hundreds of exact optimisations per pilot would buy
+ * nothing (candidates differ by whole turnpoints, not metres).
  */
 function measureSequenceDistance(
   scan: ProgressScan,
   sequence: TurnpointReaching[],
+  mode: 'approx' | 'exact' = 'exact',
 ): { bestProgress: BestProgress | null; flownDistance: number } {
   const { task, fixes, geometry, goalIdx, nextMeasureFor, clipMs, altitudeBonus } = scan;
   const madeGoal = sequence.length > 0 &&
@@ -742,6 +750,8 @@ function measureSequenceDistance(
   const { remainingTPs, remainingLegDistances } =
     buildRemainingPath(task, lastReaching.taskIndex, geometry.segmentDistances);
   const bestProgress = computeBestProgress({
+    task,
+    lastReachedIndex: lastReaching.taskIndex,
     fixes,
     lastReachingTime: lastReaching.time.getTime(),
     remainingTPs,
@@ -749,7 +759,7 @@ function measureSequenceDistance(
     nextMeasure: nextMeasureFor(lastReaching.taskIndex),
     deadlineMs: clipMs,
     altitudeBonus,
-  });
+  }, mode);
   return {
     bestProgress,
     flownDistance: bestProgress
@@ -795,8 +805,10 @@ function chooseBestSequence(params: BestSequenceParams): TurnpointReaching[] {
     });
 
     const tpsReached = candidateSequence.length;
+    // Ranking only — the winner is re-measured with the exact §8.6.1
+    // measurement by the caller (see measureSequenceDistance's mode).
     const { flownDistance: candidateFlownDist } =
-      measureSequenceDistance(scan, candidateSequence);
+      measureSequenceDistance(scan, candidateSequence, 'approx');
     const candidateSSSTime = sssCrossing.time.getTime();
 
     // Compare: most TPs → most distance → latest SSS
