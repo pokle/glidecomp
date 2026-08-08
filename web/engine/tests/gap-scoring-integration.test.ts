@@ -178,12 +178,14 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     // First non-goal pilot (distance points now include the HG difficulty half)
     { name: 'Rich Reinauer',     rank: 13, total: 479.7, distPts: 479.7, timePts: 0, madeGoal: false },
 
-    // Mid-pack — non-goal
-    { name: 'Steve Blenkinsop',  rank: 17, total: 358.8, distPts: 358.8, timePts: 0, madeGoal: false },
+    // Mid-pack — non-goal. Blenkinsop's flown distance is measured by the
+    // §8.6.1 per-fix route optimisation at 50.74 km — AirScore publishes
+    // 50.75 for him; the old tag-point approximation read 50.59.
+    { name: 'Steve Blenkinsop',  rank: 17, total: 359.2, distPts: 359.2, timePts: 0, madeGoal: false },
     { name: 'Neale Halsall',     rank: 22, total: 237.4, distPts: 237.4, timePts: 0, madeGoal: false },
 
     // Trailing — at minimum distance floor (tied at rank 30)
-    { name: 'Ivo van der Leeden', rank: 30, total: 41.8, distPts: 41.8, timePts: 0, madeGoal: false },
+    { name: 'Ivo van der Leeden', rank: 30, total: 41.7, distPts: 41.7, timePts: 0, madeGoal: false },
   ];
 
   for (const snap of snapshots) {

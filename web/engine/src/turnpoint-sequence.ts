@@ -373,9 +373,9 @@ interface TaskGeometry {
 
 /**
  * Optimized task line (one tag point per turnpoint), computed once. The
- * tag points feed best-progress so a pilot's remaining distance to goal
- * is measured to each cylinder's optimal tag — consistent with the leg
- * distances — rather than its nearest edge. It also determines each
+ * tag points feed best-progress's cheap 'approx' measure (candidate-start
+ * ranking and the exact search's seed — the scored remaining distance is
+ * the §8.6.1 per-fix route optimisation). It also determines each
  * turnpoint's crossing direction: a cylinder containing the previous tag
  * point is an EXIT cylinder, reached by flying out of it.
  */
@@ -680,12 +680,14 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
 }
 
 /**
- * How best-progress measures the fix→next-turnpoint distance for a pilot
- * whose last reached turnpoint is lastReachedIdx — see NextTPMeasure.
+ * How best-progress's cheap 'approx' mode measures the fix→next-turnpoint
+ * distance for a pilot whose last reached turnpoint is lastReachedIdx —
+ * see NextTPMeasure (the scored measurement is the §8.6.1 per-fix route
+ * optimisation; this ranks candidate starts and seeds the exact search).
  * The nearest-edge rule after an exit cylinder applies only to INFERRED
  * exit turnpoints, not the declared-EXIT start: after a normal exit start
- * the onward route is asymmetric and well-determined, and measuring to
- * the tag point there is what matches AirScore's flown distances.
+ * the onward route is asymmetric and well-determined, so the tag point is
+ * the better approximation there.
  */
 function nextTPMeasurer(
   { directions, optimizedLine }: TaskGeometry,
@@ -727,10 +729,18 @@ interface ProgressScan {
  * turnpoint is credited to their best progress — the scanned fix with the
  * least remaining distance to goal — and gets that fix returned for the
  * explanation. A pilot with no reaching flew no scored distance.
+ *
+ * `mode` selects the remaining-distance measurement (see
+ * {@link computeBestProgress}): 'exact' — the §8.6.1 per-fix shortest-path
+ * optimisation — for the sequence that scores; 'approx' — the cheap
+ * tag/edge measure — for ranking candidate start choices against each
+ * other, where hundreds of exact optimisations per pilot would buy
+ * nothing (candidates differ by whole turnpoints, not metres).
  */
 function measureSequenceDistance(
   scan: ProgressScan,
   sequence: TurnpointReaching[],
+  mode: 'approx' | 'exact' = 'exact',
 ): { bestProgress: BestProgress | null; flownDistance: number } {
   const { task, fixes, geometry, goalIdx, nextMeasureFor, clipMs, altitudeBonus } = scan;
   const madeGoal = sequence.length > 0 &&
@@ -742,6 +752,8 @@ function measureSequenceDistance(
   const { remainingTPs, remainingLegDistances } =
     buildRemainingPath(task, lastReaching.taskIndex, geometry.segmentDistances);
   const bestProgress = computeBestProgress({
+    task,
+    lastReachedIndex: lastReaching.taskIndex,
     fixes,
     lastReachingTime: lastReaching.time.getTime(),
     remainingTPs,
@@ -749,7 +761,7 @@ function measureSequenceDistance(
     nextMeasure: nextMeasureFor(lastReaching.taskIndex),
     deadlineMs: clipMs,
     altitudeBonus,
-  });
+  }, mode);
   return {
     bestProgress,
     flownDistance: bestProgress
@@ -795,8 +807,10 @@ function chooseBestSequence(params: BestSequenceParams): TurnpointReaching[] {
     });
 
     const tpsReached = candidateSequence.length;
+    // Ranking only — the winner is re-measured with the exact §8.6.1
+    // measurement by the caller (see measureSequenceDistance's mode).
     const { flownDistance: candidateFlownDist } =
-      measureSequenceDistance(scan, candidateSequence);
+      measureSequenceDistance(scan, candidateSequence, 'approx');
     const candidateSSSTime = sssCrossing.time.getTime();
 
     // Compare: most TPs → most distance → latest SSS

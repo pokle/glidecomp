@@ -90,7 +90,15 @@ export function taskForDistanceOrigin(task: XCTask, origin: DistanceOrigin): XCT
   if (origin !== 'start') return task;
   const sssIdx = getSSSIndex(task);
   if (sssIdx <= 0) return task; // already starts at (or before) the SSS
-  return { ...task, turnpoints: task.turnpoints.slice(sssIdx) };
+  // The trimmed route begins at the start cylinder, but scored distance
+  // under this origin begins at the start CROSSING — so the first
+  // turnpoint keeps its boundary measurement instead of the Annex A §2.2
+  // launch-centre rule (which would add the start radius back in).
+  return {
+    ...task,
+    turnpoints: task.turnpoints.slice(sssIdx),
+    firstTurnpointAtBoundary: true,
+  };
 }
 
 // ---------------------------------------------------------------------------

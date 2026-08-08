@@ -343,10 +343,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </li>
             </ul>
             <p class="text-muted-foreground mt-2">
-              The two settings give different results only for a task with a take-off turnpoint.
-              A task that starts at the SSS scores the same with both settings. The setting does
-              not change the speed section (SSS→ESS), and therefore does not change time points
-              or leading points.
+              The two settings differ by the distance from the route's first point to the start
+              cylinder's edge. For a task with a take-off turnpoint, that is the take-off→start
+              leg. For a task that starts at the SSS, the FAI rule still measures from the start
+              cylinder's centre, so the two settings differ by the start radius. The setting
+              does not change the speed section (SSS→ESS), and therefore does not change time
+              points or leading points.
             </p>
           </div>
         </div>

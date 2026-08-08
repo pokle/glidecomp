@@ -3,6 +3,26 @@
 Real files kept verbatim (apart from trimming) because a hand-typed
 approximation cannot prove the parser and the checks agree on real bytes.
 
+## `bright-open-2023-open-t1.xctsk`
+
+The archive's worst launch→ESS divergence under a free-floating ESS: the
+course bends hard at a 10 km ESS ring after a 16 km cylinder, so an
+optimiser that lets the ESS tag drift toward goal reads the launch→ESS
+distance 2.5 km long. Exercises the Annex A §3.2.4 ESS pin in
+`spec-distances.test.ts`. From
+[pokle/glidecomp-archive](https://github.com/pokle/glidecomp-archive) at
+`comps/bright-open-2023-open-t1/` (AirScore reference numbers quoted in the
+test come from that folder's `airscore-result-raw.json`).
+
+## `corryong-cup-2022-open-t1.xctsk`
+
+A task whose route begins directly at the start cylinder — no TAKEOFF row —
+as AirScore-imported tasks often do. Exercises the Annex A §2.2 launch-
+centre rule (`spec-distances.test.ts`): the published cumulative distances
+(also quoted in the test) all measure from the start cylinder's CENTRE, so
+an edge-measured route loses exactly the 5 km start radius. Same archive
+provenance, `comps/corryong-cup-2022-open-t1/`.
+
 ## `mckirdy-wrong-day-nz.igc`
 
 The track that prompted `track-quality.ts`. Submitted to **Corryong Cup 2025,
