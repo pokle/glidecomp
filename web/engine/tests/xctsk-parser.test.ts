@@ -57,6 +57,42 @@ describe('XCTSK Parser', () => {
       expect(task.turnpoints[1].radius).toBe(400);
     });
 
+    it('should parse cylinderTolerance (a scoring input — issue #577)', () => {
+      // The AirScore importer writes the comp's error_margin into the task
+      // file; dropping it here runs crossing detection with a band up to 10×
+      // wider than the comp scored with. On bright-open-2025-open-t3 that
+      // swallowed every pilot's exit beyond the 33.5 km ENTER start ring.
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { type: 'SSS', radius: 400, waypoint: { name: 'Start', lat: 47.0, lon: 11.0 } },
+          { radius: 400, waypoint: { name: 'Goal', lat: 48.0, lon: 12.0 } },
+        ],
+        cylinderTolerance: 0.0005,
+      });
+
+      expect(parseXCTask(taskJson).cylinderTolerance).toBe(0.0005);
+    });
+
+    it('should leave cylinderTolerance undefined when absent or invalid', () => {
+      const base = {
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { radius: 400, waypoint: { name: 'A', lat: 47.0, lon: 11.0 } },
+        ],
+      };
+      expect(parseXCTask(JSON.stringify(base)).cylinderTolerance).toBeUndefined();
+      // Same bounds as the API validator: a fraction in [0, 0.1].
+      for (const bad of ['0.0005', -0.001, 0.2, NaN, null]) {
+        const task = parseXCTask(JSON.stringify({ ...base, cylinderTolerance: bad }));
+        expect(task.cylinderTolerance).toBeUndefined();
+      }
+      // An explicit 0 is a real declaration (only the ±5 m minimum applies).
+      expect(parseXCTask(JSON.stringify({ ...base, cylinderTolerance: 0 })).cylinderTolerance).toBe(0);
+    });
+
     it('should parse task with SSS and goal configuration', () => {
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',

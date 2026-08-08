@@ -95,7 +95,16 @@ CIVL GAP specifies a tolerance band on cylinder radii to compensate for differen
 - **Cat 1 (World/Continental championships):** 0.1%
 - **Cat 2 (other FAI competitions):** up to 0.5%
 
-This is applied in `detectCylinderCrossings()` via `XCTask.cylinderTolerance` (default 0.5%). The effective radius for crossing detection is `radius × (1 + tolerance)`, but the crossing point is interpolated to the nominal radius.
+This is applied in `detectCylinderCrossings()` via `XCTask.cylinderTolerance`.
+The value comes from the task file — `parseXCTask` reads a declared
+`cylinderTolerance` field (the AirScore importer writes the comp's
+`error_margin` into it), and only a task that declares none falls back to
+the 0.5% default. The effective radius for crossing detection is
+`radius × (1 + tolerance)`, but the crossing point is interpolated to the
+nominal radius. The band's width is a scoring decision, not a nicety: on a
+33.5 km ENTER start ring the default band is 167.5 m wide, and scoring a
+comp that declared 0.05% (16.75 m) with it swallowed every pilot's exit
+past the ring — see issue #577 and the changelog below.
 
 ## Geometry Functions
 
@@ -205,12 +214,7 @@ cached.
 ## Limitations and Future Enhancements
 
 ### Current Limitations
-1. **ENTER-direction start concentric with the next turnpoint**: distance
-   optimisation handles it, but sequence resolution scores the field landed
-   out at the start on the archive task that has one — see
-   [issue #577](https://github.com/pokle/glidecomp/issues/577).
-
-2. **No turn direction constraints**: Doesn't account for sectors (e.g., "must turn left around turnpoint"). All turnpoints are treated as full cylinders.
+1. **No turn direction constraints**: Doesn't account for sectors (e.g., "must turn left around turnpoint"). All turnpoints are treated as full cylinders.
 
 ### Potential Enhancements
 1. **Sector support**: Handle sector turnpoints (entry/exit sectors with specific angles)
@@ -222,9 +226,10 @@ cached.
 Tests are in `web/engine/tests/task-optimizer.test.ts`, with the S7F §6.4
 rules covered by three dedicated files:
 
-- `spec-distances.test.ts` — the launch-centre rule and the ESS pin against
-  two curated archive fixtures (`tests/fixtures/*.xctsk`), asserting
-  AirScore's published per-waypoint cumulative distances.
+- `spec-distances.test.ts` — the launch-centre rule, the ESS pin and the
+  concentric-ENTER-start out-and-back route against three curated archive
+  fixtures (`tests/fixtures/*.xctsk`), asserting AirScore's published
+  per-waypoint cumulative distances.
 - `best-progress-remaining.test.ts` — the §8.6.1 remaining-route
   measurement: dogleg re-optimisation, LINE goals, un-reached exit
   cylinders, the carried `remainingRoute`, manual-flight parity.
@@ -255,6 +260,14 @@ rules covered by three dedicated files:
 - **Andoyer-Lambert Formula**: WGS84 ellipsoid distance approximation (~2 ppm accuracy vs Vincenty)
 
 ## Change Log
+
+### 2026-08-08: Declared cylinder tolerance honoured (issue #577)
+- `parseXCTask` reads the task file's `cylinderTolerance` field; the 0.5%
+  default now applies only to tasks that declare none. Before this, every
+  imported comp scored with a band up to 10× wider than it declared — on
+  bright-open-2025-open-t3 (takeoff inside a 33.5 km ENTER start ring) the
+  default band swallowed the field's shallow exits past the ring and scored
+  everyone landed out at the start. Engine scoring version 33 → 34
 
 ### 2026-08-08: S7F §6.4 distance definitions (2024 edition)
 - Launch measured from the first turnpoint's CENTRE regardless of type
