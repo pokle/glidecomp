@@ -1,15 +1,15 @@
 /**
  * The roster editor's side of the CIVL world rankings.
  *
- * Two fill buttons sit on the pilots grid: one puts CIVL IDs against names,
- * the other puts each pilot's WPRS ranking beside them. Both read
+ * One fill button sits on the pilots grid: it puts CIVL IDs against names,
+ * then each pilot's WPRS score beside them. It reads
  * `POST /api/comp/:comp_id/pilot/civl-rankings`, which answers about the rows
  * currently in the GRID rather than the saved roster — the organiser is
  * mid-edit when they press it.
  *
  * The rules live on the server (`civl-ranking-match.ts`, with the reasoning);
  * this module holds the call, the display labels, and the two pure functions
- * that turn a lookup into row edits, so the fills can be tested without a grid.
+ * that turn a lookup into row edits, so the fill can be tested without a grid.
  */
 import { api } from "../../comp/api";
 import type { ParsedRow } from "./csv";
@@ -56,47 +56,6 @@ export async function lookupRankings(
   });
   if (!res.ok) throw new Error(`Ranking lookup failed (${res.status})`);
   return (await res.json()) as RankingLookup;
-}
-
-/** One ranked pilot offered to the name typeahead, from their best-scoring list. */
-export interface RankedPilot {
-  civl_id: string;
-  pilot_name: string;
-  rank: number;
-  points: number;
-  nation: string;
-  ranking_slug: string;
-  ranking_name: string;
-  ranking_date: string;
-}
-
-/**
- * Ranked pilots whose name contains `term`, for the roster editor's typeahead.
- *
- * Every list is searched and each pilot offered once, from the list where
- * they score the most WPRS points — the same number the fill button gives.
- *
- * Returns [] on any failure. A typeahead that cannot reach the server has
- * nothing to offer, and saying so on every keystroke would be worse than
- * offering nothing — the organiser types the name themselves either way.
- */
-export async function searchRankedPilots(
-  compId: string,
-  term: string
-): Promise<RankedPilot[]> {
-  const q = term.trim();
-  if (q.length < 2) return [];
-  try {
-    const res = await api.api.comp[":comp_id"].pilot["civl-search"].$get({
-      param: { comp_id: compId },
-      query: { q },
-    });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { pilots: RankedPilot[] };
-    return body.pilots ?? [];
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -170,26 +129,6 @@ export function rankingSource(pilot: {
   if (pilot.wprs_points === null) return "";
   if (!pilot.civl_ranking_slug) return "set by organiser";
   return `${listLabel(pilot.civl_ranking_slug)} · ${formatRankingMonth(pilot.civl_ranking_date)}`;
-}
-
-/**
- * Everything one chosen pilot brings with them.
- *
- * The name is CIVL's spelling, not the organiser's half-typed one: having
- * picked this human out of a list, the roster should agree with the list about
- * how they are spelled — that is what makes the next lookup match by name too.
- *
- * The score travels with the list and month it came from, exactly as the fill
- * button's does, so the roster can say where the number came from.
- */
-export function pilotDetails(pilot: RankedPilot): Partial<ParsedRow> {
-  return {
-    name: pilot.pilot_name,
-    civl_id: pilot.civl_id,
-    wprs_points: String(pilot.points),
-    civl_ranking_slug: pilot.ranking_slug,
-    civl_ranking_date: pilot.ranking_date,
-  };
 }
 
 /** What a fill did, for the status line under the grid. */

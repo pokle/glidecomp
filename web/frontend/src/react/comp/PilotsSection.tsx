@@ -19,13 +19,7 @@ import {
   Link as AriaLink,
   type SortDescriptor,
 } from "react-aria-components";
-import type {
-  CellComponent,
-  ColumnDefinition,
-  RowComponent,
-  RowRangeLookup,
-  Tabulator,
-} from "tabulator-tables";
+import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import { Badge } from "@/react/rac/badge";
 import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
@@ -42,9 +36,6 @@ import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { TabulatorGrid } from "./TabulatorGrid";
 import {
   fillCivlIds,
-  pilotDetails,
-  searchRankedPilots,
-  type RankedPilot,
   fillRankings,
   formatRankingMonth,
   listLabel,
@@ -336,14 +327,9 @@ const EMPTY_GRID_PLACEHOLDER = `
  * Tabulator column definitions: a frozen remove button, then one editable
  * column per CSV column. The class column is a list editor limited to the
  * comp's classes; the name column is frozen so horizontal scrolling never
- * loses track of whose row is being edited, and suggests ranked pilots as the
- * organiser types (see `suggest`).
+ * loses track of whose row is being edited.
  */
-function gridColumns(
-  compClasses: string[],
-  /** Ranked pilots matching what has been typed so far, for the name column. */
-  suggest: (term: string) => Promise<RankedPilot[]>
-): ColumnDefinition[] {
+function gridColumns(compClasses: string[]): ColumnDefinition[] {
   const remove: ColumnDefinition = {
     title: "",
     width: 36,
@@ -370,34 +356,6 @@ function gridColumns(
     if (c.key === "name") {
       def.frozen = true;
       def.minWidth = 140;
-      // An autocomplete over the CIVL rankings, and NOT a closed list:
-      // freetext is what keeps the column a name field. Most rosters have
-      // pilots who have never been ranked, and a cell that refused to hold
-      // them would be a worse column than one with no suggestions at all.
-      def.editor = "list";
-      def.editorParams = {
-        autocomplete: true,
-        freetext: true,
-        allowEmpty: true,
-        // Ask the server per keystroke rather than filtering a cached list:
-        // the rankings are ~2,000 names per list, and which list is being read
-        // can change between one cell and the next.
-        filterRemote: true,
-        // @types/tabulator-tables types `valuesLookup` as RowRangeLookup (the
-        // "active"/"visible"/"all" strings) only. Tabulator 6 also accepts a
-        // (cell, filterTerm) function, which is the whole point of
-        // filterRemote — so the ONE field is cast, leaving the rest checked.
-        valuesLookup: (async (_cell: CellComponent, term: string) => {
-          const pilots = await suggest(term ?? "");
-          // The label carries what tells two pilots of the same name apart —
-          // nation and world rank — while the VALUE stays the bare name,
-          // because the cell is a name and has to read like one.
-          return pilots.map((p) => ({
-            label: `${p.pilot_name} · ${p.nation || "—"} · #${p.rank}`,
-            value: p.pilot_name,
-          }));
-        }) as unknown as RowRangeLookup,
-      };
     }
     if (c.key === "pilot_class") {
       def.editor = "list";
@@ -512,45 +470,6 @@ function EditPilotsDialog({
     },
     [compId]
   );
-
-  /**
-   * The name column's typeahead, and the memory that lets a pick fill a row.
-   *
-   * Tabulator's list editor hands `cellEdited` the chosen VALUE — here the
-   * bare name — and not the item it came from, so the suggestions are kept
-   * until the edit lands and the pilot is recovered from them.
-   */
-  const suggestionsRef = useRef<RankedPilot[]>([]);
-
-  const suggestPilots = useCallback(
-    async (term: string): Promise<RankedPilot[]> => {
-      const pilots = await searchRankedPilots(compId, term);
-      suggestionsRef.current = pilots;
-      return pilots;
-    },
-    [compId]
-  );
-
-  /**
-   * A name that came from the typeahead brings its pilot's details with it.
-   *
-   * Only an UNAMBIGUOUS name is acted on. Two ranked pilots sharing a name is
-   * rare but real, and the cell records the name rather than which of them was
-   * highlighted — so rather than guess, the row keeps the name and the
-   * organiser fills the id themselves. Same rule the fill button follows.
-   *
-   * An id already in the row is never overwritten: it is someone's deliberate
-   * answer, and a name is not evidence against it.
-   */
-  function applyPickedPilot(row: RowComponent, name: string) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const hits = suggestionsRef.current.filter((p) => p.pilot_name === trimmed);
-    if (hits.length !== 1) return;
-    const current = row.getData() as ParsedRow;
-    if (current.civl_id) return;
-    row.update(pilotDetails(hits[0]));
-  }
 
   function addRow() {
     void tableRef.current?.addRow(emptyRow(compClasses));
@@ -778,7 +697,7 @@ function EditPilotsDialog({
         <TabulatorGrid
           id="pilots-grid"
           className="gc-grid min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden rounded border border-border"
-          initialColumns={() => gridColumns(compClasses, suggestPilots)}
+          initialColumns={() => gridColumns(compClasses)}
           initialData={() => pilots.map(pilotToRow)}
           options={{
             layout: "fitDataStretch",
@@ -791,11 +710,6 @@ function EditPilotsDialog({
           tableRef={tableRef}
           events={{
             cellEdited: (cell) => {
-              // A name picked from the typeahead brings its id and ranking.
-              if (cell.getField() === "name") {
-                applyPickedPilot(cell.getRow(), String(cell.getValue() ?? ""));
-                return;
-              }
               // Typing over a score makes it the organiser's number, so the
               // list and month it used to carry stop being true of it. They
               // are cleared here rather than at save time so the cell's
@@ -889,8 +803,7 @@ function EditPilotsDialog({
       </Dialog>
 
       {/* Nested inside the editor's Modal, the way RouteEditorDialog nests
-          AddWaypointDialog. It reads and writes the SAME lookup state, so the
-          list chosen here is also the one the name typeahead searches. */}
+          AddWaypointDialog. */}
       {civlOpen ? (
         <CivlFillDialog
           lookup={lookup}

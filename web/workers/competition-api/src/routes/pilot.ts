@@ -10,14 +10,9 @@ import {
   createCompPilotSchema,
   bulkPilotsSchema,
   civlRankingLookupSchema,
-  civlPilotSearchSchema,
   validated,
 } from "../validators";
-import {
-  bestPerPilot,
-  matchRoster,
-  type RankedEntry,
-} from "../civl-ranking-match";
+import { matchRoster, type RankedEntry } from "../civl-ranking-match";
 import { resolvePilotId } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { audit, auditAll, describeChange } from "../audit";
@@ -28,10 +23,6 @@ import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
 const PILOT_RESOLVE_CONCURRENCY = 10;
 
 const MAX_PILOTS_PER_COMP = 250;
-
-/** Suggestions per keystroke. Long enough to hold every Smith worth choosing
- *  between, short enough that a two-letter term is not a page of names. */
-const CIVL_SEARCH_LIMIT = 20;
 
 /**
  * Values per statement in the CIVL ranking lookup. D1 rejects a statement with
@@ -47,9 +38,6 @@ function chunk<T>(values: T[], size: number): T[][] {
   for (let i = 0; i < values.length; i += size) out.push(values.slice(i, i + size));
   return out;
 }
-
-/** CIVL publishes ten lists; used only to size the typeahead's over-fetch. */
-const MAX_LISTS = 10;
 
 /**
  * Each list we hold, mapped to its newest snapshot date.
@@ -728,69 +716,6 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         deleted: toDelete.length,
         total: after.results.length,
       });
-    }
-  )
-
-  // ── GET /api/comp/:comp_id/pilot/civl-search ── Admin: ranked pilots whose
-  // name contains `q`, for the roster editor's name typeahead.
-  //
-  // The roster is a spreadsheet an organiser types into, and most of what they
-  // type is a name they already know how CIVL spells. Offering the ranked
-  // pilots as they type is what lets the id and the rank arrive WITH the name
-  // instead of being reconciled afterwards — the same match the fill button
-  // makes, made one row at a time and before the ambiguity exists.
-  //
-  // Deliberately NOT the matcher: this suggests, and a human chooses. The
-  // matcher's refusal to act on an ambiguous name is about filling cells
-  // unattended; here two pilots called the same thing are simply two rows in
-  // the list, told apart by their id, nation and rank.
-  //
-  // Searches EVERY list and offers each pilot once, at their best rank — the
-  // same number the fill button would give them. Suggesting a per-list rank
-  // here while the button filled a cross-list best would put two different
-  // numbers in front of the organiser for one pilot.
-  .get(
-    "/api/comp/:comp_id/pilot/civl-search",
-    requireAuth,
-    sqidsMiddleware,
-    requireCompAdmin,
-    validated("query", civlPilotSearchSchema),
-    async (c) => {
-      const { q } = c.req.valid("query");
-
-      const lists = await latestSnapshots(c.env.DB);
-      if (lists.size === 0) return c.json({ pilots: [] });
-
-      // LIKE's own wildcards have to be neutralised or a name containing '%'
-      // would match the table. ESCAPE names the character that does it.
-      const term = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
-
-      // Over-fetch: the cap is on PILOTS offered, and one pilot can occupy
-      // several of these rows before they are collapsed to their best.
-      const rows = await c.env.DB.prepare(
-        `SELECT civl_id, pilot_name, "rank", points, nation,
-                ranking_slug, ranking_name, ranking_date
-           FROM pilot_ranking
-          WHERE pilot_name LIKE ?1 ESCAPE '\\'
-          ORDER BY "rank" ASC, pilot_name ASC
-          LIMIT ?2`
-      )
-        .bind(term, CIVL_SEARCH_LIMIT * MAX_LISTS)
-        .all<RankedEntry & { nation: string }>();
-
-      // Latest snapshot only: the table transiently holds two months for a
-      // list while the importer swaps them (migration 0025), and a pilot's
-      // best rank must not be one they no longer hold.
-      const current = rows.results.filter(
-        (row) => lists.get(row.ranking_slug) === row.ranking_date
-      );
-      const nations = new Map(current.map((row) => [row.civl_id, row.nation]));
-      const best = [...bestPerPilot(current).values()]
-        .sort((a, b) => a.rank - b.rank || a.pilot_name.localeCompare(b.pilot_name))
-        .slice(0, CIVL_SEARCH_LIMIT)
-        .map((entry) => ({ ...entry, nation: nations.get(entry.civl_id) ?? "" }));
-
-      return c.json({ pilots: best });
     }
   )
 

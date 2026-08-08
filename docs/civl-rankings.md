@@ -201,9 +201,8 @@ pilots to 6,875 — see [One number per pilot](#one-number-per-pilot-wprs-points
 below. The migration converts every stored rank back to the points it came
 from, by the (list, month, pilot) it recorded.
 
-**Filling the roster in** happens two ways in the pilots editor
-(`/comp/:id/pilots` → Edit, `src/react/comp/PilotsSection.tsx` +
-`civl-rankings.ts`), and both apply the same rules.
+**Filling the roster in** happens in the pilots editor (`/comp/:id/pilots` →
+Edit, `src/react/comp/PilotsSection.tsx` + `civl-rankings.ts`).
 
 **"Fill from CIVL…"**, in the editor's footer with the other grid-wide
 actions. It opens a dialog of its own (`CivlFillDialog`) saying how many of
@@ -231,20 +230,9 @@ when missing", and a number already in the grid is somebody's answer — typed
 for a pilot the lists have wrong or have missed, or filled from an earlier
 import. The cost is the refresh path: when CIVL publishes a new month, filling
 again adds nothing to a roster that is already scored, and **clearing a score
-is how an organiser asks for the newer one**. The outcome line says
-so, because "0 rankings filled in" otherwise reads as a failure — a matched
-row that was left alone is counted separately (`already_set`) from one the
-list has never heard of.
-
-**A name typeahead**, on the name column. Typing two or more characters offers
-ranked pilots — each once, from their best-scoring list — labelled with nation
-and world rank because that is what tells two pilots of one name apart. Picking one
-takes CIVL's spelling of the name and brings the id and the rank with it — the
-same match the button makes, made one row at a time and before the ambiguity
-exists. The column stays **freetext**: most rosters have pilots who have never
-been ranked, and a name cell that refused to hold them would be worse than one
-with no suggestions. It reads `GET /api/comp/:comp_id/pilot/civl-search`
-(admin only), and an id already in the row is never overwritten.
+is how an organiser asks for the newer one**. The outcome line says so, because
+"0 filled in" otherwise reads as a failure — a matched row that was left alone
+is counted separately (`already_set`) from one no list has heard of.
 
 Every ambiguity is refused rather than resolved: two DIFFERENT ranked humans
 sharing a name, two roster rows claiming one ranked pilot, or a ranked pilot
@@ -256,15 +244,12 @@ claim matches the query could never fetch. Rules and reasoning:
 
 The button reads `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
 which answers about the rows in the **grid** — the organiser is mid-edit when
-they press it — and returns every list we hold, including ones that place
-nobody, so a wrong-discipline pick shows as "0 of 24" instead of vanishing.
-Nothing is written until Save.
-
-The typeahead's route defaults to the discipline's **main** XC list when the
-caller names none (`preferredListSlug`). Taking the first slug of the right
-discipline alphabetically does not work: that is
-`hang-gliding-class-1-sport-xc`, so an HG comp would quietly search a list
-almost none of its field is in.
+they press it, and asking about the SAVED roster would answer about a state
+they are in the middle of leaving. The dialog asks again every time it opens,
+for the same reason: a name corrected since the grid loaded is the commonest
+reason to press the button at all, and the matches are keyed by row index, so
+a stale answer does not merely miss — it can put one pilot's id on another
+pilot's row. Nothing is written until Save.
 
 Writes go through the ordinary roster save, so they are `audit()`ed like any
 other roster change. They take **no** `bumpAndRevalidateScores()` call: a world

@@ -314,18 +314,6 @@ export const civlRankingLookupSchema = z.object({
     .max(250),
 });
 
-/**
- * Query for the roster editor's name typeahead.
- *
- * `q` has a floor of two characters so a stray keystroke cannot ask for a scan
- * of every ranked pilot, and a ceiling because a name is a name. There is no
- * list to name: every list is searched, and each pilot is offered once, from
- * the list where they score the most WPRS points.
- */
-export const civlPilotSearchSchema = z.object({
-  q: z.string().trim().min(2).max(MAX_TEXT),
-});
-
 // ── Task validators ──
 
 // ── XCTask (xctsk) — strict schema, SEC-12 ──

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   fillCivlIds,
   fillRankings,
-  pilotDetails,
   formatRankingMonth,
   listLabel,
   rankingSource,
@@ -247,37 +246,64 @@ describe("listLabel", () => {
   });
 });
 
-describe("pilotDetails", () => {
-  const picked = {
-    civl_id: "2231",
-    pilot_name: "Jonny Durand",
-    rank: 7,
-    points: 281,
-    nation: "Australia",
-    ranking_slug: "hang-gliding-class-1-xc",
-    ranking_name: "HG Class 1",
-    ranking_date: "2026-08-01",
-  };
-
-  it("brings the id, the score, and where the score came from", () => {
-    expect(pilotDetails(picked)).toEqual({
-      name: "Jonny Durand",
-      civl_id: "2231",
-      wprs_points: "281",
-      civl_ranking_slug: "hang-gliding-class-1-xc",
-      civl_ranking_date: "2026-08-01",
-    });
+describe("rankingSource", () => {
+  it("names the list and the month for an imported score", () => {
+    expect(
+      rankingSource({
+        wprs_points: 261.5,
+        civl_ranking_slug: "hang-gliding-class-1-xc",
+        civl_ranking_date: "2026-07-01",
+      })
+    ).toBe("HG Class 1 · Jul 2026");
   });
 
-  it("takes CIVL's spelling of the name, not the organiser's", () => {
-    // The half-typed "Durand" that opened the list is replaced by the full
-    // name, which is what makes the NEXT lookup match this row by name too.
-    expect(pilotDetails(picked).name).toBe("Jonny Durand");
+  it("says a hand-set score is hand-set rather than leaving it bare", () => {
+    expect(
+      rankingSource({
+        wprs_points: 30,
+        civl_ranking_slug: null,
+        civl_ranking_date: null,
+      })
+    ).toBe("set by organiser");
   });
 
-  it("writes the score as the string the grid's cells hold", () => {
-    // ParsedRow is the spreadsheet's shape: every cell is text, so a number
-    // here would compare unequal to a typed one and re-render oddly.
-    expect(pilotDetails(picked).wprs_points).toBe("281");
+  it("says nothing at all when there is no score", () => {
+    expect(
+      rankingSource({
+        wprs_points: null,
+        civl_ranking_slug: null,
+        civl_ranking_date: null,
+      })
+    ).toBe("");
+  });
+});
+
+describe("formatRankingMonth", () => {
+  it("reads an ISO snapshot date as a month", () => {
+    expect(formatRankingMonth("2026-07-01")).toBe("Jul 2026");
+    expect(formatRankingMonth("2026-01-01")).toBe("Jan 2026");
+    expect(formatRankingMonth("2025-12-01")).toBe("Dec 2025");
+  });
+
+  it("is empty for no date and passes anything unexpected through", () => {
+    expect(formatRankingMonth(null)).toBe("");
+    expect(formatRankingMonth("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("listLabel", () => {
+  it("labels the lists with CIVL's own names", () => {
+    // Taken from a real import's ranking_name column, not guessed from the
+    // slug: the picker shows the snapshot's name and the roster shows this
+    // one, so "paragliding-accuracy" has to be "PGA" in both.
+    expect(listLabel("paragliding-xc")).toBe("PG XC");
+    expect(listLabel("hang-gliding-class-1-sport-xc")).toBe("HG Class 1 Sport");
+    expect(listLabel("paragliding-accuracy")).toBe("PGA");
+    expect(listLabel("paragliding-aerobatics")).toBe("PG Acro Solo");
+  });
+
+  it("makes an unknown list readable rather than dropping it", () => {
+    // CIVL adding an eleventh list must not blank out a stored ranking's source.
+    expect(listLabel("paragliding-speed-run")).toBe("Paragliding Speed Run");
   });
 });

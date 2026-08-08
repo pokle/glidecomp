@@ -2,8 +2,8 @@
  * CIVL world rankings on the pilot roster (/comp/:id/pilots).
  *
  * The organiser's workflow, end to end: open the roster editor, fill the CIVL
- * IDs the ranking list can identify by name, fill each pilot's WPRS score
- * from their ID, save, and read the roster down the points column to build a
+ * IDs the rankings can identify by name, fill each pilot's WPRS score from
+ * their ID, save, and read the roster down the points column to build a
  * launch order.
  *
  * Runs against a SYNTHETIC list (`bun run seed-civl-rankings` — slug
@@ -125,10 +125,10 @@ test.beforeEach(async ({ page }) => {
 /**
  * Wait for the editor's grid to be built and its ranking lookup answered.
  *
- * The lookup is what the typeahead and the fill both read, and it is fired
- * when the grid reports ready — so "the Fill button is enabled" is the one
- * signal that covers both. It used to be "the picker shows a list name", which
- * stopped existing when the picker moved into its own dialog.
+ * The grid builds lazily (Tabulator is loaded on demand), so a test that
+ * starts editing before its first row exists is testing an empty table. The
+ * enabled Fill button is the second half: it is what the roster actions wait
+ * on.
  */
 async function expectGridReady(page: Page): Promise<void> {
   await expect(page.locator("#pilots-grid .tabulator-row").first()).toBeVisible({
@@ -209,40 +209,6 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   await expect(page.getByRole("row", { name: /Bruno Ridge/ })).toContainText(
     brunoScore!
   );
-});
-
-test("typing a name suggests ranked pilots, and picking one brings its id and score", async ({
-  page,
-}) => {
-  await page.goto(`/comp/${compId}/pilots`);
-  await page.getByRole("button", { name: "Edit" }).click();
-  await expectGridReady(page);
-
-  // The grid sorts by name, so row one is Ada Thermal — in the list, and with
-  // no id yet. Retyping her name is the path this feature exists for: the
-  // organiser knows who they mean, and the id should arrive WITH the name
-  // rather than be reconciled afterwards.
-  const nameCell = page
-    .locator('#pilots-grid .tabulator-row .tabulator-cell[tabulator-field="name"]')
-    .first();
-  // Tabulator opens its editor on a SINGLE click; a double click reopens it
-  // and loses the first keystrokes.
-  await nameCell.click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.type("Ada", { delay: 60 });
-
-  // The suggestion says who they are, not just what they are called — nation
-  // and world rank are what tell two pilots of one name apart.
-  const suggestion = page.locator(".tabulator-edit-list-item", { hasText: "Ada Thermal" });
-  await expect(suggestion.first()).toBeVisible({ timeout: 20_000 });
-  await suggestion.first().click();
-
-  // The row now carries what the lists know: CIVL's spelling, the id, the score.
-  const row = page
-    .locator("#pilots-grid .tabulator-row", { hasText: "Ada Thermal" })
-    .first();
-  await expect(row.locator('[tabulator-field="civl_id"]')).not.toHaveText("");
-  await expect(row.locator('[tabulator-field="wprs_points"]')).not.toHaveText("");
 });
 
 test("the roster sorts by WPRS points, unscored pilots last either way", async ({
