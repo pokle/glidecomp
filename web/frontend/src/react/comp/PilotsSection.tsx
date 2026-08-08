@@ -647,6 +647,27 @@ function EditPilotsDialog({
   }
 
   /**
+   * Open the fill dialog, asking the rankings about the grid AS IT IS NOW.
+   *
+   * This used to be asked once, when the grid finished loading, and the answer
+   * reused forever after. A name corrected in the meantime — which is the
+   * commonest reason a pilot has no ID, and so the commonest reason to press
+   * this button — was still being matched against the name it had on load, so
+   * the fill did nothing at all. Saving and reopening the editor fixed it,
+   * because that rebuilt the grid and asked again.
+   *
+   * Dropping the old answer first is what makes the dialog say "Reading the
+   * CIVL world rankings…" rather than showing a count from before the edit.
+   * The grid cannot be edited while the dialog is over it, so an answer taken
+   * here is still true when Fill is pressed.
+   */
+  function openCivlFill() {
+    setLookup(null);
+    setCivlOpen(true);
+    void refreshLookup(gridRows());
+  }
+
+  /**
    * Run the fill, then close the dialog it was started from.
    *
    * Closing on the way out is what puts the result in front of the organiser:
@@ -792,10 +813,7 @@ function EditPilotsDialog({
               });
             },
           }}
-          onReady={() => {
-            setGridReady(true);
-            void refreshLookup(gridRows());
-          }}
+          onReady={() => setGridReady(true)}
         />
 
         {status ? <p className="text-sm text-muted-foreground">{status}</p> : null}
@@ -857,7 +875,7 @@ function EditPilotsDialog({
               variant="outline"
               size="sm"
               isDisabled={!gridReady}
-              onPress={() => setCivlOpen(true)}
+              onPress={() => openCivlFill()}
             >
               Fill from CIVL…
             </Button>

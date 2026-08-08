@@ -58,6 +58,13 @@ const ROSTER = [...MATCHING_ROSTER, ...FILLER_ROSTER];
 
 let compId: string;
 
+/** The dev server, honouring the worktree port override (fixtures/stack.ts). */
+function baseUrl(): string {
+  return process.env.DEV_FRONTEND_PORT
+    ? `http://localhost:${process.env.DEV_FRONTEND_PORT}`
+    : "http://localhost:3000";
+}
+
 async function signIn(page: Page): Promise<void> {
   const login = await page.request.post("/api/auth/dev-login", { data: TEST_USER });
   expect(login.ok(), await login.text()).toBe(true);
@@ -81,11 +88,7 @@ test.beforeAll(async ({ playwright }) => {
   // anyone having run the real importer. Cheap and idempotent.
   execSync("bun run seed-civl-rankings", { stdio: "inherit", timeout: 120_000 });
 
-  const api = await playwright.request.newContext({
-    baseURL: process.env.DEV_FRONTEND_PORT
-      ? `http://localhost:${process.env.DEV_FRONTEND_PORT}`
-      : "http://localhost:3000",
-  });
+  const api = await playwright.request.newContext({ baseURL: baseUrl() });
   const login = await api.post("/api/auth/dev-login", { data: TEST_USER });
   expect(login.ok(), await login.text()).toBe(true);
 
@@ -109,11 +112,7 @@ test.beforeAll(async ({ playwright }) => {
 });
 
 test.afterAll(async ({ playwright }) => {
-  const api = await playwright.request.newContext({
-    baseURL: process.env.DEV_FRONTEND_PORT
-      ? `http://localhost:${process.env.DEV_FRONTEND_PORT}`
-      : "http://localhost:3000",
-  });
+  const api = await playwright.request.newContext({ baseURL: baseUrl() });
   await api.post("/api/auth/dev-login", { data: TEST_USER });
   if (compId) await api.delete(`/api/comp/${compId}`);
   await api.dispose();
@@ -301,4 +300,77 @@ test("a score typed over by hand stops claiming a source", async ({ page }) => {
   await expect(adaRow).toContainText("99");
   await expect(adaRow).toContainText("set by organiser");
   await expect(adaRow).not.toContainText("Sample World Ranking");
+});
+
+test("the fill reads the grid as it is NOW, not as it was loaded", async ({
+  page,
+  playwright,
+}) => {
+  // The bug: the rankings were asked about the roster once, when the grid
+  // finished loading, and the answer reused for every fill afterwards. Two
+  // ways that goes wrong, and this exercises the worse one.
+  //
+  //  1. A name corrected in the grid was still matched against the name it
+  //     had on load, so the fill did nothing — which is how it was found.
+  //  2. The matches are keyed by ROW INDEX. Delete a row and every index
+  //     below it shifts, so a stale answer applies one pilot's ID to a
+  //     DIFFERENT pilot's row. Silent, and wrong in the roster.
+  //
+  // Its own comp, with its own ID-less roster: the shared one has ids saved
+  // into it by the first test, and an already-identified roster has no name
+  // matches left for a shifted index to misplace.
+  const api = await playwright.request.newContext({ baseURL: baseUrl() });
+  await api.post("/api/auth/dev-login", { data: TEST_USER });
+  const created = await api.post("/api/comp", {
+    data: { name: e2eCompName("CIVL Stale"), category: "hg", pilot_classes: ["open"] },
+  });
+  const staleCompId = ((await created.json()) as { comp_id: string }).comp_id;
+  try {
+    await api.post(`/api/comp/${staleCompId}/pilot/bulk`, {
+      data: {
+        pilots: ["Ada Thermal", "Bruno Ridge", "Cleo Vario", "Zulu Nobody"].map(
+          (registered_pilot_name) => ({ registered_pilot_name, pilot_class: "open" })
+        ),
+      },
+    });
+
+    await page.goto(`/comp/${staleCompId}/pilots`);
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expectGridReady(page);
+
+    // Ada sorts first, so the answer taken at load has HER name match at
+    // index 0. Removing her row shifts Bruno into that index.
+    const adaRow = page
+      .locator("#pilots-grid .tabulator-row", { hasText: "Ada Thermal" })
+      .first();
+    await adaRow.locator('[title="Remove pilot"]').click();
+    await expect(
+      page.locator("#pilots-grid .tabulator-row", { hasText: "Ada Thermal" })
+    ).toHaveCount(0);
+
+    await openCivlDialog(page);
+    await page.getByRole("button", { name: "Fill", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Fill from CIVL rankings" })
+    ).toBeHidden({ timeout: 20_000 });
+
+    // Bruno gets Bruno's id. Against the stale answer he was handed Ada's
+    // (9000001) — a real pilot, a plausible-looking roster, the wrong human.
+    const bruno = page
+      .locator("#pilots-grid .tabulator-row", { hasText: "Bruno Ridge" })
+      .first();
+    await expect(bruno.locator('[tabulator-field="civl_id"]')).toHaveText("9000002");
+    const cleo = page
+      .locator("#pilots-grid .tabulator-row", { hasText: "Cleo Vario" })
+      .first();
+    await expect(cleo.locator('[tabulator-field="civl_id"]')).toHaveText("9000003");
+    // Nobody in any list: still empty, not handed the leftovers.
+    const zulu = page
+      .locator("#pilots-grid .tabulator-row", { hasText: "Zulu Nobody" })
+      .first();
+    await expect(zulu.locator('[tabulator-field="civl_id"]')).toHaveText("");
+  } finally {
+    await api.delete(`/api/comp/${staleCompId}`);
+    await api.dispose();
+  }
 });
