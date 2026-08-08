@@ -1990,7 +1990,7 @@ describe('explainGapScore — validity charts', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Surfacing the standings: per-section ranks, points-of-available, and the
+// Surfacing the scores: per-section ranks, points-of-available, and the
 // winner's headline note (the "full validity but not 1000 points" report).
 // ---------------------------------------------------------------------------
 

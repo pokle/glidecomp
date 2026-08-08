@@ -1,9 +1,9 @@
 /**
  * Whole-competition scores machinery, shared by the dedicated scores page
  * (pages/CompScoresPage — the canonical scores surface) and the comp hub's
- * compact standings summary (CompScoresSummary): the SSR-seedable fetch +
+ * compact scores summary (CompScoresSummary): the SSR-seedable fetch +
  * rescore state machine (useCompScores) and the score views (per-class
- * standings, top-3, teams, results-by-task). View transforms (class rollups,
+ * scores, top-3, teams, results-by-task). View transforms (class rollups,
  * top-3, teams) come from the shared scores-views module; the "Results by
  * task" tab reuses the task page's ScoresSection one task at a time. Built on
  * the RAC kit: the view tabs are ARIA tabs, and each view is a sortable
@@ -26,8 +26,8 @@ import {
   aggregateTeams,
   buildClassGroups,
   computeTop3Rows,
-  type ClassStanding,
-  type PilotStanding,
+  type CompClassScore,
+  type CompPilotScore,
 } from "../../scores-views";
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
@@ -49,7 +49,7 @@ export type CompScoresState =
 /**
  * Whole-comp scores state machine: one fetch per compId (skipped when seeded
  * from SSR), plus the admin "Recompute scores" action. Shared by the dedicated
- * scores page (pages/CompScores) and the comp page's standings summary.
+ * scores page (pages/CompScores) and the comp page's scores summary.
  */
 export function useCompScores(
   compId: string,
@@ -191,9 +191,9 @@ export function ScoresViews({
    */
   deepLinkTaskId?: string | null;
 }) {
-  const teams = useMemo(() => aggregateTeams(scores.standings), [scores]);
-  const groups = useMemo(() => buildClassGroups(scores.standings), [scores]);
-  const firstTab = `standings:${scores.standings[0].pilot_class}`;
+  const teams = useMemo(() => aggregateTeams(scores.class_scores), [scores]);
+  const groups = useMemo(() => buildClassGroups(scores.class_scores), [scores]);
+  const firstTab = `scores:${scores.class_scores[0].pilot_class}`;
   const [tab, setTab] = useState(firstTab);
   const scorableTasks = tasks.filter((t) => t.has_xctsk);
   const [pickedTaskId, setPickedTaskId] = useState(
@@ -216,8 +216,8 @@ export function ScoresViews({
       onSelectionChange={(key) => setTab(String(key))}
     >
       <TabList aria-label="Score views">
-        {scores.standings.map((cls) => (
-          <Tab key={cls.pilot_class} id={`standings:${cls.pilot_class}`}>
+        {scores.class_scores.map((cls) => (
+          <Tab key={cls.pilot_class} id={`scores:${cls.pilot_class}`}>
             {cls.pilot_class}
           </Tab>
         ))}
@@ -226,9 +226,9 @@ export function ScoresViews({
         {scorableTasks.length > 0 ? <Tab id="bytask">Results by task</Tab> : null}
       </TabList>
 
-      {scores.standings.map((cls) => (
-        <TabPanel key={cls.pilot_class} id={`standings:${cls.pilot_class}`}>
-          <StandingsTable scores={scores} cls={cls} />
+      {scores.class_scores.map((cls) => (
+        <TabPanel key={cls.pilot_class} id={`scores:${cls.pilot_class}`}>
+          <ScoresTable scores={scores} cls={cls} />
         </TabPanel>
       ))}
 
@@ -416,7 +416,7 @@ function SortableTable({
 
 // ── Views ─────────────────────────────────────────────────────────────────────
 
-function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStanding }) {
+function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore }) {
   const compName = useCompName();
   // Only show columns for tasks flown by this pilot class — classes fly
   // different tasks, so mixing them would leave every off-class cell blank.
@@ -516,7 +516,7 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
           </Explain>
         </p>
       ) : null}
-      <SortableTable label={`Standings — ${cls.pilot_class}`} columns={columns} rows={rows} />
+      <SortableTable label={`Scores — ${cls.pilot_class}`} columns={columns} rows={rows} />
     </>
   );
 }
@@ -524,7 +524,7 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
 /**
  * Per-pilot FTV explainer (transparency): which tasks counted (in full or in
  * part), which were discarded under the validity cap, and the total arithmetic.
- * Rendered straight from the standings' FTV fields — the same numbers the
+ * Rendered straight from the scores' FTV fields — the same numbers the
  * scoreboard shows.
  */
 function FtvBreakdown({
@@ -532,7 +532,7 @@ function FtvBreakdown({
   nameById,
   ftvFactor,
 }: {
-  pilot: PilotStanding;
+  pilot: CompPilotScore;
   nameById: Map<string, string>;
   ftvFactor: number | null;
 }) {
@@ -708,5 +708,5 @@ function TeamsTable({
     { sort: String(team.total_score), node: <strong>{formatScore(team.total_score)}</strong> },
   ]);
 
-  return <SortableTable label="Team standings" columns={columns} rows={rows} />;
+  return <SortableTable label="Team scores" columns={columns} rows={rows} />;
 }

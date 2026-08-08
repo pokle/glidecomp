@@ -148,7 +148,7 @@ export function buildArrivalSection(
 
   items.push(...buildArrivalEssNotGoalItems(entry, params));
 
-  // The header's standing — the arrival POSITION is the section's whole
+  // The header's rank — the arrival POSITION is the section's whole
   // input, so it is the rank, restated scannably.
   const rank =
     position !== null && position > 0 && atEss >= 2

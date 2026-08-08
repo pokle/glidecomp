@@ -48,7 +48,7 @@ interface ServedScore {
   task_id: string;
   computed_at: string;
   stale: boolean;
-  classes: Array<{ pilots: Array<{ pilot_name: string; total_score: number }> }>;
+  class_scores: Array<{ pilots: Array<{ pilot_name: string; total_score: number }> }>;
 }
 
 interface ServedCompScores {
@@ -56,7 +56,7 @@ interface ServedCompScores {
   computed_at: string | null;
   stale: boolean;
   tasks: Array<{ task_id: string }>;
-  standings: Array<{ pilot_class: string; pilots: Array<{ pilot_name: string }> }>;
+  class_scores: Array<{ pilot_class: string; pilots: Array<{ pilot_name: string }> }>;
 }
 
 beforeEach(async () => {
@@ -170,7 +170,7 @@ describe("task score read path", () => {
     );
     const data = (await res.json()) as ServedScore;
     expect(data.stale).toBe(false);
-    expect(data.classes[0].pilots).toHaveLength(1);
+    expect(data.class_scores[0].pilots).toHaveLength(1);
     expect(new Date(data.computed_at).getTime()).not.toBeNaN();
   });
 
@@ -260,7 +260,7 @@ describe("task score read path", () => {
     expect(cold.headers.get("X-Cache")).toBe("MISS");
     const coldData = (await cold.json()) as ServedScore;
     expect(coldData.stale).toBe(false);
-    expect(coldData.classes[0].pilots).toHaveLength(1);
+    expect(coldData.class_scores[0].pilots).toHaveLength(1);
 
     const warm = await request("GET", t.scorePath);
     expect(warm.headers.get("X-Cache")).toBe("HIT");
@@ -386,7 +386,7 @@ describe("comp scores aggregation", () => {
     const comp1 = (await res1.json()) as ServedCompScores;
     expect(comp1.stale).toBe(false);
     expect(comp1.computed_at).toBe((await getRow(t.taskIdNum)).computed_at);
-    expect(comp1.standings[0].pilots).toHaveLength(2);
+    expect(comp1.class_scores[0].pilots).toHaveLength(2);
     const etag = res1.headers.get("ETag")!;
 
     // Unchanged comp: conditional request transfers nothing.
@@ -394,7 +394,7 @@ describe("comp scores aggregation", () => {
     expect(conditional.status).toBe(304);
 
     // Mark the task stale — the comp response reports it transactionally
-    // while still serving the stored standings. The ETag folds the staleness
+    // while still serving the stored scores. The ETag folds the staleness
     // label in, so the stale-labelled body has its own identity; a poll
     // carrying it keeps 304ing until the re-score lands.
     await bumpScoreInputs(env.DB, [t.taskIdNum]);
@@ -432,7 +432,7 @@ describe("comp scores aggregation", () => {
     const data = (await res.json()) as ServedCompScores;
     expect(data.computed_at).toBeNull();
     expect(data.stale).toBe(false);
-    expect(data.standings).toEqual([]);
+    expect(data.class_scores).toEqual([]);
   });
 
   test("a team edit changes the comp ETag and the served teams without any recompute", async () => {
@@ -454,9 +454,9 @@ describe("comp scores aggregation", () => {
     expect(res2.headers.get("ETag")).not.toBe(etag1);
     expect(res2.headers.get("X-Cache")).toBe("HIT");
     const comp2 = (await res2.json()) as ServedCompScores & {
-      standings: Array<{ pilots: Array<{ team_name: string | null }> }>;
+      class_scores: Array<{ pilots: Array<{ team_name: string | null }> }>;
     };
-    expect(comp2.standings[0].pilots[0].team_name).toBe("Team Thermal");
+    expect(comp2.class_scores[0].pilots[0].team_name).toBe("Team Thermal");
     expect(comp2.stale).toBe(false);
 
     // No recompute happened: the task's stored blob is untouched.
@@ -480,7 +480,7 @@ describe("mutation hooks mark scores stale (via routes)", () => {
     expect(upload.status).toBe(201);
     const scorePath = `/api/comp/${compId}/task/${taskId}/score`;
     const { data: before } = await getFresh(scorePath);
-    const originalName = before.classes[0].pilots[0].pilot_name;
+    const originalName = before.class_scores[0].pilots[0].pilot_name;
 
     const pilots = await request("GET", `/api/comp/${compId}/pilot`);
     const pilotList = (await pilots.json()) as {
@@ -494,8 +494,8 @@ describe("mutation hooks mark scores stale (via routes)", () => {
     expect(patch.status).toBe(200);
 
     const { data: after } = await getFresh(scorePath);
-    expect(after.classes[0].pilots[0].pilot_name).toBe("Renamed Pilot");
-    expect(after.classes[0].pilots[0].pilot_name).not.toBe(originalName);
+    expect(after.class_scores[0].pilots[0].pilot_name).toBe("Renamed Pilot");
+    expect(after.class_scores[0].pilots[0].pilot_name).not.toBe(originalName);
   });
 
   test("deleting a track re-scores the task", async () => {
@@ -515,7 +515,7 @@ describe("mutation hooks mark scores stale (via routes)", () => {
     }
     const scorePath = `/api/comp/${compId}/task/${taskId}/score`;
     const { data: before } = await getFresh(scorePath);
-    expect(before.classes[0].pilots).toHaveLength(2);
+    expect(before.class_scores[0].pilots).toHaveLength(2);
 
     const tracks = await request("GET", `/api/comp/${compId}/task/${taskId}/igc`);
     const trackList = (await tracks.json()) as {
@@ -528,7 +528,7 @@ describe("mutation hooks mark scores stale (via routes)", () => {
     expect(del.status).toBe(200);
 
     const { data: after } = await getFresh(scorePath);
-    expect(after.classes[0].pilots).toHaveLength(1);
+    expect(after.class_scores[0].pilots).toHaveLength(1);
   });
 });
 
@@ -536,7 +536,7 @@ describe("FTV series scoring (S7F §15)", () => {
   interface ServedFtvScores extends ServedCompScores {
     series_scoring: "total" | "ftv";
     ftv_factor?: number;
-    standings: Array<{
+    class_scores: Array<{
       pilot_class: string;
       pilots: Array<{
         pilot_name: string;
@@ -625,7 +625,7 @@ describe("FTV series scoring (S7F §15)", () => {
     const sum = (await sumRes.json()) as ServedFtvScores;
     expect(sum.series_scoring).toBe("total");
     const sumByPilot = new Map(
-      sum.standings[0].pilots.map((p) => [p.pilot_name, p.total_score])
+      sum.class_scores[0].pilots.map((p) => [p.pilot_name, p.total_score])
     );
     const etagTotal = sumRes.headers.get("ETag")!;
 
@@ -641,7 +641,7 @@ describe("FTV series scoring (S7F §15)", () => {
     // The series-scoring setting is folded into the comp ETag.
     expect(ftvRes.headers.get("ETag")).not.toBe(etagTotal);
 
-    for (const p of ftv.standings[0].pilots) {
+    for (const p of ftv.class_scores[0].pilots) {
       // FTV can only drop points, never add them.
       expect(p.total_score).toBeLessThanOrEqual(sumByPilot.get(p.pilot_name)! + 1e-6);
       expect(typeof p.calculated_ftv).toBe("number");
@@ -664,6 +664,6 @@ describe("FTV series scoring (S7F §15)", () => {
     const data = (await res.json()) as ServedFtvScores;
     // One task can't discard anything → reported as plain total.
     expect(data.series_scoring).toBe("total");
-    expect(data.standings[0].pilots[0].tasks[0].ftv_status).toBeUndefined();
+    expect(data.class_scores[0].pilots[0].tasks[0].ftv_status).toBeUndefined();
   });
 });

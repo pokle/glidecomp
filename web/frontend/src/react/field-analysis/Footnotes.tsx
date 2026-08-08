@@ -70,7 +70,7 @@ export function Footnote({
 }
 
 /**
- * Which pilots the standings include but the analysis could not measure.
+ * Which pilots the scores include but the analysis could not measure.
  *
  * The closing note is the point of the whole footnote: their absence does not
  * make the correlations wrong, because the ranks those correlations are
@@ -84,7 +84,7 @@ export function ExcludedPilots({
   return (
     <Footnote
       id={EXCLUDED_PILOTS_ID}
-      title={`${excluded.length} pilot${excluded.length === 1 ? "" : "s"} in the standings but not in this analysis`}
+      title={`${excluded.length} pilot${excluded.length === 1 ? "" : "s"} in the scores but not in this analysis`}
     >
       <ul className="space-y-0.5">
         {excluded.map((e, i) => (

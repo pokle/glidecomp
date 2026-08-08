@@ -13,7 +13,7 @@ import type {
 } from "./types";
 
 /**
- * Rank competition standings by total score, sharing ranks on ties.
+ * Rank competition scores by total score, sharing ranks on ties.
  *
  * S7A §5.2.5.1/§5.2.5.4: the overall competition ranking orders pilots by total
  * score descending, and "pilots with the same score are ranked in the same
@@ -59,7 +59,7 @@ export function emptyClassScore(
 }
 
 /**
- * The standings row for a pilot whose tracklog was withheld: zero everywhere,
+ * The scores row for a pilot whose tracklog was withheld: zero everywhere,
  * with the reasons attached so the scores table and the score-detail page can
  * say WHY rather than showing an unexplained 0.
  */

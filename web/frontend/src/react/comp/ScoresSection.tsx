@@ -59,7 +59,7 @@ export function ScoresSection({
     // Seeded from SSR — surface the replay link from the seed, skip the fetch.
     if (seededRef.current) {
       seededRef.current = false;
-      onReplayAvailable(initialScore!.classes.some((cls) => cls.pilots.length > 0));
+      onReplayAvailable(initialScore!.class_scores.some((cls) => cls.pilots.length > 0));
       return;
     }
     let cancelled = false;
@@ -83,7 +83,7 @@ export function ScoresSection({
         // Reveal the 3D replay link once the task has tracks to show (the
         // bundle endpoint needs an xctsk + at least one track, both implied
         // by a scored pilot).
-        onReplayAvailable(data.classes.some((cls) => cls.pilots.length > 0));
+        onReplayAvailable(data.class_scores.some((cls) => cls.pilots.length > 0));
       } catch {
         if (!cancelled) setState({ kind: "unavailable" });
       }
@@ -132,7 +132,7 @@ export function ScoresSection({
         />
       ) : null}
       {state.kind === "loaded"
-        ? state.data.classes.map((cls) => (
+        ? state.data.class_scores.map((cls) => (
             <ScoreClassTable
               key={cls.pilot_class}
               compId={compId}
@@ -140,13 +140,13 @@ export function ScoresSection({
               taskName={taskName}
               cls={cls}
               timezone={timezone}
-              showClassName={state.data.classes.length > 1}
+              showClassName={state.data.class_scores.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
             />
           ))
         : null}
       {state.kind === "loaded" &&
-      state.data.classes.some((cls) => cls.pilots.length > 0) ? (
+      state.data.class_scores.some((cls) => cls.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
           Click a row for the full breakdown.
         </p>

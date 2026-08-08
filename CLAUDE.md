@@ -346,7 +346,7 @@ These are the standing imperatives. Each links to the reference that explains it
   provider must match this spec.
 - **Track quality** ([docs/track-quality.md](docs/track-quality.md)): two HARD
   checks withhold a track from scoring and field analysis; three SOFT checks only
-  annotate. A withheld pilot is **never** deleted from the standings — they are
+  annotate. A withheld pilot is **never** deleted from the scores — they are
   seated last at 0 with reasons. Every verdict is organiser-overridable (FAI S7A
   §4.4.6). Re-tune thresholds only via `audit-track-quality.ts` over both the
   bundled comps and the archive.

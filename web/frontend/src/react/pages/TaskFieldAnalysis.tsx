@@ -7,7 +7,7 @@
  * non-admins, and this page reflects that rather than second-guessing it).
  *
  * Its own page rather than a section on the task page: it is a long,
- * exploratory read that shouldn't compete with the official standings.
+ * exploratory read that shouldn't compete with the official scores.
  *
  * Lives at /comp/:compId/analysis/task/:taskId — a chapter of the comp's
  * field analysis, NOT a leaf of the task page, so the breadcrumb's parent is

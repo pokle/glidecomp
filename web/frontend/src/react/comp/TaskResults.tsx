@@ -4,14 +4,14 @@
  * canonical public results surface.
  *
  * This deliberately is NOT the management grid — statuses, uploads on behalf
- * and manual flights live in TaskStandings, which the task page renders for
+ * and manual flights live in TaskScoresAdmin, which the task page renders for
  * admins only ("Manage pilots & tracks"). What stays here for signed-in
  * pilots is self-service: the Submit track button and a one-line "your
  * submission" status.
  *
  * SSR-safety: the server renders the control-less podium from the SSR score
  * seed; the Submit track button and the your-submission line mount after
- * hydration (`mounted` gate), exactly like the old standings table did.
+ * hydration (`mounted` gate), exactly like the old scores table did.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link as AriaLink } from "react-aria-components";
@@ -52,7 +52,7 @@ function StoppedTaskNotice({
   // Offset-only zone label until mounted so this SSR-rendered notice hydrates
   // cleanly regardless of the comp zone (see useMounted / formatInstant).
   const mounted = useMounted();
-  const stopped = score.classes.find((c) => c.stopped)?.stopped;
+  const stopped = score.class_scores.find((c) => c.stopped)?.stopped;
   if (!stopped) return null;
   return (
     <p className="mt-2 text-sm">
@@ -143,7 +143,7 @@ export function TaskResults({
       setScore(data);
       setEtag(res.headers.get("ETag"));
       setScoreState("ok");
-      onReplayAvailable(data.classes.some((c) => c.pilots.length > 0));
+      onReplayAvailable(data.class_scores.some((c) => c.pilots.length > 0));
     } catch {
       setScoreState("unavailable");
     }
@@ -156,7 +156,7 @@ export function TaskResults({
   useEffect(() => {
     if (seededRef.current && refresh === 0) {
       seededRef.current = false;
-      onReplayAvailable(initialScore!.classes.some((c) => c.pilots.length > 0));
+      onReplayAvailable(initialScore!.class_scores.some((c) => c.pilots.length > 0));
       return;
     }
     void fetchScore();
@@ -274,20 +274,20 @@ export function TaskResults({
             pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
           />
           <StoppedTaskNotice score={score} timezone={timezone} />
-          {score.classes.every((c) => c.pilots.length === 0) ? (
+          {score.class_scores.every((c) => c.pilots.length === 0) ? (
             <p className="mt-2 text-muted-foreground">
               No scored pilots yet — results appear once tracks are submitted.
             </p>
           ) : (
             <>
-              {score.classes.map((cls) => (
+              {score.class_scores.map((cls) => (
                 <ClassPodium
                   key={cls.pilot_class}
                   compId={compId}
                   taskId={taskId}
                   taskName={taskName}
                   cls={cls}
-                  showClassName={score.classes.length > 1}
+                  showClassName={score.class_scores.length > 1}
                   isOpenDistance={isOpenDistance}
                 />
               ))}
@@ -295,7 +295,7 @@ export function TaskResults({
           )}
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
             <LinkButton variant="outline" size="sm" href={scoresHref}>
-              Full results &amp; standings
+              Full scores
             </LinkButton>
             {/* Static Astro page — a plain anchor leaves the SPA. */}
             <a

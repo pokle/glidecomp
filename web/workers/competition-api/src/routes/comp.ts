@@ -201,7 +201,7 @@ function serializeComp(alphabet: string, row: Record<string, unknown>) {
  * Series scoring (total ↔ FTV) and the FTV factor deliberately do NOT carry
  * it: FTV is a pure aggregation over the stored task scores, computed live in
  * GET /scores (which folds these two fields into its ETag), so they change
- * published STANDINGS without changing any per-task score. Bumping every task
+ * published SCORES without changing any per-task score. Bumping every task
  * would be wasted work that changes nothing.
  */
 function compFieldTable(
@@ -368,7 +368,7 @@ export const compRoutes = new Hono<AuthedEnv>()
       // New PG GAP comps default to FTV series scoring (the paragliding norm,
       // S7A §5.2.5.1); HG and open-distance comps default to sum-of-tasks. The
       // DB column default stays "total", so this only affects newly created
-      // comps — existing comps' published standings never change silently.
+      // comps — existing comps' published scores never change silently.
       const seriesScoring =
         body.series_scoring ??
         (body.category === "pg" && scoringFormat === "gap" ? "ftv" : "total");

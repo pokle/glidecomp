@@ -74,7 +74,7 @@ test("comp analysis: the column notes are behind their headers' ⓘ", async ({
 
   // The verdict thresholds belong to the column that holds the verdict chip —
   // this table has no separate "What it means" column for them.
-  await page.getByRole("button", { name: "About Against comp standings" }).first().click();
+  await page.getByRole("button", { name: "About Against comp scores" }).first().click();
   await expect(page.getByRole("dialog")).toContainText("clear pattern");
 });
 

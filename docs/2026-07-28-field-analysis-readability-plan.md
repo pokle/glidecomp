@@ -196,7 +196,7 @@ heading or column header — the place the reader's question actually arises:
 | `StyleClusters`' method + silhouette paragraph | Inline, ends with `mean silhouette 0.16` | ⓘ on "Pilot style clusters" |
 | `PercentileHeatmap`'s figcaption (6 sentences) | Inline | Keep the first sentence; rest into a ⓘ on the section heading |
 | The weather panel's provenance/sampling block | Three paragraphs under the charts | **Careful:** the Open-Meteo CC BY 4.0 credit is a licence obligation and must stay visible. Keep a one-line visible credit, move grid-size / elevation / sampling detail behind ⓘ |
-| Comp page: the "Across tasks / Day to day / Against comp standings" paragraph | One dense block below the table | Split into **three** ⓘs, one per column header — that is where each question is asked |
+| Comp page: the "Across tasks / Day to day / Against comp scores" paragraph | One dense block below the table | Split into **three** ⓘs, one per column header — that is where each question is asked |
 
 Net effect on the task page: roughly 1,400 of the 3,588 prose words leave the
 default reading flow without leaving the page.
@@ -250,7 +250,7 @@ Everything a reader consults once should start closed. Use `Disclosure`
   compared, 3 pilots not analysed").
 - **"Outcome checks"** — both pages. Explicitly a sanity check on the analysis,
   not a finding; the copy says so. Collapse.
-- **"Standings behind these figures"** (comp page) — a duplicate of the scores
+- **"Scores behind these figures"** (comp page) — a duplicate of the scores
   page. Collapse, with a link to `/comp/:id/scores`.
 - **Family sections** — already correct (top-3 open). Leave alone.
 - **`AnalysisBasis`** — leave open. It is four facts and a bar, and it
@@ -354,7 +354,7 @@ existing e2e assertions have a mode to run in.
   to build its glossary. Pass those descriptions to `MetricExplanation` in the
   first column and the table becomes self-explaining, matching the task page.
 - Column-header ⓘs per §B.
-- Collapse "Standings behind these figures" and "Outcome checks" per §C.
+- Collapse "Scores behind these figures" and "Outcome checks" per §C.
 - The "Per task:" row is a bare list of underlined links. Turning each into a
   card with its own one-line finding is the natural home for §E's summary and
   is most of what [#452](https://github.com/pokle/glidecomp/issues/452) asks

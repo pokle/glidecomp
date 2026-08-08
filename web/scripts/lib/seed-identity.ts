@@ -61,7 +61,7 @@ export function pilotNameKey(pilotClass: string, name: string): string {
  * while AirScore's published results table carries only a name. Keyed
  * separately, a pilot who flew one day and had an unusable tracklog on another
  * — a header-only "Failed security check" file, or none at all — split into TWO
- * comp_pilot rows: they appeared twice in the standings with a share of their
+ * comp_pilot rows: they appeared twice in the scores with a share of their
  * tasks each, and counted twice in the S7F §9.1 launch-validity buckets. The
  * Corryong Cup 2026 floater class publishes a block of 13 such rows; 15 of that
  * comp's 80 registrations were one person seeded twice.

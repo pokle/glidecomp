@@ -85,7 +85,7 @@ interface RowPilot {
   activeManual: ManualFlightEntry | null;
 }
 
-export function TaskStandings({
+export function TaskScoresAdmin({
   compId,
   taskId,
   taskName = null,
@@ -294,14 +294,14 @@ export function TaskStandings({
         pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
       />
 
-      {score.classes.map((cls) => (
-        <ClassStandings
+      {score.class_scores.map((cls) => (
+        <ClassScoresRows
           key={cls.pilot_class}
           compId={compId}
           taskId={taskId}
           taskName={taskName}
           cls={cls}
-          showClassName={score.classes.length > 1}
+          showClassName={score.class_scores.length > 1}
           isOpenDistance={isOpenDistance}
           greyed={greyed}
           mounted={mounted}
@@ -320,7 +320,7 @@ export function TaskStandings({
         />
       ))}
 
-      {score.classes.some((c) => c.pilots.length > 0) ? (
+      {score.class_scores.some((c) => c.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
           Click a row for the full breakdown.
         </p>
@@ -329,7 +329,7 @@ export function TaskStandings({
   );
 }
 
-function ClassStandings({
+function ClassScoresRows({
   compId,
   taskId,
   taskName,
@@ -436,7 +436,12 @@ function ClassStandings({
     <div className="mt-4">
       {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
       <Table
-        aria-label={`Standings — ${cls.pilot_class}`}
+        // NOT `Scores — ${class}`: ScoresSection's public grid already owns
+        // that name, and on the task page an admin has BOTH mounted at once —
+        // two grids with one accessible name is unusable with a screen reader
+        // (and ambiguous to a Playwright locator). This one is the management
+        // surface, and the card heading above it says so.
+        aria-label={`Manage pilots & tracks — ${cls.pilot_class}`}
         className="mt-2"
         // Whole-row activation for ranked pilots: keyboard (Enter) and click
         // both open the score breakdown. RAC keeps presses on the inner
@@ -458,7 +463,7 @@ function ClassStandings({
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <StandingsRow
+            <ScoresRow
               key={row.compPilotId}
               row={row}
               compId={compId}
@@ -507,7 +512,7 @@ function OutcomeBadge({ outcome, evidence }: { outcome: Outcome; evidence: RowPi
   );
 }
 
-function StandingsRow({
+function ScoresRow({
   row,
   compId,
   taskId,

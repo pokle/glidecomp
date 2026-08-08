@@ -12,7 +12,7 @@
 -- with ≤6 planned tasks, 0.25 for ≥7. NULL means "auto-derive from the number
 -- of scoreable tasks"; an explicit value lets an admin override.
 --
--- Existing competitions default to "total" so their published standings are
+-- Existing competitions default to "total" so their published scores are
 -- unchanged. New PG comps are set to "ftv" at creation time in the app layer
 -- (the DB default stays "total" so no existing comp is silently re-scored).
 -- Both values are also validated in the app layer (zod in validators.ts).

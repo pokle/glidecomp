@@ -91,7 +91,7 @@ export function DayToDayNote() {
   );
 }
 
-export function AgainstStandingsNote() {
+export function AgainstCompScoresNote() {
   return (
     <p>
       A separate reading. It takes the average of each pilot for that behaviour
@@ -153,7 +153,7 @@ export function OutcomeChecksNote() {
  * On screen the ⓘ popovers are the way in, and they carry the same components.
  *
  * `page` picks the column set, because the two tables do not share columns:
- * the comp aggregate has Across tasks / Day to day / Against comp standings,
+ * the comp aggregate has Across tasks / Day to day / Against comp scores,
  * the per-task ranking has Strength / Pilots measured.
  */
 export function HowToReadFootnote({
@@ -177,8 +177,8 @@ export function HowToReadFootnote({
           <NoteBlock title="Day to day">
             <DayToDayNote />
           </NoteBlock>
-          <NoteBlock title="Against comp standings">
-            <AgainstStandingsNote />
+          <NoteBlock title="Against comp scores">
+            <AgainstCompScoresNote />
           </NoteBlock>
         </>
       ) : (

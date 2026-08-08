@@ -13,7 +13,7 @@
  * scores show the fix in action (a pilot who never flies out of the big ring
  * scores their outbound distance, NOT a near-goal result).
  *
- * Three tasks, one shared 44-pilot field (so the comp standings aggregate):
+ * Three tasks, one shared 44-pilot field (so the comp scores aggregate):
  *   Task 1 "Grand Loop"  — one 10 km exit ring. The classic #347 shape.
  *   Task 2 "Double Ring" — two concentric exit rings (5 km + 11 km) in sequence.
  *   Task 3 "Ridge Run"   — a point-to-point control: all ENTER turnpoints, no

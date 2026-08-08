@@ -1,11 +1,11 @@
 /**
- * What this task did to the pilot's competition standing.
+ * What this task did to the pilot's competition score.
  *
  * The report card ends at the task total, which leaves the reader's last
  * question unanswered: so where does that put me? On an FTV comp the answer
  * can even be "nowhere" — a task can be discarded entirely — and a pilot who
  * has just read a full accounting of 579.5 points deserves to know that
- * before they go looking for them in the standings.
+ * before they go looking for them in the scores.
  *
  * Fetched CLIENT-SIDE ONLY, deliberately, and absent from the SSR loader.
  * `/api/comp/:id/scores` is the whole comp: every pilot × every task. Adding
@@ -21,7 +21,7 @@ import type { CompScores } from "../loaders";
 import { formatScore, ordinal } from "../lib/format";
 import { compPath } from "../lib/slug";
 
-interface Standing {
+interface CompPlacing {
   /** Where the pilot sits in their class overall. */
   rank: number;
   fieldSize: number;
@@ -35,12 +35,12 @@ interface Standing {
   ftvCountedScore?: number;
 }
 
-function findStanding(
+function findPlacing(
   scores: CompScores,
   taskId: string,
   compPilotId: string
-): Standing | null {
-  for (const cls of scores.standings) {
+): CompPlacing | null {
+  for (const cls of scores.class_scores) {
     const idx = cls.pilots.findIndex((p) => p.comp_pilot_id === compPilotId);
     if (idx < 0) continue;
     const pilot = cls.pilots[idx];
@@ -59,7 +59,7 @@ function findStanding(
   return null;
 }
 
-export function TaskInStandings({
+export function TaskInCompScores({
   compId,
   compName,
   taskId,
@@ -70,11 +70,11 @@ export function TaskInStandings({
   taskId: string;
   compPilotId: string;
 }) {
-  const [standing, setStanding] = useState<Standing | null>(null);
+  const [placing, setPlacing] = useState<CompPlacing | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setStanding(null);
+    setPlacing(null);
     (async () => {
       try {
         const res = await fetch(
@@ -83,7 +83,7 @@ export function TaskInStandings({
         );
         if (!res.ok) return;
         const scores = (await res.json()) as CompScores;
-        if (!cancelled) setStanding(findStanding(scores, taskId, compPilotId));
+        if (!cancelled) setPlacing(findPlacing(scores, taskId, compPilotId));
       } catch {
         // Supplementary: a failure here leaves the section out, and the score
         // above it is explained in full regardless.
@@ -94,18 +94,18 @@ export function TaskInStandings({
     };
   }, [compId, taskId, compPilotId]);
 
-  if (!standing) return null;
+  if (!placing) return null;
 
   const scoresHref = `${compPath(compId, compName)}/scores`;
-  const discarded = standing.ftvStatus === "discarded";
-  const partial = standing.ftvStatus === "partial";
+  const discarded = placing.ftvStatus === "discarded";
+  const partial = placing.ftvStatus === "partial";
 
   return (
     <section className="rounded-lg border p-4">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="font-semibold">This task in the competition</h2>
         <span className="shrink-0 font-semibold tabular-nums">
-          {ordinal(standing.rank)} of {standing.fieldSize}
+          {ordinal(placing.rank)} of {placing.fieldSize}
         </span>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -116,26 +116,26 @@ export function TaskInStandings({
           <>
             Under Fixed Total Validity this task was <strong>discarded</strong> —
             it was among your weakest and does not count toward your{" "}
-            {formatScore(standing.compTotal)}-point competition total.
+            {formatScore(placing.compTotal)}-point competition total.
           </>
         ) : partial ? (
           <>
             Under Fixed Total Validity this task counted{" "}
             <strong>in part</strong>:{" "}
-            {formatScore(standing.ftvCountedScore ?? standing.taskScore)} of its{" "}
-            {formatScore(standing.taskScore)} points went into your{" "}
-            {formatScore(standing.compTotal)}-point competition total.
+            {formatScore(placing.ftvCountedScore ?? placing.taskScore)} of its{" "}
+            {formatScore(placing.taskScore)} points went into your{" "}
+            {formatScore(placing.compTotal)}-point competition total.
           </>
         ) : (
           <>
-            These {formatScore(standing.taskScore)} points are part of your{" "}
-            {formatScore(standing.compTotal)}-point competition total.
+            These {formatScore(placing.taskScore)} points are part of your{" "}
+            {formatScore(placing.compTotal)}-point competition total.
           </>
         )}
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
         <Link to={scoresHref} className="underline underline-offset-2">
-          Full competition standings
+          Full competition scores
         </Link>
       </p>
     </section>

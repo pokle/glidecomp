@@ -413,7 +413,7 @@ export function SettingsDialog({
           </div>
 
           {/* Series (multi-task) scoring — how per-task scores combine into
-              competition standings. FTV is a GAP-only aggregation (S7F §15). */}
+              competition scores. FTV is a GAP-only aggregation (S7F §15). */}
           {scoringFormat === "gap" ? (
             <div>
               <h3 className="mb-1.5 text-sm font-medium">Series scoring</h3>

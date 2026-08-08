@@ -27,7 +27,7 @@ import { Explain } from "@/react/rac/explain";
 import { VerdictBadge } from "../field-analysis/SeparationRanking";
 import {
   AcrossTasksNote,
-  AgainstStandingsNote,
+  AgainstCompScoresNote,
   DayToDayNote,
   HowToReadFootnote,
   OutcomeChecksNote,
@@ -415,11 +415,11 @@ export function CompFieldAnalysis() {
             </Card>
           ) : null}
 
-          <Card aria-labelledby="standings-heading" className="gap-3">
-            <h2 id="standings-heading" className="text-lg font-semibold">
-              Standings behind these figures
+          <Card aria-labelledby="comp-scores-heading" className="gap-3">
+            <h2 id="comp-scores-heading" className="text-lg font-semibold">
+              Scores behind these figures
             </h2>
-            <Table aria-label="Competition standings used for the analysis">
+            <Table aria-label="Competition scores used for the analysis">
               <TableHeader>
                 <Column className="w-14 text-right">#</Column>
                 <Column isRowHeader className="min-w-40">
@@ -509,7 +509,7 @@ function taskInformative(m: CompMetricAggregate, i: number): boolean | null {
  *    words — and the consistency map below plots both to the pixel;
  *  - comp ρ, its n and its verdict were three columns describing ONE reading.
  *    They are one cell now, and the cell says whose reading it is: the
- *    coefficient against the comp standings, not the average of the tasks.
+ *    coefficient against the comp scores, not the average of the tasks.
  *
  * The bar column is the n-weighted signed mean, which is also the sort key, so
  * the bars descend with the rows. Ranking by comp ρ instead would have let a
@@ -528,7 +528,7 @@ function SeparationTable({
   /** First column's header — "Behaviour" for the ranking, "Outcome" for the
    * checks, same distinction the task page draws. */
   subjectLabel: string;
-  /** Pilots in the comp standings — the denominator for "39 of 44 pilots". */
+  /** Pilots in the comp scores — the denominator for "39 of 44 pilots". */
   fieldSize: number;
 }) {
   return (
@@ -554,8 +554,8 @@ function SeparationTable({
             belong on this header — the comp table has no separate "What it
             means" column for them the way the task ranking does. */}
         <Column className="w-44">
-          <HeaderWithNote label="Against comp standings">
-            <AgainstStandingsNote />
+          <HeaderWithNote label="Against comp scores">
+            <AgainstCompScoresNote />
             <VerdictLegend />
           </HeaderWithNote>
         </Column>
@@ -659,7 +659,7 @@ function SeparationTable({
 
 /**
  * A column header with its ⓘ. `whitespace-normal` because the kit's Column is
- * `whitespace-nowrap` by default and "Against comp standings" plus a 24px
+ * `whitespace-nowrap` by default and "Against comp scores" plus a 24px
  * button does not fit a 11rem column on one line.
  */
 function HeaderWithNote({
