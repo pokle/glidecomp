@@ -21,7 +21,7 @@ import type { CompScores } from "../loaders";
 import { formatScore, ordinal } from "../lib/format";
 import { compPath } from "../lib/slug";
 
-interface CompPlacing {
+interface TaskInCompScore {
   /** Where the pilot sits in their class overall. */
   rank: number;
   fieldSize: number;
@@ -35,12 +35,12 @@ interface CompPlacing {
   ftvCountedScore?: number;
 }
 
-function findPlacing(
-  scores: CompScores,
+function findTaskInCompScore(
+  compScores: CompScores,
   taskId: string,
   compPilotId: string
-): CompPlacing | null {
-  for (const cls of scores.class_scores) {
+): TaskInCompScore | null {
+  for (const cls of compScores.class_scores) {
     const idx = cls.pilots.findIndex((p) => p.comp_pilot_id === compPilotId);
     if (idx < 0) continue;
     const pilot = cls.pilots[idx];
@@ -51,7 +51,7 @@ function findPlacing(
       fieldSize: cls.pilots.length,
       compTotal: pilot.total_score,
       taskScore: task.score,
-      seriesScoring: scores.series_scoring,
+      seriesScoring: compScores.series_scoring,
       ftvStatus: task.ftv_status,
       ftvCountedScore: task.ftv_counted_score,
     };
@@ -70,11 +70,11 @@ export function TaskInCompScores({
   taskId: string;
   compPilotId: string;
 }) {
-  const [placing, setPlacing] = useState<CompPlacing | null>(null);
+  const [score, setScore] = useState<TaskInCompScore | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setPlacing(null);
+    setScore(null);
     (async () => {
       try {
         const res = await fetch(
@@ -82,8 +82,8 @@ export function TaskInCompScores({
           { credentials: "include" }
         );
         if (!res.ok) return;
-        const scores = (await res.json()) as CompScores;
-        if (!cancelled) setPlacing(findPlacing(scores, taskId, compPilotId));
+        const compScores = (await res.json()) as CompScores;
+        if (!cancelled) setScore(findTaskInCompScore(compScores, taskId, compPilotId));
       } catch {
         // Supplementary: a failure here leaves the section out, and the score
         // above it is explained in full regardless.
@@ -94,18 +94,18 @@ export function TaskInCompScores({
     };
   }, [compId, taskId, compPilotId]);
 
-  if (!placing) return null;
+  if (!score) return null;
 
   const scoresHref = `${compPath(compId, compName)}/scores`;
-  const discarded = placing.ftvStatus === "discarded";
-  const partial = placing.ftvStatus === "partial";
+  const discarded = score.ftvStatus === "discarded";
+  const partial = score.ftvStatus === "partial";
 
   return (
     <section className="rounded-lg border p-4">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="font-semibold">This task in the competition</h2>
         <span className="shrink-0 font-semibold tabular-nums">
-          {ordinal(placing.rank)} of {placing.fieldSize}
+          {ordinal(score.rank)} of {score.fieldSize}
         </span>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -116,20 +116,20 @@ export function TaskInCompScores({
           <>
             Under Fixed Total Validity this task was <strong>discarded</strong> —
             it was among your weakest and does not count toward your{" "}
-            {formatScore(placing.compTotal)}-point competition total.
+            {formatScore(score.compTotal)}-point competition total.
           </>
         ) : partial ? (
           <>
             Under Fixed Total Validity this task counted{" "}
             <strong>in part</strong>:{" "}
-            {formatScore(placing.ftvCountedScore ?? placing.taskScore)} of its{" "}
-            {formatScore(placing.taskScore)} points went into your{" "}
-            {formatScore(placing.compTotal)}-point competition total.
+            {formatScore(score.ftvCountedScore ?? score.taskScore)} of its{" "}
+            {formatScore(score.taskScore)} points went into your{" "}
+            {formatScore(score.compTotal)}-point competition total.
           </>
         ) : (
           <>
-            These {formatScore(placing.taskScore)} points are part of your{" "}
-            {formatScore(placing.compTotal)}-point competition total.
+            These {formatScore(score.taskScore)} points are part of your{" "}
+            {formatScore(score.compTotal)}-point competition total.
           </>
         )}
       </p>
