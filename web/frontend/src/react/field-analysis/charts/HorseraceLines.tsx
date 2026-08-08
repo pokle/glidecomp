@@ -313,11 +313,12 @@ export function HorseraceLines({
           : "Hover or focus a line to name the pilot behind it."}
       </p>
 
+      {/* The axes now name the quantity and the order, so the caption keeps
+          only what they cannot say: what a short line means, and who is
+          coloured. */}
       <figcaption className="text-xs text-muted-foreground">
-        Minutes behind the fastest pilot at each turnpoint — the leader runs
-        along the top at zero, and a line that stops early is a pilot who
-        landed. The top {colored.length} are coloured; every pilot's exact
-        numbers are in the table below.
+        A line that stops early is a pilot who landed. The top {colored.length}{" "}
+        are coloured; the table below has every pilot.
       </figcaption>
     </figure>
   );

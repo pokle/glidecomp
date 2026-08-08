@@ -7,7 +7,7 @@
  * non-admins, and this page reflects that rather than second-guessing it).
  *
  * Its own page rather than a section on the task page: it is a long,
- * exploratory read that shouldn't compete with the official standings.
+ * exploratory read that shouldn't compete with the official scores.
  *
  * Lives at /comp/:compId/analysis/task/:taskId — a chapter of the comp's
  * field analysis, NOT a leaf of the task page, so the breadcrumb's parent is
@@ -44,6 +44,11 @@ import { TaskDiagram } from "../comp/TaskDiagram";
 import { useInitialData } from "../lib/initial-data";
 import type { TaskFieldAnalysisLoaderData } from "../loaders";
 import { SeparationRanking, rankMetrics } from "../field-analysis/SeparationRanking";
+import { Explain } from "@/react/rac/explain";
+import {
+  HowToReadFootnote,
+  OneDayCaveatNote,
+} from "../field-analysis/ReadingNotes";
 import {
   MetricFamilySection,
   familySectionId,
@@ -330,7 +335,7 @@ export function TaskFieldAnalysis() {
       ...(hasThermalsSection
         ? [{ id: "thermals-heading", label: "The day's thermals" }]
         : []),
-      { id: "separation-heading", label: "Which behaviours went with better results" },
+      { id: "separation-heading", label: "Which behaviours went with better ranks" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
       { id: "clusters-heading", label: "Pilot style clusters" },
       { id: "families-heading", label: "The metrics in detail" },
@@ -500,9 +505,8 @@ export function TaskFieldAnalysis() {
             <TaskDiagram task={task.xctsk} size="md" className="shrink-0" />
           </div>
           <figcaption className="mt-1 text-center text-xs text-muted-foreground">
-            The optimised route. Pilots fly it in the direction of the
-            arrows. The radii, the leg distances and the start times are on the
-            task page.
+            The optimised route — radii, leg distances and start times are on
+            the task page.
           </figcaption>
         </figure>
       ) : null}
@@ -621,8 +625,22 @@ export function TaskFieldAnalysis() {
             ) : null}
 
             <Card aria-labelledby="separation-heading" className="gap-3">
-              <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
-                Which behaviours went with better results
+              <h2
+                id="separation-heading"
+                className="flex items-center gap-1 scroll-mt-20 text-lg font-semibold"
+              >
+                Which behaviours went with better ranks
+                {/* Why a strong-looking coefficient on ONE task is not yet a
+                    finding — a caveat about the whole section, so it hangs off
+                    the section's heading rather than a column. */}
+                <Explain
+                  label="One task is not a finding"
+                 
+                >
+                  <OneDayCaveatNote
+                    behaviourCount={rankMetrics(report.metrics).length}
+                  />
+                </Explain>
               </h2>
               <SeparationRanking metrics={report.metrics} report={report} />
             </Card>
@@ -677,6 +695,12 @@ export function TaskFieldAnalysis() {
               {active.excluded.length > 0 ? (
                 <ExcludedPilots excluded={active.excluded} />
               ) : null}
+              {/* The static form of the ranking's column ⓘs — popovers are
+                  print:hidden and cannot exist on paper. */}
+              <HowToReadFootnote
+                page="task"
+                behaviourCount={rankMetrics(report.metrics).length}
+              />
               <MethodNote gridStepSeconds={report.basis.gridStepSeconds} />
               <MetricGlossary entries={report.metrics} nested />
             </Footnotes>

@@ -5,7 +5,7 @@ import {
   SCORES_CSV_COLUMNS,
   type ScoresCsvInput,
 } from "./scores-csv";
-import type { ClassStanding, PilotStanding, TaskInfo } from "./scores-views";
+import type { CompClassScore, CompPilotScore, TaskInfo } from "./scores-views";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -19,8 +19,8 @@ function pilot(
   name: string,
   id: string,
   entries: Array<{ task: string; score: number; rank: number }>,
-  extra: Partial<PilotStanding> = {}
-): PilotStanding {
+  extra: Partial<CompPilotScore> = {}
+): CompPilotScore {
   return {
     pilot_name: name,
     comp_pilot_id: id,
@@ -37,8 +37,8 @@ function pilot(
   };
 }
 
-function scores(standings: ClassStanding[], tasks: TaskInfo[]): ScoresCsvInput {
-  return { comp_id: "abc", tasks, standings };
+function scores(classScores: CompClassScore[], tasks: TaskInfo[]): ScoresCsvInput {
+  return { comp_id: "abc", tasks, class_scores: classScores };
 }
 
 /** Split a CSV line, honouring quoted cells. */

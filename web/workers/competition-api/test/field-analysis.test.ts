@@ -219,7 +219,7 @@ describe("field analysis read path", () => {
     }
   });
 
-  test("ranks come from the official standings, and totals match them", async () => {
+  test("ranks come from the official scores, and totals match them", async () => {
     const t = await seedTask();
     await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
 
@@ -229,16 +229,18 @@ describe("field analysis read path", () => {
       `/api/comp/${t.compId}/task/${t.taskId}/score`
     );
     const scores = (await scoreRes.json()) as {
-      classes: Array<{
+      class_scores: Array<{
         pilots: Array<{ comp_pilot_id: string; rank: number; total_score: number }>;
       }>;
     };
 
+    // `fa.classes` (field analysis) and `scores.class_scores` (task score) are
+    // different endpoints — only the score one was renamed.
     const cls = fa.classes[0];
     const totalByTrackFile = new Map(
       cls.totals.map((x) => [x.trackFile, x.totalScore])
     );
-    for (const official of scores.classes[0].pilots) {
+    for (const official of scores.class_scores[0].pilots) {
       // Pair by comp_pilot_id → trackFile, never by array index.
       const idx = t.pilotIdNums.findIndex(
         (n) => encodeId(env.SQIDS_ALPHABET, n) === official.comp_pilot_id

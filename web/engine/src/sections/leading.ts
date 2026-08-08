@@ -106,7 +106,7 @@ export function buildLeadingSection(
     emphasis: 'muted',
   });
 
-  // Standing on the section's input: the coefficient itself (lower is
+  // Ranked on the section's input: the coefficient itself (lower is
   // better), never the points — a §12.1 reduction can reorder those. "Of the
   // N measured" on purpose: a coefficient exists for everyone who flew the
   // speed section, so this denominator is the whole field, not the goal/ESS

@@ -171,7 +171,7 @@ function CompDetailView({
   }
 
   // Once the last task date is behind us the visitor's job flips from "what
-  // am I flying today?" to "who won?" — standings lead, tasks follow.
+  // am I flying today?" to "who won?" — scores lead, tasks follow.
   // Derived from the loader-injected "today", so SSR and hydration agree.
   const finished = isCompFinished(comp.tasks, comp.timezone, today);
 
@@ -345,7 +345,7 @@ function CompDetailView({
 
 /**
  * True once every task date is behind us in the comp's own timezone — the
- * comp has finished flying, so the page leads with the standings.
+ * comp has finished flying, so the page leads with the scores.
  *
  * The task list itself makes nothing of the calendar: every task is presented
  * alike, whether it flew last year or flies tomorrow.

@@ -26,7 +26,7 @@
  * display and for tie comparison (S7A §5.2.5.4), as elsewhere in the engine.
  *
  * This module is pure data-in/data-out so it is unit-testable and can drive
- * both the competition API's standings and the CLI.
+ * both the competition API's scores and the CLI.
  */
 
 import type { ScoreExplanationItem } from './score-explanation-types';

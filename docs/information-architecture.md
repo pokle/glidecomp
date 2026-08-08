@@ -47,7 +47,7 @@ Date: 2026-04-05
 │   ├── Competition list            Browse & create competitions
 │   ├── /comp/{id}                  Competition detail (scrollable sections)
 │   │   ├── Tasks section           Task list, create new
-│   │   ├── Standings section       Competition scores, filter by class/team
+│   │   ├── Scores section       Competition scores, filter by class/team
 │   │   ├── Pilots section          Registered pilots, class assignments
 │   │   └── Settings dialog (⚙)    Admin-only pop-up: GAP params, admins, close date
 │   │
@@ -225,7 +225,7 @@ This keeps the analysis page focused on *flight analysis*, which is its core str
 │  │  [+ New Task] (admin)        │  │
 │  └───────────────────────────────┘  │
 │                                     │
-│  ┌─ Standings ───────────────────┐  │
+│  ┌─ Scores ───────────────────┐  │
 │  │  Overall competition scores   │  │
 │  │  Filter: [All] [Open] [Sport] │  │
 │  └───────────────────────────────┘  │
@@ -238,7 +238,7 @@ This keeps the analysis page focused on *flight analysis*, which is its core str
 
 1. **Header**: Competition name, category badge (HG/PG), pilot classes, pilot count. Settings gear icon (admin only). Class coverage warnings displayed here prominently if any.
 2. **Tasks**: Task list (clickable → `/comp/{id}/task/{tid}`). "New Task" button (admin only).
-3. **Standings**: Overall competition standings. Filter by class or team. Per-task score summaries. Public (also accessible via `/scores?comp={id}` deep link).
+3. **Scores**: Overall competition scores. Filter by class or team. Per-task score summaries. Public (also accessible via `/scores?comp={id}` deep link).
 4. **Pilots**: Registered pilots with class, team, driver contact. Admin can edit class assignments.
 
 **Settings dialog** (admin only, opened via gear icon in header): Competition name, category, close date, GAP parameters, admin management (add/remove by email), pilot class definitions, delete competition (danger zone).
@@ -317,7 +317,7 @@ This IA can be implemented incrementally:
 
 1. ~~**Add global nav bar** to all authenticated pages (My Flights, Competitions, User Menu). This alone fixes the biggest confusion.~~ ✅ Done (#132)
 2. ~~**Remove competition-related UI from dashboard** (sample comp link, competitions button). Dashboard becomes purely about personal flights.~~ ✅ Done (#132)
-3. **Restructure competition detail** as a single scrollable page with clear sections (Tasks, Standings, Pilots, Settings).
+3. **Restructure competition detail** as a single scrollable page with clear sections (Tasks, Scores, Pilots, Settings).
 4. **Move "Comp Score" and "GAP Config"** out of the analysis sidebar into the competition pages.
 5. **Add "View on Map" button** to task detail page as the bridge to analysis.
 6. **Route analysis under `/u/{username}/analysis`** instead of standalone `/analysis.html`.

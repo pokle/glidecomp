@@ -5,8 +5,8 @@ import {
   computeTop3Rows,
   tasksForGroup,
   OVERALL_LABEL,
-  type ClassStanding,
-  type PilotStanding,
+  type CompClassScore,
+  type CompPilotScore,
   type TaskInfo,
 } from "./scores-views";
 
@@ -17,7 +17,7 @@ function pilot(
   name: string,
   scores: Record<string, number>,
   team?: string | null
-): PilotStanding {
+): CompPilotScore {
   const tasks = Object.entries(scores).map(([task_id, score]) => ({
     task_id,
     task_date: "2026-01-01",
@@ -42,25 +42,25 @@ function task(task_id: string, classes: string[]): TaskInfo {
 
 describe("buildClassGroups", () => {
   test("flat classes get an Overall rollup", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       { pilot_class: "open", pilots: [pilot("A", { t1: 100 })] },
       { pilot_class: "floater", pilots: [pilot("B", { t1: 80 })] },
     ];
-    const groups = buildClassGroups(standings);
+    const groups = buildClassGroups(classScores);
     expect(groups.map((g) => g.label)).toEqual(["open", "floater", OVERALL_LABEL]);
     expect(groups[2].classes).toEqual(["open", "floater"]);
     expect(groups[2].pilots.map((p) => p.pilot_name)).toEqual(["A", "B"]);
   });
 
   test("slash-delimited classes roll up to their top-level ancestor", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       { pilot_class: "open/a-grade", pilots: [pilot("A", { t1: 100 })] },
       { pilot_class: "open/b-grade", pilots: [pilot("B", { t1: 120 })] },
       { pilot_class: "open/recreational", pilots: [pilot("C", { t1: 50 })] },
       { pilot_class: "floater/vetran", pilots: [pilot("D", { t1: 90 })] },
       { pilot_class: "floater/novice", pilots: [pilot("E", { t1: 70 })] },
     ];
-    const groups = buildClassGroups(standings);
+    const groups = buildClassGroups(classScores);
     expect(groups.map((g) => g.label)).toEqual([
       "open/a-grade",
       "open/b-grade",
@@ -87,12 +87,12 @@ describe("buildClassGroups", () => {
   });
 
   test("deeper hierarchies produce a rollup per ancestor level", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       { pilot_class: "hg/open/rigid", pilots: [pilot("A", { t1: 10 })] },
       { pilot_class: "hg/open/flex", pilots: [pilot("B", { t1: 20 })] },
       { pilot_class: "hg/sport", pilots: [pilot("C", { t1: 30 })] },
     ];
-    const labels = buildClassGroups(standings).map((g) => g.label);
+    const labels = buildClassGroups(classScores).map((g) => g.label);
     expect(labels).toContain("hg/open");
     expect(labels).toContain("hg");
     // "hg" spans every class, so a separate Overall would be a duplicate
@@ -100,27 +100,27 @@ describe("buildClassGroups", () => {
   });
 
   test("single-child rollups and duplicate groups are dropped", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       { pilot_class: "floater/novice", pilots: [pilot("A", { t1: 10 })] },
       { pilot_class: "open", pilots: [pilot("B", { t1: 20 })] },
     ];
-    const labels = buildClassGroups(standings).map((g) => g.label);
+    const labels = buildClassGroups(classScores).map((g) => g.label);
     // "floater" would contain exactly floater/novice — dropped
     expect(labels).toEqual(["floater/novice", "open", OVERALL_LABEL]);
   });
 
   test("a single class yields no rollups", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       { pilot_class: "open", pilots: [pilot("A", { t1: 10 })] },
     ];
-    expect(buildClassGroups(standings).map((g) => g.label)).toEqual(["open"]);
+    expect(buildClassGroups(classScores).map((g) => g.label)).toEqual(["open"]);
   });
 });
 
 // ── computeTop3Rows ───────────────────────────────────────────────────────────
 
 describe("computeTop3Rows", () => {
-  const standings: ClassStanding[] = [
+  const classScores: CompClassScore[] = [
     {
       pilot_class: "open",
       pilots: [
@@ -139,7 +139,7 @@ describe("computeTop3Rows", () => {
   ];
 
   test("takes the top 3 scores per task plus a Total row", () => {
-    const groups = buildClassGroups(standings);
+    const groups = buildClassGroups(classScores);
     const open = groups.find((g) => g.label === "open")!;
     const rows = computeTop3Rows(open, tasks);
 
@@ -159,7 +159,7 @@ describe("computeTop3Rows", () => {
   });
 
   test("rows shrink when fewer than 3 pilots flew", () => {
-    const groups = buildClassGroups(standings);
+    const groups = buildClassGroups(classScores);
     const floater = groups.find((g) => g.label === "floater")!;
     const rows = computeTop3Rows(floater, tasks);
     expect(rows.map((r) => r.label)).toEqual(["T3", "Total"]);
@@ -167,7 +167,7 @@ describe("computeTop3Rows", () => {
   });
 
   test("the Overall group spans every task", () => {
-    const groups = buildClassGroups(standings);
+    const groups = buildClassGroups(classScores);
     const overall = groups.find((g) => g.label === OVERALL_LABEL)!;
     expect(tasksForGroup(overall, tasks).map((t) => t.task_id)).toEqual([
       "t1",
@@ -181,7 +181,7 @@ describe("computeTop3Rows", () => {
 
 describe("aggregateTeams", () => {
   test("sums scores per task and total, ranked by total", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       {
         pilot_class: "open",
         pilots: [
@@ -197,7 +197,7 @@ describe("aggregateTeams", () => {
       },
     ];
 
-    const teams = aggregateTeams(standings);
+    const teams = aggregateTeams(classScores);
     expect(teams.map((t) => t.team_name)).toEqual(["Eagles", "Condors"]);
 
     const eagles = teams[0];
@@ -213,21 +213,21 @@ describe("aggregateTeams", () => {
   });
 
   test("a pilot entered in two classes is listed once, ordered by contribution", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       { pilot_class: "open", pilots: [pilot("A", { t1: 50 }, "Condors"), pilot("B", { t1: 60 }, "Condors")] },
       { pilot_class: "floater", pilots: [pilot("A", { t2: 30 }, "Condors")] },
     ];
-    const teams = aggregateTeams(standings);
+    const teams = aggregateTeams(classScores);
     // A contributes 80 total across both classes, B only 60
     expect(teams[0].pilots).toEqual(["A", "B"]);
     expect(teams[0].total_score).toBe(140);
   });
 
   test("returns empty when no pilot has a team", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       { pilot_class: "open", pilots: [pilot("A", { t1: 10 }), pilot("B", { t1: 20 }, "  ")] },
     ];
-    expect(aggregateTeams(standings)).toEqual([]);
+    expect(aggregateTeams(classScores)).toEqual([]);
   });
 });
 
@@ -235,7 +235,7 @@ describe("aggregateTeams", () => {
 
 describe("shared ranks on ties", () => {
   test("buildClassGroups: equal totals share a rank, next rank skips (1,2,2,4)", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       {
         pilot_class: "open",
         pilots: [
@@ -246,7 +246,7 @@ describe("shared ranks on ties", () => {
         ],
       },
     ];
-    const group = buildClassGroups(standings).find((g) => g.label === "open")!;
+    const group = buildClassGroups(classScores).find((g) => g.label === "open")!;
     expect(group.pilots.map((p) => [p.pilot_name, p.rank])).toEqual([
       ["A", 1],
       ["B", 2],
@@ -257,7 +257,7 @@ describe("shared ranks on ties", () => {
 
   test("buildClassGroups: ties are on the published whole-point total", () => {
     // 700.4 and 699.6 both display as 700 → tie; 699.4 displays as 699.
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       {
         pilot_class: "open",
         pilots: [
@@ -267,12 +267,12 @@ describe("shared ranks on ties", () => {
         ],
       },
     ];
-    const group = buildClassGroups(standings).find((g) => g.label === "open")!;
+    const group = buildClassGroups(classScores).find((g) => g.label === "open")!;
     expect(group.pilots.map((p) => p.rank)).toEqual([1, 1, 3]);
   });
 
   test("aggregateTeams: teams with equal totals share a rank", () => {
-    const standings: ClassStanding[] = [
+    const classScores: CompClassScore[] = [
       {
         pilot_class: "open",
         pilots: [
@@ -282,7 +282,7 @@ describe("shared ranks on ties", () => {
         ],
       },
     ];
-    const teams = aggregateTeams(standings);
+    const teams = aggregateTeams(classScores);
     expect(Object.fromEntries(teams.map((t) => [t.team_name, t.rank]))).toEqual({
       Eagles: 1,
       Condors: 1,

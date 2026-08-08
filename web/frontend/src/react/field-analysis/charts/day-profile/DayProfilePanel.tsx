@@ -33,6 +33,7 @@
  * no per-pilot series to set against the model.
  */
 import { useMemo, useState } from "react";
+import { Explain } from "@/react/rac/explain";
 import type {
   ClimbHourlySeries,
   DayTimingSeries,
@@ -278,16 +279,46 @@ export function DayProfilePanel({
       <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
         {readout ?? "Hover a chart for exact figures."}
       </p>
+      {/* Two conventions a reader cannot deduce from the charts stay visible:
+          the shared axis, and which way the arrows point. How the per-leg bars
+          are built is method — behind the ⓘ, printed in place below. */}
       <p className="text-xs text-muted-foreground">
-        All charts — measured and modelled alike — share that one time axis, so a vertical scan
-        compares the two at the same moment. Arrows fly WITH the wind — direction figures are
-        degrees the wind blows from; arrow length and opacity track speed and sample count. On the
-        per-leg chart the pale bar is when the field flew that leg and the solid band inside it is
-        the circling its wind was measured from — a leg the field glided is measured in a sliver of
-        the time it was flown. Exact numbers are in the day family&rsquo;s tables under &ldquo;The
-        metrics in detail&rdquo;.
+        <span className="inline-flex items-baseline gap-1">
+          <span>
+            All charts share that one time axis. Arrows fly WITH the wind —
+            direction figures are degrees the wind blows from.
+          </span>
+          <Explain label="Reading the day profile" className="self-center">
+            <DayProfileNote />
+          </Explain>
+        </span>
+        <span className="hidden print:block">
+          <DayProfileNote />
+        </span>
       </p>
       {showWeather && weather ? <MetAttribution weather={weather} /> : null}
     </figure>
+  );
+}
+
+/** How to read the arrows and the per-leg bars, and where the exact numbers
+ * are. One definition, rendered in the ⓘ and again for print. */
+function DayProfileNote() {
+  return (
+    <>
+      <p>
+        A vertical scan compares the measured and the modelled at the same
+        moment. Arrow length and opacity track speed and sample count.
+      </p>
+      <p>
+        On the per-leg chart the pale bar is when the field flew that leg, and
+        the solid band inside it is the circling its wind was measured from — a
+        leg the field glided is measured in a sliver of the time it was flown.
+      </p>
+      <p>
+        Exact numbers are in the day family&rsquo;s tables under &ldquo;The
+        metrics in detail&rdquo;.
+      </p>
+    </>
   );
 }

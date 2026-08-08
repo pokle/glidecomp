@@ -6,9 +6,11 @@ Analysis user experience issues), alongside the still-open
 [#452](https://github.com/pokle/glidecomp/issues/452) and
 [#458](https://github.com/pokle/glidecomp/issues/458).
 
-**Status.** §A is shipped. §B, §C, §E, §F, §G, §H are untouched by anything
-since. §D is half-answered by [#519](https://github.com/pokle/glidecomp/pull/519)
-and [#520](https://github.com/pokle/glidecomp/pull/520) — see the note there.
+**Status.** §A is shipped. **§B is shipped** — see its section below for what
+landed and the one place it departed from this plan; §G's column-header ⓘs came
+with it. §C, §E, §F, §H are untouched by anything since. §D is half-answered by
+[#519](https://github.com/pokle/glidecomp/pull/519) and
+[#520](https://github.com/pokle/glidecomp/pull/520) — see the note there.
 
 ## The problem, measured
 
@@ -190,14 +192,51 @@ heading or column header — the place the reader's question actually arises:
 | `VerdictLegend` (the \|ρ\| ≥ 0.5 / ≥ 0.3 / noise-floor thresholds) | Inline under both ranking tables, both pages | ⓘ on the **"What it means"** column header. Stays statically in `Footnotes` for print |
 | "Rank 22 behaviours against one day's results and a few will look strong on luck alone…" | Inline paragraph | ⓘ on the section heading |
 | "N behaviours were measured on fewer than 8 pilots…" | Inline paragraph | Same ⓘ, second paragraph |
-| The 5-line Spearman intro under "Which behaviours went with better results" | Always visible | Keep **one** sentence visible ("Each row is one behaviour, compared against the published placings"); the rest into the heading's ⓘ |
+| The 5-line Spearman intro under "Which behaviours went with better ranks" | Always visible | Keep **one** sentence visible ("Each row is one behaviour, compared against the published ranks"); the rest into the heading's ⓘ |
 | `StyleClusters`' method + silhouette paragraph | Inline, ends with `mean silhouette 0.16` | ⓘ on "Pilot style clusters" |
 | `PercentileHeatmap`'s figcaption (6 sentences) | Inline | Keep the first sentence; rest into a ⓘ on the section heading |
 | The weather panel's provenance/sampling block | Three paragraphs under the charts | **Careful:** the Open-Meteo CC BY 4.0 credit is a licence obligation and must stay visible. Keep a one-line visible credit, move grid-size / elevation / sampling detail behind ⓘ |
-| Comp page: the "Across tasks / Day to day / Against comp standings" paragraph | One dense block below the table | Split into **three** ⓘs, one per column header — that is where each question is asked |
+| Comp page: the "Across tasks / Day to day / Against comp scores" paragraph | One dense block below the table | Split into **three** ⓘs, one per column header — that is where each question is asked |
 
 Net effect on the task page: roughly 1,400 of the 3,588 prose words leave the
 default reading flow without leaving the page.
+
+**SHIPPED**, as part of a whole-SPA copy reduction rather than a
+field-analysis-only change, so the affordance is the RAC kit's
+`rac/explain.tsx` rather than `field-analysis/Explain.tsx` — the comp hub, the
+scores tables and `SettingsDialog` use it too, and a reader should only ever
+learn one vocabulary. `MetricExplanation` sits on top of it, as planned.
+
+The notes themselves live in `field-analysis/ReadingNotes.tsx`, one component
+per note, so the popover and the printed copy are the same JSX and cannot
+drift. Measured against the bundled Corryong Cup 2026 (fresh numbers, per the
+warning above):
+
+| | Before | After |
+|---|---|---|
+| Comp analysis | 8,056 px / 4,188 words | **7,845 px / 3,820 words** |
+| Task analysis | 17,656 px / 9,052 words | **17,241 px / 8,363 words** |
+
+**One departure, and it is the interesting one.** The plan said moved prose
+"stays statically in `Footnotes` for print". Rendered *visibly* there — which is
+what `Footnotes` does, and what `MetricGlossary` beside it has always done —
+that made the comp page **taller than before the change** (8,345 px): the
+paragraphs were lifted out of the table and put straight back underneath it.
+So `HowToReadFootnote` is `hidden print:block`, and its popovers have no "read
+the full note" link, because there is nowhere to go that the popover has not
+already said. The glossary keeps its visible form on the same reasoning
+inverted: 26 entries are worth reading in bulk, and each ⓘ genuinely links into
+it.
+
+The distinction is worth keeping when §C and the rest land: **a static mirror
+earns screen space only when it is more than a transcript of the popovers on
+the same page.**
+
+Coverage is `e2e/explain-affordance.spec.ts`, which asserts all three legs —
+the note is out of the reading flow, it is one click away with Esc returning
+focus to the trigger, and it is on paper. The print leg is the one nothing else
+guards: a screen-driven spec passes happily while the printout has lost half
+its method.
 
 ## C. Collapse the reference layer
 
@@ -211,7 +250,7 @@ Everything a reader consults once should start closed. Use `Disclosure`
   compared, 3 pilots not analysed").
 - **"Outcome checks"** — both pages. Explicitly a sanity check on the analysis,
   not a finding; the copy says so. Collapse.
-- **"Standings behind these figures"** (comp page) — a duplicate of the scores
+- **"Scores behind these figures"** (comp page) — a duplicate of the scores
   page. Collapse, with a link to `/comp/:id/scores`.
 - **Family sections** — already correct (top-3 open). Leave alone.
 - **`AnalysisBasis`** — leave open. It is four facts and a bar, and it
@@ -315,7 +354,7 @@ existing e2e assertions have a mode to run in.
   to build its glossary. Pass those descriptions to `MetricExplanation` in the
   first column and the table becomes self-explaining, matching the task page.
 - Column-header ⓘs per §B.
-- Collapse "Standings behind these figures" and "Outcome checks" per §C.
+- Collapse "Scores behind these figures" and "Outcome checks" per §C.
 - The "Per task:" row is a bare list of underlined links. Turning each into a
   card with its own one-line finding is the natural home for §E's summary and
   is most of what [#452](https://github.com/pokle/glidecomp/issues/452) asks

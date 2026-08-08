@@ -75,7 +75,7 @@ function scoresCsvDev(): Plugin {
             const comp = (await compRes.json()) as { name: string };
             const scores = scoresRes.ok
               ? ((await scoresRes.json()) as ScoresCsvInput)
-              : { comp_id: compId, tasks: [], standings: [] };
+              : { comp_id: compId, tasks: [], scores: [] };
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader(
               'Content-Disposition',

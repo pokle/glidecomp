@@ -445,7 +445,7 @@ export function renderCompReport(report: CompAggregateReport): string {
   lines.push(heading('Competition Field Analysis', '='));
 
   // Separation first here too — task-by-task ρ columns show which strategies
-  // mattered on which day; the standings are context, not the headline.
+  // mattered on which day; the scores are context, not the headline.
   // Outcome-derived metrics rank apart, same as the per-task report: they
   // correlate by construction, so they must not top the behavioural ranking.
   // |mean signed ρ| ranks CONSISTENT separation: a metric flip-flopping
@@ -511,8 +511,8 @@ export function renderCompReport(report: CompAggregateReport): string {
     );
   }
 
-  const standings: ReportTable = {
-    title: `Comp standings (${report.taskLabels.length} tasks)`,
+  const scores: ReportTable = {
+    title: `Comp scores (${report.taskLabels.length} tasks)`,
     columns: [
       { header: '#', align: 'right' },
       { header: 'Pilot', align: 'left' },
@@ -526,7 +526,7 @@ export function renderCompReport(report: CompAggregateReport): string {
       p.totalScore.toFixed(1),
     ]),
   };
-  lines.push('', ...renderTable(standings));
+  lines.push('', ...renderTable(scores));
   lines.push('');
   return lines.join('\n');
 }

@@ -173,7 +173,7 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   // (in a field big enough for it to mean anything) the median are named too.
   //
   // Ranked by THIS component's points — the y axis — not by the class
-  // standings. That is what "the best three" means on a chart about one
+  // scores. That is what "the best three" means on a chart about one
   // component, and it is the reading that makes the arrival chart's story
   // legible: the pilot who won the day is not necessarily among the three
   // named at the top of it.

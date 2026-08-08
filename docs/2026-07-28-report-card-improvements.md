@@ -14,7 +14,7 @@ below. [#528](https://github.com/pokle/glidecomp/pull/528) added a **vs-the-day
 variant for the class leader** — a pilot with no gap to anyone still asks "full
 validity, why not full points?", so `buildComparisonSection` hands off to
 `buildPointsLeftSection` instead of returning nothing — plus **per-component
-standings**, the `rank` line each of the distance / time / leading / arrival
+scores**, the `rank` line each of the distance / time / leading / arrival
 sections now carries ("3rd fastest of 12", "First of 22 to the end of the speed
 section"). [#529](https://github.com/pokle/glidecomp/pull/529) then made the
 ledgers reconcile: penalties are a row like any component, derived from the
@@ -317,10 +317,10 @@ Two lines, identical time, identical detail, one event. Collapse to
 `ESS + Goal — CORRY` when `essIdx === goalIdx`. Cosmetic, but it is the moment
 the pilot finished the task and it currently reads like a rendering bug.
 
-### 9. The task's contribution to the standings is never shown — M
+### 9. The task's contribution to the scores is never shown — M
 
 The report card ends at the task total. Nothing says what this task contributed
-to the comp standings, whether FTV kept or discarded it, or where the pilot sits
+to the comp scores, whether FTV kept or discarded it, or where the pilot sits
 overall. A closing "This task in the competition" line with a link to
 `/comp/:id/scores` would close the loop — and on an FTV comp, "this task was
 discarded" is information a pilot very much wants on the page that explains it.
@@ -485,7 +485,7 @@ reconstruction is wrong; that is the assertion the script fails on.
 public and read by everyone, not only by its pilot — alongside the three best at
 that component, the last, and the median (only when the field is big enough for
 "the middle one" to mean anything). Names are ranked by the component's own
-points, not the class standings, which is what makes the arrival chart's story
+points, not the class scores, which is what makes the arrival chart's story
 legible: the pilot who won the day is not necessarily among the three named at
 the top of it.
 
@@ -559,7 +559,7 @@ charts would bury the prose that currently carries it.
    the distance-validity distribution
 9. ✅ Task distance + start-crossing reason + ESS/goal collapse; ✅ the
    terminology pass, as a collapsed glossary at the foot of the page
-10. ✅ Standings link
+10. ✅ Scores link
 
 Items 1, 3, 4 and 7 shared one API/payload change and one `SCORING_ENGINE_VERSION`
 bump (v28 — a payload roll, no behaviour change), so they shipped together.

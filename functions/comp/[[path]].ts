@@ -165,7 +165,7 @@ const ROUTES: Array<{
           : undefined,
         head: {
           title: `${c.name} — GlideComp`,
-          description: `${c.name}: ${summary}. Tasks, standings and per-pilot score explanations on GlideComp.`,
+          description: `${c.name}: ${summary}. Tasks, scores and per-pilot score explanations on GlideComp.`,
           extra:
             jsonLd({
               "@context": "https://schema.org",
@@ -194,7 +194,7 @@ const ROUTES: Array<{
           : undefined,
         head: {
           title: `Scores — ${c.name} — GlideComp`,
-          description: `Standings for ${c.name}: overall scores per class, top 3 per task, and per-pilot score explanations on GlideComp.`,
+          description: `${c.name} scores: overall totals per class, top 3 per task, and per-pilot score explanations on GlideComp.`,
           extra: jsonLd(
               breadcrumb(origin, [
                 ["Competitions", "/comp"],
@@ -499,7 +499,7 @@ async function scoresCsv(
 
   // No scored task yet → the header row alone. An empty export is a truthful
   // answer; an error would make a legitimate URL look broken.
-  const csv = buildScoresCsv(data.scores ?? { comp_id: compId, tasks: [], standings: [] }, {
+  const csv = buildScoresCsv(data.scores ?? { comp_id: compId, tasks: [], class_scores: [] }, {
     compName: data.comp.name,
     origin,
   });
@@ -665,8 +665,8 @@ function breadcrumb(origin: string, items: Array<[string, string]>) {
   };
 }
 
-function pilotNameFrom(score: { classes: Array<{ pilots: Array<{ comp_pilot_id: string; pilot_name: string }> }> }, pilotId: string): string {
-  for (const cls of score.classes) {
+function pilotNameFrom(score: { class_scores: Array<{ pilots: Array<{ comp_pilot_id: string; pilot_name: string }> }> }, pilotId: string): string {
+  for (const cls of score.class_scores) {
     const p = cls.pilots.find((x) => x.comp_pilot_id === pilotId);
     if (p) return p.pilot_name;
   }

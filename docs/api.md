@@ -132,6 +132,16 @@ Scored results for a single task:
 curl https://glidecomp.com/api/comp/compa/task/taska/score
 ```
 
+Both score endpoints return their per-class results as **`class_scores`**, an
+array of `{ pilot_class, pilots }`. The shape is the same on both, so one
+reader handles either.
+
+> **Changed 2026-08.** This array used to be called `standings` on the
+> competition endpoint and `classes` on the task endpoint — the same data under
+> two names. Both are now `class_scores`, and the old names are gone. (The
+> competition response also has a `tasks[].classes`, which is unrelated: it is
+> the list of class *names* a task was scored for.)
+
 Both score endpoints return `computed_at` and a `stale` flag, and carry an
 `ETag`. Use it to poll cheaply while a re-score is in flight:
 

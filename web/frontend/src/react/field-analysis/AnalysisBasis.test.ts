@@ -116,7 +116,7 @@ describe("AnalysisBasis excluded pilots", () => {
   it("keeps the count but sends the names to the footnote", () => {
     const out = html(OLD_BASIS, EIGHT);
     expect(out).toContain("8");
-    expect(out).toContain("in the standings but not in this analysis");
+    expect(out).toContain("in the scores but not in this analysis");
     expect(out).not.toContain("Pilot 0");
     expect(out).not.toContain("no tracklog to analyse");
     // ...via a link that lands on the footnote's heading.
@@ -125,11 +125,11 @@ describe("AnalysisBasis excluded pilots", () => {
 
   it("says nothing at all when every pilot was analysed", () => {
     const out = html(OLD_BASIS, []);
-    expect(out).not.toContain("in the standings");
+    expect(out).not.toContain("in the scores");
     expect(out).not.toContain("excluded-pilots");
   });
 
   it("keeps the singular readable for one pilot", () => {
-    expect(html(OLD_BASIS, EIGHT.slice(0, 1))).toContain("pilot is in the standings");
+    expect(html(OLD_BASIS, EIGHT.slice(0, 1))).toContain("pilot is in the scores");
   });
 });
