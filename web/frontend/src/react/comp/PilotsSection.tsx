@@ -983,6 +983,17 @@ function CivlFillDialog({
               {listSentence(lookup.lists)}. Each is taken from the list where
               they score the most WPRS points.
             </p>
+            {/* Spelled out because this is the only place the number is
+                explained, and "WPRS" is what the roster column is headed —
+                an organiser who has not met the acronym meets it here. CIVL
+                publishes no overall ranking, which is why a pilot in several
+                lists has to be taken from one of them. */}
+            <p className="text-sm text-muted-foreground">
+              WPRS is the FAI/CIVL <strong>World Pilot Ranking Scheme</strong> —
+              the score CIVL works out from a pilot's competition results, and
+              sorts each of its ranking lists by. A pilot can be in several
+              lists, and CIVL publishes no overall one.
+            </p>
           </>
         )}
 
