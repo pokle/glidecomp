@@ -192,7 +192,7 @@ heading or column header — the place the reader's question actually arises:
 | `VerdictLegend` (the \|ρ\| ≥ 0.5 / ≥ 0.3 / noise-floor thresholds) | Inline under both ranking tables, both pages | ⓘ on the **"What it means"** column header. Stays statically in `Footnotes` for print |
 | "Rank 22 behaviours against one day's results and a few will look strong on luck alone…" | Inline paragraph | ⓘ on the section heading |
 | "N behaviours were measured on fewer than 8 pilots…" | Inline paragraph | Same ⓘ, second paragraph |
-| The 5-line Spearman intro under "Which behaviours went with better scores" | Always visible | Keep **one** sentence visible ("Each row is one behaviour, compared against the published ranks"); the rest into the heading's ⓘ |
+| The 5-line Spearman intro under "Which behaviours went with better ranks" | Always visible | Keep **one** sentence visible ("Each row is one behaviour, compared against the published ranks"); the rest into the heading's ⓘ |
 | `StyleClusters`' method + silhouette paragraph | Inline, ends with `mean silhouette 0.16` | ⓘ on "Pilot style clusters" |
 | `PercentileHeatmap`'s figcaption (6 sentences) | Inline | Keep the first sentence; rest into a ⓘ on the section heading |
 | The weather panel's provenance/sampling block | Three paragraphs under the charts | **Careful:** the Open-Meteo CC BY 4.0 credit is a licence obligation and must stay visible. Keep a one-line visible credit, move grid-size / elevation / sampling detail behind ⓘ |

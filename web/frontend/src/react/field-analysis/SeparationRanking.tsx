@@ -159,7 +159,7 @@ export function SeparationRanking({
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         {/* The heading already asks the question ("which behaviours went with
-            better scores"), so one clause is enough here. What ρ is, which
+            better ranks"), so one clause is enough here. What ρ is, which
             sign is good, and what "pilots measured" is worth are on the
             column headers' ⓘ — and in HowToReadFootnote, for paper. */}
         Each row is one behaviour, compared against the published ranks.

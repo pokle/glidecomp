@@ -347,7 +347,7 @@ export function CompFieldAnalysis() {
         <div className="mt-6 flex flex-col gap-6">
           <Card aria-labelledby="consistency-heading" className="gap-3">
             <h2 id="consistency-heading" className="text-lg font-semibold">
-              Which behaviours went with better scores, across tasks
+              Which behaviours went with better ranks, across tasks
             </h2>
             {/* One line, and it says the thing the heading does not: what the
                 order means. Everything else this paragraph used to carry is on

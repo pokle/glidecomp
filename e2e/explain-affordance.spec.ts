@@ -21,7 +21,7 @@ import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "./fixtures/test";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
-const RANKING_HEADING = /Which behaviours went with better scores/;
+const RANKING_HEADING = /Which behaviours went with better ranks/;
 
 /** The seeded sample comp's analysis URLs, and its first analysed task's. */
 async function analysisUrls(request: APIRequestContext) {

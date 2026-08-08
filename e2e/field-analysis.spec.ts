@@ -36,7 +36,7 @@ import { test, expect, type Page } from "./fixtures/test";
 import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";
-const RANKING_HEADING = /Which behaviours went with better scores/;
+const RANKING_HEADING = /Which behaviours went with better ranks/;
 
 let analysisPath: string;
 
