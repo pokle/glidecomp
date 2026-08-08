@@ -28,7 +28,14 @@ import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
 import { Button } from "@/react/rac/button";
 import { cn } from "@/react/lib/utils";
+import { Explain } from "@/react/rac/explain";
 import { MetricExplanation } from "./MetricExplanation";
+import {
+  OutcomeChecksNote,
+  PilotsMeasuredNote,
+  StrengthNote,
+  VerdictLegend,
+} from "./ReadingNotes";
 import { verdictWords } from "./units";
 import { MetricDetailPanel } from "./charts/MetricDetailPanel";
 import { MetricChartOverlay } from "./charts/MetricChartOverlay";
@@ -91,26 +98,6 @@ export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }
   return <Badge variant={variant}>{verdictWords(correlation.verdict)}</Badge>;
 }
 
-/** What every verdict chip means, in the thresholds behind it — rendered
- * under both the task ranking and the comp aggregate. The chips read as plain
- * English ("could be chance"); this is where the statistics they stand for are
- * spelled out, so the plain words are never the whole story a curious reader
- * can get. */
-export function VerdictLegend() {
-  return (
-    <p className="text-xs text-muted-foreground">
-      <strong>clear pattern</strong> is |ρ| ≥ 0.5, <strong>some pattern</strong> ≥ 0.3
-      and <strong>faint pattern</strong> below — each only once the coefficient is
-      bigger than chance alone produces at that many pilots (its noise floor).{" "}
-      <strong>could be chance</strong> (in the statistics: within noise) means
-      shuffling the placings produces a coefficient that size more than 5% of the
-      time, so it cannot be told apart from luck however big it looks.{" "}
-      <strong>too few pilots</strong> is fewer than {MIN_CORRELATION_N} pilots with a
-      value — not enough to tell either way.
-    </p>
-  );
-}
-
 export function SeparationRanking({
   metrics,
   report,
@@ -171,24 +158,14 @@ export function SeparationRanking({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {/* The heading now asks the question ("which behaviours went with
-            better results"), so this says how the answer was arrived at —
-            in that order, and in a pilot's words before the statistician's. */}
-        Every row is one behaviour, measured for each pilot and then compared
-        against the published placings (Spearman's rank correlation, ρ). Rank 1
-        is best, so a behaviour where more is better shows a{" "}
-        <strong>negative</strong> ρ. A bigger bar means the behaviour tracked
-        the placings more closely on this task, and{" "}
-        <strong>pilots measured</strong> is how much of the analysed field the
-        behaviour applied to — a reading drawn from half the field is thinner
-        than one drawn from all of it.
+        {/* The heading already asks the question ("which behaviours went with
+            better results"), so one clause is enough here. What ρ is, which
+            sign is good, and what "pilots measured" is worth are on the
+            column headers' ⓘ — and in HowToReadFootnote, for paper. */}
+        Each row is one behaviour, compared against the published placings.
         {report ? (
           // An instruction to interact — meaningless on paper.
-          <span className="print:hidden">
-            {" "}
-            Select a row to see that behaviour plotted against rank — the
-            chart stays in view while you work down the table.
-          </span>
+          <span className="print:hidden"> Select a row to plot it against rank.</span>
         ) : null}
       </p>
 
@@ -270,17 +247,15 @@ export function SeparationRanking({
         />
       )}
 
-      <VerdictLegend />
-      <p className="text-xs text-muted-foreground">
-        Rank {ranked.length} behaviours against one day's results and a few will
-        look strong on luck alone — the ones worth believing are those that
-        repeat across tasks in the competition-level analysis.
-      </p>
+      {/* The verdict legend and the one-day caveat used to sit here as two
+          paragraphs of statistics under every ranking. They are on the column
+          headers' ⓘ now, and printed in HowToReadFootnote. What stays visible
+          is the COUNT below: a fact about this report, not a method note. */}
       {underpowered.length > 0 ? (
         <p className="text-xs text-muted-foreground">
           {underpowered.length} behaviour{underpowered.length === 1 ? " was" : "s were"}{" "}
           measured on fewer than {MIN_CORRELATION_N} pilots — too few to tell
-          either way, so read those rows as a hint at most.
+          either way.
         </p>
       ) : null}
 
@@ -288,14 +263,18 @@ export function SeparationRanking({
 
       {outcomeRanked.length > 0 ? (
         <div className="space-y-2 pt-2">
-          <h3 className="text-base font-semibold">Outcome checks</h3>
+          <h3 className="flex items-center gap-1 text-base font-semibold">
+            Outcome checks
+            <Explain label="Outcome checks">
+              <OutcomeChecksNote />
+              <p>
+                Their per-pilot tables stay in the Race craft section below.
+              </p>
+            </Explain>
+          </h3>
           <p className="text-sm text-muted-foreground">
-            These are not behaviours. They measure the result itself, for
-            example the time behind the leader and the race time lost, so they
-            always follow the places. They are here as a check on the analysis.
-            A weak pattern in this table means that something is wrong in the
-            numbers, and not in the flying of any pilot. Their per-pilot tables
-            stay in the Race craft section below.
+            These measure the result, not a behaviour, so they always follow the
+            places.
           </p>
           <RankingTable
             ranked={outcomeRanked}
@@ -496,10 +475,24 @@ function RankingTable({
         {/* No aria-labels on these headers any more: the columns they
             replaced were named "ρ" and "n", symbols a screen reader can only
             spell out. "Strength" and "Pilots measured" say themselves, and an
-            aria-label would override the visible name for no gain. */}
-        <Column className="w-48">Strength</Column>
-        <Column className="w-32">What it means</Column>
-        <Column className="w-36">Pilots measured</Column>
+            aria-label would override the visible name for no gain.
+            Each carries the ⓘ holding the paragraph that used to explain it
+            below the table; all three are printed in HowToReadFootnote. */}
+        <Column className="w-48">
+          <HeaderWithNote label="Strength">
+            <StrengthNote />
+          </HeaderWithNote>
+        </Column>
+        <Column className="w-32">
+          <HeaderWithNote label="What it means">
+            <VerdictLegend />
+          </HeaderWithNote>
+        </Column>
+        <Column className="w-36">
+          <HeaderWithNote label="Pilots measured">
+            <PilotsMeasuredNote />
+          </HeaderWithNote>
+        </Column>
       </TableHeader>
       <TableBody>
         {ranked.map(({ metric, correlation }) => (
@@ -566,6 +559,28 @@ function RankingTable({
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+/**
+ * A column header with its ⓘ. `whitespace-normal` because the kit's Column is
+ * `whitespace-nowrap` and "Pilots measured" plus a 24px button does not fit a
+ * 9rem column on one line.
+ */
+function HeaderWithNote({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-normal">
+      {label}
+      <Explain label={label}>
+        {children}
+      </Explain>
+    </span>
   );
 }
 

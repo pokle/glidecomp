@@ -26,6 +26,7 @@
  */
 import { useMemo, useState } from "react";
 import { cn } from "@/react/lib/utils";
+import { Explain } from "@/react/rac/explain";
 import {
   FAMILY_LABELS,
   formatMetricValue,
@@ -317,23 +318,60 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
           : "Hover a cell for the pilot, value, and percentile behind it."}
       </p>
 
+      {/* Two sentences on screen: what a cell is, and what an empty one is.
+          The column ordering the caption used to spell out is now stated by
+          the chart's own axis title ("behaviours — most explanatory → least"),
+          and the rest is method, so it sits behind the ⓘ. */}
       <figcaption className="text-xs text-muted-foreground">
-        The pilots in rank order against every behaviour. A darker cell is a
-        better percentile in this field, and an empty cell is a behaviour that
-        does not apply. The columns start with the behaviours whose better end
-        went with better places, continue through the behaviours that separated
-        nobody, and end with the behaviours that ran the other way. A field
-        that one behaviour separated therefore shades dark in the top-left
-        corner, and a field where each pilot won differently does not. The band
-        above rates how much pattern each group of columns holds: a{" "}
-        <strong>clear</strong>,{" "}
-        <strong>some</strong> or <strong>faint</strong> pattern,{" "}
-        <strong>noise</strong> (could be chance), or <strong>too few</strong>{" "}
-        pilots to tell. The family sections below carry the exact values.
-        {hasNeutral
-          ? " † This behaviour has no good or bad direction. The shade is the position in the field, and not the quality."
-          : null}
+        <span className="inline-flex items-baseline gap-1">
+          <span>
+            The pilots in rank order against every behaviour. A darker cell is
+            a better percentile in this field, and an empty cell is a behaviour
+            that does not apply.
+          </span>
+          <Explain label="Reading the heatmap" className="self-center">
+            <HeatmapNote hasNeutral={hasNeutral} />
+          </Explain>
+        </span>
+        {/* A popover cannot exist on paper, so print gets the same prose in
+            place. Hidden on screen, where the ⓘ is the way in. */}
+        <span className="hidden print:block">
+          <HeatmapNote hasNeutral={hasNeutral} />
+        </span>
       </figcaption>
     </figure>
+  );
+}
+
+/**
+ * What the column order, the band above and the † marker mean. Rendered twice
+ * — in the caption's ⓘ on screen, and statically for print — so the two can
+ * never drift. See rac/explain.tsx on why anything behind a ⓘ needs a printed
+ * copy.
+ */
+function HeatmapNote({ hasNeutral }: { hasNeutral: boolean }) {
+  return (
+    <>
+      <p>
+        The columns start with the behaviours whose better end went with better
+        places, continue through the behaviours that separated nobody, and end
+        with the behaviours that ran the other way. A field that one behaviour
+        separated therefore shades dark in the top-left corner, and a field
+        where each pilot won differently does not.
+      </p>
+      <p>
+        The band above rates how much pattern each group of columns holds: a{" "}
+        <strong>clear</strong>, <strong>some</strong> or <strong>faint</strong>{" "}
+        pattern, <strong>noise</strong> (could be chance), or{" "}
+        <strong>too few</strong> pilots to tell. The family sections below carry
+        the exact values.
+      </p>
+      {hasNeutral ? (
+        <p>
+          † This behaviour has no good or bad direction. The shade is the
+          position in the field, and not the quality.
+        </p>
+      ) : null}
+    </>
   );
 }

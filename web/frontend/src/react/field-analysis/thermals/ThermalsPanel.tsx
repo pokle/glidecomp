@@ -27,6 +27,7 @@ import type {
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
+import { Explain } from "@/react/rac/explain";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { formatTimeOfDay } from "../../lib/time";
 import { formatAltitude, useUnits } from "../../lib/units";
@@ -692,16 +693,48 @@ export function ThermalsPanel({
         </details>
       </div>
 
+      {/* The reconstruction method is behind the ⓘ. The model ATTRIBUTION is
+          not: it is a licence obligation, so it stays on the page in both
+          media, and the "a model run, not an observation" caveat stays with
+          it — a prediction must never be readable as a record. */}
       <p className="text-xs text-muted-foreground">
-        How to read this: each thermal pools every pilot's fixes through the same climb into{" "}
-        100 m altitude bands; a band's core is the lift-weighted centre of its fixes, so the
-        rose and the sector readings are already normalised for the thermal's lean and drift.
-        Wedge length is relative climb by side of the core; the dashed ring is the measured
-        working radius and the dotted ring the widest the field ranged. The solid arrow is the
-        wind measured from the pilots' circles; the dashed arrow is the weather model's wind
-        for the same place, time and altitudes — a model run, not an observation.
-        {weather?.source ? ` Model: ${weather.source.attribution} (${weather.source.model}).` : ""}
+        <span className="inline-flex items-baseline gap-1">
+          <span>
+            The dashed arrow is the weather model&rsquo;s wind — a model run,
+            not an observation.
+            {weather?.source
+              ? ` Model: ${weather.source.attribution} (${weather.source.model}).`
+              : ""}
+          </span>
+          <Explain label="How the thermals were reconstructed" className="self-center">
+            <ThermalsNote />
+          </Explain>
+        </span>
+        <span className="hidden print:block">
+          <ThermalsNote />
+        </span>
       </p>
     </div>
+  );
+}
+
+/** How a thermal shape is built and what each mark on the rose means. One
+ * definition, rendered in the ⓘ and again for print. */
+function ThermalsNote() {
+  return (
+    <>
+      <p>
+        Each thermal pools every pilot&rsquo;s fixes through the same climb into
+        100 m altitude bands. A band&rsquo;s core is the lift-weighted centre of
+        its fixes, so the rose and the sector readings are already normalised
+        for the thermal&rsquo;s lean and drift.
+      </p>
+      <p>
+        Wedge length is relative climb by side of the core; the dashed ring is
+        the measured working radius and the dotted ring the widest the field
+        ranged. The solid arrow is the wind measured from the pilots&rsquo;
+        circles.
+      </p>
+    </>
   );
 }

@@ -6,9 +6,11 @@ Analysis user experience issues), alongside the still-open
 [#452](https://github.com/pokle/glidecomp/issues/452) and
 [#458](https://github.com/pokle/glidecomp/issues/458).
 
-**Status.** §A is shipped. §B, §C, §E, §F, §G, §H are untouched by anything
-since. §D is half-answered by [#519](https://github.com/pokle/glidecomp/pull/519)
-and [#520](https://github.com/pokle/glidecomp/pull/520) — see the note there.
+**Status.** §A is shipped. **§B is shipped** — see its section below for what
+landed and the one place it departed from this plan; §G's column-header ⓘs came
+with it. §C, §E, §F, §H are untouched by anything since. §D is half-answered by
+[#519](https://github.com/pokle/glidecomp/pull/519) and
+[#520](https://github.com/pokle/glidecomp/pull/520) — see the note there.
 
 ## The problem, measured
 
@@ -198,6 +200,43 @@ heading or column header — the place the reader's question actually arises:
 
 Net effect on the task page: roughly 1,400 of the 3,588 prose words leave the
 default reading flow without leaving the page.
+
+**SHIPPED**, as part of a whole-SPA copy reduction rather than a
+field-analysis-only change, so the affordance is the RAC kit's
+`rac/explain.tsx` rather than `field-analysis/Explain.tsx` — the comp hub, the
+scores tables and `SettingsDialog` use it too, and a reader should only ever
+learn one vocabulary. `MetricExplanation` sits on top of it, as planned.
+
+The notes themselves live in `field-analysis/ReadingNotes.tsx`, one component
+per note, so the popover and the printed copy are the same JSX and cannot
+drift. Measured against the bundled Corryong Cup 2026 (fresh numbers, per the
+warning above):
+
+| | Before | After |
+|---|---|---|
+| Comp analysis | 8,056 px / 4,188 words | **7,845 px / 3,820 words** |
+| Task analysis | 17,656 px / 9,052 words | **17,241 px / 8,363 words** |
+
+**One departure, and it is the interesting one.** The plan said moved prose
+"stays statically in `Footnotes` for print". Rendered *visibly* there — which is
+what `Footnotes` does, and what `MetricGlossary` beside it has always done —
+that made the comp page **taller than before the change** (8,345 px): the
+paragraphs were lifted out of the table and put straight back underneath it.
+So `HowToReadFootnote` is `hidden print:block`, and its popovers have no "read
+the full note" link, because there is nowhere to go that the popover has not
+already said. The glossary keeps its visible form on the same reasoning
+inverted: 26 entries are worth reading in bulk, and each ⓘ genuinely links into
+it.
+
+The distinction is worth keeping when §C and the rest land: **a static mirror
+earns screen space only when it is more than a transcript of the popovers on
+the same page.**
+
+Coverage is `e2e/explain-affordance.spec.ts`, which asserts all three legs —
+the note is out of the reading flow, it is one click away with Esc returning
+focus to the trigger, and it is on paper. The print leg is the one nothing else
+guards: a screen-driven spec passes happily while the printout has lost half
+its method.
 
 ## C. Collapse the reference layer
 

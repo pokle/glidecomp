@@ -21,6 +21,7 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
 import { Modal, Dialog, DialogHeader, DialogTitle } from "@/react/rac/dialog";
 import { Button } from "@/react/rac/button";
+import { Explain } from "@/react/rac/explain";
 import {
   aggregateTeams,
   buildClassGroups,
@@ -490,14 +491,29 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
   return (
     <>
       {isFtv ? (
+        // The headline fact stays on the page; how to read the struck-through
+        // and "(part)" rows is method, so it sits behind the ⓘ. Every pilot's
+        // own arithmetic is already a click away in FtvBreakdown, which is
+        // where a reader who wants the detail is going anyway.
         <p className="mt-3 text-sm text-muted-foreground">
-          <strong className="font-medium text-foreground">FTV — Fixed Total Validity.</strong>{" "}
-          Each pilot's total counts only their best tasks up to a fixed validity
+          <strong className="font-medium text-foreground">FTV</strong> — only each
+          pilot&rsquo;s best tasks count
           {scores.ftv_factor != null
-            ? ` (${Math.round(scores.ftv_factor * 100)}% discarded)`
+            ? ` (${Math.round(scores.ftv_factor * 100)}% of validity discarded)`
             : ""}
-          ; struck-through scores were discarded, "(part)" scores counted only in
-          part. Open a total's breakdown for the arithmetic.
+          .{" "}
+          <Explain label="Fixed Total Validity" className="align-middle">
+            <p>
+              Each pilot&rsquo;s total counts only their best tasks up to a fixed
+              validity
+              {scores.ftv_factor != null
+                ? ` (${Math.round(scores.ftv_factor * 100)}% discarded)`
+                : ""}
+              . Struck-through scores were discarded, &ldquo;(part)&rdquo; scores
+              counted only in part.
+            </p>
+            <p>Open a total&rsquo;s breakdown for the arithmetic.</p>
+          </Explain>
         </p>
       ) : null}
       <SortableTable label={`Standings — ${cls.pilot_class}`} columns={columns} rows={rows} />

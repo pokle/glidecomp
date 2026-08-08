@@ -23,7 +23,16 @@ import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { cn } from "@/react/lib/utils";
 import { Card } from "@/react/rac/card";
-import { VerdictBadge, VerdictLegend } from "../field-analysis/SeparationRanking";
+import { Explain } from "@/react/rac/explain";
+import { VerdictBadge } from "../field-analysis/SeparationRanking";
+import {
+  AcrossTasksNote,
+  AgainstStandingsNote,
+  DayToDayNote,
+  HowToReadFootnote,
+  OutcomeChecksNote,
+  VerdictLegend,
+} from "../field-analysis/ReadingNotes";
 import { ConsistencyChip } from "../field-analysis/ConsistencyChip";
 import { ConsistencyMap } from "../field-analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlossary";
@@ -340,15 +349,12 @@ export function CompFieldAnalysis() {
             <h2 id="consistency-heading" className="text-lg font-semibold">
               Which behaviours went with better results, across tasks
             </h2>
+            {/* One line, and it says the thing the heading does not: what the
+                order means. Everything else this paragraph used to carry is on
+                the column headers' ⓘ, where the question is asked. */}
             <p className="text-sm text-muted-foreground">
-              A behaviour that keeps its sign and its size across every task
-              tells you about flying. A behaviour that changes between tasks
-              tells you about the weather on those days. Rank 1 is the best
-              rank, so a behaviour where more is better shows a{" "}
-              <strong>negative</strong> ρ, and its bar is left of centre. Read
-              each row from left to right: the average of the behaviour over the
-              tasks, whether it held from day to day, how it looks against the
-              overall standings, and then each task.
+              Sorted so the behaviours that pulled the same way on every task
+              come first.
             </p>
             <SeparationTable
               metrics={rankedMetrics}
@@ -357,33 +363,13 @@ export function CompFieldAnalysis() {
               subjectLabel="Behaviour"
               fieldSize={active.aggregate.pilots.length}
             />
-            <p className="text-xs text-muted-foreground">
-              <strong>Across tasks</strong> is the average of the coefficients
-              of each task, weighted by n, with the signs kept. It is also the
-              order of the table. A behaviour that pulled the same way every day
-              comes first, because days that pull opposite ways cancel each
-              other there. <strong>Day to day</strong> reads only the tasks
-              whose coefficient cleared its own noise floor, which are the solid
-              bars. A <strong>hollow bar</strong> is a day whose coefficient can
-              be chance. A behaviour that depends on the day is a finding, not a
-              fault. <strong>Against comp standings</strong> is a separate
-              reading. It takes the average of each pilot for that behaviour
-              over the whole competition, and correlates it against their
-              overall place. The verdict and the pilot count belong to that
-              reading.
-            </p>
-            <VerdictLegend />
             {uncorrelated.length > 0 ? (
               <p className="text-xs text-muted-foreground">
                 {uncorrelated.length} more metric
-                {uncorrelated.length === 1 ? "" : "s"} describe the day and not
-                a pilot, for example the wind and the strength of the climbs.
-                They have no value for each pilot to correlate, so they have no
-                row here. They are in the glossary below, and on the analysis of
-                each task.
+                {uncorrelated.length === 1 ? "" : "s"} describe the day, not a
+                pilot, so they have no row here — see the glossary.
               </p>
             ) : null}
-
           </Card>
 
           {/* The map and the outcome checks were h3s nested inside the ranking
@@ -395,24 +381,29 @@ export function CompFieldAnalysis() {
             <h2 id="consistency-map-heading" className="text-lg font-semibold">
               Consistency map
             </h2>
+            {/* The second sentence used to read the axes aloud. ConsistencyMap
+                is the one chart here that draws proper axis titles — it is the
+                model the others were told to copy — so the chart says it. */}
             <p className="text-sm text-muted-foreground">
-              The same table as a picture. It plots how much each behaviour
-              separated the field on each day (across) against how consistently
-              that behaviour pulled one way (up).
+              The same table as a picture.
             </p>
             <ConsistencyMap metrics={rankedMetrics} />
           </Card>
 
           {outcomeMetrics.length > 0 ? (
             <Card aria-labelledby="outcome-heading" className="gap-3">
-              <h2 id="outcome-heading" className="text-lg font-semibold">
+              <h2
+                id="outcome-heading"
+                className="flex items-center gap-1 text-lg font-semibold"
+              >
                 Outcome checks
+                <Explain label="Outcome checks">
+                  <OutcomeChecksNote />
+                </Explain>
               </h2>
               <p className="text-sm text-muted-foreground">
-                These are not behaviours. They measure the result itself, so
-                they always follow the places. They are here as a check on the
-                analysis. A weak pattern means that something is wrong in the
-                numbers, and not in the flying of any pilot.
+                These measure the result, not a behaviour, so they always follow
+                the places.
               </p>
               <SeparationTable
                 metrics={outcomeMetrics}
@@ -454,9 +445,16 @@ export function CompFieldAnalysis() {
             </Table>
           </Card>
 
-          {/* Method descriptions for every metric named above — this page has
-              no ⓘ popovers, so the glossary is the one place to read them
-              (and the printed reference). */}
+          {/* The static form of every column header's ⓘ — popovers are
+              print:hidden and cannot exist on paper, so without this the prose
+              that left the reading flow would have left the page. Print-only:
+              on screen the ⓘs already carry it, and rendering it here as well
+              would put the paragraphs straight back under the table. */}
+          <HowToReadFootnote page="comp" />
+
+          {/* Method descriptions for every metric named above. Visible, unlike
+              the note above: 26 entries a reader may want in bulk, and the one
+              place this page states them at all. */}
           <MetricGlossary
             entries={glossaryEntries}
             intro="How GlideComp measures every metric named above. These are the current method descriptions of the engine. The report of each task carries the same text beside its numbers."
@@ -539,9 +537,28 @@ function SeparationTable({
         <Column isRowHeader className="min-w-56">
           {subjectLabel}
         </Column>
-        <Column className="w-44">Across tasks</Column>
-        <Column className="w-40">Day to day</Column>
-        <Column className="w-44">Against comp standings</Column>
+        {/* Each header carries the paragraph that used to sit under the table
+            explaining it — the place the reader's question actually arises.
+            Every one is mirrored in HowToReadFootnote for print. */}
+        <Column className="w-44">
+          <HeaderWithNote label="Across tasks">
+            <AcrossTasksNote />
+          </HeaderWithNote>
+        </Column>
+        <Column className="w-40">
+          <HeaderWithNote label="Day to day">
+            <DayToDayNote />
+          </HeaderWithNote>
+        </Column>
+        {/* The verdict chip lives in this cell, so the thresholds behind it
+            belong on this header — the comp table has no separate "What it
+            means" column for them the way the task ranking does. */}
+        <Column className="w-44">
+          <HeaderWithNote label="Against comp standings">
+            <AgainstStandingsNote />
+            <VerdictLegend />
+          </HeaderWithNote>
+        </Column>
         {taskLabels.map((label, i) => (
           <Column
             key={label}
@@ -637,6 +654,28 @@ function SeparationTable({
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+/**
+ * A column header with its ⓘ. `whitespace-normal` because the kit's Column is
+ * `whitespace-nowrap` by default and "Against comp standings" plus a 24px
+ * button does not fit a 11rem column on one line.
+ */
+function HeaderWithNote({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-normal">
+      {label}
+      <Explain label={label}>
+        {children}
+      </Explain>
+    </span>
   );
 }
 

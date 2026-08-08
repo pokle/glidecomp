@@ -135,8 +135,10 @@ export function CompScoresPage() {
                   deepLinkTaskId={searchParams.get("task")}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Click any score for a step-by-step explanation. Questions about a
-                  score?{" "}
+                  {/* "Click any score for a step-by-step explanation" was
+                      here too — the tables ScoresViews renders each already
+                      say it directly under themselves. */}
+                  Questions about a score?{" "}
                   <Link
                     to={`${compPath(compId, comp.name)}#admins`}
                     className="underline underline-offset-4"

@@ -79,9 +79,8 @@ export function ScoresDownload({
           <DialogHeader>
             <DialogTitle>Open in Google Sheets</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              One formula pulls these scores into a sheet and keeps them up to
-              date — Sheets re-reads them for you, so a re-score turns up
-              without another download.
+              One formula, kept up to date — a re-score turns up without
+              another download.
             </p>
           </DialogHeader>
 
@@ -115,9 +114,7 @@ export function ScoresDownload({
           </code>
 
           <p className="text-sm text-muted-foreground">
-            One row per pilot per task, with the task in its own column — ready
-            to pivot by pilot, task, class or team, and every row links back to
-            the score it came from.
+            One row per pilot per task. Every row links back to its score.
           </p>
 
           <DialogFooter>

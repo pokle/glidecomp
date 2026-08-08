@@ -4,6 +4,10 @@
  * answers "who's winning?" at a glance, /comp/:id/scores holds the full
  * apparatus (all pilots, per-task results, Top 3 per task, Teams).
  *
+ * That last sentence used to be printed under the list, in prose. It said
+ * nothing the section header's "Full scores" button and the "+ N more pilots"
+ * link either side of it did not already say, so it is a comment now.
+ *
  * Shares the SSR-seedable useCompScores state machine with the scores page,
  * so the summary is in the server HTML like the old inline section was.
  */
@@ -99,12 +103,6 @@ export function CompScoresSummary({
               );
             })}
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            <Link className="underline underline-offset-4" to={scoresHref}>
-              Full scores
-            </Link>{" "}
-            has every pilot, per-task results, top 3 per task, and team standings.
-          </p>
         </>
       )}
     </Card>

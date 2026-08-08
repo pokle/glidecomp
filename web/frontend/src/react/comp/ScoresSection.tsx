@@ -148,8 +148,7 @@ export function ScoresSection({
       {state.kind === "loaded" &&
       state.data.classes.some((cls) => cls.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          Click a pilot's row for the full score breakdown — every start,
-          turnpoint and point calculation, shown on the map.
+          Click a row for the full breakdown.
         </p>
       ) : null}
     </section>

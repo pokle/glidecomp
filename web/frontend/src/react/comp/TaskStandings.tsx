@@ -271,9 +271,11 @@ export function TaskStandings({
   return (
     <Card>
       <h2 className="text-lg font-bold">Manage pilots &amp; tracks</h2>
+      {/* The list of what the tools are went: they are the buttons directly
+          beneath. The consequence stays — it is the one thing the controls
+          themselves do not say. */}
       <p className="mt-1 text-sm text-muted-foreground">
-        Admin tools: pilot statuses, track uploads on behalf, and manual
-        flights. Every change here recomputes the task's scores.
+        Every change here recomputes the task&rsquo;s scores.
       </p>
       {submissionsClosed ? (
         // Otherwise an organiser who has just closed the task is left
@@ -320,8 +322,7 @@ export function TaskStandings({
 
       {score.classes.some((c) => c.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          Click a scored pilot's row for the full breakdown — every start,
-          turnpoint and point calculation, shown on the map.
+          Click a row for the full breakdown.
         </p>
       ) : null}
     </Card>
