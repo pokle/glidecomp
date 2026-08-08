@@ -57,8 +57,6 @@ interface Lookup {
   >;
   matched_count: number;
   rankable_count: number;
-  /** Display names of the lists the matches came from. */
-  lists: string[];
 }
 
 async function lookup(
@@ -252,19 +250,18 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
       },
     ]);
 
-    const { matches, lists } = await lookup(compId, [
+    const { matches } = await lookup(compId, [
       { name: "Luke Nicol", civl_id: "25161" },
     ]);
     expect(matches["0"]).toMatchObject({
       rank: 106,
+      points: 261.5,
       ranking_slug: "hang-gliding-class-1-xc",
       ranking_name: "HG Class 1",
     });
-    // Only the lists the numbers actually came from are named.
-    expect(lists).toEqual(["HG Class 1"]);
   });
 
-  test("names every list a roster's numbers came from", async () => {
+  test("each match carries ITS OWN list, so one roster can span several", async () => {
     const compId = await createComp();
     await seedRanking([
       { rank: 12, civlId: "25161", pilotName: "Ana Silva" },
@@ -277,12 +274,13 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
       },
     ]);
 
-    const { lists, matched_count } = await lookup(compId, [
+    const { matches, matched_count } = await lookup(compId, [
       { name: "Ana Silva", civl_id: "25161" },
       { name: "Someone Else", civl_id: "70001" },
     ]);
     expect(matched_count).toBe(2);
-    expect(lists).toEqual(["HG Class 1", "PG XC"]);
+    expect(matches["0"].ranking_name).toBe("HG Class 1");
+    expect(matches["1"].ranking_name).toBe("PG XC");
   });
 
   test("only the newest snapshot of a list is matched against", async () => {
@@ -337,12 +335,7 @@ describe("POST /api/comp/:comp_id/pilot/civl-rankings", () => {
   test("with nothing imported it answers empty rather than failing", async () => {
     const compId = await createComp();
     const result = await lookup(compId, [{ name: "Ana Silva" }]);
-    expect(result).toEqual({
-      matches: {},
-      matched_count: 0,
-      rankable_count: 0,
-      lists: [],
-    });
+    expect(result).toEqual({ matches: {}, matched_count: 0, rankable_count: 0 });
   });
 
   test("a non-admin cannot read it", async () => {

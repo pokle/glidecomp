@@ -163,7 +163,7 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   // Ambiguity (two DIFFERENT ranked humans, one name), Unranked Nobody and
   // every filler are not. The dialog says so before anything is pressed.
   await expect(
-    page.getByText(new RegExp(`3 of ${ROSTER.length} pilots are in`))
+    page.getByText(new RegExp(`3 of ${ROSTER.length} pilots have one`))
   ).toBeVisible({ timeout: 20_000 });
 
   // ONE press. Ids first, then the ranks that only become fillable once the
@@ -177,7 +177,7 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
     page.getByRole("heading", { name: "Fill from CIVL rankings" })
   ).toBeHidden({ timeout: 20_000 });
   await expect(
-    page.getByText(/2 CIVL IDs and 3 rankings filled in from Sample World Ranking/)
+    page.getByText(/2 CIVL IDs and 3 WPRS scores filled in/)
   ).toBeVisible({ timeout: 20_000 });
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -200,9 +200,9 @@ test("one press fills IDs by name and then rankings by ID, and shows where they 
   await openCivlDialog(page);
   await page.getByRole("button", { name: "Fill", exact: true }).click();
   await expect(
-    page.getByText(/3 pilots already had a ranking and were left alone/)
+    page.getByText(/3 already had a score and were left alone/)
   ).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(/0 CIVL IDs and 0 rankings filled in/)).toBeVisible();
+  await expect(page.getByText(/0 CIVL IDs and 0 WPRS scores filled in/)).toBeVisible();
 
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toBeHidden({ timeout: 20_000 });

@@ -814,7 +814,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       const compId = c.var.ids.comp_id!;
       const roster = c.req.valid("json").pilots;
       if (roster.length === 0) {
-        return c.json({ matches: {}, matched_count: 0, rankable_count: 0, lists: [] });
+        return c.json({ matches: {}, matched_count: 0, rankable_count: 0 });
       }
 
       // The catalogue first: one row per list, at its latest snapshot. The
@@ -824,7 +824,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       // kept out of a pilot's best rank.
       const lists = await latestSnapshots(c.env.DB);
       if (lists.size === 0) {
-        return c.json({ matches: {}, matched_count: 0, rankable_count: 0, lists: [] });
+        return c.json({ matches: {}, matched_count: 0, rankable_count: 0 });
       }
 
       const entries = await rankedCandidates(c.env.DB, {
@@ -833,15 +833,10 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         lists,
       });
 
-      const result = matchRoster(roster, entries);
-      return c.json({
-        ...result,
-        // Which lists the numbers actually came from, so the outcome line can
-        // name them. A roster's ranks routinely come from several at once now.
-        lists: [
-          ...new Set(Object.values(result.matches).map((m) => m.ranking_name)),
-        ].sort(),
-      });
+      // Each match carries its own list, which is what the roster stores and
+      // shows per row. No roster-wide list summary: the editor stopped naming
+      // lists when it stopped asking anyone to choose one.
+      return c.json(matchRoster(roster, entries));
     }
   )
 

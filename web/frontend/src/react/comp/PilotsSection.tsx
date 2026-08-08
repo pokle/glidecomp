@@ -500,7 +500,7 @@ function EditPilotsDialog({
         setLookupSize(rows.length);
         return result;
       } catch {
-        setLookup({ matches: {}, matched_count: 0, rankable_count: 0, lists: [] });
+        setLookup({ matches: {}, matched_count: 0, rankable_count: 0 });
         setErrors((e) => [
           ...e,
           "Could not read the CIVL rankings. The rest of the editor still works.",
@@ -613,7 +613,7 @@ function EditPilotsDialog({
     if (!refreshed) {
       setStatus(
         `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} filled in. ` +
-          `Could not read the rankings again, so no rankings were filled.`
+          `Could not read the rankings again, so no scores were filled.`
       );
       return;
     }
@@ -624,25 +624,19 @@ function EditPilotsDialog({
     const noId = ranks.rows.filter((r) => !r.civl_id).length;
     setStatus(
       `${ids.filled} CIVL ID${ids.filled === 1 ? "" : "s"} and ` +
-        `${ranks.filled} ranking${ranks.filled === 1 ? "" : "s"} filled in` +
-        // Each pilot is taken from whichever list ranks them best, so a
-        // roster's numbers can come from several at once. Naming them is what
-        // makes a rank checkable against civlcomps.org.
-        (refreshed.lists.length > 0 ? ` from ${listSentence(refreshed.lists)}` : "") +
-        ". " +
-        // Only missing cells are written, so a roster that is already ranked
+        `${ranks.filled} WPRS score${ranks.filled === 1 ? "" : "s"} filled in.` +
+        // Only missing cells are written, so a roster that is already scored
         // gets "0 filled in" — which reads as a failure unless the reason is
         // said out loud, along with what to do about a newer month.
         (ranks.already_set > 0
-          ? `${ranks.already_set} pilot${ranks.already_set === 1 ? "" : "s"} ` +
-            `already had a ranking and ${ranks.already_set === 1 ? "was" : "were"} ` +
-            `left alone — clear a ranking to take this month's instead. `
+          ? ` ${ranks.already_set} already had a score and ` +
+            `${ranks.already_set === 1 ? "was" : "were"} left alone — clear one ` +
+            `to refill.`
           : "") +
         (noId > 0
-          ? `${noId} row${noId === 1 ? " has" : "s have"} no ID — no list has ` +
-            `anybody by that exact name, or more than one does. `
-          : "") +
-        "Rankings are copied, not looked up later: they stay as they are now."
+          ? ` ${noId} row${noId === 1 ? " has" : "s have"} no ID — no exact ` +
+            `name match.`
+          : "")
     );
   }
 
@@ -911,15 +905,6 @@ function EditPilotsDialog({
 }
 
 /**
- * The lists a set of matches came from, as prose: "HG Class 1", "HG Class 1
- * and PG XC", "HG Class 1, PG XC and PGA".
- */
-function listSentence(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-/**
  * The CIVL fill, in a dialog of its own: what filling will do, and the button
  * that does it.
  *
@@ -943,7 +928,10 @@ function CivlFillDialog({
   onClose: () => void;
   onFill: () => void;
 }) {
-  const holdsNothing = lookup !== null && lookup.lists.length === 0 && lookup.matched_count === 0;
+  // Nothing imported and nothing matched are the same answer to the only
+  // question this dialog asks — "is there anything to fill?" — so they get
+  // the same message rather than two that a reader has to tell apart.
+  const holdsNothing = lookup !== null && lookup.matched_count === 0;
   return (
     <Modal
       isOpen
@@ -970,29 +958,20 @@ function CivlFillDialog({
           </p>
         ) : (
           <>
+            {/* The acronym is expanded here because this is where an organiser
+                meets it — it is also what the roster column is headed. Which
+                CIVL list each number came from is not their problem: they no
+                longer choose one, and the roster shows it per row anyway. */}
             <p className="text-sm text-muted-foreground">
-              Add CIVL IDs and rankings when missing
+              Add CIVL IDs and WPRS (World Pilot Ranking Scheme) points when
+              missing
             </p>
             {/* The count is what the picker's "n of N" used to carry, and it
                 is the part worth keeping: it says what pressing the button is
                 about to be worth before it is pressed. */}
             <p className="text-sm text-muted-foreground">
               {lookup.matched_count} of {rosterSize}{" "}
-              {rosterSize === 1 ? "pilot is" : "pilots are"} in{" "}
-              {lookup.lists.length === 1 ? "the " : ""}
-              {listSentence(lookup.lists)}. Each is taken from the list where
-              they score the most WPRS points.
-            </p>
-            {/* Spelled out because this is the only place the number is
-                explained, and "WPRS" is what the roster column is headed —
-                an organiser who has not met the acronym meets it here. CIVL
-                publishes no overall ranking, which is why a pilot in several
-                lists has to be taken from one of them. */}
-            <p className="text-sm text-muted-foreground">
-              WPRS is the FAI/CIVL <strong>World Pilot Ranking Scheme</strong> —
-              the score CIVL works out from a pilot's competition results, and
-              sorts each of its ranking lists by. A pilot can be in several
-              lists, and CIVL publishes no overall one.
+              {rosterSize === 1 ? "pilot has" : "pilots have"} one.
             </p>
           </>
         )}

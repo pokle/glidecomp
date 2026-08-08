@@ -35,15 +35,8 @@ export interface RankingLookup {
   matches: Record<number, RowMatch>;
   /** Roster rows the rankings can place at all. */
   matched_count: number;
-  /** Of those, the ones that can fill a rank right now (id already present). */
+  /** Of those, the ones that can fill a score right now (id already present). */
   rankable_count: number;
-  /**
-   * The lists those matches actually came from, by display name. A roster's
-   * numbers routinely come from several at once now — a pilot is taken from
-   * whichever list ranks them best — so the outcome line names them rather
-   * than claiming one.
-   */
-  lists: string[];
 }
 
 /**

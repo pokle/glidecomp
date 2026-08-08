@@ -27,9 +27,6 @@ const LOOKUP = (matches: Record<number, RowMatch>): RankingLookup => ({
   matched_count: Object.keys(matches).length,
   rankable_count: Object.values(matches).filter((m) => m.matched_by === "civl_id")
     .length,
-  lists: [
-    ...new Set(Object.values(matches).map((m) => m.ranking_name)),
-  ].sort(),
 });
 
 /** Each match carries the list its rank came from — pilots on one roster can
