@@ -408,7 +408,7 @@ describe('score explanation with a LINE goal', () => {
     expect(goal!.detail).toContain('counts as goal');
   });
 
-  it('describes a land-out as closest to the goal line', () => {
+  it('describes a land-out by its least remaining distance to the goal line', () => {
     const oneKmShort = destinationPoint(GOAL.lat, GOAL.lon, 1000, -Math.PI / 2);
     const fixes: IGCFix[] = [
       ...eastboundTrack(47.0, 10.95, 11.24),
@@ -418,7 +418,7 @@ describe('score explanation with a LINE goal', () => {
     const { flight } = goalItem(result);
     const bestProgress = flight.items.find((i) => i.id === 'best-progress');
     expect(bestProgress).toBeDefined();
-    expect(bestProgress!.detail).toContain('closest to the goal line');
+    expect(bestProgress!.detail).toContain('least distance still to fly to the goal line');
   });
 });
 

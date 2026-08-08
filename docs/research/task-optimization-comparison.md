@@ -27,15 +27,17 @@ For each intermediate turnpoint, the algorithm searches for the angle θ ∈ [0,
 cost(θ) = distance(prev_optimized_point, point_on_circle(θ)) + distance(point_on_circle(θ), next_center)
 ```
 
-- **First turnpoint:** Point placed on circle along bearing toward next turnpoint center
-- **Last turnpoint:** Point placed on circle along bearing from previous optimized point
-- **Intermediate turnpoints:** Golden section search (tolerance 1e-5 radians, ~30 iterations)
+- **First turnpoint:** the turnpoint's CENTRE, whatever its type or radius (Annex A §2.2)
+- **Mid-route ESS:** pinned to the incoming leg — nearest boundary point toward the previous optimized point (Annex A §3.2.4), so the launch→ESS prefix equals the standalone §6.4.2 launchToESS optimisation
+- **Last turnpoint:** nearest boundary point toward the previous optimized point (constructed from the centre's bearing), or the closest point on a LINE goal
+- **Intermediate turnpoints:** Golden section search (tolerance 1e-5 radians, ~30 iterations); a cylinder the leg crosses straight through takes the deterministic boundary point nearest the chord (the spec's two-intersection rule)
 
 ### Key Characteristics
 
-- **Iterative convergence** — re-runs the forward pass using previous iteration's optimized points until total distance changes by < 1m
+- **Iterative convergence** — re-runs the forward pass using previous iteration's optimized points until total distance changes by < 1m, adopting the converged pass
 - **WGS84 ellipsoid geometry** — uses Andoyer-Lambert distance formula and Vincenty direct for destination
-- **No coordinate projection** — works directly in geographic coordinates (no UTM/Mercator)
+- **No coordinate projection** — works directly in geographic coordinates (no UTM/Mercator); the one planar computation is the chord-crossing tie-break, which is placement-only
+- **§8.6.1 remaining routes** — `optimizeRemainingRoute()` re-runs the same algorithm from an arbitrary position (a track fix, a manual landing) through the un-reached zones to goal, which is how flown distance is measured
 
 ### Strengths
 - Simple, fast, easy to understand
@@ -183,7 +185,13 @@ GlideComp works directly in geographic coordinates (lat/lon), computing WGS84 el
 
 3. ~~**Add cylinder tolerance**~~ — **Done.** `XCTask.cylinderTolerance` field controls the tolerance fraction (default 0.5% for Cat 2). Applied in `detectCylinderCrossings` by expanding the effective radius for crossing detection, while interpolating to the nominal radius for the crossing point.
 
-4. **Consider UTM projection** — For the optimization loop, project to UTM and use Euclidean geometry for the angle bisector calculation. This would match the spec exactly, but the accuracy gain over geographic coordinates + Andoyer is marginal.
+4. ~~**Measure from the launch centre**~~ — **Done (2026-08-08).** Every route is measured from the first turnpoint's CENTRE regardless of its type or radius (Annex A §2.2). SSS-first tasks — common in AirScore imports — previously lost exactly their start radius (5–10 km on ~60 archive tasks).
+
+5. ~~**Pin the ESS fix**~~ — **Done (2026-08-08).** A mid-route ESS is pinned to the incoming leg (Annex A §3.2.4; modern AirScore's `get_target_points` does the same), so the task path kinks at ESS and the launch→ESS slice equals the standalone §6.4.2 optimisation.
+
+6. ~~**Re-optimise remaining distance per fix (§8.6.1)**~~ — **Done (2026-08-08).** `optimizeRemainingRoute()` runs a fresh shortest-path optimisation {point(fix), un-reached zones…, goal} per candidate fix (branch-and-bound over the track), replacing the frozen-tag approximation. Archive-wide median error vs published AirScore distances dropped from 188 m to 60 m.
+
+7. **Consider UTM projection** — For the optimization loop, project to UTM and use Euclidean geometry for the angle bisector calculation. This would match the spec exactly, but the accuracy gain over geographic coordinates + Andoyer is marginal.
 
 ### Current Status
 
@@ -194,9 +202,13 @@ GlideComp is intended for scoring HG and PG competitions. The algorithm now matc
 - Vincenty direct formula for destination points — consistent with distance calculations
 - Iterative convergence — re-runs until < 1m change, matching CIVL GAP Annex A
 - Cylinder tolerance — configurable per-task (default 0.5%, Cat 1 = 0.1%)
+- Launch-centre rule, ESS pin, chord-crossing tie-break (Annex A §2.2/§3.2.4)
+- §8.6.1 per-fix remaining-route optimisation for flown distance
 
 **Nice to have:**
 - UTM projection for the optimization loop (would match the spec exactly, but geographic coordinates + Andoyer produce equivalent results)
+
+**Known legacy divergences** (documented in `web/engine/tests/distance-corpus.test.ts`): pre-2025 comps on xc.highcloud.net were scored by a legacy AirScore that did not fully converge, did not pin the ESS, and measured an identical concentric ESS/goal to the goal CENTRE — their published distances are not a reference for the current spec.
 
 ## References
 

@@ -348,9 +348,10 @@ describe('explainGapScore — flight narrative', () => {
     expect(bp!.text).toContain('best distance made good along the task');
     expect(bp!.detail).toContain('42.0 km');
     // Names the next un-reached turnpoint (last reached = 2, so next is ESS)
-    // and makes clear the marker is the closest point to it, not to goal.
-    expect(bp!.detail).toContain('next turnpoint, ESS (ESSWP)');
-    expect(bp!.detail).toContain('not the point nearest goal');
+    // and makes clear the marker is the least-remaining-distance point along
+    // the routed course, not the point nearest goal in a straight line.
+    expect(bp!.detail).toContain('next: ESS (ESSWP)');
+    expect(bp!.detail).toContain('not as a straight line to goal');
     expect(bp!.anchor!.kind).toBe('best_progress');
     // The anchor carries the routed distance-to-goal polyline: the
     // best-progress point, then each un-reached turnpoint's tag point to goal.

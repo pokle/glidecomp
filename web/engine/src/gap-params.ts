@@ -90,16 +90,20 @@ export interface GAPParameters {
    */
   timePointsExponent?: SpeedExponent;
   /**
-   * Where scored task distance begins, for tasks that define a take-off
-   * turnpoint before the SSS:
-   * - 'takeoff' — measure from the take-off point through the SSS to goal,
-   *   per FAI CIVL GAP / PWCA (the take-off→SSS leg counts). The default.
-   * - 'start'   — measure from the start (SSS) cylinder edge, excluding the
-   *   take-off→SSS leg (the HGFA/SAFA rule wording; "Move Origin" in the
-   *   Davis/SeeYou hang-gliding toolchain).
+   * Where scored task distance begins:
+   * - 'takeoff' — measure from the route's first point through the SSS to
+   *   goal, per FAI CIVL GAP / PWCA. The default. Per Annex A §2.2 the
+   *   first point is the first turnpoint's CENTRE regardless of its type
+   *   or radius, so a take-off→SSS leg counts, and a task that begins at
+   *   the SSS still carries the centre→boundary start radius.
+   * - 'start'   — measure from the start (SSS) cylinder edge, excluding
+   *   everything before the start crossing (the HGFA/SAFA rule wording;
+   *   "Move Origin" in the Davis/SeeYou hang-gliding toolchain). See
+   *   XCTask.firstTurnpointAtBoundary.
    *
-   * Only affects tasks whose first turnpoint is a TAKEOFF; tasks that
-   * begin at the SSS score identically either way.
+   * The two differ by the distance from the route's first point to the
+   * start cylinder's edge: the take-off→SSS leg when a TAKEOFF turnpoint
+   * exists, or exactly the start radius when the route begins at the SSS.
    */
   distanceOrigin: DistanceOrigin;
   /**

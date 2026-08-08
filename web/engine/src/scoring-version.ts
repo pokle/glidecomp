@@ -359,7 +359,21 @@
 //      pass is adopted rather than discarded, and the optimised task line
 //      is cached per task object (content-keyed), which pays for the extra
 //      §8.6.1 optimisations.
-export const SCORING_ENGINE_VERSION = 32;
+// v33: NO score change — explanation copy and comment corrections. The
+//      land-out "best progress" narrative now describes the marked point as
+//      the one with the least distance still to fly, measured as the
+//      shortest route through the remaining turnpoints to goal — the v32
+//      §8.6.1 measurement — instead of "where the track came closest to the
+//      next turnpoint", which the exact measure no longer guarantees. Doc
+//      comments that still described the frozen-tag approximation as the
+//      scored measurement (NextTPMeasure, computeTaskGeometry,
+//      nextTPMeasurer) and the distanceOrigin claim that SSS-first tasks
+//      score identically under both origins (false since the v32 launch-
+//      centre rule — they differ by the start radius) are corrected. Every
+//      point is unchanged; the bump rolls the stale-first store so settled
+//      comps serve the corrected narrative rather than the old wording
+//      indefinitely.
+export const SCORING_ENGINE_VERSION = 33;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -367,4 +381,4 @@ export const SCORING_ENGINE_VERSION = 32;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "a911659609d5649637e78560d6c1b6ee136e74ae03f692ed2dc9a892fbe4b821";
+  "87afd945dc8a45f35f514f0a8fd336fc16152e6ed23e20f5193674e09582d968";

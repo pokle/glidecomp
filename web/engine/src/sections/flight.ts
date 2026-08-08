@@ -429,9 +429,10 @@ function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[]
     });
   } else if (result.bestProgress) {
     // The marked point is where the flight made the most distance along the
-    // task route — i.e. where the track came closest to the *next* un-reached
-    // turnpoint (routed on toward goal), not the point nearest goal in a
-    // straight line. Name that turnpoint so the map marker makes sense.
+    // task — the fix whose §8.6.1 remaining route (shortest path through the
+    // un-reached turnpoints to goal) is shortest, not the point nearest goal
+    // in a straight line. Name the next turnpoint so the map marker makes
+    // sense.
     const nextIdx = result.lastTurnpointReached + 1;
     const nextIsGoal = nextIdx === getGoalIndex(task);
     const goalIsLine = nextIsGoal && computeGoalLine(task) !== null;
@@ -461,10 +462,10 @@ function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[]
       text: `Landed out — best distance made good along the task, ${km(result.bestProgress.distanceToGoal)} short of goal`,
       value: fmt(result.bestProgress.time),
       detail: nextIsGoal
-        ? `The marked point is where the track came closest to ${goalIsLine ? 'the goal line' : 'goal'}${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
+        ? `The marked point is where the flight had the least distance still to fly to ${goalIsLine ? 'the goal line' : 'goal'}${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
         : nextIsExit
-          ? `The next turnpoint, ${nextDesc}, is an exit cylinder — it counts only when the pilot flies OUT of its ${km(task.turnpoints[nextIdx]?.radius ?? 0)} boundary, and this flight never did. The marked point is where the track came closest to that boundary from inside; distance is measured along the task route from here, out to the boundary and on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`
-          : `The marked point is where the track came closest to the next turnpoint, ${nextDesc} — not the point nearest goal. Distance is measured along the task route from here, on through the remaining turnpoints to goal, so the scored distance is ${km(entry.flown_distance)}.`,
+          ? `The next turnpoint, ${nextDesc}, is an exit cylinder — it counts only when the pilot flies OUT of its ${km(task.turnpoints[nextIdx]?.radius ?? 0)} boundary, and this flight never did. The marked point is where the flight had the least distance still to fly — measured as the shortest route from that point out to the boundary and on through the remaining turnpoints to goal — so the scored distance is ${km(entry.flown_distance)}.`
+          : `The marked point is where the flight had the least distance still to fly — measured as the shortest route from that point through the remaining turnpoints (next: ${nextDesc}) to goal, not as a straight line to goal — so the scored distance is ${km(entry.flown_distance)}.`,
       anchor: {
         kind: 'best_progress',
         latitude: result.bestProgress.latitude,

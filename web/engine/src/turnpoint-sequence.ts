@@ -373,9 +373,9 @@ interface TaskGeometry {
 
 /**
  * Optimized task line (one tag point per turnpoint), computed once. The
- * tag points feed best-progress so a pilot's remaining distance to goal
- * is measured to each cylinder's optimal tag — consistent with the leg
- * distances — rather than its nearest edge. It also determines each
+ * tag points feed best-progress's cheap 'approx' measure (candidate-start
+ * ranking and the exact search's seed — the scored remaining distance is
+ * the §8.6.1 per-fix route optimisation). It also determines each
  * turnpoint's crossing direction: a cylinder containing the previous tag
  * point is an EXIT cylinder, reached by flying out of it.
  */
@@ -680,12 +680,14 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
 }
 
 /**
- * How best-progress measures the fix→next-turnpoint distance for a pilot
- * whose last reached turnpoint is lastReachedIdx — see NextTPMeasure.
+ * How best-progress's cheap 'approx' mode measures the fix→next-turnpoint
+ * distance for a pilot whose last reached turnpoint is lastReachedIdx —
+ * see NextTPMeasure (the scored measurement is the §8.6.1 per-fix route
+ * optimisation; this ranks candidate starts and seeds the exact search).
  * The nearest-edge rule after an exit cylinder applies only to INFERRED
  * exit turnpoints, not the declared-EXIT start: after a normal exit start
- * the onward route is asymmetric and well-determined, and measuring to
- * the tag point there is what matches AirScore's flown distances.
+ * the onward route is asymmetric and well-determined, so the tag point is
+ * the better approximation there.
  */
 function nextTPMeasurer(
   { directions, optimizedLine }: TaskGeometry,

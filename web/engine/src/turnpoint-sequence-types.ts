@@ -524,12 +524,14 @@ export interface TurnpointSequenceResult {
 }
 
 /**
- * How the distance from a fix to the next un-reached turnpoint is measured
- * by {@link computeBestProgress}:
+ * How the CHEAP fix→next-turnpoint measure in {@link computeBestProgress}
+ * works. This is no longer the scored measurement: the scored remaining
+ * distance is the §8.6.1 per-fix route optimisation (`optimizeRemainingRoute`
+ * in task-optimizer.ts), and these measures serve the 'approx' mode — the
+ * candidate-start ranking loop and the exact search's seeding heuristic.
  * - 'tag': to the optimizer's tag point on the cylinder — keeps the
- *   remaining route continuous with the onward optimized legs (and matches
- *   AirScore's flown distances closely). The default for an intermediate
- *   ENTER turnpoint.
+ *   remaining route continuous with the onward optimized legs. The default
+ *   for an intermediate ENTER turnpoint.
  * - 'edge': to the cylinder's nearest boundary point from outside. Used for
  *   a cylinder goal (no onward leg — the pilot only needs to reach it) and
  *   for the ENTER turnpoint right after a reached EXIT cylinder: the
