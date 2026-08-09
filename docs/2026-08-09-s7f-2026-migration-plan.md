@@ -1,7 +1,18 @@
 # Migrating GAP scoring to FAI S7F 2026 (single-edition strategy)
 
-**Status: plan, 2026-08-09.** Point-in-time snapshot; the issues it spawns are
-the live tracker.
+**Status: implemented, 2026-08-09** (same day, engine versions v40–v45 on
+this branch). Point-in-time snapshot; the issues it spawns are the live
+tracker. What shipped differs from the plan below in two scoped-down ways:
+
+- **Phase 5**: the Vincenty inverse landed (`ellipsoidDistance`, §7.1.5
+  compliance); the §7.1.3 PathFinder + LTM route optimisation did NOT — the
+  corpus-verified optimiser stands in, documented as a deviation on
+  `/scoring/gap`. Follow-up work.
+- **Phase 4**: fixed tolerances and the optimised goal-line orientation
+  landed; the §9.2.4 validation-time details stay tracked in #586/#587,
+  which need re-reading against the 2026 text.
+- **Phase 6** (Elevated Goal, altitude limits) was deferred entirely by
+  owner decision — needs a follow-up issue.
 
 GlideComp implements the 2024 edition of FAI Sporting Code Section 7F
 ([docs/reference/fai-s7f-xc-scoring-2024/](reference/fai-s7f-xc-scoring-2024/s7f-xc-scoring-2024.md)).
