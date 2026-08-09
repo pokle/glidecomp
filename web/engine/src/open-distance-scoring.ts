@@ -24,7 +24,7 @@
 
 import type { XCTask } from './xctsk-parser';
 import type { TurnpointSequenceResult } from './turnpoint-sequence';
-import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
+import { ellipsoidDistance, calculateBearingRadians, destinationPoint } from './geo';
 import {
   DEFAULT_GAP_PARAMETERS,
   type PilotFlight,
@@ -82,7 +82,7 @@ export function openDistanceGeometryForFlight(
   let furthestIndex = 0;
   for (let i = 0; i < pilot.fixes.length; i++) {
     const fix = pilot.fixes[i];
-    const d = andoyerDistance(center.lat, center.lon, fix.latitude, fix.longitude);
+    const d = ellipsoidDistance(center.lat, center.lon, fix.latitude, fix.longitude);
     if (d > furthestFromCenter) {
       furthestFromCenter = d;
       furthestIndex = i;

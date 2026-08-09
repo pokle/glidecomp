@@ -1,6 +1,6 @@
 /**
  * The total section: the component sum, the penalties inside the FAI S7F
- * §12.4 rounding, and the §12.2 / §12.4 floors that make the printed
+ * §13.5 rounding, and the §12.2 / §13.5 floors that make the printed
  * arithmetic differ from the published total.
  */
 
@@ -26,7 +26,7 @@ export function buildTotalSection(
     .filter((c, i) => c > 0 || i < 2) // always show distance + time, others only when earned
     .map((c) => Number(c.toFixed(1)));
   const parts = shownComponents.map((c) => c.toFixed(1)).join(' + ');
-  // FAI S7F §11 rounds the total to one decimal place; §12.4 does that
+  // FAI S7F §12 rounds the total to one decimal place; §13.5 does that
   // rounding *after* penalties, so the penalties sit inside the round().
   const jtg = entry.jump_the_gun_penalty ?? 0;
   const jtgShown = Number(fmtPoints(jtg));
@@ -45,7 +45,7 @@ export function buildTotalSection(
   // Evaluate from the figures the reader sees, not the engine's full
   // precision: hidden components that each round down while their exact sum
   // rounds up would otherwise print an "=" between figures that don't
-  // equate. And when a floor engaged (§12.2 minimum-distance score, §12.4
+  // equate. And when a floor engaged (§12.2 minimum-distance score, §13.5
   // zero) the printed arithmetic isn't the operation performed at all.
   const evaluatedTenths = Math.round(
     (shownComponents.reduce((s, c) => s + c, 0) - jtgShown - entry.penalty_points) * 10,
@@ -59,12 +59,12 @@ export function buildTotalSection(
   if (evaluatedTenths === totalTenths) {
     detail = `round(${equation}, 1 dp) = ${total}`;
   } else if (entry.penalty_points > 0 && totalTenths === 0 && evaluatedTenths < 0) {
-    // §12.4 zero floor: the penalty took the score below zero.
-    detail = `${equation} would come to ${evaluated}, but scores never go below 0 (FAI S7F §12.4) — so the total is 0.`;
+    // §13.5 zero floor: the penalty took the score below zero.
+    detail = `${equation} would come to ${evaluated}, but scores never go below 0 (FAI S7F §13.5) — so the total is 0.`;
   } else if (jtg > 0 && totalTenths - evaluatedTenths > 3) {
     // §12.2 floor: more than display-rounding drift above the printed sum
     // means the jump-the-gun deduction was floored.
-    detail = `${equation} would come to ${evaluated}, but the jump-the-gun penalty never drops a pilot below the minimum-distance score (FAI S7F §12.2) — so the total is ${total}.`;
+    detail = `${equation} would come to ${evaluated}, but the jump-the-gun penalty never drops a pilot below the minimum-distance score (FAI S7F §13.3) — so the total is ${total}.`;
   } else {
     detail = `${equation} ≈ ${total} — the points above are shown rounded to 0.1; the total is rounded from their exact sum.`;
   }

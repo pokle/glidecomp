@@ -7,7 +7,7 @@
  * second one silently misses the store — and a miss is indistinguishable from
  * a cold cache, so nothing fails and no test catches it. That is not a
  * hypothetical: the per-pilot transparency endpoint recovers the scorer's
- * §12.3.4 equalized window by looking up the row the scorer wrote, and it used
+ * §13.4.4 equalized window by looking up the row the scorer wrote, and it used
  * to rebuild the scorer's hash format from a second, hand-written copy of the
  * same template. A drift there would have shown a pilot a stopped-task
  * narrative that disagreed with their published score, with nothing to see it
@@ -87,7 +87,7 @@ export function qualityGeomHash(g: TaskScoringGeometry): Promise<string> {
  * correcting a mistyped task date would leave every pilot's page showing the
  * old "wrong day" finding forever.
  *
- * `windowEndMs` is the pilot's own §12.3.4 equalized scored-window end, so
+ * `windowEndMs` is the pilot's own §13.4.4 equalized scored-window end, so
  * this is the one hash that is per-pilot rather than per-task.
  */
 export function pilotDetailGeomHash(

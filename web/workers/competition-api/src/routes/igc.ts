@@ -123,7 +123,7 @@ export type EnsureResult =
  * mistyped email, whose own profile carries no national ids, matches nothing.
  * The old code inserted a fresh roster row, so the pilot was registered twice
  * — the organiser's entry sitting empty, a self-made one carrying the track —
- * and nobody was told. The pilot count feeds launch validity (S7F §9.1), so
+ * and nobody was told. The pilot count feeds launch validity (S7F §10.1), so
  * the phantom is a scoring input too.
  *
  * The fix is step 4 below: if there is ANY unclaimed registration in this
@@ -416,7 +416,7 @@ export const igcRoutes = new Hono<AuthedEnv>()
       } else if (ensured.outcome === "registered") {
         // Open registration just put someone on the roster. Without this the
         // transparency record shows a track uploaded for a pilot it never saw
-        // join — and the pilot count feeds launch validity (S7F §9.1), so this
+        // join — and the pilot count feeds launch validity (S7F §10.1), so this
         // is a scoring input arriving unannounced. Mirrors the wording the
         // admin registration routes use, plus how it happened.
         const declined = ensured.declined

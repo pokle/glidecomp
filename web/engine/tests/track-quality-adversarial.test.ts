@@ -18,7 +18,7 @@ import { describe, expect, it } from 'bun:test';
 import { assessTrackQuality } from '../src/track-quality';
 import type { TrackQualityCheckId, TrackQualityReport } from '../src/track-quality';
 import { fixAltitude, type IGCFix } from '../src/igc-parser';
-import { andoyerDistance, destinationPoint } from '../src/geo';
+import { ellipsoidDistance, destinationPoint } from '../src/geo';
 import type { XCTask } from '../src/xctsk-parser';
 
 // Constants copied from track-quality.ts — the oracle must match the old
@@ -127,7 +127,7 @@ function referenceEvidence(fixes: IGCFix[]) {
   for (let i = 1; i < n; i++) {
     pathLength[i] =
       pathLength[i - 1] +
-      andoyerDistance(
+      ellipsoidDistance(
         fixes[i - 1].latitude,
         fixes[i - 1].longitude,
         fixes[i].latitude,
@@ -166,7 +166,7 @@ function referenceEvidence(fixes: IGCFix[]) {
     let minSpeed = Infinity;
     for (let j = lo + 1; j <= i; j++) if (speed[j] < minSpeed) minSpeed = speed[j];
     const path = pathLength[i] - pathLength[lo];
-    const displacement = andoyerDistance(
+    const displacement = ellipsoidDistance(
       fixes[lo].latitude,
       fixes[lo].longitude,
       fixes[i].latitude,

@@ -51,7 +51,7 @@ function createTask(defs: TaskDef[]): XCTask {
 
 // A straight west→east task along the equator (lat 0). Collinear turnpoints
 // keep the optimised geometry easy to reason about; distances stay honest
-// ellipsoidal values via andoyerDistance.
+// ellipsoidal values via ellipsoidDistance.
 //   SSS(0,0) r1000 · TP1(0,0.1) r400 · TP2(0,0.2) r400 · GOAL(0,0.3) r400
 const TASK = createTask([
   { name: 'SSS', lat: 0, lon: 0.0, radius: 1000, type: 'SSS' },
@@ -233,7 +233,7 @@ describe('manualFlightScoringData', () => {
 
     const result = scoreFlights(TASK, flights, { scoring: 'PG', useLeading: false });
 
-    // All three count toward launch validity (S7F §9.1).
+    // All three count toward launch validity (S7F §10.1).
     expect(result.stats.numFlying).toBe(3);
     expect(result.stats.numInGoal).toBe(1);
 
@@ -418,7 +418,7 @@ describe('explainManualFlightScore', () => {
 // ---------------------------------------------------------------------------
 
 import { manualOpenDistanceGeometry } from '../src/manual-flight';
-import { andoyerDistance } from '../src/geo';
+import { ellipsoidDistance } from '../src/geo';
 
 describe('manualOpenDistanceGeometry', () => {
   // A single take-off cylinder — the open-distance task shape.
@@ -430,12 +430,12 @@ describe('manualOpenDistanceGeometry', () => {
     const landing = { lat: 0, lon: 0.1 }; // ~11.1 km east of the centre
     const geom = manualOpenDistanceGeometry(OD_TASK, landing);
 
-    const toCentre = andoyerDistance(0, 0, landing.lat, landing.lon);
+    const toCentre = ellipsoidDistance(0, 0, landing.lat, landing.lon);
     // distance = (centre→landing) − radius.
     expect(geom.distance).toBeCloseTo(toCentre - 5000, 0);
     expect(geom.landing).toEqual(landing);
     // Origin is on the cylinder edge (5 km from the centre), east toward landing.
-    expect(andoyerDistance(0, 0, geom.origin.lat, geom.origin.lon)).toBeCloseTo(5000, 0);
+    expect(ellipsoidDistance(0, 0, geom.origin.lat, geom.origin.lon)).toBeCloseTo(5000, 0);
     expect(geom.origin.lon).toBeGreaterThan(0);
   });
 

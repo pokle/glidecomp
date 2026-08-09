@@ -7,7 +7,7 @@
  * cannot drift apart.
  */
 
-import { andoyerDistance } from "@glidecomp/engine";
+import { ellipsoidDistance } from "@glidecomp/engine";
 import type { TaskWeather, WeatherHour } from "@/react/weather/types";
 
 const HOUR_MS = 3_600_000;
@@ -34,7 +34,7 @@ export function sampleOffset(weather: TaskWeather): {
   // Project rule: never hand-roll geo maths — geo.ts owns the WGS84 formulas.
   const distanceKm =
     Number.isFinite(source.pointLat) && Number.isFinite(resolved.lat)
-      ? andoyerDistance(resolved.lat, resolved.lon, source.pointLat, source.pointLon) / 1000
+      ? ellipsoidDistance(resolved.lat, resolved.lon, source.pointLat, source.pointLon) / 1000
       : null;
   const elevationDeltaM =
     source.pointElevationM !== null && resolved.elevationM !== null

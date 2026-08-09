@@ -100,7 +100,7 @@ export type ScoreChartXUnit = 'duration' | 'distance' | 'coefficient' | 'positio
  * This is NOT a fit. `curve` is the scorer's own function sampled, and every
  * pilot in `pilots` has been checked to sit on it: their published points and
  * the function's value at their x agree to within the published rounding.
- * Anyone who does not (an ESS-but-not-goal pilot carrying the §12.1
+ * Anyone who does not (an ESS-but-not-goal pilot carrying the §13.2
  * reduction, a goal pilot docked by a stopped task) is counted in `omitted`
  * and left off, because a dot beside the curve would silently contradict the
  * claim the curve makes. That check is what lets the caption say "every dot
@@ -225,7 +225,7 @@ export interface ScoreExplanationSection {
    * through the speed section" — pre-worded here so every UI says the same
    * thing. Ranked by the input (time, distance, coefficient, arrival order),
    * NOT by points: that is what a pilot means by the question, and it stays
-   * honest when a §12.1/§12.3.5 reduction reorders the points.
+   * honest when a §12.1/§13.4.5 reduction reorders the points.
    */
   rank?: string;
   /**
@@ -286,21 +286,21 @@ export interface ScoreEntryInput {
   penalty_points: number;
   penalty_reason: string | null;
   total_score: number;
-  /** Seconds started before the first start gate (S7F §12.2), when early. */
+  /** Seconds started before the first start gate (S7F §13.3), when early. */
   early_start_seconds?: number | null;
   /** How the early start reshaped the score — see engine PilotScore. */
   early_start_outcome?: 'pg_launch_to_sss' | 'hg_penalty' | 'hg_min_distance' | null;
   /** Automatic jump-the-gun penalty points deducted (HG early starts). */
   jump_the_gun_penalty?: number | null;
-  /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
+  /** Stopped tasks (S7F §13.4.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. */
   stopped_altitude_bonus?: number | null;
-  /** The pilot's leading coefficient (S7F §11.3), lower is better — the sole
+  /** The pilot's leading coefficient (S7F §13.4), lower is better — the sole
    * input to leading points. Null/absent when leading isn't scored, or on a
    * payload cached before it was published. */
   leading_coefficient?: number | null;
   /** Position in the ESS arrival order (1-based) — with the size of the ESS
-   * field, the whole input to the §11.4 arrival formula. */
+   * field, the whole input to the §13.5 arrival formula. */
   arrival_position?: number | null;
   /** When the pilot reached ESS (epoch ms). What the arrival order is sorted
    * by: wall-clock time, not speed. */
@@ -308,7 +308,7 @@ export interface ScoreEntryInput {
 }
 
 /**
- * Whole-class stopped-task outcome (S7F §12.3), as published by the
+ * Whole-class stopped-task outcome (S7F §13.4), as published by the
  * competition API (ClassScore.stopped). Present when the task was stopped.
  */
 export interface StoppedClassInput {
@@ -322,7 +322,7 @@ export interface StoppedClassInput {
 }
 
 /**
- * The §11.3.1 leading clock the class's coefficients were measured against,
+ * The §12.3.1 leading clock the class's coefficients were measured against,
  * as published by the competition API (ClassScore.leading_times).
  *
  * Optional like every other transparency block: a payload cached before it
@@ -335,9 +335,9 @@ export interface LeadingTimesInput {
   last_ess_ms: number | null;
   /** When the last landed-out pilot landed, or null when nobody landed out. */
   last_outlanding_ms: number | null;
-  /** The task's goal deadline (§8.3.c), or null. */
+  /** The task's goal deadline (§9.2), or null. */
   deadline_ms: number | null;
-  /** The task stop time (§12.3.1) on a stopped task, else null. */
+  /** The task stop time (§13.4.1) on a stopped task, else null. */
   stop_time_ms: number | null;
   /** maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline). */
   max_time_ms: number;
@@ -359,7 +359,7 @@ export interface LeadingTimesInput {
  * these must degrade to the bare percentages rather than fail.
  */
 export interface ValidityInputsInput {
-  /** Pilots present at launch (flew + present-but-did-not-fly), S7F §9.1. */
+  /** Pilots present at launch (flew + present-but-did-not-fly), S7F §10.1. */
   num_present: number;
   /** Pilots who flew — the launch-validity numerator. */
   num_flying: number;
@@ -376,7 +376,7 @@ export interface ValidityInputsInput {
   /** Mean of each flying pilot's distance over the minimum, metres. The
    * distance-validity ratio's numerator, pre-divided by the pilot count. */
   mean_distance_over_minimum: number;
-  /** The weight fractions the available points were split by (S7F §10). */
+  /** The weight fractions the available points were split by (S7F §11). */
   weights: { distance: number; time: number; leading: number; arrival: number };
 }
 
@@ -398,7 +398,7 @@ export interface ClassPilotInput {
   time_points?: number;
   leading_points?: number;
   arrival_points?: number;
-  /** The pilot's leading coefficient (S7F §11.3), lower is better. */
+  /** The pilot's leading coefficient (S7F §13.4), lower is better. */
   leading_coefficient?: number | null;
   /** Position in the ESS arrival order (1-based), or null. */
   arrival_position?: number | null;
@@ -415,7 +415,7 @@ export interface ClassContextInput {
     launch: number;
     distance: number;
     time: number;
-    /** Stopped-task validity (S7F §12.3.3), when the task was stopped. */
+    /** Stopped-task validity (S7F §13.4.3), when the task was stopped. */
     stopped?: number;
     task: number;
   };
@@ -430,9 +430,9 @@ export interface ClassContextInput {
   pilots: ClassPilotInput[];
   /** The numbers behind the validity factors and the weight split. */
   validity_inputs?: ValidityInputsInput;
-  /** The §11.3.1 leading clock, when the class scored leading points. */
+  /** The §12.3.1 leading clock, when the class scored leading points. */
   leading_times?: LeadingTimesInput;
-  /** Present when the task was scored as stopped (S7F §12.3). */
+  /** Present when the task was scored as stopped (S7F §13.4). */
   stopped?: StoppedClassInput;
 }
 

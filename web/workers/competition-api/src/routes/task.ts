@@ -127,9 +127,9 @@ function taskFieldTable(
       },
       bumpsScores: true,
     },
-    // Stopped tasks (issue #264, S7F §12.3): stored as a normalised ISO UTC
+    // Stopped tasks (issue #264, S7F §13.4): stored as a normalised ISO UTC
     // instant so the scorer and the UI agree on it. Stopping (or un-stopping)
-    // a task rescores every pilot in it — the §12.3 machinery turns on and off
+    // a task rescores every pilot in it — the §13.4 machinery turns on and off
     // with this field.
     stop_announcement_time: {
       column: "stop_announcement_time",
@@ -137,7 +137,7 @@ function taskFieldTable(
       changed: (was) => was !== normalisedStopTime,
       describe: (was) => {
         if (was === null && normalisedStopTime !== null) {
-          return `Stopped the task — stop announcement time ${normalisedStopTime} (scored per FAI S7F §12.3)`;
+          return `Stopped the task — stop announcement time ${normalisedStopTime} (scored per FAI S7F §13.4)`;
         }
         if (normalisedStopTime === null) {
           return "Cleared the task stop — task scored as run to completion";

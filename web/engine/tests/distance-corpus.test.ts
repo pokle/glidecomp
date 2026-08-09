@@ -4,9 +4,9 @@
  * Two suites:
  *
  * 1. The bundled tasks (web/samples/comps — always present, runs in CI):
- *    the S7F §6.4.2 structural property on every task — the task path's
+ *    the S7F §7.2 structural property on every task — the task path's
  *    launch→ESS prefix equals an independent launchToESS optimisation,
- *    which is what the Annex A §3.2.4 ESS pin guarantees by construction.
+ *    which is what the §7.2 ESS pin guarantees by construction.
  *
  * 2. The archive back-catalogue (pokle/glidecomp-archive): the same
  *    invariant over every archived task, plus task-distance parity against
@@ -49,7 +49,7 @@ function loadTask(root: string, dir: string): XCTask | null {
   }
 }
 
-/** §6.4.2: the task path's launch→ESS prefix must equal the independent
+/** §7.2: the task path's launch→ESS prefix must equal the independent
  * launchToESS optimisation — the property the ESS pin establishes. */
 function assertPrefixMatchesIndependent(task: XCTask, label: string): void {
   const essIdx = getESSIndex(task);
@@ -69,7 +69,7 @@ function assertPrefixMatchesIndependent(task: XCTask, label: string): void {
   ).toBeLessThan(3);
 }
 
-describe('bundled tasks: §6.4.2 launch→ESS prefix equals its own optimisation', () => {
+describe('bundled tasks: §7.2 launch→ESS prefix equals its own optimisation', () => {
   for (const dir of taskDirs(SAMPLES_ROOT)) {
     it(dir, () => {
       const task = loadTask(SAMPLES_ROOT, dir);
@@ -82,7 +82,7 @@ describe('bundled tasks: §6.4.2 launch→ESS prefix equals its own optimisation
 const archiveDirs = taskDirs(ARCHIVE_ROOT);
 
 describe.if(archiveDirs.length > 0)('archive corpus (glidecomp-archive)', () => {
-  it('every task satisfies the §6.4.2 prefix property', () => {
+  it('every task satisfies the §7.2 prefix property', () => {
     let checked = 0;
     for (const dir of archiveDirs) {
       const task = loadTask(ARCHIVE_ROOT, dir);
@@ -102,7 +102,7 @@ describe.if(archiveDirs.length > 0)('archive corpus (glidecomp-archive)', () => 
       // geometry); the per-waypoint cumulatives bracket the published ones.
       'forbes-flatlands-2025-open-t5': 'legacy optimiser convergence (engine 989 m shorter)',
       // Scored by legacy AirScore, which optimises the whole route globally
-      // instead of pinning the ESS (Annex A §3.2.4): the engine matches the
+      // instead of pinning the ESS (§7.2): the engine matches the
       // published cumulatives to metres up to the ESS, then the pin
       // deliberately kinks the path (+403 m total). Same class of
       // divergence as forbes-flatlands-2025-open-t5. (Originally suspected

@@ -52,8 +52,8 @@ describe('scoring source closure', () => {
   it('follows a parent-relative import back out of a subdirectory', () => {
     const tree = virtualSourceTree({
       'root.ts': `import './sub/deep';`,
-      'sub/deep.ts': `import { andoyerDistance } from '../geo';`,
-      'geo.ts': `export const andoyerDistance = 1;`,
+      'sub/deep.ts': `import { ellipsoidDistance } from '../geo';`,
+      'geo.ts': `export const ellipsoidDistance = 1;`,
     });
     expect(scoringSourceFiles(['root.ts'], tree)).toEqual([
       'geo.ts',

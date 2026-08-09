@@ -1,5 +1,5 @@
 /**
- * Start-gate time resolution (FAI S7F §6.3.3, §8.3.1).
+ * Start-gate time resolution (FAI S7F §6.3.1, §9.2.4.1).
  *
  * XCTrack task files carry start gates as time-of-day strings ("13:30:00Z",
  * UTC), while tracklogs carry absolute times. This module turns a task's
@@ -7,9 +7,9 @@
  * flight, so the scorer can snap each pilot's start to a gate.
  *
  * In a race to goal, a pilot's start time is the last gate at or before
- * their start-cylinder crossing — not the crossing itself (§8.3.1). A
+ * their start-cylinder crossing — not the crossing itself (§9.2.4.1). A
  * crossing after the last gate takes the last gate. A crossing before the
- * first gate is a failed ("early") start, handled by §12.2.
+ * first gate is a failed ("early") start, handled by §13.3.
  */
 
 import type { XCTask } from './xctsk-parser';
@@ -54,12 +54,12 @@ export function resolveTimeOfDayNear(
 }
 
 /**
- * Resolve the task's goal deadline (FAI S7F §8.3.c) to an absolute epoch
+ * Resolve the task's goal deadline (FAI S7F §9.2) to an absolute epoch
  * time, or null when the task doesn't define a parseable deadline.
  *
  * XCTrack carries the deadline as a time-of-day string on the goal config
  * (`goal.deadline`, e.g. "08:00:00Z"). Crossings after the deadline don't
- * count and landed-out distance is measured only up to it (§8.6.1, §11.1) —
+ * count and landed-out distance is measured only up to it (§9.3, §12.1) —
  * the enforcement lives in resolveTurnpointSequence; this just resolves the
  * wall-clock time onto the flight's calendar day.
  *
@@ -78,7 +78,7 @@ export function resolveTaskDeadline(
 }
 
 /**
- * Resolve the launch-window open time (`takeoff.timeOpen`, FAI S7F §8.6.1)
+ * Resolve the launch-window open time (`takeoff.timeOpen`, FAI S7F §9.3)
  * to an absolute epoch time, or null when the task doesn't define one.
  *
  * A pilot must launch within the launch window; a start-cylinder crossing
@@ -137,9 +137,9 @@ export function resolveStartGates(
 
 /**
  * The gate defining a pilot's start time: the last gate at or before the
- * crossing (§8.3.1), the last gate for crossings after it. Returns the
+ * crossing (§9.2.4.1), the last gate for crossings after it. Returns the
  * index into `gates`, or -1 when the crossing precedes the first gate
- * (an early start, §12.2).
+ * (an early start, §13.3).
  *
  * @param gates - Sorted absolute gate times from {@link resolveStartGates}
  * @param crossingMs - The pilot's start-cylinder crossing time

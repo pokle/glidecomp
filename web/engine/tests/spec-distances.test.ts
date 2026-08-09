@@ -1,9 +1,9 @@
 /**
- * FAI S7F §6.4 distance-definition compliance (2024 edition).
+ * FAI S7F §7.2 distance-definition compliance (2024 edition).
  *
  * Two rules from Annex A that the optimizer must implement:
  *
- * 1. Launch centre (Annex A §2.2): "the distance is measured from the center
+ * 1. Launch centre (§7.2): "the distance is measured from the center
  *    of the launch waypoint (regardless of whether it has been given a
  *    radius)". The first route element is always a point — the first
  *    turnpoint's CENTRE — whatever its type. Tasks whose route begins
@@ -11,11 +11,11 @@
  *    imports) previously measured from the start cylinder's edge, losing
  *    exactly its radius: 5–10 km on real archive tasks.
  *
- * 2. ESS pin (Annex A §3.2.4): "The end of speed section is taken from its
+ * 2. ESS pin (§7.2): "The end of speed section is taken from its
  *    center position, so that its fix is pinned to the preceding points,
  *    rather than any subsequent points at a different position." The task
  *    path deliberately KINKS at ESS; its launch→ESS prefix then equals the
- *    §6.4.2 launchToESSPath = getShortestPath(launchToESS) by construction,
+ *    §7.2 launchToESSPath = getShortestPath(launchToESS) by construction,
  *    so every slice-based consumer (speed-section length for leading points,
  *    launch→ESS for stopped validity) reads the spec's number.
  *
@@ -33,7 +33,7 @@ import {
   getOptimizedSegmentDistances,
 } from '../src/task-optimizer';
 import { parseXCTask, getESSIndex, type XCTask, type Turnpoint } from '../src/xctsk-parser';
-import { andoyerDistance, destinationPoint, calculateBearingRadians } from '../src/geo';
+import { ellipsoidDistance, destinationPoint, calculateBearingRadians } from '../src/geo';
 import { computeLeadingAggregate } from '../src/gap-formulas';
 
 const fixture = (name: string): XCTask =>
@@ -53,7 +53,7 @@ function makeTask(turnpoints: Turnpoint[]): XCTask {
 }
 
 /**
- * The independent §6.4.2 launchToESS optimisation: the task truncated at the
+ * The independent §7.2 launchToESS optimisation: the task truncated at the
  * ESS, optimised as its own route (its terminal element measured like a
  * goal). The ESS pin must make the full task path's launch→ESS prefix equal
  * this — the property the 2024 spec establishes by pinning.
@@ -74,7 +74,7 @@ function prefixDistance(task: XCTask, essIdx: number): number {
   return sum;
 }
 
-describe('launch centre rule (Annex A §2.2)', () => {
+describe('launch centre rule (§7.2)', () => {
   it('a route starting at the start cylinder measures from its CENTRE', () => {
     // Start cylinder r=5000 at A, goal r=400 20 km away: centre→edge is
     // 20 000 − 400, not (20 000 − 5 000 − 400) from the start's edge.
@@ -112,11 +112,11 @@ describe('launch centre rule (Annex A §2.2)', () => {
     const task = fixture('corryong-cup-2022-open-t1.xctsk');
     const line = calculateOptimizedTaskLine(task);
     const tp0 = task.turnpoints[0].waypoint;
-    expect(andoyerDistance(line[0].lat, line[0].lon, tp0.lat, tp0.lon)).toBeLessThan(1);
+    expect(ellipsoidDistance(line[0].lat, line[0].lon, tp0.lat, tp0.lon)).toBeLessThan(1);
   });
 });
 
-describe('ESS pin (Annex A §3.2.4)', () => {
+describe('ESS pin (§7.2)', () => {
   // A course that bends sharply at a big ESS cylinder: launch → ESS(r=5km)
   // → goal off at an angle. Free-floating optimisation would drag the ESS
   // tag toward the goal; the pin fixes it to the incoming leg.
@@ -141,7 +141,7 @@ describe('ESS pin (Annex A §3.2.4)', () => {
       ess.waypoint.lat, ess.waypoint.lon, line[0].lat, line[0].lon,
     );
     const pinned = destinationPoint(ess.waypoint.lat, ess.waypoint.lon, ess.radius, bearing);
-    expect(andoyerDistance(line[1].lat, line[1].lon, pinned.lat, pinned.lon)).toBeLessThan(2);
+    expect(ellipsoidDistance(line[1].lat, line[1].lon, pinned.lat, pinned.lon)).toBeLessThan(2);
   });
 
   it('the task path kinks at ESS: pinned total ≥ the free-floating optimum', () => {
@@ -165,7 +165,7 @@ describe('ESS pin (Annex A §3.2.4)', () => {
     expect(Math.abs(prefix - independent)).toBeLessThan(3);
   };
 
-  it('bright-open-2023-open-t1: launch→ESS prefix equals the independent §6.4.2 optimisation', () => {
+  it('bright-open-2023-open-t1: launch→ESS prefix equals the independent §7.2 optimisation', () => {
     // The archive's worst divergence under the old free-floating ESS:
     // prefix 66.214 km vs true launch→ESS optimum 63.727 km (−2.5 km).
     prefixEqualsIndependent(fixture('bright-open-2023-open-t1.xctsk'));

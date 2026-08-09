@@ -156,7 +156,7 @@ function auditTask(label: string, compsRoot: string, dir: string, category: 'hg'
   }
   const params: GAPParameters = {
     ...DEFAULT_GAP_PARAMETERS,
-    ...resolveCompGapParams(category, null, null),
+    ...resolveCompGapParams(category, null),
   };
   params.nominalDistance = calculateOptimizedTaskDistance(task) * 0.7;
 

@@ -12,6 +12,7 @@ import type { XCTask, Turnpoint } from '../xctsk-parser';
 import { getGoalIndex } from '../xctsk-parser';
 import type { TurnpointReaching } from '../turnpoint-sequence';
 import type { BestTimeCandidate, GAPParameters } from '../gap-scoring';
+import { resolveLeadingTimeRatio } from '../gap-scoring';
 import type {
   ClassContextInput,
   ClassPilotInput,
@@ -21,7 +22,7 @@ import type {
 
 /**
  * Read a published class pilot as a {@link BestTimeCandidate}, so the report
- * card's best time (FAI S7F §11.2.1) comes from {@link bestTimeFrom} — the
+ * card's best time (FAI S7F §9.4.1) comes from {@link bestTimeFrom} — the
  * scorer's own function — rather than a hand-copied filter. Only the field
  * names differ between the scored shape and the published one.
  */
@@ -47,7 +48,7 @@ export function pilotsAtEss(classContext: ClassContextInput): number {
 }
 
 /**
- * Did FAI S7F §10's "nobody reaches ESS" rule zero this class's available time
+ * Did FAI S7F §11's "nobody reaches ESS" rule zero this class's available time
  * and arrival points?
  *
  * Stated in the spec's HG box, so HG only — paragliding arrives at a zero time
@@ -57,7 +58,7 @@ export function pilotsAtEss(classContext: ClassContextInput): number {
  * Gated on the PUBLISHED available time being zero as well as on the field
  * count: the stale-first store keeps serving bodies written before the rule
  * existed, and those carry a non-zero time figure that this sentence would
- * flatly contradict. A whole-day zero (a stopped task that failed §12.3.2)
+ * flatly contradict. A whole-day zero (a stopped task that failed §13.4.2)
  * is excluded for the same reason — nothing was on offer there for any
  * component, which is a different finding with its own row.
  */
@@ -102,18 +103,14 @@ export function reachingAnchor(
 }
 
 /**
- * Name the leading-weight generation that set this task's leading↔time split,
- * so the explanation is self-describing (issue #257). Hang gliding is
- * generation-independent, so it needs no note.
+ * Spell out the §11 leading↔time split for this task, so the explanation is
+ * self-describing. The PG no-goal rule is the surprising branch, so it is
+ * stated for paragliding; hang gliding takes the plain ratio.
  */
 export function leadingWeightDetail(params: GAPParameters): string | undefined {
-  if (params.scoring !== 'PG') return undefined;
-  if (params.leadingWeightFormula === 's7f2024') {
-    const ratioPct = Math.round(params.leadingTimeRatio * 100);
-    return `Leading weight follows the FAI S7F 2024 §10 formula: ${ratioPct}% of the non-distance weight (LeadingTimeRatio) goes to leading when someone makes goal, and all of it when nobody does.`;
+  const ratioPct = Math.round(resolveLeadingTimeRatio(params) * 100);
+  if (params.scoring !== 'PG') {
+    return `Leading weight follows the FAI S7F 2026 §11 formula: ${ratioPct}% of the non-distance weight (the task's Leading Time Ratio) goes to leading.`;
   }
-  if (params.leadingWeightFormula === 's7f2020') {
-    return 'Weights follow the FAI S7F 2020–2022 §10 formula (PWC-derived): distance weight 0.838 when nobody makes goal, else 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³; leading weight fixed at 0.162; time takes the remainder.';
-  }
-  return 'Leading weight follows the GAP2020 formula (the GAP2016/2018 weights, AirScore legacy parity): 35% of the non-distance weight when someone makes goal, and 0.1 × best distance ÷ task distance when nobody does.';
+  return `Leading weight follows the FAI S7F 2026 §11 formula: ${ratioPct}% of the non-distance weight (the task's Leading Time Ratio) goes to leading when someone makes goal, and all of it when nobody does.`;
 }

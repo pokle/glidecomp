@@ -88,7 +88,7 @@ export function buildComparisonSection(
   // Penalties are points lost to the leader like any component, and a ledger
   // that omits them cannot reconcile with the gap it claims to explain. BOTH
   // sides are derived from the identity the payload guarantees — components −
-  // total — rather than from the published penalty figures: a §12.2/§12.4
+  // total — rather than from the published penalty figures: a §12.2/§13.5
   // floor makes the published deduction bigger than its net effect (the
   // archive's jump-the-gun cases were 74 points apart), and the ledger's
   // business is the net. Tolerance for the total's 0.1 rounding.
@@ -255,7 +255,7 @@ function shortfallsAgainstOffer(
       ? [{ label: 'arrival-points', lost: ap.arrival - entry.arrival_points }]
       : []),
     {
-      // Net penalty effect, derived from components − total, so a §12.2/§12.4
+      // Net penalty effect, derived from components − total, so a §12.2/§13.5
       // floor never overstates what the deduction actually cost.
       label: 'penalties',
       lost:
@@ -274,7 +274,7 @@ function shortfallsAgainstOffer(
  * a component at all.
  *
  * The four offers normally add up to the day's points, give or take display
- * rounding. Under FAI S7F §10 an HG task nobody flew to the end of the speed
+ * rounding. Under FAI S7F §12 an HG task nobody flew to the end of the speed
  * section carries no time and no arrival points, and nothing takes their
  * place — so `unallocated` is a real slice of the day that no pilot could have
  * won, and every "you were N short of the day" sentence has to say so.
@@ -388,7 +388,7 @@ function buildPointsLeftSection(
         : undefined,
     );
   }
-  // Net penalty effect (components − total), so a §12.2/§12.4 floor never
+  // Net penalty effect (components − total), so a §12.2/§13.5 floor never
   // overstates what the deduction actually cost.
   const penalties =
     entry.distance_points +
@@ -420,7 +420,7 @@ function buildPointsLeftSection(
   // them real. OVERSHOOT: on a day nobody makes goal the GAP weight split can
   // sum to slightly more than 1 (the time weight is clamped at zero —
   // calculateWeights), so the rows above come to more than the points actually
-  // left. UNALLOCATED: §10 zeroed the time and arrival offers on an HG task
+  // left. UNALLOCATED: §11 zeroed the time and arrival offers on an HG task
   // nobody flew to ESS, so part of the day was never winnable. Say which,
   // rather than print a share the rows visibly contradict.
   const { offered: shownOffers, unallocated } = offerLedger(ap);
@@ -431,7 +431,7 @@ function buildPointsLeftSection(
     leftDetail =
       `${fmtPoints(unallocated)} of the ${fmtPoints(ap.total)} was never on offer to anyone: ` +
       `nobody reached the end of the speed section, so the task carried no time or arrival points ` +
-      `(FAI S7F §10). ` +
+      `(FAI S7F §11). ` +
       (shortOfOffer <= 0.05
         ? `You took all ${fmtPoints(shownOffers)} that could be won.`
         : `Against the ${fmtPoints(shownOffers)} that could be won you were ` +
@@ -503,7 +503,7 @@ export function buildWinnerHeadlineNote(
         ? ` — all of it ${dominant.label}`
         : ` — mostly ${dominant.label}`
       : '';
-  // S7F §10: on an HG task nobody flew to ESS, most of the shortfall is points
+  // S7F §11: on an HG task nobody flew to ESS, most of the shortfall is points
   // the day never offered anyone — so the leader's first sentence must not
   // read as if they left them on the table. Their sweep is measured against
   // what could actually be won, which they may well have taken in full.
@@ -515,7 +515,7 @@ export function buildWinnerHeadlineNote(
       ap.total,
     )} points on offer, ${fmtPoints(left)} went untaken${mostly}.`;
   } else if (missedOfOffer <= 0.05) {
-    note = `Top of the class with everything that was winnable: nobody reached the end of the speed section, so the task carried no time or arrival points (FAI S7F §10) and only ${fmtPoints(
+    note = `Top of the class with everything that was winnable: nobody reached the end of the speed section, so the task carried no time or arrival points (FAI S7F §11) and only ${fmtPoints(
       offered,
     )} of the day's ${fmtPoints(ap.total)} could be won — all of it yours.`;
   } else {
@@ -523,7 +523,7 @@ export function buildWinnerHeadlineNote(
       ap.total,
     )} points the day was worth only ${fmtPoints(
       offered,
-    )} could be won at all (FAI S7F §10) — and ${fmtPoints(
+    )} could be won at all (FAI S7F §11) — and ${fmtPoints(
       missedOfOffer,
     )} of those went untaken${mostly}.`;
   }

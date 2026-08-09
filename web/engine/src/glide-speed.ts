@@ -5,7 +5,7 @@
  */
 
 import { fixAltitude, type IGCFix } from './igc-parser';
-import { andoyerDistance, calculateBearing, calculateTrackDistance } from './geo';
+import { ellipsoidDistance, calculateBearing, calculateTrackDistance } from './geo';
 
 
 export interface ChevronPosition {
@@ -48,7 +48,7 @@ export function requiredGlideToTarget(
   target: { lat: number; lon: number; altitude: number },
 ): number | undefined {
   if (altitude <= target.altitude) return undefined;
-  const dist = andoyerDistance(lat, lon, target.lat, target.lon);
+  const dist = ellipsoidDistance(lat, lon, target.lat, target.lon);
   return dist / (altitude - target.altitude);
 }
 
@@ -72,7 +72,7 @@ export function calculateGlidePositions(
     const prevFix = fixes[i - 1];
     const currFix = fixes[i];
 
-    const segmentDistance = andoyerDistance(
+    const segmentDistance = ellipsoidDistance(
       prevFix.latitude,
       prevFix.longitude,
       currFix.latitude,
@@ -256,7 +256,7 @@ export function calculatePointMetrics(
   let startIndex = centerIndex;
   let backDist = 0;
   for (let i = centerIndex; i > 0; i--) {
-    const d = andoyerDistance(
+    const d = ellipsoidDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i - 1].latitude, fixes[i - 1].longitude,
     );
@@ -269,7 +269,7 @@ export function calculatePointMetrics(
   let endIndex = centerIndex;
   let fwdDist = 0;
   for (let i = centerIndex; i < fixes.length - 1; i++) {
-    const d = andoyerDistance(
+    const d = ellipsoidDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i + 1].latitude, fixes[i + 1].longitude,
     );

@@ -7,7 +7,7 @@
  * restore rule.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, resolveTimePointsExponent, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, resolveLeadingTimeRatio, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
@@ -1519,34 +1519,21 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const pct1 = (n: number) => `${(n * 100).toFixed(1)}%`;
     const wPct = (n: number) => `${Math.round(n * 100)}%`;
 
-    // Scoring configuration in effect (so scores are reproducible)
-    const lwf = params.leadingWeightFormula ?? 'gap2020';
-    // PG leading weight has a second, orthogonal knob (issue #257): the
-    // GAP2020 vs S7F-2024 generation. Surface it so the split is reproducible.
-    const leadWeightCfg =
-      params.scoring === 'PG' && lwf === 's7f2024'
-        ? `, S7F 2024 ratio ${Math.round((params.leadingTimeRatio ?? 0.26) * 100)}%`
-        : params.scoring === 'PG' && lwf === 's7f2020'
-          ? ', S7F 2020–2022 weights'
-          : params.scoring === 'PG'
-            ? ', GAP2020 weight'
-            : '';
+    // Scoring configuration in effect (so scores are reproducible). Scored
+    // under FAI S7F 2026 — nominal launch/goal and the formula generations
+    // are fixed by that edition, so only the real knobs are listed.
     const leadCfg = params.useLeading
-      ? `on (${params.leadingFormula}${leadWeightCfg})`
+      ? `on (ratio ${Math.round(resolveLeadingTimeRatio(params) * 100)}%)`
       : 'off';
-    const timeExp = resolveTimePointsExponent(params).replace('/', '⁄');
     html += `
       <div class="rounded-lg border border-border bg-muted/30 p-3">
-        <div class="text-xs text-muted-foreground mb-1">${docLink('what-is-gap', 'Scoring configuration')}</div>
+        <div class="text-xs text-muted-foreground mb-1">${docLink('what-is-gap', 'Scoring configuration')} — FAI S7F 2026</div>
         <div class="flex gap-x-3 gap-y-1 text-sm flex-wrap">
           <span>Sport: ${params.scoring}</span>
           <span title="Nominal distance">Nom dist: ${formatDistance(params.nominalDistance).withUnit}</span>
           <span title="Nominal task time">Nom time: ${Math.round(params.nominalTime / 60)} min</span>
-          <span title="Nominal goal ratio">Nom goal: ${pct1(params.nominalGoal)}</span>
-          <span title="Nominal launch ratio">Nom launch: ${pct1(params.nominalLaunch)}</span>
           <span>Min dist: ${formatDistance(params.minimumDistance).withUnit}</span>
           <span>${docLink('leading-points', 'Leading')}: ${leadCfg}</span>
-          <span title="Time-points speed-fraction exponent (S7F §11.2)">${docLink('time-points', 'Time exp')}: ${timeExp}</span>
           ${params.scoring === 'HG' ? `<span>${docLink('arrival-points', 'Arrival')}: ${params.useArrival ? 'on' : 'off'}</span>` : ''}
           <span title="Where scored distance begins (take-off vs start cylinder)">${docLink('distance-origin', 'Dist origin')}: ${params.distanceOrigin}</span>
           ${params.scoring === 'HG' ? `<span>${docLink('distance-difficulty', 'Difficulty')}: ${params.useDistanceDifficulty ? 'on' : 'off'}</span>` : ''}
@@ -1559,7 +1546,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">${docLink('task-validity', 'Task Validity')}</div>
         <div class="flex gap-3 text-sm flex-wrap">
-          <span title="Pilots flying ${stats.numFlying} of ${stats.numPresent} present; nominal launch ${pct1(params.nominalLaunch)}">Launch: ${pct1(result.taskValidity.launch)}</span>
+          <span title="Pilots flying ${stats.numFlying} of ${stats.numPresent} present; nominal launch 96%">Launch: ${pct1(result.taskValidity.launch)}</span>
           <span title="Best distance ${formatDistance(stats.bestDistance).withUnit} vs nominal ${formatDistance(params.nominalDistance).withUnit}">Dist: ${pct1(result.taskValidity.distance)}</span>
           <span title="Best time ${stats.bestTime ? formatHMS(stats.bestTime) : '—'} vs nominal ${Math.round(params.nominalTime / 60)} min">Time: ${pct1(result.taskValidity.time)}</span>
           <span class="font-medium" title="Launch × Distance × Time">Task: ${pct1(result.taskValidity.task)}</span>
@@ -1578,11 +1565,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           ${params.scoring === 'HG' ? `<span title="Arrival weight ${wPct(result.weights.arrival)}">Arrival: ${result.availablePoints.arrival.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.arrival)})</span></span>` : ''}
         </div>
         ${
-          // FAI S7F §10 (HG): nobody reached ESS, so the time and arrival
+          // FAI S7F §11 (HG): nobody reached ESS, so the time and arrival
           // offers are zero and nothing replaces them — say why, or the row
           // above visibly fails to add up to the total.
           params.scoring === 'HG' && stats.numReachedESS === 0 && result.availablePoints.total > 0
-            ? `<div class="text-xs text-muted-foreground mt-1">Nobody reached ESS, so no time or arrival points were available (FAI S7F §10) — only ${(result.availablePoints.distance + result.availablePoints.leading).toFixed(0)} points could be won.</div>`
+            ? `<div class="text-xs text-muted-foreground mt-1">Nobody reached ESS, so no time or arrival points were available (FAI S7F §12) — only ${(result.availablePoints.distance + result.availablePoints.leading).toFixed(0)} points could be won.</div>`
             : ''
         }
       </div>

@@ -1,50 +1,48 @@
 /**
- * Stopped-task scoring support (FAI S7F §12.3).
+ * Stopped-task scoring support (FAI S7F 2026 §13.4).
  *
  * When a task is stopped mid-flight (weather calldown), the recorded stop
- * announcement time is "scored back" to an earlier task stop time (§12.3.1),
- * every pilot is scored only for a common time window (§12.3.4), landed-out
- * distance earns an altitude bonus (§12.3.6), and a fourth validity factor
- * applies (§12.3.3). This module holds the field-independent pieces: stop-time
- * resolution, the scored-window arithmetic, the §12.3.2 minimum-run rule, and
+ * announcement time is "scored back" to an earlier task stop time (§13.4.1),
+ * every pilot is scored only for a common time window (§13.4.4), landed-out
+ * distance earns an altitude bonus (§13.4.6), and a fourth validity factor
+ * applies (§13.4.3). This module holds the field-independent pieces: stop-time
+ * resolution, the scored-window arithmetic, the §13.4.2 minimum-run rule, and
  * the altitude-bonus constants. The stopped-task validity formula lives with
  * the other validity formulas in ./gap-formulas; the whole-field integration
- * (validity multiplier, §12.3.5 time-points reduction) in ./gap-scoring.
+ * (validity multiplier, §13.4.5 time-points reduction) in ./gap-scoring.
  */
 
 import type { XCTask } from './xctsk-parser';
 import { getGoalIndex } from './xctsk-parser';
 import { resolveStartGates } from './time-gates';
-import type { GAPParameters } from './gap-params';
 
 /**
- * §12.3.6 altitude-bonus glide ratios: a pilot still flying at the task stop
- * is credited the distance their height above goal would glide out to.
+ * §13.4.6 altitude-bonus glide ratios: a pilot still flying at the task stop
+ * is credited the distance their height above goal would glide out to. The
+ * PG ratio is 2.5 since the 2025 edition (was 4.0), confirmed at 2.5 for
+ * 2026 by CIVL Bureau decision for consistency with PWCA rules.
  */
 export const STOPPED_GLIDE_RATIO_HG = 5.0;
-export const STOPPED_GLIDE_RATIO_PG = 4.0;
+export const STOPPED_GLIDE_RATIO_PG = 2.5;
 
-/** The §12.3.6 altitude-bonus glide ratio for a sport. */
+/** The §13.4.6 altitude-bonus glide ratio for a sport. */
 export function stoppedGlideRatio(scoring: 'PG' | 'HG'): number {
   return scoring === 'PG' ? STOPPED_GLIDE_RATIO_PG : STOPPED_GLIDE_RATIO_HG;
 }
 
 /**
- * §12.3.1 fallback score-back for a hang-gliding race with a single start
- * gate (or no usable gates): 15 minutes.
+ * §13.4.1 score-back times — fixed values in the 2026 edition (the PG
+ * competition parameter and the HG gate-interval rule are both gone).
  */
-export const HG_SINGLE_GATE_SCORE_BACK_SECONDS = 15 * 60;
+export const SCORE_BACK_SECONDS_HG = 15 * 60;
+export const SCORE_BACK_SECONDS_PG = 5 * 60;
 
-/** How the task stop time was derived from the announcement (§12.3.1). */
-export type ScoreBackKind =
-  /** PG: the competition's score-back time (§5.6). */
-  | 'pg_score_back'
-  /** HG, multiple start gates: one start-gate interval. */
-  | 'hg_gate_interval'
-  /** HG, single gate (or no usable gates): the fixed 15 minutes. */
-  | 'hg_single_gate';
+/** The §13.4.1 score-back time for a sport. */
+export function scoreBackSecondsFor(scoring: 'PG' | 'HG'): number {
+  return scoring === 'PG' ? SCORE_BACK_SECONDS_PG : SCORE_BACK_SECONDS_HG;
+}
 
-/** The resolved task stop for a stopped task (§12.3.1). */
+/** The resolved task stop for a stopped task (§13.4.1). */
 export interface TaskStopContext {
   /** The recorded task stop announcement time (epoch ms). */
   announcementMs: number;
@@ -52,62 +50,44 @@ export interface TaskStopContext {
   stopTimeMs: number;
   /** Seconds scored back from the announcement. */
   scoreBackSeconds: number;
-  /** How the score-back was derived. */
-  scoreBackKind: ScoreBackKind;
 }
 
 /**
- * Resolve the task stop time from the stop announcement time (§12.3.1):
+ * Resolve the task stop time from the stop announcement time (§13.4.1):
+ * `taskStopTime = taskStopAnnouncementTime − scoreBackTime`, with the fixed
+ * score-back of 15 minutes for hang gliding and 5 minutes for paragliding.
  *
- * - PG: `stopTime = announcement − competitionScoreBackTime` (§5.6, the
- *   {@link GAPParameters.scoreBackTime} parameter).
- * - HG: one start-gate interval before the announcement, or 15 minutes for
- *   a single start gate (also used when the task has no usable gates —
- *   elapsed-time tasks and gateless races have no interval to take).
- *
- * @param task - The task (its start gates drive the HG interval)
- * @param announcementMs - The recorded stop announcement time (epoch ms),
- *   also the day reference for resolving the gate times-of-day
- * @param params - The competition's GAP parameters
+ * @param announcementMs - The recorded stop announcement time (epoch ms)
+ * @param scoring - The discipline (drives the fixed score-back)
  */
 export function resolveTaskStop(
-  task: XCTask,
   announcementMs: number,
-  params: GAPParameters,
+  scoring: 'PG' | 'HG',
 ): TaskStopContext {
-  let scoreBackSeconds: number;
-  let scoreBackKind: ScoreBackKind;
-  if (params.scoring === 'PG') {
-    scoreBackSeconds = Math.max(0, params.scoreBackTime);
-    scoreBackKind = 'pg_score_back';
-  } else {
-    const gates = resolveStartGates(task, announcementMs);
-    if (gates && gates.length >= 2) {
-      scoreBackSeconds = (gates[1] - gates[0]) / 1000;
-      scoreBackKind = 'hg_gate_interval';
-    } else {
-      scoreBackSeconds = HG_SINGLE_GATE_SCORE_BACK_SECONDS;
-      scoreBackKind = 'hg_single_gate';
-    }
-  }
+  const scoreBackSeconds = scoreBackSecondsFor(scoring);
   return {
     announcementMs,
     stopTimeMs: announcementMs - scoreBackSeconds * 1000,
     scoreBackSeconds,
-    scoreBackKind,
   };
 }
 
 /**
- * §12.3.2 minimum run: for a stopped task to be scored, the scored time
- * window must have lasted at least `min(1 hour, nominalTime / 2)`.
+ * §13.4.2 minimum duration: a stopped hang-gliding task is scored only when
+ * the scored time window lasted at least `min(1 hour, nominalTime / 2)`.
+ * Paragliding has no minimum — instead, low-validity stopped PG tasks are
+ * excluded from the competition ranking (§16, task validity < 0.05).
  */
-export function stoppedMinimumRunSeconds(nominalTimeSeconds: number): number {
+export function stoppedMinimumRunSeconds(
+  nominalTimeSeconds: number,
+  scoring: 'PG' | 'HG',
+): number {
+  if (scoring === 'PG') return 0;
   return Math.min(3600, nominalTimeSeconds / 2);
 }
 
 /**
- * The goal altitude (m, GNSS) the §12.3.6 altitude bonus is measured above —
+ * The goal altitude (m, GNSS) the §13.4.6 altitude bonus is measured above —
  * the goal turnpoint's waypoint altitude, or 0 when the task doesn't carry
  * one (the bonus then overstates by the goal's true elevation; better than
  * no bonus, and honest task files always carry `altSmoothed`).
@@ -119,12 +99,12 @@ export function resolveGoalAltitude(task: XCTask): number {
 }
 
 /**
- * §12.3.4 per-pilot scored-window ends for a stopped task.
+ * §13.4.4 per-pilot scored-window ends for a stopped task.
  *
- * - Race to goal with a single start gate: every pilot shares the window
+ * - Race with a single start gate: every pilot shares the window
  *   [start gate, stop time] — returns null (the caller keeps the stop time
  *   as the common window end).
- * - Multiple start gates or elapsed time: every pilot is scored for the
+ * - Multiple start gates or Time Trial: every pilot is scored for the
  *   duration the LAST-started pilot had — their own start plus
  *   `stopTime − lastStart`. Pilots who never started keep the stop time.
  *
@@ -133,7 +113,7 @@ export function resolveGoalAltitude(task: XCTask): number {
  * window end (epoch ms).
  *
  * The starts should be the pilots' OFFICIAL start times (gate-snapped in a
- * gated race, actual crossing for elapsed time), from a first scoring pass
+ * gated race, actual crossing in a Time Trial), from a first scoring pass
  * clipped at the stop time — so a start after the stop can never appear.
  *
  * @param task - The task (gate count decides the single-gate shortcut)

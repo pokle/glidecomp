@@ -8,9 +8,8 @@
 import { useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Form } from "react-aria-components";
-import { defaultsFor, resolveCompGapParams, resolveTimePointsExponent } from "@glidecomp/engine";
+import { defaultsFor, resolveCompGapParams, resolveLeadingTimeRatio } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
-import { Explain } from "@/react/rac/explain";
 import {
   Dialog,
   DialogFooter,
@@ -77,10 +76,8 @@ export function SettingsDialog({
   // nominalDistance stays blank when unset so the scorer auto-computes
   // it per task (70% of task distance), matching historical behavior.
   // Resolve the *effective* params the scorer uses (official per-category
-  // defaults + saved overrides, plus the date-based PG leading-weight default
-  // from the comp's creation time — issue #257), so every field's initial
-  // value matches what the scoreboard is computed from.
-  const gpCreatedAtMs = Date.parse(comp.creation_date);
+  // defaults + saved overrides), so every field's initial value matches what
+  // the scoreboard is computed from.
   // Strip nominalDistance (nullable "auto") before merging — the dialog keys
   // its own nominalDistance field off the stored value, and the engine type
   // wants number | undefined, not the CompGapParams number | null.
@@ -88,8 +85,7 @@ export function SettingsDialog({
   void _gpNd;
   const gp = resolveCompGapParams(
     comp.category === "pg" ? "pg" : "hg",
-    comp.gap_params ? gpStored : null,
-    Number.isNaN(gpCreatedAtMs) ? null : gpCreatedAtMs
+    comp.gap_params ? gpStored : null
   );
 
   const [name, setName] = useState(comp.name);
@@ -130,42 +126,24 @@ export function SettingsDialog({
       : NaN
   );
   const [nominalTime, setNominalTime] = useState(Math.round(gp.nominalTime / 60));
-  const [nominalGoal, setNominalGoal] = useState(Math.round(gp.nominalGoal * 100));
-  const [nominalLaunch, setNominalLaunch] = useState(Math.round(gp.nominalLaunch * 100));
   const [minimumDistance, setMinimumDistance] = useState(gp.minimumDistance / 1000);
   const [useLeading, setUseLeading] = useState(gp.useLeading);
   const [useArrival, setUseArrival] = useState(gp.useArrival);
   const [useDifficulty, setUseDifficulty] = useState(gp.useDistanceDifficulty ?? true);
-  const [leadingFormula, setLeadingFormula] = useState<"weighted" | "classic">(
-    gp.leadingFormula ?? "weighted"
-  );
-  // Leading-weight generation (PG only; issue #257). `gp` is the effective
-  // params (resolveCompGapParams with the comp's creation date), so a new PG
-  // comp shows 's7f2024' and an older one 'gap2020' — matching the scorer.
-  const [leadingWeightFormula, setLeadingWeightFormula] = useState<
-    "gap2020" | "s7f2020" | "s7f2024"
-  >(gp.leadingWeightFormula ?? "gap2020");
+  // S7F 2026 §11 Leading Time Ratio, shown as a percentage (0–26). One
+  // decimal place — the HG default is 17.5%, and whole-percent rounding
+  // would silently save 18%.
   const [leadingTimeRatio, setLeadingTimeRatio] = useState(
-    Math.round((gp.leadingTimeRatio ?? 0.26) * 100)
-  );
-  // Time-points exponent (S7F §11.2), decoupled from the leading formula
-  // (issue #258). A saved comp that predates the split keeps the exponent its
-  // leadingFormula historically implied (resolveTimePointsExponent).
-  const [timePointsExponent, setTimePointsExponent] = useState<"5/6" | "2/3">(
-    resolveTimePointsExponent(gp)
+    Math.round(resolveLeadingTimeRatio(gp) * 1000) / 10
   );
   const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(
     gp.distanceOrigin ?? "takeoff"
   );
   const [jtgFactor, setJtgFactor] = useState(gp.jumpTheGunFactor ?? 2);
   const [jtgMax, setJtgMax] = useState(gp.jumpTheGunMaxSeconds ?? 300);
-  // ESS-but-not-goal (S7F §12.1), shown as a percentage of points kept.
+  // ESS-but-not-goal (S7F 2026 §13.2), shown as a percentage of points kept.
   const [essNotGoal, setEssNotGoal] = useState(
     Math.round((gp.essNotGoalFactor ?? 0.8) * 100)
-  );
-  // PG score-back time (S7F §5.6, §12.3.1), shown in minutes.
-  const [scoreBack, setScoreBack] = useState(
-    Math.round((gp.scoreBackTime ?? 300) / 60)
   );
 
   const [saving, setSaving] = useState(false);
@@ -178,31 +156,17 @@ export function SettingsDialog({
    */
   function resetToDefaults() {
     const d = defaultsFor(category);
-    // The PG leading-weight default is date-based (issue #257): reset to what a
-    // comp of this age would default to — 's7f2024' for one created on/after
-    // the cutoff, 'gap2020' for an older one — not the raw engine baseline.
-    const resolved = resolveCompGapParams(
-      category,
-      null,
-      Number.isNaN(gpCreatedAtMs) ? null : gpCreatedAtMs
-    );
     setNominalDistance(NaN);
     setNominalTime(Math.round(d.nominalTime / 60));
-    setNominalGoal(Math.round(d.nominalGoal * 100));
-    setNominalLaunch(Math.round(d.nominalLaunch * 100));
     setMinimumDistance(d.minimumDistance / 1000);
     setUseLeading(d.useLeading);
     setUseArrival(d.useArrival);
     setUseDifficulty(d.useDistanceDifficulty);
-    setLeadingFormula(d.leadingFormula);
-    setLeadingWeightFormula(resolved.leadingWeightFormula);
-    setLeadingTimeRatio(Math.round(d.leadingTimeRatio * 100));
-    setTimePointsExponent(resolveTimePointsExponent(d));
+    setLeadingTimeRatio(Math.round(resolveLeadingTimeRatio(d) * 1000) / 10);
     setDistanceOrigin(d.distanceOrigin);
     setJtgFactor(d.jumpTheGunFactor);
     setJtgMax(d.jumpTheGunMaxSeconds);
     setEssNotGoal(Math.round(d.essNotGoalFactor * 100));
-    setScoreBack(Math.round(d.scoreBackTime / 60));
   }
 
   // Live class list for the default-class dropdown.
@@ -257,21 +221,16 @@ export function SettingsDialog({
       scoring: (category === "pg" ? "PG" : "HG") as "PG" | "HG",
       nominalDistance: Number.isNaN(nominalDistance) ? null : nominalDistance * 1000,
       nominalTime: num(nominalTime, 90) * 60,
-      nominalGoal: num(nominalGoal, 20) / 100,
-      nominalLaunch: num(nominalLaunch, 96) / 100,
       minimumDistance: num(minimumDistance, 5) * 1000,
       useLeading,
       useArrival,
-      leadingFormula,
-      leadingWeightFormula,
-      leadingTimeRatio: num(leadingTimeRatio, 26) / 100,
-      timePointsExponent,
+      leadingTimeRatio:
+        num(leadingTimeRatio, category === "pg" ? 26 : 17.5) / 100,
       distanceOrigin,
       useDistanceDifficulty: useDifficulty,
       jumpTheGunFactor: num(jtgFactor, 2),
       jumpTheGunMaxSeconds: num(jtgMax, 300),
       essNotGoalFactor: num(essNotGoal, 80) / 100,
-      scoreBackTime: num(scoreBack, 5) * 60,
     };
 
     setSaving(true);
@@ -413,7 +372,7 @@ export function SettingsDialog({
           </div>
 
           {/* Series (multi-task) scoring — how per-task scores combine into
-              competition scores. FTV is a GAP-only aggregation (S7F §15). */}
+              competition scores. FTV is a GAP-only aggregation (S7F §16). */}
           {scoringFormat === "gap" ? (
             <div>
               <h3 className="mb-1.5 text-sm font-medium">Series scoring</h3>
@@ -427,7 +386,7 @@ export function SettingsDialog({
                 ariaLabel="Series scoring"
               />
               <p className="mt-1 text-sm text-muted-foreground">
-                FTV (S7F §15) scores each pilot on their best tasks, discarding a
+                FTV (S7F §16) scores each pilot on their best tasks, discarding a
                 fixed fraction of the total validity — the paragliding norm. Sum of
                 task scores is the simple total.
               </p>
@@ -515,24 +474,6 @@ export function SettingsDialog({
                   onChange={setNominalTime}
                 />
                 <NumberField
-                  label="Nominal goal (%)"
-                  minValue={0}
-                  maxValue={100}
-                  step={1}
-                  formatOptions={{ useGrouping: false }}
-                  value={nominalGoal}
-                  onChange={setNominalGoal}
-                />
-                <NumberField
-                  label="Nominal launch (%)"
-                  minValue={0}
-                  maxValue={100}
-                  step={1}
-                  formatOptions={{ useGrouping: false }}
-                  value={nominalLaunch}
-                  onChange={setNominalLaunch}
-                />
-                <NumberField
                   label="Minimum distance (km)"
                   minValue={0}
                   step={0.1}
@@ -548,7 +489,7 @@ export function SettingsDialog({
                   formatOptions={{ useGrouping: false }}
                   value={jtgFactor}
                   onChange={setJtgFactor}
-                  description="FAI S7F §12.2: an HG pilot starting early loses 1 point per this many seconds. Spec default 2. No effect on PG (early starts are scored launch→start only)."
+                  description="FAI S7F §13.3: an HG pilot starting early loses 1 point per this many seconds. Spec default 2. No effect on PG (early starts are scored launch→start only)."
                 />
                 <NumberField
                   label="Jump-the-gun: maximum seconds early (HG)"
@@ -567,18 +508,7 @@ export function SettingsDialog({
                   formatOptions={{ useGrouping: false }}
                   value={essNotGoal}
                   onChange={setEssNotGoal}
-                  description="FAI S7F §12.1: an HG pilot who reaches ESS but lands before goal keeps this share of their time and arrival points. Spec default 80. No effect on PG (the spec fixes it at 0 — no goal, no time points)."
-                />
-
-                <NumberField
-                  label="Score-back time (min, PG stopped tasks)"
-                  minValue={0}
-                  maxValue={60}
-                  step={1}
-                  formatOptions={{ useGrouping: false }}
-                  value={scoreBack}
-                  onChange={setScoreBack}
-                  description="FAI S7F §5.6, §12.3.1: when a PG task is stopped, the task stop time is the stop announcement minus this. Spec default 5 minutes. No effect on HG (scored back one start-gate interval, or 15 minutes with a single gate)."
+                  description="FAI S7F §13.2: an HG pilot who reaches ESS but lands before goal keeps this share of their time and arrival points. Spec default 80. No effect on PG (the spec fixes it at 0 — no goal, no time points)."
                 />
 
                 <CheckboxField
@@ -598,96 +528,20 @@ export function SettingsDialog({
                   hint="Splits HG distance points half linear, half difficulty (FAI S7F). No effect on PG."
                 />
 
-                <div>
-                  <h4 className="mb-1.5 text-sm font-medium">Leading coefficient formula</h4>
-                  <SimpleSelect
-                    value={leadingFormula}
-                    onChange={(v) => setLeadingFormula(v as "weighted" | "classic")}
-                    options={[
-                      { value: "weighted", label: "Weighted — GAP2020+ / S7F paragliding" },
-                      { value: "classic", label: "Classic — S7F hang gliding / GAP2016/2018" },
-                    ]}
-                    ariaLabel="Leading coefficient formula"
-                  />
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    The leading-points envelope (S7F §11.3.1). The 2024 spec pairs hang
-                    gliding with classic and paragliding with weighted; both match AirScore.
-                  </p>
-                </div>
-                <div>
-                  <h4 className="mb-1.5 text-sm font-medium">Time points exponent</h4>
-                  <SimpleSelect
-                    value={timePointsExponent}
-                    onChange={(v) => setTimePointsExponent(v as "5/6" | "2/3")}
-                    options={[
-                      { value: "5/6", label: "5⁄6 — current FAI S7F (both sports)" },
-                      { value: "2/3", label: "2⁄3 — older GAP2016/2018 curve" },
-                    ]}
-                    ariaLabel="Time points exponent"
-                  />
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    The speed-fraction exponent (S7F §11.2), set independently of the leading
-                    formula. 5⁄6 is the current spec for both sports; 2⁄3 is slightly more
-                    generous.
-                  </p>
-                </div>
-                {category === "pg" ? (
-                  <div>
-                    <h4 className="mb-1.5 flex items-center gap-1 text-sm font-medium">
-                      Paragliding leading weight
-                      {/* Three formulas' worth of arithmetic used to sit under
-                          the select as one 61-word paragraph. An organiser
-                          picking an option needs the one line below; the
-                          weights behind each are for whoever asks. */}
-                      <Explain label="Paragliding leading weight">
-                        <p>
-                          <strong>GAP2020</strong> gives leading 35% (and 0.1 ×
-                          BestDist/TaskDist of the total when nobody makes
-                          goal).
-                        </p>
-                        <p>
-                          <strong>S7F 2020–2022</strong> uses the PWC-derived
-                          fixed weights — distance 0.838 when nobody makes goal,
-                          leading always 0.162.
-                        </p>
-                        <p>
-                          <strong>S7F 2024</strong> uses the LeadingTimeRatio
-                          below, and all of the non-distance weight when nobody
-                          makes goal.
-                        </p>
-                      </Explain>
-                    </h4>
-                    <SimpleSelect
-                      value={leadingWeightFormula}
-                      onChange={(v) =>
-                        setLeadingWeightFormula(v as "gap2020" | "s7f2020" | "s7f2024")
-                      }
-                      options={[
-                        { value: "gap2020", label: "GAP2020 — GAP2016/2018 weights (default)" },
-                        { value: "s7f2020", label: "S7F 2020–2022 — PWC weights (AirScore gap2020/21/22)" },
-                        { value: "s7f2024", label: "S7F 2024 — LeadingTimeRatio (§10)" },
-                      ]}
-                      ariaLabel="Paragliding leading weight formula"
-                    />
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      How much of the non-distance weight goes to leading vs
-                      time. Hang gliding is unaffected.
-                    </p>
-                    {leadingWeightFormula === "s7f2024" ? (
-                      <NumberField
-                        className="mt-3"
-                        label="Leading-time ratio (%)"
-                        minValue={0}
-                        maxValue={50}
-                        step={1}
-                        formatOptions={{ useGrouping: false }}
-                        value={leadingTimeRatio}
-                        onChange={setLeadingTimeRatio}
-                        description="FAI S7F §10: the % of the non-distance weight allocated to leading when someone makes goal (0–50%, spec default 26%). The rest goes to time."
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
+                <NumberField
+                  label="Leading-time ratio (%)"
+                  minValue={0}
+                  maxValue={26}
+                  step={0.5}
+                  formatOptions={{ useGrouping: false }}
+                  value={leadingTimeRatio}
+                  onChange={setLeadingTimeRatio}
+                  description={
+                    category === "pg"
+                      ? "FAI S7F §11: the % of the non-distance weight allocated to leading (0–26%, spec default 26%). The rest goes to time. When nobody makes goal, all the non-distance weight goes to leading."
+                      : "FAI S7F §11: the % of the non-distance weight allocated to leading (0–26%, spec default 17.5%). The rest goes to time and arrival."
+                  }
+                />
                 <div>
                   <h4 className="mb-1.5 text-sm font-medium">Distance origin</h4>
                   <SimpleSelect

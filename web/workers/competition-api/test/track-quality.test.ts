@@ -217,7 +217,7 @@ describe("hard-failed tracks in the scores", () => {
   });
 
   // The blast-radius guarantee: an automatic heuristic must not be able to
-  // move anyone else's points. If a withheld pilot counted toward S7F §9.1
+  // move anyone else's points. If a withheld pilot counted toward S7F §10.1
   // "pilots present", one false positive would cut the whole field's score.
   test("withholding a track leaves the rest of the field's scores untouched", async () => {
     const withBad = await seedTask({ good: 2, bad: true });

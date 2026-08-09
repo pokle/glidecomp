@@ -1,6 +1,6 @@
 /**
  * The fixed, competition-wide pilot status vocabulary (FAI Sporting Code
- * S7F §9.1). Every competition uses exactly this set — it is NOT
+ * S7F §10.1). Every competition uses exactly this set — it is NOT
  * admin-configurable (issue #261).
  *
  *   (no row) → Present  — the default. A registered pilot with no

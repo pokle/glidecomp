@@ -121,7 +121,7 @@ export function StepBox({
  * This exists because the alternative is worse than a question. An organiser
  * who typed a pilot's email wrongly used to get a SECOND roster entry for that
  * pilot, silently: their own entry empty, a self-made one carrying the track,
- * and a pilot count that feeds launch validity (S7F §9.1) counting a phantom.
+ * and a pilot count that feeds launch validity (S7F §10.1) counting a phantom.
  *
  * Nothing is preselected, deliberately. Preselecting the likeliest candidate
  * is exactly how somebody files a track against a stranger without noticing —

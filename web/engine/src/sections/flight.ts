@@ -4,7 +4,7 @@
  * Composed from five phase builders — start crossings (including re-entries
  * and which one scored), turnpoint reachings, the task deadline, a task stop,
  * and goal or best progress — plus the manual-flight variant an official
- * records for a pilot with no tracklog (FAI S7F §8.4).
+ * records for a pilot with no tracklog (FAI S7F §9.2.2).
  */
 
 import type { XCTask } from '../xctsk-parser';
@@ -29,18 +29,18 @@ const MAX_DEADLINE_CROSSINGS_LISTED = 6;
 
 /**
  * Shown when a crossing was credited by the cylinder tolerance band rather
- * than a physical crossing of the nominal radius (FAI S7F §8.1).
+ * than a physical crossing of the nominal radius (FAI S7F §9.1.1).
  */
 const TOLERANCE_NOTE =
-  'Credited by the cylinder tolerance band (FAI S7F §8.1) — the track came within tolerance of the cylinder edge but did not physically cross the nominal radius.';
+  'Credited by the cylinder tolerance band (FAI S7F §9.1.1) — the track came within tolerance of the cylinder edge but did not physically cross the nominal radius.';
 
 /**
  * The goal-line version of {@link TOLERANCE_NOTE}: a line carries the same
- * percentage tolerance as a cylinder (FAI S7F §8.2), and at goal what that
+ * percentage tolerance as a cylinder (FAI S7F §9.1.3), and at goal what that
  * buys is length — a crossing that lands just past an endpoint still counts.
  */
 const LINE_TOLERANCE_NOTE =
-  'Credited by the line tolerance band (FAI S7F §8.2) — the track crossed just past the end of the goal line, within the tolerance it carries. A line gets the same percentage as a cylinder, and at least 5 m.';
+  'Credited by the line tolerance band (FAI S7F §9.1.3) — the track crossed just past the end of the goal line, within the tolerance it carries. A line gets the same percentage as a cylinder, and at least 5 m.';
 
 /** The inputs every flight-narrative phase builder shares. */
 interface FlightNarrativeCtx {
@@ -64,14 +64,14 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
     });
   }
 
-  // Launch-window violation (FAI S7F §8.6.1): start crossings before the
+  // Launch-window violation (FAI S7F §9.3): start crossings before the
   // window even opened prove the pilot was airborne before launching was
   // allowed — they were excluded from start validation.
   if (result.launchWindow && result.launchWindow.droppedStartCrossings > 0) {
     const lw = result.launchWindow;
     out.push({
       id: 'launch-window',
-      text: `${lw.droppedStartCrossings === 1 ? 'A start-cylinder crossing' : `${lw.droppedStartCrossings} start-cylinder crossings`} before the launch window opened at ${fmt(lw.openTime)} ${lw.droppedStartCrossings === 1 ? 'was' : 'were'} ignored (FAI S7F §8.6.1) — a crossing before the window opens means the pilot was airborne before launching was allowed, so it cannot validate a start.`,
+      text: `${lw.droppedStartCrossings === 1 ? 'A start-cylinder crossing' : `${lw.droppedStartCrossings} start-cylinder crossings`} before the launch window opened at ${fmt(lw.openTime)} ${lw.droppedStartCrossings === 1 ? 'was' : 'were'} ignored (FAI S7F §9.3) — a crossing before the window opens means the pilot was airborne before launching was allowed, so it cannot validate a start.`,
       emphasis: 'warning',
     });
   }
@@ -215,7 +215,7 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
     if (result.earlyStart) {
       out.push({
         id: 'early-start',
-        text: `Crossed the start ${duration(result.earlyStart.secondsEarly)} before the first start gate opened at ${fmt(result.earlyStart.firstGateTime)} — an early start ("jumping the gun", FAI S7F §12.2). The speed-section clock runs from the first gate.`,
+        text: `Crossed the start ${duration(result.earlyStart.secondsEarly)} before the first start gate opened at ${fmt(result.earlyStart.firstGateTime)} — an early start ("jumping the gun", FAI S7F §13.3). The speed-section clock runs from the first gate.`,
         emphasis: 'warning',
       });
     } else if (result.startGate) {
@@ -224,8 +224,8 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
         id: 'start-gate',
         text:
           gate.gateCount > 1
-            ? `Start time taken: gate ${gate.index + 1} of ${gate.gateCount} — the last start gate at or before the crossing. The speed-section clock runs from the gate, not from the crossing (FAI S7F §8.3.1).`
-            : 'Start time taken: the start gate — the speed-section clock runs from the gate, not from the crossing (FAI S7F §8.3.1).',
+            ? `Start time taken: gate ${gate.index + 1} of ${gate.gateCount} — the last start gate at or before the crossing. The speed-section clock runs from the gate, not from the crossing (FAI S7F §9.2.4.1).`
+            : 'Start time taken: the start gate — the speed-section clock runs from the gate, not from the crossing (FAI S7F §9.2.4.1).',
         value: fmt(gate.time),
         emphasis: 'muted',
       });
@@ -306,7 +306,7 @@ function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationI
       detail = `${goalNote}${detail ? ` ${detail}` : ''}`;
     }
     if (reaching.toleranceCredited) {
-      // A goal line's band is §8.2's, and it means something different from a
+      // A goal line's band is §9.1.3's, and it means something different from a
       // cylinder's — say which one credited the pilot.
       detail = `${detail ? `${detail} ` : ''}${goalLine ? LINE_TOLERANCE_NOTE : TOLERANCE_NOTE}`;
     }
@@ -336,7 +336,7 @@ function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationI
 function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   const { task, result, entry, fmt } = ctx;
   const out: ScoreExplanationItem[] = [];
-  // Task deadline (FAI S7F §8.3.c, §11.1): crossings after it were excluded
+  // Task deadline (FAI S7F §9.2, §12.1): crossings after it were excluded
   // from the sequence and distance was measured only up to it. Shown when it
   // actually shaped this flight — crossings were ignored, or a landed-out
   // pilot's track continues past the deadline.
@@ -344,7 +344,7 @@ function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   if (dl && (dl.crossingsAfter > 0 || (!entry.made_goal && dl.trackContinuesPastDeadline))) {
     out.push({
       id: 'task-deadline',
-      text: 'Task deadline — turnpoint crossings after this time do not count, and distance is measured only up to it (FAI S7F §8.3, §11.1).',
+      text: 'Task deadline — turnpoint crossings after this time do not count, and distance is measured only up to it (FAI S7F §9.2, §12.1).',
       value: fmt(dl.time),
       emphasis: dl.crossingsAfter > 0 ? 'warning' : 'muted',
     });
@@ -390,32 +390,30 @@ function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
 function buildStopItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   const { result, entry, fmt } = ctx;
   const out: ScoreExplanationItem[] = [];
-  // Stopped task (FAI S7F §12.3): narrate how the stop shaped this flight —
+  // Stopped task (FAI S7F §13.4): narrate how the stop shaped this flight —
   // the scored window's end, the complete-flight exemption for pilots
-  // at/after ESS (§12.3.5), and any crossings dropped by the clip.
+  // at/after ESS (§13.4.5), and any crossings dropped by the clip.
   const stop = result.stopInfo;
   if (!stop) return out;
   const windowDiffers =
     stop.windowEnd.getTime() !== stop.stopTime.getTime();
   out.push({
     id: 'task-stopped',
-    // A pilot already past ESS keeps their complete flight (§12.3.5, stated
-    // next) — for them the stop is context, not a clip, so don't claim one.
-    text: stop.essBeforeStop
-      ? 'The task was stopped (FAI S7F §12.3).'
-      : windowDiffers
-        ? 'The task was stopped. With multiple start gates every pilot is scored for the time window the last-started pilot had (FAI S7F §12.3.4) — this flight scored up to the window end shown.'
-        : 'The task was stopped — the flight is scored only up to the task stop time (FAI S7F §12.3).',
+    // §13.4.5 (2026): every pilot is scored only up to the stop — including
+    // pilots already past ESS.
+    text: windowDiffers
+      ? 'The task was stopped. With multiple start gates every pilot is scored for the time window the last-started pilot had (FAI S7F §13.4.4) — this flight scored up to the window end shown.'
+      : 'The task was stopped — the flight is scored only up to the task stop time (FAI S7F §13.4).',
     value: fmt(stop.windowEnd),
     emphasis: stop.crossingsAfterStop > 0 ? 'warning' : 'muted',
     detail: windowDiffers
       ? `Task stop time ${fmt(stop.stopTime)}; this pilot's scored window ends ${fmt(stop.windowEnd)}.`
       : undefined,
   });
-  if (stop.essBeforeStop && (entry.made_goal || result.essReaching)) {
+  if (stop.essBeforeStop && result.essReaching && !entry.made_goal) {
     out.push({
-      id: 'stop-ess-exemption',
-      text: 'Already past the end of the speed section when the task was stopped — the complete flight is scored, including anything flown after the stop (FAI S7F §12.3.5).',
+      id: 'stop-ess-between',
+      text: 'Past the end of the speed section but short of goal when the task was stopped — scored for the distance and speed-section time flown up to the stop (FAI S7F §13.4.5).',
       emphasis: 'muted',
     });
   }
@@ -439,7 +437,7 @@ function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[]
     });
   } else if (result.bestProgress) {
     // The marked point is where the flight made the most distance along the
-    // task — the fix whose §8.6.1 remaining route (shortest path through the
+    // task — the fix whose §9.3 remaining route (shortest path through the
     // un-reached turnpoints to goal) is shortest, not the point nearest goal
     // in a straight line. Name the next turnpoint so the map marker makes
     // sense.
@@ -449,7 +447,7 @@ function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[]
     const nextIsExit = !nextIsGoal && directions[nextIdx] === 'exit';
     const nextName = turnpointName(task, nextIdx);
     const nextDesc = `${turnpointLabel(task, nextIdx)}${nextName ? ` (${nextName})` : ''}`;
-    // The remaining routed line: the §8.6.1 measured route carried on the
+    // The remaining routed line: the §9.3 measured route carried on the
     // result (first element = the best-progress point). Payloads cached
     // before the field existed fall back to the task line's tag points —
     // an approximation of the measured route, but still a truthful "on
@@ -545,7 +543,7 @@ export function buildManualFlightSection(
   const items: ScoreExplanationItem[] = [
     {
       id: 'manual-flight',
-      text: 'Manual flight — recorded by an official for a pilot with no tracklog (FAI S7F §8.4). The distance is computed from the last turnpoint reached and the landing point, exactly as a real track at the same place would score.',
+      text: 'Manual flight — recorded by an official for a pilot with no tracklog (FAI S7F §9.2.2). The distance is computed from the last turnpoint reached and the landing point, exactly as a real track at the same place would score.',
       emphasis: 'muted',
     },
     {

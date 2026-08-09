@@ -14,7 +14,7 @@ export type ScoringFormat = "gap" | "open_distance";
 
 /** How a competition's per-task scores are aggregated into scores
  * (migration 0022). "total" = sum of task scores; "ftv" = Fixed Total
- * Validity (S7F §15) — best tasks kept up to a fixed validity. */
+ * Validity (S7F §16) — best tasks kept up to a fixed validity. */
 export type SeriesScoring = "total" | "ftv";
 
 /** Where scored distance begins (GAPParameters.distanceOrigin). Mirrors the
@@ -96,7 +96,7 @@ export interface TaskDetailData {
   task_date: string;
   creation_date: string;
   xctsk: XCTask | null;
-  /** Stopped tasks (S7F §12.3): the recorded stop announcement time (ISO
+  /** Stopped tasks (S7F §13.4): the recorded stop announcement time (ISO
    * UTC), or null when the task ran to completion. */
   stop_announcement_time: string | null;
   /** The organizer's free-text account of the day's conditions. Public to
@@ -166,21 +166,21 @@ export interface PilotScoreEntry {
   penalty_points: number;
   penalty_reason: string | null;
   total_score: number;
-  /** Seconds started before the first start gate (S7F §12.2), when early. */
+  /** Seconds started before the first start gate (S7F §13.3), when early. */
   early_start_seconds?: number | null;
   /** How the early start reshaped the score. */
   early_start_outcome?: "pg_launch_to_sss" | "hg_penalty" | "hg_min_distance" | null;
   /** Automatic jump-the-gun penalty points deducted (HG early starts). */
   jump_the_gun_penalty?: number | null;
-  /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
+  /** Stopped tasks (S7F §13.4.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. */
   stopped_altitude_bonus?: number | null;
-  /** The pilot's leading coefficient (S7F §11.3), lower is better — the sole
+  /** The pilot's leading coefficient (S7F §13.4), lower is better — the sole
    * input to leading points. Null when leading isn't scored; absent on
    * payloads cached before it was published. */
   leading_coefficient?: number | null;
   /** Position in the ESS arrival order (1-based) — with the ESS field size,
-   * the whole input to the §11.4 arrival formula. Null when arrival isn't
+   * the whole input to the §13.5 arrival formula. Null when arrival isn't
    * scored or the pilot never reached ESS; absent on older payloads. */
   arrival_position?: number | null;
   /** When the pilot reached ESS (epoch ms). What the arrival order sorts by:
@@ -209,7 +209,7 @@ export interface ClassValidityInputs {
 }
 
 /**
- * The §11.3.1 leading clock the class's coefficients were measured against —
+ * The §12.3.1 leading clock the class's coefficients were measured against —
  * see the API's ClassLeadingTimes. `max_time_ms` is where a landed-out
  * pilot's leading graph ends, and it is the whole field's number, not the
  * pilot's: min(max(last land-out, last ESS), deadline).
@@ -224,7 +224,7 @@ export interface ClassLeadingTimes {
   max_time_source: "last_outlanding" | "last_ess" | "deadline" | "stop" | "fallback";
 }
 
-/** Whole-class stopped-task outcome (S7F §12.3) — see the API's ClassStoppedInfo. */
+/** Whole-class stopped-task outcome (S7F §13.4) — see the API's ClassStoppedInfo. */
 export interface ClassStoppedInfo {
   stop_time_ms: number;
   scored_window_seconds: number | null;
@@ -241,7 +241,7 @@ export interface ClassScore {
     launch: number;
     distance: number;
     time: number;
-    /** Stopped-task validity (S7F §12.3.3), present when the task was stopped. */
+    /** Stopped-task validity (S7F §13.4.3), present when the task was stopped. */
     stopped?: number;
     task: number;
   };
@@ -253,6 +253,12 @@ export interface ClassScore {
     total: number;
   };
   pilots: PilotScoreEntry[];
+  /**
+   * Which edition of the FAI Sporting Code S7F scored this class
+   * ("s7f-2026"). Absent on payloads cached before the field was published
+   * — degrade the badge to plain "FAI S7F" there, never guess an edition.
+   */
+  rules_edition?: "s7f-2026";
   /** The numbers behind `task_validity` and the available-points split. */
   validity_inputs?: ClassValidityInputs;
   /**
@@ -265,11 +271,11 @@ export interface ClassScore {
    */
   gap_params?: GAPParameters;
   /**
-   * The §11.3.1 leading clock, when the class scored leading points: where a
+   * The §12.3.1 leading clock, when the class scored leading points: where a
    * landed-out pilot's graph was carried to, and which field time decided it.
    */
   leading_times?: ClassLeadingTimes;
-  /** Present when the task was scored as stopped (S7F §12.3). */
+  /** Present when the task was scored as stopped (S7F §13.4). */
   stopped?: ClassStoppedInfo;
 }
 

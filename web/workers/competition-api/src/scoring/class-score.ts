@@ -167,10 +167,10 @@ export function buildClassScore(
 ): ClassScore {
   const withPenalties = result.pilotScores.map((ps) => {
     const pilot = pilotMeta.get(ps.trackFile)!;
-    // FAI S7F §12.4: apply the scorekeeper's absolute penalty, then round to
+    // FAI S7F §13.5: apply the scorekeeper's absolute penalty, then round to
     // one decimal place (rounding is done after penalties), floored at zero
     // (the lowest score a pilot can attain is 0). ps.totalScore is already the
-    // §11 one-decimal total; re-rounding keeps the final clean when the
+    // §12 one-decimal total; re-rounding keeps the final clean when the
     // penalty itself carries more precision.
     const penalised = ps.totalScore - pilot.penalty_points;
     return {
@@ -229,6 +229,9 @@ export function buildClassScore(
     pilots,
     ...(transparency
       ? {
+          // The edition label rides with the GAP transparency data (open
+          // distance is not scored under S7F, so it carries none).
+          rules_edition: "s7f-2026" as const,
           validity_inputs: transparency.validity_inputs,
           gap_params: transparency.gap_params,
         }

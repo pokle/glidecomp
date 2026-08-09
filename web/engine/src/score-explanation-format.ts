@@ -22,7 +22,7 @@ export function pts(points: number): string {
 }
 
 /**
- * Format a point value at the spec's one-decimal precision (S7F §11), dropping
+ * Format a point value at the spec's one-decimal precision (S7F §12), dropping
  * a trailing ".0" so whole scores read as whole numbers.
  */
 export function fmtPoints(points: number): string {
@@ -58,7 +58,7 @@ const VALIDITY_MIN_DECIMALS = 2;
 const VALIDITY_MAX_DECIMALS = 5;
 
 /** The validity factors in play: the three S7F basics, plus the stopped-task
- * factor (§12.3.3) when the task was stopped. */
+ * factor (§13.4.3) when the task was stopped. */
 function validityFactors(v: ClassContextInput['task_validity']): number[] {
   return [v.launch, v.distance, v.time, ...(v.stopped !== undefined ? [v.stopped] : [])];
 }
