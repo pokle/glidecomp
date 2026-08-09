@@ -130,9 +130,11 @@ export function SettingsDialog({
   const [useLeading, setUseLeading] = useState(gp.useLeading);
   const [useArrival, setUseArrival] = useState(gp.useArrival);
   const [useDifficulty, setUseDifficulty] = useState(gp.useDistanceDifficulty ?? true);
-  // S7F 2026 §11 Leading Time Ratio, shown as a percentage (0–26).
+  // S7F 2026 §11 Leading Time Ratio, shown as a percentage (0–26). One
+  // decimal place — the HG default is 17.5%, and whole-percent rounding
+  // would silently save 18%.
   const [leadingTimeRatio, setLeadingTimeRatio] = useState(
-    Math.round(resolveLeadingTimeRatio(gp) * 100)
+    Math.round(resolveLeadingTimeRatio(gp) * 1000) / 10
   );
   const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(
     gp.distanceOrigin ?? "takeoff"
@@ -160,7 +162,7 @@ export function SettingsDialog({
     setUseLeading(d.useLeading);
     setUseArrival(d.useArrival);
     setUseDifficulty(d.useDistanceDifficulty);
-    setLeadingTimeRatio(Math.round(resolveLeadingTimeRatio(d) * 100));
+    setLeadingTimeRatio(Math.round(resolveLeadingTimeRatio(d) * 1000) / 10);
     setDistanceOrigin(d.distanceOrigin);
     setJtgFactor(d.jumpTheGunFactor);
     setJtgMax(d.jumpTheGunMaxSeconds);
