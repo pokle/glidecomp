@@ -4,6 +4,86 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-08-09
+
+### Security Vulnerabilities Fixed
+
+| Package | Severity | Advisory | Description |
+|---------|----------|----------|-------------|
+| nanoid | HIGH | [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) | Custom generators can loop indefinitely when `size` is zero. Transitive via `postcss` (locked to `nanoid@3.3.16`). Fixed by adding override `nanoid: ^3.3.18` — postcss's own range (`^3.3.16`) already accepts it, so no other package needed touching. |
+| js-yaml | HIGH | [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) | Quadratic CPU consumption in `!!omap` resolution; the CVE-2026-59870 fix wasn't backported to the 4.x line until 4.3.1. Transitive via `astro`/`@astrojs/mdx`/`shadcn` (locked to `js-yaml@4.3.0`). Fixed by adding override `js-yaml: ^4.3.1`. |
+| undici | HIGH + 4×MODERATE | [GHSA-4cwx-7wf7-3272](https://github.com/advisories/GHSA-4cwx-7wf7-3272), [GHSA-8xcm-r25x-g524](https://github.com/advisories/GHSA-8xcm-r25x-g524), [GHSA-m8rv-5g2x-5cg5](https://github.com/advisories/GHSA-m8rv-5g2x-5cg5), [GHSA-jr45-8vmc-qm54](https://github.com/advisories/GHSA-jr45-8vmc-qm54), [GHSA-v3r7-h72x-cjcm](https://github.com/advisories/GHSA-v3r7-h72x-cjcm) | Cross-user cache/cookie disclosure, response desynchronisation via the retry interceptor, CRLF injection via a blob-like body `type`. All fixed in 7.29.0; our override was still pinning `^7.28.0`. Bumped to `^7.29.0`. |
+| sharp (nested copy) | HIGH | [GHSA-f88m-g3jw-g9cj](https://github.com/advisories/GHSA-f88m-g3jw-g9cj) | Inherited libvips CVEs (CVE-2026-33327/33328/35590/35591). The frontend workspace's own `sharp` dependency was already pinned safe at `^0.35.3`, but `astro`'s `optionalDependencies` (`^0.34.0`) resolved a **separate, vulnerable nested copy** at `sharp@0.34.5` (visible in `bun.lock` as `astro/sharp`). Fixed by adding a root override `sharp: ^0.35.3`, which unifies every workspace onto the one safe copy already in use directly. |
+| react-router | HIGH | [GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2) | RSC-mode CSRF bypass — not exploitable here (client-side React only, no RSC), but the audit's affected range (`<7.18.2`) still matched our locked `react-router@7.18.1`. `react-router-dom`'s existing `^7.9.5` range already covers `7.18.2`, but unlike the 2026-08-02 cycle, a plain `bun install` did **not** re-resolve it this time — needed an explicit `bun update react-router-dom`. See Lessons. |
+
+None of these five required a version bump in any workspace's own `package.json` beyond the react-router-dom lockfile refresh — all were closed via `overrides` or a forced re-resolution within the existing semver range.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** | 4.13.0 | 4.13.1 | frontend, auth-api, competition-api, airscore-api (+ root override) | Bug fixes only: trie-router slash-counting fix, stream utility re-acquires the writer lock after a failed `pipe()`, ETag handling now skips unsafe HTTP methods and error responses outside the wildcard case. No breaking changes. |
+| **better-auth** | 1.6.25 | 1.6.26 | frontend, auth-api | Bug fixes: session cleanup on user deletion now removes secondary-storage sessions too; `findSessions()` tolerates invalid secondary-storage entries without dropping valid ones; email OTP no longer reveals whether an email is registered before verification; JWT type-inference fix when combined with other client plugins; JWT key minting inside DB transactions no longer deadlocks SQLite; Apple OAuth proxy callback preserves user data. No breaking changes. |
+| **@better-auth/api-key** | 1.6.25 | 1.6.26 | auth-api | Aligned with better-auth 1.6.26. |
+| **lucide-react** | 1.28.0 | 1.31.0 | frontend | New icons (`mail-badge`, `angle`, `eject`), emoji-icon renames/metadata cleanup, dependency maintenance. No breaking changes. |
+| **shadcn** | 4.16.1 | 4.16.2 | frontend | CLI-only: `searchRegistries` now matches on registry item titles with fuzzy matching. No breaking changes. |
+| **mapbox-gl** | 3.26.0 (frontend spec; root spec and the actual lockfile resolution were already 3.28.0) | 3.28.1 | root, frontend | Bug fix: iconset rendering in the ESM bundle. Also fixed a stale version-spec drift: `web/frontend/package.json` still said `^3.26.0` while the root's `^3.28.0` was what bun actually resolved for everyone; both now read `^3.28.1`. |
+| **@types/three** | 0.185.3 | 0.185.4 | frontend | Type definition patch. |
+| **react-router-dom** (and its `react-router` dependency) | 7.18.1 (resolved) | 7.18.2 (resolved) | frontend | Already covered by the existing `^7.9.5` range — no `package.json` edit — but needed a forced `bun update react-router-dom` to actually move the lockfile this cycle (plain `bun install` left it on 7.18.1). Also clears the HIGH react-router advisory above. |
+
+### Code Changes Required
+
+None. Every upgrade this cycle is a drop-in patch/minor release with no API changes affecting our usage.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `nanoid` (^3.3.18) | **Added** | Clears HIGH infinite-loop advisory GHSA-2v37-7h3g-55p8. Transitive via `postcss`. |
+| `js-yaml` (^4.3.1) | **Added** | Clears HIGH quadratic-CPU advisory GHSA-5p4m-2wfm-xmqj. Transitive via `astro`/`@astrojs/mdx`/`shadcn`. |
+| `sharp` (^0.35.3) | **Added** | Unifies resolution onto the one safe copy already used directly by the frontend workspace; clears the HIGH libvips advisory GHSA-f88m-g3jw-g9cj that `astro`'s own `optionalDependencies` (`^0.34.0`) was otherwise pulling in as a second, vulnerable, nested copy. |
+| `undici` (^7.28.0 → ^7.29.0) | **Updated** | Clears 1 high + 4 moderate advisories (cross-user cache/cookie disclosure, CRLF injection, response desync via retry interceptor). |
+| `hono` (^4.13.0 → ^4.13.1) | **Updated** | Keeps the override aligned with workspace versions. |
+
+Full override list is now: `@babel/core`, `@hono/node-server`, `brace-expansion`, `defu`, `esbuild`, `fast-uri`, `form-data`, `hono`, `js-yaml`, `kysely`, `nanoid`, `postcss`, `protocol-buffers-schema`, `shell-quote`, `sharp`, `svgo`, `undici`, `vite`, `ws`.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.120.0 | **Still capped — re-checked every 4.11x/4.12x release since last cycle.** `npm view wrangler@<version> dependencies.miniflare` for 4.117.0 through 4.120.0 all report `5.202608xx.x-alpha` (4.119.0/4.120.0 moved to a newer alpha still, `5.20260801.x`). No new release has appeared on the stable miniflare 4.x line since 4.116.0. Re-evaluate with the same command before ever bumping past 4.116.0. |
+| @cloudflare/vitest-pool-workers | 0.19.1 | 0.20.3 | Paired with the wrangler cap above — still bundles the alpha miniflare. Re-evaluate alongside wrangler. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260809.1 | **Major (5.x).** No newer 4.x release available — confirmed again this cycle. Evaluate in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest. |
+| zod | 3.25.76 | 4.4.3 | Major. Standalone task — `@hono/zod-validator` 0.9.0 accepts both. |
+| vite | 7.3.6 | 8.2.0 | Major. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. Already at latest within `^7`. |
+| @vitejs/plugin-react | 5.2.0 | 6.0.5 | Major. Pairs with Vite 8. |
+| astro | 6.4.8 | 7.2.0 | **Major.** Still carries the 3 XSS advisories (GHSA-4g3v-8h47-v7g6, GHSA-f48w-9m4c-m7f5, GHSA-7pw4-f3q4-r2p2) fixed in 7.0.10+ — not exploitable here (no View Transitions / dynamic spread attributes in our static pages). Needs focused evaluation. |
+| @astrojs/mdx | 6.0.3 | 7.0.5 | Major. Pairs with Astro 7. |
+| kysely | 0.28.17 | 0.29.4 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.28`. Defer to a focused PR. |
+| jsdom | 25.0.1 | 30.0.1 | Major version jump. Already at latest within `^25`. Defer. |
+| katex | 0.17.0 | 0.18.1 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.17`. Defer. |
+| concurrently | 9.2.4 | 10.0.4 | Major. ESM-only, drops `--name-separator`. Already at latest within `^9`. Low priority. |
+| @types/node | 25.9.5 | 26.1.2 | Major. Already at latest within `^25`. Stay on 25.x. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, dev-router).
+- `bun run test:all` — 1445 root/engine/airscore-api/dev-router/scripts tests + 680 frontend + 97 auth-api (6 todo) + 711 competition-api all pass.
+- `bun run test:e2e` — first full run: 79 passed, 1 collateral failure (`explain-affordance.spec.ts` "comp analysis: the column notes are behind their headers' ⓘ") from the documented "local stack died" pattern — `dev-workers` (wrangler on :8790) dropped a client connection mid-run and came back 2s later, which the harness itself logs as collateral, not a product failure. Re-ran the same spec alone: passed in 6.2s. Re-ran the **entire suite** a second time end-to-end: **80/80 passed**, confirming this cycle's dependency changes introduced no regression.
+- `bun run test:e2e:ssr` — 35/35 passed, clean, no flakes.
+- `bun audit` — started the cycle at **12 vulnerabilities** (5 high, 6 moderate, 1 low): new since the 2026-08-02 baseline of 5 were `nanoid`, `js-yaml`, and `undici` (newly-disclosed advisories against versions that hadn't changed) plus a `sharp` nested-copy vulnerability that a plain `bun audit` hadn't previously surfaced. Ends the cycle at **3 vulnerabilities** (2 moderate, 1 low) — only the pre-existing, already-deferred Astro XSS advisories remain (fixed in Astro 7.x, not exploitable here per prior cycles' analysis).
+
+### Lessons / Notes for Future Sessions
+
+- **`bun audit`'s vulnerability surface can grow between cycles with zero version changes on our side.** This cycle opened at 12 vulnerabilities vs. the prior cycle's 5, even though nothing in the lockfile had changed yet — `nanoid`, `js-yaml`, and `undici` advisories are either newly disclosed or newly indexed against versions (`nanoid@3.3.16`, `js-yaml@4.3.0`, `undici@7.28.0`) that were already pinned. Don't assume last cycle's "unchanged" note means this cycle's baseline audit will match — always re-run `bun audit` fresh rather than trusting the previous entry's vulnerability count.
+- **A dependency can be vulnerable via a *second, separately-resolved* nested copy even when the workspace's own direct dependency is already patched.** `web/frontend/package.json` pins `sharp: ^0.35.3` directly and that resolves fine, but `astro`'s own `optionalDependencies: { sharp: "^0.34.0" }` was satisfied by a **different, vulnerable** `sharp@0.34.5` living at the `astro/sharp` lockfile key. `bun audit` catches this (it walks the full graph), a version diff of `package.json` alone would not. When `bun audit` names a package your `package.json` claims is already fixed, check `bun.lock` for a second, nested resolution before assuming the audit is stale — the fix is usually a root-level `overrides` entry to unify the resolution, not a version bump anywhere.
+- **`react-router-dom`'s range covering a patch is not a guarantee `bun install` will move to it.** The 2026-08-02 log noted the `^7.9.5` range "already covers 7.18.2 automatically" — true then, but this cycle a plain `bun install` (and even a fresh `bun install` after other edits) left it locked at `7.18.1`. Only an explicit `bun update react-router-dom` moved the lockfile. **Caution:** running `bun update <pkg>` from the repo root (rather than scoped to the workspace that actually declares it) can silently **add that package as a new direct dependency of the root `package.json`** if bun resolves it there — this happened here and had to be reverted by hand. Prefer `bun update --filter '@glidecomp/frontend' react-router-dom`, or just bump the version string directly in the workspace's own `package.json`, over a bare root-level `bun update <pkg>`.
+- **wrangler is still capped at 4.116.0** four cycles running now (since 2026-08-02). 4.117.0 through 4.120.0 all bundle an alpha miniflare (`5.20260730.0-alpha` through `5.20260801.1-alpha`) on the stable-line 4.x check (`npm view wrangler@<v> dependencies.miniflare`). No new 4.116.x patch has appeared either — 4.116.0 looks to be the last release on stable miniflare 4.x. Keep checking before every bump.
+- **Astro's 3 XSS advisories, `@cloudflare/workers-types` 5.x, and the rest of the majors table are unchanged from prior cycles** — re-verified this cycle rather than blindly carried forward, but the conclusions (defer, not exploitable, needs a focused PR) still hold.
+
 ## 2026-08-02
 
 ### Security Vulnerabilities Fixed
