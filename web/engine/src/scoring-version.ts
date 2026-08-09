@@ -406,7 +406,18 @@
 //      Bumped because availablePoints and validity_inputs.weights are part of
 //      the cached payload: without a roll the stale-first store would serve
 //      the pre-change figures for settled comps indefinitely.
-export const SCORING_ENGINE_VERSION = 35;
+// v36: the PG early-start distance is the flat launch→SSS value (issue #584).
+//      §12.2 scores a paraglider pilot who jumps the gun "for the distance
+//      between the launch point and the SSS control zone, as calculated when
+//      determining the complete task distance (see 6.4.1)" — a fixed award.
+//      applyEarlyStarts capped it at the pilot's own flown distance, which is
+//      stricter than the spec for the one case where the two differ: an early
+//      starter who then landed short of their own start. That cap is gone.
+//      Scores move only for such a pilot (the §11.1 minimum-distance floor
+//      still applies underneath). The report card's distance section now
+//      prints which value applied — the launch→start leg beside what was
+//      actually flown, or the minimum when the leg falls below it.
+export const SCORING_ENGINE_VERSION = 36;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -414,4 +425,4 @@ export const SCORING_ENGINE_VERSION = 35;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "3be0f7eb69cbd5c1abc409dc30705362e75c51f3d87cde4b279fdca535b555e4";
+  "5a42c862b6ff204d9b09d442334f4205207ecb406333f08b5b62048cea7cfe68";
