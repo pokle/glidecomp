@@ -479,8 +479,8 @@ test.describe("submitting a track without an account", () => {
       for (const t of detail.tasks.filter((t) => t.has_xctsk)) {
         const score = (await (
           await admin.get(`/api/comp/${comp.comp_id}/task/${t.task_id}/score`)
-        ).json()) as { classes?: { pilots: { comp_pilot_id: string }[] }[] };
-        const pilot = score.classes?.[0]?.pilots?.[0];
+        ).json()) as { class_scores?: { pilots: { comp_pilot_id: string }[] }[] };
+        const pilot = score.class_scores?.[0]?.pilots?.[0];
         if (pilot) {
           target = {
             compId: comp.comp_id,
@@ -501,7 +501,7 @@ test.describe("submitting a track without an account", () => {
     await page.route("**/api/comp/*/task/*/score*", async (route) => {
       const res = await route.fetch();
       const body = (await res.json()) as Record<string, unknown>;
-      await route.fulfill({ response: res, json: { ...body, stale: true, classes: [] } });
+      await route.fulfill({ response: res, json: { ...body, stale: true, class_scores: [] } });
     });
 
     await page.goto(
@@ -518,7 +518,7 @@ test.describe("submitting a track without an account", () => {
   });
 
   test.describe("the organiser's own upload, from the manage grid", () => {
-    // TaskStandings has its own upload path — no dialog, no shared form, a
+    // TaskScoresAdmin has its own upload path — no dialog, no shared form, a
     // FileTrigger straight onto the per-pilot endpoint. It had no test of any
     // kind, and had drifted: an invented 5 MB check on the UNCOMPRESSED file,
     // against a server that caps 2 MB decompressed.

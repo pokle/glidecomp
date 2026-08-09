@@ -66,6 +66,18 @@ export interface XCTask {
    * Default: 0.005 (0.5%) — the Cat 2 maximum.
    */
   cylinderTolerance?: number;
+
+  /**
+   * Optimizer directive, never parsed from a file: measure the route from
+   * the first turnpoint's BOUNDARY (its optimal tag point) instead of its
+   * centre. Annex A §2.2 measures every route from the first point's centre
+   * regardless of radius; the one caller that wants edge semantics is
+   * `taskForDistanceOrigin('start')` (gap-scoring.ts), whose trimmed task
+   * starts at the start cylinder and must not gain the centre→edge
+   * kilometres — scored distance under that origin begins at the start
+   * crossing.
+   */
+  firstTurnpointAtBoundary?: boolean;
 }
 
 /**
@@ -159,6 +171,21 @@ function parseV1(data: Record<string, unknown>): XCTask {
     earthModel: (data.earthModel as XCTask['earthModel']) || 'WGS84',
     turnpoints,
   };
+
+  // Cylinder tolerance is a SCORING input (§8.1): the AirScore importer
+  // writes the comp's error_margin here, and dropping it runs crossing
+  // detection with the 0.5% default — up to 10× the band the comp scored
+  // with, wide enough to swallow a shallow excursion past a big ENTER
+  // start ring (issue #577). Bounds mirror the API validator's ([0, 0.1]);
+  // an explicit 0 is a real declaration (only the ±5 m minimum applies).
+  if (
+    typeof data.cylinderTolerance === 'number' &&
+    Number.isFinite(data.cylinderTolerance) &&
+    data.cylinderTolerance >= 0 &&
+    data.cylinderTolerance <= 0.1
+  ) {
+    task.cylinderTolerance = data.cylinderTolerance;
+  }
 
   // Parse takeoff times
   if (typeof data.takeoff === 'object' && data.takeoff !== null) {

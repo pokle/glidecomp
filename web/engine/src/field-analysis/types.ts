@@ -516,7 +516,7 @@ export type SignConsistency = 'consistent' | 'leaning' | 'split' | 'quiet';
 
 export interface CompAggregateReport {
   taskLabels: string[];
-  /** Comp standings: total score across tasks, rank 1 = best. */
+  /** Comp scores: total score across tasks, rank 1 = best. */
   pilots: { key: string; name: string; taskCount: number; totalScore: number; rank: number }[];
   /** Registry order (union across tasks, first-seen order). */
   metrics: CompMetricAggregate[];

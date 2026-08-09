@@ -78,7 +78,7 @@ async function statusKey(): Promise<string | null> {
 
 /** Poll the score endpoint until fresh (stale-first serving). */
 async function getFreshScores(path: string): Promise<{
-  classes: Array<{
+  class_scores: Array<{
     pilot_class: string;
     task_validity: { launch: number };
     pilots: Array<{ pilot_name: string; flown_distance: number; made_goal: boolean; total_score: number }>;
@@ -503,7 +503,7 @@ describe("manual flights feed scoring", () => {
     });
 
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(2);
     // Launch validity is positive → the field was counted as flying.
     expect(open.task_validity.launch).toBeGreaterThan(0);
@@ -614,7 +614,7 @@ describe("open-distance manual flights", () => {
 
     // Scores: the manual flight is scored as open distance (numFlying).
     const scores = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = scores.classes.find((c) => c.pilot_class === "open")!;
+    const open = scores.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(1);
     expect(open.pilots[0].pilot_name).toBe("Downwind Dan");
     expect(open.pilots[0].flown_distance).toBeGreaterThan(15000);

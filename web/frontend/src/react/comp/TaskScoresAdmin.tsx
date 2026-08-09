@@ -1,14 +1,14 @@
 /**
  * Admin task management grid — "Manage pilots & tracks" (issues #306, then
- * split from the public results surface). One row per pilot with their
+ * split from the public scores surface). One row per pilot with their
  * outcome on the task: ranked scorers first, then a per-class "did not
  * score" tail (present-not-flown / DNF / absent). Columns: rank · pilot ·
  * outcome (badge + evidence) · distance · points · Manage.
  *
  * This is the management tool, admin-only by design: opening a pilot's score
  * card, statuses, uploads on behalf, manual flights and restores. The PUBLIC
- * results live in
- * TaskResults (top 3 + link to the comp scores page) — this grid is never
+ * scores live in
+ * TaskScoresPublic (top 3 + link to the comp scores page) — this grid is never
  * server-rendered and mounts only after the admin check resolves.
  *
  * Built on the RAC kit (src/react/rac/) — see
@@ -85,7 +85,7 @@ interface RowPilot {
   activeManual: ManualFlightEntry | null;
 }
 
-export function TaskStandings({
+export function TaskScoresAdmin({
   compId,
   taskId,
   taskName = null,
@@ -115,7 +115,7 @@ export function TaskStandings({
   submissionsClosed?: boolean;
   /** Parent bump to refetch scores (route edits). */
   refresh: number;
-  /** Notify the parent a mutation happened, so the public results refetch too. */
+  /** Notify the parent a mutation happened, so the public scores refetch too. */
   onMutated?: () => void;
 }) {
   // Client-data gate (this grid is never server-rendered, but the roster /
@@ -271,9 +271,11 @@ export function TaskStandings({
   return (
     <Card>
       <h2 className="text-lg font-bold">Manage pilots &amp; tracks</h2>
+      {/* The list of what the tools are went: they are the buttons directly
+          beneath. The consequence stays — it is the one thing the controls
+          themselves do not say. */}
       <p className="mt-1 text-sm text-muted-foreground">
-        Admin tools: pilot statuses, track uploads on behalf, and manual
-        flights. Every change here recomputes the task's scores.
+        Every change here recomputes the task&rsquo;s scores.
       </p>
       {submissionsClosed ? (
         // Otherwise an organiser who has just closed the task is left
@@ -292,14 +294,14 @@ export function TaskStandings({
         pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
       />
 
-      {score.classes.map((cls) => (
-        <ClassStandings
+      {score.class_scores.map((cls) => (
+        <ClassScoresRows
           key={cls.pilot_class}
           compId={compId}
           taskId={taskId}
           taskName={taskName}
           cls={cls}
-          showClassName={score.classes.length > 1}
+          showClassName={score.class_scores.length > 1}
           isOpenDistance={isOpenDistance}
           greyed={greyed}
           mounted={mounted}
@@ -318,17 +320,16 @@ export function TaskStandings({
         />
       ))}
 
-      {score.classes.some((c) => c.pilots.length > 0) ? (
+      {score.class_scores.some((c) => c.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          Click a scored pilot's row for the full breakdown — every start,
-          turnpoint and point calculation, shown on the map.
+          Click a row for the full breakdown.
         </p>
       ) : null}
     </Card>
   );
 }
 
-function ClassStandings({
+function ClassScoresRows({
   compId,
   taskId,
   taskName,
@@ -435,7 +436,12 @@ function ClassStandings({
     <div className="mt-4">
       {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
       <Table
-        aria-label={`Standings — ${cls.pilot_class}`}
+        // NOT `Scores — ${class}`: ScoresSection's public grid already owns
+        // that name, and on the task page an admin has BOTH mounted at once —
+        // two grids with one accessible name is unusable with a screen reader
+        // (and ambiguous to a Playwright locator). This one is the management
+        // surface, and the card heading above it says so.
+        aria-label={`Manage pilots & tracks — ${cls.pilot_class}`}
         className="mt-2"
         // Whole-row activation for ranked pilots: keyboard (Enter) and click
         // both open the score breakdown. RAC keeps presses on the inner
@@ -457,7 +463,7 @@ function ClassStandings({
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <StandingsRow
+            <ScoresRow
               key={row.compPilotId}
               row={row}
               compId={compId}
@@ -506,7 +512,7 @@ function OutcomeBadge({ outcome, evidence }: { outcome: Outcome; evidence: RowPi
   );
 }
 
-function StandingsRow({
+function ScoresRow({
   row,
   compId,
   taskId,

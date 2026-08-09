@@ -53,6 +53,7 @@
     "seed": "bun web/scripts/seed-sample-comp.ts",
     "forge-igc": "bun web/scripts/forge-igc.ts",
     "civl-rankings": "bun web/scripts/fetch-civl-rankings.ts",
+    "seed-civl-rankings": "bun web/scripts/seed-civl-rankings.ts",
     "detect-events": "bun web/engine/cli/detect-events.ts",
     "get-xcontest-task": "bun web/engine/cli/get-xcontest-task.ts",
     "score-task": "bun web/engine/cli/score-task.ts",

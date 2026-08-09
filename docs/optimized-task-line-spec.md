@@ -45,8 +45,33 @@ cost(θ) = distance(prevPoint, pointOnCircle(θ)) + distance(pointOnCircle(θ), 
 
 This cost function is unimodal, so golden section search converges in ~30 iterations (tolerance 1e-5 radians).
 
-**First turnpoint (Start):** Point on circle along bearing toward next point.
-**Last turnpoint (Goal):** Point on circle along bearing from previous point (entry side).
+Three placements are fixed by rule rather than searched (FAI S7F Annex A):
+
+**First turnpoint (launch):** the turnpoint's **centre**, whatever its type or
+radius — Annex A §2.2: "the distance is measured from the center of the launch
+waypoint (regardless of whether it has been given a radius)". A route that
+begins directly at the start cylinder (no TAKEOFF row, as AirScore-imported
+tasks often are) therefore includes the centre→boundary kilometres. The one
+exception is the trimmed task behind `distanceOrigin: 'start'`
+(`XCTask.firstTurnpointAtBoundary`), whose scored distance begins at the start
+crossing, so its first turnpoint keeps the boundary measurement.
+
+**Mid-route ESS:** pinned to the incoming leg — Annex A §3.2.4: the ESS fix is
+the nearest boundary point toward the previous optimised point, never dragged
+toward goal. The task path deliberately kinks at ESS, which makes its
+launch→ESS prefix equal the §6.4.2 `launchToESSPath` (a standalone
+optimisation) by construction — so slicing the task path at the ESS yields the
+spec's launch-to-ESS and speed-section distances.
+
+**Last turnpoint (goal):** the nearest boundary point toward the previous
+optimised point (constructed from the goal centre's bearing to it), or the
+closest point on a LINE goal.
+
+**Crossed cylinders:** when the prev→next leg passes straight through a
+cylinder, every chord point ties on distance; the tag is placed
+deterministically at the boundary point nearest the chord (the perpendicular
+foot projected onto the circle), matching AirScore's published per-leg
+cumulatives.
 
 #### Iterative Convergence
 
@@ -54,7 +79,7 @@ A single forward pass uses the next turnpoint's *center* as the target, which is
 
 1. **First pass:** Optimize each cylinder using the previous optimized point and the next turnpoint *center*
 2. **Subsequent passes:** Re-optimize each cylinder using the previous optimized point and the next *optimized point from the previous iteration*
-3. **Converge:** Stop when total path distance changes by < 1 meter
+3. **Converge:** Stop when total path distance changes by < 1 meter, keeping the best (converged) pass
 
 This matches the CIVL GAP specification (Section 7F, Annex A) approach. On real tasks with large cylinders (e.g. `face.xctsk` with a 7 km cylinder), iteration shortens the task distance by ~200 m vs a single pass.
 
@@ -70,7 +95,16 @@ CIVL GAP specifies a tolerance band on cylinder radii to compensate for differen
 - **Cat 1 (World/Continental championships):** 0.1%
 - **Cat 2 (other FAI competitions):** up to 0.5%
 
-This is applied in `detectCylinderCrossings()` via `XCTask.cylinderTolerance` (default 0.5%). The effective radius for crossing detection is `radius × (1 + tolerance)`, but the crossing point is interpolated to the nominal radius.
+This is applied in `detectCylinderCrossings()` via `XCTask.cylinderTolerance`.
+The value comes from the task file — `parseXCTask` reads a declared
+`cylinderTolerance` field (the AirScore importer writes the comp's
+`error_margin` into it), and only a task that declares none falls back to
+the 0.5% default. The effective radius for crossing detection is
+`radius × (1 + tolerance)`, but the crossing point is interpolated to the
+nominal radius. The band's width is a scoring decision, not a nicety: on a
+33.5 km ENTER start ring the default band is 167.5 m wide, and scoring a
+comp that declared 0.05% (16.75 m) with it swallowed every pilot's exit
+past the ring — see issue #577 and the changelog below.
 
 ## Geometry Functions
 
@@ -126,6 +160,19 @@ export function calculateOptimizedTaskDistance(
 export function getOptimizedSegmentDistances(
   task: XCTask
 ): number[]
+
+/**
+ * The FAI S7F §8.6.1 remaining route from an arbitrary position: the
+ * shortest path of {point(position), un-reached zones…, goal}, optimised
+ * with the same §6.4.1 algorithm (ESS pin included, goal line taken from
+ * the TASK's final leg). Behind a landed-out pilot's flown distance
+ * (taskDistance − remaining) and a manual flight's made-good distance.
+ */
+export function optimizeRemainingRoute(
+  task: XCTask,
+  lastReachedIndex: number,
+  position: { lat: number; lon: number }
+): { line: { lat: number; lon: number }[]; distance: number } | null
 ```
 
 ### Map Provider Integration
@@ -155,41 +202,51 @@ When a task is set:
 For typical tasks (5-10 turnpoints), optimization completes in < 10ms even with iteration.
 
 ### Caching
-The optimized path is calculated on-demand when:
-- A task is loaded
-- The map provider's `setTask()` is called
-
-Results are not cached as task changes are infrequent.
+The optimised task line is cached per task object in a `WeakMap`, keyed on a
+cheap content string (turnpoint types/radii/coordinates + goal type) so an
+in-place edit — the analysis page's task editor adjusts radii on the live
+object — can never be served a stale line. Sequence resolution, the
+explainers and the field analysis all recompute the line per pilot, so the
+cache is what keeps the §8.6.1 per-fix optimisations affordable.
+Remaining-route optimisations (fresh synthetic route per position) are not
+cached.
 
 ## Limitations and Future Enhancements
 
 ### Current Limitations
-1. **Start cylinder assumption**: Assumes pilot approaches from outside the start cylinder. For "Enter" start cylinders (where pilot starts inside), the algorithm still works but may not be optimal.
-
-2. **No turn direction constraints**: Doesn't account for sectors (e.g., "must turn left around turnpoint"). All turnpoints are treated as full cylinders.
+1. **No turn direction constraints**: Doesn't account for sectors (e.g., "must turn left around turnpoint"). All turnpoints are treated as full cylinders.
 
 ### Potential Enhancements
 1. **Sector support**: Handle sector turnpoints (entry/exit sectors with specific angles)
 
-2. **Start cylinder types**: Distinguish between SSS (Start of Speed Section) types:
-   - Exit start: Pilot starts inside, optimization begins at cylinder edge
-   - Enter start: Pilot starts outside, must enter cylinder
-
-3. **FAI triangle detection**: Detect and optimize FAI triangle tasks with their specific constraints
+2. **FAI triangle detection**: Detect and optimize FAI triangle tasks with their specific constraints
 
 ## Testing
 
-Tests are in `web/engine/tests/task-optimizer.test.ts`.
+Tests are in `web/engine/tests/task-optimizer.test.ts`, with the S7F §6.4
+rules covered by three dedicated files:
+
+- `spec-distances.test.ts` — the launch-centre rule, the ESS pin and the
+  concentric-ENTER-start out-and-back route against three curated archive
+  fixtures (`tests/fixtures/*.xctsk`), asserting AirScore's published
+  per-waypoint cumulative distances.
+- `best-progress-remaining.test.ts` — the §8.6.1 remaining-route
+  measurement: dogleg re-optimisation, LINE goals, un-reached exit
+  cylinders, the carried `remainingRoute`, manual-flight parity.
+- `distance-corpus.test.ts` — the §6.4.2 prefix property over every bundled
+  task (CI), plus the whole glidecomp-archive back-catalogue and
+  modern-generation task-distance parity when `GLIDECOMP_COMPS_DIR` points
+  at an archive checkout.
 
 ### Unit Tests
 1. **Two turnpoints**: Simple bearing-based approach
 2. **Collinear turnpoints**: Produces straight-line path
 3. **Complex task with large cylinders**: Iterative produces shorter distance
 4. **Segment distances sum to total**: Consistency check
-5. **Points on cylinders**: Each optimized point lies within 1m of its turnpoint cylinder
+5. **Points on cylinders**: The first point is the launch centre; every other optimized point lies within 1m of its turnpoint cylinder
 
 ### Integration Tests
-1. **face.xctsk**: Iterative distance < 77.5 km (vs 77.5 km single-pass) — validates that iteration matters on real tasks with large cylinders
+1. **face.xctsk**: Iterative convergence beats the single-pass distance (the route starts at the SSS cylinder, so under the launch-centre rule the totals carry its 3 km radius: ~80.3 km vs the old edge-measured 77.3 km)
 2. **Corryong Cup T1 scoring**: Full pipeline test (IGC parsing → turnpoint sequence → GAP scoring) in `gap-scoring-integration.test.ts`
 
 ## References
@@ -203,6 +260,29 @@ Tests are in `web/engine/tests/task-optimizer.test.ts`.
 - **Andoyer-Lambert Formula**: WGS84 ellipsoid distance approximation (~2 ppm accuracy vs Vincenty)
 
 ## Change Log
+
+### 2026-08-08: Declared cylinder tolerance honoured (issue #577)
+- `parseXCTask` reads the task file's `cylinderTolerance` field; the 0.5%
+  default now applies only to tasks that declare none. Before this, every
+  imported comp scored with a band up to 10× wider than it declared — on
+  bright-open-2025-open-t3 (takeoff inside a 33.5 km ENTER start ring) the
+  default band swallowed the field's shallow exits past the ring and scored
+  everyone landed out at the start. Engine scoring version 33 → 34
+
+### 2026-08-08: S7F §6.4 distance definitions (2024 edition)
+- Launch measured from the first turnpoint's CENTRE regardless of type
+  (Annex A §2.2) — SSS-first tasks gain their start radius, matching
+  AirScore; `distanceOrigin: 'start'` keeps boundary semantics via
+  `XCTask.firstTurnpointAtBoundary`
+- Mid-route ESS pinned to the incoming leg (Annex A §3.2.4) — the task path
+  kinks at ESS and its launch→ESS prefix equals the §6.4.2 launchToESSPath
+- `optimizeRemainingRoute()` — the §8.6.1 per-position remaining-route
+  optimisation behind flown distance and manual flights
+- Deterministic tag on a crossed cylinder (boundary point nearest the
+  chord); nearest-boundary points constructed from the centre's bearing;
+  converged pass adopted; task line cached per task object
+- Verified against the glidecomp-archive back-catalogue (196 tasks with
+  published AirScore results); engine scoring version 31 → 32
 
 ### 2026-03-20: CIVL-Accurate Scoring
 - Added iterative convergence — re-runs until < 1m change, matching CIVL GAP Annex A

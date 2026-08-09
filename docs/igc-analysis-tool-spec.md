@@ -195,7 +195,7 @@ When an event is selected from the panel, the map highlights the event location 
 ├── circle-detector.ts           # Circling flight detection and wind estimation
 ├── cluster-detector.ts          # Cross-pilot gaggle detection
 ├── turnpoint-sequence.ts        # Turnpoint sequencing and best-progress scoring
-├── task-optimizer.ts            # Optimized task line calculation (golden section search)
+├── task-optimizer.ts            # Optimized task line + §8.6.1 remaining routes (golden section search)
 ├── gap-scoring.ts               # CIVL GAP multi-track task scoring (FAI Section 7F)
 ├── open-distance-scoring.ts     # Open-distance task scoring
 ├── field-analysis/              # Per-pilot behavioural metrics across a whole field of

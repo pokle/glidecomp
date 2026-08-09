@@ -221,6 +221,9 @@ export const trackQualityOverrideSchema = z.object({
 
 // ── Comp pilot validators ──
 
+/** Shared by the comp-pilot ranking date and the task validators below. */
+const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
 const optionalText = z.string().max(MAX_TEXT).nullable().optional();
 
 /**
@@ -244,6 +247,30 @@ export const compPilotFieldsSchema = z.object({
   pilot_class: pilotClassString,
   team_name: optionalText,
   driver_contact: optionalText,
+  // The pilot's WPRS score, copied onto the roster (never looked up live —
+  // see migrations 0029/0030) and overridable by the organiser. The two source
+  // fields say which CIVL list and which monthly snapshot it came from; both
+  // null means a hand-entered number.
+  //
+  // REAL and not an integer: CIVL publishes one decimal, and near the top of a
+  // list that decimal is the whole difference between two pilots. The ceiling
+  // is far above the best score ever published (431.2 in August 2026) and only
+  // exists so the column cannot be used as free numeric storage.
+  wprs_points: z.number().positive().max(10000).nullable().optional(),
+  civl_ranking_slug: z
+    .string()
+    .max(MAX_TEXT)
+    // A civlcomps.org URL segment ('hang-gliding-class-1-xc'). Constrained
+    // because it is rendered as the source of a published number; free text
+    // here would let a roster import label a rank with anything at all.
+    .regex(/^[a-z0-9-]+$/, "must be a CIVL ranking list slug")
+    .nullable()
+    .optional(),
+  civl_ranking_date: z
+    .string()
+    .regex(isoDateRegex, "must be an ISO date (YYYY-MM-DD)")
+    .nullable()
+    .optional(),
   first_start_order: z.number().int().positive().nullable().optional(),
 });
 
@@ -270,9 +297,24 @@ export const bulkPilotsSchema = z.object({
     .max(250),
 });
 
-// ── Task validators ──
+/**
+ * The roster to look up against the CIVL ranking lists — the grid's CURRENT
+ * contents, which is why it is a body rather than the stored roster. Only the
+ * two fields the matching uses are accepted; the same 250-row cap applies, and
+ * it bounds the bound-parameter count of the lookup's single query.
+ */
+export const civlRankingLookupSchema = z.object({
+  pilots: z
+    .array(
+      z.object({
+        name: z.string().max(MAX_TEXT),
+        civl_id: optionalText,
+      })
+    )
+    .max(250),
+});
 
-const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+// ── Task validators ──
 
 // ── XCTask (xctsk) — strict schema, SEC-12 ──
 //

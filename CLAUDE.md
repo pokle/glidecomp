@@ -87,6 +87,13 @@ checked-in TODO file (`docs/TODO.md` was deleted as stale; don't recreate it).
 `docs/` holds specs, plans, and reference. Treat the dated ones (`docs/2026-*.md`)
 as point-in-time snapshots rather than current status.
 
+**Python runs with uv.** The stack is TypeScript/bun, but where a Python
+script earns its keep (e.g. the S7F PDF extraction pipeline in
+`docs/reference/fai-s7f-xc-scoring-2024/`), it declares its dependencies
+inline in a PEP 723 `# /// script` block and is invoked with
+`uv run <script.py>` — never `pip install` into the environment, and no
+`requirements.txt`.
+
 **Branch previews:** every branch gets a Cloudflare Pages branch-alias URL.
 **When you open or push to a PR, always include it in the PR body and show it in
 the chat** — and get it from `bun run preview-url`, **never by deriving it in
@@ -116,6 +123,17 @@ These are the standing imperatives. Each links to the reference that explains it
     such a name, respell the label, not the name.
   - Quoted external text — FAI/CIVL spec wording, error strings from other
     tools — is reproduced verbatim, whatever it spells.
+- **Propose UI wording before you change it.** Asked to reword something a
+  user reads — a label, a button, a dialog's explanation, a status message —
+  write the proposed text out and get it confirmed FIRST, then edit. Wording
+  is the owner's call and it is cheap to settle in a message and expensive to
+  settle in a diff: a paragraph rewritten in the code drags its tests, its
+  e2e assertions and its screenshots with it.
+  - Show the whole affected block, not the changed clause, and include the
+    neighbouring copy the change has to sit beside — a rewrite that reads well
+    alone can repeat or contradict the line above it.
+  - **Trivial fixes are exempt**: typos, grammar, punctuation, and the
+    Australian English spellings above. Just make those.
 
 ### Correctness and transparency
 
@@ -164,6 +182,10 @@ These are the standing imperatives. Each links to the reference that explains it
     competition data: `task_weather` ([docs/weather.md](docs/weather.md)) and
     `pilot_ranking` ([docs/civl-rankings.md](docs/civl-rankings.md)). Neither
     takes an `audit()` call either.
+    - The roster's own copy of a world ranking (`comp_pilot.wprs_points` and
+      its source columns, migrations 0029/0030) is the other way round: it IS
+      competition data an organiser entered, so it is audited — but it feeds
+      launch order, never a task score, so it takes no bump.
 - **A failure to ask is not an answer** (issue #481). Identity and page data are
   each fetched once per page load, and every downstream decision keys off the
   result — so a *transient* failure must never be recorded as a *fact*. A dropped
@@ -331,7 +353,7 @@ These are the standing imperatives. Each links to the reference that explains it
   provider must match this spec.
 - **Track quality** ([docs/track-quality.md](docs/track-quality.md)): two HARD
   checks withhold a track from scoring and field analysis; three SOFT checks only
-  annotate. A withheld pilot is **never** deleted from the standings — they are
+  annotate. A withheld pilot is **never** deleted from the scores — they are
   seated last at 0 with reasons. Every verdict is organiser-overridable (FAI S7A
   §4.4.6). Re-tune thresholds only via `audit-track-quality.ts` over both the
   bundled comps and the archive.

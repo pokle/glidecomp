@@ -41,6 +41,35 @@ import {
 const COMP_TASK_CONCURRENCY = 3;
 
 /**
+ * Storage shape → wire shape for a task score.
+ *
+ * The wire calls the per-class array `class_scores`, matching the comp-level
+ * endpoint so a consumer can read both with one code path. The STORED blob
+ * (`task_scores.response_json`) still calls it `classes`, and deliberately
+ * keeps doing so:
+ *
+ *  - the store is stale-first, so a row written before this change is still
+ *    SERVED while its revalidation runs. Renaming the stored key would mean
+ *    every such row arrives at a client reading `class_scores` as undefined —
+ *    a task page showing no scores at all until that row happened to be
+ *    recomputed;
+ *  - `routes/pilot-profile.ts` reads the blob with raw SQL
+ *    (`json_each(ts.response_json, '$.classes')`) to get per-task ranks for a
+ *    pilot's profile. A migration that blanked or reshaped the cache would
+ *    empty that column for every task not yet re-read.
+ *
+ * So the rename lives here, at the boundary, and the cache format is left
+ * alone. It is an internal derived cache, not a contract with anyone.
+ */
+function toTaskScoreWire(
+  body: StoredTaskScore | TaskScoreResponse,
+  stale: boolean
+): Record<string, unknown> {
+  const { classes, ...rest } = body;
+  return { ...rest, class_scores: classes, stale };
+}
+
+/**
  * Cache-Control for score responses (matches the SSR plan): signed-in
  * viewers must never see another session's cached body; anonymous readers
  * and crawlers may cache but must revalidate — the ETag makes that a
@@ -129,7 +158,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           return c.body(null, 304, headers);
         }
         const body = JSON.parse(row.response_json) as StoredTaskScore;
-        return c.json({ ...body, stale }, 200, headers);
+        return c.json(toTaskScoreWire(body, stale), 200, headers);
       }
 
       // Cold — no servable blob. Compute synchronously, store, serve.
@@ -138,7 +167,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         taskId,
         row?.inputs_rev ?? 0
       );
-      return c.json({ ...response, stale: false }, 200, {
+      return c.json(toTaskScoreWire(response, false), 200, {
         ETag: toEtag(stateKey),
         "X-Cache": "MISS",
         "Cache-Control": cacheControl(c, response.computed_at, false),
@@ -255,7 +284,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       const anyStale = taskScores.some((t) => t.stale);
       // Oldest constituent compute: the honest "as of" for aggregated
-      // standings. Null for a comp with no scoreable tasks.
+      // scores. Null for a comp with no scoreable tasks.
       const computedAt = taskScores.reduce<string | null>(
         (oldest, t) =>
           oldest === null || t.computed_at < oldest ? t.computed_at : oldest,
@@ -266,7 +295,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
       // from — each task's stored state_key plus the team assignments, with
       // the staleness label folded in (as on the task endpoint) so a
       // stale-labelled body never revalidates a fresh one.
-      // The series-scoring settings change the standings (FTV vs sum, and the
+      // The series-scoring settings change the scores (FTV vs sum, and the
       // discard factor) without touching any per-task state_key, so they must
       // be folded in here or a toggle would serve a stale cached body.
       const compStateString = [
@@ -308,13 +337,13 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         calculated_ftv?: number;
       };
 
-      const classStandings: Record<string, Record<string, PilotTotals>> = {};
+      const classTotals: Record<string, Record<string, PilotTotals>> = {};
       // Per class, per task: the day-winner's score (max in the class).
       const classTaskWinner: Record<string, Record<string, number>> = {};
 
       for (const task of taskScores) {
         for (const cls of task.classes) {
-          classStandings[cls.pilot_class] ??= {};
+          classTotals[cls.pilot_class] ??= {};
           classTaskWinner[cls.pilot_class] ??= {};
           const winnerScore = cls.pilots.reduce(
             (max, p) => Math.max(max, p.total_score),
@@ -322,8 +351,8 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           );
           classTaskWinner[cls.pilot_class][task.task_id] = winnerScore;
           for (const pilot of cls.pilots) {
-            if (!classStandings[cls.pilot_class][pilot.comp_pilot_id]) {
-              classStandings[cls.pilot_class][pilot.comp_pilot_id] = {
+            if (!classTotals[cls.pilot_class][pilot.comp_pilot_id]) {
+              classTotals[cls.pilot_class][pilot.comp_pilot_id] = {
                 pilot_name: pilot.pilot_name,
                 comp_pilot_id: pilot.comp_pilot_id,
                 team_name: teamByPilot.get(pilot.comp_pilot_id) ?? null,
@@ -331,7 +360,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
                 tasks: [],
               };
             }
-            const entry = classStandings[cls.pilot_class][pilot.comp_pilot_id];
+            const entry = classTotals[cls.pilot_class][pilot.comp_pilot_id];
             // Default (sum-of-tasks) total; overwritten below under FTV.
             entry.total_score += pilot.total_score;
             entry.tasks.push({
@@ -357,7 +386,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         : null;
 
       if (ftvActive && ftvFactor !== null) {
-        for (const [clsKey, pilots] of Object.entries(classStandings)) {
+        for (const [clsKey, pilots] of Object.entries(classTotals)) {
           const target = calculatedFtv(
             Object.values(classTaskWinner[clsKey] ?? {}),
             ftvFactor
@@ -385,10 +414,10 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      // Build ranked standings per class. rankByTotalScore applies S7A
+      // Build the ranked scores per class. rankByTotalScore applies S7A
       // §5.2.5.4 ties (equal published totals share a rank; no tie-break) to
       // whatever total_score holds — the sum, or the FTV total set above.
-      const standings = Object.entries(classStandings).map(
+      const classScores = Object.entries(classTotals).map(
         ([pilotClass, pilots]) => ({
           pilot_class: pilotClass,
           pilots: rankByTotalScore(Object.values(pilots)).map((p) => ({
@@ -426,7 +455,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           task_date: t.task_date,
           classes: t.classes.map((cls) => cls.pilot_class),
         })),
-        standings,
+        class_scores: classScores,
         computed_at: computedAt,
         stale: anyStale,
         series_scoring: ftvActive ? "ftv" : "total",

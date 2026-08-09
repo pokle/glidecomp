@@ -48,7 +48,7 @@ export interface FieldAnalysisClass {
   /** trackFile → cross-task pilot key (`cp:<comp_pilot_id>`). Exact, unlike
    * the CLI's filename heuristic, and survives pilot renames. */
   pilot_key_by_track_file: Record<string, string>;
-  /** Per-pilot official totals — feeds aggregateComp's comp standings. */
+  /** Per-pilot official totals — feeds aggregateComp's comp scores. */
   totals: { trackFile: string; pilotName: string; totalScore: number }[];
   /** Pilots in this class the analysis could not include, and why. Shown in
    * the UI so nobody reads the correlations as covering the whole field. */
@@ -81,7 +81,7 @@ export interface TaskFieldAnalysisResponse {
  *
  * Correlations are measured against OFFICIAL ranks (from computeTaskScore),
  * not the re-score's tracked-pilots-only ranks: manual flights (issue #306)
- * count toward the published standings but have no fixes to analyse, so
+ * count toward the published scores but have no fixes to analyse, so
  * ranking within the tracked subset would correlate against a leaderboard
  * nobody recognises. Those pilots land in `excluded` for disclosure.
  */
@@ -114,7 +114,7 @@ export async function computeTaskFieldAnalysis(
     );
   }
 
-  // Official standings — the ranks every correlation is measured against, and
+  // Official scores — the ranks every correlation is measured against, and
   // the totals the comp aggregate ranks on. Usually cheap: computeTaskScore
   // reads its per-track analyses from track_analysis rather than R2. Passing
   // cfg through pins both passes to one parameter resolution — a concurrent
@@ -231,7 +231,7 @@ export async function computeTaskFieldAnalysis(
       if (!entry) {
         excluded.push({
           pilot_name: ps.pilotName,
-          reason: "not in the official standings for this task",
+          reason: "not in the official scores for this task",
         });
         return false;
       }

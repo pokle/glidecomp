@@ -9,6 +9,7 @@
  * that only speaks when it has evidence.
  */
 import { Card } from "@/react/rac/card";
+import { Explain } from "@/react/rac/explain";
 import { useEffect, useState } from "react";
 import { debriefFindings, debriefSentence, type DebriefFinding } from "./debrief";
 import type { CompFieldAnalysisData } from "./types";
@@ -69,21 +70,45 @@ export function TaskDebrief({
 
   return (
     <Card aria-labelledby="debrief-heading" className="gap-3">
-      <h2 id="debrief-heading" className="scroll-mt-20 text-lg font-semibold">
+      <h2
+        id="debrief-heading"
+        className="flex items-center gap-1 scroll-mt-20 text-lg font-semibold"
+      >
         Task debrief
+        {/* What qualifies a behaviour for this list is method — behind the ⓘ,
+            and printed in place below so paper still carries it. */}
+        <Explain label="What makes this list">
+          <DebriefNote />
+        </Explain>
       </h2>
       <p className="text-sm text-muted-foreground">
-        Where this task differed from the rest of the competition. Each of
-        these behaviours cleared its noise floor today, AND contradicts a
-        direction that every other informative task agreed on. A day that
-        reverses a direction is a finding about the day, and not a fault in the
-        data.
+        Where this task differed from the rest of the competition.
       </p>
+      <div className="hidden text-sm text-muted-foreground print:block">
+        <DebriefNote />
+      </div>
       <ul className="list-disc space-y-2 pl-5 text-sm">
         {findings.map((f) => (
           <li key={f.metricId}>{debriefSentence(f)}</li>
         ))}
       </ul>
     </Card>
+  );
+}
+
+/** What qualifies a behaviour for the debrief, and why a reversal is a finding
+ * rather than a fault. One definition, rendered in the ⓘ and again for print. */
+function DebriefNote() {
+  return (
+    <>
+      <p>
+        Each of these behaviours cleared its noise floor today, AND contradicts
+        a direction that every other informative task agreed on.
+      </p>
+      <p>
+        A day that reverses a direction is a finding about the day, and not a
+        fault in the data.
+      </p>
+    </>
   );
 }

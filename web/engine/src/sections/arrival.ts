@@ -21,6 +21,7 @@ import {
   defaultFormatTime,
 } from '../score-explanation-format';
 import { ordinal } from './rank';
+import { noEssPointsZeroed, pilotsAtEss } from './shared';
 
 /**
  * Arrival points, with the arithmetic that produced them.
@@ -40,10 +41,10 @@ import { ordinal } from './rank';
  *    early start gate can cross ahead of a faster pilot on a later gate and
  *    take more arrival points for it. Nothing on the site said so, and it is
  *    the detail most likely to be disputed.
- *  - **What one place was worth on this day.** The marginal value of moving up
+ *  - **What one rank was worth on this day.** The marginal value of moving up
  *    one is exact, and varies enormously with position — near the front a
- *    place is worth a lot, at the back almost nothing. That turns a bare
- *    placing into something a pilot can weigh.
+ *    rank is worth a lot, at the back almost nothing. That turns a bare
+ *    rank into something a pilot can weigh.
  */
 export function buildArrivalSection(
   entry: ScoreEntryInput,
@@ -54,9 +55,7 @@ export function buildArrivalSection(
   const ap = classContext.available_points;
   // Prefer the published field size (it is the divisor the scorer used); fall
   // back to counting, for payloads written before validity_inputs existed.
-  const atEss =
-    classContext.validity_inputs?.num_reached_ess ??
-    classContext.pilots.filter((p) => p.reached_ess).length;
+  const atEss = pilotsAtEss(classContext);
   const position = entry.arrival_position ?? null;
   const items: ScoreExplanationItem[] = [];
 
@@ -97,7 +96,7 @@ export function buildArrivalSection(
       params.essNotGoalFactor < 1;
     items.push({
       id: 'arrival-formula',
-      text: 'Arrival points fall off steeply with each place',
+      text: 'Arrival points fall off steeply with each rank',
       value: pts(entry.arrival_points),
       detail:
         `arrival ratio = 1 − (${position} − 1) ÷ ${atEss} = ${trimZeros(
@@ -144,11 +143,21 @@ export function buildArrivalSection(
       text: `${atEss} pilot${atEss === 1 ? '' : 's'} reached the end of the speed section on this task; the points scale with where in that group you crossed it (FAI S7F §11.4).`,
       emphasis: 'muted',
     });
+  } else if (noEssPointsZeroed(classContext, params)) {
+    // Nobody got there at all, so there was no arrival order to rank anyone
+    // in and the specification puts nothing on offer (§10). Said here as well
+    // as in the day-quality section because a reader who skipped straight to
+    // this section would otherwise see a bare zero with no reason beside it.
+    items.push({
+      id: 'arrival-no-ess',
+      text: 'Nobody reached the end of the speed section on this task, so there was no arrival order to place anyone in and the task offered no arrival points to anyone (FAI S7F §10).',
+      emphasis: 'warning',
+    });
   }
 
   items.push(...buildArrivalEssNotGoalItems(entry, params));
 
-  // The header's standing — the arrival POSITION is the section's whole
+  // The header's rank — the arrival POSITION is the section's whole
   // input, so it is the rank, restated scannably.
   const rank =
     position !== null && position > 0 && atEss >= 2

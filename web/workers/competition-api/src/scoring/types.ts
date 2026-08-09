@@ -70,7 +70,7 @@ export interface PilotScoreEntry {
   /**
    * Set when this pilot's tracklog failed a HARD data-quality check
    * (track-quality.ts) and was withheld from scoring: they hold a place in
-   * the standings at 0 rather than vanishing from the results. Null for every
+   * the scores at 0 rather than vanishing from the results. Null for every
    * normally-scored pilot.
    */
   track_excluded?: { reasons: string[] } | null;
@@ -143,12 +143,23 @@ export interface ClassScore {
   stopped?: ClassStoppedInfo;
 }
 
+/**
+ * A scored task, as STORED in `task_scores.response_json`.
+ *
+ * Despite the name this is a storage shape, not the wire shape: the endpoint
+ * publishes `classes` as `class_scores` (see `toTaskScoreWire` in
+ * routes/score.ts, which also explains why the stored key was left alone).
+ * Anything reading the blob — including `routes/pilot-profile.ts`'s raw
+ * `json_each(…, '$.classes')` — sees the name below; anything reading the API
+ * sees `class_scores`.
+ */
 export interface TaskScoreResponse {
   task_id: string;
   comp_id: string;
   task_date: string;
   /** How the task was scored — lets the UI pick the right columns. */
   scoring_format: "gap" | "open_distance";
+  /** Published as `class_scores` — see the note above. */
   classes: ClassScore[];
 }
 

@@ -122,7 +122,7 @@ function AccountSection() {
     <Card>
       <CardHeader
         title="Account"
-        description="You can sign in with Google or an emailed code — both use this address."
+        description="Sign in with Google or an emailed code — both use this address."
       />
       <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-[auto_1fr]">
         {rows.map((row) => (
@@ -152,7 +152,7 @@ function AppearanceSection() {
     <Card>
       <CardHeader
         title="Appearance"
-        description="Choose how GlideComp looks on this device. Changes apply immediately."
+        description="How GlideComp looks on this device."
         action={<SavedFlash nonce={savedNonce} />}
       />
       {/* RAC's Radio IS the label, so the card styling goes on the Radio
@@ -243,7 +243,7 @@ function UnitsSection() {
     <Card>
       <CardHeader
         title="Units"
-        description="How speeds, altitudes, climb rates and distances are displayed. Changes apply immediately, and sync to your account when you're signed in."
+        description="How speeds, altitudes, climb rates and distances are displayed. Synced to your account when you're signed in."
         action={<SavedFlash nonce={savedNonce} />}
       />
       <div className="grid gap-1">
@@ -494,7 +494,7 @@ function ProfileSection() {
     <Card>
       <CardHeader
         title="Profile"
-        description="Your pilot details, used when you register for competitions. Changes take effect when you save."
+        description="Your pilot details, used when you register for competitions."
       />
       {state === "loading" ? (
         <Loading>Loading your profile…</Loading>
@@ -794,6 +794,12 @@ function SuperadminSection() {
         </LinkButton>
         <LinkButton variant="outline" href="/admin/cache">
           Cache
+        </LinkButton>
+        {/* A Pages Function, not a react-router route. `download` (no value)
+            forces a save under the server's Content-Disposition filename, and
+            keeps RAC from client-navigating a URL the SPA has no route for. */}
+        <LinkButton variant="outline" href="/civl-rankings.csv" download="">
+          CIVL rankings (CSV)
         </LinkButton>
       </div>
     </Card>

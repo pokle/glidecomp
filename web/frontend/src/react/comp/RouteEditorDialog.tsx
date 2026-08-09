@@ -28,6 +28,7 @@ import {
 } from "@glidecomp/engine";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
+import { Explain } from "@/react/rac/explain";
 import {
   Dialog,
   DialogFooter,
@@ -173,9 +174,9 @@ export function RouteEditorDialog({
   // The "Load from XContest" flow is a small pop-up (a code input + Load).
   const [xcImportOpen, setXcImportOpen] = useState(false);
 
-  // Fields not edited by the grid/panels (taskType, earthModel, takeoff,
-  // cylinderTolerance) are carried over from the loaded task; an import
-  // replaces the whole base.
+  // Fields not edited by the grid/panels (taskType, earthModel, takeoff)
+  // are carried over from the loaded task; an import replaces the whole
+  // base. cylinderTolerance is edited in the Advanced panel below.
   const baseRef = useRef<XCTask | null>(xctsk);
 
   // Load the competition's waypoints once, to pick turnpoints from.
@@ -222,6 +223,14 @@ export function RouteEditorDialog({
     const hhmm = xctsk?.goal?.deadline ? gateToHHMM(xctsk.goal.deadline) : null;
     return hhmm ? toDisplayTime(hhmm) : "";
   });
+
+  // Advanced panel state: the §8.1 cylinder tolerance, edited as a percentage
+  // of the radius (stored on the task as a fraction — AirScore imports write
+  // the comp's own margin here). NaN = not declared, so the engine scores
+  // with its 0.5% Cat 2 default.
+  const [tolerancePct, setTolerancePct] = useState<number>(
+    xctsk?.cylinderTolerance !== undefined ? xctsk.cylinderTolerance * 100 : NaN
+  );
 
   /**
    * Validation + derived geometry, recomputed whenever the rows or the
@@ -463,6 +472,9 @@ export function RouteEditorDialog({
     setGoalType(task.goal?.type ?? "CYLINDER");
     const deadline = task.goal?.deadline ? gateToHHMM(task.goal.deadline) : null;
     setGoalDeadline(deadline ? toDisplayTime(deadline) : "");
+    setTolerancePct(
+      task.cylinderTolerance !== undefined ? task.cylinderTolerance * 100 : NaN
+    );
     toast.success(`Loaded ${task.turnpoints.length} turnpoints from ${sourceLabel}`);
   }
 
@@ -509,8 +521,10 @@ export function RouteEditorDialog({
       ...(base?.earthModel ? { earthModel: base.earthModel } : {}),
       turnpoints: result.turnpoints,
       ...(base?.takeoff ? { takeoff: base.takeoff } : {}),
-      ...(base?.cylinderTolerance !== undefined
-        ? { cylinderTolerance: base.cylinderTolerance }
+      // Percent → fraction, rounded so 0.05% is exactly 0.0005 (a scoring
+      // input; the crossing detector reads it). Blank means not declared.
+      ...(Number.isFinite(tolerancePct)
+        ? { cylinderTolerance: Math.round(tolerancePct * 1e6) / 1e8 }
         : {}),
     };
     if (openDistance) {
@@ -1064,15 +1078,52 @@ export function RouteEditorDialog({
                 </span>
               </div>
               {goalType === "LINE" ? (
+                // Geometry an organiser reads once, so it sits on the ⓘ rather
+                // than under the control every time the dialog opens.
                 <p className="mt-2 text-sm text-muted-foreground">
-                  The goal line is centred on the last turnpoint, perpendicular
-                  to the final leg, and extends the turnpoint&apos;s radius to
-                  each side (total length 2 × radius).
+                  <span className="inline-flex items-baseline gap-1">
+                    <span>Line length is 2 × the turnpoint&apos;s radius.</span>
+                    <Explain label="Goal line geometry" className="self-center">
+                      <p>
+                        The goal line is centred on the last turnpoint,
+                        perpendicular to the final leg, and extends the
+                        turnpoint&apos;s radius to each side.
+                      </p>
+                    </Explain>
+                  </span>
                 </p>
               ) : null}
             </Disclosure>
           </>
         ) : null}
+
+        {/* Collapsed by default like Start/Goal — the badge reads the
+            effective tolerance back on the header row (#436), so the one
+            value inside is never hidden behind the fold. */}
+        <Disclosure
+          title="Advanced"
+          badge={
+            <span className="text-xs font-normal text-muted-foreground">
+              {Number.isFinite(tolerancePct)
+                ? `Cylinder tolerance ${+tolerancePct.toFixed(2)}%`
+                : "Cylinder tolerance 0.5% (default)"}
+            </span>
+          }
+        >
+          <div className="mt-2 max-w-sm">
+            <NumberField
+              label="Cylinder tolerance (%)"
+              minValue={0}
+              maxValue={10}
+              step={0.01}
+              formatOptions={{ maximumFractionDigits: 2 }}
+              placeholder="0.5"
+              value={tolerancePct}
+              onChange={setTolerancePct}
+              description="The margin for deciding whether a pilot reached each cylinder (FAI S7F §8.1): a band of this percentage of the radius, at least ±5 m. Category 1 championships use 0.1%; Category 2 allows up to 0.5%. Leave blank to score with the 0.5% default."
+            />
+          </div>
+        </Disclosure>
 
         <DialogFooter className="mx-0 mb-0 border-t border-border">
           <Button slot="close" variant="outline">

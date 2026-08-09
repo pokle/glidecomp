@@ -59,10 +59,10 @@ screenshots them. Paths below are relative to the repo root.
    ```
    Expected output ends with `✓ drove Corryong Cup 2026 end-to-end`. Screenshots
    land in `.claude/skills/run-glidecomp/shots/` (`comp.png`, `scores.png`) —
-   **open `scores.png` and look at it**; it should show a ~99-row GAP standings
+   **open `scores.png` and look at it**; it should show a ~99-row GAP scores
    table with per-task points and a descending total (Jon Durand tops it at
    ~2,433). Known quirk: `comp.png` and `scores.png` currently come out
-   byte-identical — `/comp/:id` carries the standings inline now, so the
+   byte-identical — `/comp/:id` carries the scores inline now, so the
    driver's second stop (`/scores?comp_id=…`) renders the same view.
 
    To drive the open-distance path instead, use the hidden Big Chip comp — it

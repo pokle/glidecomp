@@ -59,7 +59,7 @@ export function ScoresSection({
     // Seeded from SSR — surface the replay link from the seed, skip the fetch.
     if (seededRef.current) {
       seededRef.current = false;
-      onReplayAvailable(initialScore!.classes.some((cls) => cls.pilots.length > 0));
+      onReplayAvailable(initialScore!.class_scores.some((cls) => cls.pilots.length > 0));
       return;
     }
     let cancelled = false;
@@ -83,7 +83,7 @@ export function ScoresSection({
         // Reveal the 3D replay link once the task has tracks to show (the
         // bundle endpoint needs an xctsk + at least one track, both implied
         // by a scored pilot).
-        onReplayAvailable(data.classes.some((cls) => cls.pilots.length > 0));
+        onReplayAvailable(data.class_scores.some((cls) => cls.pilots.length > 0));
       } catch {
         if (!cancelled) setState({ kind: "unavailable" });
       }
@@ -132,7 +132,7 @@ export function ScoresSection({
         />
       ) : null}
       {state.kind === "loaded"
-        ? state.data.classes.map((cls) => (
+        ? state.data.class_scores.map((cls) => (
             <ScoreClassTable
               key={cls.pilot_class}
               compId={compId}
@@ -140,16 +140,15 @@ export function ScoresSection({
               taskName={taskName}
               cls={cls}
               timezone={timezone}
-              showClassName={state.data.classes.length > 1}
+              showClassName={state.data.class_scores.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
             />
           ))
         : null}
       {state.kind === "loaded" &&
-      state.data.classes.some((cls) => cls.pilots.length > 0) ? (
+      state.data.class_scores.some((cls) => cls.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          Click a pilot's row for the full score breakdown — every start,
-          turnpoint and point calculation, shown on the map.
+          Click a row for the full breakdown.
         </p>
       ) : null}
     </section>
@@ -200,6 +199,15 @@ function ScoreClassTable({
 
   const v = cls.task_validity;
   const ap = cls.available_points;
+  // FAI S7F §10 (HG): nobody reached ESS, so the task carried no time and no
+  // arrival points. Gated on the published zero as well as the field count, so
+  // a pre-rule cached body keeps its old caption rather than being described
+  // as something it is not; a whole-day zero is a different finding.
+  const noEssOffer =
+    cls.gap_params?.scoring === "HG" &&
+    ap.total > 0 &&
+    ap.time === 0 &&
+    essFieldSize === 0;
 
   const detailHref = (compPilotId: string, pilotName?: string | null) =>
     pilotPath(compId, compName, taskId, taskName, compPilotId, pilotName);
@@ -374,6 +382,17 @@ function ScoreClassTable({
           · Available: {Number(ap.total.toFixed(1))} pts
           (dist {Math.round(ap.distance)}, time {Math.round(ap.time)}, lead{" "}
           {Math.round(ap.leading)})
+          {/* FAI S7F §10: nobody reached ESS on an HG task, so the time and
+              arrival offers are zero and nothing replaces them — without this
+              the split visibly fails to add up to the total. */}
+          {noEssOffer ? (
+            <>
+              {" "}
+              — nobody reached the end of the speed section, so no time or arrival
+              points were available (FAI S7F §10) and only{" "}
+              {Number((ap.distance + ap.leading).toFixed(1))} pts could be won.
+            </>
+          ) : null}
         </p>
       )}
     </div>

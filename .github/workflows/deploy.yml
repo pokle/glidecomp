@@ -124,7 +124,7 @@ jobs:
           cat > web/workers/auth-api/.dev.vars << 'EOF'
           GOOGLE_CLIENT_ID=dummy-for-ci
           GOOGLE_CLIENT_SECRET=dummy-for-ci
-          BETTER_AUTH_SECRET=ci-test-secret
+          BETTER_AUTH_SECRET=ci-only-not-for-production-J7Oz93uJjYD6f2bkvkO220QquD7a1jUOaSDrrWsDUOvp
           BETTER_AUTH_URL=http://localhost:3000
           EOF
 

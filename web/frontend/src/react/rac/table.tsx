@@ -112,7 +112,7 @@ export function Row<T extends object>({
         "border-b transition-colors outline-none data-hovered:bg-muted/50 data-selected:bg-muted",
         "data-focus-visible:ring-2 data-focus-visible:ring-ring/50",
         // Row-level actions (onAction/href) get a pointer, matching the old
-        // cursor-pointer standings rows.
+        // cursor-pointer scores rows.
         "data-[href]:cursor-pointer",
         // Drag-and-drop states (route editor grid).
         "data-dragging:opacity-50 data-drop-target:outline-2 data-drop-target:outline-primary",

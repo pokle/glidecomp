@@ -81,7 +81,7 @@ import {
   MinimizeIcon,
 } from "../score-detail/icons";
 import { ScoringGlossary } from "../components/ScoringGlossary";
-import { TaskInStandings } from "../comp/TaskInStandings";
+import { TaskInCompScores } from "../comp/TaskInCompScores";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -296,7 +296,7 @@ function buildDetailData(
 
   let cls: ClassScore | undefined;
   let entry: PilotScoreEntry | undefined;
-  for (const c of score.classes) {
+  for (const c of score.class_scores) {
     const found = c.pilots.find((p) => p.comp_pilot_id === pilotId);
     if (found) {
       cls = c;
@@ -938,9 +938,9 @@ export function PilotScoreDetail() {
           ))}
           {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
           {/* Closes the loop from this task back to the competition. Loads
-              after hydration — see TaskInStandings for why it is not in the
+              after hydration — see TaskInCompScores for why it is not in the
               SSR payload. */}
-          <TaskInStandings
+          <TaskInCompScores
             compId={compId}
             compName={data.comp.name}
             taskId={taskId}

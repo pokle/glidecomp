@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { Form } from "react-aria-components";
 import { defaultsFor, resolveCompGapParams, resolveTimePointsExponent } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
+import { Explain } from "@/react/rac/explain";
 import {
   Dialog,
   DialogFooter,
@@ -412,7 +413,7 @@ export function SettingsDialog({
           </div>
 
           {/* Series (multi-task) scoring — how per-task scores combine into
-              competition standings. FTV is a GAP-only aggregation (S7F §15). */}
+              competition scores. FTV is a GAP-only aggregation (S7F §15). */}
           {scoringFormat === "gap" ? (
             <div>
               <h3 className="mb-1.5 text-sm font-medium">Series scoring</h3>
@@ -632,8 +633,29 @@ export function SettingsDialog({
                 </div>
                 {category === "pg" ? (
                   <div>
-                    <h4 className="mb-1.5 text-sm font-medium">
+                    <h4 className="mb-1.5 flex items-center gap-1 text-sm font-medium">
                       Paragliding leading weight
+                      {/* Three formulas' worth of arithmetic used to sit under
+                          the select as one 61-word paragraph. An organiser
+                          picking an option needs the one line below; the
+                          weights behind each are for whoever asks. */}
+                      <Explain label="Paragliding leading weight">
+                        <p>
+                          <strong>GAP2020</strong> gives leading 35% (and 0.1 ×
+                          BestDist/TaskDist of the total when nobody makes
+                          goal).
+                        </p>
+                        <p>
+                          <strong>S7F 2020–2022</strong> uses the PWC-derived
+                          fixed weights — distance 0.838 when nobody makes goal,
+                          leading always 0.162.
+                        </p>
+                        <p>
+                          <strong>S7F 2024</strong> uses the LeadingTimeRatio
+                          below, and all of the non-distance weight when nobody
+                          makes goal.
+                        </p>
+                      </Explain>
                     </h4>
                     <SimpleSelect
                       value={leadingWeightFormula}
@@ -648,13 +670,8 @@ export function SettingsDialog({
                       ariaLabel="Paragliding leading weight formula"
                     />
                     <p className="mt-1 text-sm text-muted-foreground">
-                      How much of the non-distance weight goes to leading vs time.
-                      GAP2020 gives leading 35% (and 0.1 × BestDist/TaskDist of the total
-                      when nobody makes goal); S7F 2020–2022 uses the PWC-derived fixed
-                      weights (distance 0.838 when nobody makes goal, leading always
-                      0.162); S7F 2024 uses the LeadingTimeRatio below (and all of the
-                      non-distance weight when nobody makes goal). Hang-gliding is
-                      unaffected.
+                      How much of the non-distance weight goes to leading vs
+                      time. Hang gliding is unaffected.
                     </p>
                     {leadingWeightFormula === "s7f2024" ? (
                       <NumberField

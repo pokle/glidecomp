@@ -249,7 +249,7 @@ export function directionAdjustedPercentile(
 /**
  * ρ re-expressed against {@link directionAdjustedPercentile}'s orientation:
  * POSITIVE when the end of the metric that scores 100 there is the end that
- * went with better placings, negative when it ran the other way, ~0 when the
+ * went with better ranks, negative when it ran the other way, ~0 when the
  * metric said nothing. 0 when the metric earned no coefficient at all.
  *
  * `MetricCorrelation.rho` is signed against rank, where rank 1 is best, so a

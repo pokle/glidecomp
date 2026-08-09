@@ -2,7 +2,7 @@
  * Version of the scoring engine's observable behaviour.
  *
  * The competition API folds this into every scoring cache key (task scores,
- * comp standings, per-track analysis, per-pilot transparency), so results
+ * comp scores, per-track analysis, per-pilot transparency), so results
  * computed by two different engine generations can never be served side by
  * side: a deploy that changes scoring behaviour rolls every key at once.
  * Because the engine is deterministic, a cached score and a cached analysis
@@ -322,7 +322,102 @@
 //      every root's import closure. The cache roll is harmless — scores
 //      recompute identically, verified byte-for-byte over 376,405 scored
 //      fields spanning every bundled task across 14 parameter variants.
-export const SCORING_ENGINE_VERSION = 31;
+// v32: S7F §6.4 distance definitions (2024 edition), verified against the
+//      211-comp archive. Four related changes to the optimiser and the
+//      flown-distance measurement:
+//      (a) Launch centre (Annex A §2.2) — every route is measured from the
+//      first turnpoint's CENTRE "regardless of whether it has been given a
+//      radius", not just when it is typed TAKEOFF. Tasks whose route begins
+//      at the start cylinder (common in AirScore imports — ~60 archive
+//      tasks) previously lost exactly the start radius: 5–10 km of task and
+//      flown distance. The one deliberate exception is the trimmed task
+//      behind distanceOrigin 'start' (scored distance there begins at the
+//      start crossing), marked by the new XCTask.firstTurnpointAtBoundary.
+//      (b) ESS pin (Annex A §3.2.4) — a mid-route ESS fix is "pinned to the
+//      preceding points": the nearest boundary point toward the incoming
+//      leg, never dragged toward goal. The task path now kinks at ESS, and
+//      its launch→ESS prefix equals the §6.4.2 launchToESSPath by
+//      construction, so the sliced speed-section length feeding the leading
+//      coefficient and the §12.3.3 stopped validity is the spec's number
+//      (2.5 km long on the worst archive task before).
+//      (c) §8.6.1 flown distance — a landed-out pilot's remaining distance
+//      is now a fresh shortest-path optimisation from each candidate fix
+//      through the un-reached zones to goal (branch-and-bound over the
+//      track, 5 m tolerance), replacing the frozen-tag approximation; the
+//      measured route is carried on BestProgress.remainingRoute so the map
+//      draws exactly what was scored. Manual flights measure the same way.
+//      Against AirScore's published per-pilot distances (Corryong Cup 2026
+//      T1) the mean error drops from 66 m to under 50 m with the worst
+//      pilot inside 100 m (was 385 m).
+//      (d) Deterministic tag on a crossed cylinder — when a leg passes
+//      straight through a cylinder every chord point ties; the tag now sits
+//      at the boundary point nearest the chord (the spec's construction,
+//      matching AirScore's published cumulatives) instead of wherever the
+//      numeric search landed. Also: nearest-boundary points are computed
+//      from the centre's bearing (the reversed-bearing shortcut drifted by
+//      meridian convergence — tens of metres on long legs), a converged
+//      pass is adopted rather than discarded, and the optimised task line
+//      is cached per task object (content-keyed), which pays for the extra
+//      §8.6.1 optimisations.
+// v33: NO score change — explanation copy and comment corrections. The
+//      land-out "best progress" narrative now describes the marked point as
+//      the one with the least distance still to fly, measured as the
+//      shortest route through the remaining turnpoints to goal — the v32
+//      §8.6.1 measurement — instead of "where the track came closest to the
+//      next turnpoint", which the exact measure no longer guarantees. Doc
+//      comments that still described the frozen-tag approximation as the
+//      scored measurement (NextTPMeasure, computeTaskGeometry,
+//      nextTPMeasurer) and the distanceOrigin claim that SSS-first tasks
+//      score identically under both origins (false since the v32 launch-
+//      centre rule — they differ by the start radius) are corrected. Every
+//      point is unchanged; the bump rolls the stale-first store so settled
+//      comps serve the corrected narrative rather than the old wording
+//      indefinitely.
+// v34: the task's declared cylinder tolerance is honoured (issue #577).
+//      parseXCTask now reads the xctsk file's `cylinderTolerance` field —
+//      the XCTask type, the API validator, the AirScore importer (which
+//      writes the comp's error_margin into it) and the route editor all
+//      already carried it, but the parser dropped it, so every task scored
+//      with the 0.5% engine default (§8.1 Cat 2 maximum) instead of the
+//      band the comp declared (0.05% on most imported comps — 10× tighter).
+//      Scores move only where a crossing decision fell between the two
+//      bands. The found case is bright-open-2025-open-t3: the takeoff sits
+//      INSIDE the 33.5 km ENTER start ring, pilots exit past the boundary
+//      by ~100 m and re-enter to start, and the default band (167.5 m at
+//      that radius) never saw them outside — no enter crossing, no start,
+//      the whole field scored landed out at ~14 km instead of the published
+//      101.66 km. With the declared 0.05% band the field resolves to goal.
+// v35: NO pilot's points change — the S7F §10 "nobody reaches ESS" rule
+//      (issue #583). On a hang-gliding task where numReachedESS is 0, the
+//      spec's HG box sets AvailableTimePoints and AvailableArrivalPoints to
+//      zero, and redistributes nothing: distance and leading keep their usual
+//      weights and the remainder of the day is left unallocated. GlideComp
+//      published the normal non-zero figures, so the scoreboard and the report
+//      card advertised points nobody could win — time points require an ESS
+//      crossing and the arrival position map is empty, so both components were
+//      already zero for every pilot.
+//      calculateWeights now takes the ESS count and returns zeroed time and
+//      arrival fractions in that case; availablePoints follows, while
+//      availablePoints.total stays 1000 × task validity (the day's worth), so
+//      the components deliberately fall short of it by the unallocated
+//      remainder. Every explanation that compares a pilot against "the day"
+//      now names that remainder rather than presenting it as points they left
+//      untaken.
+//      Bumped because availablePoints and validity_inputs.weights are part of
+//      the cached payload: without a roll the stale-first store would serve
+//      the pre-change figures for settled comps indefinitely.
+// v36: the PG early-start distance is the flat launch→SSS value (issue #584).
+//      §12.2 scores a paraglider pilot who jumps the gun "for the distance
+//      between the launch point and the SSS control zone, as calculated when
+//      determining the complete task distance (see 6.4.1)" — a fixed award.
+//      applyEarlyStarts capped it at the pilot's own flown distance, which is
+//      stricter than the spec for the one case where the two differ: an early
+//      starter who then landed short of their own start. That cap is gone.
+//      Scores move only for such a pilot (the §11.1 minimum-distance floor
+//      still applies underneath). The report card's distance section now
+//      prints which value applied — the launch→start leg beside what was
+//      actually flown, or the minimum when the leg falls below it.
+export const SCORING_ENGINE_VERSION = 36;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -330,4 +425,4 @@ export const SCORING_ENGINE_VERSION = 31;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "1ded972bd3aef49e435b8fe92f00a0c81915b3933f6a25c795f1e7271f27582e";
+  "5a42c862b6ff204d9b09d442334f4205207ecb406333f08b5b62048cea7cfe68";
