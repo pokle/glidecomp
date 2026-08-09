@@ -387,7 +387,18 @@
 //      that radius) never saw them outside — no enter crossing, no start,
 //      the whole field scored landed out at ~14 km instead of the published
 //      101.66 km. With the declared 0.05% band the field resolves to goal.
-export const SCORING_ENGINE_VERSION = 34;
+// v35: the PG early-start distance is the flat launch→SSS value (issue #584).
+//      §12.2 scores a paraglider pilot who jumps the gun "for the distance
+//      between the launch point and the SSS control zone, as calculated when
+//      determining the complete task distance (see 6.4.1)" — a fixed award.
+//      applyEarlyStarts capped it at the pilot's own flown distance, which is
+//      stricter than the spec for the one case where the two differ: an early
+//      starter who then landed short of their own start. That cap is gone.
+//      Scores move only for such a pilot (the §11.1 minimum-distance floor
+//      still applies underneath). The report card's distance section now
+//      prints which value applied — the launch→start leg beside what was
+//      actually flown, or the minimum when the leg falls below it.
+export const SCORING_ENGINE_VERSION = 35;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -395,4 +406,4 @@ export const SCORING_ENGINE_VERSION = 34;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "b3dbf28be4f0b1419f0aa2ad17c7cf83ed6238efee18b46829ae6f1396ffe51b";
+  "4f9ee1b8f3e4cc81fc1cf86204e5160138724f6496fd54b75d81e7f5a3403c44";

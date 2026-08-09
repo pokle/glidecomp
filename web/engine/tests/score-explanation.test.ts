@@ -1055,7 +1055,7 @@ describe('explainGapScore — start gates & early starts', () => {
     expect(total.items[0].detail).toContain('− 60 jump-the-gun');
   });
 
-  it('explains the PG early-start launch→SSS clamp', () => {
+  function pgEarlyStart(flownDistance: number) {
     const result: TurnpointSequenceResult = {
       ...makeReentryResult(),
       startGate: { time: at(32), index: 0, gateCount: 3 },
@@ -1066,21 +1066,41 @@ describe('explainGapScore — start gates & early starts', () => {
       made_goal: false,
       reached_ess: false,
       speed_section_time: null,
-      flown_distance: 2800,
+      flown_distance: flownDistance,
       early_start_seconds: 120,
       early_start_outcome: 'pg_launch_to_sss',
       total_score: 40,
     };
-    const x = explainGapScore({
+    return explainGapScore({
       task: makeTask(), result, entry,
       classContext: makeClassContext(),
       params: { scoring: 'PG' },
     });
+  }
+
+  it('explains the PG early-start launch→SSS distance, and which value applied', () => {
+    // The scored 18.4 km is the launch→SSS leg; makeReentryResult flew 60 km.
+    const x = pgEarlyStart(18_400);
     expect(x.headline).toContain('Early start');
     const distance = section(x, 'distance');
-    const clamp = distance.items.find((i) => i.id === 'early-start-distance')!;
-    expect(clamp.text).toContain('launch to the start cylinder');
-    expect(clamp.emphasis).toBe('warning');
+    const item = distance.items.find((i) => i.id === 'early-start-distance')!;
+    expect(item.text).toContain('launch to the start cylinder');
+    expect(item.text).toContain('a fixed distance');
+    expect(item.value).toBe('18.4 km');
+    expect(item.detail).toContain('not what you actually flew (60.0 km)');
+    expect(item.emphasis).toBe('warning');
+  });
+
+  it('says so when the launch→SSS leg is below the minimum distance', () => {
+    // 2.8 km of launch→SSS floors to the 5 km minimum (§11.1) — the printed
+    // figure is then the minimum, so it must not be labelled the leg.
+    const x = pgEarlyStart(5_000);
+    const item = section(x, 'distance').items.find(
+      (i) => i.id === 'early-start-distance',
+    )!;
+    expect(item.value).toBe('5.0 km');
+    expect(item.detail).toContain('shorter than the 5.0 km minimum');
+    expect(item.detail).not.toContain('actually flew');
   });
 });
 
