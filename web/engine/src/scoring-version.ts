@@ -406,7 +406,18 @@
 //      Bumped because availablePoints and validity_inputs.weights are part of
 //      the cached payload: without a roll the stale-first store would serve
 //      the pre-change figures for settled comps indefinitely.
-// v36: goal-line tolerance and crossing direction (issue #359, S7F §8.2,
+// v36: the PG early-start distance is the flat launch→SSS value (issue #584).
+//      §12.2 scores a paraglider pilot who jumps the gun "for the distance
+//      between the launch point and the SSS control zone, as calculated when
+//      determining the complete task distance (see 6.4.1)" — a fixed award.
+//      applyEarlyStarts capped it at the pilot's own flown distance, which is
+//      stricter than the spec for the one case where the two differ: an early
+//      starter who then landed short of their own start. That cap is gone.
+//      Scores move only for such a pilot (the §11.1 minimum-distance floor
+//      still applies underneath). The report card's distance section now
+//      prints which value applied — the launch→start leg beside what was
+//      actually flown, or the minimum when the leg falls below it.
+// v37: goal-line tolerance and crossing direction (issue #359, S7F §8.2,
 //      §8.5.2). Two changes at a LINE goal, both at the margins of the line:
 //      (a) §8.2 line tolerance — the goal line now carries the same
 //      percentage band a cylinder gets (§8.1), with the same 5 m floor,
@@ -431,7 +442,7 @@
 //      Only tasks with a LINE goal can move, and only pilots within a few
 //      metres of an endpoint or crossing the line backwards; every bundled
 //      comp scores identically.
-export const SCORING_ENGINE_VERSION = 36;
+export const SCORING_ENGINE_VERSION = 37;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -439,4 +450,4 @@ export const SCORING_ENGINE_VERSION = 36;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "7c1ad1a1388983c66fed7626b720d30427630b2f9fd015ce3c386b251fafc873";
+  "4cf99a70855439c9c1f3f34e0ca3126cb0aafc07bc3bfaf764c2918c545eca41";
