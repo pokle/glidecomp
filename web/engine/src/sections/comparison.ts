@@ -270,6 +270,28 @@ function shortfallsAgainstOffer(
 }
 
 /**
+ * What the day actually put on offer, and how much of its total never reached
+ * a component at all.
+ *
+ * The four offers normally add up to the day's points, give or take display
+ * rounding. Under FAI S7F §10 an HG task nobody flew to the end of the speed
+ * section carries no time and no arrival points, and nothing takes their
+ * place — so `unallocated` is a real slice of the day that no pilot could have
+ * won, and every "you were N short of the day" sentence has to say so.
+ */
+function offerLedger(ap: ClassContextInput['available_points']): {
+  offered: number;
+  unallocated: number;
+} {
+  const offered =
+    ap.distance +
+    ap.time +
+    (ap.leading > 0 ? ap.leading : 0) +
+    (ap.arrival > 0 ? ap.arrival : 0);
+  return { offered, unallocated: ap.total - offered };
+}
+
+/**
  * The leader's version of "where the points went": nobody out-scored them,
  * so the comparison that answers their actual question — the day had full
  * validity, why didn't I get full points? — is against the day's own offer,
@@ -394,19 +416,28 @@ function buildPointsLeftSection(
   const losses = shortfallsAgainstOffer(entry, ap);
   const dominant =
     losses.length > 0 && losses[0].lost >= 0.75 * left ? losses[0] : null;
-  // On a day nobody makes goal, the GAP weight split can sum to slightly more
-  // than 1 (the time weight is clamped at zero — S7F §10, calculateWeights),
-  // so the per-component offers overshoot the day total and the rows above
-  // sum to more than the points actually left. Say so, rather than print a
-  // share the rows visibly contradict.
-  const shownOffers =
-    ap.distance +
-    ap.time +
-    (ap.leading > 0 ? ap.leading : 0) +
-    (ap.arrival > 0 ? ap.arrival : 0);
-  const overshoot = shownOffers - ap.total;
+  // Two ways the component offers and the day's total fail to agree, both of
+  // them real. OVERSHOOT: on a day nobody makes goal the GAP weight split can
+  // sum to slightly more than 1 (the time weight is clamped at zero —
+  // calculateWeights), so the rows above come to more than the points actually
+  // left. UNALLOCATED: §10 zeroed the time and arrival offers on an HG task
+  // nobody flew to ESS, so part of the day was never winnable. Say which,
+  // rather than print a share the rows visibly contradict.
+  const { offered: shownOffers, unallocated } = offerLedger(ap);
+  const overshoot = -unallocated;
   let leftDetail: string;
-  if (overshoot > 0.2) {
+  if (unallocated > 0.2) {
+    const shortOfOffer = shownOffers - entry.total_score;
+    leftDetail =
+      `${fmtPoints(unallocated)} of the ${fmtPoints(ap.total)} was never on offer to anyone: ` +
+      `nobody reached the end of the speed section, so the task carried no time or arrival points ` +
+      `(FAI S7F §10). ` +
+      (shortOfOffer <= 0.05
+        ? `You took all ${fmtPoints(shownOffers)} that could be won.`
+        : `Against the ${fmtPoints(shownOffers)} that could be won you were ` +
+          `${fmtPoints(shortOfOffer)} short.` +
+          (dominant ? ` The biggest untaken offer is ${dominant.label}.` : ''));
+  } else if (overshoot > 0.2) {
     leftDetail = `The component offers sum to ${fmtPoints(shownOffers)} on a ${fmtPoints(ap.total)}-point day — with nobody in goal the GAP weights overshoot slightly — so the rows above come to more than the ${fmtPoints(left)} actually left.${dominant ? ` The biggest untaken offer is ${dominant.label}.` : ''}`;
   } else if (dominant && dominant.lost <= left + 0.05) {
     leftDetail =
@@ -428,9 +459,14 @@ function buildPointsLeftSection(
   return {
     id: 'comparison',
     title: 'The points left on the day',
-    summary: `Nobody out-scored you — so this compares your ${fmtPoints(
-      entry.total_score,
-    )} against the ${fmtPoints(ap.total)} the day offered.`,
+    summary:
+      unallocated > 0.2
+        ? `Nobody out-scored you — so this compares your ${fmtPoints(
+            entry.total_score,
+          )} against the ${fmtPoints(shownOffers)} this task actually put on offer.`
+        : `Nobody out-scored you — so this compares your ${fmtPoints(
+            entry.total_score,
+          )} against the ${fmtPoints(ap.total)} the day offered.`,
     docHref: '/scoring/gap#scoring-components',
     items,
   };
@@ -467,9 +503,30 @@ export function buildWinnerHeadlineNote(
         ? ` — all of it ${dominant.label}`
         : ` — mostly ${dominant.label}`
       : '';
-  let note = `Top of the class, but not a full sweep: of the ${fmtPoints(
-    ap.total,
-  )} points on offer, ${fmtPoints(left)} went untaken${mostly}.`;
+  // S7F §10: on an HG task nobody flew to ESS, most of the shortfall is points
+  // the day never offered anyone — so the leader's first sentence must not
+  // read as if they left them on the table. Their sweep is measured against
+  // what could actually be won, which they may well have taken in full.
+  const { offered, unallocated } = offerLedger(ap);
+  const missedOfOffer = offered - entry.total_score;
+  let note: string;
+  if (unallocated <= 0.2) {
+    note = `Top of the class, but not a full sweep: of the ${fmtPoints(
+      ap.total,
+    )} points on offer, ${fmtPoints(left)} went untaken${mostly}.`;
+  } else if (missedOfOffer <= 0.05) {
+    note = `Top of the class with everything that was winnable: nobody reached the end of the speed section, so the task carried no time or arrival points (FAI S7F §10) and only ${fmtPoints(
+      offered,
+    )} of the day's ${fmtPoints(ap.total)} could be won — all of it yours.`;
+  } else {
+    note = `Top of the class, but not a full sweep: nobody reached the end of the speed section, so of the ${fmtPoints(
+      ap.total,
+    )} points the day was worth only ${fmtPoints(
+      offered,
+    )} could be won at all (FAI S7F §10) — and ${fmtPoints(
+      missedOfOffer,
+    )} of those went untaken${mostly}.`;
+  }
   // When the shortfall is time, state the concrete fact behind it: how much
   // quicker the pilot who took the full time-points was.
   if (dominant?.label === 'time-points' && entry.speed_section_time !== null) {

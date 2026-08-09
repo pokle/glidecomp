@@ -387,7 +387,37 @@
 //      that radius) never saw them outside — no enter crossing, no start,
 //      the whole field scored landed out at ~14 km instead of the published
 //      101.66 km. With the declared 0.05% band the field resolves to goal.
-// v35: the leading coefficient's land-out tail runs to the spec's field-level
+// v35: NO pilot's points change — the S7F §10 "nobody reaches ESS" rule
+//      (issue #583). On a hang-gliding task where numReachedESS is 0, the
+//      spec's HG box sets AvailableTimePoints and AvailableArrivalPoints to
+//      zero, and redistributes nothing: distance and leading keep their usual
+//      weights and the remainder of the day is left unallocated. GlideComp
+//      published the normal non-zero figures, so the scoreboard and the report
+//      card advertised points nobody could win — time points require an ESS
+//      crossing and the arrival position map is empty, so both components were
+//      already zero for every pilot.
+//      calculateWeights now takes the ESS count and returns zeroed time and
+//      arrival fractions in that case; availablePoints follows, while
+//      availablePoints.total stays 1000 × task validity (the day's worth), so
+//      the components deliberately fall short of it by the unallocated
+//      remainder. Every explanation that compares a pilot against "the day"
+//      now names that remainder rather than presenting it as points they left
+//      untaken.
+//      Bumped because availablePoints and validity_inputs.weights are part of
+//      the cached payload: without a roll the stale-first store would serve
+//      the pre-change figures for settled comps indefinitely.
+// v36: the PG early-start distance is the flat launch→SSS value (issue #584).
+//      §12.2 scores a paraglider pilot who jumps the gun "for the distance
+//      between the launch point and the SSS control zone, as calculated when
+//      determining the complete task distance (see 6.4.1)" — a fixed award.
+//      applyEarlyStarts capped it at the pilot's own flown distance, which is
+//      stricter than the spec for the one case where the two differ: an early
+//      starter who then landed short of their own start. That cap is gone.
+//      Scores move only for such a pilot (the §11.1 minimum-distance floor
+//      still applies underneath). The report card's distance section now
+//      prints which value applied — the launch→start leg beside what was
+//      actually flown, or the minimum when the leg falls below it.
+// v37: the leading coefficient's land-out tail runs to the spec's field-level
 //      `maxTime` (issue #585, S7F §11.3.1):
 //
 //        maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline)
@@ -431,7 +461,7 @@
 //      and the maxTime they produce), because `maxTime` is the one input to a
 //      landed-out pilot's coefficient that lives entirely outside their own
 //      flight — the report card now names it and says which field time set it.
-export const SCORING_ENGINE_VERSION = 35;
+export const SCORING_ENGINE_VERSION = 37;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -439,4 +469,4 @@ export const SCORING_ENGINE_VERSION = 35;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "2ceb0936f78dea40af7ecbd583d2140f26db596b14a271e564486366eced1ec7";
+  "a9991030a2ba3473b5576cf6ffe56ed1ed45e73668447a733328fe5352ed58dd";

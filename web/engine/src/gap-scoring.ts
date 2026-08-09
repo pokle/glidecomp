@@ -213,7 +213,8 @@ export function bestTimeFrom(
 /**
  * Step 1: Early starts (FAI S7F §12.2) reshape a pilot's scoring inputs
  * before any field aggregation:
- * - PG: scored only for the launch→SSS distance; no time/leading/arrival.
+ * - PG: scored only for the launch→SSS distance — a fixed value, whatever
+ *   the flight covered; no time/leading/arrival.
  * - HG within jumpTheGunMaxSeconds: complete flight scored; a penalty of
  *   (seconds early ÷ jumpTheGunFactor) points is applied at the total,
  *   floored at the minimum-distance score (not zero).
@@ -243,8 +244,12 @@ function applyEarlyStarts(
     o => o === 'pg_launch_to_sss' || o === 'hg_min_distance',
   );
   // Optimized launch→SSS distance — what a PG early starter is scored for.
-  // Under distanceOrigin 'start' the task is already trimmed to begin at
-  // the SSS, so this is 0 and the minimum-distance floor takes over.
+  // §12.2 awards it as a FIXED value ("as calculated when determining the
+  // complete task distance", §6.4.1), so it is not capped at what the pilot
+  // flew: one who jumped the gun and then landed short of their own start
+  // still gets the whole launch→SSS leg. Under distanceOrigin 'start' the
+  // task is already trimmed to begin at the SSS, so this is 0 and the
+  // minimum-distance floor takes over.
   let launchToSssMeters = 0;
   if (anyNeutralized) {
     const segs = getOptimizedSegmentDistances(scoringTask);
@@ -256,7 +261,7 @@ function applyEarlyStarts(
       return {
         ...f,
         flownDistance: outcome === 'pg_launch_to_sss'
-          ? Math.min(f.flownDistance, launchToSssMeters)
+          ? launchToSssMeters
           : 0, // → minimum-distance floor in step 2
         madeGoal: false,
         reachedESS: false,
@@ -613,6 +618,8 @@ export function scoreFlights(
     useArrival: fullParams.useArrival,
     leadingWeightFormula: fullParams.leadingWeightFormula,
     leadingTimeRatio: fullParams.leadingTimeRatio,
+    // S7F §10, HG: nobody at ESS ⇒ no time or arrival points are available.
+    numReachedESS,
   });
   const totalAvailable = 1000 * taskValidity.task;
   const availablePoints: AvailablePoints = {

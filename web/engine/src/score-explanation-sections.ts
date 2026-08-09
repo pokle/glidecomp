@@ -13,7 +13,13 @@
  * file a section was built in.
  */
 
-export { bestTimeCandidate, leadingWeightDetail, turnpointLabel } from './sections/shared';
+export {
+  bestTimeCandidate,
+  leadingWeightDetail,
+  noEssPointsZeroed,
+  pilotsAtEss,
+  turnpointLabel,
+} from './sections/shared';
 export { buildFlightSection, buildManualFlightSection } from './sections/flight';
 export { buildValiditySection } from './sections/validity';
 export { buildDistanceSection } from './sections/distance';
