@@ -802,7 +802,7 @@ $$
 $$
 
 [^14]: https://proj.org
-[^15]: Ding, Xie, Jiang, An Efficient Algorithm for Touring n Circles, EITCE 2018. Download here: https://www.matec-conferences.org/articles/matecconf/pdf/2018/91/matecconf_eitce2018_03027.pdf
+[^15]: Ding, Xie, Jiang, An Efficient Algorithm for Touring n Circles, EITCE 2018. Download here: https://www.matec-conferences.org/articles/matecconf/pdf/2018/91/matecconf_eitce2018_03027.pdf *(Transcriber's note: a local transcription and copy of this paper live at [../ding-2018-touring-n-circles/](../ding-2018-touring-n-circles/ding-2018-touring-n-circles.md).)*
 
 <!-- PDF p.24 -->
 
@@ -2199,7 +2199,7 @@ public class CoordinateConverter {
 
 This annex describes the extension of the PathFinder algorithm, as presented in Ding et al. (2018)[^22], to also find the shortest path through a task where one or several of the route elements are lines.
 
-[^22]: Ding, Xie, Jiang, An Efficient Algorithm for Touring n Circles, EITCE 2018. Download here: https://www.matec-conferences.org/articles/matecconf/pdf/2018/91/matecconf_eitce2018_03027.pdf
+[^22]: Ding, Xie, Jiang, An Efficient Algorithm for Touring n Circles, EITCE 2018. Download here: https://www.matec-conferences.org/articles/matecconf/pdf/2018/91/matecconf_eitce2018_03027.pdf *(Transcriber's note: a local transcription and copy of this paper live at [../ding-2018-touring-n-circles/](../ding-2018-touring-n-circles/ding-2018-touring-n-circles.md).)*
 
 ### B.1 Line control zone optimization
 
