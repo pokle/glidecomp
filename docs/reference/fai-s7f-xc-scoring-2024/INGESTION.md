@@ -33,12 +33,13 @@ contains none, so no change-markers appear in the transcription.
 
 ## Pipeline
 
-`extract_s7f.py` (committed beside this file) does the mechanical half. It is
-a [uv script](https://docs.astral.sh/uv/guides/scripts/) with its dependencies
+`../extract_s7f.py` (shared by all S7F edition directories under
+`docs/reference/`) does the mechanical half. It is a
+[uv script](https://docs.astral.sh/uv/guides/scripts/) with its dependencies
 declared inline (PEP 723), so there is nothing to install first:
 
 ```
-uv run extract_s7f.py sporting_code_s7f.pdf workdir/
+uv run ../extract_s7f.py sporting_code_s7f.pdf workdir/
 ```
 
 It emits per page: a 150 dpi raster PNG, the layout-preserving text layer, a
