@@ -417,7 +417,25 @@
 //      still applies underneath). The report card's distance section now
 //      prints which value applied — the launch→start leg beside what was
 //      actually flown, or the minimum when the leg falls below it.
-export const SCORING_ENGINE_VERSION = 36;
+// v37: HG leading weight follows the S7F §10 HG box on a no-goal day (the
+//      adjacent deviation found while fixing #583). The spec gives hang
+//      gliding ONE formula, (1 − DistanceWeight) ÷ 8 × 1.4, with no GoalRatio
+//      case; the "0.1 × BestDist ÷ TaskDist when nobody makes goal" rule is
+//      the PARAGLIDING GAP2016/2018 legacy weight (stored as 'gap2020', kept
+//      for AirScore parity). The branch testing it never tested the sport, so
+//      it caught HG too — handing a no-goal HG day a leading weight that
+//      scaled with how far the field flew, up to 0.1, where the spec offers
+//      0.0175. It also made the weight JUMP discontinuously the moment the
+//      first pilot reached goal.
+//      This MOVES POINTS, unlike v35. Over the 211-comp archive: 184 GAP
+//      tasks scored with their own stored formula, 9 affected (all HG, no
+//      goal, leading enabled), 70 pilot totals changed, largest 82.4 points
+//      — a Dalby Big Air 2022 sports-class leader whose available leading
+//      points fall from 99.9 to 17.5. Every affected task also had nobody at
+//      ESS, so under v35 those points are not redistributed: the day now caps
+//      at the spec's 900 + 18 = 918. The 41 HG tasks with leading on and
+//      pilots in goal, and all 30 PG tasks, are unchanged.
+export const SCORING_ENGINE_VERSION = 37;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -425,4 +443,4 @@ export const SCORING_ENGINE_VERSION = 36;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "5a42c862b6ff204d9b09d442334f4205207ecb406333f08b5b62048cea7cfe68";
+  "09da4b387f018248bae1cb409fb6d7c093b933ea07bc16998fdae99d3ad887ba";
