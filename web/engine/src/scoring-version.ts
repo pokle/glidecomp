@@ -417,7 +417,75 @@
 //      still applies underneath). The report card's distance section now
 //      prints which value applied — the launch→start leg beside what was
 //      actually flown, or the minimum when the leg falls below it.
-// v37: goal-line tolerance and crossing direction (issue #359, S7F §8.2,
+// v37: HG leading weight follows the S7F §10 HG box on a no-goal day (the
+//      adjacent deviation found while fixing #583). The spec gives hang
+//      gliding ONE formula, (1 − DistanceWeight) ÷ 8 × 1.4, with no GoalRatio
+//      case; the "0.1 × BestDist ÷ TaskDist when nobody makes goal" rule is
+//      the PARAGLIDING GAP2016/2018 legacy weight (stored as 'gap2020', kept
+//      for AirScore parity). The branch testing it never tested the sport, so
+//      it caught HG too — handing a no-goal HG day a leading weight that
+//      scaled with how far the field flew, up to 0.1, where the spec offers
+//      0.0175. It also made the weight JUMP discontinuously the moment the
+//      first pilot reached goal.
+//      This MOVES POINTS, unlike v35. Over the 211-comp archive: 184 GAP
+//      tasks scored with their own stored formula, 9 affected (all HG, no
+//      goal, leading enabled), 70 pilot totals changed, largest 82.4 points
+//      — a Dalby Big Air 2022 sports-class leader whose available leading
+//      points fall from 99.9 to 17.5. Every affected task also had nobody at
+//      ESS, so under v35 those points are not redistributed: the day now caps
+//      at the spec's 900 + 18 = 918. The 41 HG tasks with leading on and
+//      pilots in goal, and all 30 PG tasks, are unchanged.
+// v38: the leading coefficient's land-out tail runs to the spec's field-level
+//      `maxTime` (issue #585, S7F §11.3.1):
+//
+//        maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline)
+//
+//      Both variants inherited AirScore's tail instead. The classic (HG) one
+//      ran to max(lastESStime, the pilot's OWN last fix) — per-pilot, so a
+//      pilot who landed early was never carried out to the field's last
+//      land-out; the weighted (PG) one ran to lastESStime alone and never
+//      extended at all for the pilots the prose is about ("for pilots who land
+//      out after the last pilot reached ESS, the calculation keeps going until
+//      they land"). Neither capped anything at the task deadline.
+//      `maxTime` is now resolved once per class from the whole field — the
+//      last land-out is the latest tracklog end among started pilots who never
+//      reached ESS — and capped at the goal deadline (§8.3.c) and, on a
+//      stopped task, at the stop time (§12.3.1), since nothing after either is
+//      scored and a recorder left running would otherwise stretch every
+//      pilot's tail. A deadline at or before the first start is ignored, the
+//      same task-setting mistake resolveTimingWindow already ignores. Both
+//      tails are floored at zero: the cap can land maxTime before a very late
+//      starter's own crossing, and a negative tail would hand that pilot the
+//      field's best coefficient.
+//      Measured over the 58 leading-scored tasks of the 211-comp archive
+//      (1,521 scored pilots), against a master that already carries v37:
+//      12.6% of pilots' leading points move, mean |Δ| 0.6 points, p95 3.3,
+//      largest 17.8, and 2.0% change rank. Distance, time and arrival points
+//      are untouched, and 34 of the 58 tasks are unchanged — every one whose
+//      last land-out came before the last ESS.
+//      The movement concentrates on the 9 archive tasks where NOBODY reached
+//      ESS, and there it is a correction, not a perturbation. With no last-ESS
+//      time the old tail fell back to each pilot's OWN last fix, so a pilot
+//      was charged for the whole time they stayed up and credited for landing
+//      early — the leading order came out close to the landing order. On
+//      Forbes 2022 task 7 the pilot with the old best coefficient (1.63, all
+//      17.5 leading points on offer) is the first to land; under one shared
+//      maxTime they hold the WORST of the field (7.93) at 0 points, and the
+//      pilot who got nearest ESS takes the 17.5. Those tasks also moved CLOSER
+//      to AirScore's published totals (Forbes 2022 task 7: mean |Δtotal|
+//      33.7 → 25.8; Forbes 2025 task 4: 27.6 → 25.5), despite the change being
+//      a deliberate departure from AirScore.
+//      v37 is why the numbers are small: it cut a no-goal HG day's leading
+//      offer from up to 100 points to the spec's 17.5, and those are exactly
+//      the days this changes most. Against the pre-v37 master the same run
+//      moved a pilot by as much as 93 points.
+//      The scored payload also carries the resolved clock per class
+//      (`leading_times`: first start, last ESS, last land-out, deadline, stop,
+//      and the maxTime they produce), because `maxTime` is the one input to a
+//      landed-out pilot's coefficient that lives entirely outside their own
+//      flight — the report card now names it and says which field time set it.
+
+// v39: goal-line tolerance and crossing direction (issue #359, S7F §8.2,
 //      §8.5.2). Two changes at a LINE goal, both at the margins of the line:
 //      (a) §8.2 line tolerance — the goal line now carries the same
 //      percentage band a cylinder gets (§8.1), with the same 5 m floor,
@@ -442,7 +510,7 @@
 //      Only tasks with a LINE goal can move, and only pilots within a few
 //      metres of an endpoint or crossing the line backwards; every bundled
 //      comp scores identically.
-export const SCORING_ENGINE_VERSION = 37;
+export const SCORING_ENGINE_VERSION = 39;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -450,4 +518,4 @@ export const SCORING_ENGINE_VERSION = 37;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "4cf99a70855439c9c1f3f34e0ca3126cb0aafc07bc3bfaf764c2918c545eca41";
+  "6a2145c07d6ccb0b0c3706624a13af44a4bcb5f2624cb0581704c8385653a808";

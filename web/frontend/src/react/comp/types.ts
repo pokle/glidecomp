@@ -208,6 +208,22 @@ export interface ClassValidityInputs {
   weights: { distance: number; time: number; leading: number; arrival: number };
 }
 
+/**
+ * The §11.3.1 leading clock the class's coefficients were measured against —
+ * see the API's ClassLeadingTimes. `max_time_ms` is where a landed-out
+ * pilot's leading graph ends, and it is the whole field's number, not the
+ * pilot's: min(max(last land-out, last ESS), deadline).
+ */
+export interface ClassLeadingTimes {
+  first_start_ms: number;
+  last_ess_ms: number | null;
+  last_outlanding_ms: number | null;
+  deadline_ms: number | null;
+  stop_time_ms: number | null;
+  max_time_ms: number;
+  max_time_source: "last_outlanding" | "last_ess" | "deadline" | "stop" | "fallback";
+}
+
 /** Whole-class stopped-task outcome (S7F §12.3) — see the API's ClassStoppedInfo. */
 export interface ClassStoppedInfo {
   stop_time_ms: number;
@@ -248,6 +264,11 @@ export interface ClassScore {
    * distance and on payloads cached before it was published.
    */
   gap_params?: GAPParameters;
+  /**
+   * The §11.3.1 leading clock, when the class scored leading points: where a
+   * landed-out pilot's graph was carried to, and which field time decided it.
+   */
+  leading_times?: ClassLeadingTimes;
   /** Present when the task was scored as stopped (S7F §12.3). */
   stopped?: ClassStoppedInfo;
 }

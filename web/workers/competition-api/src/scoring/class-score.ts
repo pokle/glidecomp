@@ -3,14 +3,33 @@
  * ranking, and the transparency extras the report card reads.
  */
 
-import type { GAPParameters, StoppedTaskScore, TaskScoreCore } from "@glidecomp/engine";
+import type {
+  GAPParameters,
+  LeadingTimes,
+  StoppedTaskScore,
+  TaskScoreCore,
+} from "@glidecomp/engine";
 import { encodeId } from "../sqids";
 import type {
+  ClassLeadingTimes,
   ClassScore,
   ClassValidityInputs,
   ExcludedPilot,
   PilotScoreEntry,
 } from "./types";
+
+/** The engine's leading clock in wire shape (camelCase → snake_case). */
+function classLeadingTimes(times: LeadingTimes): ClassLeadingTimes {
+  return {
+    first_start_ms: times.firstStartMs,
+    last_ess_ms: times.lastESSMs,
+    last_outlanding_ms: times.lastOutlandingMs,
+    deadline_ms: times.deadlineMs,
+    stop_time_ms: times.stopTimeMs,
+    max_time_ms: times.maxTimeMs,
+    max_time_source: times.maxTimeSource,
+  };
+}
 
 /**
  * Rank competition scores by total score, sharing ranks on ties.
@@ -133,6 +152,7 @@ export function buildClassScore(
   pilotClass: string,
   result: Pick<TaskScoreCore, "taskValidity" | "availablePoints" | "pilotScores"> & {
     stopped?: StoppedTaskScore;
+    leadingTimes?: LeadingTimes;
   },
   pilotMeta: Map<string, PilotMeta>,
   alphabet: string,
@@ -212,6 +232,12 @@ export function buildClassScore(
           validity_inputs: transparency.validity_inputs,
           gap_params: transparency.gap_params,
         }
+      : {}),
+    // Only where leading was actually scored: the engine leaves the clock
+    // off the result entirely when it wasn't, and publishing a maxTime that
+    // decided nothing would invite the page to explain it.
+    ...(result.leadingTimes
+      ? { leading_times: classLeadingTimes(result.leadingTimes) }
       : {}),
     ...(result.stopped
       ? {

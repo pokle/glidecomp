@@ -322,6 +322,35 @@ export interface StoppedClassInput {
 }
 
 /**
+ * The §11.3.1 leading clock the class's coefficients were measured against,
+ * as published by the competition API (ClassScore.leading_times).
+ *
+ * Optional like every other transparency block: a payload cached before it
+ * existed simply doesn't say where the land-out tail ended.
+ */
+export interface LeadingTimesInput {
+  /** The clock's origin: the first start gate, else the field's first start. */
+  first_start_ms: number;
+  /** When the last pilot reached ESS, or null when nobody did. */
+  last_ess_ms: number | null;
+  /** When the last landed-out pilot landed, or null when nobody landed out. */
+  last_outlanding_ms: number | null;
+  /** The task's goal deadline (§8.3.c), or null. */
+  deadline_ms: number | null;
+  /** The task stop time (§12.3.1) on a stopped task, else null. */
+  stop_time_ms: number | null;
+  /** maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline). */
+  max_time_ms: number;
+  /** Which of the times above `max_time_ms` came from. */
+  max_time_source:
+    | 'last_outlanding'
+    | 'last_ess'
+    | 'deadline'
+    | 'stop'
+    | 'fallback';
+}
+
+/**
  * The field-level numbers the validity and weight formulas were evaluated
  * from, as published by the competition API (ClassScore.validity_inputs).
  *
@@ -401,6 +430,8 @@ export interface ClassContextInput {
   pilots: ClassPilotInput[];
   /** The numbers behind the validity factors and the weight split. */
   validity_inputs?: ValidityInputsInput;
+  /** The §11.3.1 leading clock, when the class scored leading points. */
+  leading_times?: LeadingTimesInput;
   /** Present when the task was scored as stopped (S7F §12.3). */
   stopped?: StoppedClassInput;
 }

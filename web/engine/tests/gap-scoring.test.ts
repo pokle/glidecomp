@@ -13,6 +13,7 @@ import {
   calculateLeadingCoefficient,
   computeLeadingAggregate,
   combineLeadingCoefficient,
+  resolveLeadingMaxTime,
   calculateLeadingPoints,
   calculateArrivalPoints,
   applyMinimumDistance,
@@ -569,6 +570,199 @@ describe('calculateLeadingCoefficient', () => {
 });
 
 // ---------------------------------------------------------------------------
+// §11.3.1 maxTime — the field-level end of the land-out tail (issue #585)
+// ---------------------------------------------------------------------------
+
+describe('resolveLeadingMaxTime', () => {
+  const first = BASE_TIME.getTime();
+  const base = {
+    firstStartMs: first,
+    lastESSMs: null,
+    lastOutlandingMs: null,
+    deadlineMs: null,
+    stopTimeMs: null,
+  };
+
+  it('takes the last ESS when it is later than the last land-out', () => {
+    expect(resolveLeadingMaxTime({
+      ...base, lastESSMs: first + 7200000, lastOutlandingMs: first + 3600000,
+    })).toEqual({ timeMs: first + 7200000, source: 'last_ess' });
+  });
+
+  it('keeps running to the last land-out when a pilot flew on past the last ESS', () => {
+    // The case the spec's prose is about, and the one the weighted formula
+    // never modelled: someone was still flying after the winner finished.
+    expect(resolveLeadingMaxTime({
+      ...base, lastESSMs: first + 3600000, lastOutlandingMs: first + 7200000,
+    })).toEqual({ timeMs: first + 7200000, source: 'last_outlanding' });
+  });
+
+  it('takes the last land-out when nobody reached ESS', () => {
+    expect(resolveLeadingMaxTime({
+      ...base, lastOutlandingMs: first + 5400000,
+    })).toEqual({ timeMs: first + 5400000, source: 'last_outlanding' });
+  });
+
+  it('caps at the task deadline', () => {
+    expect(resolveLeadingMaxTime({
+      ...base,
+      lastESSMs: first + 3600000,
+      lastOutlandingMs: first + 7200000,
+      deadlineMs: first + 5400000,
+    })).toEqual({ timeMs: first + 5400000, source: 'deadline' });
+  });
+
+  it('leaves maxTime alone when the deadline falls after it', () => {
+    expect(resolveLeadingMaxTime({
+      ...base, lastESSMs: first + 3600000, deadlineMs: first + 7200000,
+    })).toEqual({ timeMs: first + 3600000, source: 'last_ess' });
+  });
+
+  it('caps at the stop time on a stopped task', () => {
+    // A recorder left running past the stop must not stretch anyone's tail:
+    // nothing after the stop is scored.
+    expect(resolveLeadingMaxTime({
+      ...base, lastOutlandingMs: first + 7200000, stopTimeMs: first + 1800000,
+    })).toEqual({ timeMs: first + 1800000, source: 'stop' });
+  });
+
+  it('falls back to an hour after the first start when the field says nothing', () => {
+    expect(resolveLeadingMaxTime(base)).toEqual({
+      timeMs: first + 3600000, source: 'fallback',
+    });
+  });
+});
+
+describe('land-out tail runs to the field maxTime (S7F §11.3.1)', () => {
+  /** A land-out pilot's aggregate, plus the field's first start. */
+  function landOut(formula: LeadingFormula) {
+    const finisher = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const lander = createTrackThroughCylinders(standardWaypoints.slice(0, 2), { fixIntervalMinutes: 1 });
+    const fSeq = resolveTurnpointSequence(standardTask, finisher);
+    const dSeq = resolveTurnpointSequence(standardTask, lander);
+    const firstSSS = fSeq.sssReaching!.time.getTime();
+    return {
+      agg: computeLeadingAggregate(
+        lander, standardTask, dSeq.sequence,
+        dSeq.sssReaching!.time.getTime(), null, formula),
+      firstSSS,
+      lastESS: fSeq.essReaching!.time.getTime(),
+    };
+  }
+
+  for (const formula of ['weighted', 'classic'] as const) {
+    it(`${formula}: a later maxTime is a worse (higher) coefficient`, () => {
+      const { agg, firstSSS, lastESS } = landOut(formula);
+      const atESS = combineLeadingCoefficient(agg, firstSSS, lastESS, formula);
+      const anHourLater = combineLeadingCoefficient(agg, firstSSS, lastESS + 3600000, formula);
+      expect(anHourLater).toBeGreaterThan(atESS);
+    });
+
+    it(`${formula}: the tail never goes negative when maxTime precedes the pilot's start`, () => {
+      // Reachable through the deadline cap: a very late starter can begin
+      // after maxTime. A negative tail would hand them the best coefficient
+      // in the field and zero everyone else's leading points.
+      const { agg, firstSSS } = landOut(formula);
+      const before = combineLeadingCoefficient(agg, firstSSS, firstSSS - 60000, formula);
+      const atStart = combineLeadingCoefficient(agg, firstSSS, agg.pilotSSSMs, formula);
+      expect(before).toBeGreaterThanOrEqual(0);
+      expect(before).toBe(atStart);
+    });
+  }
+
+  it('an ESS pilot is unaffected by maxTime — they carry no tail', () => {
+    const finisher = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
+    const fSeq = resolveTurnpointSequence(standardTask, finisher);
+    const firstSSS = fSeq.sssReaching!.time.getTime();
+    const essMs = fSeq.essReaching!.time.getTime();
+    const agg = computeLeadingAggregate(
+      finisher, standardTask, fSeq.sequence, firstSSS, essMs, 'weighted');
+    expect(combineLeadingCoefficient(agg, firstSSS, essMs + 3600000, 'weighted'))
+      .toBe(combineLeadingCoefficient(agg, firstSSS, essMs, 'weighted'));
+  });
+});
+
+describe('scoreTask publishes the leading clock', () => {
+  // The lander starts with the field, lands out short of ESS, and keeps
+  // recording for another hour — the pilot the spec's "keeps going until they
+  // land" prose is about.
+  function landerFixes(): IGCFix[] {
+    const flown = createTrackThroughCylinders(standardWaypoints.slice(0, 2), {
+      fixIntervalMinutes: 1,
+    });
+    const last = flown[flown.length - 1];
+    const lastMin = (last.time.getTime() - BASE_TIME.getTime()) / 60000;
+    const loitering = Array.from({ length: 60 }, (_, i) =>
+      createFix(lastMin + i + 1, last.latitude, last.longitude),
+    );
+    return [...flown, ...loitering];
+  }
+
+  function twoPilots(): PilotFlight[] {
+    return [
+      {
+        pilotName: 'Finisher',
+        trackFile: 'finisher.igc',
+        fixes: createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 }),
+      },
+      { pilotName: 'Lander', trackFile: 'lander.igc', fixes: landerFixes() },
+    ];
+  }
+  const params: Partial<GAPParameters> = {
+    nominalDistance: 10000, nominalTime: 600, useLeading: true,
+  };
+
+  it('resolves maxTime from the last land-out when it comes after the last ESS', () => {
+    const result = scoreTask(standardTask, twoPilots(), params);
+    const times = result.leadingTimes!;
+    const lander = result.pilotScores.find(p => p.pilotName === 'Lander')!;
+    const fixes = landerFixes();
+
+    expect(times.maxTimeSource).toBe('last_outlanding');
+    expect(times.maxTimeMs).toBe(fixes[fixes.length - 1].time.getTime());
+    expect(times.maxTimeMs).toBeGreaterThan(times.lastESSMs!);
+    expect(times.deadlineMs).toBeNull();
+    expect(times.stopTimeMs).toBeNull();
+    expect(Number.isFinite(lander.leadingCoefficient)).toBe(true);
+  });
+
+  it('caps maxTime at the task deadline, shortening the tail', () => {
+    const pilots = twoPilots();
+    const withoutDeadline = scoreTask(standardTask, pilots, params);
+    // A deadline between the last ESS and the last land-out: §11.3.1 stops
+    // the graph there, so the landed-out pilot's coefficient improves.
+    const lastESS = withoutDeadline.leadingTimes!.lastESSMs!;
+    // Whole seconds: the xctsk deadline is a time-of-day string, and an ESS
+    // time interpolated between fixes carries milliseconds.
+    const deadlineMs = Math.floor((lastESS + 1800000) / 1000) * 1000;
+    const deadline = new Date(deadlineMs).toISOString().slice(11, 19) + 'Z';
+    const task: XCTask = {
+      ...standardTask,
+      goal: { ...standardTask.goal, type: standardTask.goal?.type ?? 'CYLINDER', deadline },
+    };
+
+    const withDeadline = scoreTask(task, pilots, params);
+    const times = withDeadline.leadingTimes!;
+    expect(times.maxTimeSource).toBe('deadline');
+    expect(times.maxTimeMs).toBe(deadlineMs);
+    expect(times.lastOutlandingMs).toBeGreaterThan(deadlineMs);
+
+    const lcBefore = withoutDeadline.pilotScores.find(p => p.pilotName === 'Lander')!
+      .leadingCoefficient;
+    const lcAfter = withDeadline.pilotScores.find(p => p.pilotName === 'Lander')!
+      .leadingCoefficient;
+    expect(lcAfter).toBeLessThan(lcBefore);
+  });
+
+  it('omits the clock when the competition scores no leading points', () => {
+    const result = scoreTask(standardTask, twoPilots(), {
+      ...params, useLeading: false,
+    });
+    expect(result.leadingTimes).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Arrival Points (HG)
 // ---------------------------------------------------------------------------
 
@@ -1007,17 +1201,11 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
     expect(w.distance + w.leading).toBeLessThan(1);
   });
 
-  it('caps the distance offer at the spec’s 900 points', () => {
-    // §10: "a maximum of 900 points are available for distance". That ceiling
-    // is the distance weight's own value at GoalRatio = 0, on a full-validity
-    // day.
-    //
-    // The spec's companion figure — 18 points for leading — is NOT asserted
-    // here: it comes from the §10 HG leading weight (1 − DW) ÷ 8 × 1.4, and
-    // GlideComp's HG GoalRatio = 0 branch uses the older GAP weight
-    // (0.1 × best ÷ task distance) instead. That is a separate deviation, it
-    // moves real points, and it is deliberately not touched by the §10
-    // available-points fix.
+  it('caps an HG day at the spec’s 900 distance + 18 leading', () => {
+    // §10, in full: "a maximum of 900 points are available for distance and
+    // 18 points for leading … Max(availableTotalPoints) = 918". Both ceilings
+    // are the weights' own values at GoalRatio = 0 on a full-validity day, and
+    // neither depends on how far the field flew.
     const w = calculateWeights({
       goalRatio: 0,
       bestDistance: 100000,
@@ -1026,7 +1214,8 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
       numReachedESS: 0,
     });
     expect(w.distance * 1000).toBeCloseTo(900, 6);
-    expect(w.leading).toBeGreaterThan(0);
+    expect(w.leading * 1000).toBeCloseTo(17.5, 6); // the spec's "18 points"
+    expect((w.distance + w.leading) * 1000).toBeCloseTo(917.5, 6); // "918"
   });
 
   it('does not fire for PG (the spec states the rule for HG only)', () => {
@@ -1043,6 +1232,68 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
   it('is left unapplied when the count is not supplied', () => {
     const w = calculateWeights({ ...base, scoring: 'HG' });
     expect(w.time).toBeGreaterThan(0);
+  });
+});
+
+describe('calculateWeights — the HG leading weight has no goal-ratio branch (S7F §10)', () => {
+  // The §10 HG box gives one formula, (1 − DistanceWeight) ÷ 8 × 1.4, with no
+  // GoalRatio case. The GAP2016/2018 "0.1 × BestDist ÷ TaskDist when nobody
+  // makes goal" rule is the PARAGLIDING legacy weight, and it used to catch
+  // hang gliding too, because the branch testing it did not test the sport.
+  const hgLeading = (goalRatio: number, bestDistance: number) =>
+    calculateWeights({
+      goalRatio,
+      bestDistance,
+      taskDistance: 100000,
+      scoring: 'HG',
+      useLeading: true,
+      useArrival: true,
+    }).leading;
+
+  it('uses the spec formula when nobody makes goal', () => {
+    // DistanceWeight at GoalRatio 0 is 0.9, so leading is 0.1 ÷ 8 × 1.4.
+    expect(hgLeading(0, 50000)).toBeCloseTo(0.0175, 10);
+  });
+
+  it('does not scale with how far the field got', () => {
+    // The legacy PG rule made this vary from 0.01 to 0.1 across these three.
+    expect(hgLeading(0, 10000)).toBeCloseTo(0.0175, 10);
+    expect(hgLeading(0, 50000)).toBeCloseTo(0.0175, 10);
+    expect(hgLeading(0, 100000)).toBeCloseTo(0.0175, 10);
+  });
+
+  it('is continuous as the first pilot reaches goal', () => {
+    // The legacy branch made the weight JUMP at the first goal pilot — from
+    // 0.1 down to 0.0176 on a fully-flown task. It is now the same curve
+    // either side, and the arrival weight it is 1.4× has always been.
+    const nobody = calculateWeights({
+      goalRatio: 0, bestDistance: 100000, taskDistance: 100000, scoring: 'HG',
+    });
+    const oneIn = calculateWeights({
+      goalRatio: 0.001, bestDistance: 100000, taskDistance: 100000, scoring: 'HG',
+    });
+    expect(Math.abs(oneIn.leading - nobody.leading)).toBeLessThan(0.001);
+    expect(nobody.leading).toBeCloseTo(nobody.arrival * 1.4, 10);
+  });
+
+  it('leaves the PG legacy weight alone — it is the GAP2016/2018 formula', () => {
+    const pg = (bestDistance: number) =>
+      calculateWeights({
+        goalRatio: 0,
+        bestDistance,
+        taskDistance: 100000,
+        scoring: 'PG',
+        leadingWeightFormula: 'gap2020',
+      }).leading;
+    expect(pg(50000)).toBeCloseTo(0.05, 10); // 0.1 × 50 ÷ 100 km
+    expect(pg(100000)).toBeCloseTo(0.1, 10);
+  });
+
+  it('leaves the HG weight alone when pilots make goal (unchanged formula)', () => {
+    const w = calculateWeights({
+      goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG',
+    });
+    expect(w.leading).toBeCloseTo(((1 - w.distance) / 8) * 1.4, 10);
   });
 });
 

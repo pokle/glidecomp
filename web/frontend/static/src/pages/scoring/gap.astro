@@ -250,6 +250,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             the scoreboard and the report card then show what could really be won. The report card
             says so in the day-quality section, and again beside the time and arrival components.
           </p>
+          <p class="text-muted-foreground">
+            That puts a ceiling on such a day. Nobody in goal means a distance weight of 0.9 and a
+            <a href="#leading-weight" class="underline hover:text-foreground">leading weight</a>
+            of 0.0175, so a perfect day offers at most <strong>900 points for distance and 18 for
+            leading — 918 in total</strong>. It is also the most an open-distance task can be
+            worth.
+          </p>
         </div>
       </section>
 
@@ -485,6 +492,29 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
+              <h3 id="leading-max-time" class="text-base font-semibold mb-1 scroll-mt-20">
+                Pilots who land out
+              </h3>
+              <p class="text-muted-foreground">
+                A pilot who lands before ESS has no more track to measure, but the curve must
+                still cover the rest of the day. GlideComp holds that pilot at the best distance
+                they reached, and carries the curve on to <em>maxTime</em>
+                (<SpecRef section="11.3.1" />):
+              </p>
+              <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{maxTime} = \min\!\left(\max(\text{lastOutlandingTime},\; \text{lastESSTime}),\; \text{taskDeadline}\right)`)}></p>
+              <p class="text-muted-foreground">
+                That is the later of two times — when the last pilot landed out, and when the
+                last pilot reached ESS — but never later than the task deadline. A stopped task
+                ends the curve at the task stop time, because nothing after the stop is scored.
+              </p>
+              <p class="text-muted-foreground">
+                maxTime is one time for the whole class, not for each pilot. A pilot who stays up
+                long after the winner is home therefore adds a little to the leading coefficient
+                of every pilot who landed out. Your report card gives the maxTime that your own
+                curve used, and which of these times set it.
+              </p>
+            </div>
+            <div>
               <h3 class="text-base font-semibold mb-1">How Points Are Awarded</h3>
               <p class="text-muted-foreground">
                 Leading points use a curve with the same shape as time points, but with LC values
@@ -507,12 +537,23 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
           <div>
             <h3 id="leading-weight" class="text-base font-semibold mb-1 scroll-mt-20">
-              How much weight goes to leading (paragliding)
+              How much weight goes to leading
             </h3>
             <p class="text-muted-foreground">
-              For paragliding, each competition selects how the non-distance points of the day
-              divide between <em>leading</em> and <em>time</em>. Hang gliding always uses the FAI
-              HG formula. <strong>New PG competitions use S7F 2024 by default.</strong>
+              <strong>Hang gliding</strong> has one formula (<SpecRef section="10" />), and it is
+              the same in every generation of GAP:
+            </p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{LeadingWeight} = \dfrac{1 - \text{DistanceWeight}}{8} \times 1.4`)}></p>
+            <p class="text-muted-foreground">
+              There is no separate case for a day when nobody makes goal. On such a day the
+              distance weight is 0.9, so leading takes 0.0175 — the 18 points of the
+              <a href="#scoring-components" class="underline hover:text-foreground">918-point ceiling</a>
+              above.
+            </p>
+            <p class="text-muted-foreground">
+              For <strong>paragliding</strong>, each competition selects how the non-distance
+              points of the day divide between <em>leading</em> and <em>time</em>.
+              <strong>New PG competitions use S7F 2024 by default.</strong>
               Competitions created before 15 July 2026 use GAP2020 by default, so their published
               scores never change:
             </p>
@@ -1405,14 +1446,14 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.
                 </li>
                 <li>
-                  <strong>Leading coefficient: the land-out tail (<SpecRef section="11.3.1" />):</strong>
-                  for a pilot who lands out, the specification extends the leading graph to
-                  <em>maxTime</em> — the last outlanding or the last ESS time, whichever is later,
-                  capped at the task deadline. GlideComp's classic (HG) variant extends to the
-                  pilot's own landing or the last ESS time; the weighted (PG) variant extends to
-                  the last ESS time only; neither caps at the deadline. This moves leading points
-                  only at the margins. Tracked in
-                  <a href="https://github.com/pokle/glidecomp/issues/585" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #585</a>.
+                  <strong>Leading coefficient: track points after the deadline (<SpecRef section="11.3.1" />):</strong>
+                  the specification counts a track point recorded after the task deadline at the
+                  deadline time. GlideComp counts it at its own time, which makes the leading
+                  coefficient of a pilot who kept going a little worse than the specification
+                  gives. It applies only to a pilot who was still flying toward ESS after the
+                  deadline, and who therefore earned no more distance for it. The
+                  <a href="#leading-max-time" class="underline hover:text-foreground">end of the curve</a>
+                  itself follows the specification.
                 </li>
                 <li>
                   <strong>Times carry fractions of a second (<SpecRef section="8.7" />):</strong>
