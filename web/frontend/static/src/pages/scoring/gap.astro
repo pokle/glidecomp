@@ -949,7 +949,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Penalties — percentage (<SpecRef section="12.4" />)</td>
-                  <td class="py-2">Not implemented</td>
+                  <td class="py-2">Not implemented. Tracked in <a href="https://github.com/pokle/glidecomp/issues/265" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #265</a> — add your voice there if you need it.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Early starts &amp; jump-the-gun (<SpecRef section="12.2" />)</td>
@@ -969,7 +969,11 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Line-type control zones at intermediate turnpoints (<SpecRef section="8.4" />)</td>
-                  <td class="py-2">Not implemented. Every turnpoint before goal is a cylinder.</td>
+                  <td class="py-2">Not implemented. Every turnpoint before goal is a cylinder. Tracked in <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Open distance task type (<SpecRef section="6.1.2" />, <SpecRef section="8.6.2" />)</td>
+                  <td class="py-2">Not implemented. GlideComp's <a href="/scoring/open-distance" class="underline hover:text-foreground">open-distance format</a> is the classic free-flight format, which is a different thing — see the note under Differences below. Tracked in <a href="https://github.com/pokle/glidecomp/issues/588" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #588</a>.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="8.3" />, <SpecRef section="11.1" />)</td>
@@ -1052,7 +1056,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             We compared the GlideComp scoring engine line by line against the FAI Sporting Code
             Section 7F (2024 edition). We also compared it against the source code of
             <a href="https://github.com/biuti/airscore-app" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>,
-            the CIVL-approved scoring software. The last comparison was in July 2026. The table
+            the CIVL-approved scoring software. The last comparison was in August 2026. The table
             shows how the three compare on each part of the formula. The notes below the table
             explain the important differences in more detail. A section number (§) refers to the
             2024 edition, and links to the correct page of the
@@ -1168,7 +1172,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Penalties (<SpecRef section="12.4" />)</td>
                   <td class="py-2 pr-3">Order: jump-the-gun, then percentage, then absolute. Minimum 0.</td>
-                  <td class="py-2 pr-3">Jump-the-gun and absolute penalties. <strong>No percentage penalties.</strong></td>
+                  <td class="py-2 pr-3">Jump-the-gun and absolute penalties. <strong>No percentage penalties</strong> (<a href="https://github.com/pokle/glidecomp/issues/265" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #265</a>).</td>
                   <td class="py-2">All three, and negative (bonus) penalties.</td>
                 </tr>
                 <tr class="border-b border-border/50">
@@ -1283,7 +1287,24 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 valid when two consecutive fixes are on opposite sides of it. A flight around its
                 end must also need an impossible speed of more than 120&nbsp;km/h. GlideComp treats
                 every turnpoint before goal as a cylinder. Line-type turnpoints are rare in
-                XCTrack task files, so this affects few tasks.
+                XCTrack task files, so this affects few tasks. Tracked in
+                <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a> —
+                add your thoughts there if this matters for your competition.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">"Open distance" means the classic format, not the S7F task type (<SpecRef section="6.1.2" />, <SpecRef section="8.6.2" />)</h3>
+              <p class="text-muted-foreground">
+                GlideComp's <a href="/scoring/open-distance" class="underline hover:text-foreground">open-distance competitions</a>
+                score the classic free-flight format. There is one take-off point, pilots fly as
+                far as they can, and the score is the straight-line distance from the take-off
+                cylinder edge. The specification defines a different <em>open distance task</em>:
+                a route of control zones, an optional start, and an optional compass direction for
+                the final open leg. Under <SpecRef section="8.6.2" label="§8.6.2" /> the pilot's
+                best distance past the last control zone — projected onto that direction, when one
+                is set — is added to the route distance. GlideComp does not implement that task
+                type. A task with control zones always scores as a race task. Tracked in
+                <a href="https://github.com/pokle/glidecomp/issues/588" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #588</a>.
               </p>
             </div>
             <div>
@@ -1344,6 +1365,58 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   therefore keeps 80% of both by default.
                 </li>
                 <li>
+                  <strong>Hang gliding goal lines use the paragliding semi-circle rule (<SpecRef section="8.5.2" />):</strong>
+                  the rule that entering the control semi-circle behind the goal line counts as a
+                  crossing is a paragliding-only rule in the specification. For hang gliding, the
+                  line must be crossed in the direction of the last leg. GlideComp applies the
+                  paragliding rule to both sports. The effect is very small, because a pilot who
+                  gets behind the line has almost always entered the semi-circle. Tracked in
+                  <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.
+                </li>
+                <li>
+                  <strong>Available points when no hang glider reaches ESS (<SpecRef section="10" />):</strong>
+                  the specification sets the available time and arrival points to zero when nobody
+                  reaches the end of the speed section. GlideComp shows the normal non-zero
+                  available points, but no pilot can earn them, so every pilot's score is the same
+                  either way. Tracked in
+                  <a href="https://github.com/pokle/glidecomp/issues/583" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #583</a>.
+                </li>
+                <li>
+                  <strong>Paragliding early-start distance (<SpecRef section="12.2" />):</strong>
+                  the specification scores an early starter for the launch→SSS distance as a fixed
+                  value. GlideComp caps that value at the distance the pilot actually flew, which
+                  is stricter for a pilot who jumped the gun and then landed short of their own
+                  start. Tracked in
+                  <a href="https://github.com/pokle/glidecomp/issues/584" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #584</a>.
+                </li>
+                <li>
+                  <strong>Leading coefficient: the land-out tail (<SpecRef section="11.3.1" />):</strong>
+                  for a pilot who lands out, the specification extends the leading graph to
+                  <em>maxTime</em> — the last outlanding or the last ESS time, whichever is later,
+                  capped at the task deadline. GlideComp's classic (HG) variant extends to the
+                  pilot's own landing or the last ESS time; the weighted (PG) variant extends to
+                  the last ESS time only; neither caps at the deadline. This moves leading points
+                  only at the margins. Tracked in
+                  <a href="https://github.com/pokle/glidecomp/issues/585" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #585</a>.
+                </li>
+                <li>
+                  <strong>Times carry fractions of a second (<SpecRef section="8.7" />):</strong>
+                  the specification's smallest unit of time is one second. GlideComp interpolates
+                  each crossing between the two nearest fixes, so a speed-section time can carry a
+                  fraction of a second. That is more precise, but time points can differ by a
+                  fraction of a point from a scorer that works in whole seconds. Tracked in
+                  <a href="https://github.com/pokle/glidecomp/issues/586" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #586</a>.
+                </li>
+                <li>
+                  <strong>Single start gate: which start crossing counts (<SpecRef section="8.3" />):</strong>
+                  with a single gate, the specification takes the first crossing after the gate.
+                  GlideComp tries every crossing and keeps the best flight, for every task type.
+                  The start time snaps to the gate either way, so time points never differ. For a
+                  pilot who crossed, returned, and crossed again, the reported crossing and the
+                  leading points can differ. Tracked in
+                  <a href="https://github.com/pokle/glidecomp/issues/587" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #587</a>.
+                </li>
+                <li>
                   <strong>Optional leading and arrival points:</strong> the specification always
                   gives a leading weight, and an arrival weight in hang gliding classes 1 and 5.
                   GlideComp uses the FAI formula by default: leading on for both categories, and
@@ -1360,8 +1433,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </li>
                 <li>
                   <strong>Distance precision:</strong> GlideComp computes the distances on the
-                  WGS84 ellipsoid, as the specification requires (<SpecRef section="4.2" />). The
-                  optimised route is not bit-identical to the route of another tool such as
+                  WGS84 ellipsoid, as the specification requires (<SpecRef section="4.2" />).
+                  The route optimiser honours the Annex A rules that fix the result — the 1 m
+                  convergence tolerance, sequential evaluation, the launch measured from its
+                  centre, and the pinned mid-route ESS — but it converges with a numeric search
+                  on each cylinder instead of the Annex A intersection and reflection
+                  constructions. The
+                  optimised route is therefore not bit-identical to the route of another tool such as
                   <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>.
                   The points of a landed-out pilot can therefore differ by a small quantity. This
                   changes the absolute values more than the relative ranking.
