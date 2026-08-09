@@ -542,7 +542,24 @@
 //      by design (owner decision, 2026-08-09): GlideComp keeps no
 //      multi-edition support, and pre-2026 comps carry an "indicative
 //      scores" notice in the UI instead.
-export const SCORING_ENGINE_VERSION = 40;
+
+// v41: FAI S7F 2026 edition, phase 2 — the new PG leading coefficient
+//      (§12.3.1, introduced by the 2025 edition). The weighted leadingArea
+//      is now minToESS(tpᵢ) · taskTime(tpᵢ) · ∫ weight(x) dx over each
+//      fix interval's done-fraction span, with the envelope integral in
+//      exact closed form (leadWeightIntegral — the (1−10^{9p−9})⁵(1−10^{−3p})²
+//      product expands to 18 integrable exponential terms). The missingArea
+//      tail is minToESS(best) · maxTime · ∫ weight over the never-flown
+//      remainder, replacing the old weightFalling(best)·maxTime·best term.
+//      The previous implementation was the AirScore weightedarea form
+//      (weight(p)·Δbest·time — a point-sampled Riemann sum with progress as
+//      the amplitude); the 2026 form weights by REMAINING distance instead,
+//      so every PG leading coefficient moves and land-out tails shift most.
+//      HG (classic) is unchanged. The LeadingAggregate cache split
+//      (weightedTimeSum/weightedDeltaSum) keeps the same rebasing shape, so
+//      cached aggregates recompute under the new contribution formula via
+//      the version bump alone.
+export const SCORING_ENGINE_VERSION = 41;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -550,4 +567,4 @@ export const SCORING_ENGINE_VERSION = 40;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "53c94cf58f4cadddf1bc36c07d82c474475e41fc695e636f6f7b54b31cc20ec7";
+  "9690dc1d7cedaa931e76593aa8e28d86d81c8ee12405e5669312ca89650701bb";

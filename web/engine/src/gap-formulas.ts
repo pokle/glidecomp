@@ -575,8 +575,11 @@ export function calculateTimePoints({
 // Leading Coefficient
 // ---------------------------------------------------------------------------
 
-// Leading-area weighting envelope (AirScore weightedarea.py). At p≈1
-// (just left SSS) and p≈0 (at ESS) the weight is ~0; it peaks in the
+// Leading-area weighting envelope (S7F 2026 §12.3.1, PG). Written here in
+// terms of the REMAINING fraction p = minToESS / speedSectionDistance; the
+// spec writes weight(v) over the done fraction v = 1 − p, with
+// weight(v) = weightRising(1 − v) · weightFalling(1 − v) — the same curve.
+// At p≈1 (just left SSS) and p≈0 (at ESS) the weight is ~0; it peaks in the
 // middle, so leading is rewarded most for being out front mid-course.
 function weightRising(p: number): number {
   return Math.pow(1 - Math.pow(10, 9 * p - 9), 5);
@@ -584,28 +587,52 @@ function weightRising(p: number): number {
 function weightFalling(p: number): number {
   return Math.pow(1 - Math.pow(10, -3 * p), 2);
 }
-function leadWeight(p: number): number {
+/**
+ * The §12.3.1 leading-weight envelope at remaining fraction p — exported for
+ * the derivative check in tests ({@link leadWeightIntegral} must integrate
+ * exactly this curve) and for the report card's chart sampling.
+ */
+export function leadWeight(p: number): number {
   return weightRising(p) * weightFalling(p);
 }
 
-/** Per-fix-interval contribution to the raw leading-coefficient sum. */
-function lcContribution(
-  formula: LeadingFormula,
-  prevBestKm: number,
-  curBestKm: number,
-  timeSec: number,
-  ssKm: number,
-): number {
-  // Only progress toward ESS (a decrease in best distance) contributes.
-  if (prevBestKm <= curBestKm) return 0;
-  if (formula === 'classic') {
-    // classic: task_time * (best[i-1]² − best[i]²)
-    return timeSec * (prevBestKm * prevBestKm - curBestKm * curBestKm);
+// Binomial coefficients of (1 − u)^5 and (1 − v)^2 — the envelope expands
+// into 18 exponential terms, so its integral has an exact closed form.
+const RISING_COEFFS = [1, -5, 10, -10, 5, -1];
+const FALLING_COEFFS = [1, -2, 1];
+const LN10 = Math.LN10;
+
+/**
+ * Cumulative integral of the leading-weight envelope over the remaining
+ * fraction: W(p) = ∫₀^p leadWeight(q) dq, exactly.
+ *
+ * The §12.3.1 leadingArea integrates weight(x) over the DONE fraction x;
+ * with x = 1 − q that interval integral is a difference of this cumulative:
+ * ∫_{done(prev)}^{done(cur)} weight(x) dx = W(p_prev) − W(p_cur), where
+ * p = minToESS / speedSectionDistance at each end.
+ *
+ * Derivation: leadWeight(q) = (1 − 10^{9q−9})⁵ · (1 − 10^{−3q})² expands to
+ * Σⱼₖ aⱼbₖ · 10^{−9j} · 10^{(9j−3k)q}; each term integrates to
+ * 10^{(9j−3k)q} / ((9j−3k)·ln10) except the (0,0) constant term, which
+ * integrates to q. Exact and deterministic — no quadrature error to move a
+ * score between runs.
+ */
+export function leadWeightIntegral(p: number): number {
+  const q = Math.min(1, Math.max(0, p));
+  let total = 0;
+  for (let j = 0; j <= 5; j++) {
+    for (let k = 0; k <= 2; k++) {
+      const c = RISING_COEFFS[j] * FALLING_COEFFS[k] * Math.pow(10, -9 * j);
+      const alpha = 9 * j - 3 * k;
+      if (alpha === 0) {
+        total += c * q;
+      } else {
+        const scale = alpha * LN10;
+        total += (c * (Math.pow(10, alpha * q) - 1)) / scale;
+      }
+    }
   }
-  // weighted: weight(p) * progress * task_time, with p = best[i] / ssKm
-  const w = leadWeight(curBestKm / ssKm);
-  if (w === 0) return 0;
-  return w * (prevBestKm - curBestKm) * timeSec;
+  return total;
 }
 
 /**
@@ -638,12 +665,14 @@ export interface LeadingAggregate {
    */
   lastFixMs: number;
   /**
-   * weighted: Σ wᵢ·Δbestᵢ·(tᵢ − pilotSSS), summed against the pilot's OWN
-   * start so the epoch-second terms stay small (no catastrophic cancellation).
-   * combineLeadingCoefficient re-references it to the field's first start.
+   * weighted (S7F 2026 §12.3.1): Σ minToESSᵢ·ΔWᵢ·(tᵢ − pilotSSS), where ΔWᵢ
+   * is the exact weight-envelope integral over the done-fraction interval —
+   * summed against the pilot's OWN start so the epoch-second terms stay
+   * small (no catastrophic cancellation). combineLeadingCoefficient
+   * re-references it to the field's first start.
    */
   weightedTimeSum: number;
-  /** weighted: Σ wᵢ·Δbestᵢ — the multiplier for the start-time shift. */
+  /** weighted: Σ minToESSᵢ·ΔWᵢ — the multiplier for the start-time shift. */
   weightedDeltaSum: number;
   /** classic: the field-independent Σ (already referenced to the pilot's own start). */
   classicSum: number;
@@ -744,20 +773,29 @@ export function computeLeadingAggregate(
     const distKm = (edge + cumToESS[nextReq]) / 1000;
 
     if (prevDistKm !== null) {
-      // AirScore appends this fix's distance to the ratchet window, then
-      // weights the interval by this ("next") fix's time.
+      // The ratchet appends this fix's distance to the window, then weights
+      // the interval by this ("next") fix's time — the spec's taskTime(tpᵢ).
       const curBestKm = Math.min(prevDistKm, ssKm, prevBestKm);
       if (formula === 'classic') {
-        // classic is referenced to the pilot's own start and never rebased,
-        // so its times are non-negative as-is — no gate clamp.
-        const localTimeSec = tms / 1000 - pilotSSSSec;
-        classicSum += lcContribution('classic', prevBestKm, curBestKm, localTimeSec, ssKm);
+        // classic (HG, §12.3.1): task_time · (best[i−1]² − best[i]²).
+        // Referenced to the pilot's own start and never rebased, so its
+        // times are non-negative as-is — no gate clamp.
+        if (prevBestKm > curBestKm) {
+          const localTimeSec = tms / 1000 - pilotSSSSec;
+          classicSum +=
+            localTimeSec * (prevBestKm * prevBestKm - curBestKm * curBestKm);
+        }
       } else if (prevBestKm > curBestKm) {
-        // weighted: split w·Δbest·time into (Σ w·Δbest·time) and (Σ w·Δbest)
-        // so the field's start-time offset can be applied later.
-        const w = leadWeight(curBestKm / ssKm);
-        if (w !== 0) {
-          const delta = w * (prevBestKm - curBestKm);
+        // weighted (PG, S7F 2026 §12.3.1):
+        //   minToESS(tpᵢ) · taskTime(tpᵢ) · ∫ weight(x) dx
+        // over the done-fraction interval this fix advanced through. Split
+        // the taskTime factor into (Σ Δ·time) and (Σ Δ) so the field's
+        // start-time offset can be applied later.
+        const delta =
+          curBestKm *
+          (leadWeightIntegral(prevBestKm / ssKm) -
+            leadWeightIntegral(curBestKm / ssKm));
+        if (delta !== 0) {
           weightedTimeSum += delta * (Math.max(tms, clockStartMs) / 1000 - pilotSSSSec);
           weightedDeltaSum += delta;
         }
@@ -912,12 +950,14 @@ export function combineLeadingCoefficient(
   }
 
   // weighted: rebase the per-pilot sum from the pilot's own start to the
-  // field's first start — Σ w·Δbest·(t − first) = weightedTimeSum + (pilotSSS − first)·weightedDeltaSum.
+  // field's first start — Σ Δ·(t − first) = weightedTimeSum + (pilotSSS − first)·weightedDeltaSum.
   const shiftSec = pilotSSSMs / 1000 - taskFirstSSSTime / 1000;
   let total = agg.weightedTimeSum + shiftSec * agg.weightedDeltaSum;
   if (!reachedESS) {
+    // §12.3.1 missingArea: minToESS(best) · maxTime · ∫ weight over the
+    // remaining (never-flown) part of the speed section.
     const missingTimeSec = Math.max(0, (taskMaxTime - taskFirstSSSTime) / 1000);
-    total += weightFalling(bestDistKm / ssKm) * missingTimeSec * bestDistKm;
+    total += bestDistKm * missingTimeSec * leadWeightIntegral(bestDistKm / ssKm);
   }
   return total / (1800 * ssKm);
 }

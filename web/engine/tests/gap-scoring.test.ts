@@ -13,6 +13,8 @@ import {
   calculateLeadingCoefficient,
   computeLeadingAggregate,
   combineLeadingCoefficient,
+  leadWeight,
+  leadWeightIntegral,
   resolveLeadingMaxTime,
   calculateLeadingPoints,
   calculateArrivalPoints,
@@ -583,6 +585,48 @@ describe('calculateLeadingCoefficient', () => {
       dSeq.sssReaching!.time.getTime(), null, 'weighted');
     expect(Number.isFinite(lcLand)).toBe(true);
     expect(lcLand).toBeGreaterThan(lcFinish);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S7F 2026 §12.3.1 — the exact weight-envelope integral behind the PG LC
+// ---------------------------------------------------------------------------
+
+describe('leadWeightIntegral (S7F 2026 §12.3.1)', () => {
+  it('starts at zero and is monotonically increasing', () => {
+    expect(leadWeightIntegral(0)).toBe(0);
+    let prev = 0;
+    for (let i = 1; i <= 100; i++) {
+      const cur = leadWeightIntegral(i / 100);
+      expect(cur).toBeGreaterThanOrEqual(prev);
+      prev = cur;
+    }
+  });
+
+  it('differentiates back to the §12.3.1 weight envelope (closed form is exact)', () => {
+    // Central difference of the closed-form cumulative must reproduce
+    // weight(p) = weightRising(p)·weightFalling(p) everywhere on (0, 1).
+    const h = 1e-6;
+    for (const p of [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]) {
+      const numeric = (leadWeightIntegral(p + h) - leadWeightIntegral(p - h)) / (2 * h);
+      expect(numeric).toBeCloseTo(leadWeight(p), 6);
+    }
+  });
+
+  it('agrees with brute-force quadrature over the whole envelope', () => {
+    // Simpson's rule on 10⁴ panels — sanity that the 18-term expansion is
+    // the right curve, not just a smooth one.
+    const n = 10000;
+    const hh = 1 / n;
+    let sum = leadWeight(0) + leadWeight(1);
+    for (let i = 1; i < n; i++) sum += leadWeight(i * hh) * (i % 2 === 0 ? 2 : 4);
+    const simpson = (sum * hh) / 3;
+    expect(leadWeightIntegral(1)).toBeCloseTo(simpson, 9);
+  });
+
+  it('clamps outside [0, 1]', () => {
+    expect(leadWeightIntegral(-0.5)).toBe(0);
+    expect(leadWeightIntegral(1.5)).toBe(leadWeightIntegral(1));
   });
 });
 
