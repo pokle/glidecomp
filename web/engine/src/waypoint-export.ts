@@ -10,8 +10,9 @@
  * import directly.
  *
  * Like ./waypoint-files this module is deliberately OUTSIDE the scoring import
- * closure (see scoring-version.test.ts): it's pure number→string formatting, so
- * adding export formats never forces a scoring-engine version bump. The only
+ * closure (see web/scripts/scoring-fingerprint.ts): it's pure number→string
+ * formatting, so adding export formats never rolls the scoring-engine
+ * generation. The only
  * geo maths it needs (lat/lon → UTM) lives in ./utm; never hand-roll it here.
  */
 import type { WaypointFileRecord } from './waypoint-files';

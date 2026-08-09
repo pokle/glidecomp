@@ -344,6 +344,31 @@ These are the standing imperatives. Each links to the reference that explains it
 
 ### Engine
 
+- **A scoring change writes a note; it never bumps a number**
+  ([docs/scoring-version.md](docs/scoring-version.md)). The engine generation
+  every scoring cache is keyed by is **derived** — a content hash over the
+  import closure of `SCORING_ROOTS`, generated into
+  `src/scoring-fingerprint.generated.ts` (gitignored) by
+  `bun run engine:fingerprint`, which `postinstall`, `deps`, `dev`, `build` and
+  every `deploy:*` already call. There is no `SCORING_ENGINE_VERSION` to bump
+  and no fingerprint to paste; both were deleted because two parallel engine
+  branches conflicted over them, and a hash over the merged tree matches
+  neither parent, so the conflict had no correct side to keep.
+  - What a behaviour change DOES owe is a note in
+    `web/engine/scoring-changes/` — one file per change, `NNN-slug.md`, so two
+    branches can never collide. Say whether points move, and if they do, by how
+    much and for whom (measure over the 211-comp archive where you can); if
+    nothing observable changes, say that, because the generation still rolls
+    and every competition still recomputes. CI enforces it
+    (`web/scripts/check-scoring-change-note.ts`, a merge-base diff — deliberately
+    no baseline in the tree).
+  - The directory is **published**, linked from `/scoring` and `/scoring/gap`:
+    a pilot whose points moved without their organiser touching anything is
+    entitled to read why.
+  - Code that must never drag the report card or a file format into the closure
+    stays outside it on purpose — see `format-distance.ts`, `waypoint-files.ts`.
+    New code that CAN affect a score but no root imports goes in `SCORING_ROOTS`
+    (that is why `track-quality.ts` and `manual-flight.ts` are there).
 - **Never implement inline geo math** (distance, bearing, etc.) — always use
   `web/engine/src/geo.ts`, which provides WGS84 ellipsoid formulas
   (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for
@@ -403,6 +428,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Accessibility standard | [docs/accessibility-standard.md](docs/accessibility-standard.md) |
 | Map interaction spec | [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) |
 | Score caching (stale-first) | [docs/score-caching-stale-first-plan.md](docs/score-caching-stale-first-plan.md) |
+| Engine generation + scoring changelog | [docs/scoring-version.md](docs/scoring-version.md) |
 | Field analysis internals | [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md) |
 | Information architecture + design language | [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) |
 | 3D replay | [docs/3d-flight-replay-notes.md](docs/3d-flight-replay-notes.md) |

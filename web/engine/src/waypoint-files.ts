@@ -15,8 +15,8 @@
  * hemisphere, DMS, or UTM; each parser normalises to signed decimal degrees.
  *
  * This module is deliberately separate from ./waypoints: it is NOT part of
- * the scoring import closure (see scoring-version.test.ts), so adding file
- * formats here never forces a scoring-engine version bump. It's pure
+ * the scoring import closure (see web/scripts/scoring-fingerprint.ts), so
+ * adding file formats here never rolls the scoring-engine generation. It's pure
  * string→number parsing; never hand-roll geo maths here (UTM lives in ./utm).
  */
 import { parseWaypointsCSV, type WaypointRecord } from './waypoints';

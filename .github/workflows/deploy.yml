@@ -67,6 +67,18 @@ jobs:
       - name: Run tests
         run: bun run test:all
 
+      # The scoring changelog is the transparency record for a pilot whose
+      # points moved, so a branch that changes scoring behaviour has to add a
+      # note. This lives here rather than in a bun test because it compares
+      # against the MERGE BASE: keeping no baseline in the tree is what leaves
+      # parallel engine branches nothing to conflict over. The checkout is
+      # shallow, so master is fetched first; the check skips itself rather
+      # than failing if the merge base is still out of reach.
+      - name: Check for a scoring change note
+        run: |
+          git fetch --no-tags --depth=100 origin master || true
+          bun run check:scoring-note
+
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest

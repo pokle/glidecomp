@@ -1097,7 +1097,11 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             The source code of the scoring engine is open, and it is on
             <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
               GitHub
-            </a>.
+            </a>. Every change to how a flight is scored is recorded in the
+            <a href="https://github.com/pokle/glidecomp/tree/master/web/engine/scoring-changes" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
+              scoring changelog
+            </a>, which says what moved and who it affects. A change re-scores every
+            competition, including one that has already finished.
           </p>
         </div>
       </section>
