@@ -13,36 +13,29 @@ import { getGoalIndex } from './xctsk-parser';
 import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
 import {
   computeGoalLine,
-  goalLineCrossingFraction,
+  goalLineCrossing,
+  goalLineToleranceM,
   goalSemicircleBoundaryFraction,
+  goalZoneRadius,
   isForwardGoalCrossing,
   isInGoalSemicircle,
   type GoalLine,
 } from './goal-line';
 import {
   DEFAULT_CYLINDER_TOLERANCE,
-  MIN_CYLINDER_TOLERANCE_M,
+  outerDetectionRadius,
+  innerDetectionRadius,
 } from './turnpoint-sequence-types';
 import type { CylinderCrossing } from './turnpoint-sequence-types';
 
-/**
- * Outer edge of a cylinder's tolerance band (§8.1): the radius at which an
- * entry cylinder is credited. Shared by crossing detection and the
- * presence-based reaching check so both use the same notion of "inside".
- */
-export function outerDetectionRadius(radius: number, tolerance: number): number {
-  return Math.max(radius * (1 + tolerance), radius + MIN_CYLINDER_TOLERANCE_M);
-}
-
-/**
- * Inner edge of a cylinder's tolerance band (§8.1): the radius at which an
- * EXIT cylinder is credited — the pilot leaving is credited a touch early
- * rather than a touch late. Applies to the EXIT start and to inferred exit
- * turnpoints (see {@link computeTurnpointDirections}).
- */
-export function innerDetectionRadius(radius: number, tolerance: number): number {
-  return Math.max(0, Math.min(radius * (1 - tolerance), radius - MIN_CYLINDER_TOLERANCE_M));
-}
+// The §8.1 band edges live beside the tolerance constants they are built
+// from (turnpoint-sequence-types), because the goal-line geometry needs the
+// outer edge too and must not import this module. Re-exported here so every
+// existing caller keeps its import.
+export {
+  outerDetectionRadius,
+  innerDetectionRadius,
+} from './turnpoint-sequence-types';
 
 // ---------------------------------------------------------------------------
 // Functions
@@ -83,14 +76,14 @@ export function detectCylinderCrossings(
 
   // EXIT cylinders are the one place the *inner* edge of the band matters: a
   // pilot leaving an EXIT start is credited once they cross the inner radius
-  // outward (§8.2/§8.3), and an inferred exit turnpoint (a cylinder the route
+  // outward (§8.3), and an inferred exit turnpoint (a cylinder the route
   // reaches from inside — see computeTurnpointDirections) is credited at the
   // same edge. Every entry cylinder is credited at the outer edge.
   const dirs = directions ?? computeTurnpointDirections(task);
 
-  // Goal line (S7F §6.3.1): when the task's goal is a LINE, the goal task
-  // position is detected against the line + control semicircle instead of a
-  // cylinder. Null means cylinder goal — the loop below handles it as before.
+  // Goal line (S7F §6.2.3.1, §8.5.2): when the task's goal is a LINE, the goal
+  // task position is detected against the line + control semicircle instead of
+  // a cylinder. Null means cylinder goal — the loop below handles it as before.
   const goalLine = computeGoalLine(task);
   const goalIdx = getGoalIndex(task);
 
@@ -98,7 +91,7 @@ export function detectCylinderCrossings(
 
   for (let tpIdx = 0; tpIdx < task.turnpoints.length; tpIdx++) {
     if (goalLine && tpIdx === goalIdx) {
-      detectGoalLineCrossings(goalLine, fixes, tpIdx, crossings);
+      detectGoalLineCrossings(goalLine, fixes, tpIdx, tolerance, crossings);
       continue;
     }
     const tp = task.turnpoints[tpIdx];
@@ -264,25 +257,39 @@ export function detectCylinderCrossings(
 }
 
 /**
- * Detect goal-line crossings (S7F §6.3.1) for the goal task position and
- * append them to `out`.
+ * Detect goal-line crossings (S7F §6.2.3.1, §8.2, §8.5.2) for the goal task
+ * position and append them to `out`.
  *
  * The pilot is "inside" goal when in the control semicircle behind the line
- * ({@link isInGoalSemicircle}); a track segment that intersects the line
- * itself is a crossing even when neither fix lands in the semicircle (a
- * fast crossing near an endpoint can leave no fix inside). To keep the
- * enter/exit alternation consistent with the semicircle state — which the
- * presence-based reaching logic relies on — such a through-crossing emits an
- * 'enter' and an 'exit' at the same interpolated instant.
+ * ({@link isInGoalSemicircle}, at the §8.5.2/§8.1 band radius); a track
+ * segment that intersects the line itself is a crossing even when neither fix
+ * lands in the semicircle (a fast crossing near an endpoint can leave no fix
+ * inside). To keep the enter/exit alternation consistent with the semicircle
+ * state — which the presence-based reaching logic relies on — such a
+ * through-crossing emits an 'enter' and an 'exit' at the same interpolated
+ * instant.
  *
- * No tolerance band applies: the §8.1 band is defined for cylinders; the
- * goal line is exact geometry (its semicircle already absorbs the
- * fast-crossing case), so `toleranceCredited` is always false here.
+ * Two rules shape which crossings are emitted:
+ *
+ * - **Direction (§8.5.2).** Goal is reached by crossing the line "in the
+ *   correct direction" — the direction of the last leg. A through-crossing
+ *   the other way (both fixes outside the control zone, the track leaving
+ *   across the line) therefore emits nothing: the goal task position accepts
+ *   the first crossing of either direction, so an 'enter' — or the 'exit'
+ *   beside it — would credit goal to a pilot flying away from it.
+ *
+ * - **Tolerance (§8.2).** The line carries a tolerance band, at the same
+ *   percentage a cylinder gets and with the same 5 m floor: it reaches
+ *   `goalLineToleranceM` metres past each endpoint, so a pilot who clipped
+ *   the very end of the line is credited, flagged `toleranceCredited`. The
+ *   band changes only WHETHER a crossing counts, never WHEN — the crossing
+ *   point is always the track's own intersection with the line's plane.
  */
 function detectGoalLineCrossings(
   goalLine: GoalLine,
   fixes: IGCFix[],
   taskIndex: number,
+  tolerance: number,
   out: CylinderCrossing[]
 ): void {
   if (fixes.length < 2) return;
@@ -290,12 +297,18 @@ function detectGoalLineCrossings(
   const centerLat = goalLine.center.lat;
   const centerLon = goalLine.center.lon;
 
-  // Conservative bounding box around the line + semicircle (everything lies
-  // within halfWidth of the centre). A fix pair whose own bbox doesn't
-  // overlap it can't produce a crossing — skips the frame math for the vast
-  // majority of the track. Same margin scheme as the cylinder loop.
+  // §8.2 band around the line, and the §8.5.2 → §8.1 band on the control
+  // semicircle's radius. Both are metres of measurement slack, single-digit
+  // on any goal line a competition sets.
+  const toleranceM = goalLineToleranceM(goalLine, tolerance);
+  const zoneRadius = goalZoneRadius(goalLine, tolerance);
+
+  // Conservative bounding box around the line + semicircle + bands. A fix pair
+  // whose own bbox doesn't overlap it can't produce a crossing — skips the
+  // frame math for the vast majority of the track. Same margin scheme as the
+  // cylinder loop.
   const DEG = Math.PI / 180;
-  const reach = goalLine.halfWidth;
+  const reach = Math.max(zoneRadius, goalLine.halfWidth + toleranceM);
   const latDelta = (reach / 110540) * 1.01;
   const cosLat = Math.cos((Math.abs(centerLat) + latDelta) * DEG);
   const lonDelta = (reach / (111000 * Math.max(cosLat, 1e-6))) * 1.01;
@@ -306,7 +319,7 @@ function detectGoalLineCrossings(
     fixIndex: number,
     t: number,
     direction: 'enter' | 'exit',
-    viaSemicircleArc = false
+    extra?: Partial<Pick<CylinderCrossing, 'toleranceCredited' | 'goalSemicircleCredited'>>
   ): void => {
     const lat = anchorPrev.latitude + t * (anchorCurr.latitude - anchorPrev.latitude);
     const lon = anchorPrev.longitude + t * (anchorCurr.longitude - anchorPrev.longitude);
@@ -322,11 +335,13 @@ function detectGoalLineCrossings(
       direction,
       distanceToCenter: andoyerDistance(lat, lon, centerLat, centerLon),
       toleranceCredited: false,
-      ...(viaSemicircleArc ? { goalSemicircleCredited: true } : {}),
+      ...extra,
     });
   };
 
-  let prevInside = isInGoalSemicircle(goalLine, fixes[0].latitude, fixes[0].longitude);
+  let prevInside = isInGoalSemicircle(
+    goalLine, fixes[0].latitude, fixes[0].longitude, zoneRadius,
+  );
 
   for (let fixIdx = 1; fixIdx < fixes.length; fixIdx++) {
     const p0 = fixes[fixIdx - 1];
@@ -349,25 +364,30 @@ function detectGoalLineCrossings(
 
     const from = { lat: p0.latitude, lon: p0.longitude };
     const to = { lat: p1.latitude, lon: p1.longitude };
-    const currInside = isInGoalSemicircle(goalLine, to.lat, to.lon);
-    const lineT = goalLineCrossingFraction(goalLine, from, to);
+    const currInside = isInGoalSemicircle(goalLine, to.lat, to.lon, zoneRadius);
+    const hit = goalLineCrossing(goalLine, from, to, toleranceM);
+    const credit = hit?.toleranceCredited ? { toleranceCredited: true } : undefined;
 
-    if (lineT !== null) {
+    if (hit) {
       if (prevInside !== currInside) {
         // Crossing the line into (or back out of) the semicircle.
-        push(p0, p1, fixIdx, lineT, currInside ? 'enter' : 'exit');
-      } else {
+        push(p0, p1, fixIdx, hit.t, currInside ? 'enter' : 'exit', credit);
+      } else if (isForwardGoalCrossing(goalLine, from, to)) {
         // Crossed the line but neither fix is in the semicircle (e.g. a fast
         // pass near an endpoint): an instantaneous enter+exit pair keeps the
         // crossing on record without corrupting the inside/outside state.
-        const direction = isForwardGoalCrossing(goalLine, from, to);
-        push(p0, p1, fixIdx, lineT, direction ? 'enter' : 'exit');
-        push(p0, p1, fixIdx, lineT, direction ? 'exit' : 'enter');
+        push(p0, p1, fixIdx, hit.t, 'enter', credit);
+        push(p0, p1, fixIdx, hit.t, 'exit', credit);
       }
+      // …and the wrong-way through-crossing emits nothing (§8.5.2 — see the
+      // function doc). The pilot is outside the control zone on both fixes,
+      // so leaving it out keeps the inside/outside state correct too.
     } else if (prevInside !== currInside) {
       // Entered or left through the semicircle's arc (no line intersection).
-      const t = goalSemicircleBoundaryFraction(goalLine, from, to);
-      push(p0, p1, fixIdx, t, currInside ? 'enter' : 'exit', true);
+      const t = goalSemicircleBoundaryFraction(goalLine, from, to, zoneRadius);
+      push(p0, p1, fixIdx, t, currInside ? 'enter' : 'exit', {
+        goalSemicircleCredited: true,
+      });
     }
 
     prevInside = currInside;

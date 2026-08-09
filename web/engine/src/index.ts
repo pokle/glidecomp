@@ -149,9 +149,12 @@ export {
 export {
   computeGoalLine,
   distanceToGoalLine,
+  goalLineCrossing,
   goalLineCrossingFraction,
   goalLinePointAt,
+  goalLineToleranceM,
   goalSemicirclePoints,
+  goalZoneRadius,
   isForwardGoalCrossing,
   isInGoalSemicircle,
   type GoalLine,

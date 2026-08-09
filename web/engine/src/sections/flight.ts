@@ -34,6 +34,14 @@ const MAX_DEADLINE_CROSSINGS_LISTED = 6;
 const TOLERANCE_NOTE =
   'Credited by the cylinder tolerance band (FAI S7F §8.1) — the track came within tolerance of the cylinder edge but did not physically cross the nominal radius.';
 
+/**
+ * The goal-line version of {@link TOLERANCE_NOTE}: a line carries the same
+ * percentage tolerance as a cylinder (FAI S7F §8.2), and at goal what that
+ * buys is length — a crossing that lands just past an endpoint still counts.
+ */
+const LINE_TOLERANCE_NOTE =
+  'Credited by the line tolerance band (FAI S7F §8.2) — the track crossed just past the end of the goal line, within the tolerance it carries. A line gets the same percentage as a cylinder, and at least 5 m.';
+
 /** The inputs every flight-narrative phase builder shares. */
 interface FlightNarrativeCtx {
   task: XCTask;
@@ -289,16 +297,18 @@ function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationI
     if (goalLine) {
       // Say what the goal geometry was and how this reaching satisfied it —
       // the line itself, or a fix in the control semicircle behind it.
-      const lineDesc = `the ${Math.round(goalLine.halfWidth * 2)} m goal line, perpendicular to the final leg (S7F §6.3.1)`;
+      const lineDesc = `the ${Math.round(goalLine.halfWidth * 2)} m goal line, perpendicular to the final leg (S7F §6.2.3.1)`;
       const goalNote = reaching.goalSemicircleCredited
         ? `Recorded in the control semicircle behind ${lineDesc} — a fix in the semicircle counts as goal even when the line crossing itself falls between tracklog fixes.`
         : reaching.selectionReason === 'already_inside'
           ? `Goal is ${lineDesc}.`
-          : `Crossed ${lineDesc}.`;
+          : `Crossed ${lineDesc}, in the direction of the last leg.`;
       detail = `${goalNote}${detail ? ` ${detail}` : ''}`;
     }
     if (reaching.toleranceCredited) {
-      detail = `${detail ? `${detail} ` : ''}${TOLERANCE_NOTE}`;
+      // A goal line's band is §8.2's, and it means something different from a
+      // cylinder's — say which one credited the pilot.
+      detail = `${detail ? `${detail} ` : ''}${goalLine ? LINE_TOLERANCE_NOTE : TOLERANCE_NOTE}`;
     }
     if (isESS) {
       const t = entry.speed_section_time ?? result.speedSectionTime;

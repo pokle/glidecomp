@@ -105,7 +105,7 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
     task turnpoint table (Direction column) on the task page & route editor
   - 3D globe / Threebox providers: out of scope (not drawn)
 
-- **Goal line** (tasks with `goal.type === 'LINE'`, S7F §6.3.1)
+- **Goal line** (tasks with `goal.type === 'LINE'`, S7F §6.2.3.1)
   - The last turnpoint's circle is replaced by two features:
     - The goal line itself: `task-goal-line` layer, solid line in the type
       color (purple `#a855f7`), width 4, opacity 0.9, round caps — endpoints
@@ -113,6 +113,11 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
       the turnpoint radius to each side)
     - The control semicircle behind the line: a `task-cylinders` polygon
       (same fill/stroke as a cylinder) from `goalSemicirclePoints()`
+  - Both are the NOMINAL geometry. Reaching them applies a tolerance band a
+    few metres wide (§8.2 for the line, §8.1 for the semicircle), which is
+    not drawn — exactly as a cylinder's own band is not drawn. A goal
+    credited by the band therefore marks the crossing a few metres outside
+    the drawn shape, and the report card names the band as the reason
   - Cylinder goals are unaffected
 
 - **Turnpoint dots**

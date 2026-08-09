@@ -151,7 +151,7 @@ export interface TrackManifest {
      */
     optimizedPath?: { x: number; z: number }[];
     /**
-     * Present when the task ends at a goal LINE (S7F §6.3.1) instead of a
+     * Present when the task ends at a goal LINE (S7F §6.2.3.1) instead of a
      * cylinder: the line's endpoints in ENU metres, perpendicular to the
      * final leg and centred on the last turnpoint. The viewer draws the
      * goal as this line (with its control semicircle behind it) rather

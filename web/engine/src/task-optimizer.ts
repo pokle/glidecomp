@@ -145,7 +145,7 @@ function chordCrossingPoint(
 
 /**
  * Closest point on a goal line to a given point — the optimal "tag" of a
- * LINE goal (S7F §6.3.1): the task ends where the shortest route meets the
+ * LINE goal (S7F §6.2.3.1): the task ends where the shortest route meets the
  * line. Golden-section search over the position along the line; distance to
  * a geodesic segment is unimodal, so this converges like the circle search.
  */
