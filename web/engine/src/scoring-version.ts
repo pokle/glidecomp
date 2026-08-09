@@ -579,7 +579,25 @@
 //          the pilot's position at the task stop time (the last in-window
 //          fix), not as the best over every fix; the scored distance is
 //          max(best distance up to the stop, stop position + bonus).
-export const SCORING_ENGINE_VERSION = 42;
+
+// v43: FAI S7F 2026 edition, phase 4 — task evaluation (§9.1, §6.2.3.1).
+//      (a) Tolerances are the fixed 2026 values: 0% relative + 5 m absolute
+//          for cylinders (§9.1.1, decided at the 2025 Plenary), a flat 5 m
+//          for lines and the goal-line band (§9.1.2, §9.1.3). A task file's
+//          declared `cylinderTolerance` is now IGNORED by scoring (owner
+//          decision, 2026-08-09 — supersedes issue #580's behaviour); the
+//          field still parses and round-trips, and the route editor no
+//          longer edits it. Tasks that scored under the old 0.5% default
+//          (or a declared value) get narrower bands, so tolerance-credited
+//          reachings at band edges can change.
+//      (b) Goal line orientation (§6.2.3.1, changed by the 2025 edition):
+//          the line is perpendicular to the OPTIMISED route's previous
+//          point p on the last control zone before goal — computed from a
+//          route with the goal treated as its centre — instead of the
+//          previous turnpoint centre. Angled final legs rotate the line by
+//          the difference between the centre-to-centre bearing and the
+//          optimised approach.
+export const SCORING_ENGINE_VERSION = 43;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -587,4 +605,4 @@ export const SCORING_ENGINE_VERSION = 42;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "5e832c7a65a8a479f09fcc3f342e967f853473fc161868cda39c5bb751a9bfc4";
+  "167e6842b567e37e73e0b421b6de24dda122fa7970c79c29616ccab17a7de0df";

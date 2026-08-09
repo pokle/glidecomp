@@ -72,7 +72,9 @@ export function detectCylinderCrossings(
   // 5 m absolute minimum, applied when deciding whether a pilot reached a
   // cylinder, to absorb distance-measurement differences between flight
   // recorders and scoring programs. Default 0.5% (Cat 2 maximum).
-  const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
+  // S7F 2026 §9.1.1: the tolerance is the fixed spec band — a declared
+  // task-file tolerance is deliberately ignored.
+  const tolerance = DEFAULT_CYLINDER_TOLERANCE;
 
   // EXIT cylinders are the one place the *inner* edge of the band matters: a
   // pilot leaving an EXIT start is credited once they cross the inner radius

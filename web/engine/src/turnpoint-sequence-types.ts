@@ -10,16 +10,19 @@
 import type { GoalLine } from './goal-line';
 
 /**
- * Default cylinder tolerance as a fraction of the radius. 0.5% is the Cat 2
- * maximum (FAI S7F §8.1); Cat 1 uses 0.1%. Kept as the default for club
- * scoring — a task can override it via {@link XCTask.cylinderTolerance}.
+ * Relative cylinder tolerance as a fraction of the radius — fixed at 0% by
+ * S7F 2026 §9.1.1 (decided at the 2025 Plenary; earlier editions allowed
+ * 0.1%–0.5%). Scoring no longer honours a task file's declared
+ * `cylinderTolerance` either (owner decision, 2026-08-09,
+ * docs/2026-08-09-s7f-2026-migration-plan.md): every task is evaluated at
+ * the spec band. The field is still parsed so task files round-trip.
  */
-export const DEFAULT_CYLINDER_TOLERANCE = 0.005;
+export const DEFAULT_CYLINDER_TOLERANCE = 0;
 
 /**
- * Absolute minimum cylinder tolerance in metres (FAI S7F §8.1). The tolerance
- * band is at least ±5 m, so small cylinders (where the percentage is tiny —
- * 0.5% of a 400 m turnpoint is only 2 m) still get the full spec allowance.
+ * Absolute cylinder tolerance in metres (S7F 2026 §9.1.1): the band is ±5 m
+ * around the nominal radius. With the relative term fixed at 0 this IS the
+ * whole band.
  */
 export const MIN_CYLINDER_TOLERANCE_M = 5;
 

@@ -441,9 +441,9 @@ describe('cylinder tolerance band (§8.1)', () => {
   });
 
   it('credits an EXIT start at the inner edge of the band', () => {
-    // Large EXIT start (5000 m): 0.5% → inner edge at 4975 m. A pilot who
-    // crosses 4975 m outward has left the start, even though they have not yet
-    // reached the nominal 5000 m radius.
+    // EXIT start (5000 m): the S7F 2026 fixed ±5 m band puts the inner edge
+    // at 4995 m. A pilot who crosses 4995 m outward has left the start, even
+    // though they have not yet reached the nominal 5000 m radius.
     const task = createTask(
       [
         { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },
@@ -452,8 +452,8 @@ describe('cylinder tolerance band (§8.1)', () => {
       { direction: 'EXIT' },
     );
     const c = task.turnpoints[0].waypoint;
-    const p1 = destinationPoint(c.lat, c.lon, 4970, 0); // inside inner edge
-    const p2 = destinationPoint(c.lat, c.lon, 4980, 0); // outside inner, inside nominal
+    const p1 = destinationPoint(c.lat, c.lon, 4990, 0); // inside inner edge
+    const p2 = destinationPoint(c.lat, c.lon, 4998, 0); // outside inner, inside nominal
     const fixes = [createFix(0, p1.lat, p1.lon), createFix(1, p2.lat, p2.lon)];
     const crossings = detectCylinderCrossings(task, fixes).filter(c => c.taskIndex === 0);
     const exit = crossings.find(c => c.direction === 'exit');
@@ -1717,12 +1717,12 @@ describe('resolveTurnpointSequence', () => {
       expect(result.madeGoal).toBe(true);
     });
 
-    it('credits an exit ring from the inner tolerance band (§8.1)', () => {
-      // Nominal ring radius 10 000 m, inner band edge 9 950 m: a pilot who
-      // turns around at 9 980 m crossed the band but not the nominal
-      // radius — credited, flagged as tolerance-credited.
+    it('credits an exit ring from the inner tolerance band (§9.1.1)', () => {
+      // Nominal ring radius 10 000 m, inner band edge 9 995 m (the S7F 2026
+      // fixed ±5 m): a pilot who turns around at 9 997 m crossed the band
+      // but not the nominal radius — credited, flagged tolerance-credited.
       const shortOfRing = northFixes([
-        0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 9980, // just inside nominal
+        0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 9997, // just inside nominal
         9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000, 0, // home
       ]);
       const result = resolveTurnpointSequence(concentricTask(), shortOfRing);
@@ -1776,20 +1776,31 @@ describe('ENTER start concentric with the next turnpoint (issue #577)', () => {
     });
   };
 
-  it("honours the task's declared tolerance: a 100 m excursion past the ring starts the task", () => {
-    const task = parseXCTask(taskJson(0.0005));
-    const result = resolveTurnpointSequence(task, trackFixes());
-    expect(result.sssReaching).not.toBeNull();
-    expect(result.sequence.map(r => r.taskIndex)).toEqual([1, 2, 3]);
-    expect(result.madeGoal).toBe(true);
+  it('the fixed ±5 m band lets a 100 m excursion start the task, whatever the file declares', () => {
+    // Under S7F 2026 §9.1.1 the band is ±5 m for every task; a declared
+    // tolerance (here one that would once have widened it) changes nothing.
+    for (const declared of [undefined, 0.0005, 0.005]) {
+      const task = parseXCTask(taskJson(declared));
+      const result = resolveTurnpointSequence(task, trackFixes());
+      expect(result.sssReaching).not.toBeNull();
+      expect(result.sequence.map(r => r.taskIndex)).toEqual([1, 2, 3]);
+      expect(result.madeGoal).toBe(true);
+    }
   });
 
-  it('without a declared tolerance the 0.5% default band swallows the excursion', () => {
+  it('an excursion that never clears the ±5 m band is swallowed', () => {
     // Documents the band semantics the fix depends on: the detection edge IS
-    // the state boundary, so a pilot who never passes the outer edge is
-    // never outside an ENTER cylinder and no enter crossing can exist.
+    // the state boundary, so a pilot who never passes the outer edge
+    // (33 505 m here) is never outside an ENTER cylinder and no enter
+    // crossing can exist. This shallow track peaks 4 m past the nominal ring.
+    const shallow: IGCFix[] =
+      [30300, 32000, 33400, 33504, 33504, 33400, 30000, 20000, 10000, 2000, 700, 300, 100]
+        .map((d, i) => {
+          const p = at(d);
+          return createFix(i, p.lat, p.lon);
+        });
     const task = parseXCTask(taskJson());
-    const result = resolveTurnpointSequence(task, trackFixes());
+    const result = resolveTurnpointSequence(task, shallow);
     expect(result.sssReaching).toBeNull();
     expect(result.flownDistance).toBe(0);
   });

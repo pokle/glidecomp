@@ -28,12 +28,17 @@
  * is at most a few metres and, like the cylinder bands, is not drawn on the
  * map; the drawn line and semicircle are the nominal ones.
  *
- * The final leg direction is taken from turnpoint centres: from the last
- * turnpoint whose centre differs from the goal centre, to the goal centre.
- * (An ESS ring is often concentric with the goal, so concentric turnpoints
- * are skipped when finding the leg.) When no direction can be established —
- * fewer than two distinct centres, or a zero radius — the goal falls back
- * to cylinder behaviour and every function here reports "no goal line".
+ * The final leg direction follows the OPTIMISED route (S7F 2026 §6.2.3.1,
+ * changed by the 2025 edition): the previous point p is the optimised route
+ * point on the last control zone before goal, and the line runs
+ * perpendicular to p→centre. The route is computed with the goal treated as
+ * its centre point, so the geometry has no circular dependency on the line
+ * being constructed. When the route gives no usable direction the leg falls
+ * back to turnpoint centres (skipping turnpoints concentric with the goal —
+ * an ESS ring is often concentric); when no direction can be established at
+ * all — fewer than two distinct centres, or a zero radius — the goal falls
+ * back to cylinder behaviour and every function here reports "no goal
+ * line".
  *
  * All decisions made from this geometry are explainable: the line endpoints
  * and semicircle are exported for rendering, so what the pilot sees on the
@@ -43,6 +48,11 @@
 
 import type { XCTask } from './xctsk-parser';
 import { getGoalIndex } from './xctsk-parser';
+// Runtime-only cycle with task-optimizer (it imports this module's geometry;
+// we call its route optimiser inside a function body) — safe under ESM
+// hoisting, and the derived task passed back always has a CYLINDER goal so
+// the call can never recurse into goal-line construction.
+import { calculateOptimizedTaskLine } from './task-optimizer';
 import {
   andoyerDistance,
   calculateBearingRadians,
@@ -78,7 +88,51 @@ export interface GoalLine {
  * line (or a line can't be constructed — see the module doc for fallback
  * conditions). Null means: treat the goal as a cylinder, exactly as before.
  */
+// Memoised goal lines and the CYLINDER-goal variant used to compute the
+// orientation route: keyed by task object identity so repeated calls in the
+// crossing detector and renderer don't re-run the route optimiser (which
+// itself caches by task object, hence the persistent derived task).
+const goalLineCache = new WeakMap<XCTask, GoalLine | null>();
+const orientationTaskCache = new WeakMap<XCTask, XCTask>();
+
+/**
+ * S7F 2026 §6.2.3.1: the previous point p — the optimised route point on
+ * the last control zone before goal, from a route computed with the goal
+ * treated as its centre point. Null when the route yields no usable point.
+ */
+function optimizedPreviousPoint(
+  task: XCTask,
+  goalIdx: number,
+  goalCenter: { lat: number; lon: number },
+): { lat: number; lon: number } | null {
+  let derived = orientationTaskCache.get(task);
+  if (!derived) {
+    derived = { ...task, goal: { ...task.goal, type: 'CYLINDER' } };
+    orientationTaskCache.set(task, derived);
+  }
+  const line = calculateOptimizedTaskLine(derived);
+  // The optimised line carries one point per turnpoint. Walk back from the
+  // zone before goal to the nearest route point distinct from the goal
+  // centre (a concentric ESS ring's point can coincide with it when the
+  // route enters from the far side of a zero-progress leg).
+  for (let i = Math.min(goalIdx, line.length) - 1; i >= 0; i--) {
+    const p = line[i];
+    if (!p) continue;
+    if (andoyerDistance(p.lat, p.lon, goalCenter.lat, goalCenter.lon) > 1) {
+      return p;
+    }
+  }
+  return null;
+}
+
 export function computeGoalLine(task: XCTask): GoalLine | null {
+  if (goalLineCache.has(task)) return goalLineCache.get(task)!;
+  const line = computeGoalLineUncached(task);
+  goalLineCache.set(task, line);
+  return line;
+}
+
+function computeGoalLineUncached(task: XCTask): GoalLine | null {
   if (task.goal?.type !== 'LINE') return null;
   const goalIdx = getGoalIndex(task);
   if (goalIdx < 1) return null;
@@ -86,19 +140,24 @@ export function computeGoalLine(task: XCTask): GoalLine | null {
   const halfWidth = goal.radius;
   if (!(halfWidth > 0)) return null;
 
-  // Final leg direction from turnpoint centres, skipping any turnpoint
-  // concentric with the goal (commonly the ESS ring around the goal line).
-  let prev: { lat: number; lon: number } | null = null;
-  for (let i = goalIdx - 1; i >= 0; i--) {
-    const wp = task.turnpoints[i].waypoint;
-    if (wp.lat !== goal.waypoint.lat || wp.lon !== goal.waypoint.lon) {
-      prev = { lat: wp.lat, lon: wp.lon };
-      break;
+  const center = { lat: goal.waypoint.lat, lon: goal.waypoint.lon };
+
+  // §6.2.3.1 (2026): orient on the optimised route's previous point.
+  let prev = optimizedPreviousPoint(task, goalIdx, center);
+
+  // Fallback: turnpoint centres, skipping any turnpoint concentric with the
+  // goal (commonly the ESS ring around the goal line).
+  if (!prev) {
+    for (let i = goalIdx - 1; i >= 0; i--) {
+      const wp = task.turnpoints[i].waypoint;
+      if (wp.lat !== center.lat || wp.lon !== center.lon) {
+        prev = { lat: wp.lat, lon: wp.lon };
+        break;
+      }
     }
   }
   if (!prev) return null;
 
-  const center = { lat: goal.waypoint.lat, lon: goal.waypoint.lon };
   const legBearing = calculateBearingRadians(prev.lat, prev.lon, center.lat, center.lon);
   return {
     center,

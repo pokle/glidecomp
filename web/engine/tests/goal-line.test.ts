@@ -222,7 +222,12 @@ describe('optimised route with a LINE goal', () => {
     );
     const lineDistance = calculateOptimizedTaskDistance(task);
     const centerDistance = calculateOptimizedTaskDistance(centerTask);
-    expect(lineDistance).toBeLessThanOrEqual(centerDistance + 1);
+    // Under the 2026 §6.2.3.1 orientation the line is perpendicular to the
+    // OPTIMISED approach, so the line route meets it essentially at the
+    // centre: the two distances agree to within the optimiser's metre-scale
+    // convergence (they are no longer metres apart as under the old
+    // centre-based orientation).
+    expect(lineDistance).toBeLessThanOrEqual(centerDistance + 3);
   });
 });
 
@@ -406,15 +411,17 @@ describe('goal line tolerance (S7F §8.2, §8.5.2)', () => {
     expect(result.lastTurnpointReached).toBe(1);
   });
 
-  it('honours the task\'s declared tolerance for the line band', () => {
-    // At 5% the band reaches 20 m past the end, so 210 m out now counts.
+  it('ignores a declared task tolerance — the S7F 2026 band is fixed at ±5 m', () => {
+    // A declared 5% would have reached 20 m past the end. Under the 2026
+    // fixed band a crossing 210 m out (10 m past the end) stays uncredited,
+    // whatever the task file declares.
     const task = { ...lineGoalTask(), cylinderTolerance: 0.05 };
     const fixes: IGCFix[] = [
       ...toTP1(),
       createFix(30 * 60, atLine(-500, 210).lat, atLine(-500, 210).lon),
       createFix(31 * 60, atLine(500, 210).lat, atLine(500, 210).lon),
     ];
-    expect(resolveTurnpointSequence(task, fixes).madeGoal).toBe(true);
+    expect(resolveTurnpointSequence(task, fixes).madeGoal).toBe(false);
   });
 
   it('leaves an ordinary crossing exactly where it was, uncredited', () => {

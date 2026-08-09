@@ -437,7 +437,8 @@ function resolveTrackStartInside(
   { directions }: TaskGeometry,
   { goalIdx, goalLine }: TaskAnchors,
 ): boolean[] {
-  const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
+  // S7F 2026 §9.1.1: fixed spec band; declared task tolerances are ignored.
+  const tolerance = DEFAULT_CYLINDER_TOLERANCE;
   return task.turnpoints.map((tp, tpIdx) => {
     if (fixes.length === 0) return false;
     // A LINE goal has no interior; "inside" is the control semicircle, taken
