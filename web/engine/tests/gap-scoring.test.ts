@@ -1007,17 +1007,11 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
     expect(w.distance + w.leading).toBeLessThan(1);
   });
 
-  it('caps the distance offer at the spec’s 900 points', () => {
-    // §10: "a maximum of 900 points are available for distance". That ceiling
-    // is the distance weight's own value at GoalRatio = 0, on a full-validity
-    // day.
-    //
-    // The spec's companion figure — 18 points for leading — is NOT asserted
-    // here: it comes from the §10 HG leading weight (1 − DW) ÷ 8 × 1.4, and
-    // GlideComp's HG GoalRatio = 0 branch uses the older GAP weight
-    // (0.1 × best ÷ task distance) instead. That is a separate deviation, it
-    // moves real points, and it is deliberately not touched by the §10
-    // available-points fix.
+  it('caps an HG day at the spec’s 900 distance + 18 leading', () => {
+    // §10, in full: "a maximum of 900 points are available for distance and
+    // 18 points for leading … Max(availableTotalPoints) = 918". Both ceilings
+    // are the weights' own values at GoalRatio = 0 on a full-validity day, and
+    // neither depends on how far the field flew.
     const w = calculateWeights({
       goalRatio: 0,
       bestDistance: 100000,
@@ -1026,7 +1020,8 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
       numReachedESS: 0,
     });
     expect(w.distance * 1000).toBeCloseTo(900, 6);
-    expect(w.leading).toBeGreaterThan(0);
+    expect(w.leading * 1000).toBeCloseTo(17.5, 6); // the spec's "18 points"
+    expect((w.distance + w.leading) * 1000).toBeCloseTo(917.5, 6); // "918"
   });
 
   it('does not fire for PG (the spec states the rule for HG only)', () => {
@@ -1043,6 +1038,68 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
   it('is left unapplied when the count is not supplied', () => {
     const w = calculateWeights({ ...base, scoring: 'HG' });
     expect(w.time).toBeGreaterThan(0);
+  });
+});
+
+describe('calculateWeights — the HG leading weight has no goal-ratio branch (S7F §10)', () => {
+  // The §10 HG box gives one formula, (1 − DistanceWeight) ÷ 8 × 1.4, with no
+  // GoalRatio case. The GAP2016/2018 "0.1 × BestDist ÷ TaskDist when nobody
+  // makes goal" rule is the PARAGLIDING legacy weight, and it used to catch
+  // hang gliding too, because the branch testing it did not test the sport.
+  const hgLeading = (goalRatio: number, bestDistance: number) =>
+    calculateWeights({
+      goalRatio,
+      bestDistance,
+      taskDistance: 100000,
+      scoring: 'HG',
+      useLeading: true,
+      useArrival: true,
+    }).leading;
+
+  it('uses the spec formula when nobody makes goal', () => {
+    // DistanceWeight at GoalRatio 0 is 0.9, so leading is 0.1 ÷ 8 × 1.4.
+    expect(hgLeading(0, 50000)).toBeCloseTo(0.0175, 10);
+  });
+
+  it('does not scale with how far the field got', () => {
+    // The legacy PG rule made this vary from 0.01 to 0.1 across these three.
+    expect(hgLeading(0, 10000)).toBeCloseTo(0.0175, 10);
+    expect(hgLeading(0, 50000)).toBeCloseTo(0.0175, 10);
+    expect(hgLeading(0, 100000)).toBeCloseTo(0.0175, 10);
+  });
+
+  it('is continuous as the first pilot reaches goal', () => {
+    // The legacy branch made the weight JUMP at the first goal pilot — from
+    // 0.1 down to 0.0176 on a fully-flown task. It is now the same curve
+    // either side, and the arrival weight it is 1.4× has always been.
+    const nobody = calculateWeights({
+      goalRatio: 0, bestDistance: 100000, taskDistance: 100000, scoring: 'HG',
+    });
+    const oneIn = calculateWeights({
+      goalRatio: 0.001, bestDistance: 100000, taskDistance: 100000, scoring: 'HG',
+    });
+    expect(Math.abs(oneIn.leading - nobody.leading)).toBeLessThan(0.001);
+    expect(nobody.leading).toBeCloseTo(nobody.arrival * 1.4, 10);
+  });
+
+  it('leaves the PG legacy weight alone — it is the GAP2016/2018 formula', () => {
+    const pg = (bestDistance: number) =>
+      calculateWeights({
+        goalRatio: 0,
+        bestDistance,
+        taskDistance: 100000,
+        scoring: 'PG',
+        leadingWeightFormula: 'gap2020',
+      }).leading;
+    expect(pg(50000)).toBeCloseTo(0.05, 10); // 0.1 × 50 ÷ 100 km
+    expect(pg(100000)).toBeCloseTo(0.1, 10);
+  });
+
+  it('leaves the HG weight alone when pilots make goal (unchanged formula)', () => {
+    const w = calculateWeights({
+      goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG',
+    });
+    expect(w.leading).toBeCloseTo(((1 - w.distance) / 8) * 1.4, 10);
   });
 });
 
