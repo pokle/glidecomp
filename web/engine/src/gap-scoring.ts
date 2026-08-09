@@ -551,6 +551,8 @@ export function scoreFlights(
     useArrival: fullParams.useArrival,
     leadingWeightFormula: fullParams.leadingWeightFormula,
     leadingTimeRatio: fullParams.leadingTimeRatio,
+    // S7F §10, HG: nobody at ESS ⇒ no time or arrival points are available.
+    numReachedESS,
   });
   const totalAvailable = 1000 * taskValidity.task;
   const availablePoints: AvailablePoints = {

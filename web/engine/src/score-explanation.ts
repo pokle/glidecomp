@@ -42,6 +42,7 @@ import {
   buildPenaltySection,
   buildManualFlightSection,
   buildWinnerHeadlineNote,
+  noEssPointsZeroed,
 } from './score-explanation-sections';
 import {
   buildTimeChart,
@@ -125,6 +126,27 @@ function withItemCharts(
 }
 
 /**
+ * Does this card get an arrival section?
+ *
+ * Normally when there were arrival points to win, or the pilot won some. The
+ * third case is FAI S7F §10: on an HG task with arrival points switched on
+ * where nobody reached ESS, the available figure is now zero, and dropping the
+ * section would delete the only place that says why the component is missing —
+ * exactly what the reader of a no-ESS day came for.
+ */
+function showsArrival(
+  entry: ScoreEntryInput,
+  classContext: ExplainGapScoreInput['classContext'],
+  params: GAPParameters,
+): boolean {
+  return (
+    classContext.available_points.arrival > 0 ||
+    entry.arrival_points > 0 ||
+    (params.useArrival && noEssPointsZeroed(classContext, params))
+  );
+}
+
+/**
  * Explain a GAP-scored pilot's result.
  *
  * The narrative uses the pilot's resolved turnpoint sequence; the point
@@ -162,7 +184,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
     );
   }
 
-  if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
+  if (showsArrival(entry, classContext, params)) {
     sections.push(
       withChart(
         buildArrivalSection(entry, classContext, params, fmt),
@@ -376,7 +398,7 @@ export function explainManualFlightScore(
     });
   }
 
-  if (classContext.available_points.arrival > 0 || entry.arrival_points > 0) {
+  if (showsArrival(entry, classContext, params)) {
     sections.push(buildArrivalSection(entry, classContext, params));
   }
 

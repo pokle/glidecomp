@@ -199,6 +199,15 @@ function ScoreClassTable({
 
   const v = cls.task_validity;
   const ap = cls.available_points;
+  // FAI S7F §10 (HG): nobody reached ESS, so the task carried no time and no
+  // arrival points. Gated on the published zero as well as the field count, so
+  // a pre-rule cached body keeps its old caption rather than being described
+  // as something it is not; a whole-day zero is a different finding.
+  const noEssOffer =
+    cls.gap_params?.scoring === "HG" &&
+    ap.total > 0 &&
+    ap.time === 0 &&
+    essFieldSize === 0;
 
   const detailHref = (compPilotId: string, pilotName?: string | null) =>
     pilotPath(compId, compName, taskId, taskName, compPilotId, pilotName);
@@ -373,6 +382,17 @@ function ScoreClassTable({
           · Available: {Number(ap.total.toFixed(1))} pts
           (dist {Math.round(ap.distance)}, time {Math.round(ap.time)}, lead{" "}
           {Math.round(ap.leading)})
+          {/* FAI S7F §10: nobody reached ESS on an HG task, so the time and
+              arrival offers are zero and nothing replaces them — without this
+              the split visibly fails to add up to the total. */}
+          {noEssOffer ? (
+            <>
+              {" "}
+              — nobody reached the end of the speed section, so no time or arrival
+              points were available (FAI S7F §10) and only{" "}
+              {Number((ap.distance + ap.leading).toFixed(1))} pts could be won.
+            </>
+          ) : null}
         </p>
       )}
     </div>

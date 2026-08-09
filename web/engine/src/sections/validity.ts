@@ -24,7 +24,7 @@ import {
   pctWeight,
   availableTotalDetail,
 } from '../score-explanation-format';
-import { leadingWeightDetail } from './shared';
+import { leadingWeightDetail, noEssPointsZeroed } from './shared';
 
 /**
  * The inputs behind each validity factor, as a detail sentence.
@@ -156,6 +156,25 @@ export function buildValiditySection(
       value: pts(ap.total),
       detail: availableTotalDetail(v, ap.total, decimals),
     },
+    // FAI S7F §10, HG: nobody reached ESS, so time and arrival points were
+    // never on offer. Stated here, where the day's points are decided, because
+    // it caps what ANY pilot could have scored — the time section below can
+    // only speak for the pilot whose card this is.
+    ...(params && noEssPointsZeroed(classContext, params)
+      ? [{
+          id: 'no-ess-available',
+          text: 'Nobody reached the end of the speed section, so this task offered no time or arrival points at all (FAI S7F §10).',
+          // The bare figure, so it sits under the day's total in the same
+          // column rather than overflowing it with a phrase.
+          value: pts(ap.distance + ap.leading),
+          detail:
+            `Only distance and leading points could be won: ` +
+            `${fmtPoints(ap.distance)} + ${fmtPoints(ap.leading)} = ` +
+            `${fmtPoints(ap.distance + ap.leading)} of the ${fmtPoints(ap.total)} the day was worth. ` +
+            `The rest is not shared out to the other components — the specification leaves it unawarded.`,
+          emphasis: 'warning' as const,
+        }]
+      : []),
     {
       id: 'available-split',
       // How many pilots got there decides the split, so say so — "the goal
