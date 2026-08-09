@@ -19,7 +19,15 @@ import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-seq
 import type { GAPParameters } from './gap-params';
 import type { TaskValidity, WeightFractions, LeadingAggregate } from './gap-formulas';
 
-/** Available points in each category. */
+/**
+ * Available points in each category.
+ *
+ * `total` is the day's points on offer — 1000 × task validity — and is NOT
+ * defined as the sum of the four components. They normally add up to it, but
+ * under FAI S7F §10 an HG task nobody flew to ESS has zero time and arrival
+ * points with nothing redistributed, so distance + leading falls short of the
+ * total by the unallocated remainder.
+ */
 export interface AvailablePoints {
   distance: number;
   time: number;

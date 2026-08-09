@@ -981,6 +981,130 @@ describe('calculateWeights with flags', () => {
   });
 });
 
+describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', () => {
+  const base = {
+    goalRatio: 0,
+    bestDistance: 50000,
+    taskDistance: 100000,
+    useLeading: true,
+    useArrival: true,
+  };
+
+  it('HG with nobody at ESS: no time and no arrival weight', () => {
+    const w = calculateWeights({ ...base, scoring: 'HG', numReachedESS: 0 });
+    expect(w.time).toBe(0);
+    expect(w.arrival).toBe(0);
+    expect(w.distance).toBeGreaterThan(0);
+    expect(w.leading).toBeGreaterThan(0);
+  });
+
+  it('the remainder is left unallocated — nothing is redistributed', () => {
+    const w = calculateWeights({ ...base, scoring: 'HG', numReachedESS: 0 });
+    const withEss = calculateWeights({ ...base, scoring: 'HG', numReachedESS: 3 });
+    // Distance and leading are untouched; only time and arrival are dropped.
+    expect(w.distance).toBe(withEss.distance);
+    expect(w.leading).toBe(withEss.leading);
+    expect(w.distance + w.leading).toBeLessThan(1);
+  });
+
+  it('caps the distance offer at the spec’s 900 points', () => {
+    // §10: "a maximum of 900 points are available for distance". That ceiling
+    // is the distance weight's own value at GoalRatio = 0, on a full-validity
+    // day.
+    //
+    // The spec's companion figure — 18 points for leading — is NOT asserted
+    // here: it comes from the §10 HG leading weight (1 − DW) ÷ 8 × 1.4, and
+    // GlideComp's HG GoalRatio = 0 branch uses the older GAP weight
+    // (0.1 × best ÷ task distance) instead. That is a separate deviation, it
+    // moves real points, and it is deliberately not touched by the §10
+    // available-points fix.
+    const w = calculateWeights({
+      goalRatio: 0,
+      bestDistance: 100000,
+      taskDistance: 100000,
+      scoring: 'HG',
+      numReachedESS: 0,
+    });
+    expect(w.distance * 1000).toBeCloseTo(900, 6);
+    expect(w.leading).toBeGreaterThan(0);
+  });
+
+  it('does not fire for PG (the spec states the rule for HG only)', () => {
+    const w = calculateWeights({ ...base, scoring: 'PG', numReachedESS: 0 });
+    expect(w.time).toBeGreaterThan(0);
+  });
+
+  it('does not fire when a pilot reached ESS without making goal', () => {
+    const w = calculateWeights({ ...base, scoring: 'HG', numReachedESS: 1 });
+    expect(w.time).toBeGreaterThan(0);
+    expect(w.arrival).toBeGreaterThan(0);
+  });
+
+  it('is left unapplied when the count is not supplied', () => {
+    const w = calculateWeights({ ...base, scoring: 'HG' });
+    expect(w.time).toBeGreaterThan(0);
+  });
+});
+
+describe('scoreTask — nobody at ESS zeroes the offer (S7F §10, issue #583)', () => {
+  // Two HG pilots who fly the start and TP1 and land out before ESS.
+  const landedOutWaypoints = standardWaypoints.slice(0, 2);
+  const pilots: PilotFlight[] = [
+    {
+      pilotName: 'Alice',
+      trackFile: 'alice.igc',
+      fixes: createTrackThroughCylinders(landedOutWaypoints),
+    },
+    {
+      pilotName: 'Bob',
+      trackFile: 'bob.igc',
+      fixes: createTrackThroughCylinders(landedOutWaypoints, { fixIntervalMinutes: 2 }),
+    },
+  ];
+  const params: Partial<GAPParameters> = {
+    scoring: 'HG',
+    nominalDistance: 10000,
+    nominalTime: 600,
+    useLeading: true,
+    useArrival: true,
+  };
+
+  it('publishes zero available time and arrival points', () => {
+    const result = scoreTask(standardTask, pilots, params);
+
+    expect(result.stats.numReachedESS).toBe(0);
+    expect(result.availablePoints.time).toBe(0);
+    expect(result.availablePoints.arrival).toBe(0);
+    expect(result.availablePoints.distance).toBeGreaterThan(0);
+  });
+
+  it('leaves the remainder unallocated rather than redistributing it', () => {
+    const result = scoreTask(standardTask, pilots, params);
+    const ap = result.availablePoints;
+
+    expect(ap.total).toBeGreaterThan(0);
+    expect(ap.distance + ap.leading).toBeLessThan(ap.total);
+    // The day's points on offer stay 1000 × task validity — the components
+    // fall short of it, and that shortfall is the unallocated remainder.
+    expect(ap.total).toBeCloseTo(1000 * result.taskValidity.task, 6);
+  });
+
+  it('moves nobody’s score — the zeroed points were unearnable anyway', () => {
+    // Time points need an ESS crossing and arrival needs a position in the ESS
+    // order, so both were already zero for every pilot before the rule fired.
+    // Each total is still exactly distance + leading.
+    const result = scoreTask(standardTask, pilots, params);
+    for (const p of result.pilotScores) {
+      expect(p.timePoints).toBe(0);
+      expect(p.arrivalPoints).toBe(0);
+      expect(p.totalScore).toBeCloseTo(
+        Number((p.distancePoints + p.leadingPoints).toFixed(1)),
+        1,
+      );
+    }
+  });
+});
+
 describe('calculateWeights — S7F 2024 leading formula (issue #257)', () => {
   it('PG s7f2024 with goal: leading = LeadingTimeRatio × (1 − DW)', () => {
     const gr = 0.3;

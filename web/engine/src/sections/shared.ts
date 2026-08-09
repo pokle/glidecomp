@@ -13,6 +13,7 @@ import { getGoalIndex } from '../xctsk-parser';
 import type { TurnpointReaching } from '../turnpoint-sequence';
 import type { BestTimeCandidate, GAPParameters } from '../gap-scoring';
 import type {
+  ClassContextInput,
   ClassPilotInput,
   ExplanationAnchor,
   ExplanationAnchorKind,
@@ -30,6 +31,46 @@ export function bestTimeCandidate(pilot: ClassPilotInput): BestTimeCandidate {
     reachedESS: pilot.reached_ess,
     speedSectionTime: pilot.speed_section_time,
   };
+}
+
+/**
+ * How many pilots in the class reached the end of the speed section.
+ *
+ * The published count is the divisor the scorer actually used; counting rows
+ * is the fallback for payloads written before `validity_inputs` existed.
+ */
+export function pilotsAtEss(classContext: ClassContextInput): number {
+  return (
+    classContext.validity_inputs?.num_reached_ess ??
+    classContext.pilots.filter((p) => p.reached_ess).length
+  );
+}
+
+/**
+ * Did FAI S7F §10's "nobody reaches ESS" rule zero this class's available time
+ * and arrival points?
+ *
+ * Stated in the spec's HG box, so HG only — paragliding arrives at a zero time
+ * weight through its own GoalRatio = 0 leading weight instead, which
+ * {@link leadingWeightDetail} already spells out.
+ *
+ * Gated on the PUBLISHED available time being zero as well as on the field
+ * count: the stale-first store keeps serving bodies written before the rule
+ * existed, and those carry a non-zero time figure that this sentence would
+ * flatly contradict. A whole-day zero (a stopped task that failed §12.3.2)
+ * is excluded for the same reason — nothing was on offer there for any
+ * component, which is a different finding with its own row.
+ */
+export function noEssPointsZeroed(
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): boolean {
+  return (
+    params.scoring === 'HG' &&
+    classContext.available_points.total > 0 &&
+    classContext.available_points.time === 0 &&
+    pilotsAtEss(classContext) === 0
+  );
 }
 
 /** Human label for a task position: Takeoff / Start / TP3 / ESS / Goal. */

@@ -1577,6 +1577,14 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           <span title="Leading weight ${wPct(result.weights.leading)}">Leading: ${result.availablePoints.leading.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.leading)})</span></span>
           ${params.scoring === 'HG' ? `<span title="Arrival weight ${wPct(result.weights.arrival)}">Arrival: ${result.availablePoints.arrival.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.arrival)})</span></span>` : ''}
         </div>
+        ${
+          // FAI S7F §10 (HG): nobody reached ESS, so the time and arrival
+          // offers are zero and nothing replaces them — say why, or the row
+          // above visibly fails to add up to the total.
+          params.scoring === 'HG' && stats.numReachedESS === 0 && result.availablePoints.total > 0
+            ? `<div class="text-xs text-muted-foreground mt-1">Nobody reached ESS, so no time or arrival points were available (FAI S7F §10) — only ${(result.availablePoints.distance + result.availablePoints.leading).toFixed(0)} points could be won.</div>`
+            : ''
+        }
       </div>
     `;
 

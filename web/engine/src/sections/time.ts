@@ -28,7 +28,7 @@ import {
   reconcileWithAvailable,
   trimZeros,
 } from '../score-explanation-format';
-import { bestTimeCandidate } from './shared';
+import { bestTimeCandidate, noEssPointsZeroed } from './shared';
 import { rankAmong, rankLabel } from './rank';
 
 export function buildTimeSection(
@@ -63,16 +63,22 @@ export function buildTimeSection(
   const bestTime = bestTimeFrom(candidates, essNotGoalFactor);
   let rank: string | undefined;
 
+  // FAI S7F §10 (HG): nobody in the class reached ESS, so there were no time
+  // points to win — a fact about the whole task, not about this pilot, and the
+  // reason the section header shows nothing available.
+  const noEssAtAll = noEssPointsZeroed(classContext, params);
+
   if (!qualifies || entry.speed_section_time === null || bestTime === null) {
     items.push({
       id: 'no-time-points',
-      text:
-        params.scoring === 'PG'
+      text: noEssAtAll
+        ? 'Nobody in this class reached the end of the speed section, so the task offered no time points to anyone (FAI S7F §10). Distance and leading points were all that could be won.'
+        : params.scoring === 'PG'
           ? 'Time points are only awarded to pilots who complete the task.'
           : entry.reached_ess && !entry.made_goal && essNotGoalFactor === 0
             ? 'Reached the end of the speed section but not goal — this competition scores that at 0% of time and arrival points (FAI S7F §12.1).'
             : 'Time points are only awarded to pilots who reach the end of the speed section.',
-      emphasis: 'muted',
+      emphasis: noEssAtAll ? 'warning' : 'muted',
     });
   } else {
     // Time-points exponent (S7F §11.2) actually used for this comp, decoupled
