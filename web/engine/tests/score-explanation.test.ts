@@ -1588,6 +1588,89 @@ describe('explainGapScore — leading points', () => {
     expect(s.items.find((i) => i.id === 'leading-coefficient')).toBeUndefined();
     expect(s.items.find((i) => i.id === 'leading')!.value).toBe('62.5 pts');
   });
+
+  // §11.3.1's maxTime is the one input to a landed-out pilot's coefficient
+  // that comes from outside their own flight, so the page has to name it.
+  function landedOutLeading(
+    times?: ClassContextInput['leading_times'],
+  ) {
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, leading: 100 };
+    ctx.pilots = ctx.pilots.map((p, i) => ({
+      ...p,
+      leading_coefficient: i === 0 ? 0.981 : 1.284,
+    }));
+    if (times) ctx.leading_times = times;
+    return section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: {
+          ...makeGoalEntry(),
+          made_goal: false,
+          reached_ess: false,
+          speed_section_time: null,
+          leading_points: 62.5,
+          leading_coefficient: 1.284,
+        },
+        classContext: ctx,
+        params: { scoring: 'PG', leadingFormula: 'weighted' },
+      }),
+      'leading',
+    );
+  }
+
+  const clock = {
+    first_start_ms: Date.UTC(2024, 0, 15, 12, 0, 0),
+    last_ess_ms: Date.UTC(2024, 0, 15, 15, 0, 0),
+    last_outlanding_ms: Date.UTC(2024, 0, 15, 16, 0, 0),
+    deadline_ms: null,
+    stop_time_ms: null,
+    max_time_ms: Date.UTC(2024, 0, 15, 16, 0, 0),
+    max_time_source: 'last_outlanding' as const,
+  };
+
+  it('names the maxTime the land-out tail ran to, and what set it', () => {
+    const item = landedOutLeading(clock).items.find((i) => i.id === 'leading-max-time')!;
+    expect(item.value).toBe('16:00:00 UTC');
+    expect(item.detail).toContain('when the last pilot landed out');
+  });
+
+  it('says the deadline capped the tail when it did', () => {
+    const capped = {
+      ...clock,
+      deadline_ms: Date.UTC(2024, 0, 15, 15, 30, 0),
+      max_time_ms: Date.UTC(2024, 0, 15, 15, 30, 0),
+      max_time_source: 'deadline' as const,
+    };
+    const item = landedOutLeading(capped).items.find((i) => i.id === 'leading-max-time')!;
+    expect(item.value).toBe('15:30:00 UTC');
+    expect(item.detail).toContain('task deadline');
+  });
+
+  it('says nothing about maxTime for a pilot who reached ESS — they carry no tail', () => {
+    const ctx = makeClassContext();
+    ctx.available_points = { ...ctx.available_points, leading: 100 };
+    ctx.leading_times = clock;
+    ctx.pilots = ctx.pilots.map((p) => ({ ...p, leading_coefficient: 0.981 }));
+    const s = section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: { ...makeGoalEntry(), leading_points: 100, leading_coefficient: 0.981 },
+        classContext: ctx,
+        params: { scoring: 'PG', leadingFormula: 'weighted' },
+      }),
+      'leading',
+    );
+    expect(s.items.find((i) => i.id === 'leading-max-time')).toBeUndefined();
+  });
+
+  it('degrades to the previous section when the payload predates the clock', () => {
+    const s = landedOutLeading();
+    expect(s.items.find((i) => i.id === 'leading-max-time')).toBeUndefined();
+    expect(s.items.find((i) => i.id === 'leading-coefficient')).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

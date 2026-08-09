@@ -178,7 +178,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
     sections.push(
       withChart(
-        buildLeadingSection(entry, classContext, params),
+        buildLeadingSection(entry, classContext, params, fmt),
         buildLeadingChart(entry, classContext),
       ),
     );
