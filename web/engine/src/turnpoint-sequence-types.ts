@@ -379,15 +379,17 @@ export interface TaskStopInfo {
   windowEnd: Date;
 
   /**
-   * True when the pilot reached ESS within their scored window (§12.3.5):
-   * the complete flight is scored, including anything flown after the stop.
+   * True when the pilot reached ESS within their scored window. Since the
+   * 2026 edition this is transparency only — §13.4.5 truncates EVERY pilot
+   * at the stop; it decides which §13.4.5 case (between ESS and goal) the
+   * pilot falls under, never an exemption from the clip.
    */
   essBeforeStop: boolean;
 
   /**
    * True when the tracklog reaches the scored-window end — the pilot was
-   * still flying at the stop, making them eligible for the §12.3.6 altitude
-   * bonus (and counted as "still flying" in the §12.3.3 stopped validity).
+   * still flying at the stop, making them eligible for the §13.4.6 altitude
+   * bonus (and counted as "still flying" in the §13.4.3 stopped validity).
    */
   flyingAtStop: boolean;
 

@@ -638,26 +638,50 @@ export function scoreFlights(
   // Step 6: Determine ESS arrival order — see essArrivalOrder.
   const essPositionMap = essArrivalOrder(effFlights, fullParams);
 
-  // §13.4.5: every goal pilot's time points are reduced by the points a
-  // pilot reaching ESS exactly at the end of the scored window would get —
-  // removing the discontinuity against pilots stopped between ESS and goal.
+  // §13.4.5 (2026): the stopped-task time/distance points scheme.
+  //
+  //  1. Nobody in goal at the stop → the task offers no time points at all,
+  //     and nothing is moved to distance.
+  //  2. Somebody in goal:
+  //     a. pilots between ESS and goal at the stop exist → the reduction is
+  //        the time points the best of THEM would have received had they
+  //        completed the flight to goal (standard §12.2 arithmetic on their
+  //        own speed-section time — max over the set covers both the
+  //        single-gate "earliest ESS crossing" and the multi-gate/Time
+  //        Trial "smallest start→ESS time" reference-pilot definitions);
+  //     b. none exist → the reduction is the time points of a hypothetical
+  //        pilot reaching ESS exactly at the end of the scored window.
+  //     Every goal pilot's time points are reduced by it, and the same
+  //     amount is ADDED to the available distance points for the task.
   let stopTimeReduction = 0;
-  if (
-    stopped?.requirementMet &&
-    stopped.scoredWindowSeconds !== null &&
-    bestTime !== null &&
-    numInGoal > 0
-  ) {
-    stopTimeReduction = calculateTimePoints({
-      pilotTime: stopped.scoredWindowSeconds,
-      bestTime,
-      madeGoal: true,
-      reachedESS: true,
-      availableTimePoints: availablePoints.time,
-      scoring: fullParams.scoring,
-      essNotGoalFactor,
-    });
-    stopped.timePointsReduction = roundToTenth(stopTimeReduction);
+  if (stopped?.requirementMet) {
+    if (numInGoal === 0) {
+      availablePoints.time = 0;
+    } else if (bestTime !== null) {
+      const betweenTimes = effFlights
+        .filter(f => f.reachedESS && !f.madeGoal)
+        .map(f => f.speedSectionTime)
+        .filter((t): t is number => t !== null && t > 0);
+      const wouldBeTimePoints = (pilotTime: number) =>
+        calculateTimePoints({
+          pilotTime,
+          bestTime,
+          madeGoal: true,
+          reachedESS: true,
+          availableTimePoints: availablePoints.time,
+          scoring: fullParams.scoring,
+          essNotGoalFactor,
+        });
+      if (betweenTimes.length > 0) {
+        stopTimeReduction = maxBy(betweenTimes.map(wouldBeTimePoints), x => x);
+      } else if (stopped.scoredWindowSeconds !== null) {
+        stopTimeReduction = wouldBeTimePoints(stopped.scoredWindowSeconds);
+      }
+      if (stopTimeReduction > 0) {
+        stopped.timePointsReduction = roundToTenth(stopTimeReduction);
+        availablePoints.distance += stopTimeReduction;
+      }
+    }
   }
 
   // §12.2 floor for the jump-the-gun penalty: the score a pilot would get

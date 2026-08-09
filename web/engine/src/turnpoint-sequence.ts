@@ -126,11 +126,11 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  *
  * @param task - The competition task definition
  * @param fixes - The pilot's GPS tracklog
- * @param options - Optional stopped-task context (FAI S7F §12.3): when
+ * @param options - Optional stopped-task context (FAI S7F 2026 §13.4): when
  *   `options.stop` is set the scored flight is clipped to the pilot's
- *   scored time window (§12.3.4), a pilot at/after ESS at the window end is
- *   scored for their complete flight (§12.3.5), and a pilot still flying at
- *   the window end earns the altitude bonus (§12.3.6). The result then
+ *   scored time window (§13.4.4/§13.4.5 — nothing after the stop earns
+ *   points, for anyone), and a pilot still flying at the window end earns
+ *   the §13.4.6 altitude bonus at their stop-time position. The result then
  *   carries {@link TaskStopInfo} for transparency.
  * @returns Complete sequence result with scoring data and explanations
  */
@@ -150,36 +150,25 @@ export function resolveTurnpointSequence(
   const flyingAtStop = fixes.length > 0 &&
     fixes[fixes.length - 1].time.getTime() >= windowEndMs;
 
-  // Probe pass without the stop: decides the §12.3.5 exemption (a pilot
-  // at/after ESS at the window end is scored for the complete flight) and
-  // already IS the final answer for a pilot who landed before the stop.
-  const probe = resolveSequenceOnce(task, fixes, null);
-  const essBeforeStop = probe.essReaching !== null &&
-    probe.essReaching.time.getTime() <= windowEndMs;
-
   let result: TurnpointSequenceResult;
   let bonusApplied = false;
   let clipped = false;
   if (!flyingAtStop) {
     // Landed before the window end: nothing to clip, no altitude bonus.
-    result = probe;
-  } else if (essBeforeStop) {
-    // §12.3.5: complete flight scored, including anything after the stop.
-    // A landed-out pilot (between ESS and goal) still gets the §12.3.6
-    // altitude bonus over the whole flight; a goal pilot needs no re-run.
-    if (probe.madeGoal) {
-      result = probe;
-    } else {
-      result = resolveSequenceOnce(task, fixes, { windowEndMs: null, altitudeBonus: bonusOpts });
-      bonusApplied = true;
-    }
+    result = resolveSequenceOnce(task, fixes, null);
   } else {
-    // §12.3.4: scored only up to the window end — crossings after it can't
-    // count and distance is measured only up to it, with the bonus.
+    // §13.4.5 (2026): EVERY pilot is scored only up to the window end —
+    // there is no longer an exemption for pilots at/after ESS. Crossings
+    // after it can't count, distance is measured only up to it, and the
+    // §13.4.6 bonus is taken at the stop-time position.
     result = resolveSequenceOnce(task, fixes, { windowEndMs, altitudeBonus: bonusOpts });
     bonusApplied = true;
     clipped = true;
   }
+  // Transparency only (the report card says which case a pilot was in):
+  // whether ESS had been reached within the scored window.
+  const essBeforeStop = result.essReaching !== null &&
+    result.essReaching.time.getTime() <= windowEndMs;
 
   // Crossings excluded by the stop clip (those already past the task
   // deadline are the deadline's, not the stop's).

@@ -263,11 +263,16 @@ const BEST_PROGRESS_TOLERANCE_M = 5;
  *   first — fixes after it are not scanned. Null when the task has none.
  *   For a stopped task the caller folds the scored-window end (§12.3.4)
  *   into this same clip.
- * @param altitudeBonus - Stopped tasks only (§12.3.6): credit each scanned
- *   fix a bonus distance of glideRatio × (GNSS altitude − goalAltitude),
- *   clamped to the geometric remaining distance, and pick the best
- *   EFFECTIVE (bonus-adjusted) remaining distance. Null when no bonus
- *   applies (task not stopped, or the pilot landed before the stop).
+ * @param altitudeBonus - Stopped tasks only (S7F 2026 §13.4.6): credit the
+ *   pilot's position at the task stop time — the LAST scanned fix, since
+ *   the caller folds the scored-window end into `deadlineMs` — a bonus
+ *   distance of glideRatio × (GNSS altitude − goalAltitude), clamped to the
+ *   geometric remaining distance there, and pick the best EFFECTIVE
+ *   remaining distance ("if the Bonus Distance exceeds the pilot's best
+ *   distance up to Task Stop Time, it is used"). Earlier fixes never carry
+ *   a bonus — the 2026 edition computes it only for the position at stop,
+ *   "disregarding any better distances achieved previously". Null when no
+ *   bonus applies (task not stopped, or the pilot landed before the stop).
  */
 interface BestProgressParams {
   task: XCTask;
@@ -319,8 +324,22 @@ export function computeBestProgress(
     nextMeasure.kind === 'goal-line' ? nextMeasure.line : computeGoalLine(task);
 
   const nextTP = remainingTPs[0];
-  const capFor = (fix: IGCFix): number =>
-    altitudeBonus
+
+  // §13.4.6 (2026): the altitude bonus belongs ONLY to the pilot's position
+  // at the task stop time — the last eligible fix, since the caller folds
+  // the scored-window end into deadlineMs. Find that index first so the
+  // per-fix cap can be zero everywhere else.
+  let lastEligibleIndex = -1;
+  if (altitudeBonus) {
+    for (let i = 0; i < fixes.length; i++) {
+      const t = fixes[i].time.getTime();
+      if (t <= lastReachingTime) continue;
+      if (deadlineMs !== null && t > deadlineMs) break;
+      lastEligibleIndex = i;
+    }
+  }
+  const capFor = (fix: IGCFix, index: number): number =>
+    altitudeBonus && index === lastEligibleIndex
       ? altitudeBonus.glideRatio * Math.max(0, fixAltitude(fix) - altitudeBonus.goalAltitude)
       : 0;
 
@@ -334,7 +353,7 @@ export function computeBestProgress(
     const fix = fixes[i];
     if (fix.time.getTime() <= lastReachingTime) continue;
     // §11.1: flying after the task deadline earns no further distance.
-    // (For a stopped task the caller folds the §12.3.4 window end in here.)
+    // (For a stopped task the caller folds the §13.4.4 window end in here.)
     if (deadlineMs !== null && fix.time.getTime() > deadlineMs) break;
 
     const dCentre = andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon);
@@ -346,7 +365,7 @@ export function computeBestProgress(
           : nextMeasure.kind === 'goal-line'
             ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
             : Math.max(0, dCentre - nextTP.radius);
-    const cap = capFor(fix);
+    const cap = capFor(fix, i);
     const geometric = heuristicNext + interTPDistance;
     const bonus = Math.min(geometric, cap);
     const heuristic = geometric - bonus;
@@ -396,7 +415,7 @@ export function computeBestProgress(
     });
     // remainingTPs is non-empty here, so a route always exists.
     const geometric = route ? route.distance : 0;
-    const bonus = altitudeBonus ? Math.min(geometric, capFor(fix)) : 0;
+    const bonus = altitudeBonus ? Math.min(geometric, capFor(fix, i)) : 0;
     return { eff: geometric - bonus, geom: geometric, bonus, line: route ? route.line : [] };
   };
 
@@ -417,7 +436,7 @@ export function computeBestProgress(
     if (c.lb >= best.eff - TOL) break;
     if (c.index === seed.index) continue;
     const fix = fixes[c.index];
-    const capHere = capFor(fix);
+    const capHere = capFor(fix, c.index);
     let ruledOut = false;
     for (const e of evaluated) {
       const sep = andoyerDistance(e.lat, e.lon, fix.latitude, fix.longitude);

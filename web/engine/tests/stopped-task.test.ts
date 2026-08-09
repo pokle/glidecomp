@@ -230,16 +230,21 @@ describe('resolveTurnpointSequence with a stop (§12.3.4–§12.3.6)', () => {
     expect(lateGoal.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('§12.3.5: a pilot past ESS at the stop is scored for the complete flight', () => {
+  it('§13.4.5 (2026): a pilot past ESS at the stop is still clipped — goal after the stop does not count', () => {
     // ESS (47.05) reached ~min 10.3; stop at 15; goal reached ~20.3 — after
-    // the stop, but the complete flight counts.
+    // the stop. The 2024 edition scored the complete flight; the 2026
+    // edition truncates everyone at the stop, so the goal crossing is void
+    // and the pilot is scored as between ESS and goal.
     const r = resolveTurnpointSequence(makeTask(), makeTrack(), {
       stop: { ...stopBase, stopTimeMs: msAfterBase(15) },
     });
     expect(r.essReaching).not.toBeNull();
     expect(r.essReaching!.time.getTime()).toBeLessThan(msAfterBase(15));
     expect(r.stopInfo!.essBeforeStop).toBe(true);
-    expect(r.madeGoal).toBe(true); // goal after the stop still counts
+    expect(r.madeGoal).toBe(false); // goal after the stop is void
+    expect(r.bestProgress!.time.getTime()).toBeLessThanOrEqual(msAfterBase(15));
+    // The speed-section time survives — the ESS crossing was inside the window.
+    expect(r.speedSectionTime).not.toBeNull();
   });
 
   it('a pilot landed before the stop is untouched (no clip, no bonus)', () => {
@@ -427,6 +432,63 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
     for (const p of result.pilotScores) expect(p.totalScore).toBe(0);
   });
 
+  it('§13.4.5: the goal reduction is added to the available distance points', () => {
+    // Fast reaches goal ~min 12.7 (before the 10:15 stop); Slow is between
+    // SSS and ESS. The reduction docked from Fast's time points must appear
+    // as extra available distance points.
+    const stoppedRun = scoreTask(makeTask(), makeField(), params, undefined, options);
+    const reduction = stoppedRun.stopped!.timePointsReduction;
+    expect(reduction).toBeGreaterThan(0);
+    const validityPool =
+      1000 * stoppedRun.taskValidity.task * stoppedRun.weights.distance;
+    expect(stoppedRun.availablePoints.distance).toBeCloseTo(
+      validityPool + reduction, 0,
+    );
+  });
+
+  it('§13.4.5: a pilot between ESS and goal at the stop sets the reduction', () => {
+    // Fast crosses goal ~min 12.7; Middle reaches ESS ~min 8.5 but is still
+    // short of goal at the 10:15 stop. Middle is "between ESS and goal", so
+    // the reduction equals the §12.2 time points Middle would have received
+    // — their own start→ESS time against the best time.
+    const field: PilotFlight[] = [
+      { pilotName: 'Fast', trackFile: 'fast.igc', fixes: makeTrack({ degPerMin: 0.008, minutes: 14 }) },
+      { pilotName: 'Middle', trackFile: 'middle.igc', fixes: makeTrack({ degPerMin: 0.006, minutes: 22 }) },
+    ];
+    const result = scoreTask(makeTask(), field, params, undefined, options);
+    const middle = result.pilotScores.find(p => p.trackFile === 'middle.igc')!;
+    expect(middle.reachedESS).toBe(true);
+    expect(middle.madeGoal).toBe(false);
+    expect(middle.speedSectionTime).not.toBeNull();
+    // The reduction reconciles with Middle's would-be §12.2 time points, not
+    // with the scored-window fallback (which would be larger — the window is
+    // longer than Middle's ESS time).
+    const sf = (t: number, best: number) =>
+      Math.max(0, 1 - Math.pow(((t - best) / 3600) / Math.sqrt(best / 3600), 5 / 6));
+    const wouldBe =
+      sf(middle.speedSectionTime!, result.stats.bestTime!) * result.availablePoints.time;
+    expect(result.stopped!.timePointsReduction).toBeCloseTo(wouldBe, 0);
+  });
+
+  it('§13.4.5: nobody in goal at the stop → the task offers no time points', () => {
+    // HG field (PG already offers no time without goal): one pilot past ESS
+    // but short of goal at the stop, nobody in goal.
+    const field: PilotFlight[] = [
+      { pilotName: 'A', trackFile: 'a.igc', fixes: makeTrack({ degPerMin: 0.006, minutes: 22 }) },
+      { pilotName: 'B', trackFile: 'b.igc', fixes: makeTrack({ degPerMin: 0.003, minutes: 22 }) },
+    ];
+    // HG score-back is 15 minutes: announcement 10:30 → stop 10:15, and the
+    // 15-minute window clears the 10-minute HG minimum run.
+    const result = scoreTask(
+      makeTask(), field, { scoring: 'HG', nominalTime: 1200 }, undefined,
+      { stopAnnouncementMs: msAfterBase(30) },
+    );
+    expect(result.stats.numInGoal).toBe(0);
+    expect(result.stats.numReachedESS).toBeGreaterThan(0);
+    expect(result.availablePoints.time).toBe(0);
+    for (const p of result.pilotScores) expect(p.timePoints).toBe(0);
+  });
+
   it('§12.3.3: stopped validity < 1 when nobody reached ESS', () => {
     // A slow field: nobody near the ESS by the stop.
     const field: PilotFlight[] = [
@@ -516,7 +578,7 @@ describe('score explanation — stopped task', () => {
     const bonusItem = distance.items.find((i) => i.id === 'stopped-altitude-bonus');
     expect(bonusItem).toBeDefined();
     expect(bonusItem!.text).toContain('altitude bonus');
-    expect(bonusItem!.text).toContain('§12.3.6');
+    expect(bonusItem!.text).toContain('§13.4.6');
 
     const validity = explanation.sections.find((s) => s.id === 'validity')!;
     const stoppedValidity = validity.items.find((i) => i.id === 'stopped-validity');
@@ -528,13 +590,15 @@ describe('score explanation — stopped task', () => {
     expect(total.detail).toContain('= 720');
   });
 
-  it('explains the §12.3.5 goal time-points reduction', () => {
+  it('explains the §13.4.5 goal time-points reduction', () => {
     const task = makeTask();
-    const track = makeTrack();
+    // Fast enough to cross goal (~min 12.7) BEFORE the stop at min 15 — the
+    // 2026 edition voids any goal crossing after the stop.
+    const track = makeTrack({ degPerMin: 0.008, minutes: 14 });
     const result = resolveTurnpointSequence(task, track, {
       stop: { glideRatio: 4, goalAltitude: 1000, stopTimeMs: msAfterBase(15) },
     });
-    expect(result.madeGoal).toBe(true); // §12.3.5 complete flight
+    expect(result.madeGoal).toBe(true); // goal before the stop
     const explanation = explainGapScore({
       task,
       result,
@@ -567,16 +631,13 @@ describe('score explanation — stopped task', () => {
       params: { scoring: 'PG' },
     });
 
-    const flight = explanation.sections.find((s) => s.id === 'flight')!;
-    expect(flight.items.find((i) => i.id === 'stop-ess-exemption')).toBeDefined();
-
     const time = explanation.sections.find((s) => s.id === 'time')!;
     const reduction = time.items.find((i) => i.id === 'stopped-time-reduction');
     expect(reduction).toBeDefined();
     expect(reduction!.text).toContain('120');
-    expect(reduction!.text).toContain('§12.3.5');
+    expect(reduction!.text).toContain('§13.4.5');
     const formula = time.items.find((i) => i.id === 'time-formula')!;
-    expect(formula.detail).toContain('− 120 (task stopped, §12.3.5)');
+    expect(formula.detail).toContain('− 120 (task stopped, §13.4.5)');
   });
 });
 

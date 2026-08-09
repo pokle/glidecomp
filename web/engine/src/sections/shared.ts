@@ -58,7 +58,7 @@ export function pilotsAtEss(classContext: ClassContextInput): number {
  * Gated on the PUBLISHED available time being zero as well as on the field
  * count: the stale-first store keeps serving bodies written before the rule
  * existed, and those carry a non-zero time figure that this sentence would
- * flatly contradict. A whole-day zero (a stopped task that failed §12.3.2)
+ * flatly contradict. A whole-day zero (a stopped task that failed §13.4.2)
  * is excluded for the same reason — nothing was on offer there for any
  * component, which is a different finding with its own row.
  */

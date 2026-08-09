@@ -191,7 +191,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       // Check comp exists and handle test visibility
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test, pilot_classes, scoring_format, series_scoring, ftv_factor FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, pilot_classes, scoring_format, series_scoring, ftv_factor, category FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
@@ -201,6 +201,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           scoring_format: string;
           series_scoring: string;
           ftv_factor: number | null;
+          category: string | null;
         }>();
 
       if (!comp) return c.json({ error: "Not found" }, 404);
@@ -343,6 +344,18 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       for (const task of taskScores) {
         for (const cls of task.classes) {
+          // S7F 2026 §15 (PG only): a stopped task with a task validity
+          // under 0.05 (the winner has fewer than 50 points) is excluded
+          // from the competition ranking. It stays on the task's own scores
+          // page — only the comp aggregation skips it.
+          if (
+            comp.category === "pg" &&
+            comp.scoring_format === "gap" &&
+            cls.stopped &&
+            cls.task_validity.task < 0.05
+          ) {
+            continue;
+          }
           classTotals[cls.pilot_class] ??= {};
           classTaskWinner[cls.pilot_class] ??= {};
           const winnerScore = cls.pilots.reduce(

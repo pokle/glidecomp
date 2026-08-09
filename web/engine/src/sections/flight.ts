@@ -390,32 +390,30 @@ function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
 function buildStopItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   const { result, entry, fmt } = ctx;
   const out: ScoreExplanationItem[] = [];
-  // Stopped task (FAI S7F §12.3): narrate how the stop shaped this flight —
+  // Stopped task (FAI S7F §13.4): narrate how the stop shaped this flight —
   // the scored window's end, the complete-flight exemption for pilots
-  // at/after ESS (§12.3.5), and any crossings dropped by the clip.
+  // at/after ESS (§13.4.5), and any crossings dropped by the clip.
   const stop = result.stopInfo;
   if (!stop) return out;
   const windowDiffers =
     stop.windowEnd.getTime() !== stop.stopTime.getTime();
   out.push({
     id: 'task-stopped',
-    // A pilot already past ESS keeps their complete flight (§12.3.5, stated
-    // next) — for them the stop is context, not a clip, so don't claim one.
-    text: stop.essBeforeStop
-      ? 'The task was stopped (FAI S7F §12.3).'
-      : windowDiffers
-        ? 'The task was stopped. With multiple start gates every pilot is scored for the time window the last-started pilot had (FAI S7F §12.3.4) — this flight scored up to the window end shown.'
-        : 'The task was stopped — the flight is scored only up to the task stop time (FAI S7F §12.3).',
+    // §13.4.5 (2026): every pilot is scored only up to the stop — including
+    // pilots already past ESS.
+    text: windowDiffers
+      ? 'The task was stopped. With multiple start gates every pilot is scored for the time window the last-started pilot had (FAI S7F §13.4.4) — this flight scored up to the window end shown.'
+      : 'The task was stopped — the flight is scored only up to the task stop time (FAI S7F §13.4).',
     value: fmt(stop.windowEnd),
     emphasis: stop.crossingsAfterStop > 0 ? 'warning' : 'muted',
     detail: windowDiffers
       ? `Task stop time ${fmt(stop.stopTime)}; this pilot's scored window ends ${fmt(stop.windowEnd)}.`
       : undefined,
   });
-  if (stop.essBeforeStop && (entry.made_goal || result.essReaching)) {
+  if (stop.essBeforeStop && result.essReaching && !entry.made_goal) {
     out.push({
-      id: 'stop-ess-exemption',
-      text: 'Already past the end of the speed section when the task was stopped — the complete flight is scored, including anything flown after the stop (FAI S7F §12.3.5).',
+      id: 'stop-ess-between',
+      text: 'Past the end of the speed section but short of goal when the task was stopped — scored for the distance and speed-section time flown up to the stop (FAI S7F §13.4.5).',
       emphasis: 'muted',
     });
   }

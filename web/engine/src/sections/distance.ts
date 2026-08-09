@@ -79,14 +79,14 @@ export function buildDistanceSection(
     });
   }
 
-  // Stopped tasks (S7F §12.3.6): a pilot still flying at the stop gets a
+  // Stopped tasks (S7F §13.4.6): a pilot still flying at the stop gets a
   // bonus distance for their height above goal — it is already inside the
   // scored distance, so state it before the figure it explains.
   const altBonus = entry.stopped_altitude_bonus ?? result.stopInfo?.altitudeBonus ?? 0;
   if (altBonus > 0 && result.stopInfo) {
     items.push({
       id: 'stopped-altitude-bonus',
-      text: `Still flying when the task was stopped — an altitude bonus of ${km(altBonus)} is included in the scored distance: height above goal glides out at a fixed ${result.stopInfo.glideRatio}:1 ratio (FAI S7F §12.3.6).`,
+      text: `Still flying when the task was stopped — an altitude bonus of ${km(altBonus)} is included in the scored distance: height above goal glides out at a fixed ${result.stopInfo.glideRatio}:1 ratio (FAI S7F §13.4.6).`,
       // Print the arithmetic only when it reconciles — the bonus is clamped
       // at goal distance, and a clamped figure would contradict the equation.
       detail: result.stopInfo.bestPointAltitude !== undefined &&

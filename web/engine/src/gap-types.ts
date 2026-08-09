@@ -151,13 +151,16 @@ export interface StoppedTaskScore {
    * scoreable representation of "the task cannot be scored".
    */
   requirementMet: boolean;
-  /** The §12.3.3 stopped-task validity applied (0 when requirementMet is false). */
+  /** The §13.4.3 stopped-task validity applied (0 when requirementMet is false). */
   stoppedValidity: number;
   /**
-   * §12.3.5: the fixed time-points reduction applied to every goal pilot —
-   * the time points a pilot reaching ESS exactly at the end of the scored
-   * window would get (removes the goal/landed-short discontinuity). 0 when
-   * nobody made goal or no best time exists.
+   * §13.4.5 (2026): the fixed time-points reduction applied to every goal
+   * pilot — the standard §12.2 time points the best pilot between ESS and
+   * goal at the stop would have received had they completed the flight (or,
+   * with nobody between, a hypothetical pilot reaching ESS exactly at the
+   * end of the scored window). The same amount is ADDED to the available
+   * distance points, so the published `availablePoints.distance` already
+   * carries it. 0 when nobody made goal or no best time exists.
    */
   timePointsReduction: number;
   /** Launched pilots who landed before the stop (feeds §12.3.3). */

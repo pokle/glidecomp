@@ -1,7 +1,7 @@
 /**
  * Time points, with the arithmetic that produced them: the speed fraction
  * against the class best time (FAI S7F §11.2), the §12.1 ESS-but-not-goal
- * reduction, and the §12.3.5 stopped-task deduction, each folded into the
+ * reduction, and the §13.4.5 stopped-task deduction, each folded into the
  * printed equation so it reconciles with the published points.
  */
 
@@ -140,7 +140,7 @@ export function buildTimeSection(
         emphasis: 'warning',
       });
     }
-    // Stopped tasks (S7F §12.3.5): every goal pilot's time points are docked
+    // Stopped tasks (S7F §13.4.5): every goal pilot's time points are docked
     // by a fixed amount — the points a pilot reaching ESS exactly at the end
     // of the scored window would get. Stated before the formula, and folded
     // into the printed equations so they reconcile with the published points.
@@ -151,7 +151,7 @@ export function buildTimeSection(
     if (stopReduction > 0) {
       items.push({
         id: 'stopped-time-reduction',
-        text: `The task was stopped: every goal pilot's time points are reduced by ${fmtPoints(stopReduction)} — the points a pilot reaching the end of the speed section exactly at the task stop would get — so finishing just before the stop scores no better than being stopped just after ESS (FAI S7F §12.3.5).`,
+        text: `The task was stopped: every goal pilot's time points are reduced by ${fmtPoints(stopReduction)} — the time points the best pilot caught between the end of the speed section and goal at the stop would have received — so finishing just before the stop scores no better than being stopped just after ESS. The same amount is added to the day's distance points (FAI S7F §13.4.5).`,
         emphasis: 'warning',
       });
     }
@@ -162,7 +162,7 @@ export function buildTimeSection(
       ? ` × ${trimZeros(essNotGoalFactor.toFixed(2), 1)} (ESS but not goal, §12.1)`
       : '';
     const stopEq = stopReduction > 0
-      ? ` − ${fmtPoints(stopReduction)} (task stopped, §12.3.5)`
+      ? ` − ${fmtPoints(stopReduction)} (task stopped, §13.4.5)`
       : '';
     if (entry.speed_section_time <= bestTime) {
       const { availStr, reconciles } = reconcileWithAvailable(

@@ -139,14 +139,14 @@ export function buildValiditySection(
       value: pctValidity(v.time, decimals),
       detail: timeValidityDetail(vi, params),
     },
-    // Stopped tasks (S7F §12.3.3): the fourth validity factor.
+    // Stopped tasks (S7F §13.4.3): the fourth validity factor.
     ...(v.stopped !== undefined
       ? [{
           id: 'stopped-validity',
           text:
             classContext.stopped && !classContext.stopped.requirement_met
-              ? 'Stopped-task validity — the task was stopped before running the minimum time (min(1 h, half the nominal time) after the start), so it cannot be scored (FAI S7F §12.3.2).'
-              : 'Stopped-task validity — the task was stopped; when nobody has reached the end of the speed section, the day is devalued by how settled the field already was (FAI S7F §12.3.3).',
+              ? 'Stopped-task validity — the task was stopped before running the minimum time (min(1 h, half the nominal time) after the start), so it cannot be scored (FAI S7F §13.4.2).'
+              : 'Stopped-task validity — the task was stopped; when nobody has reached the end of the speed section, the day is devalued by how settled the field already was (FAI S7F §13.4.3).',
           value: pctValidity(v.stopped, decimals),
           emphasis: (v.stopped < 1 ? 'warning' : 'muted') as 'warning' | 'muted',
         }]
