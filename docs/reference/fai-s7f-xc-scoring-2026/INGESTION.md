@@ -33,7 +33,10 @@ explained in detail.
   JSON — support added to `extract_s7f.py` during this ingestion). In the
   transcription: whole red blocks carry a
   `*(Red in source: changed in this edition.)*` marker line; short red
-  phrases are wrapped `<ins>…</ins>`.
+  phrases are wrapped `<ins>…</ins>`. **Caveat:** the Annex A code samples'
+  C# syntax colouring is red-brown and also trips the classifier — the
+  p. 52 `red_changes` output is syntax colouring, not edition changes, so a
+  transcriber must always confirm red extents against the raster.
 - **Discipline marking now pairs each coloured band with a margin icon**
   (hang-glider or paraglider silhouette), so the distinction survives
   grey-scale printing. The icons render as small images and pollute the
