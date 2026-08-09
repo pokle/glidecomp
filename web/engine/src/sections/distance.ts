@@ -43,9 +43,26 @@ export function buildDistanceSection(
   const items: ScoreExplanationItem[] = [];
 
   if (entry.early_start_outcome === 'pg_launch_to_sss') {
+    // The scored distance IS the launch→start leg (§12.2 awards it as a fixed
+    // value), so print it here against what the pilot actually flew — that
+    // difference is the whole effect of the rule on their card. Two caveats:
+    // a launch→start leg shorter than the minimum distance is floored by
+    // §11.1, so the figure is then the minimum and must not be labelled the
+    // leg; and an older cached payload may not carry the flown figure, in
+    // which case the rule is stated without the comparison.
+    const actuallyFlew = result.flownDistance;
+    const atMinimum = entry.flown_distance <= params.minimumDistance;
     items.push({
       id: 'early-start-distance',
-      text: 'Early start (FAI S7F §12.2): paraglider pilots who start before the first start gate are scored only for the distance from launch to the start cylinder — the rest of the flight earns no points.',
+      text: 'Early start (FAI S7F §12.2): paraglider pilots who start before the first start gate are scored only for the distance from launch to the start cylinder — a fixed distance, whatever the rest of the flight covered.',
+      value: km(entry.flown_distance),
+      detail: atMinimum
+        ? `The launch→start leg is shorter than the ${km(params.minimumDistance)} minimum, so the minimum distance is scored instead (FAI S7F §11.1).`
+        : `The launch→start leg of the task line, as measured for the complete task distance (FAI S7F §6.4.1)${
+            Number.isFinite(actuallyFlew) && actuallyFlew > 0
+              ? ` — not what you actually flew (${km(actuallyFlew)})`
+              : ''
+          }.`,
       emphasis: 'warning',
     });
   } else if (entry.early_start_outcome === 'hg_min_distance') {

@@ -406,7 +406,18 @@
 //      Bumped because availablePoints and validity_inputs.weights are part of
 //      the cached payload: without a roll the stale-first store would serve
 //      the pre-change figures for settled comps indefinitely.
-// v36: HG leading weight follows the S7F §10 HG box on a no-goal day (the
+// v36: the PG early-start distance is the flat launch→SSS value (issue #584).
+//      §12.2 scores a paraglider pilot who jumps the gun "for the distance
+//      between the launch point and the SSS control zone, as calculated when
+//      determining the complete task distance (see 6.4.1)" — a fixed award.
+//      applyEarlyStarts capped it at the pilot's own flown distance, which is
+//      stricter than the spec for the one case where the two differ: an early
+//      starter who then landed short of their own start. That cap is gone.
+//      Scores move only for such a pilot (the §11.1 minimum-distance floor
+//      still applies underneath). The report card's distance section now
+//      prints which value applied — the launch→start leg beside what was
+//      actually flown, or the minimum when the leg falls below it.
+// v37: HG leading weight follows the S7F §10 HG box on a no-goal day (the
 //      adjacent deviation found while fixing #583). The spec gives hang
 //      gliding ONE formula, (1 − DistanceWeight) ÷ 8 × 1.4, with no GoalRatio
 //      case; the "0.1 × BestDist ÷ TaskDist when nobody makes goal" rule is
@@ -424,7 +435,7 @@
 //      ESS, so under v35 those points are not redistributed: the day now caps
 //      at the spec's 900 + 18 = 918. The 41 HG tasks with leading on and
 //      pilots in goal, and all 30 PG tasks, are unchanged.
-export const SCORING_ENGINE_VERSION = 36;
+export const SCORING_ENGINE_VERSION = 37;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -432,4 +443,4 @@ export const SCORING_ENGINE_VERSION = 36;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "e73e1f96e522f83c6cadbd0668c3411d58f4c7ce48f88002fbe658f9a5f74c59";
+  "09da4b387f018248bae1cb409fb6d7c093b933ea07bc16998fdae99d3ad887ba";

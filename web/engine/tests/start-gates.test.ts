@@ -308,6 +308,28 @@ describe('early-start scoring (§12.2)', () => {
     expect(normal.earlyStartOutcome).toBeUndefined();
   });
 
+  it('PG: the launch→SSS distance is a fixed award, not a cap on what was flown', () => {
+    // Jumped the gun and then landed short of their own start (§12.2 awards
+    // the launch→SSS distance "as calculated when determining the complete
+    // task distance", §6.4.1 — it is not reduced to the flight).
+    const shortFlight = launchToSss / 2;
+    const result = scoreFlights(scoringTask, [
+      flight({ trackFile: 'normal.igc' }),
+      flight({
+        trackFile: 'landed-short.igc',
+        earlyStartSeconds: 120,
+        flownDistance: shortFlight,
+        madeGoal: false,
+        reachedESS: false,
+        speedSectionTime: null,
+      }),
+    ], { ...baseParams, scoring: 'PG' });
+    const early = result.pilotScores.find(p => p.trackFile === 'landed-short.igc')!;
+    expect(shortFlight).toBeLessThan(launchToSss);
+    expect(early.earlyStartOutcome).toBe('pg_launch_to_sss');
+    expect(early.flownDistance).toBeCloseTo(launchToSss, 0);
+  });
+
   it('HG within the limit: complete flight scored, 1 point per X seconds deducted', () => {
     const result = scoreFlights(scoringTask, [
       flight({ trackFile: 'normal.igc' }),

@@ -1401,14 +1401,6 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.
                 </li>
                 <li>
-                  <strong>Paragliding early-start distance (<SpecRef section="12.2" />):</strong>
-                  the specification scores an early starter for the launch→SSS distance as a fixed
-                  value. GlideComp caps that value at the distance the pilot actually flew, which
-                  is stricter for a pilot who jumped the gun and then landed short of their own
-                  start. Tracked in
-                  <a href="https://github.com/pokle/glidecomp/issues/584" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #584</a>.
-                </li>
-                <li>
                   <strong>Leading coefficient: the land-out tail (<SpecRef section="11.3.1" />):</strong>
                   for a pilot who lands out, the specification extends the leading graph to
                   <em>maxTime</em> — the last outlanding or the last ESS time, whichever is later,
