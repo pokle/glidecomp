@@ -241,6 +241,15 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             90% of the points. When 50% of the pilots make goal, the distance weight decreases to
             approximately 0.55.
           </p>
+          <p class="text-muted-foreground">
+            There is one exception. In <strong>hang gliding</strong>, if nobody reaches the end of
+            the speed section, the task has <strong>no time points and no arrival points at all</strong>.
+            Distance and leading keep their usual share, and the rest of the day is not shared out
+            to the other components: it is simply not awarded. A pilot's score does not change,
+            because neither component can be earned without an end-of-speed-section crossing, but
+            the scoreboard and the report card then show what could really be won. The report card
+            says so in the day-quality section, and again beside the time and arrival components.
+          </p>
         </div>
       </section>
 
@@ -1394,14 +1403,6 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   is very small, because a pilot who gets behind the line has almost always
                   entered the semi-circle. Tracked in
                   <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.
-                </li>
-                <li>
-                  <strong>Available points when no hang glider reaches ESS (<SpecRef section="10" />):</strong>
-                  the specification sets the available time and arrival points to zero when nobody
-                  reaches the end of the speed section. GlideComp shows the normal non-zero
-                  available points, but no pilot can earn them, so every pilot's score is the same
-                  either way. Tracked in
-                  <a href="https://github.com/pokle/glidecomp/issues/583" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #583</a>.
                 </li>
                 <li>
                   <strong>Paragliding early-start distance (<SpecRef section="12.2" />):</strong>

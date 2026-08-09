@@ -387,7 +387,26 @@
 //      that radius) never saw them outside — no enter crossing, no start,
 //      the whole field scored landed out at ~14 km instead of the published
 //      101.66 km. With the declared 0.05% band the field resolves to goal.
-// v35: goal-line tolerance and crossing direction (issue #359, S7F §8.2,
+// v35: NO pilot's points change — the S7F §10 "nobody reaches ESS" rule
+//      (issue #583). On a hang-gliding task where numReachedESS is 0, the
+//      spec's HG box sets AvailableTimePoints and AvailableArrivalPoints to
+//      zero, and redistributes nothing: distance and leading keep their usual
+//      weights and the remainder of the day is left unallocated. GlideComp
+//      published the normal non-zero figures, so the scoreboard and the report
+//      card advertised points nobody could win — time points require an ESS
+//      crossing and the arrival position map is empty, so both components were
+//      already zero for every pilot.
+//      calculateWeights now takes the ESS count and returns zeroed time and
+//      arrival fractions in that case; availablePoints follows, while
+//      availablePoints.total stays 1000 × task validity (the day's worth), so
+//      the components deliberately fall short of it by the unallocated
+//      remainder. Every explanation that compares a pilot against "the day"
+//      now names that remainder rather than presenting it as points they left
+//      untaken.
+//      Bumped because availablePoints and validity_inputs.weights are part of
+//      the cached payload: without a roll the stale-first store would serve
+//      the pre-change figures for settled comps indefinitely.
+// v36: goal-line tolerance and crossing direction (issue #359, S7F §8.2,
 //      §8.5.2). Two changes at a LINE goal, both at the margins of the line:
 //      (a) §8.2 line tolerance — the goal line now carries the same
 //      percentage band a cylinder gets (§8.1), with the same 5 m floor,
@@ -412,7 +431,7 @@
 //      Only tasks with a LINE goal can move, and only pilots within a few
 //      metres of an endpoint or crossing the line backwards; every bundled
 //      comp scores identically.
-export const SCORING_ENGINE_VERSION = 35;
+export const SCORING_ENGINE_VERSION = 36;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -420,4 +439,4 @@ export const SCORING_ENGINE_VERSION = 35;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "2075030a01edc70064565ed6bc398e7762468c1bb6883defc24784d277890106";
+  "7c1ad1a1388983c66fed7626b720d30427630b2f9fd015ce3c386b251fafc873";
