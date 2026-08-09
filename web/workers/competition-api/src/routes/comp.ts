@@ -16,7 +16,7 @@ import type { z } from "zod";
 import { audit, auditAll, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal, taskRouteSummary } from "../xctsk-summary";
-import { DEFAULT_GAP_PARAMETERS, resolveTimePointsExponent, type GAPParameters } from "@glidecomp/engine";
+import { DEFAULT_GAP_PARAMETERS, defaultLeadingTimeRatio, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
 const MAX_COMPS_PER_ACCOUNT = 50;
@@ -60,12 +60,6 @@ function describeGapParamChanges(
   if (o.nominalTime !== n.nominalTime) {
     out.push(`Changed nominal time from ${min(o.nominalTime)} to ${min(n.nominalTime)}`);
   }
-  if (o.nominalGoal !== n.nominalGoal) {
-    out.push(`Changed nominal goal from ${pct(o.nominalGoal)} to ${pct(n.nominalGoal)}`);
-  }
-  if (o.nominalLaunch !== n.nominalLaunch) {
-    out.push(`Changed nominal launch from ${pct(o.nominalLaunch)} to ${pct(n.nominalLaunch)}`);
-  }
   if (o.minimumDistance !== n.minimumDistance) {
     out.push(`Changed minimum distance from ${km(o.minimumDistance)} to ${km(n.minimumDistance)}`);
   }
@@ -79,31 +73,13 @@ function describeGapParamChanges(
   if (o.useArrival !== n.useArrival) {
     out.push(n.useArrival ? "Enabled arrival points" : "Disabled arrival points");
   }
-  const oFormula = o.leadingFormula ?? "weighted";
-  const nFormula = n.leadingFormula ?? "weighted";
-  if (oFormula !== nFormula) {
-    out.push(describeChange("leading coefficient formula", oFormula, nFormula));
-  }
-  // Leading-weight generation (PG only; issue #257) — changes every PG
-  // pilot's leading↔time split, so both the generation and its ratio are
-  // individually audit-logged.
-  const oLwf = o.leadingWeightFormula ?? "gap2020";
-  const nLwf = n.leadingWeightFormula ?? "gap2020";
-  if (oLwf !== nLwf) {
-    out.push(describeChange("PG leading-weight formula", oLwf, nLwf));
-  }
-  const oLtr = o.leadingTimeRatio ?? 0.26;
-  const nLtr = n.leadingTimeRatio ?? 0.26;
+  // §11 Leading Time Ratio — changes every pilot's leading↔time split, so
+  // it is individually audit-logged. The unset default is per discipline.
+  const ltrDefault = defaultLeadingTimeRatio(n.scoring);
+  const oLtr = o.leadingTimeRatio ?? defaultLeadingTimeRatio(o.scoring);
+  const nLtr = n.leadingTimeRatio ?? ltrDefault;
   if (oLtr !== nLtr) {
-    out.push(describeChange("PG leading-time ratio", pct(oLtr), pct(nLtr)));
-  }
-  // Time-points exponent (S7F §11.2), decoupled from the leading formula
-  // (issue #258). Report the effective exponent so a change from the
-  // formula-implied default to an explicit override is still logged.
-  const oExp = resolveTimePointsExponent(o);
-  const nExp = resolveTimePointsExponent(n);
-  if (oExp !== nExp) {
-    out.push(describeChange("time points exponent", oExp, nExp));
+    out.push(describeChange("leading-time ratio", pct(oLtr), pct(nLtr)));
   }
   const oOrigin = o.distanceOrigin ?? "takeoff";
   const nOrigin = n.distanceOrigin ?? "takeoff";
@@ -141,16 +117,7 @@ function describeGapParamChanges(
   const nEng = n.essNotGoalFactor ?? 0.8;
   if (oEng !== nEng) {
     out.push(
-      `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §12.1)`
-    );
-  }
-  // PG score-back time (S7F §5.6, §12.3.1): shifts the stop time of every
-  // stopped task, so it is individually audit-logged.
-  const oSb = o.scoreBackTime ?? 300;
-  const nSb = n.scoreBackTime ?? 300;
-  if (oSb !== nSb) {
-    out.push(
-      `Changed the PG score-back time from ${min(oSb)} to ${min(nSb)} (stopped tasks, S7F §12.3.1)`
+      `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §13.2)`
     );
   }
   return out;

@@ -14,8 +14,13 @@ import { getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { getOptimizedSegmentDistances } from './task-optimizer';
 import { resolveStartGates } from './time-gates';
 import { andoyerDistance } from './geo';
-import type { GAPParameters, LeadingFormula, LeadingWeightFormula, SpeedExponent } from './gap-params';
-import { DEFAULT_GAP_PARAMETERS } from './gap-params';
+import type { GAPParameters, LeadingFormula } from './gap-params';
+import {
+  DEFAULT_GAP_PARAMETERS,
+  NOMINAL_LAUNCH,
+  NOMINAL_GOAL,
+  defaultLeadingTimeRatio,
+} from './gap-params';
 
 /** Coefficients of a cubic c0 + c1·x + c2·x² + c3·x³. */
 interface Cubic {
@@ -36,12 +41,17 @@ function poly3(x: number, { c0, c1, c2, c3 }: Cubic): number {
   return c0 + c1 * x + c2 * x * x + c3 * x * x * x;
 }
 
-// FAI S7F validity/arrival polynomial coefficients (the spec's own numbers).
-/** Launch-validity curve in the launch-validity ratio (§ launch validity). */
-const LAUNCH_VALIDITY_CUBIC: Cubic = { c0: 0, c1: 0.027, c2: 2.917, c3: -1.944 };
-/** Time-validity curve in the time-validity ratio (§ time validity). */
+// FAI S7F 2026 validity/arrival polynomial coefficients (the spec's own
+// numbers).
+/**
+ * Launch-validity curve in the launch-validity ratio (S7F 2026 §10.1).
+ * The linear coefficient is 0.028 — the 2025 edition corrected a typo
+ * (0.027) that had stood since about 2014.
+ */
+const LAUNCH_VALIDITY_CUBIC: Cubic = { c0: 0, c1: 0.028, c2: 2.917, c3: -1.944 };
+/** Time-validity curve in the time-validity ratio (S7F 2026 §10.3). */
 const TIME_VALIDITY_CUBIC: Cubic = { c0: -0.271, c1: 2.912, c2: -2.098, c3: 0.457 };
-/** Arrival-points curve in the arrival ratio (S7F §11.4, HG only). */
+/** Arrival-points curve in the arrival ratio (S7F 2026 §12.4, HG only). */
 const ARRIVAL_POINTS_CUBIC: Cubic = { c0: 0.2, c1: 0.037, c2: 0.13, c3: 0.633 };
 
 // ---------------------------------------------------------------------------
@@ -76,28 +86,27 @@ export interface WeightFractions {
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate launch validity.
- * Reduced when fewer pilots launch than the nominal threshold.
+ * Calculate launch validity (S7F 2026 §10.1).
+ * Reduced when fewer pilots launch than the fixed 96% nominal threshold.
  */
 export function calculateLaunchValidity(
   numFlying: number,
   numPresent: number,
-  nominalLaunch: number,
 ): number {
   if (numPresent === 0) return 0;
-  const lvr = Math.min(1, numFlying / (numPresent * nominalLaunch));
+  const lvr = Math.min(1, numFlying / (numPresent * NOMINAL_LAUNCH));
   return Math.min(1, Math.max(0, poly3(lvr, LAUNCH_VALIDITY_CUBIC)));
 }
 
 /**
- * Calculate distance validity.
+ * Calculate distance validity (S7F 2026 §10.2).
  * Reduced when pilots don't fly far enough relative to nominal parameters.
+ * The formula's DistanceWeight (nominal goal) is fixed at 30% by the spec.
  */
 export function calculateDistanceValidity(
   pilotDistances: number[],
   bestDistance: number,
   nominalDistance: number,
-  nominalGoal: number,
   minimumDistance: number,
 ): number {
   const numFlying = pilotDistances.length;
@@ -107,8 +116,8 @@ export function calculateDistanceValidity(
     (sum, d) => sum + Math.max(0, d - minimumDistance), 0
   );
 
-  const a = (nominalGoal + 1) * (nominalDistance - minimumDistance);
-  const b = Math.max(0, nominalGoal * (bestDistance - nominalDistance));
+  const a = (NOMINAL_GOAL + 1) * (nominalDistance - minimumDistance);
+  const b = Math.max(0, NOMINAL_GOAL * (bestDistance - nominalDistance));
   const nominalDistArea = (a + b) / 2;
 
   if (nominalDistArea <= 0) return 0;
@@ -206,10 +215,10 @@ export function calculateTaskValidity(
   stoppedValidity?: number,
 ): TaskValidity {
   const numFlying = pilotDistances.length;
-  const launch = calculateLaunchValidity(numFlying, numPresent, params.nominalLaunch);
+  const launch = calculateLaunchValidity(numFlying, numPresent);
   const distance = calculateDistanceValidity(
     pilotDistances, bestDistance,
-    params.nominalDistance, params.nominalGoal, params.minimumDistance,
+    params.nominalDistance, params.minimumDistance,
   );
   const time = calculateTimeValidity(
     bestTime, bestDistance,
@@ -230,30 +239,22 @@ export function calculateTaskValidity(
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate weight fractions for the four scoring components.
- *
- * @param useLeading - Whether leading (departure) points are enabled
- * @param useArrival - Whether arrival points are enabled (HG only)
- * @param leadingWeightFormula - PG leading-weight generation (see
- *   {@link GAPParameters.leadingWeightFormula}); ignored for HG
- * @param leadingTimeRatio - PG S7F-2024 LeadingTimeRatio (see
- *   {@link GAPParameters.leadingTimeRatio})
+ * Calculate weight fractions for the four scoring components (S7F 2026 §11).
  */
 export interface WeightInputs {
   goalRatio: number;
-  bestDistance: number;
-  taskDistance: number;
   scoring: 'PG' | 'HG';
   /** Leading (departure) points enabled. Default true. */
   useLeading?: boolean;
   /** Arrival points enabled (HG only). Default true. */
   useArrival?: boolean;
-  /** PG leading-weight generation (ignored for HG). Default 'gap2020'. */
-  leadingWeightFormula?: LeadingWeightFormula;
-  /** PG S7F-2024 LeadingTimeRatio. Default 0.26. */
+  /**
+   * §11 LeadingTimeRatio (0–0.26). Defaults to the discipline default
+   * (26% PG, 17.5% HG).
+   */
   leadingTimeRatio?: number;
   /**
-   * How many pilots reached the end of the speed section (HG only, S7F §10).
+   * How many pilots reached the end of the speed section (HG only, §11).
    * Zero triggers the spec's "nobody at ESS" rule below; omit it when the
    * count is unknown and the rule is left unapplied.
    */
@@ -263,67 +264,39 @@ export interface WeightInputs {
 export function calculateWeights(inputs: WeightInputs): WeightFractions {
   const {
     goalRatio,
-    bestDistance,
-    taskDistance,
     scoring,
     useLeading = true,
     useArrival = true,
-    leadingWeightFormula = 'gap2020',
-    leadingTimeRatio = 0.26,
     numReachedESS,
   } = inputs;
   const gr = goalRatio;
+  const ltr = inputs.leadingTimeRatio ?? defaultLeadingTimeRatio(scoring);
 
-  // Distance weight: the shared polynomial for HG (identical in every
-  // generation) and for PG under the GAP2016/2018 and S7F-2024 generations.
-  // The S7F 2020–2022 PG generation ('s7f2020') replaced it with PWC-derived
-  // fixed weights (S7F 2020 §10): 0.838 when nobody makes goal, else its own
-  // polynomial.
-  const s7f2020Pg = scoring === 'PG' && leadingWeightFormula === 's7f2020';
-  const dw = s7f2020Pg
-    ? (gr === 0 ? 0.838 : 0.805 - 1.374 * gr + 1.413 * gr * gr - 0.484 * gr * gr * gr)
-    : 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
+  // Distance weight (§11): one polynomial, both disciplines.
+  const dw = 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
 
-  // Arrival weight: HG only, when enabled
+  // Arrival weight (§11): HG only, when enabled — 12.5% of the non-distance
+  // weight. (HG Class 2 would be 0; the engine does not model HG classes.)
   const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
 
-  // Leading weight. Hang gliding is generation-independent; paragliding
-  // picks between the legacy split (stored as 'gap2020', actually the
-  // GAP2016/2018 formula — see GAPParameters.leadingWeightFormula), the
-  // S7F 2020–2022 PWC weights, and the S7F-2024 §10 formula.
+  // Leading weight (§11): LeadingTimeRatio of the non-distance weight, both
+  // disciplines — except that for PG, when nobody makes goal, time points
+  // are unearnable and *all* the non-distance weight goes to leading.
   let lw: number;
   if (!useLeading) {
     lw = 0;
-  } else if (s7f2020Pg) {
-    // S7F 2020–2022 §10: PG leading weight is fixed at 0.162 whenever
-    // leading is on; time takes the remainder, which comes out exactly 0
-    // when nobody makes goal (0.838 + 0.162 = 1 — PG time points are
-    // unearnable without goal).
-    lw = 0.162;
-  } else if (scoring === 'PG' && leadingWeightFormula === 's7f2024') {
-    // FAI S7F 2024 §10: leading takes LeadingTimeRatio of the non-distance
-    // weight when someone makes goal; when nobody does (GoalRatio = 0) PG
-    // time points are unearnable, so *all* non-distance weight goes to
-    // leading.
-    lw = gr === 0 ? 1 - dw : (1 - dw) * leadingTimeRatio;
   } else if (scoring === 'PG' && gr === 0) {
-    // GAP2016/2018 (stored as 'gap2020'): when nobody makes goal the PG
-    // leading weight is a share of how far the field got, not of the
-    // non-distance weight. PG ONLY — the S7F §10 HG box states the hang
-    // gliding weight with no GoalRatio branch at all, and this line used to
-    // catch HG too, handing a no-goal HG day up to 100 leading points where
-    // the spec offers 17.5 ("18 points for leading", §10).
-    lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
+    lw = 1 - dw;
   } else {
-    const multiplier = scoring === 'PG' ? 1.4 * 2 : 1.4;
-    lw = ((1 - dw) / 8) * multiplier;
+    lw = (1 - dw) * ltr;
   }
 
-  // FAI S7F §10 (HG box): "if nobody reaches ESS, then a maximum of 900 points
-  // are available for distance and 18 points for leading but, of course, no
-  // points for time nor arrival". Nothing is redistributed — the spec leaves
-  // the remaining weight unallocated, so these fractions deliberately sum to
-  // less than 1 and the day's points on offer stop at distance + leading.
+  // S7F 2026 §11 (HG box): "if nobody reaches ESS, then a maximum of 900
+  // points are available for distance and 18 points for leading but, of
+  // course, no points for time nor arrival". Nothing is redistributed — the
+  // spec leaves the remaining weight unallocated, so these fractions
+  // deliberately sum to less than 1 and the day's points on offer stop at
+  // distance + leading.
   //
   // No pilot's score moves: time points require an ESS crossing and the
   // arrival positions are empty, so both components were already zero for
@@ -517,20 +490,21 @@ export function applyMinimumDistance(
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate the speed fraction for a pilot, matching AirScore's
- * `pilot_speed` (gap2020+ / current FAI S7F):
+ * The S7F 2026 §12.2 time-points exponent: the speed fraction falls off with
+ * the 5/6 power (the spec writes it as the 6th root of the 5th power).
+ */
+const SPEED_FRACTION_EXPONENT = 5 / 6;
+
+/**
+ * Calculate the speed fraction for a pilot (S7F 2026 §12.2):
  *
- *   SF = max(0, 1 − ((Tp − Tmin) / √Tmin)^e)    with times in hours
+ *   SF = max(0, 1 − ((Tp − Tmin) / √Tmin)^(5/6))    with times in hours
  *
- * where e is the time-points exponent (FAI S7F §11.2): 5/6 for the modern
- * formula (current S7F, both sports) and 2/3 for the older GAP2016/2018 curve.
- * Since issue #258 this exponent is chosen independently of the
- * leading-coefficient variant. Tp/Tmin are speed-section times.
+ * Tp/Tmin are speed-section times.
  */
 export function calculateSpeedFraction(
   pilotTimeSeconds: number,
   bestTimeSeconds: number,
-  exponent: number = 5 / 6,
 ): number {
   if (bestTimeSeconds <= 0 || pilotTimeSeconds <= 0) return 0;
   if (pilotTimeSeconds <= bestTimeSeconds) return 1;
@@ -539,26 +513,10 @@ export function calculateSpeedFraction(
   const bestTime = bestTimeSeconds / 3600;
   const sqrtBest = Math.sqrt(bestTime);
   if (sqrtBest <= 0) return 0;
-  return Math.max(0, 1 - Math.pow((pilotTime - bestTime) / sqrtBest, exponent));
-}
-
-/** Numeric value of a time-points exponent (FAI S7F §11.2). */
-export function speedExponentValue(exponent: SpeedExponent): number {
-  return exponent === '2/3' ? 2 / 3 : 5 / 6;
-}
-
-/**
- * Resolve the effective time-points exponent for a parameter set (issue #258).
- * An explicit {@link GAPParameters.timePointsExponent} wins; otherwise the
- * exponent is derived from {@link GAPParameters.leadingFormula} — the value it
- * historically implied (classic → 2/3, weighted → 5/6) — so competitions saved
- * before the two were decoupled keep their exact scores.
- */
-export function resolveTimePointsExponent(
-  params: Pick<GAPParameters, 'timePointsExponent' | 'leadingFormula'>,
-): SpeedExponent {
-  if (params.timePointsExponent) return params.timePointsExponent;
-  return params.leadingFormula === 'classic' ? '2/3' : '5/6';
+  return Math.max(
+    0,
+    1 - Math.pow((pilotTime - bestTime) / sqrtBest, SPEED_FRACTION_EXPONENT),
+  );
 }
 
 /** Inputs to {@link calculateTimePoints} for one pilot. */
@@ -575,21 +533,19 @@ export interface TimePointsInput {
   availableTimePoints: number;
   /** Sport — PG requires goal, HG requires ESS, to earn any time points. */
   scoring: 'PG' | 'HG';
-  /** Time-points exponent (S7F §11.2). Defaults to '5/6' (current spec). */
-  exponent?: SpeedExponent;
   /**
-   * §12.1 share of time points an HG pilot keeps when they reach ESS but not
+   * §13.2 share of time points an HG pilot keeps when they reach ESS but not
    * goal. Defaults to the engine baseline (0.8). PG is fixed at 0 by the spec.
    */
   essNotGoalFactor?: number;
 }
 
 /**
- * Calculate time points for a single pilot.
- * PG: Only pilots who made goal get time points (S7F §12.1 fixes the
+ * Calculate time points for a single pilot (S7F 2026 §12.2).
+ * PG: Only pilots who made goal get time points (§13.2 fixes the
  * ESS-but-not-goal parameter at 0 for paragliding).
  * HG: Pilots who reached ESS get time points, but a pilot who does not go
- * on to reach goal keeps only `essNotGoalFactor` of them (S7F §12.1,
+ * on to reach goal keeps only `essNotGoalFactor` of them (§13.2,
  * default 0.8) — reaching goal "validates" the speed section.
  */
 export function calculateTimePoints({
@@ -599,7 +555,6 @@ export function calculateTimePoints({
   reachedESS,
   availableTimePoints,
   scoring,
-  exponent = '5/6',
   essNotGoalFactor = DEFAULT_GAP_PARAMETERS.essNotGoalFactor,
 }: TimePointsInput): number {
   if (bestTime === null || pilotTime === null) return 0;
@@ -609,9 +564,9 @@ export function calculateTimePoints({
   // HG: must reach ESS
   if (scoring === 'HG' && !reachedESS) return 0;
 
-  const sf = calculateSpeedFraction(pilotTime, bestTime, speedExponentValue(exponent));
+  const sf = calculateSpeedFraction(pilotTime, bestTime);
   const points = sf * availableTimePoints;
-  // §12.1: an HG pilot with ESS but no goal keeps only the configured share.
+  // §13.2: an HG pilot with ESS but no goal keeps only the configured share.
   if (scoring === 'HG' && !madeGoal) return points * essNotGoalFactor;
   return points;
 }

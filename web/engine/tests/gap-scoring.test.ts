@@ -22,7 +22,6 @@ import {
   toFlightScoringData,
   taskForDistanceOrigin,
   resolveCompGapParams,
-  S7F2024_PG_DEFAULT_SINCE_MS,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type PilotFlight,
@@ -159,23 +158,30 @@ const standardWaypoints = standardTask.turnpoints.map(tp => ({
 
 describe('calculateLaunchValidity', () => {
   it('returns ~1 when all pilots launch', () => {
-    const lv = calculateLaunchValidity(100, 100, 0.96);
+    const lv = calculateLaunchValidity(100, 100);
     expect(lv).toBeGreaterThan(0.99);
   });
 
-  it('returns ~1 when numFlying >= nominalLaunch * numPresent', () => {
-    const lv = calculateLaunchValidity(96, 100, 0.96);
+  it('returns ~1 when numFlying >= 96% of numPresent (S7F 2026 §10.1)', () => {
+    const lv = calculateLaunchValidity(96, 100);
     expect(lv).toBeGreaterThan(0.99);
   });
 
   it('is reduced when fewer pilots launch', () => {
-    const lv = calculateLaunchValidity(50, 100, 0.96);
+    const lv = calculateLaunchValidity(50, 100);
     expect(lv).toBeLessThan(0.9);
     expect(lv).toBeGreaterThan(0);
   });
 
   it('returns 0 when no pilots present', () => {
-    expect(calculateLaunchValidity(0, 0, 0.96)).toBe(0);
+    expect(calculateLaunchValidity(0, 0)).toBe(0);
+  });
+
+  it('uses the 2026 edition coefficients (0.028 linear term)', () => {
+    // LVR 0.5 on the §10.1 cubic: 0.028·x + 2.917·x² − 1.944·x³ at x = 0.5.
+    const lvr = 0.5;
+    const expected = 0.028 * lvr + 2.917 * lvr * lvr - 1.944 * lvr * lvr * lvr;
+    expect(calculateLaunchValidity(48, 100)).toBeCloseTo(expected, 12);
   });
 });
 
@@ -186,19 +192,30 @@ describe('calculateLaunchValidity', () => {
 describe('calculateDistanceValidity', () => {
   it('returns 1 when distances are well above nominal', () => {
     const dists = Array(50).fill(80000); // 80km each, well above nominal
-    const dv = calculateDistanceValidity(dists, 80000, 70000, 0.2, 5000);
+    const dv = calculateDistanceValidity(dists, 80000, 70000, 5000);
     expect(dv).toBeCloseTo(1, 0);
   });
 
   it('is reduced when distances are short', () => {
     const dists = Array(50).fill(10000); // only 10km
-    const dv = calculateDistanceValidity(dists, 10000, 70000, 0.2, 5000);
+    const dv = calculateDistanceValidity(dists, 10000, 70000, 5000);
     expect(dv).toBeLessThan(0.5);
     expect(dv).toBeGreaterThan(0);
   });
 
   it('returns 0 with empty array', () => {
-    expect(calculateDistanceValidity([], 0, 70000, 0.2, 5000)).toBe(0);
+    expect(calculateDistanceValidity([], 0, 70000, 5000)).toBe(0);
+  });
+
+  it('uses the fixed 30% nominal goal (S7F 2026 §10.2)', () => {
+    // NomDistArea = ((0.3 + 1)·(nomDist − minDist) + 0.3·(best − nomDist)) / 2,
+    // DVR = sumOverMin / (n · NomDistArea).
+    const dists = [40000, 60000];
+    const best = 60000;
+    const area = (1.3 * (70000 - 5000) + 0.3 * Math.max(0, best - 70000)) / 2;
+    const sumOverMin = 35000 + 55000;
+    const expected = Math.min(1, sumOverMin / (2 * area));
+    expect(calculateDistanceValidity(dists, best, 70000, 5000)).toBeCloseTo(expected, 12);
   });
 });
 
@@ -230,32 +247,32 @@ describe('calculateTimeValidity', () => {
 
 describe('calculateWeights', () => {
   it('all weights sum to 1', () => {
-    const w = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'PG' });
+    const w = calculateWeights({ goalRatio: 0.3, scoring: 'PG' });
     const sum = w.distance + w.time + w.leading + w.arrival;
     expect(sum).toBeCloseTo(1, 5);
   });
 
   it('PG has no arrival weight', () => {
-    const w = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'PG' });
+    const w = calculateWeights({ goalRatio: 0.3, scoring: 'PG' });
     expect(w.arrival).toBe(0);
   });
 
   it('HG has arrival weight', () => {
-    const w = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG' });
+    const w = calculateWeights({ goalRatio: 0.3, scoring: 'HG' });
     expect(w.arrival).toBeGreaterThan(0);
     const sum = w.distance + w.time + w.leading + w.arrival;
     expect(sum).toBeCloseTo(1, 5);
   });
 
   it('distance weight is high when no one reaches goal', () => {
-    const w = calculateWeights({ goalRatio: 0, bestDistance: 50000, taskDistance: 100000, scoring: 'PG' });
+    const w = calculateWeights({ goalRatio: 0, scoring: 'PG' });
     expect(w.distance).toBeCloseTo(0.9, 1);
   });
 
   it('distance weight decreases as goal ratio increases', () => {
-    const w0 = calculateWeights({ goalRatio: 0, bestDistance: 50000, taskDistance: 100000, scoring: 'PG' });
-    const w3 = calculateWeights({ goalRatio: 0.3, bestDistance: 50000, taskDistance: 100000, scoring: 'PG' });
-    const w7 = calculateWeights({ goalRatio: 0.7, bestDistance: 50000, taskDistance: 100000, scoring: 'PG' });
+    const w0 = calculateWeights({ goalRatio: 0, scoring: 'PG' });
+    const w3 = calculateWeights({ goalRatio: 0.3, scoring: 'PG' });
+    const w7 = calculateWeights({ goalRatio: 0.7, scoring: 'PG' });
     expect(w0.distance).toBeGreaterThan(w3.distance);
     expect(w3.distance).toBeGreaterThan(w7.distance);
   });
@@ -793,7 +810,6 @@ describe('scoreTask', () => {
     const result = scoreTask(standardTask, pilots, {
       nominalDistance: 10000,
       nominalTime: 600,   // short nominal time matches our synthetic track
-      nominalGoal: 0.2,
     });
 
     expect(result.pilotScores).toHaveLength(1);
@@ -1151,16 +1167,16 @@ describe('applyMinimumDistance', () => {
 
 describe('calculateWeights with flags', () => {
   it('disabling leading gives all remainder to time', () => {
-    const wWith = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'PG', useLeading: true, useArrival: true });
-    const wWithout = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'PG', useLeading: false, useArrival: true });
+    const wWith = calculateWeights({ goalRatio: 0.3, scoring: 'PG', useLeading: true, useArrival: true });
+    const wWithout = calculateWeights({ goalRatio: 0.3, scoring: 'PG', useLeading: false, useArrival: true });
     expect(wWithout.leading).toBe(0);
     expect(wWithout.time).toBeGreaterThan(wWith.time);
     expect(wWithout.distance + wWithout.time).toBeCloseTo(1, 5);
   });
 
   it('disabling arrival for HG gives remainder to time', () => {
-    const wWith = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: true });
-    const wWithout = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: false });
+    const wWith = calculateWeights({ goalRatio: 0.3, scoring: 'HG', useLeading: true, useArrival: true });
+    const wWithout = calculateWeights({ goalRatio: 0.3, scoring: 'HG', useLeading: true, useArrival: false });
     expect(wWithout.arrival).toBe(0);
     expect(wWithout.time).toBeGreaterThan(wWith.time);
     const sum = wWithout.distance + wWithout.time + wWithout.leading;
@@ -1168,18 +1184,16 @@ describe('calculateWeights with flags', () => {
   });
 
   it('disabling both for HG: dist + time = 1', () => {
-    const w = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: false, useArrival: false });
+    const w = calculateWeights({ goalRatio: 0.3, scoring: 'HG', useLeading: false, useArrival: false });
     expect(w.leading).toBe(0);
     expect(w.arrival).toBe(0);
     expect(w.distance + w.time).toBeCloseTo(1, 5);
   });
 });
 
-describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', () => {
+describe('calculateWeights — nobody at ESS (S7F 2026 §11, HG box, issue #583)', () => {
   const base = {
     goalRatio: 0,
-    bestDistance: 50000,
-    taskDistance: 100000,
     useLeading: true,
     useArrival: true,
   };
@@ -1202,14 +1216,12 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
   });
 
   it('caps an HG day at the spec’s 900 distance + 18 leading', () => {
-    // §10, in full: "a maximum of 900 points are available for distance and
+    // §11, in full: "a maximum of 900 points are available for distance and
     // 18 points for leading … Max(availableTotalPoints) = 918". Both ceilings
     // are the weights' own values at GoalRatio = 0 on a full-validity day, and
     // neither depends on how far the field flew.
     const w = calculateWeights({
       goalRatio: 0,
-      bestDistance: 100000,
-      taskDistance: 100000,
       scoring: 'HG',
       numReachedESS: 0,
     });
@@ -1219,7 +1231,9 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
   });
 
   it('does not fire for PG (the spec states the rule for HG only)', () => {
-    const w = calculateWeights({ ...base, scoring: 'PG', numReachedESS: 0 });
+    // Goal ratio > 0 so the PG no-goal rule (all non-distance weight to
+    // leading) does not zero time for its own reason.
+    const w = calculateWeights({ ...base, goalRatio: 0.3, scoring: 'PG', numReachedESS: 0 });
     expect(w.time).toBeGreaterThan(0);
   });
 
@@ -1235,65 +1249,40 @@ describe('calculateWeights — nobody at ESS (S7F §10, HG box, issue #583)', ()
   });
 });
 
-describe('calculateWeights — the HG leading weight has no goal-ratio branch (S7F §10)', () => {
-  // The §10 HG box gives one formula, (1 − DistanceWeight) ÷ 8 × 1.4, with no
-  // GoalRatio case. The GAP2016/2018 "0.1 × BestDist ÷ TaskDist when nobody
-  // makes goal" rule is the PARAGLIDING legacy weight, and it used to catch
-  // hang gliding too, because the branch testing it did not test the sport.
-  const hgLeading = (goalRatio: number, bestDistance: number) =>
+describe('calculateWeights — the HG leading weight has no goal-ratio branch (S7F 2026 §11)', () => {
+  // The §11 HG box gives one formula, (1 − DistanceWeight) × LeadingTimeRatio
+  // (default 17.5%), with no GoalRatio case.
+  const hgLeading = (goalRatio: number) =>
     calculateWeights({
       goalRatio,
-      bestDistance,
-      taskDistance: 100000,
       scoring: 'HG',
       useLeading: true,
       useArrival: true,
     }).leading;
 
   it('uses the spec formula when nobody makes goal', () => {
-    // DistanceWeight at GoalRatio 0 is 0.9, so leading is 0.1 ÷ 8 × 1.4.
-    expect(hgLeading(0, 50000)).toBeCloseTo(0.0175, 10);
-  });
-
-  it('does not scale with how far the field got', () => {
-    // The legacy PG rule made this vary from 0.01 to 0.1 across these three.
-    expect(hgLeading(0, 10000)).toBeCloseTo(0.0175, 10);
-    expect(hgLeading(0, 50000)).toBeCloseTo(0.0175, 10);
-    expect(hgLeading(0, 100000)).toBeCloseTo(0.0175, 10);
+    // DistanceWeight at GoalRatio 0 is 0.9, so leading is 0.1 × 0.175.
+    expect(hgLeading(0)).toBeCloseTo(0.0175, 10);
   });
 
   it('is continuous as the first pilot reaches goal', () => {
-    // The legacy branch made the weight JUMP at the first goal pilot — from
-    // 0.1 down to 0.0176 on a fully-flown task. It is now the same curve
-    // either side, and the arrival weight it is 1.4× has always been.
-    const nobody = calculateWeights({
-      goalRatio: 0, bestDistance: 100000, taskDistance: 100000, scoring: 'HG',
-    });
-    const oneIn = calculateWeights({
-      goalRatio: 0.001, bestDistance: 100000, taskDistance: 100000, scoring: 'HG',
-    });
+    const nobody = calculateWeights({ goalRatio: 0, scoring: 'HG' });
+    const oneIn = calculateWeights({ goalRatio: 0.001, scoring: 'HG' });
     expect(Math.abs(oneIn.leading - nobody.leading)).toBeLessThan(0.001);
+    // At the default 17.5% ratio the HG leading weight is 1.4× the arrival
+    // weight ((1−dw)·0.175 vs (1−dw)/8).
     expect(nobody.leading).toBeCloseTo(nobody.arrival * 1.4, 10);
   });
 
-  it('leaves the PG legacy weight alone — it is the GAP2016/2018 formula', () => {
-    const pg = (bestDistance: number) =>
-      calculateWeights({
-        goalRatio: 0,
-        bestDistance,
-        taskDistance: 100000,
-        scoring: 'PG',
-        leadingWeightFormula: 'gap2020',
-      }).leading;
-    expect(pg(50000)).toBeCloseTo(0.05, 10); // 0.1 × 50 ÷ 100 km
-    expect(pg(100000)).toBeCloseTo(0.1, 10);
+  it('PG at goal ratio 0: ALL non-distance weight goes to leading (§11)', () => {
+    const w = calculateWeights({ goalRatio: 0, scoring: 'PG' });
+    expect(w.leading).toBeCloseTo(1 - w.distance, 10);
+    expect(w.time).toBeCloseTo(0, 10);
   });
 
   it('leaves the HG weight alone when pilots make goal (unchanged formula)', () => {
-    const w = calculateWeights({
-      goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG',
-    });
-    expect(w.leading).toBeCloseTo(((1 - w.distance) / 8) * 1.4, 10);
+    const w = calculateWeights({ goalRatio: 0.3, scoring: 'HG' });
+    expect(w.leading).toBeCloseTo((1 - w.distance) * 0.175, 10);
   });
 });
 
@@ -1356,10 +1345,10 @@ describe('scoreTask — nobody at ESS zeroes the offer (S7F §10, issue #583)', 
   });
 });
 
-describe('calculateWeights — S7F 2024 leading formula (issue #257)', () => {
-  it('PG s7f2024 with goal: leading = LeadingTimeRatio × (1 − DW)', () => {
+describe('calculateWeights — S7F 2026 §11 LeadingTimeRatio', () => {
+  it('PG with goal: leading = LeadingTimeRatio × (1 − DW)', () => {
     const gr = 0.3;
-    const w = calculateWeights({ goalRatio: gr, bestDistance: 80000, taskDistance: 100000, scoring: 'PG', useLeading: true, useArrival: true, leadingWeightFormula: 's7f2024', leadingTimeRatio: 0.26 });
+    const w = calculateWeights({ goalRatio: gr, scoring: 'PG', useLeading: true, useArrival: true, leadingTimeRatio: 0.26 });
     const dw = w.distance;
     expect(w.leading).toBeCloseTo((1 - dw) * 0.26, 6);
     // the remainder goes to time (PG has no arrival)
@@ -1367,137 +1356,59 @@ describe('calculateWeights — S7F 2024 leading formula (issue #257)', () => {
     expect(w.distance + w.time + w.leading + w.arrival).toBeCloseTo(1, 6);
   });
 
-  it('PG s7f2024 honours a custom LeadingTimeRatio', () => {
-    const w = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'PG', useLeading: true, useArrival: true, leadingWeightFormula: 's7f2024', leadingTimeRatio: 0.5 });
-    expect(w.leading).toBeCloseTo((1 - w.distance) * 0.5, 6);
+  it('honours a custom LeadingTimeRatio for both disciplines', () => {
+    const pg = calculateWeights({ goalRatio: 0.3, scoring: 'PG', leadingTimeRatio: 0.1 });
+    expect(pg.leading).toBeCloseTo((1 - pg.distance) * 0.1, 6);
+    const hg = calculateWeights({ goalRatio: 0.3, scoring: 'HG', leadingTimeRatio: 0.1 });
+    expect(hg.leading).toBeCloseTo((1 - hg.distance) * 0.1, 6);
   });
 
-  it('PG s7f2024 at goal ratio 0: all non-distance weight goes to leading', () => {
-    const w = calculateWeights({ goalRatio: 0, bestDistance: 50000, taskDistance: 100000, scoring: 'PG', useLeading: true, useArrival: true, leadingWeightFormula: 's7f2024', leadingTimeRatio: 0.26 });
+  it('defaults per discipline: 26% PG, 17.5% HG (§11)', () => {
+    const pg = calculateWeights({ goalRatio: 0.3, scoring: 'PG' });
+    expect(pg.leading).toBeCloseTo((1 - pg.distance) * 0.26, 10);
+    const hg = calculateWeights({ goalRatio: 0.3, scoring: 'HG' });
+    expect(hg.leading).toBeCloseTo((1 - hg.distance) * 0.175, 10);
+  });
+
+  it('PG at goal ratio 0: all non-distance weight goes to leading', () => {
+    const w = calculateWeights({ goalRatio: 0, scoring: 'PG', useLeading: true, useArrival: true, leadingTimeRatio: 0.26 });
     expect(w.leading).toBeCloseTo(1 - w.distance, 6);
     expect(w.time).toBeCloseTo(0, 6);
   });
-
-  it('s7f2024 differs from the gap2020 default for PG', () => {
-    const s7f = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'PG', useLeading: true, useArrival: true, leadingWeightFormula: 's7f2024', leadingTimeRatio: 0.26 });
-    const gap = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'PG', useLeading: true, useArrival: true, leadingWeightFormula: 'gap2020', leadingTimeRatio: 0.26 });
-    // gap2020 PG leading = 0.35 × (1 − DW); s7f2024 = 0.26 × (1 − DW)
-    expect(gap.leading).toBeGreaterThan(s7f.leading);
-    expect(gap.leading).toBeCloseTo((1 - gap.distance) * 0.35, 6);
-  });
-
-  it('HG weights are unchanged by the leading-weight formula', () => {
-    const gap = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: true, leadingWeightFormula: 'gap2020', leadingTimeRatio: 0.26 });
-    const s7f = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: true, leadingWeightFormula: 's7f2024', leadingTimeRatio: 0.26 });
-    expect(s7f.leading).toBeCloseTo(gap.leading, 10);
-    expect(s7f.time).toBeCloseTo(gap.time, 10);
-    expect(s7f.arrival).toBeCloseTo(gap.arrival, 10);
-  });
 });
 
-describe('calculateWeights — S7F 2020–2022 PWC generation (s7f2020)', () => {
-  const base = { bestDistance: 80000, taskDistance: 100000, scoring: 'PG' as const, useLeading: true, useArrival: true, leadingWeightFormula: 's7f2020' as const, leadingTimeRatio: 0.26 };
-
-  it('PG at goal ratio 0: DW 0.838, leading 0.162, time exactly 0', () => {
-    const w = calculateWeights({ ...base, goalRatio: 0 });
-    expect(w.distance).toBeCloseTo(0.838, 10);
-    expect(w.leading).toBeCloseTo(0.162, 10);
-    expect(w.time).toBeCloseTo(0, 10);
-    expect(w.arrival).toBe(0);
+describe('resolveCompGapParams — single 2026 edition', () => {
+  it('ignores legacy pre-2026 keys in stored gap_params', () => {
+    const stored = {
+      nominalLaunch: 0.9,
+      nominalGoal: 0.2,
+      scoreBackTime: 600,
+      leadingFormula: 'classic',
+      leadingWeightFormula: 'gap2020',
+      timePointsExponent: '2/3',
+      nominalTime: 4000,
+    } as unknown as Partial<GAPParameters>;
+    const resolved = resolveCompGapParams('pg', stored);
+    // The one live key merged; the legacy keys neither survive nor throw.
+    expect(resolved.nominalTime).toBe(4000);
+    expect('nominalLaunch' in resolved).toBe(false);
+    expect('leadingWeightFormula' in resolved).toBe(false);
+    expect('timePointsExponent' in resolved).toBe(false);
   });
 
-  it('PG with goal: DW from the PWC polynomial, leading fixed 0.162, time the remainder', () => {
-    const gr = 0.3;
-    const w = calculateWeights({ ...base, goalRatio: gr });
-    const dw = 0.805 - 1.374 * gr + 1.413 * gr * gr - 0.484 * gr * gr * gr;
-    expect(w.distance).toBeCloseTo(dw, 10);
-    expect(w.leading).toBeCloseTo(0.162, 10);
-    expect(w.time).toBeCloseTo(1 - dw - 0.162, 10);
-    expect(w.distance + w.time + w.leading + w.arrival).toBeCloseTo(1, 10);
+  it('applies the per-discipline defaults', () => {
+    const pg = resolveCompGapParams('pg', null);
+    expect(pg.scoring).toBe('PG');
+    expect(pg.leadingTimeRatio).toBeCloseTo(0.26, 10);
+    expect(pg.essNotGoalFactor).toBe(0);
+    const hg = resolveCompGapParams('hg', null);
+    expect(hg.scoring).toBe('HG');
+    expect(hg.leadingTimeRatio).toBeCloseTo(0.175, 10);
+    expect(hg.essNotGoalFactor).toBe(0.8);
   });
 
-  it('PG at goal ratio 1: DW = 0.805 − 1.374 + 1.413 − 0.484 = 0.36', () => {
-    const w = calculateWeights({ ...base, goalRatio: 1 });
-    expect(w.distance).toBeCloseTo(0.36, 10);
-    expect(w.leading).toBeCloseTo(0.162, 10);
-    expect(w.time).toBeCloseTo(1 - 0.36 - 0.162, 10);
-  });
-
-  it('PG s7f2020 ignores LeadingTimeRatio', () => {
-    const a = calculateWeights({ ...base, goalRatio: 0.3, leadingTimeRatio: 0.26 });
-    const b = calculateWeights({ ...base, goalRatio: 0.3, leadingTimeRatio: 0.5 });
-    expect(a.leading).toBeCloseTo(b.leading, 12);
-    expect(a.time).toBeCloseTo(b.time, 12);
-  });
-
-  it('PG s7f2020 with leading off drops the 0.162 to time', () => {
-    const w = calculateWeights({ ...base, goalRatio: 0.3, useLeading: false });
-    expect(w.leading).toBe(0);
-    expect(w.time).toBeCloseTo(1 - w.distance, 10);
-  });
-
-  it('a PG task scored under s7f2020 distributes 0.162 × validity × 1000 leading points', () => {
-    const leader = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
-    const laggard = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 3 });
-    const pilots: PilotFlight[] = [
-      { pilotName: 'Leader', trackFile: 'leader.igc', fixes: leader },
-      { pilotName: 'Laggard', trackFile: 'laggard.igc', fixes: laggard },
-    ];
-    const result = scoreTask(standardTask, pilots, {
-      nominalDistance: 20000,
-      nominalTime: 1800,
-      scoring: 'PG',
-      useLeading: true,
-      leadingWeightFormula: 's7f2020',
-    });
-    expect(result.weights.leading).toBeCloseTo(0.162, 10);
-    expect(result.availablePoints.leading).toBeCloseTo(
-      0.162 * result.taskValidity.task * 1000, 6);
-    // Best LC ⇒ full available leading points.
-    const L = result.pilotScores.find(p => p.pilotName === 'Leader')!;
-    expect(L.leadingPoints).toBeCloseTo(result.availablePoints.leading, 1);
-  });
-
-  it('HG weights are untouched by s7f2020', () => {
-    const gap = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: true, leadingWeightFormula: 'gap2020', leadingTimeRatio: 0.26 });
-    const s7f = calculateWeights({ goalRatio: 0.3, bestDistance: 80000, taskDistance: 100000, scoring: 'HG', useLeading: true, useArrival: true, leadingWeightFormula: 's7f2020', leadingTimeRatio: 0.26 });
-    expect(s7f.distance).toBeCloseTo(gap.distance, 12);
-    expect(s7f.leading).toBeCloseTo(gap.leading, 12);
-    expect(s7f.time).toBeCloseTo(gap.time, 12);
-    expect(s7f.arrival).toBeCloseTo(gap.arrival, 12);
-  });
-});
-
-describe('resolveCompGapParams — date-based PG leading-weight default (issue #257)', () => {
-  const before = S7F2024_PG_DEFAULT_SINCE_MS - 1;
-  const onCutoff = S7F2024_PG_DEFAULT_SINCE_MS;
-  const after = S7F2024_PG_DEFAULT_SINCE_MS + 24 * 3600 * 1000;
-
-  it('a new PG comp (created on/after the cutoff) defaults to s7f2024', () => {
-    expect(resolveCompGapParams('pg', null, onCutoff).leadingWeightFormula).toBe('s7f2024');
-    expect(resolveCompGapParams('pg', null, after).leadingWeightFormula).toBe('s7f2024');
-  });
-
-  it('a PG comp created before the cutoff keeps gap2020 (AirScore parity)', () => {
-    expect(resolveCompGapParams('pg', null, before).leadingWeightFormula).toBe('gap2020');
-  });
-
-  it('omitting the creation date keeps the gap2020 baseline (e.g. the CLI)', () => {
-    expect(resolveCompGapParams('pg', null).leadingWeightFormula).toBe('gap2020');
-    expect(resolveCompGapParams('pg', {}).leadingWeightFormula).toBe('gap2020');
-  });
-
-  it('an explicitly saved leadingWeightFormula always wins over the date default', () => {
-    expect(
-      resolveCompGapParams('pg', { leadingWeightFormula: 'gap2020' }, after).leadingWeightFormula
-    ).toBe('gap2020');
-    expect(
-      resolveCompGapParams('pg', { leadingWeightFormula: 's7f2024' }, before).leadingWeightFormula
-    ).toBe('s7f2024');
-  });
-
-  it('hang gliding is never switched to s7f2024 by the date default', () => {
-    expect(resolveCompGapParams('hg', null, after).leadingWeightFormula).toBe('gap2020');
+  it('a stored leadingTimeRatio wins over the discipline default', () => {
+    expect(resolveCompGapParams('pg', { leadingTimeRatio: 0.1 }).leadingTimeRatio).toBe(0.1);
   });
 });
 
@@ -1590,8 +1501,11 @@ describe('scoreFlights (cache-equivalent path)', () => {
   for (const formula of ['weighted', 'classic'] as const) {
     it(`matches scoreTask with leading enabled via a cached aggregate (${formula})`, () => {
       const pilots = buildPilots();
+      // The 2026 edition pins the LC variant per discipline, so the variant
+      // is driven through `scoring` (PG → weighted, HG → classic).
       const params: Partial<GAPParameters> = {
-        nominalDistance: 10000, nominalTime: 600, useLeading: true, leadingFormula: formula,
+        nominalDistance: 10000, nominalTime: 600, useLeading: true,
+        scoring: formula === 'weighted' ? 'PG' : 'HG',
       };
 
       const full = scoreTask(standardTask, pilots, params);

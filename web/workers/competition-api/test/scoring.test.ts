@@ -351,11 +351,13 @@ describe("Live Scoring", () => {
     expect(await res2.json()).toEqual(data);
   });
 
-  test("new PG comp with no pinned leading-weight formula defaults to S7F-2024 (issue #257)", async () => {
+  test("a PG comp's leading pool matches the engine under the S7F 2026 weights end to end", async () => {
     const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
-    // A PG comp created now (>= the 2026-07-15 cutoff) that never pins a
-    // leadingWeightFormula must score its leading weight under the S7F-2024
-    // formula, not the GAP2020 one — the date-based default (issue #257).
+    // GlideComp scores everything under the S7F 2026 edition; the API's
+    // leading pool must match the engine's own scoring of the same field.
+    // The legacy keys sent here (nominalLaunch/nominalGoal/leadingFormula)
+    // double as a regression check that pre-2026 clients are accepted and
+    // their removed knobs ignored.
     const gapParams = {
       nominalLaunch: 0.96,
       nominalGoal: 0.3,
@@ -402,20 +404,22 @@ describe("Live Scoring", () => {
         fixes: igc.fixes,
       };
     });
-    const commonParams = { ...gapParams, nominalDistance: taskDistance * 0.7 };
-    const s7f = scoreTask(xcTask, enginePilots, {
-      ...commonParams,
-      leadingWeightFormula: "s7f2024" as const,
-    });
-    const gap2020 = scoreTask(xcTask, enginePilots, {
-      ...commonParams,
-      leadingWeightFormula: "gap2020" as const,
+    // Strip the legacy keys before calling the engine directly — its type
+    // surface no longer carries them (the API accepts and strips them).
+    const {
+      nominalLaunch: _nl,
+      nominalGoal: _ng,
+      leadingFormula: _lf,
+      ...liveParams
+    } = gapParams;
+    const engineResult = scoreTask(xcTask, enginePilots, {
+      ...liveParams,
+      nominalDistance: taskDistance * 0.7,
     });
 
-    // The API's leading pool matches the S7F-2024 engine result and is smaller
-    // than GAP2020's — confirming the new default took effect end to end.
-    expect(leading).toBeCloseTo(s7f.availablePoints.leading, 5);
-    expect(s7f.availablePoints.leading).toBeLessThan(gap2020.availablePoints.leading);
+    // The API's leading pool matches the engine result — the 2026 weights
+    // took effect end to end.
+    expect(leading).toBeCloseTo(engineResult.availablePoints.leading, 5);
   });
 
   test("task without xctsk returns 422", async () => {

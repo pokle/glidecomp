@@ -22,6 +22,7 @@ import {
   resolveTaskStop,
   resolveGoalAltitude,
   stoppedGlideRatio,
+  leadingFormulaFor,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
   type StopResolutionOptions,
@@ -99,17 +100,12 @@ function geometryFromRow(taskRow: ScoringTaskRow): TaskScoringGeometry {
   // A comp that hasn't saved its scoring settings falls back to the official
   // per-category FAI defaults (leading/arrival/difficulty as the S7F formula
   // uses them) rather than the raw HG-shaped engine baseline (issue #343).
-  // resolveCompGapParams also keeps the pre-#258 time-points exponent for a
-  // comp that saved a leadingFormula before the exponent was decoupled.
+  // Stored gap_params saved under pre-2026 editions may carry keys the 2026
+  // surface removed; resolveCompGapParams ignores them.
   const category = taskRow.category === "pg" ? "pg" : "hg";
-  // Pass the comp's creation time so a PG comp with no pinned leading-weight
-  // formula defaults to S7F-2024 when created on/after the cutoff, and to
-  // GAP2020/AirScore parity when created before it (issue #257).
-  const compCreatedAtMs = Date.parse(taskRow.creation_date);
   const gapParams: Partial<GAPParameters> = resolveCompGapParams(
     category,
-    storedGapParams,
-    Number.isNaN(compCreatedAtMs) ? null : compCreatedAtMs
+    storedGapParams
   );
 
   // Default nominalDistance to 70% of task distance when the comp hasn't
@@ -121,23 +117,24 @@ function geometryFromRow(taskRow: ScoringTaskRow): TaskScoringGeometry {
   }
 
   // Resolve the parameters that shape per-pilot analysis. distanceOrigin trims
-  // the task; useLeading + leadingFormula shape the cached leading aggregate.
+  // the task; useLeading + the discipline's LC variant shape the cached
+  // leading aggregate.
   const distanceOrigin = gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
   const useLeading = gapParams.useLeading ?? DEFAULT_GAP_PARAMETERS.useLeading;
-  const leadingFormula = gapParams.leadingFormula ?? DEFAULT_GAP_PARAMETERS.leadingFormula;
+  const fullGapParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...gapParams };
+  const leadingFormula = leadingFormulaFor(fullGapParams.scoring);
   const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
 
-  // Stopped tasks (issue #264, S7F §12.3): derive the task stop time from
-  // the recorded announcement (PG: minus scoreBackTime; HG: minus one gate
-  // interval) and the per-flight stop context. GAP only — open distance has
+  // Stopped tasks (issue #264, S7F 2026 §13.4): derive the task stop time
+  // from the recorded announcement minus the fixed score-back (HG 15 min /
+  // PG 5 min) and the per-flight stop context. GAP only — open distance has
   // no stopped-task concept in the spec.
-  const fullGapParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...gapParams };
   const stopAnnouncementMs = taskRow.stop_announcement_time
     ? Date.parse(taskRow.stop_announcement_time)
     : NaN;
   const stopCtx =
     scoringFormat === "gap" && Number.isFinite(stopAnnouncementMs)
-      ? resolveTaskStop(scoringTask, stopAnnouncementMs, fullGapParams)
+      ? resolveTaskStop(stopAnnouncementMs, fullGapParams.scoring)
       : null;
   const stopBase: StopResolutionOptions | null = stopCtx
     ? {

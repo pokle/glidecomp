@@ -97,64 +97,40 @@ const PG_FULL: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, scoring: 'PG' };
 const HG_FULL: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, scoring: 'HG' };
 
 // ---------------------------------------------------------------------------
-// §12.3.1 — stop time resolution
+// §13.4.1 — stop time resolution (fixed score-back in the 2026 edition)
 // ---------------------------------------------------------------------------
 
-describe('resolveTaskStop (§12.3.1)', () => {
-  it('PG: stop time is the announcement minus the competition score-back time', () => {
-    const stop = resolveTaskStop(makeTask(), msAfterBase(50), PG_FULL);
-    expect(stop.scoreBackKind).toBe('pg_score_back');
-    expect(stop.scoreBackSeconds).toBe(300); // default 5 minutes
+describe('resolveTaskStop (§13.4.1)', () => {
+  it('PG: stop time is the announcement minus the fixed 5 minutes', () => {
+    const stop = resolveTaskStop(msAfterBase(50), 'PG');
+    expect(stop.scoreBackSeconds).toBe(5 * 60);
     expect(stop.stopTimeMs).toBe(msAfterBase(45));
   });
 
-  it('PG: a custom scoreBackTime is honoured', () => {
-    const stop = resolveTaskStop(
-      makeTask(), msAfterBase(50), { ...PG_FULL, scoreBackTime: 600 },
-    );
-    expect(stop.scoreBackSeconds).toBe(600);
-    expect(stop.stopTimeMs).toBe(msAfterBase(40));
-  });
-
-  it('HG: one start-gate interval with multiple gates', () => {
-    const stop = resolveTaskStop(
-      makeTask({ timeGates: ['10:00:00Z', '10:20:00Z', '10:40:00Z'] }),
-      msAfterBase(50),
-      HG_FULL,
-    );
-    expect(stop.scoreBackKind).toBe('hg_gate_interval');
-    expect(stop.scoreBackSeconds).toBe(20 * 60);
-    expect(stop.stopTimeMs).toBe(msAfterBase(30));
-  });
-
-  it('HG: 15 minutes with a single gate (and without usable gates)', () => {
-    const single = resolveTaskStop(makeTask(), msAfterBase(50), HG_FULL);
-    expect(single.scoreBackKind).toBe('hg_single_gate');
-    expect(single.scoreBackSeconds).toBe(15 * 60);
-    expect(single.stopTimeMs).toBe(msAfterBase(35));
-
-    const gateless = resolveTaskStop(
-      makeTask({ timeGates: ['00:00:00Z'] }), // placeholder → no gates
-      msAfterBase(50),
-      HG_FULL,
-    );
-    expect(gateless.scoreBackKind).toBe('hg_single_gate');
-    expect(gateless.scoreBackSeconds).toBe(15 * 60);
+  it('HG: stop time is the announcement minus the fixed 15 minutes', () => {
+    const stop = resolveTaskStop(msAfterBase(50), 'HG');
+    expect(stop.scoreBackSeconds).toBe(15 * 60);
+    expect(stop.stopTimeMs).toBe(msAfterBase(35));
   });
 });
 
-describe('stoppedMinimumRunSeconds (§12.3.2)', () => {
-  it('is min(1 hour, nominalTime / 2)', () => {
-    expect(stoppedMinimumRunSeconds(5400)).toBe(2700);
-    expect(stoppedMinimumRunSeconds(10000)).toBe(3600);
-    expect(stoppedMinimumRunSeconds(1200)).toBe(600);
+describe('stoppedMinimumRunSeconds (§13.4.2)', () => {
+  it('HG: is min(1 hour, nominalTime / 2)', () => {
+    expect(stoppedMinimumRunSeconds(5400, 'HG')).toBe(2700);
+    expect(stoppedMinimumRunSeconds(10000, 'HG')).toBe(3600);
+    expect(stoppedMinimumRunSeconds(1200, 'HG')).toBe(600);
+  });
+
+  it('PG: no minimum duration (low-validity stopped tasks are excluded at comp level, §15)', () => {
+    expect(stoppedMinimumRunSeconds(5400, 'PG')).toBe(0);
+    expect(stoppedMinimumRunSeconds(10000, 'PG')).toBe(0);
   });
 });
 
-describe('stoppedGlideRatio / resolveGoalAltitude (§12.3.6)', () => {
+describe('stoppedGlideRatio / resolveGoalAltitude (§13.4.6)', () => {
   it('uses the spec glide ratios and the goal waypoint altitude', () => {
     expect(stoppedGlideRatio('HG')).toBe(5.0);
-    expect(stoppedGlideRatio('PG')).toBe(4.0);
+    expect(stoppedGlideRatio('PG')).toBe(2.5);
     expect(resolveGoalAltitude(makeTask())).toBe(1000);
     const bare = makeTask();
     delete bare.turnpoints[2].waypoint.altSmoothed;
@@ -364,8 +340,8 @@ function makeField(): PilotFlight[] {
 }
 
 describe('scoreTask — stopped single-gate race (PG)', () => {
-  // nominalTime 1200 → minimum run 600 s; stop announcement 10:20 with the
-  // default 300 s score-back → stop 10:15 → 15-minute window ≥ 10 minutes.
+  // Stop announcement 10:20 with the fixed PG 300 s score-back → stop 10:15
+  // → 15-minute window. PG has no minimum-duration requirement (§13.4.2).
   const params = pgParams({ nominalTime: 1200 });
   const options = { stopAnnouncementMs: msAfterBase(20) };
 
@@ -376,7 +352,7 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
     const stopped = result.stopped!;
     expect(stopped.stopTimeMs).toBe(msAfterBase(15));
     expect(stopped.scoredWindowSeconds).toBe(900);
-    expect(stopped.minimumRunSeconds).toBe(600);
+    expect(stopped.minimumRunSeconds).toBe(0); // PG: no minimum (§13.4.2)
     expect(stopped.requirementMet).toBe(true);
     expect(stopped.stoppedValidity).toBe(1); // Fast reached ESS
     expect(result.taskValidity.stopped).toBe(1);
@@ -397,10 +373,11 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
       result.availablePoints.time - stopped.timePointsReduction, 0,
     );
 
-    // §12.3.6: Slow was airborne at the stop 400 m above goal → 1600 m bonus.
+    // §13.4.6: Slow was airborne at the stop 400 m above goal → at the PG
+    // 2.5 bonus glide ratio, a 1000 m bonus.
     expect(slow.madeGoal).toBe(false);
     expect(slow.reachedESS).toBe(false);
-    expect(slow.stoppedAltitudeBonus).toBeCloseTo(1600, 6);
+    expect(slow.stoppedAltitudeBonus).toBeCloseTo(1000, 6);
     expect(slow.turnpointResult.stopInfo!.flyingAtStop).toBe(true);
 
     // Early landed before the stop: no bonus, counted landed.
@@ -421,10 +398,25 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
     expect(fastStopped.timePoints).toBeLessThan(fastNormal.timePoints);
   });
 
-  it('§12.3.2: a stop before the minimum run zeroes the task', () => {
-    // Announcement 10:10 → stop 10:05 → 5-minute window < 10-minute minimum.
+  it('PG: no minimum-duration requirement — a short stopped task still scores (§13.4.2)', () => {
+    // Announcement 10:10 → stop 10:05 → only a 5-minute window, but PG has
+    // no minimum; the low-validity exclusion happens at comp level (§15).
     const result = scoreTask(
       makeTask(), makeField(), params, undefined,
+      { stopAnnouncementMs: msAfterBase(10) },
+    );
+    expect(result.stopped!.requirementMet).toBe(true);
+    // The stopped factor itself is not zeroed by any duration rule. (The
+    // day may still be worthless for other reasons — at a 5-minute stop
+    // everyone is under minimum distance, so distance validity is 0.)
+    expect(result.stopped!.stoppedValidity).toBeGreaterThan(0);
+  });
+
+  it('HG §13.4.2: a stop before the minimum run zeroes the task', () => {
+    // HG score-back is 15 minutes: announcement 10:10 → stop 09:55, before
+    // the 10:00 start → zero scored window < the 600 s minimum.
+    const result = scoreTask(
+      makeTask(), makeField(), { scoring: 'HG', nominalTime: 1200 }, undefined,
       { stopAnnouncementMs: msAfterBase(10) },
     );
     expect(result.stopped!.requirementMet).toBe(false);

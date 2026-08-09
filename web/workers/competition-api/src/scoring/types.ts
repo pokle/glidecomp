@@ -12,6 +12,7 @@ import type {
   TrackQualityReport,
   GAPParameters,
   LeadingAggregate,
+  LeadingFormula,
   LeadingTimes,
   StopResolutionOptions,
   resolveTaskStop,
@@ -227,7 +228,7 @@ export interface TaskScoringGeometry {
   fullGapParams: GAPParameters;
   distanceOrigin: GAPParameters["distanceOrigin"];
   useLeading: boolean;
-  leadingFormula: GAPParameters["leadingFormula"];
+  leadingFormula: LeadingFormula;
   stopCtx: ReturnType<typeof resolveTaskStop> | null;
   stopBase: StopResolutionOptions | null;
 }

@@ -41,60 +41,61 @@ const pilotClassesArray = z
 
 const gapParamsSchema = z
   .object({
-    nominalLaunch: z.number().min(0).max(1),
     // Optional: when omitted the scorer auto-computes it per task
     // (70% of the optimized task distance), preserving the historical
     // default. Set it to pin a fixed comp-wide nominal distance.
     nominalDistance: z.number().positive().nullable().optional(),
-    nominalGoal: z.number().min(0).max(1),
     nominalTime: z.number().positive(),
     minimumDistance: z.number().positive(),
     scoring: z.enum(["PG", "HG"]),
     useLeading: z.boolean(),
     useArrival: z.boolean(),
-    // Leading coefficient variant (AirScore lc_formula). Optional; the
-    // per-category default is 'weighted' for PG and 'classic' for HG (2024
-    // spec, issue #258) when omitted.
-    leadingFormula: z.enum(["classic", "weighted"]).optional(),
-    // Leading-weight generation (paragliding only; issue #257). Optional; the
-    // default is date-based — new PG comps default to 's7f2024' and older ones
-    // to 'gap2020' (AirScore parity) — resolved in resolveCompGapParams.
-    leadingWeightFormula: z.enum(["gap2020", "s7f2020", "s7f2024"]).optional(),
-    // S7F 2024 §10 LeadingTimeRatio (0–0.5, spec default 0.26). Optional;
-    // only used for PG under the 's7f2024' leadingWeightFormula.
-    leadingTimeRatio: z.number().min(0).max(0.5).optional(),
-    // Time-points exponent (FAI S7F §11.2), decoupled from the leading
-    // variant (issue #258). Optional; the per-category default is '5/6'.
-    // When omitted for a comp that saved a leadingFormula, the scorer keeps
-    // the exponent that formula historically implied (classic → 2/3,
-    // weighted → 5/6) so older saved comps keep their scores.
-    timePointsExponent: z.enum(["2/3", "5/6"]).optional(),
+    // S7F 2026 §11 LeadingTimeRatio (0–0.26). Optional; the scorer defaults
+    // per discipline (26% PG, 17.5% HG).
+    leadingTimeRatio: z.number().min(0).max(0.26).optional(),
     // Where scored distance begins. Optional; defaults to 'takeoff'
     // (FAI CIVL GAP / PWCA) when omitted. 'start' excludes the
     // take-off→SSS leg (HGFA wording / "Move Origin").
     distanceOrigin: z.enum(["takeoff", "start"]).optional(),
-    // HG distance difficulty (FAI S7F §11.1.1). Optional; defaults to true.
+    // HG distance difficulty (S7F 2026 §12.1.1). Optional; defaults to true.
     // No effect on paragliding.
     useDistanceDifficulty: z.boolean().optional(),
-    // HG jump-the-gun (FAI S7F §12.2): seconds of early start per 1 penalty
+    // HG jump-the-gun (S7F 2026 §13.3): seconds of early start per 1 penalty
     // point (X) and the maximum seconds early (Y) before the pilot is
     // scored for minimum distance. Optional; the scorer defaults to the
     // spec's X=2 / Y=300. PG early starts are handled without settings
     // (scored launch→SSS only).
     jumpTheGunFactor: z.number().positive().max(3600).optional(),
     jumpTheGunMaxSeconds: z.number().min(0).max(86400).optional(),
-    // HG "ESS but not goal" (FAI S7F §12.1): fraction of time and arrival
+    // HG "ESS but not goal" (S7F 2026 §13.2): fraction of time and arrival
     // points KEPT by a pilot who reaches ESS but lands before goal.
     // Optional; the scorer defaults to the spec's recommended 0.8. The spec
     // fixes PG at 0 — the engine ignores the value for PG comps.
     essNotGoalFactor: z.number().min(0).max(1).optional(),
-    // PG score-back time in seconds (FAI S7F §5.6, §12.3.1): when a task is
-    // stopped, the PG stop time is the announcement minus this. Optional;
-    // the scorer defaults to the spec's 300 s (5 minutes). HG score-back is
-    // one start-gate interval (or 15 min single-gate) and has no setting.
-    scoreBackTime: z.number().min(0).max(3600).optional(),
+    // ---- Legacy keys from pre-2026 editions ----
+    // Accepted so older clients and re-submitted stored payloads don't
+    // hard-fail, then STRIPPED: the 2026 edition fixes these values
+    // (nominal launch 96%, nominal goal 30%, score-back HG 15 min / PG
+    // 5 min) and pins the formula variants per discipline, so nothing may
+    // depend on them. resolveCompGapParams ignores them in old stored rows
+    // the same way.
+    nominalLaunch: z.unknown().optional(),
+    nominalGoal: z.unknown().optional(),
+    scoreBackTime: z.unknown().optional(),
+    leadingFormula: z.unknown().optional(),
+    leadingWeightFormula: z.unknown().optional(),
+    timePointsExponent: z.unknown().optional(),
   })
-  .strict();
+  .strict()
+  .transform(({
+    nominalLaunch: _nl,
+    nominalGoal: _ng,
+    scoreBackTime: _sb,
+    leadingFormula: _lf,
+    leadingWeightFormula: _lwf,
+    timePointsExponent: _tpe,
+    ...kept
+  }) => kept);
 
 // Competition-local timezone — see migration 0011. Anything the runtime's
 // Intl accepts (IANA names like "Australia/Melbourne"); null clears the

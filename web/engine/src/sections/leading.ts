@@ -1,9 +1,11 @@
 /**
  * Leading points, with the arithmetic that produced them, and the sentence
- * naming which leading-coefficient variant (FAI S7F §11.3.1) measured them.
+ * naming which leading-coefficient variant (FAI S7F 2026 §12.3.1) measured
+ * them.
  */
 
-import type { GAPParameters } from '../gap-scoring';
+import type { GAPParameters, LeadingFormula } from '../gap-scoring';
+import { leadingFormulaFor } from '../gap-scoring';
 import type {
   ScoreExplanationItem,
   ScoreExplanationSection,
@@ -21,13 +23,13 @@ import {
 import { rankAmong, rankLabel } from './rank';
 
 /**
- * Name the leading-coefficient variant actually used (S7F §11.3.1), decoupled
- * from the time-points exponent since issue #258.
+ * Name the leading-coefficient variant actually used (S7F 2026 §12.3.1).
+ * The 2026 edition pins the variant per discipline.
  */
-export function leadingVariantSentence(formula: GAPParameters['leadingFormula']): string {
+export function leadingVariantSentence(formula: LeadingFormula): string {
   return formula === 'classic'
-    ? 'Measured with the classic squared-distance leading coefficient (S7F §11.3.1, the hang-gliding / GAP2016–2018 variant).'
-    : 'Measured with the weighted-area leading coefficient (S7F §11.3.1, the paragliding / GAP2020+ variant).';
+    ? 'Measured with the squared-distance leading coefficient (S7F §12.3.1, the hang-gliding variant).'
+    : 'Measured with the weighted-area leading coefficient (S7F §12.3.1, the paragliding variant).';
 }
 
 /**
@@ -153,7 +155,7 @@ export function buildLeadingSection(
 
   items.push({
     id: 'leading-variant',
-    text: leadingVariantSentence(params.leadingFormula),
+    text: leadingVariantSentence(leadingFormulaFor(params.scoring)),
     emphasis: 'muted',
   });
 

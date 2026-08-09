@@ -1,13 +1,12 @@
 /**
- * "ESS but not goal" (FAI S7F §12.1, issue #256).
+ * "ESS but not goal" (FAI S7F 2026 §13.2, issue #256).
  *
  * A pilot who reaches the end of the speed section but lands before goal
  * keeps only a configured share of their time and arrival points — reaching
  * goal "validates" the speed section. The scoring-system parameter is fixed
  * at 0 for paragliding (no goal → no time points) and defaults to 0.8 for
- * hang gliding. The factor also selects the best-time source, matching
- * AirScore's pilot_speed: while it keeps a share of the points the best
- * time comes from all ESS pilots; at 0 it is goal-validated per §11.2.1.
+ * hang gliding. The best-time source is pinned per discipline (§9.4.1):
+ * HG from all ESS pilots, PG goal-validated — independent of the factor.
  */
 import { describe, it, expect } from 'bun:test';
 import { scoreFlights, type FlightScoringData } from '../src/gap-scoring';
@@ -88,16 +87,18 @@ describe('ESS but not goal (S7F §12.1)', () => {
     expect(essOnly.timePoints).toBeCloseTo(goal.timePoints * 0.5, 0);
   });
 
-  it('HG factor 0: no time/arrival without goal, and best time is goal-validated', () => {
+  it('HG factor 0: no time/arrival without goal; best time stays ESS-based (§9.4.1)', () => {
     const flights = field();
-    // Make the ESS-only pilot the FASTEST — with factor 0 their time must
-    // not set the best time (§11.2.1: best time comes from goal pilots).
+    // Make the ESS-only pilot the FASTEST. S7F 2026 §9.4.1 pins the HG best
+    // time to all ESS pilots regardless of the ESS-but-not-goal factor, so
+    // their time DOES set the best time — they just keep none of the points.
     flights[1].speedSectionTime = 3000;
     const result = scoreFlights(task, flights, { ...baseParams, essNotGoalFactor: 0 });
     const goal = result.pilotScores.find(p => p.trackFile === 'goal.igc')!;
     const essOnly = result.pilotScores.find(p => p.trackFile === 'ess-only.igc')!;
-    expect(result.stats.bestTime).toBe(3600); // the goal pilot's time
-    expect(goal.timePoints).toBeCloseTo(result.availablePoints.time, 0); // fastest in goal
+    expect(result.stats.bestTime).toBe(3000); // the ESS pilot's time
+    expect(goal.timePoints).toBeLessThan(result.availablePoints.time); // beaten to ESS
+    expect(goal.timePoints).toBeGreaterThan(0);
     expect(essOnly.timePoints).toBe(0);
     expect(essOnly.arrivalPoints).toBe(0);
     expect(essOnly.distancePoints).toBeGreaterThan(0); // distance untouched
@@ -124,12 +125,15 @@ describe('ESS but not goal (S7F §12.1)', () => {
     expect(result.stats.bestTime).toBe(3600); // goal-validated despite the faster ESS pilot
   });
 
-  it('nobody in goal with factor 0: no best time, no time points', () => {
+  it('nobody in goal with factor 0: ESS-based best time, but nobody keeps points', () => {
     const flights = field().map(f =>
       f.madeGoal ? { ...f, madeGoal: false } : f,
     );
     const result = scoreFlights(task, flights, { ...baseParams, essNotGoalFactor: 0 });
-    expect(result.stats.bestTime).toBeNull();
+    // §9.4.1: the HG best time still comes from the ESS pilots …
+    expect(result.stats.bestTime).toBe(3600);
+    // … but with factor 0 nobody validated their speed section, so no time
+    // points are kept by anyone.
     for (const p of result.pilotScores) expect(p.timePoints).toBe(0);
   });
 

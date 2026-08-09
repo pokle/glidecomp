@@ -11,7 +11,6 @@ import {
   calculateArrivalPoints,
   calculateDistanceDifficulty,
   calculateSpeedFraction,
-  speedExponentValue,
 } from '../src/gap-scoring';
 import type {
   TurnpointSequenceResult,
@@ -578,9 +577,10 @@ describe('explainGapScore — point components', () => {
     expect(time.items[0].text).toContain('§12.1');
   });
 
-  it('goal-validated best time is shown to goal pilots when the factor is 0 (HG)', () => {
+  it('HG best time counts ESS pilots even when the factor is 0 (§9.4.1)', () => {
     const ctx = makeClassContext();
-    // A faster ESS-only pilot exists (60 min) but must not set the best time.
+    // A faster ESS-only pilot exists (60 min); §9.4.1 pins the HG best time
+    // to all ESS pilots regardless of the ESS-but-not-goal factor.
     ctx.pilots.push({
       flown_distance: 58_000, speed_section_time: 60 * 60,
       made_goal: false, reached_ess: true,
@@ -594,8 +594,8 @@ describe('explainGapScore — point components', () => {
     });
     const time = section(explanation, 'time');
     const best = time.items.find((i) => i.id === 'best-time');
-    expect(best!.value).toBe('1:05:00'); // the fastest GOAL pilot, not 1:00:00
-    expect(best!.text).toContain('among pilots who made goal');
+    expect(best!.value).toBe('1:00:00'); // the fastest ESS pilot
+    expect(best!.text).not.toContain('among pilots who made goal');
     // A goal pilot keeps full points — no reduction line.
     expect(time.items.find((i) => i.id === 'ess-not-goal')).toBeUndefined();
   });
@@ -777,7 +777,7 @@ describe('explainGapScore — point components', () => {
   // must multiply out to the printed points.
   it('prints a speed fraction precise enough to multiply out to the time points', () => {
     const ctx = makeClassContext();
-    const sf = calculateSpeedFraction(70 * 60, 65 * 60, 5 / 6);
+    const sf = calculateSpeedFraction(70 * 60, 65 * 60);
     const timePoints = sf * ctx.available_points.time;
     const explanation = explainGapScore({
       task: makeTask(),
@@ -1198,11 +1198,10 @@ describe('explainGapScore — day quality inputs', () => {
     const item = validityFor(makeValidityInputs(), {
       scoring: 'PG',
       nominalDistance: 70_000,
-      nominalGoal: 0.2,
       minimumDistance: 5_000,
     }).items.find((i) => i.id === 'distance-validity')!;
     expect(item.detail).toContain('70.0 km nominal distance');
-    expect(item.detail).toContain('20% nominal goal');
+    expect(item.detail).toContain('30% nominal goal');
     expect(item.detail).toContain('5.0 km minimum distance');
     expect(item.detail).toContain('44.1 km past the minimum');
   });
@@ -1560,7 +1559,7 @@ describe('explainGapScore — leading points', () => {
         result: makeReentryResult(),
         entry,
         classContext: ctx,
-        params: { scoring: 'PG', leadingFormula: 'weighted' },
+        params: { scoring: 'PG' },
       }),
       'leading',
     );
@@ -1614,7 +1613,7 @@ describe('explainGapScore — leading points', () => {
           leading_coefficient: 1.284,
         },
         classContext: ctx,
-        params: { scoring: 'PG', leadingFormula: 'weighted' },
+        params: { scoring: 'PG' },
       }),
       'leading',
     );
@@ -1659,7 +1658,7 @@ describe('explainGapScore — leading points', () => {
         result: makeReentryResult(),
         entry: { ...makeGoalEntry(), leading_points: 100, leading_coefficient: 0.981 },
         classContext: ctx,
-        params: { scoring: 'PG', leadingFormula: 'weighted' },
+        params: { scoring: 'PG' },
       }),
       'leading',
     );
@@ -2014,9 +2013,8 @@ describe('explainGapScore — component charts', () => {
       leading_points: 0, arrival_points: arrPts,
       arrival_position: pos, ess_time_ms: null,
     });
-    const exp = speedExponentValue('5/6');
     const best = 60 * 60;
-    const tOf = (t: number) => calculateSpeedFraction(t, best, exp) * 500;
+    const tOf = (t: number) => calculateSpeedFraction(t, best) * 500;
     ctx.pilots = [
       mk('a', 'Alpha', best, tOf(best), 1, calculateArrivalPoints(1, 4, 100)),
       mk('b', 'Bravo', 70 * 60, tOf(70 * 60), 2, calculateArrivalPoints(2, 4, 100)),

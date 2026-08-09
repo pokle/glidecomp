@@ -183,7 +183,7 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
   });
 
   it('weighted leadout rewards early course-leaders over the faster late starter', () => {
-    const r = scoreTask(task, pilots, { ...baseParams, useLeading: true, leadingFormula: 'weighted' });
+    const r = scoreTask(task, pilots, { ...baseParams, useLeading: true, scoring: 'PG' });
     const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));
 
     expect(r.availablePoints.leading).toBeGreaterThan(0);
@@ -314,32 +314,31 @@ describe('AirScore parity — Corryong Cup 2021 T1 (gap-2018 generation)', () =>
     expect(checked).toBe(15);
   });
 
-  it('time points match AirScore for every ESS pilot under the classic 2/3 curve', () => {
-    // The generation's distinguishing curve: 1 − (Δt/√Tmin)^(2/3) in hours.
-    // Under the modern 5/6 curve the runner-up (Adriaans) would score ~518,
-    // not the published 492.8. Divito and Pokle are goal pilots whose slow
-    // times clamp the curve to 0 — also part of the reference.
-    let checked = 0;
+  it('KNOWN DIVERGENCE: time points differ from the published gap-2018 values — GlideComp scores under S7F 2026', () => {
+    // The comp was published under the classic 2/3 time-points curve
+    // (1 − (Δt/√Tmin)^(2/3), in hours). GlideComp scores everything under
+    // the S7F 2026 edition, whose §12.2 curve uses the 5/6 exponent — more
+    // generous to non-winning ESS pilots. The runner-up (Adriaans, published
+    // 492.8 time points) is the canary: under 5/6 he scores visibly higher.
+    // The winner is pinned exactly — full speed fraction under either curve.
+    const winner = r.pilotScores.find((p) => p.pilotName === 'wisewould')!;
+    const refWinner = ref2021BySurname.get('wisewould')!;
+    expect(Math.abs(winner.timePoints - refWinner.timePts * qualityRatio)).toBeLessThan(1);
+
+    const adriaans = r.pilotScores.find((p) => p.pilotName === 'adriaans')!;
+    const refAdriaans = ref2021BySurname.get('adriaans')!;
+    expect(adriaans.timePoints - refAdriaans.timePts * qualityRatio).toBeGreaterThan(10);
+
+    // Every ESS pilot's divergence stays bounded — a rewrite-sized gap here
+    // would mean something other than the exponent moved. The widest gap in
+    // this field is ~41 points (a mid-pack ESS time where the two curves are
+    // furthest apart).
     for (const p of r.pilotScores) {
       if (!p.reachedESS) continue;
       const ref = ref2021BySurname.get(p.pilotName);
       if (!ref) continue;
-      expect(Math.abs(p.timePoints - ref.timePts * qualityRatio)).toBeLessThan(1);
-      checked++;
+      expect(Math.abs(p.timePoints - ref.timePts * qualityRatio)).toBeLessThan(50);
     }
-    expect(checked).toBe(15);
-  });
-
-  it('goal-pilot totals match within a point (quality-scaled)', () => {
-    let checked = 0;
-    for (const p of r.pilotScores) {
-      if (!p.madeGoal) continue;
-      const ref = ref2021BySurname.get(p.pilotName);
-      if (!ref) continue;
-      expect(Math.abs(p.totalScore - ref.total * qualityRatio)).toBeLessThan(1.5);
-      checked++;
-    }
-    expect(checked).toBe(15);
   });
 
   it('landed-out totals track AirScore, with the legacy difficulty curve as the only gap', () => {
@@ -366,12 +365,4 @@ describe('AirScore parity — Corryong Cup 2021 T1 (gap-2018 generation)', () =>
     expect(maxGap).toBeGreaterThan(5); // the deviation is real — see above
   });
 
-  it('under the modern 5/6 exponent the runner-up would score visibly differently (regression guard)', () => {
-    const modern = scoreTask(task2021, pilots, { ...params2021, timePointsExponent: '5/6' as const });
-    const adriaans = modern.pilotScores.find((p) => p.pilotName === 'adriaans')!;
-    const refAdriaans = ref2021BySurname.get('adriaans')!;
-    // 5/6 is ~25 points more generous here — proving the fixture really
-    // pins the 2/3 generation.
-    expect(adriaans.timePoints - refAdriaans.timePts * qualityRatio).toBeGreaterThan(10);
-  });
 });

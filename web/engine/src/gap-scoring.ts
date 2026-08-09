@@ -24,7 +24,7 @@ import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './
 import { resolveStartGates, resolveTaskDeadline } from './time-gates';
 import { maxBy, minBy } from './array-utils';
 
-import { DEFAULT_GAP_PARAMETERS } from './gap-params';
+import { DEFAULT_GAP_PARAMETERS, leadingFormulaFor, resolveLeadingTimeRatio } from './gap-params';
 import type { GAPParameters, DistanceOrigin } from './gap-params';
 import {
   calculateTaskValidity,
@@ -35,7 +35,6 @@ import {
   calculateDistancePointsHG,
   applyMinimumDistance,
   calculateTimePoints,
-  resolveTimePointsExponent,
   computeLeadingAggregate,
   combineLeadingCoefficient,
   resolveLeadingMaxTime,
@@ -173,36 +172,33 @@ export function effectiveEssNotGoalFactor(params: GAPParameters): number {
 }
 
 /**
- * The speed-section times that count toward the best time (FAI S7F §11.2.1),
+ * The speed-section times that count toward the best time (S7F 2026 §9.4.1),
  * in field order.
  *
- * Matches AirScore's pilot_speed: while the ESS-but-not-goal factor keeps a
- * share of time points (HG default 0.8), the best time is the fastest pilot
- * to reach ESS, goal or not, so the docked pilots' speed fractions stay on
- * the same scale; when the factor is 0 (always for PG) it is goal-validated
- * exactly as the spec reads.
- *
- * @param essNotGoalFactor - as returned by {@link effectiveEssNotGoalFactor}.
+ * §9.4.1 pins the qualifying set per discipline: in hang-gliding the best
+ * time is the fastest pilot to reach ESS, goal or not; in paragliding only
+ * pilots who reached goal are considered (a PG pilot cannot earn time points
+ * without goal, so the denominator matches who can score).
  */
 export function qualifyingSpeedSectionTimes(
   candidates: readonly BestTimeCandidate[],
-  essNotGoalFactor: number,
+  scoring: 'PG' | 'HG',
 ): number[] {
   return candidates
-    .filter(c => (essNotGoalFactor > 0 ? c.reachedESS : c.madeGoal))
+    .filter(c => (scoring === 'HG' ? c.reachedESS : c.madeGoal))
     .map(c => c.speedSectionTime)
     .filter((t): t is number => t !== null && t > 0);
 }
 
 /**
- * Best speed-section time (§11.2.1) — the denominator of every pilot's speed
+ * Best speed-section time (§9.4.1) — the denominator of every pilot's speed
  * fraction — or null when nobody qualifies.
  */
 export function bestTimeFrom(
   candidates: readonly BestTimeCandidate[],
-  essNotGoalFactor: number,
+  scoring: 'PG' | 'HG',
 ): number | null {
-  const validTimes = qualifyingSpeedSectionTimes(candidates, essNotGoalFactor);
+  const validTimes = qualifyingSpeedSectionTimes(candidates, scoring);
   return validTimes.length > 0 ? minBy(validTimes, t => t) : null;
 }
 
@@ -322,11 +318,11 @@ function gatherFieldStats(
   const numInGoal = effFlights.reduce((n, f) => n + (f.madeGoal ? 1 : 0), 0);
   const numReachedESS = effFlights.reduce((n, f) => n + (f.reachedESS ? 1 : 0), 0);
 
-  // §12.1: the ESS-but-not-goal factor in force for this field.
+  // §13.2: the ESS-but-not-goal factor in force for this field.
   const essNotGoalFactor = effectiveEssNotGoalFactor(params);
 
-  // Best time (§11.2.1) — the denominator of every speed fraction.
-  const bestTime = bestTimeFrom(effFlights, essNotGoalFactor);
+  // Best time (§9.4.1) — the denominator of every speed fraction.
+  const bestTime = bestTimeFrom(effFlights, params.scoring);
 
   const taskDistance = calculateOptimizedTaskDistance(scoringTask);
 
@@ -375,7 +371,9 @@ function resolveStoppedTaskScore(
   const scoredWindowSeconds = windowStartMs !== null
     ? Math.max(0, (stop.stopTimeMs - windowStartMs) / 1000)
     : null;
-  const minimumRunSeconds = stoppedMinimumRunSeconds(params.nominalTime);
+  const minimumRunSeconds = stoppedMinimumRunSeconds(
+    params.nominalTime, params.scoring,
+  );
   const requirementMet = scoredWindowSeconds !== null
     && scoredWindowSeconds >= minimumRunSeconds;
 
@@ -470,7 +468,7 @@ function computeLeadingCoefficients(
       ? lead.aggregate
       : computeLeadingAggregate(
           lead.fixes, scoringTask, lead.sequence,
-          f.sssTimeMs, f.essTimeMs, params.leadingFormula,
+          f.sssTimeMs, f.essTimeMs, leadingFormulaFor(params.scoring),
         );
   });
 
@@ -507,7 +505,7 @@ function computeLeadingCoefficients(
     agg === null
       ? Infinity
       : combineLeadingCoefficient(
-          agg, taskFirstSSSTime, maxTime.timeMs, params.leadingFormula,
+          agg, taskFirstSSSTime, maxTime.timeMs, leadingFormulaFor(params.scoring),
         ),
   );
 
@@ -611,14 +609,11 @@ export function scoreFlights(
   // Step 4: Calculate weights and available points
   const weights = calculateWeights({
     goalRatio,
-    bestDistance,
-    taskDistance,
     scoring: fullParams.scoring,
     useLeading: fullParams.useLeading,
     useArrival: fullParams.useArrival,
-    leadingWeightFormula: fullParams.leadingWeightFormula,
-    leadingTimeRatio: fullParams.leadingTimeRatio,
-    // S7F §10, HG: nobody at ESS ⇒ no time or arrival points are available.
+    leadingTimeRatio: resolveLeadingTimeRatio(fullParams),
+    // S7F 2026 §11, HG: nobody at ESS ⇒ no time or arrival points available.
     numReachedESS,
   });
   const totalAvailable = 1000 * taskValidity.task;
@@ -643,12 +638,7 @@ export function scoreFlights(
   // Step 6: Determine ESS arrival order — see essArrivalOrder.
   const essPositionMap = essArrivalOrder(effFlights, fullParams);
 
-  // Time-points exponent (§11.2), resolved once for the field. Decoupled from
-  // the leading-coefficient variant (issue #258); backward-compatible when only
-  // leadingFormula was stored.
-  const timeExponent = resolveTimePointsExponent(fullParams);
-
-  // §12.3.5: every goal pilot's time points are reduced by the points a
+  // §13.4.5: every goal pilot's time points are reduced by the points a
   // pilot reaching ESS exactly at the end of the scored window would get —
   // removing the discontinuity against pilots stopped between ESS and goal.
   let stopTimeReduction = 0;
@@ -665,7 +655,6 @@ export function scoreFlights(
       reachedESS: true,
       availableTimePoints: availablePoints.time,
       scoring: fullParams.scoring,
-      exponent: timeExponent,
       essNotGoalFactor,
     });
     stopped.timePointsReduction = roundToTenth(stopTimeReduction);
@@ -716,10 +705,9 @@ export function scoreFlights(
       reachedESS: f.reachedESS,
       availableTimePoints: availablePoints.time,
       scoring: fullParams.scoring,
-      exponent: timeExponent,
       essNotGoalFactor,
     });
-    // §12.3.5 stopped-task reduction — goal pilots only (a goal pilot's own
+    // §13.4.5 stopped-task reduction — goal pilots only (a goal pilot's own
     // speed time never exceeds the scored window, so this stays ≥ 0; the
     // clamp guards degenerate inputs).
     if (stopTimeReduction > 0 && f.madeGoal) {
@@ -845,11 +833,11 @@ export function scoreTask(
   // up front; everything downstream scores against this task.
   const scoringTask = taskForDistanceOrigin(task, fullParams.distanceOrigin);
 
-  // Stopped task (§12.3): derive the task stop time from the announcement
+  // Stopped task (§13.4): derive the task stop time from the announcement
   // and build the per-flight stop context (glide ratio + goal altitude for
-  // the §12.3.6 bonus). The first pass clips every pilot at the stop time.
+  // the §13.4.6 bonus). The first pass clips every pilot at the stop time.
   const stopCtx = options.stopAnnouncementMs != null
-    ? resolveTaskStop(scoringTask, options.stopAnnouncementMs, fullParams)
+    ? resolveTaskStop(options.stopAnnouncementMs, fullParams.scoring)
     : null;
   const stopBase: StopResolutionOptions | null = stopCtx
     ? {

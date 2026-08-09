@@ -313,9 +313,9 @@ describe('race.ess_margin', () => {
   // Both ESS pilots crossed at the ESS waypoint, 7 km short of goal.
   const essLon = TEST_ORIGIN.lon + 15_000 * DEG_LON_PER_M;
   const distToGoal = andoyerDistance(TEST_ORIGIN.lat, essLon, goalWp.lat, goalWp.lon);
-  const required = 300 + distToGoal / 4; // PG stopped glide ratio 4.0, goal alt 300 m
+  const required = 300 + distToGoal / 2.5; // PG stopped glide ratio 2.5 (S7F 2026 §13.4.6), goal alt 300 m
 
-  it('measures altitude above the required final glide (PG ratio 4.0)', () => {
+  it('measures altitude above the required final glide (PG ratio 2.5)', () => {
     expect(valueOf(out, 'alpha.igc')).toBeCloseTo(1500 - required, 6);
     expect(valueOf(out, 'bravo.igc')).toBeCloseTo(500 - required, 6);
     expect(valueOf(out, 'bravo.igc')!).toBeLessThan(0); // bravo arrived below glide

@@ -44,9 +44,7 @@ import {
   calculateLeadingPoints,
   calculateSpeedFraction,
   calculateTimeValidity,
-  effectiveEssNotGoalFactor,
-  resolveTimePointsExponent,
-  speedExponentValue,
+  NOMINAL_LAUNCH,
   usesDistanceDifficulty,
 } from './gap-scoring';
 import { duration, fmtPoints, km, trimZeros } from './score-explanation-format';
@@ -164,16 +162,15 @@ export function buildTimeChart(
   const available = classContext.available_points.time;
   if (available <= 0) return null;
 
-  // Best time (§11.2.1) from the scorer's own function, so the curve's
+  // Best time (§9.4.1) from the scorer's own function, so the curve's
   // denominator is the one the field was scored against.
   const bestTime = bestTimeFrom(
     classContext.pilots.map(bestTimeCandidate),
-    effectiveEssNotGoalFactor(params),
+    params.scoring,
   );
   if (bestTime === null) return null;
 
-  const exponent = speedExponentValue(resolveTimePointsExponent(params));
-  const f = (t: number) => calculateSpeedFraction(t, bestTime, exponent) * available;
+  const f = (t: number) => calculateSpeedFraction(t, bestTime) * available;
 
   const placed = placeField(
     classContext,
@@ -459,11 +456,14 @@ export function buildLaunchValidityChart(
   params: GAPParameters,
 ): ScoreChart | null {
   const vi = classContext.validity_inputs;
-  if (!vi || vi.num_present <= 0 || params.nominalLaunch <= 0) return null;
-  const ratio = Math.min(1, vi.num_flying / (vi.num_present * params.nominalLaunch));
+  if (!vi || vi.num_present <= 0) return null;
+  const ratio = Math.min(1, vi.num_flying / (vi.num_present * NOMINAL_LAUNCH));
   return {
     kind: 'validity',
-    curve: validityCurve((r) => calculateLaunchValidity(r, 1, 1)),
+    // The curve is sampled in the launch-validity ratio r; feeding
+    // r·NOMINAL_LAUNCH flying pilots of 1 present makes the clamp inside
+    // calculateLaunchValidity resolve to exactly r.
+    curve: validityCurve((r) => calculateLaunchValidity(r * NOMINAL_LAUNCH, 1)),
     point: { x: ratio, y: classContext.task_validity.launch },
     xLabel: 'share of the launch threshold met',
     caption:

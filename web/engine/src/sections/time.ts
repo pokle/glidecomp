@@ -11,8 +11,6 @@ import {
   calculateSpeedFraction,
   effectiveEssNotGoalFactor,
   qualifyingSpeedSectionTimes,
-  resolveTimePointsExponent,
-  speedExponentValue,
 } from '../gap-scoring';
 import type { TurnpointSequenceResult } from '../turnpoint-sequence';
 import type {
@@ -56,11 +54,11 @@ export function buildTimeSection(
     !entry.made_goal &&
     essNotGoalFactor > 0;
 
-  // Best time (§11.2.1) — the scorer's own functions over the published class
+  // Best time (§9.4.1) — the scorer's own functions over the published class
   // field; only the field names have to be translated.
   const candidates = classContext.pilots.map(bestTimeCandidate);
-  const bestTimes = qualifyingSpeedSectionTimes(candidates, essNotGoalFactor);
-  const bestTime = bestTimeFrom(candidates, essNotGoalFactor);
+  const bestTimes = qualifyingSpeedSectionTimes(candidates, params.scoring);
+  const bestTime = bestTimeFrom(candidates, params.scoring);
   let rank: string | undefined;
 
   // FAI S7F §10 (HG): nobody in the class reached ESS, so there were no time
@@ -81,22 +79,7 @@ export function buildTimeSection(
       emphasis: noEssAtAll ? 'warning' : 'muted',
     });
   } else {
-    // Time-points exponent (S7F §11.2) actually used for this comp, decoupled
-    // from the leading-coefficient variant (issue #258).
-    const exp = resolveTimePointsExponent(params);
-    const exponentLabel = exp === '2/3' ? '2⁄3' : '5⁄6';
-    const exponentName =
-      exp === '2/3' ? 'the older GAP2016/2018 curve' : 'the current FAI S7F';
-    const sf = calculateSpeedFraction(
-      entry.speed_section_time,
-      bestTime,
-      speedExponentValue(exp),
-    );
-    items.push({
-      id: 'time-exponent',
-      text: `Time points use the ${exponentLabel} speed-fraction exponent (${exponentName}, S7F §11.2).`,
-      emphasis: 'muted',
-    });
+    const sf = calculateSpeedFraction(entry.speed_section_time, bestTime);
     items.push({
       id: 'your-time',
       text: 'Your speed section time',
@@ -125,15 +108,17 @@ export function buildTimeSection(
       behind > 0
         ? classContext.pilots.find(
             (p) =>
-              (essNotGoalFactor > 0 ? p.reached_ess : p.made_goal) &&
+              (params.scoring === 'HG' ? p.reached_ess : p.made_goal) &&
               p.speed_section_time === bestTime &&
               p.pilot_name,
           )
         : undefined;
     items.push({
       id: 'best-time',
+      // §9.4.1 pins the qualifying set per discipline: HG counts every ESS
+      // pilot, PG only pilots who made goal.
       text:
-        essNotGoalFactor > 0
+        params.scoring === 'HG'
           ? 'Fastest time in class'
           : 'Fastest time in class (among pilots who made goal)',
       value: duration(bestTime),
@@ -197,10 +182,9 @@ export function buildTimeSection(
           : undefined,
       });
     } else {
-      // time points = speed fraction × available (× the §12.1 factor, − the
-      // §12.3.5 stopped reduction), exactly — print the fraction with enough
+      // time points = speed fraction × available (× the §13.2 factor, − the
+      // §13.4.5 stopped reduction), exactly — print the fraction with enough
       // decimals that the multiplication visibly holds at the 0.1-pt step.
-      // exponentLabel is the decoupled time-points exponent (issue #258).
       const { availStr, decimals, reconciles } = reconcileWithAvailable(
         ap.time, 3, 6, entry.time_points,
         (d, avail) => Math.max(0, Number(sf.toFixed(d)) * avail * factor - stopReduction),
@@ -209,7 +193,7 @@ export function buildTimeSection(
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^5⁄6) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${
           reconciles
             ? `= ${fmtPoints(entry.time_points)}`
             : `≈ ${fmtPoints(entry.time_points)} — the figures are shown rounded; the points come from their full precision`

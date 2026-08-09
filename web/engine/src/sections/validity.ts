@@ -8,6 +8,7 @@
  */
 
 import type { GAPParameters } from '../gap-scoring';
+import { NOMINAL_LAUNCH, NOMINAL_GOAL } from '../gap-scoring';
 import type {
   ScoreExplanationItem,
   ScoreExplanationSection,
@@ -48,11 +49,11 @@ function launchValidityDetail(
   if (!vi || !params) return undefined;
   // Whole pilots: the threshold is fractional (96% of 32 is 30.72) and
   // "30.7 pilots" reads like a unit error. Ceil, because 30 would not clear it.
-  const target = Math.ceil(vi.num_present * params.nominalLaunch);
+  const target = Math.ceil(vi.num_present * NOMINAL_LAUNCH);
   const pilots = (n: number) => `${n} pilot${n === 1 ? '' : 's'}`;
   return (
     `${pilots(vi.num_flying)} flew out of ${vi.num_present} present. ` +
-    `Nominal launch is ${trimZeros((params.nominalLaunch * 100).toFixed(1), 0)}%, ` +
+    `Nominal launch is ${trimZeros((NOMINAL_LAUNCH * 100).toFixed(1), 0)}%, ` +
     `so launch validity is full once ${pilots(target)} are in the air.`
   );
 }
@@ -64,7 +65,7 @@ function distanceValidityDetail(
   if (!vi || !params) return undefined;
   return (
     `Measured against a ${km(params.nominalDistance)} nominal distance, ` +
-    `a ${trimZeros((params.nominalGoal * 100).toFixed(1), 0)}% nominal goal ` +
+    `a ${trimZeros((NOMINAL_GOAL * 100).toFixed(1), 0)}% nominal goal ` +
     `and a ${km(params.minimumDistance)} minimum distance. ` +
     `The field flew ${km(vi.mean_distance_over_minimum)} past the minimum on average, ` +
     `with a best of ${km(vi.best_distance)}.`
