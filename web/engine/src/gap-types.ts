@@ -17,7 +17,13 @@
 import type { IGCFix } from './igc-parser';
 import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-sequence';
 import type { GAPParameters } from './gap-params';
-import type { TaskValidity, WeightFractions, LeadingAggregate } from './gap-formulas';
+import type {
+  TaskValidity,
+  WeightFractions,
+  LeadingAggregate,
+  LeadingFieldTimes,
+  LeadingMaxTimeSource,
+} from './gap-formulas';
 
 /** Available points in each category. */
 export interface AvailablePoints {
@@ -150,6 +156,22 @@ export interface StoppedTaskScore {
   numLandedBeforeStop: number;
 }
 
+/**
+ * The §11.3.1 leading clock as the field resolved it: the times it was built
+ * from, and the `maxTime` they produced.
+ *
+ * Published because `maxTime` is the one input to a landed-out pilot's
+ * leading coefficient that lives entirely outside their own flight — without
+ * it the report card can only assert the coefficient, never show where the
+ * graph was carried to or why it stopped there.
+ */
+export interface LeadingTimes extends LeadingFieldTimes {
+  /** maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline), epoch ms. */
+  maxTimeMs: number;
+  /** Which of the field times `maxTimeMs` came from. */
+  maxTimeSource: LeadingMaxTimeSource;
+}
+
 /** Complete task scoring result. */
 export interface TaskScoreResult {
   parameters: GAPParameters;
@@ -161,6 +183,11 @@ export interface TaskScoreResult {
   stats: TaskStats;
   /** Present when the task was scored as stopped (FAI S7F §12.3). */
   stopped?: StoppedTaskScore;
+  /**
+   * The §11.3.1 leading clock the coefficients were measured against.
+   * Present only when the competition scores leading points.
+   */
+  leadingTimes?: LeadingTimes;
 }
 
 /** Aggregate statistics from all pilots in the task. */

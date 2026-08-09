@@ -21,7 +21,7 @@ import type { TurnpointSequenceResult, StopResolutionOptions } from './turnpoint
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { getSSSIndex, getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
-import { resolveStartGates } from './time-gates';
+import { resolveStartGates, resolveTaskDeadline } from './time-gates';
 import { maxBy, minBy } from './array-utils';
 
 import { DEFAULT_GAP_PARAMETERS } from './gap-params';
@@ -38,10 +38,15 @@ import {
   resolveTimePointsExponent,
   computeLeadingAggregate,
   combineLeadingCoefficient,
+  resolveLeadingMaxTime,
   calculateLeadingPoints,
   calculateArrivalPoints,
 } from './gap-formulas';
-import type { DistanceScore, DistanceDifficulty } from './gap-formulas';
+import type {
+  DistanceScore,
+  DistanceDifficulty,
+  LeadingFieldTimes,
+} from './gap-formulas';
 import {
   resolveTaskStop,
   resolveScoredWindowEnds,
@@ -53,6 +58,7 @@ import type {
   AvailablePoints,
   BestTimeCandidate,
   FlightScoringData,
+  LeadingTimes,
   PilotFlight,
   PilotScore,
   PilotScoreCore,
@@ -407,13 +413,18 @@ function resolveStoppedTaskScore(
  *
  * Infinity = "no valid LC in the field" (calculateLeadingPoints then awards
  * no leading points to anyone), so `minLC` comes back Infinity too.
+ *
+ * Two passes over the field, because §11.3.1's `maxTime` — where a landed-out
+ * pilot's graph ends — is itself a field-level number: it needs every pilot's
+ * outlanding time before ANY pilot's coefficient can be folded together.
  */
 function computeLeadingCoefficients(
   scoringTask: XCTask,
   effFlights: readonly FlightScoringData[],
   outcomes: ReadonlyArray<PilotScoreCore['earlyStartOutcome']>,
   params: GAPParameters,
-): { coefficients: number[]; minLC: number } {
+  stop?: { stopTimeMs: number },
+): { coefficients: number[]; minLC: number; times?: LeadingTimes } {
   if (!params.useLeading) {
     return { coefficients: effFlights.map(() => Infinity), minLC: Infinity };
   }
@@ -433,35 +444,86 @@ function computeLeadingCoefficients(
     const gates = resolveStartGates(scoringTask, taskFirstSSSTime);
     if (gates) taskFirstSSSTime = gates[0];
   }
-  const taskLastESSTime = allESSTimes.length > 0 ? maxBy(allESSTimes, t => t) : taskFirstSSSTime + 3600000;
 
-  const coefficients = effFlights.map((f, idx) => {
+  // Pass 1: the per-pilot aggregates. null = this pilot earns no leading
+  // points at all, so they neither take a coefficient nor lend an outlanding
+  // time to the field.
+  const aggregates = effFlights.map((f, idx) => {
     // Early starters scored only for distance (§12.2) earn no leading
     // points — their cached aggregate must not resurrect a coefficient.
     const outcome = outcomes[idx];
     if (outcome === 'pg_launch_to_sss' || outcome === 'hg_min_distance') {
-      return Infinity;
+      return null;
     }
     // A flight with nothing to lead with earns no leading points: a
     // track-less pilot (manual flight, issue #306) has no tracklog to scan.
     const lead = f.leading;
-    if (lead.kind === 'none') return Infinity;
+    if (lead.kind === 'none') return null;
     // Prefer a precomputed aggregate (backend cache); otherwise scan the
     // tracklog now. Either way the field scalars fold in the same way.
-    const agg = lead.kind === 'aggregate'
+    return lead.kind === 'aggregate'
       ? lead.aggregate
       : computeLeadingAggregate(
           lead.fixes, scoringTask, lead.sequence,
           f.sssTimeMs, f.essTimeMs, params.leadingFormula,
         );
-    return combineLeadingCoefficient(
-      agg, taskFirstSSSTime, taskLastESSTime, params.leadingFormula,
-    );
   });
+
+  // The field times. A started pilot who never reached ESS landed out, and
+  // their tracklog's last fix is when: that is the `lastOutlandingTime` the
+  // spec takes the latest of.
+  let lastOutlandingMs: number | null = null;
+  for (const agg of aggregates) {
+    if (!agg || !agg.valid || agg.reachedESS) continue;
+    if (lastOutlandingMs === null || agg.lastFixMs > lastOutlandingMs) {
+      lastOutlandingMs = agg.lastFixMs;
+    }
+  }
+  // The goal deadline (§8.3.c), resolved against the leading clock's origin
+  // rather than against any one flight — this is a property of the task, and
+  // the field shares one of it. A deadline at or before the first start is
+  // the same task-setting mistake resolveTimingWindow ignores.
+  let deadlineMs = allSSSTimes.length > 0
+    ? resolveTaskDeadline(scoringTask, taskFirstSSSTime)
+    : null;
+  if (deadlineMs !== null && deadlineMs <= taskFirstSSSTime) deadlineMs = null;
+
+  const fieldTimes: LeadingFieldTimes = {
+    firstStartMs: taskFirstSSSTime,
+    lastESSMs: allESSTimes.length > 0 ? maxBy(allESSTimes, t => t) : null,
+    lastOutlandingMs,
+    deadlineMs,
+    stopTimeMs: stop ? stop.stopTimeMs : null,
+  };
+  const maxTime = resolveLeadingMaxTime(fieldTimes);
+
+  // Pass 2: fold the field times in.
+  const coefficients = aggregates.map(agg =>
+    agg === null
+      ? Infinity
+      : combineLeadingCoefficient(
+          agg, taskFirstSSSTime, maxTime.timeMs, params.leadingFormula,
+        ),
+  );
 
   const finiteLCs = coefficients.filter(lc => isFinite(lc));
   const minLC = finiteLCs.length > 0 ? minBy(finiteLCs, lc => lc) : Infinity;
-  return { coefficients, minLC };
+  return {
+    coefficients,
+    minLC,
+    // With nobody started there is no clock — firstStartMs would be the
+    // epoch. Publishing that would put a 1970 timestamp on a page whose whole
+    // job is to be checkable.
+    ...(allSSSTimes.length > 0
+      ? {
+          times: {
+            ...fieldTimes,
+            maxTimeMs: maxTime.timeMs,
+            maxTimeSource: maxTime.source,
+          },
+        }
+      : {}),
+  };
 }
 
 /**
@@ -562,8 +624,13 @@ export function scoreFlights(
   };
 
   // Step 5: Calculate leading coefficients — see computeLeadingCoefficients.
-  const { coefficients: leadingCoefficients, minLC } = computeLeadingCoefficients(
+  const {
+    coefficients: leadingCoefficients,
+    minLC,
+    times: leadingTimes,
+  } = computeLeadingCoefficients(
     scoringTask, effFlights, earlyOutcomes, fullParams,
+    stopped ? { stopTimeMs: stopped.stopTimeMs } : undefined,
   );
 
   // Step 6: Determine ESS arrival order — see essArrivalOrder.
@@ -736,6 +803,7 @@ export function scoreFlights(
     pilotScores,
     stats,
     ...(stopped ? { stopped } : {}),
+    ...(leadingTimes ? { leadingTimes } : {}),
   };
 }
 

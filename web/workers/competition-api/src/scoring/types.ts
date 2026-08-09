@@ -12,6 +12,7 @@ import type {
   TrackQualityReport,
   GAPParameters,
   LeadingAggregate,
+  LeadingTimes,
   StopResolutionOptions,
   resolveTaskStop,
 } from "@glidecomp/engine";
@@ -139,8 +140,30 @@ export interface ClassScore {
    * Absent for open distance, which ignores GAP parameters entirely.
    */
   gap_params?: GAPParameters;
+  /**
+   * The §11.3.1 leading clock the class's coefficients were measured
+   * against: the first start, the last ESS, the last land-out, the deadline
+   * / stop time, and the `maxTime` they resolve to.
+   *
+   * A landed-out pilot's coefficient carries a tail that runs to `maxTime`,
+   * and `maxTime` is decided by the whole field — nothing in that pilot's own
+   * flight explains it. Published so the report card can name it. Absent for
+   * open distance and when the class scores no leading points.
+   */
+  leading_times?: ClassLeadingTimes;
   /** Present when the task was scored as stopped (S7F §12.3). */
   stopped?: ClassStoppedInfo;
+}
+
+/** The §11.3.1 leading clock — the engine's `LeadingTimes`, in wire shape. */
+export interface ClassLeadingTimes {
+  first_start_ms: number;
+  last_ess_ms: number | null;
+  last_outlanding_ms: number | null;
+  deadline_ms: number | null;
+  stop_time_ms: number | null;
+  max_time_ms: number;
+  max_time_source: LeadingTimes["maxTimeSource"];
 }
 
 /**

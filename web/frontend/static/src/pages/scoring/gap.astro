@@ -476,6 +476,29 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
+              <h3 id="leading-max-time" class="text-base font-semibold mb-1 scroll-mt-20">
+                Pilots who land out
+              </h3>
+              <p class="text-muted-foreground">
+                A pilot who lands before ESS has no more track to measure, but the curve must
+                still cover the rest of the day. GlideComp holds that pilot at the best distance
+                they reached, and carries the curve on to <em>maxTime</em>
+                (<SpecRef section="11.3.1" />):
+              </p>
+              <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{maxTime} = \min\!\left(\max(\text{lastOutlandingTime},\; \text{lastESSTime}),\; \text{taskDeadline}\right)`)}></p>
+              <p class="text-muted-foreground">
+                That is the later of two times — when the last pilot landed out, and when the
+                last pilot reached ESS — but never later than the task deadline. A stopped task
+                ends the curve at the task stop time, because nothing after the stop is scored.
+              </p>
+              <p class="text-muted-foreground">
+                maxTime is one time for the whole class, not for each pilot. A pilot who stays up
+                long after the winner is home therefore adds a little to the leading coefficient
+                of every pilot who landed out. Your report card gives the maxTime that your own
+                curve used, and which of these times set it.
+              </p>
+            </div>
+            <div>
               <h3 class="text-base font-semibold mb-1">How Points Are Awarded</h3>
               <p class="text-muted-foreground">
                 Leading points use a curve with the same shape as time points, but with LC values
@@ -1390,14 +1413,14 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <a href="https://github.com/pokle/glidecomp/issues/584" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #584</a>.
                 </li>
                 <li>
-                  <strong>Leading coefficient: the land-out tail (<SpecRef section="11.3.1" />):</strong>
-                  for a pilot who lands out, the specification extends the leading graph to
-                  <em>maxTime</em> — the last outlanding or the last ESS time, whichever is later,
-                  capped at the task deadline. GlideComp's classic (HG) variant extends to the
-                  pilot's own landing or the last ESS time; the weighted (PG) variant extends to
-                  the last ESS time only; neither caps at the deadline. This moves leading points
-                  only at the margins. Tracked in
-                  <a href="https://github.com/pokle/glidecomp/issues/585" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #585</a>.
+                  <strong>Leading coefficient: track points after the deadline (<SpecRef section="11.3.1" />):</strong>
+                  the specification counts a track point recorded after the task deadline at the
+                  deadline time. GlideComp counts it at its own time, which makes the leading
+                  coefficient of a pilot who kept going a little worse than the specification
+                  gives. It applies only to a pilot who was still flying toward ESS after the
+                  deadline, and who therefore earned no more distance for it. The
+                  <a href="#leading-max-time" class="underline hover:text-foreground">end of the curve</a>
+                  itself follows the specification.
                 </li>
                 <li>
                   <strong>Times carry fractions of a second (<SpecRef section="8.7" />):</strong>

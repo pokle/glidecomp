@@ -650,7 +650,11 @@ export interface LeadingAggregate {
   reachedESS: boolean;
   /** Pilot's own SSS reaching time (epoch ms). */
   pilotSSSMs: number;
-  /** Time of the pilot's last fix (epoch ms) — classic land-out tail. */
+  /**
+   * Time of the pilot's last fix (epoch ms) — when the pilot didn't reach
+   * ESS this is their outlanding time, which the field's §11.3.1 `maxTime`
+   * is the latest of (see {@link resolveLeadingMaxTime}).
+   */
   lastFixMs: number;
   /**
    * weighted: Σ wᵢ·Δbestᵢ·(tᵢ − pilotSSS), summed against the pilot's OWN
@@ -796,25 +800,118 @@ export function computeLeadingAggregate(
 }
 
 /**
+ * The whole-field times the §11.3.1 leading clock is built from. Absolute
+ * epoch milliseconds throughout; {@link resolveLeadingMaxTime} turns them
+ * into the single `maxTime` the land-out tail runs to.
+ */
+export interface LeadingFieldTimes {
+  /**
+   * The leading clock's origin (`firstTaskStartTime`): the first start gate
+   * in a gated race, otherwise the first SSS crossing in the field.
+   */
+  firstStartMs: number;
+  /** When the last pilot reached ESS, or null when nobody did. */
+  lastESSMs: number | null;
+  /**
+   * When the last landed-out pilot landed — the end of the latest tracklog
+   * among pilots who never reached ESS — or null when nobody landed out.
+   */
+  lastOutlandingMs: number | null;
+  /** The task's goal deadline (§8.3.c), or null when the task sets none. */
+  deadlineMs: number | null;
+  /** The task stop time (§12.3.1) on a stopped task, else null. */
+  stopTimeMs: number | null;
+}
+
+/** Which of the {@link LeadingFieldTimes} the resolved `maxTime` came from. */
+export type LeadingMaxTimeSource =
+  | 'last_outlanding'
+  | 'last_ess'
+  | 'deadline'
+  | 'stop'
+  | 'fallback';
+
+/** A resolved §11.3.1 `maxTime`, and the field time it came from. */
+export interface LeadingMaxTime {
+  /** The instant the land-out tail runs to (epoch ms). */
+  timeMs: number;
+  source: LeadingMaxTimeSource;
+}
+
+/**
+ * How long the tail runs when the field gives nothing to measure it by —
+ * nobody reached ESS and nobody has a scannable tracklog. Arbitrary, and
+ * only reachable on a degenerate field.
+ */
+const LEADING_TAIL_FALLBACK_MS = 3_600_000;
+
+/**
+ * Resolve the field's §11.3.1 `maxTime`:
+ *
+ *   maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline)
+ *
+ * This is the instant a landed-out pilot's leading graph is carried to, and
+ * it is a property of the FIELD, not of the pilot: "for pilots who land out
+ * after the last pilot reached ESS, the calculation keeps going until they
+ * land" extends the clock for everyone still owed a tail, not only for the
+ * pilot who flew longest.
+ *
+ * A stopped task (§12.3.1) bounds it the same way the deadline does —
+ * nothing after the stop time is scored, so a tracklog that kept recording
+ * past it cannot lengthen anyone's tail.
+ */
+export function resolveLeadingMaxTime(times: LeadingFieldTimes): LeadingMaxTime {
+  const { firstStartMs, lastESSMs, lastOutlandingMs, deadlineMs, stopTimeMs } = times;
+
+  let timeMs: number;
+  let source: LeadingMaxTimeSource;
+  if (lastOutlandingMs !== null && (lastESSMs === null || lastOutlandingMs > lastESSMs)) {
+    timeMs = lastOutlandingMs;
+    source = 'last_outlanding';
+  } else if (lastESSMs !== null) {
+    timeMs = lastESSMs;
+    source = 'last_ess';
+  } else {
+    timeMs = firstStartMs + LEADING_TAIL_FALLBACK_MS;
+    source = 'fallback';
+  }
+
+  // The two caps. Reported as the source when either actually bites, because
+  // "the tail stopped at the deadline" is a different fact about the day from
+  // "the tail stopped when the last pilot landed".
+  if (stopTimeMs !== null && stopTimeMs < timeMs) {
+    timeMs = stopTimeMs;
+    source = 'stop';
+  }
+  if (deadlineMs !== null && deadlineMs < timeMs) {
+    timeMs = deadlineMs;
+    source = 'deadline';
+  }
+  return { timeMs, source };
+}
+
+/**
  * Fold the field-level scalars into a per-pilot {@link LeadingAggregate} to
  * produce the final leading coefficient — the cheap, field-dependent half of
  * `tot_lc_calculation` (late-start rectangle for classic, land-out tail, and
  * normalization). Lower LC = more leading = more points.
  *
  * @param agg - The pilot's cached/computed field-independent aggregate
- * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
- * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
+ * @param taskFirstSSSTime - The leading clock's origin (ms since epoch): the
+ *   first start gate, else the field's first SSS crossing
+ * @param taskMaxTime - The field's §11.3.1 `maxTime` (ms since epoch), from
+ *   {@link resolveLeadingMaxTime} — where a landed-out pilot's graph ends
  * @param formula - 'weighted' (modern default) or 'classic'
  * @returns Normalized leading coefficient (lower is better), or Infinity
  */
 export function combineLeadingCoefficient(
   agg: LeadingAggregate,
   taskFirstSSSTime: number,
-  taskLastESSTime: number,
+  taskMaxTime: number,
   formula: LeadingFormula = 'weighted',
 ): number {
   if (!agg.valid) return Infinity;
-  const { ssKm, bestDistKm, reachedESS, pilotSSSMs, lastFixMs } = agg;
+  const { ssKm, bestDistKm, reachedESS, pilotSSSMs } = agg;
 
   if (formula === 'classic') {
     let total = agg.classicSum;
@@ -823,8 +920,12 @@ export function combineLeadingCoefficient(
       total += ssKm * ssKm * (pilotSSSMs - taskFirstSSSTime) / 1000;
     }
     if (!reachedESS) {
-      const maxTime = Math.max(taskLastESSTime, lastFixMs);
-      total += bestDistKm * bestDistKm * (maxTime - pilotSSSMs) / 1000;
+      // Measured from the pilot's own start because classicSum is: the
+      // rectangle above already carries the graph back to the field's first
+      // start. Floored at zero — the deadline cap can land maxTime before a
+      // very late starter's own crossing, and a NEGATIVE tail would hand
+      // that pilot the field's best coefficient.
+      total += bestDistKm * bestDistKm * Math.max(0, taskMaxTime - pilotSSSMs) / 1000;
     }
     return total / (1800 * ssKm * ssKm);
   }
@@ -834,23 +935,25 @@ export function combineLeadingCoefficient(
   const shiftSec = pilotSSSMs / 1000 - taskFirstSSSTime / 1000;
   let total = agg.weightedTimeSum + shiftSec * agg.weightedDeltaSum;
   if (!reachedESS) {
-    const missingTimeSec = (taskLastESSTime - taskFirstSSSTime) / 1000;
+    const missingTimeSec = Math.max(0, (taskMaxTime - taskFirstSSSTime) / 1000);
     total += weightFalling(bestDistKm / ssKm) * missingTimeSec * bestDistKm;
   }
   return total / (1800 * ssKm);
 }
 
 /**
- * Calculate the leading coefficient (LC) for a single pilot, matching
- * AirScore's `classic` and `weighted` formulas (CIVL GAP / FAI S7F).
+ * Calculate the leading coefficient (LC) for a single pilot — the `classic`
+ * (HG) and `weighted` (PG) formulas of CIVL GAP / FAI S7F §11.3.1.
  *
  * The curve is distance-to-ESS measured **along the optimized course**
  * (distance to the next un-reached turnpoint's cylinder edge plus the
  * optimized legs from there to ESS), sampled per fix, with a ratchet:
  * the best distance never increases even if the pilot flies away from ESS.
  * Lower LC = more leading = more points. The raw per-interval sum is then
- * normalized and given a late-start (classic) and/or land-out tail term,
- * exactly as AirScore's `tot_lc_calculation`.
+ * normalized and given a late-start (classic) and/or land-out tail term, as
+ * in AirScore's `tot_lc_calculation` — except that the tail runs to the
+ * spec's field-level `maxTime` (issue #585) rather than to AirScore's
+ * per-pilot landing / last-ESS time.
  *
  * Thin wrapper over {@link computeLeadingAggregate} + {@link combineLeadingCoefficient};
  * see those for the cacheable split.
@@ -858,8 +961,9 @@ export function combineLeadingCoefficient(
  * @param fixes - Pilot's tracklog fixes (time-ordered)
  * @param task - The competition task
  * @param sequence - The pilot's resolved turnpoint reachings (for progress)
- * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
- * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
+ * @param taskFirstSSSTime - The leading clock's origin (ms since epoch)
+ * @param taskMaxTime - The field's §11.3.1 `maxTime` (ms since epoch), from
+ *   {@link resolveLeadingMaxTime}
  * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
  * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached
  * @param formula - 'weighted' (modern default) or 'classic'
@@ -870,13 +974,13 @@ export function calculateLeadingCoefficient(
   task: XCTask,
   sequence: TurnpointReaching[],
   taskFirstSSSTime: number,
-  taskLastESSTime: number,
+  taskMaxTime: number,
   pilotSSSTime: number | null,
   pilotESSTime: number | null,
   formula: LeadingFormula = 'weighted',
 ): number {
   const agg = computeLeadingAggregate(fixes, task, sequence, pilotSSSTime, pilotESSTime, formula);
-  return combineLeadingCoefficient(agg, taskFirstSSSTime, taskLastESSTime, formula);
+  return combineLeadingCoefficient(agg, taskFirstSSSTime, taskMaxTime, formula);
 }
 
 // ---------------------------------------------------------------------------

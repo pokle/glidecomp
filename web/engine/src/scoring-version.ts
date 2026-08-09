@@ -387,7 +387,51 @@
 //      that radius) never saw them outside — no enter crossing, no start,
 //      the whole field scored landed out at ~14 km instead of the published
 //      101.66 km. With the declared 0.05% band the field resolves to goal.
-export const SCORING_ENGINE_VERSION = 34;
+// v35: the leading coefficient's land-out tail runs to the spec's field-level
+//      `maxTime` (issue #585, S7F §11.3.1):
+//
+//        maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline)
+//
+//      Both variants inherited AirScore's tail instead. The classic (HG) one
+//      ran to max(lastESStime, the pilot's OWN last fix) — per-pilot, so a
+//      pilot who landed early was never carried out to the field's last
+//      land-out; the weighted (PG) one ran to lastESStime alone and never
+//      extended at all for the pilots the prose is about ("for pilots who land
+//      out after the last pilot reached ESS, the calculation keeps going until
+//      they land"). Neither capped anything at the task deadline.
+//      `maxTime` is now resolved once per class from the whole field — the
+//      last land-out is the latest tracklog end among started pilots who never
+//      reached ESS — and capped at the goal deadline (§8.3.c) and, on a
+//      stopped task, at the stop time (§12.3.1), since nothing after either is
+//      scored and a recorder left running would otherwise stretch every
+//      pilot's tail. A deadline at or before the first start is ignored, the
+//      same task-setting mistake resolveTimingWindow already ignores. Both
+//      tails are floored at zero: the cap can land maxTime before a very late
+//      starter's own crossing, and a negative tail would hand that pilot the
+//      field's best coefficient.
+//      Measured over the 58 leading-scored tasks of the 211-comp archive
+//      (1,521 scored pilots): 12.5% of pilots' leading points move, mean
+//      |Δ| 1.9 points, p95 4.9, and 2.7% change rank. Distance, time and
+//      arrival points are untouched. A task where the last land-out came
+//      before the last ESS is bit-identical — 32 of the 58.
+//      The movement is NOT uniform: it concentrates on the 9 archive tasks
+//      where NOBODY reached ESS, and there it is a correction, not a
+//      perturbation. With no last-ESS time the old tail fell back to each
+//      pilot's OWN last fix, so a pilot was charged for the whole time they
+//      stayed up and credited for landing early — the leading order came out
+//      close to the landing order. On Forbes 2022 task 7 the pilot with the
+//      old best coefficient (1.63, full leading points) is the first to land;
+//      under one shared maxTime they hold the WORST of the field (7.93) and
+//      the pilot who got nearest ESS takes the points. Those tasks also moved
+//      CLOSER to AirScore's published totals (Forbes 2025 task 4: mean
+//      |Δtotal| 34.7 → 25.6), despite the change being a deliberate departure
+//      from AirScore.
+//      The scored payload also carries the resolved clock per class
+//      (`leading_times`: first start, last ESS, last land-out, deadline, stop,
+//      and the maxTime they produce), because `maxTime` is the one input to a
+//      landed-out pilot's coefficient that lives entirely outside their own
+//      flight — the report card now names it and says which field time set it.
+export const SCORING_ENGINE_VERSION = 35;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -395,4 +439,4 @@ export const SCORING_ENGINE_VERSION = 34;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "b3dbf28be4f0b1419f0aa2ad17c7cf83ed6238efee18b46829ae6f1396ffe51b";
+  "2ceb0936f78dea40af7ecbd583d2140f26db596b14a271e564486366eced1ec7";
