@@ -100,15 +100,15 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  *
  * Algorithm (per CIVL GAP / Section 7F):
  * 1. Detect all cylinder crossings per task position
- * 2. Enforce the task deadline (§8.3.c): crossings after the goal deadline
+ * 2. Enforce the task deadline (§9.2): crossings after the goal deadline
  *    are excluded from sequence resolution (and best-progress distance is
- *    measured only up to the deadline, §11.1); the full crossing list is
+ *    measured only up to the deadline, §12.1); the full crossing list is
  *    still returned so ignored crossings can be explained
- * 3. Enforce the launch window's open time (§8.6.1): SSS crossings before
+ * 3. Enforce the launch window's open time (§9.3): SSS crossings before
  *    takeoff.timeOpen prove the pilot was airborne before launching was
  *    allowed and cannot validate a start
  * 4. For gated races: drop SSS crossings before the first start gate
- *    (§8.3 — a start can't validate before the gate opens); when every
+ *    (§9.2 — a start can't validate before the gate opens); when every
  *    crossing is pre-gate, resolve from them anyway and report earlyStart
  * 5. For SSS: use last valid crossing before continuing to next TP
  * 6. For other TPs (ESS and goal included): use first valid crossing after
@@ -116,12 +116,12 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  *    arrives at from inside, see computeTurnpointDirections) — or, when the
  *    pilot is already on the required side of the boundary at the previous
  *    reaching (nested/overlapping cylinders), credit it at that same moment
- *    (presence-based reaching, §8)
+ *    (presence-based reaching, §9)
  * 7. For ESS: always first crossing (no re-tries)
  * 8. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
  *    (most TPs reached, then most flown distance, then latest SSS)
- * 9. Snap the start time to the last gate ≤ crossing (§8.3.1) and time the
- *    speed section from the gate (§8.7)
+ * 9. Snap the start time to the last gate ≤ crossing (§9.2.4.1) and time the
+ *    speed section from the gate (§9.4)
  * 10. Compute optimized leg distances and flown distance
  *
  * @param task - The competition task definition
@@ -199,8 +199,8 @@ export function resolveTurnpointSequence(
 /**
  * The clip a stopped task places on one flight's resolution: crossings
  * after `windowEndMs` are excluded and best-progress stops scanning there
- * (null = no clip, used for the §12.3.5 complete-flight case); when
- * `altitudeBonus` is set the best-progress scan credits the §12.3.6 bonus.
+ * (null = no clip, used for the §13.4.5 complete-flight case); when
+ * `altitudeBonus` is set the best-progress scan credits the §13.4.6 bonus.
  */
 interface StopClip {
   windowEndMs: number | null;
@@ -317,7 +317,7 @@ function resolveSequenceOnce(
   const earlyStart = gateTaken?.earlyStart;
 
   // Speed section time: from the start gate taken when the race has gates
-  // (§8.7), otherwise from the pilot's actual crossing (elapsed time).
+  // (§9.4), otherwise from the pilot's actual crossing (elapsed time).
   let speedSectionTime: number | null = null;
   if (sssReaching && essReaching) {
     const startMs = startGate ? startGate.time.getTime() : sssReaching.time.getTime();
@@ -369,7 +369,7 @@ interface TaskGeometry {
  * Optimized task line (one tag point per turnpoint), computed once. The
  * tag points feed best-progress's cheap 'approx' measure (candidate-start
  * ranking and the exact search's seed — the scored remaining distance is
- * the §8.6.1 per-fix route optimisation). It also determines each
+ * the §9.3 per-fix route optimisation). It also determines each
  * turnpoint's crossing direction: a cylinder containing the previous tag
  * point is an EXIT cylinder, reached by flying out of it.
  */
@@ -398,7 +398,7 @@ interface TaskAnchors {
   goalIdx: number;
   /**
    * Non-null when the task ends at a goal LINE (S7F §6.2.3.1): reaching
-   * (§8.5.2) and remaining-distance for the goal position use line geometry.
+   * (§9.2.3) and remaining-distance for the goal position use line geometry.
    */
   goalLine: GoalLine | null;
 }
@@ -442,7 +442,7 @@ function resolveTrackStartInside(
   return task.turnpoints.map((tp, tpIdx) => {
     if (fixes.length === 0) return false;
     // A LINE goal has no interior; "inside" is the control semicircle, taken
-    // at the same §8.5.2/§8.1 band radius crossing detection uses.
+    // at the same §9.2.3/§9.1.1 band radius crossing detection uses.
     if (goalLine && tpIdx === goalIdx) {
       return isInGoalSemicircle(
         goalLine, fixes[0].latitude, fixes[0].longitude,
@@ -484,11 +484,11 @@ function filterStartCrossingsByDirection(
 
 /** The times that bound one pilot's scored flight. */
 interface TimingWindow {
-  /** Sorted absolute start-gate times (§6.3.3/§8.3); null when ungated. */
+  /** Sorted absolute start-gate times (§6.3.1/§9.2); null when ungated. */
   gates: number[] | null;
-  /** The goal deadline (§8.3.c); null when there is none or it is mis-set. */
+  /** The goal deadline (§9.2); null when there is none or it is mis-set. */
   deadlineMs: number | null;
-  /** The launch window's open time (§8.6.1); null when it doesn't apply. */
+  /** The launch window's open time (§9.3); null when it doesn't apply. */
   windowOpenMs: number | null;
   /** The scored-flight end: the deadline and a stop's window end, whichever is first. */
   clipMs: number | null;
@@ -507,7 +507,7 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
   const { task, fixes, anchors, directionSSSCrossings, stopClip } = params;
   const { sssIsFallback } = anchors;
 
-  // Start gates (RACE tasks, §6.3.3/§8.3): resolved before the timing clips
+  // Start gates (RACE tasks, §6.3.1/§9.2): resolved before the timing clips
   // below — the deadline's mis-set guard compares against the first gate.
   // The reference instant (any SSS crossing, else the first fix) only
   // places the gates' time-of-day on the right calendar day. Gates describe
@@ -520,8 +520,8 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
     ? resolveStartGates(task, gateReferenceMs)
     : null;
 
-  // Task deadline (§8.3.c): crossings after the goal deadline cannot count,
-  // and best-progress distance is measured only up to it (§8.6.1, §11.1).
+  // Task deadline (§9.2): crossings after the goal deadline cannot count,
+  // and best-progress distance is measured only up to it (§9.3, §13.2).
   // Resolved near the END of the flight — the deadline bounds the end of
   // the scoring window. A deadline at or before the first start gate is a
   // task-setting mistake (nobody could score anything) and is ignored, in
@@ -531,7 +531,7 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
     : null;
   if (deadlineMs !== null && gates && deadlineMs <= gates[0]) deadlineMs = null;
 
-  // Launch window open (§8.6.1, takeoff.timeOpen): a start crossing before
+  // Launch window open (§9.3, takeoff.timeOpen): a start crossing before
   // the window opens proves the pilot was airborne before launching was
   // allowed, so it cannot validate a start. Like gates, the window
   // describes the configured task, so it doesn't apply in fallback-start
@@ -546,7 +546,7 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
   if (windowOpenMs !== null && gates && windowOpenMs > gates[0]) windowOpenMs = null;
 
   // The scored-flight end: the task deadline and — for a stopped task — the
-  // pilot's scored-window end (§12.3.4), whichever comes first. Crossings
+  // pilot's scored-window end (§13.4.4), whichever comes first. Crossings
   // after it can't count and best-progress distance stops there.
   const stopEndMs = stopClip?.windowEndMs ?? null;
   const clipMs = deadlineMs === null
@@ -559,7 +559,7 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
 }
 
 /**
- * The deadline as the explanation reports it (§8.3.c): how many crossings it
+ * The deadline as the explanation reports it (§9.2): how many crossings it
  * ignored, and whether the pilot kept flying past it. Counted over ALL
  * crossings, not the scored ones — the ignored crossings are the finding.
  */
@@ -615,9 +615,9 @@ interface StartCrossings {
 /**
  * Start validation order: deadline clip (the caller's), direction (already
  * applied), launch-window open, then gates. Pre-window crossings are dropped
- * outright (§8.6.1 — launching before the window has no scored-with-penalty
+ * outright (§9.3 — launching before the window has no scored-with-penalty
  * provision); pre-gate crossings are kept only when EVERY crossing is
- * pre-gate, the §12.2 "jumped the gun" case (HG scores the complete flight
+ * pre-gate, the §13.3 "jumped the gun" case (HG scores the complete flight
  * with a penalty; the PG launch→SSS clamp happens in the scorer) with
  * earlyStart reporting the facts.
  */
@@ -681,7 +681,7 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
 /**
  * How best-progress's cheap 'approx' mode measures the fix→next-turnpoint
  * distance for a pilot whose last reached turnpoint is lastReachedIdx —
- * see NextTPMeasure (the scored measurement is the §8.6.1 per-fix route
+ * see NextTPMeasure (the scored measurement is the §9.3 per-fix route
  * optimisation; this ranks candidate starts and seeds the exact search).
  * The nearest-edge rule after an exit cylinder applies only to INFERRED
  * exit turnpoints, not the declared-EXIT start: after a normal exit start
@@ -715,9 +715,9 @@ interface ProgressScan {
   geometry: TaskGeometry;
   goalIdx: number;
   nextMeasureFor: (lastReachedIdx: number) => NextTPMeasure;
-  /** The scored-flight end (§11.1, §12.3.4): the scan stops there. */
+  /** The scored-flight end (§12.1, §13.4.4): the scan stops there. */
   clipMs: number | null;
-  /** The §12.3.6 stopped-task altitude bonus; null when none applies. */
+  /** The §13.4.6 stopped-task altitude bonus; null when none applies. */
   altitudeBonus: { glideRatio: number; goalAltitude: number } | null;
 }
 
@@ -730,7 +730,7 @@ interface ProgressScan {
  * explanation. A pilot with no reaching flew no scored distance.
  *
  * `mode` selects the remaining-distance measurement (see
- * {@link computeBestProgress}): 'exact' — the §8.6.1 per-fix shortest-path
+ * {@link computeBestProgress}): 'exact' — the §9.3 per-fix shortest-path
  * optimisation — for the sequence that scores; 'approx' — the cheap
  * tag/edge measure — for ranking candidate start choices against each
  * other, where hundreds of exact optimisations per pilot would buy
@@ -806,7 +806,7 @@ function chooseBestSequence(params: BestSequenceParams): TurnpointReaching[] {
     });
 
     const tpsReached = candidateSequence.length;
-    // Ranking only — the winner is re-measured with the exact §8.6.1
+    // Ranking only — the winner is re-measured with the exact §9.3
     // measurement by the caller (see measureSequenceDistance's mode).
     const { flownDistance: candidateFlownDist } =
       measureSequenceDistance(scan, candidateSequence, 'approx');
@@ -830,7 +830,7 @@ function chooseBestSequence(params: BestSequenceParams): TurnpointReaching[] {
 }
 
 /**
- * Start-gate snapping (§8.3.1): the pilot's official start time is the
+ * Start-gate snapping (§9.2.4.1): the pilot's official start time is the
  * last gate at or before their crossing; a crossing after the last gate
  * takes the last gate; an early starter is anchored to the first gate.
  */

@@ -1,6 +1,6 @@
 /**
  * Time points, with the arithmetic that produced them: the speed fraction
- * against the class best time (FAI S7F §11.2), the §12.1 ESS-but-not-goal
+ * against the class best time (FAI S7F §12.2), the §13.2 ESS-but-not-goal
  * reduction, and the §13.4.5 stopped-task deduction, each folded into the
  * printed equation so it reconciles with the published points.
  */
@@ -41,13 +41,13 @@ export function buildTimeSection(
 
   // PG requires goal (the spec fixes its ESS-but-not-goal factor at 0); HG
   // requires ESS, and a pilot who lands before goal keeps only the
-  // essNotGoalFactor share (§12.1).
+  // essNotGoalFactor share (§13.2).
   const essNotGoalFactor = effectiveEssNotGoalFactor(params);
   const qualifies =
     params.scoring === 'PG'
       ? entry.made_goal
       : entry.reached_ess && (entry.made_goal || essNotGoalFactor > 0);
-  // §12.1 reduction applies: the pilot earns time points, docked below.
+  // §13.2 reduction applies: the pilot earns time points, docked below.
   const essReduction =
     params.scoring === 'HG' &&
     entry.reached_ess &&
@@ -61,7 +61,7 @@ export function buildTimeSection(
   const bestTime = bestTimeFrom(candidates, params.scoring);
   let rank: string | undefined;
 
-  // FAI S7F §10 (HG): nobody in the class reached ESS, so there were no time
+  // FAI S7F §11 (HG): nobody in the class reached ESS, so there were no time
   // points to win — a fact about the whole task, not about this pilot, and the
   // reason the section header shows nothing available.
   const noEssAtAll = noEssPointsZeroed(classContext, params);
@@ -70,11 +70,11 @@ export function buildTimeSection(
     items.push({
       id: 'no-time-points',
       text: noEssAtAll
-        ? 'Nobody in this class reached the end of the speed section, so the task offered no time points to anyone (FAI S7F §10). Distance and leading points were all that could be won.'
+        ? 'Nobody in this class reached the end of the speed section, so the task offered no time points to anyone (FAI S7F §11). Distance and leading points were all that could be won.'
         : params.scoring === 'PG'
           ? 'Time points are only awarded to pilots who complete the task.'
           : entry.reached_ess && !entry.made_goal && essNotGoalFactor === 0
-            ? 'Reached the end of the speed section but not goal — this competition scores that at 0% of time and arrival points (FAI S7F §12.1).'
+            ? 'Reached the end of the speed section but not goal — this competition scores that at 0% of time and arrival points (FAI S7F §13.2).'
             : 'Time points are only awarded to pilots who reach the end of the speed section.',
       emphasis: noEssAtAll ? 'warning' : 'muted',
     });
@@ -87,7 +87,7 @@ export function buildTimeSection(
       // In a gated race the clock ran from the gate, not the crossing —
       // spell it out so the time never looks wrong next to the tracklog.
       detail: result.startGate
-        ? `Timed from your ${fmt(result.startGate.time)} start gate to the end of the speed section (FAI S7F §8.7)${
+        ? `Timed from your ${fmt(result.startGate.time)} start gate to the end of the speed section (FAI S7F §9.4)${
             result.sssReaching &&
             result.sssReaching.time.getTime() !== result.startGate.time.getTime()
               ? ` — you crossed the start at ${fmt(result.sssReaching.time)}`
@@ -132,11 +132,11 @@ export function buildTimeSection(
           : undefined,
       emphasis: 'muted',
     });
-    // §12.1 reduction, stated before the formula so its ×factor is explained.
+    // §13.2 reduction, stated before the formula so its ×factor is explained.
     if (essReduction) {
       items.push({
         id: 'ess-not-goal',
-        text: `Reached the end of the speed section but landed before goal — reaching goal "validates" the speed section, so only ${trimZeros((essNotGoalFactor * 100).toFixed(1), 0)}% of time and arrival points are kept (FAI S7F §12.1).`,
+        text: `Reached the end of the speed section but landed before goal — reaching goal "validates" the speed section, so only ${trimZeros((essNotGoalFactor * 100).toFixed(1), 0)}% of time and arrival points are kept (FAI S7F §13.2).`,
         emphasis: 'warning',
       });
     }
@@ -159,7 +159,7 @@ export function buildTimeSection(
     // printed equations so they reconcile with the published points.
     const factor = essReduction ? essNotGoalFactor : 1;
     const factorEq = essReduction
-      ? ` × ${trimZeros(essNotGoalFactor.toFixed(2), 1)} (ESS but not goal, §12.1)`
+      ? ` × ${trimZeros(essNotGoalFactor.toFixed(2), 1)} (ESS but not goal, §13.2)`
       : '';
     const stopEq = stopReduction > 0
       ? ` − ${fmtPoints(stopReduction)} (task stopped, §13.4.5)`

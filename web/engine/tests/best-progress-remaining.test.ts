@@ -1,5 +1,5 @@
 /**
- * FAI S7F §8.6.1 flown distance: "After the last turnpoint the pilot
+ * FAI S7F §9.3 flown distance: "After the last turnpoint the pilot
  * reached, for every remaining track point, the shortest distance to goal
  * is calculated using the method described in section 6.4.1."
  *
@@ -59,7 +59,7 @@ const dogleg = makeTask([
   tp('GOAL', GOAL.lat, GOAL.lon, 400, 'ESS'),
 ]);
 
-describe('optimizeRemainingRoute (§6.4.1 from an arbitrary point)', () => {
+describe('optimizeRemainingRoute (§7.2 from an arbitrary point)', () => {
   it('equals an optimisation of the synthetic point→zones→goal task', () => {
     const p = destinationPoint(BIG.lat, BIG.lon, 12000, Math.PI); // 12 km south of BIG
     const route = optimizeRemainingRoute(dogleg, 0, p);
@@ -106,7 +106,7 @@ describe('optimizeRemainingRoute (§6.4.1 from an arbitrary point)', () => {
   });
 });
 
-describe('best progress measures §8.6.1 remaining distance', () => {
+describe('best progress measures §9.3 remaining distance', () => {
   it('a pilot south of the big cylinder scores the re-optimised distance', () => {
     // Track: start at A, exit the start cylinder eastward, then fly to a
     // point 12 km SOUTH of the big cylinder and land there.
@@ -199,7 +199,7 @@ describe('best progress measures §8.6.1 remaining distance', () => {
   });
 });
 
-describe('manual flights use the same §8.6.1 measurement', () => {
+describe('manual flights use the same §9.3 measurement', () => {
   it('routes the landing point through the re-optimised remaining route', () => {
     const south = destinationPoint(BIG.lat, BIG.lon, 12000, Math.PI);
     const g = manualFlightGeometry(dogleg, 0, { lat: south.lat, lon: south.lon });

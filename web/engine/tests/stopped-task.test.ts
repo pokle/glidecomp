@@ -1,9 +1,9 @@
 /**
- * Stopped tasks (issue #264, FAI S7F §12.3).
+ * Stopped tasks (issue #264, FAI S7F §13.4).
  *
- * §12.3.1 stop time (PG score-back / HG gate interval), §12.3.2 minimum run,
- * §12.3.3 stopped-task validity, §12.3.4 scored time window, §12.3.5
- * complete flight at/after ESS + goal time-points reduction, §12.3.6
+ * §13.4.1 stop time (PG score-back / HG gate interval), §13.4.2 minimum run,
+ * §13.4.3 stopped-task validity, §13.4.4 scored time window, §13.4.5
+ * complete flight at/after ESS + goal time-points reduction, §13.4.6
  * altitude bonus.
  */
 import { describe, it, expect } from 'bun:test';
@@ -121,7 +121,7 @@ describe('stoppedMinimumRunSeconds (§13.4.2)', () => {
     expect(stoppedMinimumRunSeconds(1200, 'HG')).toBe(600);
   });
 
-  it('PG: no minimum duration (low-validity stopped tasks are excluded at comp level, §15)', () => {
+  it('PG: no minimum duration (low-validity stopped tasks are excluded at comp level, §16)', () => {
     expect(stoppedMinimumRunSeconds(5400, 'PG')).toBe(0);
     expect(stoppedMinimumRunSeconds(10000, 'PG')).toBe(0);
   });
@@ -139,10 +139,10 @@ describe('stoppedGlideRatio / resolveGoalAltitude (§13.4.6)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// §12.3.3 — stopped-task validity formula
+// §13.4.3 — stopped-task validity formula
 // ---------------------------------------------------------------------------
 
-describe('calculateStoppedTaskValidity (§12.3.3)', () => {
+describe('calculateStoppedTaskValidity (§13.4.3)', () => {
   it('is 1 when anyone reached ESS', () => {
     expect(calculateStoppedTaskValidity({
       pilotDistances: [10_000, 20_000],
@@ -199,10 +199,10 @@ describe('calculateStoppedTaskValidity (§12.3.3)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// §12.3.4 / §12.3.5 / §12.3.6 — sequence resolution under a stop
+// §13.4.4 / §13.4.5 / §13.4.6 — sequence resolution under a stop
 // ---------------------------------------------------------------------------
 
-describe('resolveTurnpointSequence with a stop (§12.3.4–§12.3.6)', () => {
+describe('resolveTurnpointSequence with a stop (§13.4.4–§13.4.6)', () => {
   const stopBase = { glideRatio: 4, goalAltitude: 1000 };
 
   it('clips the scored flight at the window end', () => {
@@ -258,7 +258,7 @@ describe('resolveTurnpointSequence with a stop (§12.3.4–§12.3.6)', () => {
     expect(stopped.stopInfo!.altitudeBonus).toBe(0);
   });
 
-  it('§12.3.6: a pilot still flying at the stop earns the altitude bonus', () => {
+  it('§13.4.6: a pilot still flying at the stop earns the altitude bonus', () => {
     // 1400 m over a 1000 m goal at glide 4 → 1600 m of bonus distance.
     const atGoalAlt = resolveTurnpointSequence(
       makeTask({ essAtGoal: true }), makeTrack({ altitude: 1000 }),
@@ -299,10 +299,10 @@ describe('resolveTurnpointSequence with a stop (§12.3.4–§12.3.6)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveScoredWindowEnds (§12.3.4)
+// resolveScoredWindowEnds (§13.4.4)
 // ---------------------------------------------------------------------------
 
-describe('resolveScoredWindowEnds (§12.3.4)', () => {
+describe('resolveScoredWindowEnds (§13.4.4)', () => {
   it('single-gate race: common window (null)', () => {
     expect(resolveScoredWindowEnds(
       makeTask(), [msAfterBase(0), msAfterBase(0)], msAfterBase(30),
@@ -370,7 +370,7 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
     const slow = result.pilotScores.find(p => p.trackFile === 'slow.igc')!;
     const early = result.pilotScores.find(p => p.trackFile === 'early.igc')!;
 
-    // §12.3.5: Fast reached ESS before the stop → complete flight, in goal,
+    // §13.4.5: Fast reached ESS before the stop → complete flight, in goal,
     // and their time points are docked by the fixed reduction.
     expect(fast.madeGoal).toBe(true);
     expect(stopped.timePointsReduction).toBeGreaterThan(0);
@@ -399,13 +399,13 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
     expect(normalRun.stopped).toBeUndefined();
     expect(fastNormal.turnpointResult.stopInfo).toBeUndefined();
     // Same weights/validity here (Fast makes goal either way), so the only
-    // difference in his time points is the §12.3.5 reduction.
+    // difference in his time points is the §13.4.5 reduction.
     expect(fastStopped.timePoints).toBeLessThan(fastNormal.timePoints);
   });
 
   it('PG: no minimum-duration requirement — a short stopped task still scores (§13.4.2)', () => {
     // Announcement 10:10 → stop 10:05 → only a 5-minute window, but PG has
-    // no minimum; the low-validity exclusion happens at comp level (§15).
+    // no minimum; the low-validity exclusion happens at comp level (§16).
     const result = scoreTask(
       makeTask(), makeField(), params, undefined,
       { stopAnnouncementMs: msAfterBase(10) },
@@ -489,7 +489,7 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
     for (const p of result.pilotScores) expect(p.timePoints).toBe(0);
   });
 
-  it('§12.3.3: stopped validity < 1 when nobody reached ESS', () => {
+  it('§13.4.3: stopped validity < 1 when nobody reached ESS', () => {
     // A slow field: nobody near the ESS by the stop.
     const field: PilotFlight[] = [
       { pilotName: 'A', trackFile: 'a.igc', fixes: makeTrack({ degPerMin: 0.002, minutes: 22 }) },
@@ -508,7 +508,7 @@ describe('scoreTask — stopped single-gate race (PG)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// scoreTask — multi-gate window equalization (§12.3.4)
+// scoreTask — multi-gate window equalization (§13.4.4)
 // ---------------------------------------------------------------------------
 
 describe('score explanation — stopped task', () => {
@@ -641,9 +641,9 @@ describe('score explanation — stopped task', () => {
   });
 });
 
-describe('scoreTask — stopped multi-gate race (§12.3.4)', () => {
+describe('scoreTask — stopped multi-gate race (§13.4.4)', () => {
   it('every pilot is scored for the last starter\'s window', () => {
-    // ESS co-located with goal so §12.3.5 can't exempt P1 from the clip.
+    // ESS co-located with goal so §13.4.5 can't exempt P1 from the clip.
     const task = makeTask({ timeGates: ['10:00:00Z', '10:15:00Z'], essAtGoal: true });
     // P1 takes the 10:00 gate and reaches goal ~10:20.3.
     // P2 launches late, takes the 10:15 gate (crossing ~10:15.7) and reaches

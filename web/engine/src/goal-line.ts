@@ -1,6 +1,6 @@
 /**
  * GAP goal line geometry (FAI Sporting Code Section 7F §6.2.3.1 for the
- * geometry, §8.5.2 for reaching it, §8.2 for its tolerance).
+ * geometry, §9.2.3 for reaching it, §9.1.2 for its tolerance).
  *
  * A task whose goal is configured as `goal.type === 'LINE'` ends at a goal
  * LINE instead of a cylinder: a line segment centred on the goal waypoint,
@@ -9,12 +9,12 @@
  *
  * Behind the line — on the far side from the course — lies a semicircular
  * control zone of the same radius (§6.2.3.1). Goal is achieved when the
- * tracklog crosses the line in the direction of the last leg (§8.5.2), or
+ * tracklog crosses the line in the direction of the last leg (§9.2.3), or
  * when a fix falls inside that semicircle — which rescues a fast crossing
  * that falls between two fixes, or a tracklog gap right at the line.
  *
  * The semicircle rule is **paragliding-only** in the specification; for hang
- * gliding §8.5.2 requires the line itself be crossed before a landing is
+ * gliding §9.2.3 requires the line itself be crossed before a landing is
  * made. GlideComp applies it to both sports — a deliberate, documented
  * deviation (see /scoring/gap, "Smaller details"), because getting behind
  * the line without entering the semicircle is very nearly impossible. The
@@ -22,8 +22,8 @@
  * the line the wrong way validates nothing.
  *
  * Both control-zone shapes carry a tolerance band, exactly as a cylinder
- * does (§8.1): the line gets the §8.2 line tolerance ({@link goalLineToleranceM})
- * and the semicircle gets the cylinder calculation §8.5.2 sends it to
+ * does (§9.1.1): the line gets the §9.1.3 line tolerance ({@link goalLineToleranceM})
+ * and the semicircle gets the cylinder calculation §9.2.3 sends it to
  * ({@link goalZoneRadius}). The band is measurement slack, not geometry — it
  * is at most a few metres and, like the cylinder bands, is not drawn on the
  * map; the drawn line and semicircle are the nominal ones.
@@ -189,8 +189,8 @@ function toLineFrame(
 }
 
 /**
- * The §8.2 line tolerance in metres: the same percentage a cylinder gets
- * (§8.1), applied to the line's size, with the same 5 m absolute minimum.
+ * The §9.1.2 line tolerance in metres: the same percentage a cylinder gets
+ * (§9.1.1), applied to the line's size, with the same 5 m absolute minimum.
  *
  * The specification says the absolute tolerance "is calculated from the
  * Distance and the Length (whichever is greater)" — the two ways a line's
@@ -204,9 +204,9 @@ function toLineFrame(
  *
  * What the band buys at a GOAL line is length: a crossing that lands up to
  * this far past an endpoint still counts (see {@link goalLineCrossing}).
- * §8.4's other half — a tracklog point closer to the line than the tolerance
+ * §9.2.2's other half — a tracklog point closer to the line than the tolerance
  * reaches it without crossing — is a rule for line control zones a pilot flies
- * THROUGH; at goal §8.5.2 requires the line be crossed in flight, and the
+ * THROUGH; at goal §9.2.3 requires the line be crossed in flight, and the
  * band is not a substitute for that. It would also be the one part of the
  * band that could move a goal TIME (by tolerance ÷ ground speed, a few tenths
  * of a second) rather than only decide credit, for pilots who did cross.
@@ -216,10 +216,10 @@ export function goalLineToleranceM(line: GoalLine, tolerance: number): number {
 }
 
 /**
- * Radius of the goal control semicircle as reaching sees it. §8.5.2 sends the
+ * Radius of the goal control semicircle as reaching sees it. §9.2.3 sends the
  * control zone to the CYLINDER calculation — "the same tolerance calculations
- * apply as for full cylinders (see 8.1)" — so this is the §8.1 outer
- * detection radius of the line's half-width, NOT the §8.2 line band.
+ * apply as for full cylinders (see 8.1)" — so this is the §9.1.1 outer
+ * detection radius of the line's half-width, NOT the §9.1.2 line band.
  */
 export function goalZoneRadius(line: GoalLine, tolerance: number): number {
   return outerDetectionRadius(line.halfWidth, tolerance);
@@ -228,11 +228,11 @@ export function goalZoneRadius(line: GoalLine, tolerance: number): number {
 /**
  * Is the point inside the goal control semicircle — behind the line (past it
  * in the course direction) and within `radius` of the centre? A fix here
- * counts as goal (S7F §8.5.2) even without a detected line crossing.
+ * counts as goal (S7F §9.2.3) even without a detected line crossing.
  *
  * `radius` defaults to the nominal half-width: that is the drawn semicircle,
  * which is what rendering and route measurement want. Reaching passes the
- * §8.5.2/§8.1 band edge ({@link goalZoneRadius}).
+ * §9.2.3/§9.1.1 band edge ({@link goalZoneRadius}).
  */
 export function isInGoalSemicircle(
   line: GoalLine,
@@ -246,7 +246,7 @@ export function isInGoalSemicircle(
 
 /**
  * Where a straight track segment crosses the goal line, and whether it took
- * the §8.2 tolerance band to get there — or null when the segment doesn't
+ * the §9.1.2 tolerance band to get there — or null when the segment doesn't
  * cross the line.
  *
  * `t` is the fraction of the way from the segment's first point to its second

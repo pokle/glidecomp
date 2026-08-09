@@ -16,7 +16,7 @@
  * from ten days later. It scored the S7F §5.3 minimum distance, and its hour
  * buckets stretched the field-analysis day-profile axis from 5 hours to 262.
  *
- * What this module is NOT: it is not a scoring rule. S7F §5.3 and §8.6.1
+ * What this module is NOT: it is not a scoring rule. S7F §5.3 and §9.3
  * award minimum distance to EVERY pilot who takes off, with no start-validity
  * predicate — a pilot who launches and sinks out is correctly scored, and
  * this module must never turn that into a zero. S7A §4.4.6 (Rejection of
@@ -695,7 +695,7 @@ function checkWrongPlace(
  *
  * SOFT by design: at Corryong the bomb-out landing field is INSIDE the 1 km
  * take-off cylinder, so a pilot who launches, sinks and lands never leaves
- * it — and S7F §5.3 / §8.6.1 award that pilot minimum distance, correctly.
+ * it — and S7F §5.3 / §9.3 award that pilot minimum distance, correctly.
  * This is a prompt for a scorekeeper to check whether the pilot flew at all,
  * not a scoring input.
  *

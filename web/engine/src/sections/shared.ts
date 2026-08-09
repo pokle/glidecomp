@@ -22,7 +22,7 @@ import type {
 
 /**
  * Read a published class pilot as a {@link BestTimeCandidate}, so the report
- * card's best time (FAI S7F §11.2.1) comes from {@link bestTimeFrom} — the
+ * card's best time (FAI S7F §9.4.1) comes from {@link bestTimeFrom} — the
  * scorer's own function — rather than a hand-copied filter. Only the field
  * names differ between the scored shape and the published one.
  */
@@ -48,7 +48,7 @@ export function pilotsAtEss(classContext: ClassContextInput): number {
 }
 
 /**
- * Did FAI S7F §10's "nobody reaches ESS" rule zero this class's available time
+ * Did FAI S7F §11's "nobody reaches ESS" rule zero this class's available time
  * and arrival points?
  *
  * Stated in the spec's HG box, so HG only — paragliding arrives at a zero time

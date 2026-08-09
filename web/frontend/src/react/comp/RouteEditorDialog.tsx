@@ -976,7 +976,7 @@ export function RouteEditorDialog({
               </h4>
               <p className="mt-1 text-sm text-muted-foreground">
                 {isRace
-                  ? "A pilot's start time is the last gate at or before their start crossing (FAI S7F §8.3.1). Starting before the first gate is an early start."
+                  ? "A pilot's start time is the last gate at or before their start crossing (FAI S7F §9.2.4.1). Starting before the first gate is an early start."
                   : "Elapsed-time pilots are timed from their actual start crossing; a gate only sets when the start opens."}{" "}
                 {tz
                   ? "Times are comp-local (set in Competition Settings)."

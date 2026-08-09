@@ -233,7 +233,7 @@ describe('manualFlightScoringData', () => {
 
     const result = scoreFlights(TASK, flights, { scoring: 'PG', useLeading: false });
 
-    // All three count toward launch validity (S7F §9.1).
+    // All three count toward launch validity (S7F §10.1).
     expect(result.stats.numFlying).toBe(3);
     expect(result.stats.numInGoal).toBe(1);
 

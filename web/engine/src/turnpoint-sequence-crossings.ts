@@ -1,7 +1,7 @@
 /**
  * Cylinder + goal-line crossing detection.
  *
- * Turns a tracklog into the list of raw boundary crossings (with the S7F §8.1
+ * Turns a tracklog into the list of raw boundary crossings (with the S7F §9.1.1
  * tolerance band and per-turnpoint enter/exit direction) that the sequence
  * resolver selects the scored sequence from.
  */
@@ -28,7 +28,7 @@ import {
 } from './turnpoint-sequence-types';
 import type { CylinderCrossing } from './turnpoint-sequence-types';
 
-// The §8.1 band edges live beside the tolerance constants they are built
+// The §9.1.1 band edges live beside the tolerance constants they are built
 // from (turnpoint-sequence-types), because the goal-line geometry needs the
 // outer edge too and must not import this module. Re-exported here so every
 // existing caller keeps its import.
@@ -68,7 +68,7 @@ export function detectCylinderCrossings(
 
   const crossings: CylinderCrossing[] = [];
 
-  // CIVL GAP cylinder tolerance (FAI S7F §8.1): a band of a percentage plus a
+  // CIVL GAP cylinder tolerance (FAI S7F §9.1.1): a band of a percentage plus a
   // 5 m absolute minimum, applied when deciding whether a pilot reached a
   // cylinder, to absorb distance-measurement differences between flight
   // recorders and scoring programs. Default 0.5% (Cat 2 maximum).
@@ -78,12 +78,12 @@ export function detectCylinderCrossings(
 
   // EXIT cylinders are the one place the *inner* edge of the band matters: a
   // pilot leaving an EXIT start is credited once they cross the inner radius
-  // outward (§8.3), and an inferred exit turnpoint (a cylinder the route
+  // outward (§9.2), and an inferred exit turnpoint (a cylinder the route
   // reaches from inside — see computeTurnpointDirections) is credited at the
   // same edge. Every entry cylinder is credited at the outer edge.
   const dirs = directions ?? computeTurnpointDirections(task);
 
-  // Goal line (S7F §6.2.3.1, §8.5.2): when the task's goal is a LINE, the goal
+  // Goal line (S7F §6.2.3.1, §9.2.3): when the task's goal is a LINE, the goal
   // task position is detected against the line + control semicircle instead of
   // a cylinder. Null means cylinder goal — the loop below handles it as before.
   const goalLine = computeGoalLine(task);
@@ -99,7 +99,7 @@ export function detectCylinderCrossings(
     const tp = task.turnpoints[tpIdx];
     const centerLat = tp.waypoint.lat;
     const centerLon = tp.waypoint.lon;
-    // Tolerance band (§8.1): outerRadius = max(r×(1+tol), r+5),
+    // Tolerance band (§9.1.1): outerRadius = max(r×(1+tol), r+5),
     // innerRadius = min(r×(1−tol), r−5). Entry cylinders detect against the
     // outer edge; EXIT cylinders (the EXIT start and inferred exit
     // turnpoints) detect against the inner edge so the pilot is credited
@@ -181,7 +181,7 @@ export function detectCylinderCrossings(
         //    backward to the previous state flip.
         // Only when no pair in the band episode straddles the nominal
         // radius did the pilot merely reach the tolerance band — a
-        // tolerance-credited near-miss (§8.1) anchored at the clamped edge.
+        // tolerance-credited near-miss (§9.1.1) anchored at the clamped edge.
         let anchorPrev = prevFix;
         let anchorCurr = currFix;
         let anchorFixIndex = fixIdx;
@@ -259,11 +259,11 @@ export function detectCylinderCrossings(
 }
 
 /**
- * Detect goal-line crossings (S7F §6.2.3.1, §8.2, §8.5.2) for the goal task
+ * Detect goal-line crossings (S7F §6.2.3.1, §9.1.3, §9.2.3) for the goal task
  * position and append them to `out`.
  *
  * The pilot is "inside" goal when in the control semicircle behind the line
- * ({@link isInGoalSemicircle}, at the §8.5.2/§8.1 band radius); a track
+ * ({@link isInGoalSemicircle}, at the §9.2.3/§9.1.1 band radius); a track
  * segment that intersects the line itself is a crossing even when neither fix
  * lands in the semicircle (a fast crossing near an endpoint can leave no fix
  * inside). To keep the enter/exit alternation consistent with the semicircle
@@ -273,14 +273,14 @@ export function detectCylinderCrossings(
  *
  * Two rules shape which crossings are emitted:
  *
- * - **Direction (§8.5.2).** Goal is reached by crossing the line "in the
+ * - **Direction (§9.2.3).** Goal is reached by crossing the line "in the
  *   correct direction" — the direction of the last leg. A through-crossing
  *   the other way (both fixes outside the control zone, the track leaving
  *   across the line) therefore emits nothing: the goal task position accepts
  *   the first crossing of either direction, so an 'enter' — or the 'exit'
  *   beside it — would credit goal to a pilot flying away from it.
  *
- * - **Tolerance (§8.2).** The line carries a tolerance band, at the same
+ * - **Tolerance (§9.1.2).** The line carries a tolerance band, at the same
  *   percentage a cylinder gets and with the same 5 m floor: it reaches
  *   `goalLineToleranceM` metres past each endpoint, so a pilot who clipped
  *   the very end of the line is credited, flagged `toleranceCredited`. The
@@ -299,7 +299,7 @@ function detectGoalLineCrossings(
   const centerLat = goalLine.center.lat;
   const centerLon = goalLine.center.lon;
 
-  // §8.2 band around the line, and the §8.5.2 → §8.1 band on the control
+  // §9.1.2 band around the line, and the §9.2.3 → §9.1.1 band on the control
   // semicircle's radius. Both are metres of measurement slack, single-digit
   // on any goal line a competition sets.
   const toleranceM = goalLineToleranceM(goalLine, tolerance);
@@ -381,7 +381,7 @@ function detectGoalLineCrossings(
         push(p0, p1, fixIdx, hit.t, 'enter', credit);
         push(p0, p1, fixIdx, hit.t, 'exit', credit);
       }
-      // …and the wrong-way through-crossing emits nothing (§8.5.2 — see the
+      // …and the wrong-way through-crossing emits nothing (§9.2.3 — see the
       // function doc). The pilot is outside the control zone on both fixes,
       // so leaving it out keeps the inside/outside state correct too.
     } else if (prevInside !== currInside) {

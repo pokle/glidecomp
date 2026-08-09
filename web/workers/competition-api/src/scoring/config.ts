@@ -211,7 +211,7 @@ export async function resolveTaskScoringConfig(
   const scoredClasses = new Set(taskClasses.results.map((r) => r.pilot_class));
   const scoredTracks = tracks.results.filter((t) => scoredClasses.has(t.pilot_class));
 
-  // Launch validity (FAI S7F §9.1): "pilots present" = pilots who took off
+  // Launch validity (FAI S7F §10.1): "pilots present" = pilots who took off
   // (have a track = numFlying) + pilots present who did not fly ("Did Not
   // Fly"). Absent and Present-default pilots without a track are excluded, so
   // numPresent per class = numFlying + numDNF. Count DNF pilots WITHOUT a

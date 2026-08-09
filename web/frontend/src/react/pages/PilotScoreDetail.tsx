@@ -82,6 +82,7 @@ import {
 } from "../score-detail/icons";
 import { ScoringGlossary } from "../components/ScoringGlossary";
 import { TaskInCompScores } from "../comp/TaskInCompScores";
+import { HistoricalRulesNotice, RulesEditionBadge } from "../comp/RulesEdition";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -99,6 +100,9 @@ interface DetailData {
   task: TaskDetailData;
   entry: PilotScoreEntry;
   pilotClass: string;
+  /** The published rules edition ("s7f-2026"), or undefined for payloads
+   * cached before the field existed — the badge degrades to "FAI S7F". */
+  rulesEdition?: "s7f-2026";
   explanation: ScoreExplanation;
   /** The task drawn on the map (the sequence was resolved against it). */
   mapTask: XCTask;
@@ -323,6 +327,7 @@ function buildDetailData(
       task,
       entry,
       pilotClass: cls.pilot_class,
+      rulesEdition: cls.rules_edition,
       explanation: explainExcludedTrack({
         entry,
         findings: (trackQuality?.findings ?? []).filter((f) => f.severity === "hard"),
@@ -380,6 +385,7 @@ function buildDetailData(
       task,
       entry,
       pilotClass: cls.pilot_class,
+      rulesEdition: cls.rules_edition,
       explanation,
       mapTask: task.xctsk,
       eventsByItem: anchoredEvents(explanation),
@@ -458,6 +464,7 @@ function buildDetailData(
       task,
       entry,
       pilotClass: cls.pilot_class,
+      rulesEdition: cls.rules_edition,
       explanation,
       mapTask: scoringTask,
       eventsByItem: anchoredEvents(explanation),
@@ -811,7 +818,15 @@ export function PilotScoreDetail() {
           Scores computed{" "}
           <Timestamp value={data.scoreComputedAt} compTimezone={data.comp.timezone} />
           {data.scoreStale ? " — a re-score is in progress" : ""}
+          {" · "}
+          <RulesEditionBadge edition={data.rulesEdition} />
         </p>
+        <div className="mt-2 empty:hidden">
+          <HistoricalRulesNotice
+            edition={data.rulesEdition}
+            taskDate={data.task.task_date}
+          />
+        </div>
         <p className="mt-1 font-medium">{explanation.headline}</p>
         {/* The winner's bridging sentence — why the top score is still short
             of the points on offer. The one question the day's leader arrives

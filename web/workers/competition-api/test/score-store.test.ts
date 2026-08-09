@@ -532,7 +532,7 @@ describe("mutation hooks mark scores stale (via routes)", () => {
   });
 });
 
-describe("FTV series scoring (S7F §15)", () => {
+describe("FTV series scoring (S7F §16)", () => {
   interface ServedFtvScores extends ServedCompScores {
     series_scoring: "total" | "ftv";
     ftv_factor?: number;

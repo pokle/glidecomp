@@ -33,7 +33,7 @@ export function leadingVariantSentence(formula: LeadingFormula): string {
 }
 
 /**
- * Why the land-out tail ended where it did (S7F §11.3.1). One sentence per
+ * Why the land-out tail ended where it did (S7F §12.3.1). One sentence per
  * possible source of `maxTime`, because the reason is a different fact about
  * the day in each case — "the last pilot was still flying" and "the deadline
  * cut it off" are not the same finding.
@@ -54,7 +54,7 @@ function maxTimeReason(times: LeadingTimesInput): string {
 }
 
 /**
- * The land-out tail (S7F §11.3.1): the row that names where a landed-out
+ * The land-out tail (S7F §12.3.1): the row that names where a landed-out
  * pilot's leading graph was carried to, and why it stopped there.
  *
  * `maxTime` is the one input to this pilot's coefficient that comes from

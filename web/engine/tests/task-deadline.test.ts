@@ -1,9 +1,9 @@
 /**
  * Task deadline + launch window enforcement (issue #260).
  *
- * FAI S7F §8.3.c: a valid crossing must be recorded no later than the task
- * deadline. §8.6.1: turnpoints reached count only within the timing
- * restrictions (launch window, valid start, deadline). §11.1: a landed-out
+ * FAI S7F §9.2: a valid crossing must be recorded no later than the task
+ * deadline. §9.3: turnpoints reached count only within the timing
+ * restrictions (launch window, valid start, deadline). §12.1: a landed-out
  * pilot's best distance is measured up until landing or the deadline,
  * whichever comes first.
  */
@@ -97,7 +97,7 @@ describe('resolveTaskDeadline / resolveLaunchWindowOpen', () => {
 // Deadline enforcement in sequence resolution
 // ---------------------------------------------------------------------------
 
-describe('task deadline enforcement (S7F §8.3.c, §11.1)', () => {
+describe('task deadline enforcement (S7F §9.2, §12.1)', () => {
   it('without a deadline the goal crossing counts and no deadline info is reported', () => {
     const result = resolveTurnpointSequence(makeTask(), makeTrack());
     expect(result.madeGoal).toBe(true);
@@ -126,7 +126,7 @@ describe('task deadline enforcement (S7F §8.3.c, §11.1)', () => {
     );
     expect(postDeadlineGoal.length).toBeGreaterThanOrEqual(1);
 
-    // Best progress is measured only up to the deadline (§11.1): the best
+    // Best progress is measured only up to the deadline (§13.2): the best
     // fix is exactly the minute-15 fix, not anything flown later.
     expect(result.bestProgress).not.toBeNull();
     expect(result.bestProgress!.time.getTime()).toBeLessThanOrEqual(msAfterBase(15));
@@ -171,7 +171,7 @@ describe('task deadline enforcement (S7F §8.3.c, §11.1)', () => {
 
   it('the goal ratio input (madeGoal) reflects the deadline clip', () => {
     // Same flight, two tasks: with the tight deadline the pilot no longer
-    // counts as a goal pilot — §10's "reached goal before the task deadline".
+    // counts as a goal pilot — §11's "reached goal before the task deadline".
     const inTime = resolveTurnpointSequence(makeTask(), makeTrack());
     const tooLate = resolveTurnpointSequence(
       makeTask({ deadline: timeOfDay(15) }),
@@ -183,10 +183,10 @@ describe('task deadline enforcement (S7F §8.3.c, §11.1)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Launch window (S7F §8.6.1)
+// Launch window (S7F §9.3)
 // ---------------------------------------------------------------------------
 
-describe('launch window enforcement (S7F §8.6.1)', () => {
+describe('launch window enforcement (S7F §9.3)', () => {
   it('start crossings before the window opens cannot validate a start', () => {
     // Window opens 10:30; the only start exit is ~10:01.7 — provably airborne
     // before launching was allowed.

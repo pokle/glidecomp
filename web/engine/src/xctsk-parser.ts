@@ -58,7 +58,7 @@ export interface XCTask {
 
   /**
    * Cylinder tolerance as a fraction (e.g. 0.005 = 0.5%).
-   * Applied to turnpoint radii when checking cylinder crossings (FAI S7F §8.1).
+   * Applied to turnpoint radii when checking cylinder crossings (FAI S7F §9.1.1).
    * The tolerance band is the percentage OR a 5 m absolute minimum, whichever
    * is larger — see MIN_CYLINDER_TOLERANCE_M in turnpoint-sequence.ts — and
    * extends both outward (entry cylinders) and inward (the EXIT start).
@@ -70,7 +70,7 @@ export interface XCTask {
   /**
    * Optimizer directive, never parsed from a file: measure the route from
    * the first turnpoint's BOUNDARY (its optimal tag point) instead of its
-   * centre. Annex A §2.2 measures every route from the first point's centre
+   * centre. §7.2 measures every route from the first point's centre
    * regardless of radius; the one caller that wants edge semantics is
    * `taskForDistanceOrigin('start')` (gap-scoring.ts), whose trimmed task
    * starts at the start cylinder and must not gain the centre→edge
@@ -172,7 +172,7 @@ function parseV1(data: Record<string, unknown>): XCTask {
     turnpoints,
   };
 
-  // Cylinder tolerance is a SCORING input (§8.1): the AirScore importer
+  // Cylinder tolerance is a SCORING input (§9.1.1): the AirScore importer
   // writes the comp's error_margin here, and dropping it runs crossing
   // detection with the 0.5% default — up to 10× the band the comp scored
   // with, wide enough to swallow a shallow excursion past a big ENTER

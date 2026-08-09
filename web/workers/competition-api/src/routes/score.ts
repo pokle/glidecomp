@@ -344,7 +344,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       for (const task of taskScores) {
         for (const cls of task.classes) {
-          // S7F 2026 §15 (PG only): a stopped task with a task validity
+          // S7F 2026 §16 (PG only): a stopped task with a task validity
           // under 0.05 (the winner has fewer than 50 points) is excluded
           // from the competition ranking. It stays on the task's own scores
           // page — only the comp aggregation skips it.
@@ -387,7 +387,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      // FTV (S7F §15): applies to GAP comps set to FTV with more than one task
+      // FTV (S7F §16): applies to GAP comps set to FTV with more than one task
       // (a single task can't discard anything). Pure re-aggregation over the
       // per-task scores already loaded above — no task is re-scored.
       const ftvActive =

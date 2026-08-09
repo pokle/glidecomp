@@ -51,7 +51,7 @@ function poly3(x: number, { c0, c1, c2, c3 }: Cubic): number {
 const LAUNCH_VALIDITY_CUBIC: Cubic = { c0: 0, c1: 0.028, c2: 2.917, c3: -1.944 };
 /** Time-validity curve in the time-validity ratio (S7F 2026 §10.3). */
 const TIME_VALIDITY_CUBIC: Cubic = { c0: -0.271, c1: 2.912, c2: -2.098, c3: 0.457 };
-/** Arrival-points curve in the arrival ratio (S7F 2026 §12.4, HG only). */
+/** Arrival-points curve in the arrival ratio (S7F 2026 §13.5, HG only). */
 const ARRIVAL_POINTS_CUBIC: Cubic = { c0: 0.2, c1: 0.037, c2: 0.13, c3: 0.633 };
 
 // ---------------------------------------------------------------------------
@@ -64,9 +64,9 @@ export interface TaskValidity {
   distance: number;
   time: number;
   /**
-   * Stopped-task validity (FAI S7F §12.3.3) — the fourth factor, present
+   * Stopped-task validity (FAI S7F §13.4.3) — the fourth factor, present
    * only when the task was stopped. 1 when anyone reached ESS; 0 when the
-   * stopped task didn't run long enough to be scored (§12.3.2).
+   * stopped task didn't run long enough to be scored (§13.4.2).
    */
   stopped?: number;
   /** Product of launch × distance × time (× stopped when the task was stopped) */
@@ -147,7 +147,7 @@ export function calculateTimeValidity(
 }
 
 /**
- * Inputs to the §12.3.3 stopped-task validity formula, all distances in
+ * Inputs to the §13.4.3 stopped-task validity formula, all distances in
  * METRES (the formula itself works in km, per the spec).
  */
 export interface StoppedValidityInputs {
@@ -162,7 +162,7 @@ export interface StoppedValidityInputs {
 }
 
 /**
- * Stopped-task validity (FAI S7F §12.3.3) — the fourth validity factor for
+ * Stopped-task validity (FAI S7F §13.4.3) — the fourth validity factor for
  * a stopped task:
  *
  *   NumberOfPilotsReachedESS > 0 : StoppedTaskValidity = 1
@@ -202,9 +202,9 @@ export function calculateStoppedTaskValidity(inputs: StoppedValidityInputs): num
 /**
  * Calculate complete task validity.
  *
- * @param stoppedValidity - The §12.3.3 stopped-task validity factor, present
+ * @param stoppedValidity - The §13.4.3 stopped-task validity factor, present
  *   only when the task was stopped ({@link calculateStoppedTaskValidity} — or
- *   0 when the stopped task failed the §12.3.2 minimum-run requirement).
+ *   0 when the stopped task failed the §13.4.2 minimum-run requirement).
  */
 export function calculateTaskValidity(
   params: GAPParameters,
@@ -332,7 +332,7 @@ export function calculateDistancePoints(
 }
 
 /**
- * Distance-difficulty curve for a hang-gliding task (FAI S7F §11.1.1).
+ * Distance-difficulty curve for a hang-gliding task (FAI S7F §12.1.1).
  * Holds the cumulative "difficulty score" per 100 m slot (0 … 0.5) so each
  * pilot's difficulty fraction can be looked up with sub-slot interpolation.
  */
@@ -344,7 +344,7 @@ export interface DistanceDifficulty {
 }
 
 /**
- * Build the distance-difficulty curve from the field (FAI S7F §11.1.1).
+ * Build the distance-difficulty curve from the field (FAI S7F §12.1.1).
  *
  * Only landed-out pilots shape the curve; goal pilots are excluded.
  * Distances are bucketed into 100 m slots, with sub-minimum distances
@@ -445,7 +445,7 @@ export interface DistanceScore {
 
 /**
  * Distance points for a hang-gliding pilot with the difficulty split
- * (FAI S7F §11.1.1): half linear (distance / 2·best) + half difficulty.
+ * (FAI S7F §12.1.1): half linear (distance / 2·best) + half difficulty.
  * Goal pilots get the full available distance points (0.5 + 0.5).
  */
 export interface DistancePointsHGInput {
@@ -660,7 +660,7 @@ export interface LeadingAggregate {
   pilotSSSMs: number;
   /**
    * Time of the pilot's last fix (epoch ms) — when the pilot didn't reach
-   * ESS this is their outlanding time, which the field's §11.3.1 `maxTime`
+   * ESS this is their outlanding time, which the field's §12.3.1 `maxTime`
    * is the latest of (see {@link resolveLeadingMaxTime}).
    */
   lastFixMs: number;
@@ -733,7 +733,7 @@ export function computeLeadingAggregate(
   const pilotSSSSec = pilotSSSTime / 1000;
   const endTime = pilotESSTime ?? Infinity;
 
-  // §11.3.1/§12.2: in a gated race the leading clock starts at the first
+  // §12.3.1/§12.2: in a gated race the leading clock starts at the first
   // gate. An early ("jump the gun") starter's own SSS crossing precedes it,
   // so once combineLeadingCoefficient rebases the sum to the gate their
   // pre-gate progress would contribute NEGATIVE time — driving their LC
@@ -819,7 +819,7 @@ export function computeLeadingAggregate(
 }
 
 /**
- * The whole-field times the §11.3.1 leading clock is built from. Absolute
+ * The whole-field times the §12.3.1 leading clock is built from. Absolute
  * epoch milliseconds throughout; {@link resolveLeadingMaxTime} turns them
  * into the single `maxTime` the land-out tail runs to.
  */
@@ -836,9 +836,9 @@ export interface LeadingFieldTimes {
    * among pilots who never reached ESS — or null when nobody landed out.
    */
   lastOutlandingMs: number | null;
-  /** The task's goal deadline (§8.3.c), or null when the task sets none. */
+  /** The task's goal deadline (§9.2), or null when the task sets none. */
   deadlineMs: number | null;
-  /** The task stop time (§12.3.1) on a stopped task, else null. */
+  /** The task stop time (§13.4.1) on a stopped task, else null. */
   stopTimeMs: number | null;
 }
 
@@ -850,7 +850,7 @@ export type LeadingMaxTimeSource =
   | 'stop'
   | 'fallback';
 
-/** A resolved §11.3.1 `maxTime`, and the field time it came from. */
+/** A resolved §12.3.1 `maxTime`, and the field time it came from. */
 export interface LeadingMaxTime {
   /** The instant the land-out tail runs to (epoch ms). */
   timeMs: number;
@@ -865,7 +865,7 @@ export interface LeadingMaxTime {
 const LEADING_TAIL_FALLBACK_MS = 3_600_000;
 
 /**
- * Resolve the field's §11.3.1 `maxTime`:
+ * Resolve the field's §12.3.1 `maxTime`:
  *
  *   maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline)
  *
@@ -875,7 +875,7 @@ const LEADING_TAIL_FALLBACK_MS = 3_600_000;
  * land" extends the clock for everyone still owed a tail, not only for the
  * pilot who flew longest.
  *
- * A stopped task (§12.3.1) bounds it the same way the deadline does —
+ * A stopped task (§13.4.1) bounds it the same way the deadline does —
  * nothing after the stop time is scored, so a tracklog that kept recording
  * past it cannot lengthen anyone's tail.
  */
@@ -918,7 +918,7 @@ export function resolveLeadingMaxTime(times: LeadingFieldTimes): LeadingMaxTime 
  * @param agg - The pilot's cached/computed field-independent aggregate
  * @param taskFirstSSSTime - The leading clock's origin (ms since epoch): the
  *   first start gate, else the field's first SSS crossing
- * @param taskMaxTime - The field's §11.3.1 `maxTime` (ms since epoch), from
+ * @param taskMaxTime - The field's §12.3.1 `maxTime` (ms since epoch), from
  *   {@link resolveLeadingMaxTime} — where a landed-out pilot's graph ends
  * @param formula - 'weighted' (modern default) or 'classic'
  * @returns Normalized leading coefficient (lower is better), or Infinity
@@ -964,7 +964,7 @@ export function combineLeadingCoefficient(
 
 /**
  * Calculate the leading coefficient (LC) for a single pilot — the `classic`
- * (HG) and `weighted` (PG) formulas of CIVL GAP / FAI S7F §11.3.1.
+ * (HG) and `weighted` (PG) formulas of CIVL GAP / FAI S7F §12.3.1.
  *
  * The curve is distance-to-ESS measured **along the optimized course**
  * (distance to the next un-reached turnpoint's cylinder edge plus the
@@ -983,7 +983,7 @@ export function combineLeadingCoefficient(
  * @param task - The competition task
  * @param sequence - The pilot's resolved turnpoint reachings (for progress)
  * @param taskFirstSSSTime - The leading clock's origin (ms since epoch)
- * @param taskMaxTime - The field's §11.3.1 `maxTime` (ms since epoch), from
+ * @param taskMaxTime - The field's §12.3.1 `maxTime` (ms since epoch), from
  *   {@link resolveLeadingMaxTime}
  * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
  * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached

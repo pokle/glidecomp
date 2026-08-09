@@ -618,7 +618,18 @@
 //      The §7.1.3 PathFinder route optimisation (LTM projection + Ding et
 //      al. 2018) is NOT yet adopted: the existing corpus-verified optimiser
 //      stands in, as a documented deviation on /scoring/gap.
-export const SCORING_ENGINE_VERSION = 44;
+
+// v45: FAI S7F 2026 edition, phase 7 — transparency. NO numeric change:
+//      every spec citation in the scoring sources (comments and the
+//      explanation strings the report card prints) is renumbered from the
+//      2024 edition's section numbers to the 2026 edition's (§8→§9 task
+//      evaluation, §9→§10 validity, §10→§11 allocation, §11→§12 pilot
+//      score, §12→§13 special cases, §15→§16 FTV, Annex A→§7.2), and the
+//      published payload now carries `rules_edition: "s7f-2026"` so every
+//      consumer can say which edition scored it. The bump exists because
+//      the explanation strings live inside scoring sources; recomputation
+//      changes only those strings.
+export const SCORING_ENGINE_VERSION = 45;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -626,4 +637,4 @@ export const SCORING_ENGINE_VERSION = 44;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "7360197da3a9291467f25ef3479a840da544721af8f4d6e6010338b90d3da3af";
+  "281f72a3853a29035d44f83d3d3cce1d8e98d5133a3486c35c77bf0c25caf0e0";

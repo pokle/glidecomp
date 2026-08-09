@@ -302,10 +302,10 @@ describe('detectCylinderCrossings', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: cylinder tolerance band (FAI S7F §8.1)
+// Tests: cylinder tolerance band (FAI S7F §9.1.1)
 // ---------------------------------------------------------------------------
 
-describe('cylinder tolerance band (§8.1)', () => {
+describe('cylinder tolerance band (§9.1.1)', () => {
   it('applies the 5 m absolute minimum for small cylinders', () => {
     // Entry turnpoint, 400 m radius. Cat-1 percentage (0.1%) is only 0.4 m,
     // but the spec's 5 m floor extends the outer edge to 405 m.
@@ -1740,7 +1740,7 @@ describe('ENTER start concentric with the next turnpoint (issue #577)', () => {
   // 800 m turnpoint at the same centre, and the takeoff INSIDE the ring
   // (~3.2 km from its boundary). Pilots must fly out past the ring and
   // re-enter to start, and the excursion is shallow — ~100 m past the
-  // boundary — so the width of the §8.1 band decides whether the state
+  // boundary — so the width of the §9.1.1 band decides whether the state
   // machine ever sees them outside. The comp scored with a declared
   // tolerance of 0.05% (16.75 m at this radius); the engine's 0.5% default
   // band (167.5 m) swallows the whole excursion.

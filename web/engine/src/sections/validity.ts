@@ -157,14 +157,14 @@ export function buildValiditySection(
       value: pts(ap.total),
       detail: availableTotalDetail(v, ap.total, decimals),
     },
-    // FAI S7F §10, HG: nobody reached ESS, so time and arrival points were
+    // FAI S7F §11, HG: nobody reached ESS, so time and arrival points were
     // never on offer. Stated here, where the day's points are decided, because
     // it caps what ANY pilot could have scored — the time section below can
     // only speak for the pilot whose card this is.
     ...(params && noEssPointsZeroed(classContext, params)
       ? [{
           id: 'no-ess-available',
-          text: 'Nobody reached the end of the speed section, so this task offered no time or arrival points at all (FAI S7F §10).',
+          text: 'Nobody reached the end of the speed section, so this task offered no time or arrival points at all (FAI S7F §11).',
           // The bare figure, so it sits under the day's total in the same
           // column rather than overflowing it with a phrase.
           value: pts(ap.distance + ap.leading),

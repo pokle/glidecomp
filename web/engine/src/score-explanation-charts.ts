@@ -21,8 +21,8 @@
  *  2. **A dot is plotted only if the curve provably explains it.** Each
  *     pilot's published points are checked against the function at their x
  *     ({@link EXPLAINED_TOLERANCE}); anyone who fails — an ESS-but-not-goal
- *     pilot carrying the §12.1 reduction, a goal pilot docked by a stopped
- *     task (§12.3.5) — is counted and left off. Without this the caption's
+ *     pilot carrying the §13.2 reduction, a goal pilot docked by a stopped
+ *     task (§13.4.5) — is counted and left off. Without this the caption's
  *     "every dot sits exactly on it" would be false precisely for the pilots
  *     with the most surprising scores. Checking rather than special-casing
  *     also means a future reduction we have not thought of degrades to an
@@ -64,7 +64,7 @@ import type {
  * How far a published point value may sit from the function before we stop
  * claiming the function explains it.
  *
- * Points are published rounded to 0.1 (S7F §11), so an exact match can be a
+ * Points are published rounded to 0.1 (S7F §12), so an exact match can be a
  * full 0.05 away, and the components are summed and re-rounded downstream.
  * 0.15 absorbs that without being loose enough to swallow a real reduction —
  * the smallest of those (§12.1 at 0.8 of a component) moves points by whole
@@ -278,7 +278,7 @@ export function buildLeadingChart(
 /**
  * Arrival points against position at the end of the speed section.
  *
- * Positions are integers, but the §11.4 factor is continuous in the arrival
+ * Positions are integers, but the §13.5 factor is continuous in the arrival
  * ratio and the integers merely sample it — so the curve is honest here, and
  * it carries the component's defining shape: steep at the front, flat into a
  * floor at the back.
@@ -346,7 +346,7 @@ export function buildArrivalChart(
  * surprise, but the DOTS do: where the field bunched, and how far into the
  * tail this pilot sits.
  *
- * With HG distance difficulty (S7F §11.1.1) the total is a linear half plus a
+ * With HG distance difficulty (S7F §12.1.1) the total is a linear half plus a
  * difficulty half built from where the whole field landed out — and that is
  * the chart worth having, because the difficulty half is close to
  * unexplainable in a sentence and completely obvious as a shape. Its steep
@@ -419,7 +419,7 @@ export function buildDistanceChart(
     omitted: placed.omitted,
     caption:
       (useDifficulty
-        ? `The curve is the distance-points formula, half of it built from where the field landed out (FAI S7F §11.1.1) — every dot is a pilot, sitting exactly on it. Its steepest stretches are the ones fewest pilots got past, so flying through one is worth more than the same distance somewhere easy. `
+        ? `The curve is the distance-points formula, half of it built from where the field landed out (FAI S7F §12.1.1) — every dot is a pilot, sitting exactly on it. Its steepest stretches are the ones fewest pilots got past, so flying through one is worth more than the same distance somewhere easy. `
         : `Distance points are a straight line from nothing to the best distance flown — every dot is a pilot, sitting exactly on it. `) +
       `You flew ${km(you.x)} of the class best ${km(best)}, worth ${fmtPoints(
         you.y,

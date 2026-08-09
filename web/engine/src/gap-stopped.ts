@@ -76,7 +76,7 @@ export function resolveTaskStop(
  * §13.4.2 minimum duration: a stopped hang-gliding task is scored only when
  * the scored time window lasted at least `min(1 hour, nominalTime / 2)`.
  * Paragliding has no minimum — instead, low-validity stopped PG tasks are
- * excluded from the competition ranking (§15, task validity < 0.05).
+ * excluded from the competition ranking (§16, task validity < 0.05).
  */
 export function stoppedMinimumRunSeconds(
   nominalTimeSeconds: number,

@@ -190,7 +190,7 @@ describe("POST .../igc — open registration is on the record", () => {
   test("audits the pilot joining, not just the track arriving", async () => {
     // Uploading to a comp you are not registered for silently creates your
     // comp_pilot row. That is a roster change, and the pilot count feeds
-    // launch validity (S7F §9.1) — so the public audit log has to show it, or
+    // launch validity (S7F §10.1) — so the public audit log has to show it, or
     // it reads as a track uploaded for somebody who was never registered.
     const compId = await createComp();
     const taskId = await createTask(compId);

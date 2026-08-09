@@ -95,7 +95,7 @@ function describeGapParamChanges(
         : "Disabled HG distance difficulty (pure linear distance points)",
     );
   }
-  // Jump-the-gun settings (S7F §12.2) directly change how HG early starts
+  // Jump-the-gun settings (S7F §13.3) directly change how HG early starts
   // are penalised, so both knobs are individually audit-logged.
   const oJtgX = o.jumpTheGunFactor ?? 2;
   const nJtgX = n.jumpTheGunFactor ?? 2;
@@ -111,7 +111,7 @@ function describeGapParamChanges(
       `Changed jump-the-gun limit from ${oJtgY} s to ${nJtgY} s early (beyond it, minimum distance)`
     );
   }
-  // ESS-but-not-goal (S7F §12.1): the share of time and arrival points an
+  // ESS-but-not-goal (S7F §13.2): the share of time and arrival points an
   // HG pilot keeps after reaching ESS but landing before goal.
   const oEng = o.essNotGoalFactor ?? 0.8;
   const nEng = n.essNotGoalFactor ?? 0.8;

@@ -1,6 +1,6 @@
 /**
  * Distance points, with the arithmetic that produced them — including the
- * HG linear/difficulty split (FAI S7F §11.1.1) and the early-start,
+ * HG linear/difficulty split (FAI S7F §12.1.1) and the early-start,
  * minimum-distance and stopped-task altitude-bonus caveats that shape the
  * scored distance before it is divided by the best in class.
  */
@@ -47,18 +47,18 @@ export function buildDistanceSection(
     // value), so print it here against what the pilot actually flew — that
     // difference is the whole effect of the rule on their card. Two caveats:
     // a launch→start leg shorter than the minimum distance is floored by
-    // §11.1, so the figure is then the minimum and must not be labelled the
+    // §12.1, so the figure is then the minimum and must not be labelled the
     // leg; and an older cached payload may not carry the flown figure, in
     // which case the rule is stated without the comparison.
     const actuallyFlew = result.flownDistance;
     const atMinimum = entry.flown_distance <= params.minimumDistance;
     items.push({
       id: 'early-start-distance',
-      text: 'Early start (FAI S7F §12.2): paraglider pilots who start before the first start gate are scored only for the distance from launch to the start cylinder — a fixed distance, whatever the rest of the flight covered.',
+      text: 'Early start (FAI S7F §13.3): paraglider pilots who start before the first start gate are scored only for the distance from launch to the start cylinder — a fixed distance, whatever the rest of the flight covered.',
       value: km(entry.flown_distance),
       detail: atMinimum
-        ? `The launch→start leg is shorter than the ${km(params.minimumDistance)} minimum, so the minimum distance is scored instead (FAI S7F §11.1).`
-        : `The launch→start leg of the task line, as measured for the complete task distance (FAI S7F §6.4.1)${
+        ? `The launch→start leg is shorter than the ${km(params.minimumDistance)} minimum, so the minimum distance is scored instead (FAI S7F §12.1).`
+        : `The launch→start leg of the task line, as measured for the complete task distance (FAI S7F §7.2)${
             Number.isFinite(actuallyFlew) && actuallyFlew > 0
               ? ` — not what you actually flew (${km(actuallyFlew)})`
               : ''
@@ -68,7 +68,7 @@ export function buildDistanceSection(
   } else if (entry.early_start_outcome === 'hg_min_distance') {
     items.push({
       id: 'early-start-distance',
-      text: `Early start of ${duration(entry.early_start_seconds ?? 0)} — more than the ${params.jumpTheGunMaxSeconds} s jump-the-gun limit (FAI S7F §12.2), so the flight is scored as the minimum distance.`,
+      text: `Early start of ${duration(entry.early_start_seconds ?? 0)} — more than the ${params.jumpTheGunMaxSeconds} s jump-the-gun limit (FAI S7F §13.3), so the flight is scored as the minimum distance.`,
       emphasis: 'warning',
     });
   } else if (result.flownDistance < params.minimumDistance) {
@@ -154,7 +154,7 @@ export function buildDistanceSection(
       text: 'Difficulty half — rewards flying past stretches where many pilots landed',
       value: pts(entry.distance_difficulty_points),
       detail:
-        'The difficulty curve is built from where the whole field landed out (FAI S7F §11.1.1).',
+        'The difficulty curve is built from where the whole field landed out (FAI S7F §12.1.1).',
     });
   } else {
     const { availStr, decimals, reconciles } = reconcileWithAvailable(

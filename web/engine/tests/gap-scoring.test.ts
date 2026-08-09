@@ -339,7 +339,7 @@ describe('calculateTimePoints', () => {
     expect(pts).toBeCloseTo(300, 1);
   });
 
-  it('HG: ESS without goal keeps only the default 80% (S7F §12.1)', () => {
+  it('HG: ESS without goal keeps only the default 80% (S7F §13.2)', () => {
     const pts = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
       availableTimePoints: 300, scoring: 'HG',
@@ -420,7 +420,7 @@ describe('distance origin (take-off vs start)', () => {
   });
 });
 
-describe('distance difficulty (HG, FAI S7F §11.1.1)', () => {
+describe('distance difficulty (HG, FAI S7F §12.1.1)', () => {
   // Field: one pilot in goal (40 km), a cluster of landed-out pilots at
   // ~10 km, and a lone pilot who pushed on to 25 km.
   const dists = [40000, 10000, 10200, 9800, 10100, 25000, 8000];
@@ -631,7 +631,7 @@ describe('leadWeightIntegral (S7F 2026 §12.3.1)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// §11.3.1 maxTime — the field-level end of the land-out tail (issue #585)
+// §12.3.1 maxTime — the field-level end of the land-out tail (issue #585)
 // ---------------------------------------------------------------------------
 
 describe('resolveLeadingMaxTime', () => {
@@ -694,7 +694,7 @@ describe('resolveLeadingMaxTime', () => {
   });
 });
 
-describe('land-out tail runs to the field maxTime (S7F §11.3.1)', () => {
+describe('land-out tail runs to the field maxTime (S7F §12.3.1)', () => {
   /** A land-out pilot's aggregate, plus the field's first start. */
   function landOut(formula: LeadingFormula) {
     const finisher = createTrackThroughCylinders(standardWaypoints, { fixIntervalMinutes: 1 });
@@ -790,7 +790,7 @@ describe('scoreTask publishes the leading clock', () => {
   it('caps maxTime at the task deadline, shortening the tail', () => {
     const pilots = twoPilots();
     const withoutDeadline = scoreTask(standardTask, pilots, params);
-    // A deadline between the last ESS and the last land-out: §11.3.1 stops
+    // A deadline between the last ESS and the last land-out: §13.4.1 stops
     // the graph there, so the landed-out pilot's coefficient improves.
     const lastESS = withoutDeadline.leadingTimes!.lastESSMs!;
     // Whole seconds: the xctsk deadline is a time-of-day string, and an ESS
@@ -938,7 +938,7 @@ describe('scoreTask', () => {
 
   it('honours an explicit numPresent > numFlying (launch validity < 1)', () => {
     // One pilot flew, but many were present and did not fly (DNF). Launch
-    // validity must drop below 1 (FAI S7F §9.1) instead of defaulting to
+    // validity must drop below 1 (FAI S7F §10.1) instead of defaulting to
     // numPresent = numFlying.
     const fixes = createTrackThroughCylinders(standardWaypoints);
     const pilots: PilotFlight[] = [
@@ -1330,7 +1330,7 @@ describe('calculateWeights — the HG leading weight has no goal-ratio branch (S
   });
 });
 
-describe('scoreTask — nobody at ESS zeroes the offer (S7F §10, issue #583)', () => {
+describe('scoreTask — nobody at ESS zeroes the offer (S7F §11, issue #583)', () => {
   // Two HG pilots who fly the start and TP1 and land out before ESS.
   const landedOutWaypoints = standardWaypoints.slice(0, 2);
   const pilots: PilotFlight[] = [
@@ -1578,7 +1578,7 @@ describe('scoreFlights (cache-equivalent path)', () => {
     // four correlated optional fields and the scorer could only tell them
     // apart at run time. They are now a discriminated union, so a mis-wired
     // tracked flight is a compile error at the call site and 'none' means
-    // exactly what it says: no tracklog, hence no leading points (§11.3).
+    // exactly what it says: no tracklog, hence no leading points (§13.4).
     const compact = cachedInputs(standardTask, pilots, false);
     const scored = scoreFlights(
       scoringTask, compact, { nominalDistance: 10000, useLeading: true },

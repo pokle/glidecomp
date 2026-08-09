@@ -58,7 +58,7 @@ function field(): FlightScoringData[] {
   ];
 }
 
-describe('ESS but not goal (S7F §12.1)', () => {
+describe('ESS but not goal (S7F §13.2)', () => {
   it('HG: docks time and arrival points to the default 80%', () => {
     const result = scoreFlights(task, field(), baseParams);
     const goal = result.pilotScores.find(p => p.trackFile === 'goal.igc')!;

@@ -1,5 +1,5 @@
 /**
- * GAP goal LINE scoring (S7F §6.2.3.1 geometry, §8.2 tolerance, §8.5.2
+ * GAP goal LINE scoring (S7F §6.2.3.1 geometry, §9.1.3 tolerance, §9.2.3
  * reaching).
  *
  * Covers the goal-line geometry module, crossing detection and sequence
@@ -329,7 +329,7 @@ describe('sequence resolution with a LINE goal', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Line tolerance (§8.2) and the direction requirement (§8.5.2)
+// Line tolerance (§9.1.2) and the direction requirement (§9.2.3)
 // ---------------------------------------------------------------------------
 
 /**
@@ -349,7 +349,7 @@ function toTP1(): IGCFix[] {
   return eastboundTrack(47.0, 10.95, 11.2);
 }
 
-describe('goal line tolerance (S7F §8.2, §8.5.2)', () => {
+describe('goal line tolerance (S7F §9.1.3, §9.2.3)', () => {
   const line = computeGoalLine(lineGoalTask())!; // halfWidth 200 m
 
   it('takes the cylinder percentage over the line length, with the 5 m floor', () => {
@@ -362,8 +362,8 @@ describe('goal line tolerance (S7F §8.2, §8.5.2)', () => {
     expect(goalLineToleranceM(wide, 0.005)).toBeCloseTo(50, 6);
   });
 
-  it('gives the control semicircle the §8.1 cylinder band, not the line band', () => {
-    // §8.5.2 sends the control zone to the cylinder calculation: the outer
+  it('gives the control semicircle the §9.1.1 cylinder band, not the line band', () => {
+    // §9.2.3 sends the control zone to the cylinder calculation: the outer
     // detection radius of 200 m, which the 5 m floor decides.
     expect(goalZoneRadius(line, 0.005)).toBeCloseTo(205, 6);
     expect(goalZoneRadius(line, 0.05)).toBeCloseTo(210, 6);
@@ -435,7 +435,7 @@ describe('goal line tolerance (S7F §8.2, §8.5.2)', () => {
 
   it('credits a fix in the semicircle\'s tolerance band', () => {
     // 203 m behind the centre: outside the nominal 200 m semicircle, inside
-    // the 205 m band §8.5.2 gives it. Approached from the north-east, so
+    // the 205 m band §9.2.3 gives it. Approached from the north-east, so
     // there is no line crossing to credit instead.
     const landing = atLine(203, 0);
     const fixes: IGCFix[] = [
@@ -449,7 +449,7 @@ describe('goal line tolerance (S7F §8.2, §8.5.2)', () => {
   });
 });
 
-describe('goal line crossing direction (S7F §8.5.2)', () => {
+describe('goal line crossing direction (S7F §9.2.3)', () => {
   /**
    * Get behind the line without crossing it (around the north end, well
    * outside the control semicircle), then cross it westwards — the wrong way
@@ -582,10 +582,10 @@ describe('score explanation with a LINE goal', () => {
     ];
     const result = resolveTurnpointSequence(lineGoalTask(), fixes);
     const { goal } = goalItem(result);
-    expect(goal!.detail).toContain('§8.2');
+    expect(goal!.detail).toContain('§9.1.3');
     expect(goal!.detail).toContain('just past the end of the goal line');
     // The cylinder note must not be the one that shows up.
-    expect(goal!.detail).not.toContain('§8.1');
+    expect(goal!.detail).not.toContain('§9.1.1');
   });
 
   it('describes a land-out by its least remaining distance to the goal line', () => {

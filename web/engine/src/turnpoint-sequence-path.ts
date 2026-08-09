@@ -25,7 +25,7 @@ import type {
 /**
  * Build a forward path from an SSS crossing through subsequent turnpoints.
  *
- * Reaching a turnpoint is presence-based (FAI S7F §8 / FS semantics), on the
+ * Reaching a turnpoint is presence-based (FAI S7F §9 / FS semantics), on the
  * side of the boundary the turnpoint's direction requires: an ENTER cylinder
  * needs the pilot inside it at or after the previous reaching, an EXIT
  * cylinder (one the route arrives at from inside — see
@@ -225,7 +225,7 @@ const BEST_PROGRESS_TOLERANCE_M = 5;
  * minimum remaining distance to goal. What "remaining distance" means
  * depends on the mode:
  *
- * - `'exact'` — the §8.6.1 measurement: "for every remaining track point,
+ * - `'exact'` — the §9.3 measurement: "for every remaining track point,
  *   the shortest distance to goal is calculated using the method described
  *   in section 6.4.1" — a fresh shortest-path optimisation of the route
  *   {point(fix), un-reached control zones…, goal}
@@ -233,7 +233,7 @@ const BEST_PROGRESS_TOLERANCE_M = 5;
  *   frozen by the launch-anchored task line. Used for the sequence that
  *   actually scores.
  *
- * - `'approx'` — the cheap single-pass tag/edge measure (the pre-§8.6.1
+ * - `'approx'` — the cheap single-pass tag/edge measure (the pre-§9.3
  *   behaviour): fix→next-turnpoint by {@link NextTPMeasure}, plus the task
  *   line's frozen legs. Used by the resolver's candidate-start RANKING
  *   loop, where each of many candidate sequences needs a comparable
@@ -258,10 +258,10 @@ const BEST_PROGRESS_TOLERANCE_M = 5;
  *   remaining TPs (heuristic only).
  * @param nextMeasure - The cheap fix→next-turnpoint measure used by the
  *   approx mode and the seeding heuristic (see {@link NextTPMeasure}).
- * @param deadlineMs - The task deadline (FAI S7F §11.1): best distance is
+ * @param deadlineMs - The task deadline (FAI S7F §12.1): best distance is
  *   measured up until the pilot landed or the deadline, whichever comes
  *   first — fixes after it are not scanned. Null when the task has none.
- *   For a stopped task the caller folds the scored-window end (§12.3.4)
+ *   For a stopped task the caller folds the scored-window end (§13.4.4)
  *   into this same clip.
  * @param altitudeBonus - Stopped tasks only (S7F 2026 §13.4.6): credit the
  *   pilot's position at the task stop time — the LAST scanned fix, since
@@ -357,7 +357,7 @@ export function computeBestProgress(
     // distinction only bites when a crossing interpolates exactly onto a
     // fix — e.g. a fix landing precisely on a cylinder's nominal radius.
     if (fix.time.getTime() < lastReachingTime) continue;
-    // §11.1: flying after the task deadline earns no further distance.
+    // §12.1: flying after the task deadline earns no further distance.
     // (For a stopped task the caller folds the §13.4.4 window end in here.)
     if (deadlineMs !== null && fix.time.getTime() > deadlineMs) break;
 

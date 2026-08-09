@@ -1,8 +1,8 @@
 /**
- * Arrival points (FAI S7F §11.4), with the arithmetic that produced them:
+ * Arrival points (FAI S7F §13.5), with the arithmetic that produced them:
  * the arrival position at the end of the speed section, the factor evaluated
  * by the scorer's own `calculateArrivalPoints`, what one place was worth, and
- * the §12.1 ESS-but-not-goal reduction that can dock the lot.
+ * the §13.2 ESS-but-not-goal reduction that can dock the lot.
  */
 
 import type { GAPParameters } from '../gap-scoring';
@@ -26,7 +26,7 @@ import { noEssPointsZeroed, pilotsAtEss } from './shared';
 /**
  * Arrival points, with the arithmetic that produced them.
  *
- * The §11.4 factor is a function of arrival POSITION at the end of the speed
+ * The §13.5 factor is a function of arrival POSITION at the end of the speed
  * section, which the scorer computed and then discarded — leaving arrival as
  * the one component the page could only assert. With `arrival_position` and
  * `ess_time_ms` published it substitutes like every other component.
@@ -88,7 +88,7 @@ export function buildArrivalSection(
       ap.arrival, 3, 6, entry.arrival_points,
       (d, avail) => Number(factor.toFixed(d)) * avail,
     );
-    // The §12.1 factor is stated by buildArrivalEssNotGoalItems below; when it
+    // The §13.2 factor is stated by buildArrivalEssNotGoalItems below; when it
     // applies the printed product is the pre-reduction figure, so don't claim
     // an equality the published points won't satisfy.
     const reduced =
@@ -140,17 +140,17 @@ export function buildArrivalSection(
     // ratio we can stand behind rather than inventing the other.
     items.push({
       id: 'arrival-field',
-      text: `${atEss} pilot${atEss === 1 ? '' : 's'} reached the end of the speed section on this task; the points scale with where in that group you crossed it (FAI S7F §11.4).`,
+      text: `${atEss} pilot${atEss === 1 ? '' : 's'} reached the end of the speed section on this task; the points scale with where in that group you crossed it (FAI S7F §13.5).`,
       emphasis: 'muted',
     });
   } else if (noEssPointsZeroed(classContext, params)) {
     // Nobody got there at all, so there was no arrival order to rank anyone
-    // in and the specification puts nothing on offer (§10). Said here as well
+    // in and the specification puts nothing on offer (§11). Said here as well
     // as in the day-quality section because a reader who skipped straight to
     // this section would otherwise see a bare zero with no reason beside it.
     items.push({
       id: 'arrival-no-ess',
-      text: 'Nobody reached the end of the speed section on this task, so there was no arrival order to place anyone in and the task offered no arrival points to anyone (FAI S7F §10).',
+      text: 'Nobody reached the end of the speed section on this task, so there was no arrival order to place anyone in and the task offered no arrival points to anyone (FAI S7F §11).',
       emphasis: 'warning',
     });
   }
@@ -176,7 +176,7 @@ export function buildArrivalSection(
 }
 
 /**
- * The §12.1 "ESS but not goal" caveat for the arrival section: an HG pilot
+ * The §13.2 "ESS but not goal" caveat for the arrival section: an HG pilot
  * who reaches ESS but lands before goal keeps only the competition's
  * essNotGoalFactor share of their arrival points (same factor as time).
  */
@@ -195,7 +195,7 @@ export function buildArrivalEssNotGoalItems(
   return [
     {
       id: 'arrival-ess-not-goal',
-      text: `Reached the end of the speed section but landed before goal — only ${trimZeros((params.essNotGoalFactor * 100).toFixed(1), 0)}% of arrival points are kept, the same reduction as time points (FAI S7F §12.1).`,
+      text: `Reached the end of the speed section but landed before goal — only ${trimZeros((params.essNotGoalFactor * 100).toFixed(1), 0)}% of arrival points are kept, the same reduction as time points (FAI S7F §13.2).`,
       emphasis: 'warning',
     },
   ];

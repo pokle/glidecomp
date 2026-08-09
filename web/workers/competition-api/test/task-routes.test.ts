@@ -322,7 +322,7 @@ describe("PATCH /api/comp/:comp_id/task/:task_id", () => {
     expect(res.status).toBe(400);
   });
 
-  // Stopped tasks (issue #264, S7F §12.3)
+  // Stopped tasks (issue #264, S7F §13.4)
   test("sets and clears the task stop announcement time, audit-logged and score-bumping", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);

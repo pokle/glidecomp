@@ -58,7 +58,7 @@ describe('task optimizer — iterative convergence', () => {
     const distance = calculateOptimizedTaskDistance(task);
 
     // The route starts at the SSS cylinder (r=3000, no TAKEOFF row), so per
-    // Annex A §2.2 it is measured from the SSS CENTRE: the old edge-measured
+    // §7.2 it is measured from the SSS CENTRE: the old edge-measured
     // single-pass greedy gave 77.513 km, iterative convergence 77.3 km, and
     // the centre rule adds the 3 km radius on top of the converged figure.
     expect(distance / 1000).toBeLessThan(77.5 + 3.0);
@@ -74,7 +74,7 @@ describe('task optimizer — iterative convergence', () => {
     const task = parseXCTask(taskContent);
     const path = calculateOptimizedTaskLine(task);
 
-    // The first point is the launch CENTRE (Annex A §2.2); every other
+    // The first point is the launch CENTRE (§7.2); every other
     // point should lie on its turnpoint's cylinder perimeter.
     const first = task.turnpoints[0];
     expect(

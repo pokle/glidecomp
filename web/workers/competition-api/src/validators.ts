@@ -114,7 +114,7 @@ export const timezoneSchema = z
 export const scoringFormatSchema = z.enum(["gap", "open_distance"]);
 
 // Competition series-scoring method — see migration 0022. "total" sums all
-// task scores; "ftv" (Fixed Total Validity, S7F §15) counts only each pilot's
+// task scores; "ftv" (Fixed Total Validity, S7F §16) counts only each pilot's
 // best tasks up to a fixed validity. ftv_factor is the discard fraction
 // (0 < f < 1); null auto-derives it from the task count (0.2 for ≤6, 0.25 ≥7).
 export const seriesScoringSchema = z.enum(["total", "ftv"]);
@@ -167,7 +167,7 @@ export const upsertPilotStatusSchema = z.object({
 // ── Manual flight (per-task, per-pilot) validators ──
 //
 // A manual flight scores a track-less pilot from the last turnpoint they
-// legally reached plus where they landed (FAI S7F §8.4). last_reached_tp_index
+// legally reached plus where they landed (FAI S7F §9.2.2). last_reached_tp_index
 // is an index into the FULL task turnpoints[] (Start/SSS … Goal); the server
 // computes the made-good distance via the engine. duration_seconds is the
 // speed-section time, only meaningful when the pilot is in goal.
@@ -416,7 +416,7 @@ export const updateTaskSchema = z.object({
     .optional(),
   pilot_classes: pilotClassesArray.optional(),
   xctsk: xctskSchema.nullable().optional(),
-  // Stopped tasks (issue #264, S7F §12.3): the task stop announcement time
+  // Stopped tasks (issue #264, S7F §13.4): the task stop announcement time
   // as an ISO 8601 UTC datetime. Setting it scores the task as stopped;
   // null clears the stop (task scored as run to completion).
   stop_announcement_time: z

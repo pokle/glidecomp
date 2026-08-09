@@ -2,11 +2,11 @@
  * Manual Flight Scoring
  *
  * Scores a pilot who took off (verified by launch marshals) but has no valid
- * tracklog — FAI S7F §8.4. Instead of a GPS track, the input is the last
+ * tracklog — FAI S7F §9.2.2. Instead of a GPS track, the input is the last
  * turnpoint the pilot legally reached plus where they landed. From those two
  * facts this module computes a made-good distance along the optimised course
  * and produces a synthetic {@link FlightScoringData} that feeds `scoreFlights`
- * exactly like a tracked pilot (counting toward `numFlying`, S7F §9.1).
+ * exactly like a tracked pilot (counting toward `numFlying`, S7F §10.1).
  *
  * The "last turnpoint reached" is essential, not optional: scored land-out
  * distance is a function of the trajectory (which cylinders were tagged, in
@@ -20,7 +20,7 @@
  * point and turnpoint would.
  *
  * @see /docs/... issue #306
- * @see FAI Sporting Code Section 7F (CIVL GAP) §8.4
+ * @see FAI Sporting Code Section 7F (CIVL GAP) §9.2.2
  */
 
 import type { XCTask } from './xctsk-parser';
@@ -58,7 +58,7 @@ export interface ManualFlight {
    * Speed-section time in seconds, for a pilot in goal
    * (`lastReachedIndex` === goal). Enables time / speed points. Ignored for a
    * land-out. In a gated race this should already be the effective
-   * gate-based speed-section time (S7F §8.7), matching a tracked pilot.
+   * gate-based speed-section time (S7F §9.4), matching a tracked pilot.
    */
   durationSeconds?: number | null;
 }
@@ -95,9 +95,9 @@ export interface ManualFlightGeometry {
  *
  * The scored distance mirrors the CIVL GAP flown-distance rule for a single
  * point: `madeGood = taskDistance − remaining(point, from lastReachedIndex)`,
- * where `remaining` is the §8.6.1 measurement — the shortest path of the
+ * where `remaining` is the §9.3 measurement — the shortest path of the
  * route {landing point, un-reached control zones…, goal}, optimised with
- * the §6.4.1 algorithm ({@link optimizeRemainingRoute}) — the exact
+ * the §7.2 algorithm ({@link optimizeRemainingRoute}) — the exact
  * measurement `computeBestProgress` applies per track fix.
  *
  * Turnpoint order is respected via the floor: `madeGood` never drops below
@@ -147,7 +147,7 @@ export function manualFlightGeometry(
   }
 
   const bankedToAnchor = cum[anchor]; // the floor
-  // §8.6.1: the remaining route from the landing point, optimised as its
+  // §9.3: the remaining route from the landing point, optimised as its
   // own shortest path through the un-reached zones to goal.
   const remaining = optimizeRemainingRoute(task, anchor, point);
   if (!remaining) return { ...base, madeGood: taskDistance, madeGoal: true };

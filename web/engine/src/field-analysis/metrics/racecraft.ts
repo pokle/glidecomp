@@ -459,7 +459,7 @@ const essMargin: MetricComputer = {
     'Height still available at ESS that the pilot no longer needed. That altitude was available ' +
     'for more speed, and the pilot did not use it. The value is the altitude at ESS minus the altitude ' +
     'needed to glide to goal at the standard glide ratio of the sport, which is 5.0 for HG and ' +
-    '4.0 for PG (S7F §12.3.6). A large positive margin means the pilot arrived too high. A ' +
+    '4.0 for PG (S7F §13.4.6). A large positive margin means the pilot arrived too high. A ' +
     'margin near zero means they flew the final glide with little height to spare.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);

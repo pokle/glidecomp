@@ -370,7 +370,7 @@ export function SettingsDialog({
           </div>
 
           {/* Series (multi-task) scoring — how per-task scores combine into
-              competition scores. FTV is a GAP-only aggregation (S7F §15). */}
+              competition scores. FTV is a GAP-only aggregation (S7F §16). */}
           {scoringFormat === "gap" ? (
             <div>
               <h3 className="mb-1.5 text-sm font-medium">Series scoring</h3>
@@ -384,7 +384,7 @@ export function SettingsDialog({
                 ariaLabel="Series scoring"
               />
               <p className="mt-1 text-sm text-muted-foreground">
-                FTV (S7F §15) scores each pilot on their best tasks, discarding a
+                FTV (S7F §16) scores each pilot on their best tasks, discarding a
                 fixed fraction of the total validity — the paragliding norm. Sum of
                 task scores is the simple total.
               </p>
