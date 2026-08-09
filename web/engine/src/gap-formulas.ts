@@ -13,7 +13,7 @@ import type { TurnpointReaching } from './turnpoint-sequence';
 import { getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { getOptimizedSegmentDistances } from './task-optimizer';
 import { resolveStartGates } from './time-gates';
-import { andoyerDistance } from './geo';
+import { ellipsoidDistance } from './geo';
 import type { GAPParameters, LeadingFormula } from './gap-params';
 import {
   DEFAULT_GAP_PARAMETERS,
@@ -768,7 +768,7 @@ export function computeLeadingAggregate(
     const tp = task.turnpoints[nextReq];
     const edge = Math.max(
       0,
-      andoyerDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) - tp.radius,
+      ellipsoidDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) - tp.radius,
     );
     const distKm = (edge + cumToESS[nextReq]) / 1000;
 

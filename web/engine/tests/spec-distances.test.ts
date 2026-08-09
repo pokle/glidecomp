@@ -33,7 +33,7 @@ import {
   getOptimizedSegmentDistances,
 } from '../src/task-optimizer';
 import { parseXCTask, getESSIndex, type XCTask, type Turnpoint } from '../src/xctsk-parser';
-import { andoyerDistance, destinationPoint, calculateBearingRadians } from '../src/geo';
+import { ellipsoidDistance, destinationPoint, calculateBearingRadians } from '../src/geo';
 import { computeLeadingAggregate } from '../src/gap-formulas';
 
 const fixture = (name: string): XCTask =>
@@ -112,7 +112,7 @@ describe('launch centre rule (Annex A §2.2)', () => {
     const task = fixture('corryong-cup-2022-open-t1.xctsk');
     const line = calculateOptimizedTaskLine(task);
     const tp0 = task.turnpoints[0].waypoint;
-    expect(andoyerDistance(line[0].lat, line[0].lon, tp0.lat, tp0.lon)).toBeLessThan(1);
+    expect(ellipsoidDistance(line[0].lat, line[0].lon, tp0.lat, tp0.lon)).toBeLessThan(1);
   });
 });
 
@@ -141,7 +141,7 @@ describe('ESS pin (Annex A §3.2.4)', () => {
       ess.waypoint.lat, ess.waypoint.lon, line[0].lat, line[0].lon,
     );
     const pinned = destinationPoint(ess.waypoint.lat, ess.waypoint.lon, ess.radius, bearing);
-    expect(andoyerDistance(line[1].lat, line[1].lon, pinned.lat, pinned.lon)).toBeLessThan(2);
+    expect(ellipsoidDistance(line[1].lat, line[1].lon, pinned.lat, pinned.lon)).toBeLessThan(2);
   });
 
   it('the task path kinks at ESS: pinned total ≥ the free-floating optimum', () => {

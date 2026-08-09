@@ -46,7 +46,7 @@
  * have a competition.
  */
 
-import { andoyerDistance, getBoundingBox, isInsideCylinder } from './geo';
+import { ellipsoidDistance, getBoundingBox, isInsideCylinder } from './geo';
 import { fixAltitude, type IGCFix, type IGCHeader } from './igc-parser';
 import { detectTakeoffLanding } from './takeoff-landing-detector';
 import { km, type KmOptions } from './format-distance';
@@ -625,11 +625,11 @@ function checkWrongPlace(
   const box = getBoundingBox(fixes);
   const centreLat = (box.minLat + box.maxLat) / 2;
   const centreLon = (box.minLon + box.maxLon) / 2;
-  const boxRadius = andoyerDistance(centreLat, centreLon, box.maxLat, box.maxLon);
+  const boxRadius = ellipsoidDistance(centreLat, centreLon, box.maxLat, box.maxLon);
 
   let dMin = Infinity;
   for (const tp of task.turnpoints) {
-    const d = andoyerDistance(centreLat, centreLon, tp.waypoint.lat, tp.waypoint.lon);
+    const d = ellipsoidDistance(centreLat, centreLon, tp.waypoint.lat, tp.waypoint.lon);
     if (d < dMin) dMin = d;
   }
 
@@ -642,7 +642,7 @@ function checkWrongPlace(
     for (const fix of fixes) {
       for (const tp of task.turnpoints) {
         if (
-          andoyerDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) <=
+          ellipsoidDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) <=
           WRONG_PLACE_MAX_APPROACH_M
         ) {
           return null;
@@ -656,7 +656,7 @@ function checkWrongPlace(
   for (let i = 0; i < fixes.length; i++) {
     for (let t = 0; t < task.turnpoints.length; t++) {
       const tp = task.turnpoints[t];
-      const d = andoyerDistance(
+      const d = ellipsoidDistance(
         fixes[i].latitude,
         fixes[i].longitude,
         tp.waypoint.lat,
@@ -725,7 +725,7 @@ function checkNeverLeftTakeoff(
   let maxDistance = 0;
   for (const fix of fixes) {
     if (!isInsideCylinder(fix.latitude, fix.longitude, lat, lon, takeoff.radius)) return null;
-    const d = andoyerDistance(fix.latitude, fix.longitude, lat, lon);
+    const d = ellipsoidDistance(fix.latitude, fix.longitude, lat, lon);
     if (d > maxDistance) maxDistance = d;
   }
 
@@ -795,7 +795,7 @@ function checkNeverAirborne(fixes: IGCFix[], times: number[]): TrackQualityFindi
   for (let i = 1; i < n; i++) {
     pathLength[i] =
       pathLength[i - 1] +
-      andoyerDistance(
+      ellipsoidDistance(
         fixes[i - 1].latitude,
         fixes[i - 1].longitude,
         fixes[i].latitude,
@@ -854,7 +854,7 @@ function checkNeverAirborne(fixes: IGCFix[], times: number[]): TrackQualityFindi
     while (glideDeque[dequeHead] <= lo) dequeHead++; // the window is (lo, i]
     const minSpeed = speed[glideDeque[dequeHead]];
     const path = pathLength[i] - pathLength[lo];
-    const displacement = andoyerDistance(
+    const displacement = ellipsoidDistance(
       fixes[lo].latitude,
       fixes[lo].longitude,
       fixes[i].latitude,
@@ -960,7 +960,7 @@ function checkImplausibleSpeed(
     const seconds = (times[i] - times[lo]) / 1000;
     if (seconds < SPEED_MIN_WINDOW_SECONDS) continue;
     measured = true;
-    const displacement = andoyerDistance(
+    const displacement = ellipsoidDistance(
       fixes[lo].latitude,
       fixes[lo].longitude,
       fixes[i].latitude,

@@ -9,7 +9,7 @@ import {
   getOptimizedSegmentDistances,
   computeTurnpointDirections,
 } from '../src/task-optimizer';
-import { isInsideCylinder, andoyerDistance, calculateBearingRadians, destinationPoint } from '../src/geo';
+import { isInsideCylinder, ellipsoidDistance, calculateBearingRadians, destinationPoint } from '../src/geo';
 import { parseXCTask } from '../src/xctsk-parser';
 import type { XCTask, Turnpoint, SSSConfig, GoalConfig } from '../src/xctsk-parser';
 import { createFix as createFixSeconds, BASE_TIME, type IGCFix } from './test-helpers';
@@ -1219,7 +1219,7 @@ describe('resolveTurnpointSequence', () => {
       // Straight-line from best fix (47.0, 11.25) to goal (47.0, 11.3) is ~3.7km
       // but path through TP2 (47.1, 11.2) is much longer (~11km + ~11km).
       // So distanceToGoal should be >> 3.7km
-      const straightLineToGoal = andoyerDistance(47.0, 11.25, 47.0, 11.3);
+      const straightLineToGoal = ellipsoidDistance(47.0, 11.25, 47.0, 11.3);
       expect(result.bestProgress!.distanceToGoal).toBeGreaterThan(straightLineToGoal * 2);
 
       // flownDistance should be less than it would be with straight-line remaining
@@ -1256,7 +1256,7 @@ describe('resolveTurnpointSequence', () => {
       // With no missed intermediate TPs, distanceToGoal ≈ straight line to goal edge
       const bestLat = result.bestProgress!.latitude;
       const bestLon = result.bestProgress!.longitude;
-      const straightDist = Math.max(0, andoyerDistance(bestLat, bestLon, 47.0, 11.3) - 400);
+      const straightDist = Math.max(0, ellipsoidDistance(bestLat, bestLon, 47.0, 11.3) - 400);
       expect(result.bestProgress!.distanceToGoal).toBeCloseTo(straightDist, -2);
     });
 
@@ -1293,7 +1293,7 @@ describe('resolveTurnpointSequence', () => {
 
       // Remaining distance must go through TP2 AND TP3 — much longer than
       // the straight-line distance to goal
-      const straightLineToGoal = andoyerDistance(47.0, 11.35, 47.0, 11.4);
+      const straightLineToGoal = ellipsoidDistance(47.0, 11.35, 47.0, 11.4);
       expect(result.bestProgress!.distanceToGoal).toBeGreaterThan(straightLineToGoal * 3);
     });
   });

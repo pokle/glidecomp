@@ -11,7 +11,7 @@ import {
   getOptimizedSegmentDistances,
 } from '../src/task-optimizer';
 import { parseXCTask, type XCTask, type Turnpoint } from '../src/xctsk-parser';
-import { andoyerDistance, destinationPoint } from '../src/geo';
+import { ellipsoidDistance, destinationPoint } from '../src/geo';
 
 function makeTurnpoint(name: string, lat: number, lon: number, radius: number, type?: string): Turnpoint {
   return {
@@ -78,11 +78,11 @@ describe('task optimizer — iterative convergence', () => {
     // point should lie on its turnpoint's cylinder perimeter.
     const first = task.turnpoints[0];
     expect(
-      andoyerDistance(first.waypoint.lat, first.waypoint.lon, path[0].lat, path[0].lon),
+      ellipsoidDistance(first.waypoint.lat, first.waypoint.lon, path[0].lat, path[0].lon),
     ).toBeLessThan(1.0);
     for (let i = 1; i < task.turnpoints.length; i++) {
       const tp = task.turnpoints[i];
-      const dist = andoyerDistance(tp.waypoint.lat, tp.waypoint.lon, path[i].lat, path[i].lon);
+      const dist = ellipsoidDistance(tp.waypoint.lat, tp.waypoint.lon, path[i].lat, path[i].lon);
       expect(Math.abs(dist - tp.radius)).toBeLessThan(1.0); // within 1m of cylinder
     }
   });

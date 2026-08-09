@@ -20,7 +20,7 @@ import {
 import { resolveTurnpointSequence } from '../src/turnpoint-sequence';
 import { manualFlightGeometry } from '../src/manual-flight';
 import { parseXCTask, type XCTask, type Turnpoint } from '../src/xctsk-parser';
-import { destinationPoint, andoyerDistance, calculateBearingRadians } from '../src/geo';
+import { destinationPoint, ellipsoidDistance, calculateBearingRadians } from '../src/geo';
 import type { IGCFix } from '../src/igc-parser';
 
 function tp(name: string, lat: number, lon: number, radius: number, type?: Turnpoint['type']): Turnpoint {
@@ -70,7 +70,7 @@ describe('optimizeRemainingRoute (§6.4.1 from an arbitrary point)', () => {
     expect(Math.abs(route!.distance - independent)).toBeLessThan(2);
     // The line starts at the point and has one entry per remaining zone.
     expect(route!.line.length).toBe(3);
-    expect(andoyerDistance(route!.line[0].lat, route!.line[0].lon, p.lat, p.lon)).toBeLessThan(1);
+    expect(ellipsoidDistance(route!.line[0].lat, route!.line[0].lon, p.lat, p.lon)).toBeLessThan(1);
   });
 
   it('is never longer than the frozen-tag approximation', () => {
@@ -153,16 +153,16 @@ describe('best progress measures §8.6.1 remaining distance', () => {
     expect(bp.remainingRoute).toBeDefined();
     const route = bp.remainingRoute!;
     // Starts at the best-progress fix, ends at a point on the goal boundary.
-    expect(andoyerDistance(route[0].lat, route[0].lon, bp.latitude, bp.longitude)).toBeLessThan(1);
+    expect(ellipsoidDistance(route[0].lat, route[0].lon, bp.latitude, bp.longitude)).toBeLessThan(1);
     const last = route[route.length - 1];
     const goalTp = dogleg.turnpoints[2];
     expect(
-      Math.abs(andoyerDistance(last.lat, last.lon, goalTp.waypoint.lat, goalTp.waypoint.lon) - goalTp.radius),
+      Math.abs(ellipsoidDistance(last.lat, last.lon, goalTp.waypoint.lat, goalTp.waypoint.lon) - goalTp.radius),
     ).toBeLessThan(2);
     // And its length is the scored remaining distance.
     let len = 0;
     for (let i = 1; i < route.length; i++) {
-      len += andoyerDistance(route[i - 1].lat, route[i - 1].lon, route[i].lat, route[i].lon);
+      len += ellipsoidDistance(route[i - 1].lat, route[i - 1].lon, route[i].lat, route[i].lon);
     }
     expect(Math.abs(len - bp.distanceToGoal)).toBeLessThan(2);
   });

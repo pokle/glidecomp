@@ -26,7 +26,7 @@
 import type { XCTask } from './xctsk-parser';
 import { getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine, optimizeRemainingRoute } from './task-optimizer';
-import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
+import { ellipsoidDistance, calculateBearingRadians, destinationPoint } from './geo';
 import type { FlightScoringData } from './gap-scoring';
 
 /**
@@ -131,7 +131,7 @@ export function manualFlightGeometry(
   // point. cum[i] is the along-course distance banked by reaching turnpoint i.
   const cum: number[] = new Array(optimizedLine.length).fill(0);
   for (let i = 1; i < optimizedLine.length; i++) {
-    cum[i] = cum[i - 1] + andoyerDistance(
+    cum[i] = cum[i - 1] + ellipsoidDistance(
       optimizedLine[i - 1].lat, optimizedLine[i - 1].lon,
       optimizedLine[i].lat, optimizedLine[i].lon,
     );
@@ -275,7 +275,7 @@ export function manualOpenDistanceGeometry(
   if (!takeoff) return { distance: 0, origin: landing, landing };
 
   const center = { lat: takeoff.waypoint.lat, lon: takeoff.waypoint.lon };
-  const toLanding = andoyerDistance(center.lat, center.lon, point.lat, point.lon);
+  const toLanding = ellipsoidDistance(center.lat, center.lon, point.lat, point.lon);
   const distance = Math.max(0, toLanding - takeoff.radius);
 
   // The exit that maximises the distance is on the cylinder edge, on the

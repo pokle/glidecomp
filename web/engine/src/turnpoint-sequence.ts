@@ -21,7 +21,7 @@
 
 import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
-import { andoyerDistance, isInsideCylinder } from './geo';
+import { ellipsoidDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import {
   calculateOptimizedTaskLine,
@@ -378,7 +378,7 @@ function computeTaskGeometry(task: XCTask): TaskGeometry {
   const directions = computeTurnpointDirections(task, optimizedLine);
   const segmentDistances: number[] = [];
   for (let i = 1; i < optimizedLine.length; i++) {
-    segmentDistances.push(andoyerDistance(
+    segmentDistances.push(ellipsoidDistance(
       optimizedLine[i - 1].lat, optimizedLine[i - 1].lon,
       optimizedLine[i].lat, optimizedLine[i].lon,
     ));
@@ -452,7 +452,7 @@ function resolveTrackStartInside(
     const edge = directions[tpIdx] === 'exit'
       ? innerDetectionRadius(tp.radius, tolerance)
       : outerDetectionRadius(tp.radius, tolerance);
-    return andoyerDistance(
+    return ellipsoidDistance(
       fixes[0].latitude, fixes[0].longitude,
       tp.waypoint.lat, tp.waypoint.lon,
     ) <= edge;
@@ -665,7 +665,7 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
         longitude: first.longitude,
         altitude: fixAltitude(first),
         direction: 'exit',
-        distanceToCenter: andoyerDistance(
+        distanceToCenter: ellipsoidDistance(
           first.latitude, first.longitude,
           startTP.waypoint.lat, startTP.waypoint.lon,
         ),

@@ -1,15 +1,16 @@
 /**
- * Andoyer distance accuracy tests.
+ * Geodesic distance accuracy tests.
  *
- * Validates andoyerDistance() against a Vincenty (iterative WGS84 geodesic)
- * reference implementation, both for individual point pairs and for
- * accumulated track distances over real IGC flight logs.
+ * Validates the engine's ellipsoidDistance() (S7F 2026 §7.1.5, Vincenty
+ * inverse) against an independently-written Vincenty reference
+ * implementation, both for individual point pairs and for accumulated track
+ * distances over real IGC flight logs.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { readFileSync, readdirSync } from 'fs';
 import { resolve, extname, basename } from 'path';
-import { andoyerDistance } from '../src/geo';
+import { ellipsoidDistance } from '../src/geo';
 import { parseIGC, type IGCFix } from '../src/igc-parser';
 import { resolveCompDir } from '@glidecomp/samples/node';
 
@@ -74,7 +75,7 @@ function loadIGCFiles(dir: string): string[] {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-describe('andoyerDistance vs Vincenty reference', () => {
+describe('ellipsoidDistance vs Vincenty reference', () => {
   describe('point-to-point accuracy', () => {
     const cases: [string, number, number, number, number][] = [
       ['London to Paris', 51.5007, -0.1246, 48.8584, 2.2945],
@@ -88,7 +89,7 @@ describe('andoyerDistance vs Vincenty reference', () => {
 
     for (const [name, lat1, lon1, lat2, lon2] of cases) {
       it(`${name}: error < 50 ppm`, () => {
-        const a = andoyerDistance(lat1, lon1, lat2, lon2);
+        const a = ellipsoidDistance(lat1, lon1, lat2, lon2);
         const v = vincentyDistance(lat1, lon1, lat2, lon2);
         const ppm = Math.abs(a - v) / v * 1e6;
         expect(ppm).toBeLessThan(50);
@@ -96,13 +97,13 @@ describe('andoyerDistance vs Vincenty reference', () => {
     }
 
     it('should return 0 for identical points', () => {
-      expect(andoyerDistance(47.0, 11.0, 47.0, 11.0)).toBe(0);
+      expect(ellipsoidDistance(47.0, 11.0, 47.0, 11.0)).toBe(0);
     });
 
     it('should be symmetric', () => {
-      const ab = andoyerDistance(47.123, 11.456, 48.789, 12.012);
-      const ba = andoyerDistance(48.789, 12.012, 47.123, 11.456);
-      expect(ab).toBe(ba);
+      const ab = ellipsoidDistance(47.123, 11.456, 48.789, 12.012);
+      const ba = ellipsoidDistance(48.789, 12.012, 47.123, 11.456);
+      expect(ab).toBeCloseTo(ba, 6); // symmetric to sub-micrometre
     });
   });
 
@@ -118,7 +119,7 @@ describe('andoyerDistance vs Vincenty reference', () => {
         const fixes = igc.fixes.filter(f => f.valid);
         if (fixes.length < 2) return; // skip files with no valid fixes
 
-        const andoyer = trackDistance(fixes, andoyerDistance);
+        const andoyer = trackDistance(fixes, ellipsoidDistance);
         const vincenty = trackDistance(fixes, vincentyDistance);
         const errorMeters = Math.abs(andoyer - vincenty);
 

@@ -13,7 +13,7 @@
 
 import type { IGCFix } from '../igc-parser';
 import type { ThermalSegment } from '../event-types';
-import { andoyerDistance } from '../geo';
+import { ellipsoidDistance } from '../geo';
 
 /** One pilot's use of one thermal (a flattened ThermalSegment). */
 export interface ThermalUse {
@@ -128,7 +128,7 @@ export function clusterSharedThermals(
       // Sorted by startMs, so once b starts after a's window no later b can link to a.
       if (b.startMs > a.endMs + gapMs) break;
       if (find(i) === find(j)) continue;
-      if (andoyerDistance(a.lat, a.lon, b.lat, b.lon) <= maxDistanceMeters) {
+      if (ellipsoidDistance(a.lat, a.lon, b.lat, b.lon) <= maxDistanceMeters) {
         parent[find(i)] = find(j);
       }
     }

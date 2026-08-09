@@ -17,7 +17,7 @@ import { parseXCTask, type XCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
 import { scoreTask, resolveCompGapParams, type PilotFlight } from '../src/gap-scoring';
 import type { TurnpointReaching } from '../src/turnpoint-sequence-types';
-import { andoyerDistance } from '../src/geo';
+import { ellipsoidDistance } from '../src/geo';
 import {
   buildFieldContext,
   evaluateField,
@@ -312,7 +312,7 @@ describe('race.ess_margin', () => {
   const goalWp = field.task.turnpoints[4].waypoint;
   // Both ESS pilots crossed at the ESS waypoint, 7 km short of goal.
   const essLon = TEST_ORIGIN.lon + 15_000 * DEG_LON_PER_M;
-  const distToGoal = andoyerDistance(TEST_ORIGIN.lat, essLon, goalWp.lat, goalWp.lon);
+  const distToGoal = ellipsoidDistance(TEST_ORIGIN.lat, essLon, goalWp.lat, goalWp.lon);
   const required = 300 + distToGoal / 2.5; // PG stopped glide ratio 2.5 (S7F 2026 §13.4.6), goal alt 300 m
 
   it('measures altitude above the required final glide (PG ratio 2.5)', () => {
@@ -337,7 +337,7 @@ describe('race.final_glide_init', () => {
     const lastThermal = alpha.thermals[alpha.thermals.length - 1];
     const exitFix = alpha.fixes[lastThermal.endIndex];
     const goalWp = field.task.turnpoints[4].waypoint;
-    const dist = andoyerDistance(exitFix.latitude, exitFix.longitude, goalWp.lat, goalWp.lon);
+    const dist = ellipsoidDistance(exitFix.latitude, exitFix.longitude, goalWp.lat, goalWp.lon);
     const expected = dist / (lastThermal.endAltitude - 300);
     expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expected, 6);
     const note = out.perPilot.find((v) => v.trackFile === 'alpha.igc')!.note!;

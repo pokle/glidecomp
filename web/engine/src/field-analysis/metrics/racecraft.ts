@@ -23,7 +23,7 @@ import type {
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
 import { mean, median } from '../stats';
 import { stepFor } from '../resample';
-import { andoyerDistance, localEastNorth } from '../../geo';
+import { ellipsoidDistance, localEastNorth } from '../../geo';
 import { getEffectiveESSIndex, getEffectiveSSSIndex, getGoalIndex } from '../../xctsk-parser';
 import { resolveGoalAltitude, stoppedGlideRatio } from '../../gap-stopped';
 
@@ -475,7 +475,7 @@ const essMargin: MetricComputer = {
         perPilot.push({ trackFile: p.trackFile, value: null });
         continue;
       }
-      const distanceToGoal = andoyerDistance(ess.latitude, ess.longitude, goalWp.lat, goalWp.lon);
+      const distanceToGoal = ellipsoidDistance(ess.latitude, ess.longitude, goalWp.lat, goalWp.lon);
       const required = goalAlt + distanceToGoal / ratio;
       const margin = ess.altitude - required;
       margins.set(p.trackFile, margin);
@@ -551,7 +551,7 @@ const finalGlideInit: MetricComputer = {
         continue;
       }
       const exitFix = p.fixes[last.thermal.endIndex];
-      const distanceToGoal = andoyerDistance(
+      const distanceToGoal = ellipsoidDistance(
         exitFix.latitude,
         exitFix.longitude,
         goalWp.lat,

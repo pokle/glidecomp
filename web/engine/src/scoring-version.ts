@@ -597,7 +597,28 @@
 //          previous turnpoint centre. Angled final legs rotate the line by
 //          the difference between the centre-to-centre bearing and the
 //          optimised approach.
-export const SCORING_ENGINE_VERSION = 43;
+
+// v44: FAI S7F 2026 edition, phase 5 — geodesic distances (§7.1.4, §7.1.5).
+//      The engine's one inverse-distance function is now the Vincenty
+//      (1975) inverse — one of §7.1.4's three sanctioned InverseGeodesic
+//      algorithms — replacing Andoyer-Lambert, which §7.1.5 relegates to
+//      navigation devices ("scoring software shall calculate this distance
+//      by using the InverseGeodesic algorithm"). andoyerDistance is gone;
+//      ellipsoidDistance (the spec's own name) is the export, with Andoyer
+//      retained only as the non-convergence fallback that task-scale
+//      geometry cannot reach. Every distance in the engine moves by up to
+//      ~2 ppm (centimetres at task scale); snapshot values corrected to the
+//      published Vincenty references (e.g. the 1° meridian arc is now
+//      110 574.39 m, exact). Best-progress eligibility also changed from
+//      strictly-after to at-or-after the last reaching time: a crossing
+//      that interpolates exactly onto a fix (a fix landing precisely on a
+//      cylinder's nominal radius — now possible, since Vincenty inverse
+//      round-trips Vincenty direct exactly) no longer costs that fix its
+//      measurement.
+//      The §7.1.3 PathFinder route optimisation (LTM projection + Ding et
+//      al. 2018) is NOT yet adopted: the existing corpus-verified optimiser
+//      stands in, as a documented deviation on /scoring/gap.
+export const SCORING_ENGINE_VERSION = 44;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -605,4 +626,4 @@ export const SCORING_ENGINE_VERSION = 43;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "167e6842b567e37e73e0b421b6de24dda122fa7970c79c29616ccab17a7de0df";
+  "7360197da3a9291467f25ef3479a840da544721af8f4d6e6010338b90d3da3af";

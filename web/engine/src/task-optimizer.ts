@@ -10,7 +10,7 @@
  */
 
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   destinationPoint,
   localEastNorth
@@ -70,8 +70,8 @@ function findOptimalCirclePoint(
 
   const cost = (angle: number): number => {
     const point = destinationPoint(center.lat, center.lon, radius, angle);
-    const d1 = andoyerDistance(prev.lat, prev.lon, point.lat, point.lon);
-    const d2 = andoyerDistance(point.lat, point.lon, next.lat, next.lon);
+    const d1 = ellipsoidDistance(prev.lat, prev.lon, point.lat, point.lon);
+    const d2 = ellipsoidDistance(point.lat, point.lon, next.lat, next.lon);
     return d1 + d2;
   };
 
@@ -156,7 +156,7 @@ function findOptimalGoalLinePoint(
 ): { lat: number; lon: number } {
   const cost = (t: number): number => {
     const point = goalLinePointAt(goalLine, t);
-    return andoyerDistance(prevLat, prevLon, point.lat, point.lon);
+    return ellipsoidDistance(prevLat, prevLon, point.lat, point.lon);
   };
 
   const phi = (1 + Math.sqrt(5)) / 2;
@@ -275,7 +275,7 @@ function optimizePass(
 function pathDistance(path: { lat: number; lon: number }[]): number {
   let total = 0;
   for (let i = 1; i < path.length; i++) {
-    total += andoyerDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
+    total += ellipsoidDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
   }
   return total;
 }
@@ -453,7 +453,7 @@ export function calculateOptimizedTaskDistance(task: XCTask): number {
 
   let totalDistance = 0;
   for (let i = 1; i < path.length; i++) {
-    totalDistance += andoyerDistance(
+    totalDistance += ellipsoidDistance(
       path[i - 1].lat,
       path[i - 1].lon,
       path[i].lat,
@@ -492,7 +492,7 @@ export function getOptimizedSegmentDistances(task: XCTask): number[] {
   const distances: number[] = [];
   for (let i = 1; i < path.length; i++) {
     distances.push(
-      andoyerDistance(
+      ellipsoidDistance(
         path[i - 1].lat,
         path[i - 1].lon,
         path[i].lat,
@@ -558,7 +558,7 @@ export function computeTurnpointDirections(
     if (i === 0 || i === n - 1) return 'enter';
     const prevTag = line[i - 1];
     if (!prevTag) return 'enter';
-    const prevTagToCenter = andoyerDistance(
+    const prevTagToCenter = ellipsoidDistance(
       prevTag.lat, prevTag.lon,
       tp.waypoint.lat, tp.waypoint.lon,
     );

@@ -8,7 +8,7 @@
 
 import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
-import { andoyerDistance } from './geo';
+import { ellipsoidDistance } from './geo';
 import { getGoalIndex } from './xctsk-parser';
 import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
 import {
@@ -132,11 +132,11 @@ export function detectCylinderCrossings(
       if (dLat > latDelta || dLat < -latDelta) return false;
       const dLon = lon - centerLon;
       if (dLon > lonDelta || dLon < -lonDelta) return false;
-      return andoyerDistance(lat, lon, centerLat, centerLon) <= detectRadius;
+      return ellipsoidDistance(lat, lon, centerLat, centerLon) <= detectRadius;
     };
 
     const distToCenter = (fix: IGCFix): number =>
-      andoyerDistance(fix.latitude, fix.longitude, centerLat, centerLon);
+      ellipsoidDistance(fix.latitude, fix.longitude, centerLat, centerLon);
 
     // Does the straight segment d0→d1 (distances to center) pass through the
     // nominal radius in this crossing's radial direction? Entering means the
@@ -229,7 +229,7 @@ export function detectCylinderCrossings(
         const currTime = anchorCurr.time.getTime();
         const crossingTime = new Date(prevTime + t * (currTime - prevTime));
 
-        const distanceToCenter = andoyerDistance(
+        const distanceToCenter = ellipsoidDistance(
           crossingLat, crossingLon, centerLat, centerLon
         );
 
@@ -335,7 +335,7 @@ function detectGoalLineCrossings(
       longitude: lon,
       altitude: alt,
       direction,
-      distanceToCenter: andoyerDistance(lat, lon, centerLat, centerLon),
+      distanceToCenter: ellipsoidDistance(lat, lon, centerLat, centerLon),
       toleranceCredited: false,
       ...extra,
     });

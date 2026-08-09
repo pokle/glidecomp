@@ -54,7 +54,7 @@ import { getGoalIndex } from './xctsk-parser';
 // the call can never recurse into goal-line construction.
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   destinationPoint,
   localEastNorth,
@@ -118,7 +118,7 @@ function optimizedPreviousPoint(
   for (let i = Math.min(goalIdx, line.length) - 1; i >= 0; i--) {
     const p = line[i];
     if (!p) continue;
-    if (andoyerDistance(p.lat, p.lon, goalCenter.lat, goalCenter.lon) > 1) {
+    if (ellipsoidDistance(p.lat, p.lon, goalCenter.lat, goalCenter.lon) > 1) {
       return p;
     }
   }
@@ -344,7 +344,7 @@ export function goalLinePointAt(line: GoalLine, t: number): { lat: number; lon: 
  * Shortest distance from a point to the goal line segment, in metres.
  *
  * Golden-section search over the position along the line, measuring each
- * candidate with the ellipsoidal {@link andoyerDistance} — accurate at any
+ * candidate with the ellipsoidal {@link ellipsoidDistance} — accurate at any
  * range (the pilot may be 100 km out), unlike a local planar projection.
  * The distance to a geodesic segment is unimodal in the line parameter, so
  * the search converges to the true minimum.
@@ -352,7 +352,7 @@ export function goalLinePointAt(line: GoalLine, t: number): { lat: number; lon: 
 export function distanceToGoalLine(line: GoalLine, lat: number, lon: number): number {
   const cost = (t: number): number => {
     const p = goalLinePointAt(line, t);
-    return andoyerDistance(lat, lon, p.lat, p.lon);
+    return ellipsoidDistance(lat, lon, p.lat, p.lon);
   };
 
   const phi = (1 + Math.sqrt(5)) / 2;

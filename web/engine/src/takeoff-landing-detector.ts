@@ -8,7 +8,7 @@
  */
 
 import { IGCFix, fixAltitude } from './igc-parser';
-import { andoyerDistance } from './geo';
+import { ellipsoidDistance } from './geo';
 import type { DetectionThresholds } from './thresholds';
 import type { FlightEvent } from './event-types';
 
@@ -29,7 +29,7 @@ function calculateGroundSpeed(fix1: IGCFix, fix2: IGCFix): number {
   const timeDiff = (fix2.time.getTime() - fix1.time.getTime()) / 1000;
   if (timeDiff <= 0) return 0;
 
-  const distance = andoyerDistance(
+  const distance = ellipsoidDistance(
     fix1.latitude,
     fix1.longitude,
     fix2.latitude,

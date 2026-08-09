@@ -8,7 +8,7 @@ import {
   GlideContext,
   GlideContextResolver,
 } from '../src/glide-speed';
-import { andoyerDistance } from '../src/geo';
+import { ellipsoidDistance } from '../src/geo';
 import { createFix, type IGCFix } from './test-helpers';
 
 /**
@@ -59,15 +59,15 @@ function createStraightGlide(
 }
 
 describe('Glide Speed Calculations', () => {
-  describe('andoyerDistance', () => {
+  describe('ellipsoidDistance', () => {
     it('should calculate distance between two points', () => {
       // Approximately 111km between 1 degree of latitude
-      const distance = andoyerDistance(47.0, 11.0, 48.0, 11.0);
+      const distance = ellipsoidDistance(47.0, 11.0, 48.0, 11.0);
       expect(distance).toBeCloseTo(111195, -2); // Within 100m
     });
 
     it('should return 0 for same point', () => {
-      const distance = andoyerDistance(47.0, 11.0, 47.0, 11.0);
+      const distance = ellipsoidDistance(47.0, 11.0, 47.0, 11.0);
       expect(distance).toBe(0);
     });
   });

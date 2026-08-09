@@ -5,7 +5,7 @@
  * Used to enrich IGC task declarations with radius and altitude data.
  */
 
-import { andoyerDistance } from './geo';
+import { ellipsoidDistance } from './geo';
 
 /**
  * A waypoint record from a competition waypoint database.
@@ -140,7 +140,7 @@ export function findWaypointByCoordinates(
   let closestDistance = Infinity;
 
   for (const wp of waypoints) {
-    const distance = andoyerDistance(latitude, longitude, wp.latitude, wp.longitude);
+    const distance = ellipsoidDistance(latitude, longitude, wp.latitude, wp.longitude);
     if (distance <= toleranceMeters && distance < closestDistance) {
       closest = wp;
       closestDistance = distance;

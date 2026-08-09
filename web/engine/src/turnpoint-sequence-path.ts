@@ -8,7 +8,7 @@
 
 import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
-import { andoyerDistance } from './geo';
+import { ellipsoidDistance } from './geo';
 import {
   computeTurnpointDirections,
   optimizeRemainingRoute,
@@ -314,7 +314,7 @@ export function computeBestProgress(
     const b = remainingTPs[i + 1];
     minInterZone += Math.max(
       0,
-      andoyerDistance(a.lat, a.lon, b.lat, b.lon) - a.radius - b.radius,
+      ellipsoidDistance(a.lat, a.lon, b.lat, b.lon) - a.radius - b.radius,
     );
   }
   // Straight-to-goal lower bound pieces (exact mode): the goal zone's
@@ -333,7 +333,7 @@ export function computeBestProgress(
   if (altitudeBonus) {
     for (let i = 0; i < fixes.length; i++) {
       const t = fixes[i].time.getTime();
-      if (t <= lastReachingTime) continue;
+      if (t < lastReachingTime) continue;
       if (deadlineMs !== null && t > deadlineMs) break;
       lastEligibleIndex = i;
     }
@@ -351,15 +351,20 @@ export function computeBestProgress(
   let seed: { index: number; value: number; bonus: number } | null = null;
   for (let i = 0; i < fixes.length; i++) {
     const fix = fixes[i];
-    if (fix.time.getTime() <= lastReachingTime) continue;
+    // Strictly BEFORE the reaching is excluded; a fix exactly AT the
+    // reaching moment is the pilot's position when the turnpoint was
+    // completed, and measuring the remaining task from there is valid. The
+    // distinction only bites when a crossing interpolates exactly onto a
+    // fix — e.g. a fix landing precisely on a cylinder's nominal radius.
+    if (fix.time.getTime() < lastReachingTime) continue;
     // §11.1: flying after the task deadline earns no further distance.
     // (For a stopped task the caller folds the §13.4.4 window end in here.)
     if (deadlineMs !== null && fix.time.getTime() > deadlineMs) break;
 
-    const dCentre = andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon);
+    const dCentre = ellipsoidDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon);
     const heuristicNext =
       nextMeasure.kind === 'tag'
-        ? andoyerDistance(fix.latitude, fix.longitude, nextMeasure.point.lat, nextMeasure.point.lon)
+        ? ellipsoidDistance(fix.latitude, fix.longitude, nextMeasure.point.lat, nextMeasure.point.lon)
         : nextMeasure.kind === 'exit-boundary'
           ? Math.max(0, nextTP.radius - dCentre)
           : nextMeasure.kind === 'goal-line'
@@ -382,7 +387,7 @@ export function computeBestProgress(
         ? distanceToGoalLine(goalLine, fix.latitude, fix.longitude)
         : Math.max(
             0,
-            andoyerDistance(fix.latitude, fix.longitude, goalTP.lat, goalTP.lon) - goalTP.radius,
+            ellipsoidDistance(fix.latitude, fix.longitude, goalTP.lat, goalTP.lon) - goalTP.radius,
           );
       const lb = Math.max(0, Math.max(lbNext + minInterZone, lbGoal) - cap);
       candidates.push({ index: i, lb });
@@ -439,7 +444,7 @@ export function computeBestProgress(
     const capHere = capFor(fix, c.index);
     let ruledOut = false;
     for (const e of evaluated) {
-      const sep = andoyerDistance(e.lat, e.lon, fix.latitude, fix.longitude);
+      const sep = ellipsoidDistance(e.lat, e.lon, fix.latitude, fix.longitude);
       if (e.geom - sep - capHere >= best.eff - TOL) {
         ruledOut = true;
         break;

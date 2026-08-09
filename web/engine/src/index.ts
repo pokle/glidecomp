@@ -134,7 +134,7 @@ export {
   type ForgeSabotage,
 } from './forge-igc';
 export {
-  andoyerDistance,
+  ellipsoidDistance,
   bearingFromComponents,
   calculateBearing,
   calculateBearingRadians,

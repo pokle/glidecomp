@@ -28,7 +28,7 @@ import { assessTrackQuality } from '../src/track-quality';
 import { summariseFlight } from '../src/flight-summary';
 import { openDistanceForFlight } from '../src/open-distance-scoring';
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   destinationPoint,
 } from '../src/geo';
@@ -177,7 +177,7 @@ describe('landing out part way round', () => {
   function pointAt(meters: number) {
     let left = meters;
     for (let i = 1; i < points.length; i++) {
-      const leg = andoyerDistance(
+      const leg = ellipsoidDistance(
         points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon
       );
       if (left > leg) { left -= leg; continue; }
@@ -206,7 +206,7 @@ describe('landing out part way round', () => {
     const got = landedAt(text);
     // Within a few hundred metres: the last leg is flown in cruise-sized
     // steps, and the landing wanders a little on the ground.
-    expect(andoyerDistance(want.lat, want.lon, got.lat, got.lon)).toBeLessThan(600);
+    expect(ellipsoidDistance(want.lat, want.lon, got.lat, got.lon)).toBeLessThan(600);
   });
 
   it('flies further when you ask for further', () => {
@@ -220,7 +220,7 @@ describe('landing out part way round', () => {
     const full = forge('none', totalMeters);
     const goal = points[points.length - 1];
     const got = landedAt(full.text);
-    expect(andoyerDistance(goal.lat, goal.lon, got.lat, got.lon)).toBeLessThan(600);
+    expect(ellipsoidDistance(goal.lat, goal.lon, got.lat, got.lon)).toBeLessThan(600);
   });
 
   it('is the same flight as not asking at all', () => {
@@ -241,7 +241,7 @@ describe('landing out part way round', () => {
     const { text, courseMeters } = forge('none', 0);
     expect(courseMeters).toBe(0);
     const got = landedAt(text);
-    expect(andoyerDistance(points[0].lat, points[0].lon, got.lat, got.lon))
+    expect(ellipsoidDistance(points[0].lat, points[0].lon, got.lat, got.lon))
       .toBeLessThan(3_000);
     const { quality } = judge(text);
     expect(quality.hardFailed).toBe(false);
@@ -359,7 +359,7 @@ describe('a task with no route to fly (open distance)', () => {
     const { igc } = judgeOpen(forgeOpen(120_000).text);
     const centre = OPEN_TASK.turnpoints[0].waypoint;
     const from = (f: { latitude: number; longitude: number }) =>
-      andoyerDistance(centre.lat, centre.lon, f.latitude, f.longitude);
+      ellipsoidDistance(centre.lat, centre.lon, f.latitude, f.longitude);
     const last = igc.fixes[igc.fixes.length - 1];
     const furthest = Math.max(...igc.fixes.map(from));
     expect(furthest - from(last)).toBeLessThan(50);

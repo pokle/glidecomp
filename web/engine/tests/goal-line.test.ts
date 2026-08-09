@@ -30,7 +30,7 @@ import { explainGapScore, type ScoreEntryInput, type ClassContextInput } from '.
 import { calculateOptimizedTaskDistance, calculateOptimizedTaskLine } from '../src/task-optimizer';
 import { manualFlightGeometry } from '../src/manual-flight';
 import { packTracks } from '../src/track-packer';
-import { andoyerDistance, destinationPoint } from '../src/geo';
+import { ellipsoidDistance, destinationPoint } from '../src/geo';
 import type { XCTask, GoalConfig } from '../src/xctsk-parser';
 import { createFix, type IGCFix } from './test-helpers';
 
@@ -98,8 +98,8 @@ describe('computeGoalLine', () => {
 
     // Final leg runs due east → the line runs north–south: end1 north of the
     // centre (left of course), end2 south, both 200 m away.
-    expect(andoyerDistance(line.end1.lat, line.end1.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
-    expect(andoyerDistance(line.end2.lat, line.end2.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
+    expect(ellipsoidDistance(line.end1.lat, line.end1.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
+    expect(ellipsoidDistance(line.end2.lat, line.end2.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
     expect(line.end1.lat).toBeGreaterThan(GOAL.lat);
     expect(line.end2.lat).toBeLessThan(GOAL.lat);
     expect(line.end1.lon).toBeCloseTo(GOAL.lon, 5);
@@ -107,7 +107,7 @@ describe('computeGoalLine', () => {
 
     // The full line spans 2 × radius.
     expect(
-      andoyerDistance(line.end1.lat, line.end1.lon, line.end2.lat, line.end2.lon)
+      ellipsoidDistance(line.end1.lat, line.end1.lon, line.end2.lat, line.end2.lon)
     ).toBeCloseTo(400, 0);
   });
 
@@ -175,14 +175,14 @@ describe('goal line predicates', () => {
 
   it('parameterises the line from end1 to end2', () => {
     const mid = goalLinePointAt(line, 0.5);
-    expect(andoyerDistance(mid.lat, mid.lon, GOAL.lat, GOAL.lon)).toBeLessThan(1);
+    expect(ellipsoidDistance(mid.lat, mid.lon, GOAL.lat, GOAL.lon)).toBeLessThan(1);
   });
 
   it('semicircle outline lies behind the line at the goal radius', () => {
     const points = goalSemicirclePoints(line, 16);
     expect(points[0]).toEqual(points[points.length - 1]); // closed
     for (const p of points) {
-      expect(andoyerDistance(p.lat, p.lon, GOAL.lat, GOAL.lon)).toBeLessThanOrEqual(201);
+      expect(ellipsoidDistance(p.lat, p.lon, GOAL.lat, GOAL.lon)).toBeLessThanOrEqual(201);
       // Everything is on the far (east) side of the line, within ~0.5 m.
       expect(p.lon).toBeGreaterThanOrEqual(GOAL.lon - 5e-6);
     }
