@@ -306,7 +306,13 @@ export function calculateWeights(inputs: WeightInputs): WeightFractions {
     // time points are unearnable, so *all* non-distance weight goes to
     // leading.
     lw = gr === 0 ? 1 - dw : (1 - dw) * leadingTimeRatio;
-  } else if (gr === 0) {
+  } else if (scoring === 'PG' && gr === 0) {
+    // GAP2016/2018 (stored as 'gap2020'): when nobody makes goal the PG
+    // leading weight is a share of how far the field got, not of the
+    // non-distance weight. PG ONLY — the S7F §10 HG box states the hang
+    // gliding weight with no GoalRatio branch at all, and this line used to
+    // catch HG too, handing a no-goal HG day up to 100 leading points where
+    // the spec offers 17.5 ("18 points for leading", §10).
     lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
   } else {
     const multiplier = scoring === 'PG' ? 1.4 * 2 : 1.4;
