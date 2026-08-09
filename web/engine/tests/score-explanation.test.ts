@@ -1739,6 +1739,174 @@ describe('explainGapScore — arrival points', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Nobody reached ESS (FAI S7F §10, issue #583)
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — nobody reached ESS (S7F §10)', () => {
+  /**
+   * An HG class where the whole field landed out: 855.0 distance + 45.0
+   * leading of a 950.0-point day, and 50.0 points that were never on offer.
+   */
+  function noEssContext(): ClassContextInput {
+    return {
+      task_validity: { launch: 1, distance: 0.95, time: 1, task: 0.95 },
+      available_points: {
+        distance: 855, time: 0, leading: 45, arrival: 0, total: 950,
+      },
+      pilots: [
+        {
+          pilot_name: 'Alice', flown_distance: 42_000, speed_section_time: null,
+          made_goal: false, reached_ess: false, total_score: 700,
+          distance_points: 655, time_points: 0, leading_points: 45,
+          arrival_points: 0,
+        },
+        {
+          pilot_name: 'Bob', flown_distance: 38_000, speed_section_time: null,
+          made_goal: false, reached_ess: false, total_score: 610,
+          distance_points: 600, time_points: 0, leading_points: 10,
+          arrival_points: 0,
+        },
+      ],
+      validity_inputs: {
+        ...makeValidityInputs(),
+        num_in_goal: 0,
+        num_reached_ess: 0,
+        best_time: null,
+        goal_ratio: 0,
+        weights: { distance: 0.9, time: 0, leading: 0.047, arrival: 0 },
+      },
+    };
+  }
+
+  function landedOutEntry(): ScoreEntryInput {
+    return {
+      ...makeGoalEntry(),
+      made_goal: false,
+      reached_ess: false,
+      flown_distance: 38_000,
+      speed_section_time: null,
+      distance_points: 600,
+      distance_linear_points: 600,
+      time_points: 0,
+      leading_points: 10,
+      arrival_points: 0,
+      total_score: 610,
+    };
+  }
+
+  function explainNoEss(
+    over: Partial<Parameters<typeof explainGapScore>[0]> = {},
+  ): ScoreExplanation {
+    return explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false, essReaching: null },
+      entry: landedOutEntry(),
+      classContext: noEssContext(),
+      params: { scoring: 'HG', useLeading: true, useArrival: true },
+      ...over,
+    });
+  }
+
+  it('states the rule in the day-quality section, with the capped offer', () => {
+    const item = section(explainNoEss(), 'validity').items.find(
+      (i) => i.id === 'no-ess-available',
+    )!;
+    expect(item.text).toContain('Nobody reached the end of the speed section');
+    expect(item.text).toContain('§10');
+    expect(item.emphasis).toBe('warning');
+    // The arithmetic, substituted: 855.0 + 45.0 = 900.0 of 950.0.
+    expect(item.detail).toContain('855 + 45 = 900');
+    expect(item.detail).toContain('950');
+  });
+
+  it('says it in the time section too — no time points existed for anyone', () => {
+    const item = section(explainNoEss(), 'time').items.find(
+      (i) => i.id === 'no-time-points',
+    )!;
+    expect(item.text).toContain('Nobody in this class reached the end of the speed section');
+    expect(item.text).toContain('§10');
+    expect(item.emphasis).toBe('warning');
+  });
+
+  it('keeps the arrival section, so the missing component has a reason beside it', () => {
+    const arrival = section(explainNoEss(), 'arrival');
+    expect(arrival.pointsAvailable).toBeUndefined();
+    const item = arrival.items.find((i) => i.id === 'arrival-no-ess')!;
+    expect(item.text).toContain('no arrival order');
+    expect(item.text).toContain('§10');
+  });
+
+  it('drops the arrival section when the competition scores no arrival points', () => {
+    const explanation = explainNoEss({
+      params: { scoring: 'HG', useLeading: true, useArrival: false },
+    });
+    expect(explanation.sections.find((s) => s.id === 'arrival')).toBeUndefined();
+  });
+
+  it('tells the leader the shortfall was never winnable', () => {
+    // Alice leads on 700 of a 950-point day, but only 900 could be won.
+    const explanation = explainNoEss({
+      entry: {
+        ...landedOutEntry(),
+        flown_distance: 42_000,
+        distance_points: 655,
+        distance_linear_points: 655,
+        leading_points: 45,
+        total_score: 700,
+      },
+    });
+    expect(explanation.headlineNote).toContain('only 900');
+    expect(explanation.headlineNote).toContain('§10');
+    const left = section(explanation, 'comparison').items.find(
+      (i) => i.id === 'left-total',
+    )!;
+    expect(left.detail).toContain('50 of the 950 was never on offer');
+    expect(left.detail).toContain('§10');
+  });
+
+  it('leaves a normal HG day’s wording alone', () => {
+    const ctx = noEssContext();
+    ctx.available_points = {
+      distance: 500, time: 350, leading: 45, arrival: 55, total: 950,
+    };
+    ctx.validity_inputs = { ...ctx.validity_inputs!, num_reached_ess: 12 };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: landedOutEntry(),
+      classContext: ctx,
+      params: { scoring: 'HG', useLeading: true, useArrival: true },
+    });
+    expect(
+      section(explanation, 'validity').items.find((i) => i.id === 'no-ess-available'),
+    ).toBeUndefined();
+    expect(section(explanation, 'time').items[0].text).toContain(
+      'only awarded to pilots who reach the end of the speed section',
+    );
+  });
+
+  it('keeps a stale pre-rule payload’s wording — its time offer is non-zero', () => {
+    // The stale-first store still serves bodies written before the rule
+    // existed. Those carry a real time figure, which the §10 sentence would
+    // flatly contradict.
+    const ctx = noEssContext();
+    ctx.available_points = {
+      distance: 855, time: 50, leading: 45, arrival: 0, total: 950,
+    };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false, essReaching: null },
+      entry: landedOutEntry(),
+      classContext: ctx,
+      params: { scoring: 'HG', useLeading: true, useArrival: true },
+    });
+    expect(
+      section(explanation, 'validity').items.find((i) => i.id === 'no-ess-available'),
+    ).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Component charts — the formula, with the field on it
 // ---------------------------------------------------------------------------
 

@@ -387,7 +387,26 @@
 //      that radius) never saw them outside — no enter crossing, no start,
 //      the whole field scored landed out at ~14 km instead of the published
 //      101.66 km. With the declared 0.05% band the field resolves to goal.
-// v35: the PG early-start distance is the flat launch→SSS value (issue #584).
+// v35: NO pilot's points change — the S7F §10 "nobody reaches ESS" rule
+//      (issue #583). On a hang-gliding task where numReachedESS is 0, the
+//      spec's HG box sets AvailableTimePoints and AvailableArrivalPoints to
+//      zero, and redistributes nothing: distance and leading keep their usual
+//      weights and the remainder of the day is left unallocated. GlideComp
+//      published the normal non-zero figures, so the scoreboard and the report
+//      card advertised points nobody could win — time points require an ESS
+//      crossing and the arrival position map is empty, so both components were
+//      already zero for every pilot.
+//      calculateWeights now takes the ESS count and returns zeroed time and
+//      arrival fractions in that case; availablePoints follows, while
+//      availablePoints.total stays 1000 × task validity (the day's worth), so
+//      the components deliberately fall short of it by the unallocated
+//      remainder. Every explanation that compares a pilot against "the day"
+//      now names that remainder rather than presenting it as points they left
+//      untaken.
+//      Bumped because availablePoints and validity_inputs.weights are part of
+//      the cached payload: without a roll the stale-first store would serve
+//      the pre-change figures for settled comps indefinitely.
+// v36: the PG early-start distance is the flat launch→SSS value (issue #584).
 //      §12.2 scores a paraglider pilot who jumps the gun "for the distance
 //      between the launch point and the SSS control zone, as calculated when
 //      determining the complete task distance (see 6.4.1)" — a fixed award.
@@ -398,7 +417,7 @@
 //      still applies underneath). The report card's distance section now
 //      prints which value applied — the launch→start leg beside what was
 //      actually flown, or the minimum when the leg falls below it.
-export const SCORING_ENGINE_VERSION = 35;
+export const SCORING_ENGINE_VERSION = 36;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -406,4 +425,4 @@ export const SCORING_ENGINE_VERSION = 35;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "4f9ee1b8f3e4cc81fc1cf86204e5160138724f6496fd54b75d81e7f5a3403c44";
+  "5a42c862b6ff204d9b09d442334f4205207ecb406333f08b5b62048cea7cfe68";

@@ -252,6 +252,12 @@ export interface WeightInputs {
   leadingWeightFormula?: LeadingWeightFormula;
   /** PG S7F-2024 LeadingTimeRatio. Default 0.26. */
   leadingTimeRatio?: number;
+  /**
+   * How many pilots reached the end of the speed section (HG only, S7F §10).
+   * Zero triggers the spec's "nobody at ESS" rule below; omit it when the
+   * count is unknown and the rule is left unapplied.
+   */
+  numReachedESS?: number;
 }
 
 export function calculateWeights(inputs: WeightInputs): WeightFractions {
@@ -264,6 +270,7 @@ export function calculateWeights(inputs: WeightInputs): WeightFractions {
     useArrival = true,
     leadingWeightFormula = 'gap2020',
     leadingTimeRatio = 0.26,
+    numReachedESS,
   } = inputs;
   const gr = goalRatio;
 
@@ -304,6 +311,19 @@ export function calculateWeights(inputs: WeightInputs): WeightFractions {
   } else {
     const multiplier = scoring === 'PG' ? 1.4 * 2 : 1.4;
     lw = ((1 - dw) / 8) * multiplier;
+  }
+
+  // FAI S7F §10 (HG box): "if nobody reaches ESS, then a maximum of 900 points
+  // are available for distance and 18 points for leading but, of course, no
+  // points for time nor arrival". Nothing is redistributed — the spec leaves
+  // the remaining weight unallocated, so these fractions deliberately sum to
+  // less than 1 and the day's points on offer stop at distance + leading.
+  //
+  // No pilot's score moves: time points require an ESS crossing and the
+  // arrival positions are empty, so both components were already zero for
+  // everyone. What changes is what the scoreboard claims was on offer.
+  if (scoring === 'HG' && numReachedESS === 0) {
+    return { distance: dw, time: 0, leading: lw, arrival: 0 };
   }
 
   const tw = Math.max(0, 1 - dw - lw - aw);

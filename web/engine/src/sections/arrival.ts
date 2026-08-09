@@ -21,6 +21,7 @@ import {
   defaultFormatTime,
 } from '../score-explanation-format';
 import { ordinal } from './rank';
+import { noEssPointsZeroed, pilotsAtEss } from './shared';
 
 /**
  * Arrival points, with the arithmetic that produced them.
@@ -54,9 +55,7 @@ export function buildArrivalSection(
   const ap = classContext.available_points;
   // Prefer the published field size (it is the divisor the scorer used); fall
   // back to counting, for payloads written before validity_inputs existed.
-  const atEss =
-    classContext.validity_inputs?.num_reached_ess ??
-    classContext.pilots.filter((p) => p.reached_ess).length;
+  const atEss = pilotsAtEss(classContext);
   const position = entry.arrival_position ?? null;
   const items: ScoreExplanationItem[] = [];
 
@@ -143,6 +142,16 @@ export function buildArrivalSection(
       id: 'arrival-field',
       text: `${atEss} pilot${atEss === 1 ? '' : 's'} reached the end of the speed section on this task; the points scale with where in that group you crossed it (FAI S7F §11.4).`,
       emphasis: 'muted',
+    });
+  } else if (noEssPointsZeroed(classContext, params)) {
+    // Nobody got there at all, so there was no arrival order to rank anyone
+    // in and the specification puts nothing on offer (§10). Said here as well
+    // as in the day-quality section because a reader who skipped straight to
+    // this section would otherwise see a bare zero with no reason beside it.
+    items.push({
+      id: 'arrival-no-ess',
+      text: 'Nobody reached the end of the speed section on this task, so there was no arrival order to place anyone in and the task offered no arrival points to anyone (FAI S7F §10).',
+      emphasis: 'warning',
     });
   }
 
