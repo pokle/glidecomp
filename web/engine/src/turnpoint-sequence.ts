@@ -28,7 +28,12 @@ import {
   computeTurnpointDirections,
   type TurnpointDirection,
 } from './task-optimizer';
-import { computeGoalLine, isInGoalSemicircle, type GoalLine } from './goal-line';
+import {
+  computeGoalLine,
+  goalZoneRadius,
+  isInGoalSemicircle,
+  type GoalLine,
+} from './goal-line';
 import {
   resolveStartGates,
   gateIndexForCrossing,
@@ -403,8 +408,8 @@ interface TaskAnchors {
   essIsFallback: boolean;
   goalIdx: number;
   /**
-   * Non-null when the task ends at a goal LINE (S7F §6.3.1): reaching and
-   * remaining-distance for the goal position use line geometry.
+   * Non-null when the task ends at a goal LINE (S7F §6.2.3.1): reaching
+   * (§8.5.2) and remaining-distance for the goal position use line geometry.
    */
   goalLine: GoalLine | null;
 }
@@ -446,9 +451,13 @@ function resolveTrackStartInside(
   const tolerance = task.cylinderTolerance ?? DEFAULT_CYLINDER_TOLERANCE;
   return task.turnpoints.map((tp, tpIdx) => {
     if (fixes.length === 0) return false;
-    // A LINE goal has no interior; "inside" is the control semicircle.
+    // A LINE goal has no interior; "inside" is the control semicircle, taken
+    // at the same §8.5.2/§8.1 band radius crossing detection uses.
     if (goalLine && tpIdx === goalIdx) {
-      return isInGoalSemicircle(goalLine, fixes[0].latitude, fixes[0].longitude);
+      return isInGoalSemicircle(
+        goalLine, fixes[0].latitude, fixes[0].longitude,
+        goalZoneRadius(goalLine, tolerance),
+      );
     }
     const edge = directions[tpIdx] === 'exit'
       ? innerDetectionRadius(tp.radius, tolerance)

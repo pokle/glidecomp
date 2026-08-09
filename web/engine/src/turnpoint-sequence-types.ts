@@ -23,6 +23,27 @@ export const DEFAULT_CYLINDER_TOLERANCE = 0.005;
  */
 export const MIN_CYLINDER_TOLERANCE_M = 5;
 
+/**
+ * Outer edge of a cylinder's tolerance band (§8.1): the radius at which an
+ * entry cylinder is credited. Shared by crossing detection, the
+ * presence-based reaching check and the goal control zone (§8.5.2 sends the
+ * semicircle behind a goal line to this same calculation), so every one of
+ * them uses the same notion of "inside".
+ */
+export function outerDetectionRadius(radius: number, tolerance: number): number {
+  return Math.max(radius * (1 + tolerance), radius + MIN_CYLINDER_TOLERANCE_M);
+}
+
+/**
+ * Inner edge of a cylinder's tolerance band (§8.1): the radius at which an
+ * EXIT cylinder is credited — the pilot leaving is credited a touch early
+ * rather than a touch late. Applies to the EXIT start and to inferred exit
+ * turnpoints (see {@link computeTurnpointDirections}).
+ */
+export function innerDetectionRadius(radius: number, tolerance: number): number {
+  return Math.max(0, Math.min(radius * (1 - tolerance), radius - MIN_CYLINDER_TOLERANCE_M));
+}
+
 // ---------------------------------------------------------------------------
 // Raw crossing detection
 // ---------------------------------------------------------------------------
@@ -35,7 +56,7 @@ export const MIN_CYLINDER_TOLERANCE_M = 5;
  * XCTask.turnpoints[]), NOT per waypoint — the same waypoint appearing
  * at two task positions produces independent crossings.
  *
- * For a task with a goal LINE (S7F §6.3.1), crossings of the goal task
+ * For a task with a goal LINE (S7F §6.2.3.1), crossings of the goal task
  * position use the same shape: the boundary is the goal line + its control
  * semicircle instead of a circle, `distanceToCenter` is measured to the
  * goal waypoint (the line's midpoint), and 'enter'/'exit' mean crossing
@@ -67,17 +88,20 @@ export interface CylinderCrossing {
   distanceToCenter: number;
 
   /**
-   * True when the crossing counts only because of the cylinder tolerance band
-   * (FAI S7F §8.1): the track came within the tolerance of the cylinder edge
-   * but never physically crossed the nominal radius during this band episode.
-   * Lets the UI explain a near-miss that was credited by tolerance.
+   * True when the crossing counts only because of the control zone's
+   * tolerance band: for a cylinder, the §8.1 band — the track came within
+   * the tolerance of the cylinder edge but never physically crossed the
+   * nominal radius during this band episode; for a goal LINE, the §8.2 line
+   * band — the track crossed within tolerance of the line (beside it, or
+   * just past an end) without crossing the line itself. Lets the UI explain
+   * a near-miss that was credited by tolerance.
    */
   toleranceCredited: boolean;
 
   /**
    * Goal-LINE tasks only: true when this goal crossing was detected on the
    * control semicircle's arc rather than on the goal line itself — a fix in
-   * the semicircle behind the line counts as goal (S7F §6.3.1), which
+   * the semicircle behind the line counts as goal (S7F §8.5.2), which
    * rescues a line crossing that fell between two fixes or a tracklog gap
    * at the line. Lets the UI explain why goal was credited without a line
    * crossing. Absent for cylinder turnpoints and for line crossings.
@@ -141,10 +165,11 @@ export interface TurnpointReaching {
   candidateCount: number;
 
   /**
-   * True when this reaching was credited by the cylinder tolerance band
-   * (FAI S7F §8.1) rather than a physical crossing of the nominal radius.
-   * Copied from the underlying {@link CylinderCrossing}. Absent for the
-   * no-crossing 'track_start' anchor.
+   * True when this reaching was credited by the control zone's tolerance
+   * band — §8.1 for a cylinder, §8.2 for a goal line — rather than a
+   * physical crossing of the nominal boundary. Copied from the underlying
+   * {@link CylinderCrossing}. Absent for the no-crossing 'track_start'
+   * anchor.
    */
   toleranceCredited?: boolean;
 
@@ -542,7 +567,7 @@ export interface TurnpointSequenceResult {
  * - 'exit-boundary': to the cylinder's nearest boundary point from inside
  *   (radius − distance-to-centre) — the next un-reached turnpoint is an
  *   EXIT cylinder the pilot has yet to leave.
- * - 'goal-line': to the nearest point on a LINE goal (S7F §6.3.1).
+ * - 'goal-line': to the nearest point on a LINE goal (S7F §6.2.3.1).
  */
 export type NextTPMeasure =
   | { kind: 'tag'; point: { lat: number; lon: number } }

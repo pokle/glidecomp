@@ -1014,12 +1014,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   <td class="py-2">Implemented. The start moves to the last gate at or before the crossing. The LC clock runs from the first gate (<SpecRef section="11.3.1" />).</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Goal lines (<SpecRef section="6.2.3" />, <SpecRef section="8.5.2" />)</td>
-                  <td class="py-2">Implemented. The line is perpendicular to the final leg, with the control semi-circle behind it.</td>
+                  <td class="py-2 pr-4">Goal lines (<SpecRef section="6.2.3.1" />, <SpecRef section="8.5.2" />)</td>
+                  <td class="py-2">Implemented. The line is perpendicular to the final leg, with the control semi-circle behind it. It must be crossed in the direction of the last leg.</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Line-type control zones at intermediate turnpoints (<SpecRef section="8.4" />)</td>
-                  <td class="py-2">Not implemented. Every turnpoint before goal is a cylinder. Tracked in <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.</td>
+                  <td class="py-2 pr-4">Line tolerance (<SpecRef section="8.2" />)</td>
+                  <td class="py-2">Implemented for the goal line. It gets the same percentage as a cylinder, and the same 5&nbsp;m minimum, so a crossing just past the end of the line still counts.</td>
+                </tr>
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">Line-type control zones at intermediate turnpoints (<SpecRef section="6.2.2" />, <SpecRef section="8.4" />)</td>
+                  <td class="py-2">Not implemented. Every turnpoint before goal is a cylinder. A task file cannot describe a line anywhere but goal, so no task can ask for one. Tracked in <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Open distance task type (<SpecRef section="6.1.2" />, <SpecRef section="8.6.2" />)</td>
@@ -1328,16 +1332,16 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Line control zones are only supported at goal (<SpecRef section="8.4" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Line control zones are only supported at goal (<SpecRef section="6.2.2" />, <SpecRef section="8.4" />)</h3>
               <p class="text-muted-foreground">
                 GlideComp scores a goal line as the specification defines it. The line goes
                 through the goal waypoint, perpendicular to the final leg, with the semi-circular
-                control zone behind it. Goal is the only place where GlideComp understands a line.
-                The specification also allows a line at an intermediate turnpoint. Such a line is
-                valid when two consecutive fixes are on opposite sides of it. A flight around its
-                end must also need an impossible speed of more than 120&nbsp;km/h. GlideComp treats
-                every turnpoint before goal as a cylinder. Line-type turnpoints are rare in
-                XCTrack task files, so this affects few tasks. Tracked in
+                control zone behind it. It carries the line tolerance of
+                <SpecRef section="8.2" />, and it must be crossed in the direction of the last
+                leg. Goal is the only place where GlideComp understands a line. The specification
+                also allows a line at an intermediate turnpoint, but the .xctsk task format
+                cannot describe one, so no task can ask for it and GlideComp treats every
+                turnpoint before goal as a cylinder. Tracked in
                 <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a> —
                 add your thoughts there if this matters for your competition.
               </p>
@@ -1379,14 +1383,30 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               <h3 class="text-base font-semibold mb-1">Smaller details</h3>
               <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
                 <li>
-                  <strong>Cylinder tolerance default (<SpecRef section="8.1" />):</strong> GlideComp applies the full
+                  <strong>Cylinder and line tolerance (<SpecRef section="8.1" />, <SpecRef section="8.2" />):</strong> GlideComp applies the full
                   tolerance band of the specification: a percentage plus an absolute minimum of
                   5&nbsp;m. The band extends outward for a cylinder that you enter, and inward for
                   the start that you exit. The default percentage is 0.5%, which is the
                   Cat&nbsp;2 maximum. GlideComp uses it for every competition, and does not select
                   0.1% automatically for a Cat&nbsp;1 event. The percentage is configurable for
-                  each task. A goal line has no tolerance band, because GlideComp scores it as
-                  exact geometry.
+                  each task. A goal line gets the same percentage over its length, with the same
+                  5&nbsp;m minimum, so a crossing that lands just past the end of the line still
+                  counts — and the report card says when the band is the reason. The control
+                  semi-circle behind the line gets the cylinder calculation, as
+                  <SpecRef section="8.5.2" /> requires.
+                </li>
+                <li>
+                  <strong>The two-fix rule is not a second way to reach a goal line (<SpecRef section="8.4" />):</strong>
+                  <SpecRef section="8.4" /> also validates a line from two consecutive fixes on
+                  opposite sides of it, if the speed needed to fly around the end of the line is
+                  more than 120&nbsp;km/h. GlideComp does not use this as an extra way to reach
+                  goal. A pilot whose straight path between two fixes passes outside the end of
+                  the line went around it at their own speed, so the test says nothing about
+                  them: on its own it would give goal to a pilot who crossed the line's extension
+                  a kilometre past the end. The case the test is for — a crossing so close to the
+                  end that measurement could put it on either side — is what the line tolerance
+                  above covers. A goal line is reached by crossing it (<SpecRef section="8.5.2" />),
+                  or by a fix in the control zone behind it.
                 </li>
                 <li>
                   <strong>Mis-set task deadlines are ignored (<SpecRef section="8.3" />):</strong> GlideComp applies
@@ -1417,10 +1437,12 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <li>
                   <strong>Hang gliding goal lines use the paragliding semi-circle rule (<SpecRef section="8.5.2" />):</strong>
                   the rule that entering the control semi-circle behind the goal line counts as a
-                  crossing is a paragliding-only rule in the specification. For hang gliding, the
-                  line must be crossed in the direction of the last leg. GlideComp applies the
-                  paragliding rule to both sports. The effect is very small, because a pilot who
-                  gets behind the line has almost always entered the semi-circle. Tracked in
+                  crossing is a paragliding-only rule in the specification. For hang gliding, only
+                  a crossing of the line itself counts. GlideComp applies the paragliding rule to
+                  both sports. The direction of a crossing is checked for both sports: a pilot who
+                  crosses the line the wrong way does not reach goal. The effect of the deviation
+                  is very small, because a pilot who gets behind the line has almost always
+                  entered the semi-circle. Tracked in
                   <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.
                 </li>
                 <li>
