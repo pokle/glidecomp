@@ -51,10 +51,15 @@ export function RulesEditionBadge({
 export function HistoricalRulesNotice({
   edition,
   taskDate,
+  officialUrl = null,
 }: {
   edition: "s7f-2026" | undefined;
   /** The task's (or competition's earliest task's) ISO date. */
   taskDate: string | null | undefined;
+  /** The source's own scores page for this task (issue #603), when the
+   * import recorded one — links the notice's "officially published results"
+   * phrase straight to the record it names. */
+  officialUrl?: string | null;
 }) {
   if (edition !== "s7f-2026" || !predatesS7f2026(taskDate)) return null;
   return (
@@ -62,8 +67,20 @@ export function HistoricalRulesNotice({
       <AlertDescription>
         This competition was flown before the FAI S7F 2026 scoring rules took
         effect (1 May 2026). GlideComp scores every task under the 2026
-        rules, so the scores shown here are indicative and can differ from
-        the officially published results.
+        rules, so the scores shown here are indicative and can differ from{" "}
+        {officialUrl ? (
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            the officially published results
+          </a>
+        ) : (
+          "the officially published results"
+        )}
+        .
       </AlertDescription>
     </Alert>
   );
