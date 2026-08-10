@@ -273,17 +273,30 @@ function parseERecord(line: string, baseMidnightMs: number, dayOffset: number = 
 }
 
 /**
- * H record field definitions: [3-letter code, header property name].
- * Each field matches the source-prefixed (FPLT/OPLT/PPLT — the IGC spec
- * allows source char F, O, or P) and bare (PLT) forms.
+ * The H-record date field (HFDTE / HDTE, with the IGC source char F, O or P
+ * optional), matched against the content AFTER the leading 'H'. Also accepts
+ * the post-2015 long form HFDTEDATE:150124,01. Captures the DDMMYY digits.
+ * Shared by parseIGC's first-pass date scan and parseHRecord.
  */
-const H_RECORD_FIELDS: [string, keyof Omit<IGCHeader, 'date'>][] = [
+const H_DATE_RE = /^[FOP]?DTE(?:DATE)?[:\s]*(\d{6})/;
+
+/**
+ * H record field definitions. Each field matches the source-prefixed
+ * (FPLT/OPLT/PPLT — the IGC spec allows source char F, O, or P) and bare
+ * (PLT) forms. The RegExps are compiled once here rather than per line —
+ * parseHRecord runs for every H record of every track.
+ */
+const H_RECORD_FIELDS = ([
   ['PLT', 'pilot'],
   ['GTY', 'gliderType'],
   ['GID', 'gliderId'],
   ['CID', 'competitionId'],
   ['CCL', 'competitionClass'],
-];
+] as const).map(([code, field]) => ({
+  field: field as keyof Omit<IGCHeader, 'date'>,
+  prefix: new RegExp(`^[FOP]?${code}`),
+  value: new RegExp(`^[FOP]?${code}[^:]*:(.+)`),
+}));
 
 /**
  * Parse an H record (header)
@@ -292,9 +305,8 @@ function parseHRecord(line: string, header: IGCHeader): void {
   const content = line.substring(1);
 
   // H[FOP]DTE / HDTE - Date (special case: value is not colon-delimited).
-  // Also accept the post-2015 long form HFDTEDATE:150124,01
   if (/^[FOP]?DTE/.test(content)) {
-    const dateMatch = content.match(/^[FOP]?DTE(?:DATE)?[:\s]*(\d{6})/);
+    const dateMatch = H_DATE_RE.exec(content);
     if (dateMatch) {
       header.date = parseDate(dateMatch[1]);
     }
@@ -302,9 +314,9 @@ function parseHRecord(line: string, header: IGCHeader): void {
   }
 
   // All other header fields follow the same pattern: [source]CODE[...]:value
-  for (const [code, field] of H_RECORD_FIELDS) {
-    if (new RegExp(`^[FOP]?${code}`).test(content)) {
-      const match = content.match(new RegExp(`^[FOP]?${code}[^:]*:(.+)`));
+  for (const { field, prefix, value } of H_RECORD_FIELDS) {
+    if (prefix.test(content)) {
+      const match = value.exec(content);
       if (match) {
         header[field] = sanitizeText(match[1].trim());
       }
@@ -328,7 +340,7 @@ export function parseIGC(content: string): IGCFile {
   // First pass: get the date from header
   for (const line of lines) {
     if (line.startsWith('H')) {
-      const dateMatch = line.match(/^H[FOP]?DTE(?:DATE)?[:\s]*(\d{6})/);
+      const dateMatch = H_DATE_RE.exec(line.substring(1));
       if (dateMatch) {
         baseDate = parseDate(dateMatch[1]);
         header.date = baseDate;
@@ -342,9 +354,18 @@ export function parseIGC(content: string): IGCFile {
   const baseMidnightMs = midnightUTCms(baseDate);
 
   // Midnight rollover tracking: IGC B/E records only have HHMMSS with no date,
-  // so flights crossing midnight UTC (common in Australia/Pacific) need day adjustment.
+  // so flights crossing midnight UTC (common in Australia/Pacific) need day
+  // adjustment. A time jumping from late evening to early morning between
+  // consecutive timed records means the flight crossed midnight.
   let prevHours = -1;
   let dayOffset = 0;
+  const trackMidnightRollover = (line: string): void => {
+    const hours = parseInt(line.substring(1, 3), 10);
+    if (prevHours >= 18 && hours <= 6) {
+      dayOffset++;
+    }
+    prevHours = hours;
+  };
 
   // Second pass: parse all records
   for (const line of lines) {
@@ -358,22 +379,14 @@ export function parseIGC(content: string): IGCFile {
         break;
 
       case 'B': {
-        const hours = parseInt(line.substring(1, 3), 10);
-        if (prevHours >= 18 && hours <= 6) {
-          dayOffset++;
-        }
-        prevHours = hours;
+        trackMidnightRollover(line);
         const fix = parseBRecord(line, baseMidnightMs, dayOffset);
         if (fix) fixes.push(fix);
         break;
       }
 
       case 'E': {
-        const hours = parseInt(line.substring(1, 3), 10);
-        if (prevHours >= 18 && hours <= 6) {
-          dayOffset++;
-        }
-        prevHours = hours;
+        trackMidnightRollover(line);
         const event = parseERecord(line, baseMidnightMs, dayOffset);
         if (event) events.push(event);
         break;
@@ -387,25 +400,22 @@ export function parseIGC(content: string): IGCFile {
     }
   }
 
-  // Build task from C records if present
+  // Build task from C records if present.
+  // First point is takeoff, second is start, last is landing, second-to-last
+  // is finish; everything in between (excluding those four) are turnpoints.
   let task: IGCTask | undefined;
   if (taskPoints.length >= 2) {
+    const turnpoints = taskPoints.length > 4
+      ? taskPoints.slice(2, taskPoints.length - 2)
+      : [];
     task = {
-      numTurnpoints: Math.max(0, taskPoints.length - 4), // Exclude takeoff, start, finish, landing
-      turnpoints: [],
+      numTurnpoints: turnpoints.length,
+      turnpoints,
+      takeoff: taskPoints[0],
+      start: taskPoints[1],
     };
-
-    // First point is takeoff, second is start, last is landing, second-to-last is finish
-    // Everything in between are turnpoints
-    if (taskPoints.length >= 1) task.takeoff = taskPoints[0];
-    if (taskPoints.length >= 2) task.start = taskPoints[1];
     if (taskPoints.length >= 3) task.landing = taskPoints[taskPoints.length - 1];
     if (taskPoints.length >= 4) task.finish = taskPoints[taskPoints.length - 2];
-
-    // Middle points are turnpoints
-    if (taskPoints.length > 4) {
-      task.turnpoints = taskPoints.slice(2, taskPoints.length - 2);
-    }
   }
 
   // Altitude plausibility pass: repairs land in fix.cleanedAltitude (raw

@@ -14,9 +14,9 @@ import { XCTask, getEffectiveSSSIndex, getEffectiveESSIndex, getGoalIndex } from
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { detectCircles, type CircleSegment } from './circle-detector';
 import { resolveThresholds, type DetectionThresholds, type PartialThresholds } from './thresholds';
-import { detectTakeoffLanding } from './takeoff-landing-detector';
+import { detectTakeoffLandingIndices, takeoffLandingToEvents } from './takeoff-landing-detector';
 import { detectThermals, detectGlides, thermalToEvents, glideToEvents } from './flight-phase-detectors';
-import type { FlightEvent, FlightEventType, FixIndexDetails } from './event-types';
+import type { FlightEvent, FlightEventType } from './event-types';
 
 // The flight-event type vocabulary lives in event-types.ts (dependency-free so
 // circle-detector can share TrackSegment without an import cycle). Re-exported
@@ -329,23 +329,20 @@ export function detectFlightEvents(
 
   // IMPORTANT: Detect takeoff and landing FIRST
   // All other events should only be detected after takeoff
-  const takeoffLandingEvents = detectTakeoffLanding(fixes, thresholds);
-  allEvents.push(...takeoffLandingEvents);
-
-  // Find the takeoff event to get the index where flight begins
-  const takeoffEvent = takeoffLandingEvents.find(e => e.type === 'takeoff');
+  const takeoffLanding = detectTakeoffLandingIndices(fixes, thresholds);
+  allEvents.push(...takeoffLandingToEvents(fixes, takeoffLanding));
 
   // If no takeoff detected, we shouldn't detect flight events
   // (pilot might still be on the ground)
-  if (!takeoffEvent) {
+  if (!takeoffLanding.takeoff) {
     return allEvents;
   }
 
-  // Read the takeoff fix index from the event itself. Looking it up by
-  // timestamp is unsafe — cheap GPS loggers stall and emit consecutive
-  // fixes with identical timestamps, so findIndex can land on a fix
-  // earlier than the real takeoff and leak pre-takeoff data downstream.
-  const takeoffIndex = (takeoffEvent.details as FixIndexDetails).fixIndex;
+  // The typed result carries the takeoff fix index directly. Looking it up
+  // by timestamp would be unsafe — cheap GPS loggers stall and emit
+  // consecutive fixes with identical timestamps, so findIndex can land on a
+  // fix earlier than the real takeoff and leak pre-takeoff data downstream.
+  const takeoffIndex = takeoffLanding.takeoff.fixIndex;
 
   // Create a slice of fixes from takeoff onwards for analysis
   const flightFixes = fixes.slice(takeoffIndex);

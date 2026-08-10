@@ -274,6 +274,59 @@ describe("xctskForPatch", () => {
       goal: { type: "LINE", deadline: "23:00:00Z" },
     });
   });
+
+  it("stores the task as loaded: version, gates, altitudes and tolerance survive", () => {
+    // These are the PATCH path's deliberate departures from the engine's
+    // export shape (xctskForPatch delegates to toXctskJSON and overrides):
+    // a v2 task keeps its version, real gates pass through untouched, a
+    // known altitude is kept, and the round-trip-only cylinderTolerance
+    // survives the save.
+    const patched = xctskForPatch({
+      taskType: "CLASSIC",
+      version: 2,
+      earthModel: "WGS84",
+      turnpoints: [
+        {
+          type: "SSS",
+          radius: 2000,
+          waypoint: { name: "STRT", lat: -36.5, lon: 147.9, altSmoothed: 680 },
+        },
+        { radius: 400, waypoint: { name: "GOAL", lat: -36.7, lon: 147.7 } },
+      ],
+      takeoff: { timeOpen: "01:00:00Z" },
+      sss: { type: "RACE", direction: "EXIT", timeGates: ["03:00:00Z", "03:15:00Z"] },
+      goal: { type: "CYLINDER" },
+      cylinderTolerance: 0.0005,
+    });
+    expect(patched).toEqual({
+      taskType: "CLASSIC",
+      version: 2,
+      earthModel: "WGS84",
+      turnpoints: [
+        {
+          type: "SSS",
+          radius: 2000,
+          waypoint: { name: "STRT", lat: -36.5, lon: 147.9, altSmoothed: 680 },
+        },
+        { radius: 400, waypoint: { name: "GOAL", lat: -36.7, lon: 147.7 } },
+      ],
+      takeoff: { timeOpen: "01:00:00Z" },
+      sss: { type: "RACE", direction: "EXIT", timeGates: ["03:00:00Z", "03:15:00Z"] },
+      goal: { type: "CYLINDER" },
+      cylinderTolerance: 0.0005,
+    });
+  });
+
+  it("never writes the export's 00:00:00Z placeholder gate or invented 0 altitudes", () => {
+    const patched = xctskForPatch({
+      taskType: "CLASSIC",
+      version: 1,
+      turnpoints: [{ radius: 400, waypoint: { name: "A", lat: -36.5, lon: 147.9 } }],
+      sss: { type: "RACE", direction: "EXIT" },
+    }) as { sss: Record<string, unknown>; turnpoints: Array<{ waypoint: Record<string, unknown> }> };
+    expect("timeGates" in patched.sss).toBe(false);
+    expect("altSmoothed" in patched.turnpoints[0].waypoint).toBe(false);
+  });
 });
 
 describe("turnpointsToCSV", () => {

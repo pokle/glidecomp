@@ -6,6 +6,7 @@ import { describe, it, expect } from 'bun:test';
 
 import {
   ellipsoidDistance,
+  inverseGeodesic,
   getBoundingBox,
   calculateBearing,
   destinationPoint,
@@ -520,5 +521,59 @@ describe('getCirclePoints tests (WGS84)', () => {
   it('should use default numPoints of 64', () => {
     const points = getCirclePoints(47.0, 11.0, 1000);
     expect(points).toHaveLength(65);
+  });
+});
+
+/**
+ * ellipsoidDistance and inverseGeodesic deliberately duplicate the same
+ * Vincenty inverse iteration (the former stays allocation-free for the
+ * hottest loop; the latter also returns the azimuth). Their doc comments
+ * carry reciprocal KEEP IN SYNC markers; this suite is the executable half
+ * of that promise. The two run the identical sequence of float operations
+ * (same initialisation, convergence test and series), and even the
+ * non-convergence guard falls back to the same Andoyer-Lambert distance —
+ * so the distances must be EXACTLY equal, bit for bit, not merely close.
+ */
+describe('inverseGeodesic ↔ ellipsoidDistance parity', () => {
+  const pairs: Array<[string, number, number, number, number]> = [
+    ['zero-length (identical points)', -36.5, 147.9, -36.5, 147.9],
+    ['short hop (~150 m, task scale)', -36.5675, 146.723, -36.5688, 146.7241],
+    ['cylinder scale (~5 km)', 47.0, 11.0, 47.04, 11.02],
+    ['task leg (~50 km)', -36.186, 147.977, -36.6, 148.3],
+    ['equatorial line (both on the equator)', 0, 10, 0, 12],
+    ['meridian line (same longitude)', 47.0, 11.0, 49.0, 11.0],
+    ['polar (near the pole)', 89.9, 0, 89.8, 120],
+    ['southern high latitude', -75.0, 166.0, -74.5, 168.0],
+    ['continental (~1,000 km)', 51.5007, -0.1246, 48.8584, 2.2945],
+    ['hemisphere crossing (~10,000 km)', 51.5, -0.12, -33.86, 151.21],
+    ['antipodal-ish (near non-convergence territory)', 0, 0, 0.5, 179.7],
+    ['near-antipodal off-equator', 30.0, 20.0, -29.9, -159.8],
+  ];
+
+  for (const [label, lat1, lon1, lat2, lon2] of pairs) {
+    it(`agrees exactly: ${label}`, () => {
+      const { distance } = inverseGeodesic(lat1, lon1, lat2, lon2);
+      // toBe, not toBeCloseTo: the implementations must not drift apart
+      // even in the last ulp — a divergence means one side was edited
+      // without the other (see the KEEP IN SYNC markers in geo.ts).
+      expect(distance).toBe(ellipsoidDistance(lat1, lon1, lat2, lon2));
+    });
+  }
+
+  it('agrees exactly across a spread of pseudo-random pairs', () => {
+    // Deterministic LCG so the corpus is stable run to run.
+    let s = 0x9e3779b9 >>> 0;
+    const rnd = () => {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      return s / 0x100000000;
+    };
+    for (let i = 0; i < 200; i++) {
+      const lat1 = rnd() * 170 - 85;
+      const lon1 = rnd() * 360 - 180;
+      const lat2 = rnd() * 170 - 85;
+      const lon2 = rnd() * 360 - 180;
+      expect(inverseGeodesic(lat1, lon1, lat2, lon2).distance)
+        .toBe(ellipsoidDistance(lat1, lon1, lat2, lon2));
+    }
   });
 });

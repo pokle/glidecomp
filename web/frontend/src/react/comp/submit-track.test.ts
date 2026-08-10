@@ -526,7 +526,7 @@ describe("formatting the summary", () => {
     expect(formatTrackDistance(143820, imperial)).toBe("89.4\u00a0mi");
 
     expect(formatTrackAltitude(2130, metric)).toBe("2130\u00a0m");
-    expect(formatTrackAltitude(2130, imperial)).toBe("6989\u00a0ft");
+    expect(formatTrackAltitude(2130, imperial)).toBe("6988\u00a0ft");
   });
 
   test("a figure the file did not carry is a dash, never a fake zero", () => {

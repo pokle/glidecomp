@@ -141,11 +141,12 @@ describe('task optimizer — cylinder tolerance', () => {
       makeTurnpoint('B', 47.1, 11.0, 500, 'ESS'),
     ]);
 
-    // Default is undefined (0.5% applied in detectCylinderCrossings)
+    // Default is undefined; the field is round-trip-only — scoring uses the
+    // fixed S7F 2026 ±5 m band regardless of what a task file declares.
     expect(task.cylinderTolerance).toBeUndefined();
 
-    // Can be set explicitly
-    task.cylinderTolerance = 0.001; // Cat 1
+    // Can be set explicitly (and survives, even though scoring ignores it)
+    task.cylinderTolerance = 0.001;
     expect(task.cylinderTolerance).toBe(0.001);
   });
 });

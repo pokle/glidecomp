@@ -323,10 +323,12 @@ describe('calculateSpeedFraction', () => {
 });
 
 describe('calculateTimePoints', () => {
-  it('PG: no time points if goal not made', () => {
+  // The caller resolves the §13.2 ESS-but-not-goal factor per discipline
+  // (effectiveEssNotGoalFactor): 0 for PG, the configured share for HG.
+  it('PG: no time points if goal not made (effective factor 0)', () => {
     const pts = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
-      availableTimePoints: 300, scoring: 'PG',
+      availableTimePoints: 300, essNotGoalFactor: 0,
     });
     expect(pts).toBe(0);
   });
@@ -334,7 +336,7 @@ describe('calculateTimePoints', () => {
   it('PG: full time points for fastest pilot in goal', () => {
     const pts = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: true, reachedESS: true,
-      availableTimePoints: 300, scoring: 'PG',
+      availableTimePoints: 300, essNotGoalFactor: 0,
     });
     expect(pts).toBeCloseTo(300, 1);
   });
@@ -342,7 +344,7 @@ describe('calculateTimePoints', () => {
   it('HG: ESS without goal keeps only the default 80% (S7F §13.2)', () => {
     const pts = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
-      availableTimePoints: 300, scoring: 'HG',
+      availableTimePoints: 300,
     });
     expect(pts).toBeCloseTo(240, 1);
   });
@@ -350,7 +352,7 @@ describe('calculateTimePoints', () => {
   it('HG: full time points once goal is made', () => {
     const pts = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: true, reachedESS: true,
-      availableTimePoints: 300, scoring: 'HG',
+      availableTimePoints: 300,
     });
     expect(pts).toBeCloseTo(300, 1);
   });
@@ -358,20 +360,20 @@ describe('calculateTimePoints', () => {
   it('HG: ESS-but-not-goal factor is configurable (local regulations)', () => {
     const half = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
-      availableTimePoints: 300, scoring: 'HG', essNotGoalFactor: 0.5,
+      availableTimePoints: 300, essNotGoalFactor: 0.5,
     });
     expect(half).toBeCloseTo(150, 1);
     const zero = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: true,
-      availableTimePoints: 300, scoring: 'HG', essNotGoalFactor: 0,
+      availableTimePoints: 300, essNotGoalFactor: 0,
     });
     expect(zero).toBe(0);
   });
 
-  it('HG: no time points without ESS regardless of factor', () => {
+  it('no time points without ESS regardless of factor', () => {
     const pts = calculateTimePoints({
       pilotTime: 3600, bestTime: 3600, madeGoal: false, reachedESS: false,
-      availableTimePoints: 300, scoring: 'HG', essNotGoalFactor: 1,
+      availableTimePoints: 300, essNotGoalFactor: 1,
     });
     expect(pts).toBe(0);
   });

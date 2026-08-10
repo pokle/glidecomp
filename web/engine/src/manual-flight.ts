@@ -150,7 +150,17 @@ export function manualFlightGeometry(
   // §9.3: the remaining route from the landing point, optimised as its
   // own shortest path through the un-reached zones to goal.
   const remaining = optimizeRemainingRoute(task, anchor, point);
-  if (!remaining) return { ...base, madeGood: taskDistance, madeGoal: true };
+  if (!remaining) {
+    // optimizeRemainingRoute returns null only when the anchor is at or past
+    // the final turnpoint — and the clamps above keep it strictly below goal
+    // (the last turnpoint), so a null here means the invariant broke, not
+    // that the pilot finished. Never default to "in goal": that would score
+    // a landed-out pilot as a finisher.
+    throw new Error(
+      `manualFlightGeometry: no remaining route for anchor ${anchor} of ` +
+      `${task.turnpoints.length} turnpoints — refusing to score a land-out as in goal`,
+    );
+  }
   const distanceToGoal = remaining.distance;
   const madeGoodFromPoint = taskDistance - distanceToGoal;
   const madeGood = Math.min(taskDistance, Math.max(bankedToAnchor, madeGoodFromPoint));

@@ -306,17 +306,17 @@ describe('detectCylinderCrossings', () => {
 // ---------------------------------------------------------------------------
 
 describe('cylinder tolerance band (§9.1.1)', () => {
-  it('applies the 5 m absolute minimum for small cylinders', () => {
-    // Entry turnpoint, 400 m radius. Cat-1 percentage (0.1%) is only 0.4 m,
-    // but the spec's 5 m floor extends the outer edge to 405 m.
+  it('applies the fixed 5 m band for small cylinders', () => {
+    // Entry turnpoint, 400 m radius: the S7F 2026 fixed ±5 m band extends
+    // the outer edge to 405 m.
     const task = createTask([
       { name: 'SSS', lat: 47.0, lon: 11.0, radius: 1000, type: 'SSS' },
       { name: 'ESS', lat: 47.02, lon: 11.0, radius: 400, type: 'ESS' },
     ]);
-    task.cylinderTolerance = 0.001; // 0.1% → 0.4 m band; 5 m floor dominates
+    task.cylinderTolerance = 0.001; // declared value — inert under S7F 2026
     const c = task.turnpoints[1].waypoint;
-    // Closest approach 403 m: outside the 400.4 m percentage band, inside the
-    // 405 m floor band. Only the 5 m minimum credits this crossing.
+    // Closest approach 403 m: inside the 405 m band without ever reaching
+    // the nominal radius. Only the ±5 m band credits this crossing.
     const p1 = destinationPoint(c.lat, c.lon, 410, 0);
     const p2 = destinationPoint(c.lat, c.lon, 403, 0);
     const p3 = destinationPoint(c.lat, c.lon, 410, 0);
@@ -332,7 +332,7 @@ describe('cylinder tolerance band (§9.1.1)', () => {
   });
 
   it('a two-step entry through the band is not flagged tolerance-credited', () => {
-    // Entry TP, 400 m radius, 0.1% tolerance → 5 m floor → outer edge 405 m.
+    // Entry TP, 400 m radius, fixed ±5 m band → outer edge 405 m.
     // The pilot crosses the outer edge and the nominal radius with two
     // separate fix pairs: 410 → 402 (band entry) → 398 (nominal penetration).
     // The crossing must anchor to the actual nominal-radius crossing, not be
@@ -398,9 +398,10 @@ describe('cylinder tolerance band (§9.1.1)', () => {
   });
 
   it('a two-step EXIT-start departure is not flagged tolerance-credited', () => {
-    // EXIT start, 5000 m radius, 0.5% → inner detection edge 4975 m. The
-    // pilot crosses the inner edge (4970 → 4980) and the nominal radius
-    // (4980 → 5010) with separate fix pairs.
+    // EXIT start, 5000 m radius, fixed ±5 m band → inner detection edge
+    // 4995 m. The pilot crosses the inner edge (4990 → 4997) and the
+    // nominal radius (4997 → 5010) with separate fix pairs; the crossing
+    // must anchor to the pair that straddles the nominal radius.
     const task = createTask(
       [
         { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },
@@ -409,8 +410,8 @@ describe('cylinder tolerance band (§9.1.1)', () => {
       { direction: 'EXIT' },
     );
     const c = task.turnpoints[0].waypoint;
-    const p1 = destinationPoint(c.lat, c.lon, 4970, 0);
-    const p2 = destinationPoint(c.lat, c.lon, 4980, 0); // past inner edge, inside nominal
+    const p1 = destinationPoint(c.lat, c.lon, 4990, 0);
+    const p2 = destinationPoint(c.lat, c.lon, 4997, 0); // past inner edge, inside nominal
     const p3 = destinationPoint(c.lat, c.lon, 5010, 0); // outside nominal
     const fixes = [
       createFix(0, p1.lat, p1.lon),
@@ -463,7 +464,7 @@ describe('cylinder tolerance band (§9.1.1)', () => {
 
   it('an ENTER start (outer edge) does not count the same inner near-exit', () => {
     // Same geometry, but an ENTER start detects against the outer edge
-    // (5025 m). Both fixes (4970, 4980) are inside 5025 m, so no exit is seen.
+    // (5005 m). Both fixes (4970, 4980) are inside 5005 m, so no exit is seen.
     const task = createTask(
       [
         { name: 'SSS', lat: 47.0, lon: 11.0, radius: 5000, type: 'SSS' },

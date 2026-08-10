@@ -22,7 +22,6 @@ import {
   type GoalLine,
 } from './goal-line';
 import {
-  DEFAULT_CYLINDER_TOLERANCE,
   outerDetectionRadius,
   innerDetectionRadius,
 } from './turnpoint-sequence-types';
@@ -36,6 +35,31 @@ export {
   outerDetectionRadius,
   innerDetectionRadius,
 } from './turnpoint-sequence-types';
+
+const DEG = Math.PI / 180;
+
+/**
+ * Conservative lat/lon degree deltas for a bounding box that must strictly
+ * CONTAIN everything within `reachM` metres of a point at `centerLat`. The
+ * denominators under-estimate metres-per-degree and a 1% margin is added, so
+ * a fix outside the box is definitely outside the region and can skip the
+ * (much costlier) exact geometry — a pure speed-up with no effect on which
+ * fixes are classified inside/outside. (Assumes tasks don't span the ±180°
+ * meridian, the same assumption the linear crossing interpolation makes.)
+ * Deliberately NOT geo.ts's metresPerDegree(): a pre-filter wants a cheap
+ * number that is certainly too SMALL, and an accurate one — larger than
+ * these near the poles — would shrink the box and could drop a fix the
+ * exact test would have accepted.
+ */
+function conservativeDegreeDeltas(
+  centerLat: number,
+  reachM: number
+): { latDelta: number; lonDelta: number } {
+  const latDelta = (reachM / 110540) * 1.01;
+  const cosLat = Math.cos((Math.abs(centerLat) + latDelta) * DEG);
+  const lonDelta = (reachM / (111000 * Math.max(cosLat, 1e-6))) * 1.01;
+  return { latDelta, lonDelta };
+}
 
 // ---------------------------------------------------------------------------
 // Functions
@@ -68,13 +92,10 @@ export function detectCylinderCrossings(
 
   const crossings: CylinderCrossing[] = [];
 
-  // CIVL GAP cylinder tolerance (FAI S7F §9.1.1): a band of a percentage plus a
-  // 5 m absolute minimum, applied when deciding whether a pilot reached a
-  // cylinder, to absorb distance-measurement differences between flight
-  // recorders and scoring programs. Default 0.5% (Cat 2 maximum).
-  // S7F 2026 §9.1.1: the tolerance is the fixed spec band — a declared
-  // task-file tolerance is deliberately ignored.
-  const tolerance = DEFAULT_CYLINDER_TOLERANCE;
+  // Cylinder tolerance (S7F 2026 §9.1.1): the fixed ±5 m spec band, applied
+  // when deciding whether a pilot reached a cylinder, to absorb
+  // distance-measurement differences between flight recorders and scoring
+  // programs. A declared task-file tolerance is deliberately ignored.
 
   // EXIT cylinders are the one place the *inner* edge of the band matters: a
   // pilot leaving an EXIT start is credited once they cross the inner radius
@@ -89,43 +110,30 @@ export function detectCylinderCrossings(
   const goalLine = computeGoalLine(task);
   const goalIdx = getGoalIndex(task);
 
-  const DEG = Math.PI / 180;
-
   for (let tpIdx = 0; tpIdx < task.turnpoints.length; tpIdx++) {
     if (goalLine && tpIdx === goalIdx) {
-      detectGoalLineCrossings(goalLine, fixes, tpIdx, tolerance, crossings);
+      detectGoalLineCrossings(goalLine, fixes, tpIdx, crossings);
       continue;
     }
     const tp = task.turnpoints[tpIdx];
     const centerLat = tp.waypoint.lat;
     const centerLon = tp.waypoint.lon;
-    // Tolerance band (§9.1.1): outerRadius = max(r×(1+tol), r+5),
-    // innerRadius = min(r×(1−tol), r−5). Entry cylinders detect against the
-    // outer edge; EXIT cylinders (the EXIT start and inferred exit
-    // turnpoints) detect against the inner edge so the pilot is credited
-    // with leaving a touch early rather than a touch late.
-    const outerRadius = outerDetectionRadius(tp.radius, tolerance);
-    const innerRadius = innerDetectionRadius(tp.radius, tolerance);
+    // Tolerance band (§9.1.1): outerRadius = r+5, innerRadius = r−5. Entry
+    // cylinders detect against the outer edge; EXIT cylinders (the EXIT
+    // start and inferred exit turnpoints) detect against the inner edge so
+    // the pilot is credited with leaving a touch early rather than a touch
+    // late.
+    const outerRadius = outerDetectionRadius(tp.radius);
+    const innerRadius = innerDetectionRadius(tp.radius);
     const detectRadius = dirs[tpIdx] === 'exit' ? innerRadius : outerRadius;
-    // Bounding box uses the outer radius (always ≥ detectRadius) to stay
-    // conservative regardless of which edge we detect against.
-    const radius = outerRadius;
 
-    // Conservative lat/lon bounding box around the cylinder. Any point inside
-    // the cylinder is guaranteed to fall inside this box, so a fix outside the
-    // box is definitely outside the cylinder and can skip the (much costlier)
-    // ellipsoidal distance call. The denominators under-estimate metres-per-
-    // degree and a 1% margin is added, so the box strictly contains the
-    // cylinder — this is a pure speed-up with no effect on which fixes are
-    // classified inside/outside. (Assumes tasks don't span the ±180° meridian,
-    // the same assumption the linear crossing interpolation below already makes.)
-    // Deliberately NOT geo.ts's metresPerDegree(): a pre-filter wants a cheap
-    // number that is certainly too SMALL, and an accurate one — larger than
-    // these near the poles — would shrink the box and could drop a fix the
-    // exact distance call would have accepted.
-    const latDelta = (radius / 110540) * 1.01;
-    const cosLat = Math.cos((Math.abs(centerLat) + latDelta) * DEG);
-    const lonDelta = (radius / (111000 * Math.max(cosLat, 1e-6))) * 1.01;
+    // Conservative lat/lon bounding box around the cylinder: any point
+    // inside the cylinder is guaranteed to fall inside it, so a fix outside
+    // the box can skip the ellipsoidal distance call (see
+    // conservativeDegreeDeltas for why the deltas are safe). Uses the outer
+    // radius (always ≥ detectRadius) to stay conservative regardless of
+    // which edge we detect against.
+    const { latDelta, lonDelta } = conservativeDegreeDeltas(centerLat, outerRadius);
 
     const isInside = (lat: number, lon: number): boolean => {
       const dLat = lat - centerLat;
@@ -280,18 +288,17 @@ export function detectCylinderCrossings(
  *   the first crossing of either direction, so an 'enter' — or the 'exit'
  *   beside it — would credit goal to a pilot flying away from it.
  *
- * - **Tolerance (§9.1.2).** The line carries a tolerance band, at the same
- *   percentage a cylinder gets and with the same 5 m floor: it reaches
- *   `goalLineToleranceM` metres past each endpoint, so a pilot who clipped
- *   the very end of the line is credited, flagged `toleranceCredited`. The
- *   band changes only WHETHER a crossing counts, never WHEN — the crossing
- *   point is always the track's own intersection with the line's plane.
+ * - **Tolerance (§9.1.2).** The line carries the same 5 m tolerance band a
+ *   cylinder gets: it reaches `goalLineToleranceM` metres past each
+ *   endpoint, so a pilot who clipped the very end of the line is credited,
+ *   flagged `toleranceCredited`. The band changes only WHETHER a crossing
+ *   counts, never WHEN — the crossing point is always the track's own
+ *   intersection with the line's plane.
  */
 function detectGoalLineCrossings(
   goalLine: GoalLine,
   fixes: IGCFix[],
   taskIndex: number,
-  tolerance: number,
   out: CylinderCrossing[]
 ): void {
   if (fixes.length < 2) return;
@@ -302,18 +309,15 @@ function detectGoalLineCrossings(
   // §9.1.2 band around the line, and the §9.2.3 → §9.1.1 band on the control
   // semicircle's radius. Both are metres of measurement slack, single-digit
   // on any goal line a competition sets.
-  const toleranceM = goalLineToleranceM(goalLine, tolerance);
-  const zoneRadius = goalZoneRadius(goalLine, tolerance);
+  const toleranceM = goalLineToleranceM(goalLine);
+  const zoneRadius = goalZoneRadius(goalLine);
 
   // Conservative bounding box around the line + semicircle + bands. A fix pair
   // whose own bbox doesn't overlap it can't produce a crossing — skips the
-  // frame math for the vast majority of the track. Same margin scheme as the
-  // cylinder loop.
-  const DEG = Math.PI / 180;
+  // frame math for the vast majority of the track. Same deltas as the
+  // cylinder loop (see conservativeDegreeDeltas).
   const reach = Math.max(zoneRadius, goalLine.halfWidth + toleranceM);
-  const latDelta = (reach / 110540) * 1.01;
-  const cosLat = Math.cos((Math.abs(centerLat) + latDelta) * DEG);
-  const lonDelta = (reach / (111000 * Math.max(cosLat, 1e-6))) * 1.01;
+  const { latDelta, lonDelta } = conservativeDegreeDeltas(centerLat, reach);
 
   const push = (
     anchorPrev: IGCFix,

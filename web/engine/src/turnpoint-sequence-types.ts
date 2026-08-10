@@ -10,19 +10,13 @@
 import type { GoalLine } from './goal-line';
 
 /**
- * Relative cylinder tolerance as a fraction of the radius — fixed at 0% by
- * S7F 2026 §9.1.1 (decided at the 2025 Plenary; earlier editions allowed
- * 0.1%–0.5%). Scoring no longer honours a task file's declared
- * `cylinderTolerance` either (owner decision, 2026-08-09,
+ * Absolute cylinder tolerance in metres (S7F 2026 §9.1.1): the band is ±5 m
+ * around the nominal radius. The relative (percentage) tolerance of earlier
+ * editions was fixed at 0% by the 2025 Plenary, so this IS the whole band —
+ * and scoring no longer honours a task file's declared `cylinderTolerance`
+ * either (owner decision, 2026-08-09,
  * docs/2026-08-09-s7f-2026-migration-plan.md): every task is evaluated at
  * the spec band. The field is still parsed so task files round-trip.
- */
-export const DEFAULT_CYLINDER_TOLERANCE = 0;
-
-/**
- * Absolute cylinder tolerance in metres (S7F 2026 §9.1.1): the band is ±5 m
- * around the nominal radius. With the relative term fixed at 0 this IS the
- * whole band.
  */
 export const MIN_CYLINDER_TOLERANCE_M = 5;
 
@@ -33,18 +27,19 @@ export const MIN_CYLINDER_TOLERANCE_M = 5;
  * semicircle behind a goal line to this same calculation), so every one of
  * them uses the same notion of "inside".
  */
-export function outerDetectionRadius(radius: number, tolerance: number): number {
-  return Math.max(radius * (1 + tolerance), radius + MIN_CYLINDER_TOLERANCE_M);
+export function outerDetectionRadius(radius: number): number {
+  return radius + MIN_CYLINDER_TOLERANCE_M;
 }
 
 /**
  * Inner edge of a cylinder's tolerance band (§9.1.1): the radius at which an
  * EXIT cylinder is credited — the pilot leaving is credited a touch early
  * rather than a touch late. Applies to the EXIT start and to inferred exit
- * turnpoints (see {@link computeTurnpointDirections}).
+ * turnpoints (see {@link computeTurnpointDirections}). Clamped at 0 for a
+ * cylinder smaller than the band.
  */
-export function innerDetectionRadius(radius: number, tolerance: number): number {
-  return Math.max(0, Math.min(radius * (1 - tolerance), radius - MIN_CYLINDER_TOLERANCE_M));
+export function innerDetectionRadius(radius: number): number {
+  return Math.max(0, radius - MIN_CYLINDER_TOLERANCE_M);
 }
 
 // ---------------------------------------------------------------------------

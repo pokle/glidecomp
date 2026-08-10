@@ -241,6 +241,54 @@ const STORED_PARAM_KEYS = [
   'essNotGoalFactor',
 ] as const satisfies ReadonlyArray<keyof GAPParameters>;
 
+type StoredParamKey = (typeof STORED_PARAM_KEYS)[number];
+
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v);
+const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean';
+const isScoring = (v: unknown): v is GAPParameters['scoring'] =>
+  v === 'PG' || v === 'HG';
+const isDistanceOrigin = (v: unknown): v is DistanceOrigin =>
+  v === 'takeoff' || v === 'start';
+
+/**
+ * Per-key validation for a stored gap_params value: finite number for the
+ * numeric parameters, boolean for the switches, membership for the enums
+ * (the accepted values are exactly the type definitions' — 'PG'/'HG' and
+ * {@link DistanceOrigin}). A stored value that fails its validator is
+ * IGNORED and the per-category default stands — a corrupt row degrades a
+ * knob to its default rather than feeding NaN, a string, or an unknown enum
+ * member into the scorer. (resolveLeadingTimeRatio additionally clamps the
+ * ratio to the spec's 0..26% range at read time — that read-side guard is
+ * unchanged and callers still rely on it.)
+ */
+const STORED_PARAM_VALIDATORS: {
+  [K in StoredParamKey]: (v: unknown) => v is GAPParameters[K];
+} = {
+  nominalDistance: isFiniteNumber,
+  nominalTime: isFiniteNumber,
+  minimumDistance: isFiniteNumber,
+  scoring: isScoring,
+  useLeading: isBoolean,
+  useArrival: isBoolean,
+  leadingTimeRatio: isFiniteNumber,
+  distanceOrigin: isDistanceOrigin,
+  useDistanceDifficulty: isBoolean,
+  jumpTheGunFactor: isFiniteNumber,
+  jumpTheGunMaxSeconds: isFiniteNumber,
+  essNotGoalFactor: isFiniteNumber,
+};
+
+/** Apply one stored value when its validator accepts it; otherwise keep the default. */
+function applyStoredParam<K extends StoredParamKey>(
+  merged: GAPParameters,
+  key: K,
+  value: unknown,
+): void {
+  const isValid = STORED_PARAM_VALIDATORS[key];
+  if (isValid(value)) merged[key] = value;
+}
+
 /**
  * Merge a competition's stored GAP parameters over the official per-category
  * defaults, resolving the effective parameter set the scorer (and the score
@@ -249,7 +297,9 @@ const STORED_PARAM_KEYS = [
  * Stored gap_params saved under earlier editions may carry keys the 2026
  * surface no longer exposes (nominalLaunch, nominalGoal, scoreBackTime,
  * leadingFormula, leadingWeightFormula, timePointsExponent). They are
- * accepted and IGNORED — every task scores under the 2026 edition.
+ * accepted and IGNORED — every task scores under the 2026 edition. Values of
+ * the wrong runtime type are likewise ignored per key (see
+ * {@link STORED_PARAM_VALIDATORS}); stored JSON is data, not types.
  *
  * @param category - 'hg' or 'pg' (drives {@link defaultsFor})
  * @param stored - the comp's saved gap_params, or null when it never saved any
@@ -261,10 +311,8 @@ export function resolveCompGapParams(
   const merged: GAPParameters = defaultsFor(category);
   if (stored) {
     for (const key of STORED_PARAM_KEYS) {
-      const value = (stored as Partial<Record<string, unknown>>)[key];
-      if (value !== undefined) {
-        (merged as unknown as Record<string, unknown>)[key] = value;
-      }
+      const value: unknown = stored[key];
+      if (value !== undefined) applyStoredParam(merged, key, value);
     }
   }
   return merged;

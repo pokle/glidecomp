@@ -50,7 +50,6 @@ import {
   buildRemainingPath,
   computeBestProgress,
 } from './turnpoint-sequence-path';
-import { DEFAULT_CYLINDER_TOLERANCE } from './turnpoint-sequence-types';
 import type {
   CylinderCrossing,
   TurnpointReaching,
@@ -67,10 +66,7 @@ import type {
   NextTPMeasure,
 } from './turnpoint-sequence-types';
 
-export {
-  DEFAULT_CYLINDER_TOLERANCE,
-  MIN_CYLINDER_TOLERANCE_M,
-} from './turnpoint-sequence-types';
+export { MIN_CYLINDER_TOLERANCE_M } from './turnpoint-sequence-types';
 export type {
   CylinderCrossing,
   TurnpointReaching,
@@ -257,6 +253,15 @@ function resolveSequenceOnce(
     ? (startSelectionReason === 'track_start' ? 'track_start' as const : 'first_turnpoint' as const)
     : undefined;
 
+  // The optional transparency fields both return shapes share — spread so an
+  // absent field stays absent (not undefined-valued) in the JSON payload.
+  const optionalFields = {
+    ...(startFallback ? { startFallback } : {}),
+    ...(anchors.essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
+    ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
+    ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
+  };
+
   if (sssCrossings.length === 0) {
     return {
       crossings: allCrossings,
@@ -270,10 +275,7 @@ function resolveSequenceOnce(
       flownDistance: 0,
       legs,
       speedSectionTime: null,
-      ...(startFallback ? { startFallback } : {}),
-      ...(anchors.essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
-      ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
-      ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
+      ...optionalFields,
     };
   }
 
@@ -338,10 +340,7 @@ function resolveSequenceOnce(
     speedSectionTime,
     ...(startGate ? { startGate } : {}),
     ...(earlyStart ? { earlyStart } : {}),
-    ...(startFallback ? { startFallback } : {}),
-    ...(anchors.essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
-    ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
-    ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
+    ...optionalFields,
   };
 }
 
@@ -437,8 +436,6 @@ function resolveTrackStartInside(
   { directions }: TaskGeometry,
   { goalIdx, goalLine }: TaskAnchors,
 ): boolean[] {
-  // S7F 2026 §9.1.1: fixed spec band; declared task tolerances are ignored.
-  const tolerance = DEFAULT_CYLINDER_TOLERANCE;
   return task.turnpoints.map((tp, tpIdx) => {
     if (fixes.length === 0) return false;
     // A LINE goal has no interior; "inside" is the control semicircle, taken
@@ -446,12 +443,12 @@ function resolveTrackStartInside(
     if (goalLine && tpIdx === goalIdx) {
       return isInGoalSemicircle(
         goalLine, fixes[0].latitude, fixes[0].longitude,
-        goalZoneRadius(goalLine, tolerance),
+        goalZoneRadius(goalLine),
       );
     }
     const edge = directions[tpIdx] === 'exit'
-      ? innerDetectionRadius(tp.radius, tolerance)
-      : outerDetectionRadius(tp.radius, tolerance);
+      ? innerDetectionRadius(tp.radius)
+      : outerDetectionRadius(tp.radius);
     return ellipsoidDistance(
       fixes[0].latitude, fixes[0].longitude,
       tp.waypoint.lat, tp.waypoint.lon,
