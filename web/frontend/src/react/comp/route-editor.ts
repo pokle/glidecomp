@@ -5,7 +5,7 @@
  * shared with the task detail page. Kept DOM-free so it's unit-testable.
  */
 import type { SSSConfig, Turnpoint, TurnpointType, UnitPreferences, XCTask } from "@glidecomp/engine";
-import { formatDistance } from "@glidecomp/engine";
+import { formatDistance, toXctskJSON } from "@glidecomp/engine";
 import { utcToZonedHHMM, zoneNameWithOffset } from "../lib/time";
 
 // ---------------------------------------------------------------------------
@@ -405,59 +405,56 @@ export function startConfigSummary(
 
 /**
  * Serialize a parsed XCTask to the strict shape the API's xctsk validator
- * accepts. Picks only known fields so stray keys (e.g. from tasks stored
- * by the seed script, or spec extensions in uploaded files) can't fail
- * the strict schema.
+ * accepts. Delegates the shape to the engine's toXctskJSON (so the two
+ * serializers can't drift field-by-field), then applies the PATCH path's
+ * own policies on top — each override below is a deliberate departure from
+ * the export/download shape, kept because the stored task and a downloaded
+ * file want different things.
  */
 export function xctskForPatch(task: XCTask): Record<string, unknown> {
-  const takeoff = {
-    ...(task.takeoff?.timeOpen !== undefined ? { timeOpen: task.takeoff.timeOpen } : {}),
-    ...(task.takeoff?.timeClose !== undefined ? { timeClose: task.takeoff.timeClose } : {}),
-  };
-  return {
-    taskType: task.taskType || "CLASSIC",
-    version: task.version ?? 1,
-    ...(task.earthModel ? { earthModel: task.earthModel } : {}),
-    turnpoints: task.turnpoints.map((tp) => ({
-      ...(tp.type ? { type: tp.type } : {}),
-      radius: tp.radius,
-      waypoint: {
-        name: tp.waypoint.name,
-        ...(tp.waypoint.description !== undefined
-          ? { description: tp.waypoint.description }
-          : {}),
-        lat: tp.waypoint.lat,
-        lon: tp.waypoint.lon,
-        ...(tp.waypoint.altSmoothed !== undefined
-          ? { altSmoothed: tp.waypoint.altSmoothed }
-          : {}),
-      },
-    })),
-    ...(Object.keys(takeoff).length > 0 ? { takeoff } : {}),
-    ...(task.sss
-      ? {
-          sss: {
-            type: task.sss.type,
-            direction: task.sss.direction,
-            ...(task.sss.timeGates && task.sss.timeGates.length > 0
-              ? { timeGates: task.sss.timeGates }
-              : {}),
-          },
-        }
-      : {}),
-    ...(task.goal
-      ? {
-          goal: {
-            type: task.goal.type ?? "CYLINDER",
-            ...(task.goal.deadline !== undefined ? { deadline: task.goal.deadline } : {}),
-            ...(task.goal.finishAltitude !== undefined
-              ? { finishAltitude: task.goal.finishAltitude }
-              : {}),
-          },
-        }
-      : {}),
-    ...(task.cylinderTolerance !== undefined
-      ? { cylinderTolerance: task.cylinderTolerance }
-      : {}),
-  };
+  const json = toXctskJSON(task);
+
+  // The export normalises the task type/version to a spec-compliant v1 file;
+  // the PATCH stores the task as loaded — a v2 (QR-sourced) task keeps its
+  // version, and a blank taskType still defends with the CLASSIC default.
+  json.taskType = task.taskType || "CLASSIC";
+  json.version = task.version ?? 1;
+
+  // altSmoothed: the editor treats a blank altitude as unknown. The export
+  // writes 0 for unknown (the file format expects the field), but inventing
+  // 0 in the stored task would read back as a real "0 m" in the grid.
+  const turnpoints = json.turnpoints as Array<{ waypoint: Record<string, unknown> }>;
+  turnpoints.forEach((tp, i) => {
+    if (task.turnpoints[i]?.waypoint.altSmoothed === undefined) {
+      delete tp.waypoint.altSmoothed;
+    }
+  });
+
+  // takeoff: pick only the schema-known fields — the export spreads the
+  // object wholesale, and the API validator is strict, so a stray key from
+  // an uploaded file would fail the save — and drop it entirely when empty.
+  if (json.takeoff) {
+    const takeoff = {
+      ...(task.takeoff?.timeOpen !== undefined ? { timeOpen: task.takeoff.timeOpen } : {}),
+      ...(task.takeoff?.timeClose !== undefined ? { timeClose: task.takeoff.timeClose } : {}),
+    };
+    if (Object.keys(takeoff).length > 0) json.takeoff = takeoff;
+    else delete json.takeoff;
+  }
+
+  // timeGates: the export injects a lone "00:00:00Z" placeholder (xcontest
+  // rejects an empty array); the stored task simply omits the field —
+  // editableGates treats the placeholder as "no gates" anyway, so writing
+  // it would only round-trip noise into the editor.
+  if (task.sss && !(task.sss.timeGates && task.sss.timeGates.length > 0)) {
+    delete (json.sss as Record<string, unknown>).timeGates;
+  }
+
+  // goal.type is required by the API schema; the export echoes whatever the
+  // task carries, so default a missing one.
+  if (task.goal) {
+    (json.goal as Record<string, unknown>).type = task.goal.type ?? "CYLINDER";
+  }
+
+  return json;
 }

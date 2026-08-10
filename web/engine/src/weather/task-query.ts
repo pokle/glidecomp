@@ -25,9 +25,10 @@ const DAY_MS = 86_400_000;
  */
 const PAD_HOURS = 1;
 
-/** Fallback span when a task defines no times at all: 08:00–20:00 local-ish,
- * expressed in UTC around the task date. Wide enough to contain any flying
- * day, narrow enough that the request stays one day of hourly data. */
+/** Fallback span when a task defines no times at all: the whole UTC day of
+ * the task date. Coarser than the flying day, but it contains the flying
+ * whatever zone the comp is in, and the request stays one day of hourly
+ * data. */
 const FALLBACK_START_HOUR_UTC = 0;
 const FALLBACK_END_HOUR_UTC = 24;
 

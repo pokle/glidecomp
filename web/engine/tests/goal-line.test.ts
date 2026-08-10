@@ -352,28 +352,28 @@ function toTP1(): IGCFix[] {
 describe('goal line tolerance (S7F §9.1.3, §9.2.3)', () => {
   const line = computeGoalLine(lineGoalTask())!; // halfWidth 200 m
 
-  it('takes the cylinder percentage over the line length, with the 5 m floor', () => {
-    // 0.5% of the 400 m line is 2 m — under the floor.
-    expect(goalLineToleranceM(line, 0.005)).toBeCloseTo(5, 6);
-    // 5% of 400 m is 20 m — over the floor.
-    expect(goalLineToleranceM(line, 0.05)).toBeCloseTo(20, 6);
-    // A 10 km line at the Cat 2 maximum: 0.5% of 10 km.
+  it('is the fixed 5 m band whatever the line length (S7F 2026 §9.1.1)', () => {
+    // The relative (percentage) term is fixed at 0%, so the band is the 5 m
+    // absolute minimum on a 400 m line…
+    expect(goalLineToleranceM(line)).toBeCloseTo(5, 6);
+    // …and still 5 m on a 10 km line.
     const wide = computeGoalLine(lineGoalTask('LINE', 5000))!;
-    expect(goalLineToleranceM(wide, 0.005)).toBeCloseTo(50, 6);
+    expect(goalLineToleranceM(wide)).toBeCloseTo(5, 6);
   });
 
   it('gives the control semicircle the §9.1.1 cylinder band, not the line band', () => {
     // §9.2.3 sends the control zone to the cylinder calculation: the outer
-    // detection radius of 200 m, which the 5 m floor decides.
-    expect(goalZoneRadius(line, 0.005)).toBeCloseTo(205, 6);
-    expect(goalZoneRadius(line, 0.05)).toBeCloseTo(210, 6);
+    // detection radius of the 200 m half-width — the fixed +5 m band.
+    expect(goalZoneRadius(line)).toBeCloseTo(205, 6);
+    const wide = computeGoalLine(lineGoalTask('LINE', 5000))!;
+    expect(goalZoneRadius(wide)).toBeCloseTo(5005, 6);
   });
 
   it('credits a crossing that clips just past the end of the line', () => {
     // 203 m north of the centre: past the 200 m endpoint, inside the 5 m band.
     const from = atLine(-500, 203);
     const to = atLine(500, 203);
-    const hit = goalLineCrossing(line, from, to, goalLineToleranceM(line, 0.005));
+    const hit = goalLineCrossing(line, from, to, goalLineToleranceM(line));
     expect(hit).not.toBeNull();
     expect(hit!.toleranceCredited).toBe(true);
     // Without the band it is not a crossing at all.
@@ -383,7 +383,7 @@ describe('goal line tolerance (S7F §9.1.3, §9.2.3)', () => {
   it('does not credit a crossing beyond the band', () => {
     const from = atLine(-500, 210);
     const to = atLine(500, 210);
-    expect(goalLineCrossing(line, from, to, goalLineToleranceM(line, 0.005))).toBeNull();
+    expect(goalLineCrossing(line, from, to, goalLineToleranceM(line))).toBeNull();
   });
 
   it('scores goal for a pilot who clipped the end of the line', () => {

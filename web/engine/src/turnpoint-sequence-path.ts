@@ -53,6 +53,33 @@ interface BuildForwardPathParams {
   startSelectionReason?: TurnpointReaching['selectionReason'];
 }
 
+/**
+ * One {@link TurnpointReaching}, anchored at a position (a crossing, or the
+ * previous reaching for the presence-based case). Spelled once so the three
+ * construction sites below cannot drift: `goalSemicircleCredited` is written
+ * only when true, so the JSON payload stays absent otherwise.
+ */
+function reachingAt(
+  taskIndex: number,
+  at: Pick<TurnpointReaching, 'fixIndex' | 'time' | 'latitude' | 'longitude' | 'altitude'>,
+  selectionReason: TurnpointReaching['selectionReason'],
+  candidateCount: number,
+  flags: { toleranceCredited: boolean; goalSemicircleCredited?: boolean },
+): TurnpointReaching {
+  return {
+    taskIndex,
+    fixIndex: at.fixIndex,
+    time: at.time,
+    latitude: at.latitude,
+    longitude: at.longitude,
+    altitude: at.altitude,
+    selectionReason,
+    candidateCount,
+    toleranceCredited: flags.toleranceCredited,
+    ...(flags.goalSemicircleCredited ? { goalSemicircleCredited: true } : {}),
+  };
+}
+
 export function buildForwardPath(params: BuildForwardPathParams): TurnpointReaching[] {
   const {
     sssCrossing,
@@ -67,17 +94,13 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
   const sequence: TurnpointReaching[] = [];
 
   // Add SSS reaching
-  sequence.push({
-    taskIndex: sssCrossing.taskIndex,
-    fixIndex: sssCrossing.fixIndex,
-    time: sssCrossing.time,
-    latitude: sssCrossing.latitude,
-    longitude: sssCrossing.longitude,
-    altitude: sssCrossing.altitude,
-    selectionReason: startSelectionReason,
-    candidateCount: crossingsByTP.get(sssIdx)?.length ?? 0,
-    toleranceCredited: sssCrossing.toleranceCredited,
-  });
+  sequence.push(reachingAt(
+    sssCrossing.taskIndex,
+    sssCrossing,
+    startSelectionReason,
+    crossingsByTP.get(sssIdx)?.length ?? 0,
+    { toleranceCredited: sssCrossing.toleranceCredited },
+  ));
 
   let prevReachingTime = sssCrossing.time.getTime();
 
@@ -117,20 +140,16 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
 
     if (satisfiedAtPrevReaching) {
       const prev = sequence[sequence.length - 1];
-      sequence.push({
-        taskIndex: tpIdx,
-        fixIndex: prev.fixIndex,
-        time: prev.time,
-        latitude: prev.latitude,
-        longitude: prev.longitude,
-        altitude: prev.altitude,
-        selectionReason: isExit ? 'already_outside' : 'already_inside',
-        candidateCount: tpCrossings.length,
-        toleranceCredited: lastCrossingBefore?.toleranceCredited ?? false,
-        ...(lastCrossingBefore?.goalSemicircleCredited
-          ? { goalSemicircleCredited: true }
-          : {}),
-      });
+      sequence.push(reachingAt(
+        tpIdx,
+        prev,
+        isExit ? 'already_outside' : 'already_inside',
+        tpCrossings.length,
+        {
+          toleranceCredited: lastCrossingBefore?.toleranceCredited ?? false,
+          goalSemicircleCredited: lastCrossingBefore?.goalSemicircleCredited,
+        },
+      ));
       continue; // reached at the same moment — prevReachingTime unchanged
     }
 
@@ -161,20 +180,16 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
       break; // Pilot didn't reach this TP
     }
 
-    sequence.push({
-      taskIndex: validCrossing.taskIndex,
-      fixIndex: validCrossing.fixIndex,
-      time: validCrossing.time,
-      latitude: validCrossing.latitude,
-      longitude: validCrossing.longitude,
-      altitude: validCrossing.altitude,
-      selectionReason: isESS ? 'first_crossing' : 'first_after_previous',
-      candidateCount: tpCrossings.length,
-      toleranceCredited: validCrossing.toleranceCredited,
-      ...(validCrossing.goalSemicircleCredited
-        ? { goalSemicircleCredited: true }
-        : {}),
-    });
+    sequence.push(reachingAt(
+      validCrossing.taskIndex,
+      validCrossing,
+      isESS ? 'first_crossing' : 'first_after_previous',
+      tpCrossings.length,
+      {
+        toleranceCredited: validCrossing.toleranceCredited,
+        goalSemicircleCredited: validCrossing.goalSemicircleCredited,
+      },
+    ));
 
     prevReachingTime = validCrossing.time.getTime();
   }
@@ -362,14 +377,19 @@ export function computeBestProgress(
     if (deadlineMs !== null && fix.time.getTime() > deadlineMs) break;
 
     const dCentre = ellipsoidDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon);
+    // The fix→next-zone LOWER-BOUND measure. For every kind except 'tag'
+    // this is also the heuristic measure — 'tag' alone aims at the frozen
+    // tag point while its lower bound is the nearest-edge distance.
+    const lbNext =
+      nextMeasure.kind === 'exit-boundary'
+        ? Math.max(0, nextTP.radius - dCentre)
+        : nextMeasure.kind === 'goal-line'
+          ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
+          : Math.max(0, dCentre - nextTP.radius);
     const heuristicNext =
       nextMeasure.kind === 'tag'
         ? ellipsoidDistance(fix.latitude, fix.longitude, nextMeasure.point.lat, nextMeasure.point.lon)
-        : nextMeasure.kind === 'exit-boundary'
-          ? Math.max(0, nextTP.radius - dCentre)
-          : nextMeasure.kind === 'goal-line'
-            ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
-            : Math.max(0, dCentre - nextTP.radius);
+        : lbNext;
     const cap = capFor(fix, i);
     const geometric = heuristicNext + interTPDistance;
     const bonus = Math.min(geometric, cap);
@@ -377,12 +397,6 @@ export function computeBestProgress(
     if (!seed || heuristic < seed.value) seed = { index: i, value: heuristic, bonus };
 
     if (mode === 'exact') {
-      const lbNext =
-        nextMeasure.kind === 'exit-boundary'
-          ? Math.max(0, nextTP.radius - dCentre)
-          : nextMeasure.kind === 'goal-line'
-            ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
-            : Math.max(0, dCentre - nextTP.radius);
       const lbGoal = goalLine
         ? distanceToGoalLine(goalLine, fix.latitude, fix.longitude)
         : Math.max(

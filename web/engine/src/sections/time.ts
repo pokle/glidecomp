@@ -23,6 +23,7 @@ import {
   pts,
   fmtPoints,
   duration,
+  eqResult,
   reconcileWithAvailable,
   trimZeros,
 } from '../score-explanation-format';
@@ -193,11 +194,7 @@ export function buildTimeSection(
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^5⁄6) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${
-          reconciles
-            ? `= ${fmtPoints(entry.time_points)}`
-            : `≈ ${fmtPoints(entry.time_points)} — the figures are shown rounded; the points come from their full precision`
-        } (times in hours)`,
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^5⁄6) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${eqResult(reconciles, entry.time_points)} (times in hours)`,
       });
     }
   }

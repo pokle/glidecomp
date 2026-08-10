@@ -26,6 +26,7 @@ import type { XCTask } from './xctsk-parser';
 import type { TurnpointSequenceResult } from './turnpoint-sequence';
 import { ellipsoidDistance, calculateBearingRadians, destinationPoint } from './geo';
 import {
+  assignRanks,
   DEFAULT_GAP_PARAMETERS,
   type PilotFlight,
   type PilotScore,
@@ -200,13 +201,7 @@ export function scoreOpenDistanceFlights(
 
   // Rank by distance, furthest first (ties share a rank).
   pilotScores.sort((a, b) => b.flownDistance - a.flownDistance);
-  for (let i = 0; i < pilotScores.length; i++) {
-    if (i === 0 || pilotScores[i].flownDistance !== pilotScores[i - 1].flownDistance) {
-      pilotScores[i].rank = i + 1;
-    } else {
-      pilotScores[i].rank = pilotScores[i - 1].rank;
-    }
-  }
+  assignRanks(pilotScores, p => p.flownDistance);
 
   const bestDistance = pilotScores.length > 0 ? pilotScores[0].flownDistance : 0;
 

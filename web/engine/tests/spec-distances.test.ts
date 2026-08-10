@@ -34,7 +34,7 @@ import {
 } from '../src/task-optimizer';
 import { parseXCTask, getESSIndex, type XCTask, type Turnpoint } from '../src/xctsk-parser';
 import { ellipsoidDistance, destinationPoint, calculateBearingRadians } from '../src/geo';
-import { computeLeadingAggregate } from '../src/gap-formulas';
+import { computeLeadingAggregate } from '../src/gap-leading';
 
 const fixture = (name: string): XCTask =>
   parseXCTask(readFileSync(resolve(__dirname, 'fixtures', name), 'utf-8'));

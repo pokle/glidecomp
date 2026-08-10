@@ -18,14 +18,17 @@
 import { IGCFix, fixAltitude } from './igc-parser';
 import { calculateBearing, ellipsoidDistance } from './geo';
 import { TrackSegment } from './event-types';
+import { DEFAULT_THRESHOLDS, type CircleThresholds } from './thresholds';
 
 // --- Constants ---
 
-/** Maximum plausible bearing rate (deg/s). Anything beyond this is a GPS spike. */
-const MAX_BEARING_RATE = 50;
-
-/** Maximum reasonable wind speed (m/s) — reject estimates above this. */
-const MAX_REASONABLE_WIND_SPEED = 30;
+/**
+ * The one place circle-detection defaults are spelled: the shared threshold
+ * model. Every default in this module resolves through this object, so a
+ * caller passing no overrides behaves identically to the event-detector path
+ * (which resolves the same fields via resolveThresholds).
+ */
+const CIRCLE_DEFAULTS: CircleThresholds = DEFAULT_THRESHOLDS.circle;
 
 /**
  * Approximate meters per degree of latitude at the Earth's surface.
@@ -38,9 +41,6 @@ const MAX_REASONABLE_WIND_SPEED = 30;
  * stored analyses for no gain in truth.
  */
 const METERS_PER_DEGREE_LAT = 111320;
-
-/** Minimum ground speed variation (m/s) needed for a meaningful wind estimate. */
-const MIN_GROUND_SPEED_VARIATION = 1;
 
 // --- Types ---
 
@@ -86,26 +86,16 @@ export interface CircleDetectionResult {
   bearingRates: number[];
 }
 
-export interface CircleDetectionOptions {
-  lookbackSeconds?: number;    // default 5
-  minTurnRate?: number;        // default 4.0 deg/s
-  t1Seconds?: number;          // default 8  (CRUISE -> CLIMB transition delay)
-  t2Seconds?: number;          // default 15 (CLIMB -> CRUISE transition delay)
-  minFixesPerCircle?: number;  // default 8
-  maxBearingRate?: number;     // default 50 deg/s
-  maxReasonableWindSpeed?: number;  // default 30 m/s
-  minGroundSpeedVariation?: number; // default 1 m/s
-}
-
 /**
  * Timing constants for the {@link detectCirclingSegments} 4-state machine.
  * Grouped so callers name each field rather than passing bare numbers
- * positionally (a swapped delay silently mis-detects thermals).
+ * positionally (a swapped delay silently mis-detects thermals). Defaults
+ * come from {@link CIRCLE_DEFAULTS}.
  */
 export interface CirclingSegmentParams {
-  minTurnRate?: number;  // default 4.0 deg/s
-  t1Seconds?: number;    // default 8  (CRUISE -> CLIMB transition delay)
-  t2Seconds?: number;    // default 15 (CLIMB -> CRUISE transition delay)
+  minTurnRate?: number;  // deg/s
+  t1Seconds?: number;    // CRUISE -> CLIMB transition delay
+  t2Seconds?: number;    // CLIMB -> CRUISE transition delay
 }
 
 /**
@@ -120,8 +110,8 @@ export interface WindTuning {
 }
 
 const DEFAULT_WIND_TUNING: WindTuning = {
-  maxWindSpeed: MAX_REASONABLE_WIND_SPEED,
-  minGroundSpeedVariation: MIN_GROUND_SPEED_VARIATION,
+  maxWindSpeed: CIRCLE_DEFAULTS.maxReasonableWindSpeed,
+  minGroundSpeedVariation: CIRCLE_DEFAULTS.minGroundSpeedVariation,
 };
 
 // --- Exported helpers ---
@@ -142,12 +132,12 @@ export function normalizeBearingDelta(delta: number): number {
  * For each fix i, find the fix at least `lookbackSeconds` earlier.
  * Compute bearing at both points using calculateBearing from geo.ts.
  * Rate = normalizeBearingDelta(bearing_current - bearing_lookback) / dt.
- * Clamp to [-50, 50] deg/s to reject GPS spikes.
+ * Clamp to ±maxBearingRateLimit deg/s to reject GPS spikes.
  */
 export function computeBearingRates(
   fixes: IGCFix[],
-  lookbackSeconds: number = 5,
-  maxBearingRateLimit: number = MAX_BEARING_RATE
+  lookbackSeconds: number = CIRCLE_DEFAULTS.lookbackSeconds,
+  maxBearingRateLimit: number = CIRCLE_DEFAULTS.maxBearingRate
 ): number[] {
   const rates: number[] = new Array(fixes.length).fill(0);
 
@@ -202,9 +192,9 @@ export function detectCirclingSegments(
   bearingRates: number[],
   params: CirclingSegmentParams = {}
 ): CirclingSegment[] {
-  const minTurnRate = params.minTurnRate ?? 4.0;
-  const t1Seconds = params.t1Seconds ?? 8;
-  const t2Seconds = params.t2Seconds ?? 15;
+  const minTurnRate = params.minTurnRate ?? CIRCLE_DEFAULTS.minTurnRate;
+  const t1Seconds = params.t1Seconds ?? CIRCLE_DEFAULTS.t1Seconds;
+  const t2Seconds = params.t2Seconds ?? CIRCLE_DEFAULTS.t2Seconds;
   const segments: CirclingSegment[] = [];
 
   if (fixes.length < 3) return segments;
@@ -385,8 +375,8 @@ export function fitCircleLeastSquares(
 function extractCircles(
   fixes: IGCFix[],
   circlingSegments: CirclingSegment[],
-  minFixesPerCircle: number = 8,
-  tuning: WindTuning = DEFAULT_WIND_TUNING
+  minFixesPerCircle: number,
+  tuning: WindTuning
 ): CircleSegment[] {
   const circles: CircleSegment[] = [];
 
@@ -669,22 +659,22 @@ function estimateWindFromCenterDrift(params: CenterDriftParams): WindEstimate | 
  * Detect circles in a flight track.
  *
  * @param fixes - Array of IGC fixes
- * @param options - Detection parameters
+ * @param options - Detection parameters; unset fields fall back to CIRCLE_DEFAULTS
  * @returns Detection result with circling segments, individual circles, and bearing rates
  */
 export function detectCircles(
   fixes: IGCFix[],
-  options?: CircleDetectionOptions
+  options?: Partial<CircleThresholds>
 ): CircleDetectionResult {
-  const lookbackSeconds = options?.lookbackSeconds ?? 5;
-  const minTurnRate = options?.minTurnRate ?? 4.0;
-  const t1Seconds = options?.t1Seconds ?? 8;
-  const t2Seconds = options?.t2Seconds ?? 15;
-  const minFixesPerCircle = options?.minFixesPerCircle ?? 8;
-  const maxBearingRateOpt = options?.maxBearingRate ?? MAX_BEARING_RATE;
+  const lookbackSeconds = options?.lookbackSeconds ?? CIRCLE_DEFAULTS.lookbackSeconds;
+  const minTurnRate = options?.minTurnRate ?? CIRCLE_DEFAULTS.minTurnRate;
+  const t1Seconds = options?.t1Seconds ?? CIRCLE_DEFAULTS.t1Seconds;
+  const t2Seconds = options?.t2Seconds ?? CIRCLE_DEFAULTS.t2Seconds;
+  const minFixesPerCircle = options?.minFixesPerCircle ?? CIRCLE_DEFAULTS.minFixesPerCircle;
+  const maxBearingRateOpt = options?.maxBearingRate ?? CIRCLE_DEFAULTS.maxBearingRate;
   const tuning: WindTuning = {
-    maxWindSpeed: options?.maxReasonableWindSpeed ?? MAX_REASONABLE_WIND_SPEED,
-    minGroundSpeedVariation: options?.minGroundSpeedVariation ?? MIN_GROUND_SPEED_VARIATION,
+    maxWindSpeed: options?.maxReasonableWindSpeed ?? CIRCLE_DEFAULTS.maxReasonableWindSpeed,
+    minGroundSpeedVariation: options?.minGroundSpeedVariation ?? CIRCLE_DEFAULTS.minGroundSpeedVariation,
   };
 
   // Step 1: Compute bearing rates

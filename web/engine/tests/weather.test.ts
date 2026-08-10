@@ -495,6 +495,25 @@ describe('open-meteo adapter', () => {
     expect(w.hours).toEqual([]);
   });
 
+  it('keeps an hour whose only readings are gust and precipitation', async () => {
+    // The regression this guards: a hand-kept field list in isEmptyHour had
+    // drifted from WeatherHour and threw such hours away as empty.
+    const nulls = [null, null, null, null];
+    const body = openMeteoBody({
+      ...Object.fromEntries(
+        Object.keys(openMeteoBody().hourly)
+          .filter((k) => k !== 'time')
+          .map((k) => [k, nulls])
+      ),
+      wind_gusts_10m: [null, 22, null, null],
+      precipitation: [null, 1.2, null, null],
+    });
+    const w = await openMeteoEra5Provider().fetch(query, { fetchImpl: stubFetch(body), nowMs: NOW_MS });
+    expect(w.hours.length).toBe(1);
+    expect(w.hours[0].surface.windGustKmh).toBe(22);
+    expect(w.hours[0].precipitationMm).toBe(1.2);
+  });
+
   it('marks a fetch inside the publication lag provisional', async () => {
     const justAfter = Date.UTC(2026, 0, 10, 12);
     const fresh = await openMeteoHistoricalForecastProvider().fetch(query, {

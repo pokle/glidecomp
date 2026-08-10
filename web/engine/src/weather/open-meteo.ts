@@ -97,7 +97,7 @@ function utcDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-/** Numeric column, or an all-undefined stand-in when the key is absent. */
+/** Numeric column, or null when the key is absent from the payload. */
 function column(
   hourly: Record<string, unknown> | undefined,
   key: string
@@ -111,25 +111,6 @@ function cell(col: (number | null)[] | null, i: number): number | null {
   if (!col) return null;
   const v = col[i];
   return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
-/** True when a row carries no usable reading at all — the archive has not
- * reached this day yet. Such rows are dropped so the registry can fall
- * through to another provider instead of caching a blank day. */
-function isEmptyHour(h: WeatherHour): boolean {
-  const nums = [
-    h.surface.windSpeedKmh,
-    h.surface.windDirectionDeg,
-    h.surface.temperatureC,
-    h.surface.dewPointC,
-    h.cloud.totalPct,
-    h.cloud.lowPct,
-    h.boundaryLayerDepthM,
-    h.capeJkg,
-    h.shortwaveWm2,
-  ];
-  if (nums.some((v) => v !== null)) return false;
-  return !h.levels.some((l) => l.windSpeedKmh !== null);
 }
 
 /**
@@ -156,6 +137,23 @@ const DELIVERED: Record<WeatherVariable, (hours: WeatherHour[]) => boolean> = {
   radiation: (hs) => hs.some((h) => h.shortwaveWm2 !== null),
   precipitation: (hs) => hs.some((h) => h.precipitationMm !== null),
 };
+
+/**
+ * True when a row carries no usable reading at all — the archive has not
+ * reached this day yet. Such rows are dropped so the registry can fall
+ * through to another provider instead of caching a blank day.
+ *
+ * Judged with the same per-variable DELIVERED predicates that narrow
+ * `WeatherSource.variables`: an hour is empty exactly when it delivers none
+ * of them. A hand-kept field list used to sit here instead, and it drifted
+ * from `WeatherHour` — it never learnt about gust, mid or high cloud, or
+ * precipitation, so an hour carrying only those readings was thrown away as
+ * empty. Deriving the answer from the one table removes that class of drift.
+ */
+function isEmptyHour(h: WeatherHour): boolean {
+  const row = [h];
+  return !Object.values(DELIVERED).some((delivered) => delivered(row));
+}
 
 /**
  * The variables a provider ADVERTISED, narrowed to the ones this particular

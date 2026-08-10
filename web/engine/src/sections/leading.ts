@@ -5,7 +5,7 @@
  */
 
 import type { GAPParameters, LeadingFormula } from '../gap-scoring';
-import { leadingFormulaFor } from '../gap-scoring';
+import { calculateLeadingPoints, leadingFormulaFor } from '../gap-scoring';
 import type {
   ScoreExplanationItem,
   ScoreExplanationSection,
@@ -15,7 +15,7 @@ import type {
 } from '../score-explanation-types';
 import {
   pts,
-  fmtPoints,
+  eqResult,
   reconcileWithAvailable,
   trimZeros,
   defaultFormatTime,
@@ -123,11 +123,10 @@ export function buildLeadingSection(
           : `Best in class ${trimZeros(minLC.toFixed(3), 1)}.`,
     });
     if (lc > minLC) {
-      // Mirrors calculateLeadingPoints exactly, including its degenerate
-      // guard: a non-positive best coefficient has no defined normalisation
-      // and the engine scores 0 rather than dividing by it.
-      const factor =
-        minLC > 0 ? Math.max(0, 1 - Math.cbrt(((lc - minLC) * (lc - minLC)) / minLC)) : 0;
+      // The scorer's own function at unit available points, so the printed
+      // factor can never drift from the one the engine applied — including
+      // its degenerate guard for a non-positive best coefficient.
+      const factor = calculateLeadingPoints(lc, minLC, 1);
       const { availStr, decimals, reconciles } = reconcileWithAvailable(
         ap.leading, 3, 6, entry.leading_points,
         (d, avail) => Number(factor.toFixed(d)) * avail,
@@ -139,11 +138,7 @@ export function buildLeadingSection(
         detail: `leading factor = max(0, 1 − ((LC − LCbest)² ÷ LCbest)^1⁄3) = ${trimZeros(
           factor.toFixed(decimals),
           3,
-        )}; × ${availStr} available ${
-          reconciles
-            ? `= ${fmtPoints(entry.leading_points)}`
-            : `≈ ${fmtPoints(entry.leading_points)} — the figures are shown rounded; the points come from their full precision`
-        }`,
+        )}; × ${availStr} available ${eqResult(reconciles, entry.leading_points)}`,
       });
     }
     // The tail only exists for a pilot who never reached ESS; for everyone

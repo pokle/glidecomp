@@ -206,12 +206,27 @@ function detectLanding(fixes: IGCFix[], config: TakeoffLandingConfig): { index: 
 }
 
 /**
- * Detect takeoff and landing using multiple criteria.
- * Based on XCSoar's approach - uses ground speed, altitude gain, and climb rate.
+ * The detector's typed verdict: the takeoff and landing fix indices, or null
+ * where the criteria never fired. The two scans are independent (takeoff
+ * scans forward, landing scans backward), so the detector does NOT guarantee
+ * `landing.fixIndex > takeoff.fixIndex` — a consumer that needs a coherent
+ * airborne window must check the ordering itself (see flight-summary.ts).
  */
-export function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThresholds): FlightEvent[] {
-  const events: FlightEvent[] = [];
-  if (fixes.length < 10) return events;
+export interface TakeoffLandingDetection {
+  takeoff: { fixIndex: number; startAltitude: number } | null;
+  landing: { fixIndex: number } | null;
+}
+
+/**
+ * Detect takeoff and landing using multiple criteria, returning the typed
+ * fix-index result. Based on XCSoar's approach — uses ground speed, altitude
+ * gain, and climb rate.
+ */
+export function detectTakeoffLandingIndices(
+  fixes: IGCFix[],
+  thresholds: DetectionThresholds
+): TakeoffLandingDetection {
+  if (fixes.length < 10) return { takeoff: null, landing: null };
 
   const config: TakeoffLandingConfig = {
     ...thresholds.takeoffLanding,
@@ -219,8 +234,26 @@ export function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThres
   };
 
   const takeoff = detectTakeoff(fixes, config);
-  if (takeoff) {
-    const fix = fixes[takeoff.index];
+  const landing = detectLanding(fixes, config);
+  return {
+    takeoff: takeoff ? { fixIndex: takeoff.index, startAltitude: takeoff.startAltitude } : null,
+    landing: landing ? { fixIndex: landing.index } : null,
+  };
+}
+
+/**
+ * Flatten a {@link TakeoffLandingDetection} into the FlightEvent objects the
+ * event stream carries (takeoff first, then landing, when detected).
+ */
+export function takeoffLandingToEvents(
+  fixes: IGCFix[],
+  detection: TakeoffLandingDetection
+): FlightEvent[] {
+  const events: FlightEvent[] = [];
+
+  if (detection.takeoff) {
+    const { fixIndex, startAltitude } = detection.takeoff;
+    const fix = fixes[fixIndex];
     events.push({
       id: 'takeoff',
       type: 'takeoff',
@@ -230,16 +263,16 @@ export function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThres
       altitude: fixAltitude(fix),
       description: 'Takeoff',
       details: {
-        fixIndex: takeoff.index,
-        startAltitude: takeoff.startAltitude,
-        altitudeGain: fixAltitude(fix) - takeoff.startAltitude,
+        fixIndex,
+        startAltitude,
+        altitudeGain: fixAltitude(fix) - startAltitude,
       },
     });
   }
 
-  const landing = detectLanding(fixes, config);
-  if (landing) {
-    const fix = fixes[landing.index];
+  if (detection.landing) {
+    const { fixIndex } = detection.landing;
+    const fix = fixes[fixIndex];
     events.push({
       id: 'landing',
       type: 'landing',
@@ -248,9 +281,20 @@ export function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThres
       longitude: fix.longitude,
       altitude: fixAltitude(fix),
       description: 'Landing',
-      details: { fixIndex: landing.index },
+      details: { fixIndex },
     });
   }
 
   return events;
+}
+
+/**
+ * {@link detectTakeoffLandingIndices} flattened through
+ * {@link takeoffLandingToEvents} — kept for the consumers that want the
+ * event stream directly (the analysis CLI, field analysis). Consumers that
+ * only need the fix indices should take the typed result instead of
+ * un-parsing these events.
+ */
+export function detectTakeoffLanding(fixes: IGCFix[], thresholds: DetectionThresholds): FlightEvent[] {
+  return takeoffLandingToEvents(fixes, detectTakeoffLandingIndices(fixes, thresholds));
 }

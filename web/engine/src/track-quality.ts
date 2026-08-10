@@ -48,10 +48,11 @@
 
 import { ellipsoidDistance, getBoundingBox, isInsideCylinder } from './geo';
 import { fixAltitude, type IGCFix, type IGCHeader } from './igc-parser';
-import { detectTakeoffLanding } from './takeoff-landing-detector';
+import { detectTakeoffLandingIndices } from './takeoff-landing-detector';
 import { km, type KmOptions } from './format-distance';
 import { DEFAULT_THRESHOLDS } from './thresholds';
 import type { XCTask } from './xctsk-parser';
+import { nextDayISO, zonedDayStartMs } from './zone-offset';
 
 const HOUR_MS = 3_600_000;
 
@@ -520,67 +521,6 @@ function checkWrongDay(
   };
 }
 
-/**
- * Epoch ms of local midnight starting `dateISO` ("YYYY-MM-DD") in `timeZone`,
- * or the UTC midnight when the zone is null or unknown to the runtime.
- *
- * Intl only, deliberately: the engine must not pull in a tz-lookup database
- * (see the note in field-analysis/format-time.ts). Guess the instant as if
- * the zone were UTC, read the zone's ACTUAL offset at that guess by
- * formatting back and differencing, correct, then re-probe once — the second
- * pass fixes the ±1 h error when the first guess lands on the far side of a
- * DST transition.
- */
-function zonedDayStartMs(dateISO: string, timeZone: string | null): number | null {
-  const utcGuess = Date.parse(`${dateISO}T00:00:00Z`);
-  if (Number.isNaN(utcGuess)) return null;
-  if (timeZone === null) return utcGuess;
-  try {
-    let ms = utcGuess;
-    for (let pass = 0; pass < 2; pass++) {
-      const offset = zoneOffsetMs(ms, timeZone);
-      const corrected = utcGuess - offset;
-      if (corrected === ms) return ms;
-      ms = corrected;
-    }
-    return ms;
-  } catch {
-    return utcGuess;
-  }
-}
-
-/** Offset of `timeZone` from UTC at `atMs`, in ms (positive east). */
-function zoneOffsetMs(atMs: number, timeZone: string): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  const parts: Record<string, number> = {};
-  for (const p of dtf.formatToParts(new Date(atMs))) {
-    if (p.type !== 'literal') parts[p.type] = Number(p.value);
-  }
-  const asUTC = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour === 24 ? 0 : parts.hour,
-    parts.minute,
-    parts.second
-  );
-  return asUTC - Math.floor(atMs / 1000) * 1000;
-}
-
-function nextDayISO(dateISO: string): string {
-  const ms = Date.parse(`${dateISO}T00:00:00Z`);
-  return new Date(ms + 24 * HOUR_MS).toISOString().slice(0, 10);
-}
-
 /** "9 days", "6 hours", "40 minutes" — the size of a time gap, for prose. */
 function describeGap(ms: number): string {
   const hours = ms / HOUR_MS;
@@ -881,9 +821,8 @@ function checkNeverAirborne(fixes: IGCFix[], times: number[]): TrackQualityFindi
 
   let maxGain = 0;
   for (const a of altitudes) if (a - altitudes[0] > maxGain) maxGain = a - altitudes[0];
-  const takeoffDetected = detectTakeoffLanding(fixes, DEFAULT_THRESHOLDS).some(
-    (e) => e.type === 'takeoff'
-  );
+  const takeoffDetected =
+    detectTakeoffLandingIndices(fixes, DEFAULT_THRESHOLDS).takeoff !== null;
 
   return {
     id: 'never-airborne',

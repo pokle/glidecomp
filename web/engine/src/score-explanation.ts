@@ -58,6 +58,7 @@ import type {
   ScoreExplanationSection,
   ScoreExplanationItem,
   ScoreEntryInput,
+  ClassContextInput,
   ExplainGapScoreInput,
   ExplainOpenDistanceInput,
   ExplainManualFlightInput,
@@ -126,6 +127,42 @@ function withItemCharts(
 }
 
 /**
+ * The validity section with each factor row's sparkline attached — shared
+ * verbatim by the track and manual-flight cards, which explain the same day.
+ */
+function validitySectionWithCharts(
+  entry: ScoreEntryInput,
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): ScoreExplanationSection {
+  return withItemCharts(buildValiditySection(classContext, params), {
+    'launch-validity': buildLaunchValidityChart(classContext),
+    'time-validity': buildTimeValidityChart(classContext, params),
+    'distance-validity': buildDistanceValidityChart(entry, classContext, params),
+  });
+}
+
+/**
+ * The sections every GAP card closes with: the penalty (when there is one),
+ * the total, and — after the total, deliberately — the comparison: the
+ * reader needs their own arithmetic to add up before being shown what it
+ * cost them against the winner.
+ */
+function closingSections(
+  entry: ScoreEntryInput,
+  classContext: ClassContextInput,
+  params: GAPParameters,
+): ScoreExplanationSection[] {
+  const out: ScoreExplanationSection[] = [];
+  const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
+  if (penalty) out.push(penalty);
+  out.push(buildTotalSection(entry, classContext.available_points.total));
+  const comparison = buildComparisonSection(entry, classContext);
+  if (comparison) out.push(comparison);
+  return out;
+}
+
+/**
  * Does this card get an arrival section?
  *
  * Normally when there were arrival points to win, or the pilot won some. The
@@ -160,11 +197,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
 
   const sections: ScoreExplanationSection[] = [
     buildFlightSection(task, result, entry, fmt),
-    withItemCharts(buildValiditySection(classContext, params), {
-      'launch-validity': buildLaunchValidityChart(classContext, params),
-      'time-validity': buildTimeValidityChart(classContext, params),
-      'distance-validity': buildDistanceValidityChart(entry, classContext, params),
-    }),
+    validitySectionWithCharts(entry, classContext, params),
     withChart(
       buildDistanceSection(entry, classContext, result, params),
       buildDistanceChart(entry, classContext, params),
@@ -193,13 +226,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
     );
   }
 
-  const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
-  if (penalty) sections.push(penalty);
-  sections.push(buildTotalSection(entry, classContext.available_points.total));
-  // After the total, deliberately: the reader needs their own arithmetic to
-  // add up before being shown what it cost them against the winner.
-  const comparison = buildComparisonSection(entry, classContext);
-  if (comparison) sections.push(comparison);
+  sections.push(...closingSections(entry, classContext, params));
 
   let headline: string;
   if (entry.early_start_outcome === 'pg_launch_to_sss') {
@@ -367,11 +394,7 @@ export function explainManualFlightScore(
 
   const sections: ScoreExplanationSection[] = [
     buildManualFlightSection(task, geometry, entry),
-    withItemCharts(buildValiditySection(classContext, params), {
-      'launch-validity': buildLaunchValidityChart(classContext, params),
-      'time-validity': buildTimeValidityChart(classContext, params),
-      'distance-validity': buildDistanceValidityChart(entry, classContext, params),
-    }),
+    validitySectionWithCharts(entry, classContext, params),
     buildDistanceSection(entry, classContext, synthResult, params),
     buildTimeSection(entry, classContext, params, synthResult, defaultFormatTime),
   ];
@@ -402,11 +425,7 @@ export function explainManualFlightScore(
     sections.push(buildArrivalSection(entry, classContext, params));
   }
 
-  const penalty = buildPenaltySection(entry, params.jumpTheGunFactor);
-  if (penalty) sections.push(penalty);
-  sections.push(buildTotalSection(entry, classContext.available_points.total));
-  const comparison = buildComparisonSection(entry, classContext);
-  if (comparison) sections.push(comparison);
+  sections.push(...closingSections(entry, classContext, params));
 
   const headline = geometry.madeGoal
     ? `Manual flight — made goal — ${fmtPoints(entry.total_score)} points`

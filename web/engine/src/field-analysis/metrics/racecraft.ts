@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
 import { mean, median } from '../stats';
+import { allNullPerPilot, na } from './util';
 import { stepFor } from '../resample';
 import { ellipsoidDistance, localEastNorth } from '../../geo';
 import { getEffectiveESSIndex, getEffectiveSSSIndex, getGoalIndex } from '../../xctsk-parser';
@@ -154,7 +155,7 @@ const startDelay: MetricComputer = {
     for (const p of field.pilots) {
       const tr = p.score.turnpointResult;
       if (!tr.sssReaching || p.sssMs === null) {
-        perPilot.push({ trackFile: p.trackFile, value: null });
+        perPilot.push(na(p));
         continue;
       }
       const gateMs = tr.startGate?.time.getTime() ?? p.sssMs;
@@ -226,7 +227,7 @@ const legTimeLost: MetricComputer = {
     const sssIdx = getEffectiveSSSIndex(field.task);
     const essIdx = getEffectiveESSIndex(field.task);
     if (sssIdx < 0 || essIdx <= sssIdx) {
-      return { perPilot: field.pilots.map((p) => ({ trackFile: p.trackFile, value: null })) };
+      return { perPilot: allNullPerPilot(field) };
     }
 
     const legKeys: { from: number; to: number; key: string }[] = [];
@@ -261,7 +262,7 @@ const legTimeLost: MetricComputer = {
     for (const p of field.pilots) {
       const own = timesByPilot.get(p.trackFile)!;
       if (own.size === 0) {
-        perPilot.push({ trackFile: p.trackFile, value: null });
+        perPilot.push(na(p));
         continue;
       }
       let lost = 0;
@@ -360,7 +361,7 @@ const timeBehind: MetricComputer = {
     const essIdx = getEffectiveESSIndex(field.task);
     const goalIdx = getGoalIndex(field.task);
     if (sssIdx < 0 || essIdx <= sssIdx) {
-      return { perPilot: field.pilots.map((p) => ({ trackFile: p.trackFile, value: null })) };
+      return { perPilot: allNullPerPilot(field) };
     }
 
     const tpIndices: number[] = [];
@@ -391,7 +392,7 @@ const timeBehind: MetricComputer = {
     for (const p of field.pilots) {
       const elapsed = elapsedByPilot.get(p.trackFile);
       if (!elapsed) {
-        perPilot.push({ trackFile: p.trackFile, value: null });
+        perPilot.push(na(p));
         continue;
       }
       const behindMin = elapsed.map((e, k) => {
@@ -472,7 +473,7 @@ const essMargin: MetricComputer = {
     for (const p of field.pilots) {
       const ess = p.score.turnpointResult.essReaching;
       if (!ess || !goalWp) {
-        perPilot.push({ trackFile: p.trackFile, value: null });
+        perPilot.push(na(p));
         continue;
       }
       const distanceToGoal = ellipsoidDistance(ess.latitude, ess.longitude, goalWp.lat, goalWp.lon);
@@ -532,7 +533,7 @@ const finalGlideInit: MetricComputer = {
     const perPilot: PilotMetricValue[] = [];
     for (const p of field.pilots) {
       if (!goalWp || maxDistance === null || p.sssMs === null) {
-        perPilot.push({ trackFile: p.trackFile, value: null });
+        perPilot.push(na(p));
         continue;
       }
       const endMs = p.essMs ?? p.fixes[p.landingIndex]?.time.getTime() ?? null;
@@ -547,7 +548,7 @@ const finalGlideInit: MetricComputer = {
         if (!last || exitMs > last.exitMs) last = { exitMs, thermal: t };
       }
       if (!last) {
-        perPilot.push({ trackFile: p.trackFile, value: null });
+        perPilot.push(na(p));
         continue;
       }
       const exitFix = p.fixes[last.thermal.endIndex];
@@ -559,7 +560,7 @@ const finalGlideInit: MetricComputer = {
       );
       const height = last.thermal.endAltitude - goalAlt;
       if (distanceToGoal > maxDistance || height <= 0) {
-        perPilot.push({ trackFile: p.trackFile, value: null });
+        perPilot.push(na(p));
         continue;
       }
       perPilot.push({

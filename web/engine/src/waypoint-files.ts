@@ -19,7 +19,7 @@
  * adding file formats here never rolls the scoring-engine generation. It's pure
  * string→number parsing; never hand-roll geo maths here (UTM lives in ./utm).
  */
-import { parseWaypointsCSV, type WaypointRecord } from './waypoints';
+import { DEFAULT_WAYPOINT_RADIUS_M, parseWaypointsCSV, type WaypointRecord } from './waypoints';
 import { utmToLatLon } from './utm';
 
 /**
@@ -151,7 +151,7 @@ export function parseWaypointsWPT(content: string): WaypointFileRecord[] {
       name: longName || code,
       latitude,
       longitude,
-      radius: Number.isFinite(radius) && radius > 0 ? radius : 400,
+      radius: Number.isFinite(radius) && radius > 0 ? radius : DEFAULT_WAYPOINT_RADIUS_M,
       altitude: Number.isFinite(altitude) ? altitude : 0,
     });
   }
@@ -210,7 +210,7 @@ function parseWaypointTable(content: string): WaypointFileRecord[] {
       name: longName || code,
       latitude,
       longitude,
-      radius: Number.isFinite(radius) && radius > 0 ? radius : 400,
+      radius: Number.isFinite(radius) && radius > 0 ? radius : DEFAULT_WAYPOINT_RADIUS_M,
       altitude,
     });
   }
@@ -277,7 +277,7 @@ export function parseWaypointsPCX5(content: string): WaypointFileRecord[] {
       name: longName || code,
       latitude: lat,
       longitude: lon,
-      radius: 400,
+      radius: DEFAULT_WAYPOINT_RADIUS_M,
       altitude,
     });
   }
@@ -320,7 +320,7 @@ export function parseWaypointsGPX(content: string): WaypointFileRecord[] {
       name: longName,
       latitude: lat,
       longitude: lon,
-      radius: 400,
+      radius: DEFAULT_WAYPOINT_RADIUS_M,
       altitude: Number.isFinite(ele) ? Math.round(ele) : 0,
     });
   }
@@ -352,7 +352,7 @@ export function parseWaypointsKML(content: string): WaypointFileRecord[] {
       name: firstTag(body, 'description') || code,
       latitude: lat,
       longitude: lon,
-      radius: 400,
+      radius: DEFAULT_WAYPOINT_RADIUS_M,
       altitude: Number.isFinite(alt) ? Math.round(alt) : 0,
     });
   }
@@ -400,7 +400,7 @@ export function parseWaypointsFsGeo(content: string): WaypointFileRecord[] {
       name: longName || code,
       latitude: lat,
       longitude: lon,
-      radius: 400,
+      radius: DEFAULT_WAYPOINT_RADIUS_M,
       altitude,
     });
   }
@@ -411,7 +411,7 @@ export function parseWaypointsFsGeo(content: string): WaypointFileRecord[] {
  * Parse an FS `$FormatUTM` waypoint file: fixed columns of
  *   `NAME   <zone><band>   easting   northing   alt   description`
  * e.g. `A01   33T   0354663   5130093   225   BORDANO LANDING`. The grid
- * reference is converted to WGS84 lat/lon via geo.ts's utmToLatLon.
+ * reference is converted to WGS84 lat/lon via utm.ts's utmToLatLon.
  */
 export function parseWaypointsUTM(content: string): WaypointFileRecord[] {
   const out: WaypointFileRecord[] = [];
@@ -441,7 +441,7 @@ export function parseWaypointsUTM(content: string): WaypointFileRecord[] {
       name: longName || code,
       latitude: lat,
       longitude: lon,
-      radius: 400,
+      radius: DEFAULT_WAYPOINT_RADIUS_M,
       altitude,
     });
   }

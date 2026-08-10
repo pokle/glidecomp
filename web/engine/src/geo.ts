@@ -69,6 +69,11 @@ function andoyerFallback(
  * points; at task scale that cannot occur, but the guard falls back to
  * Andoyer-Lambert (~2 ppm of Vincenty) rather than return garbage.
  *
+ * KEEP IN SYNC: the iteration below is duplicated in {@link inverseGeodesic}
+ * (which additionally returns the azimuth); a change here must be mirrored
+ * there. The parity test in tests/geo-math.test.ts pins the two functions to
+ * exactly equal distances.
+ *
  * @param lat1 - Latitude of first point (degrees)
  * @param lon1 - Longitude of first point (degrees)
  * @param lat2 - Latitude of second point (degrees)
@@ -149,6 +154,10 @@ export function ellipsoidDistance(
  *
  * Falls back to Andoyer-Lambert distance and the spherical bearing on the
  * (near-antipodal, impossible at task scale) non-convergence case.
+ *
+ * KEEP IN SYNC: the iteration below duplicates {@link ellipsoidDistance}'s;
+ * a change here must be mirrored there. The parity test in
+ * tests/geo-math.test.ts pins the two functions to exactly equal distances.
  *
  * @returns `distance` in metres and `azimuth` in radians clockwise from
  *   north, at the first point.
@@ -258,7 +267,8 @@ export function bearingFromComponents(east: number, north: number): number {
 
 /**
  * Calculate bearing from point 1 to point 2 in radians.
- * Used internally by xctsk-parser for task optimization.
+ * Used by goal-line.ts (line orientation) and by inverseGeodesic's
+ * non-convergence fallback.
  *
  * @param lat1 - Latitude of start point (degrees)
  * @param lon1 - Longitude of start point (degrees)

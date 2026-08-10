@@ -47,6 +47,16 @@ function buildThermalSegment(fixes: IGCFix[], startIndex: number, endIndex: numb
   };
 }
 
+// Internal smoothing parameters of the thermal state machine. Deliberately
+// NOT part of the DetectionThresholds model: they shape how the climb signal
+// is read, not what counts as a thermal, so they are not user-tunable.
+
+/** Number of fixes in the trailing climb-rate averaging window. */
+const THERMAL_WINDOW_SIZE = 10;
+
+/** Consecutive below-threshold windows required before a thermal exit. */
+const THERMAL_EXIT_WINDOWS = 3;
+
 /**
  * Detect thermal segments in the flight
  * A thermal is detected when:
@@ -54,15 +64,15 @@ function buildThermalSegment(fixes: IGCFix[], startIndex: number, endIndex: numb
  * - Duration > 20 seconds
  * - Relatively circular path (not a straight glide)
  */
-export function detectThermals(fixes: IGCFix[], thresholds: DetectionThresholds, windowSize = 10): ThermalSegment[] {
+export function detectThermals(fixes: IGCFix[], thresholds: DetectionThresholds): ThermalSegment[] {
   const thermals: ThermalSegment[] = [];
+  const windowSize = THERMAL_WINDOW_SIZE;
   const minClimbRate = thresholds.thermal.minClimbRate;
   const minDuration = thresholds.thermal.minThermalDuration;
 
   let inThermal = false;
   let thermalStart = 0;
   let exitCounter = 0; // Count consecutive windows below threshold
-  const exitThreshold = 3; // Exit after N consecutive windows below threshold
   let lastThermalEnd = -1; // Track the end of the last thermal to prevent overlaps
 
   for (let i = windowSize; i < fixes.length; i++) {
@@ -97,8 +107,8 @@ export function detectThermals(fixes: IGCFix[], thresholds: DetectionThresholds,
       if (avgClimb <= minClimbRate) {
         exitCounter++;
 
-        if (exitCounter >= exitThreshold) {
-          const thermalEnd = i - exitThreshold;
+        if (exitCounter >= THERMAL_EXIT_WINDOWS) {
+          const thermalEnd = i - THERMAL_EXIT_WINDOWS;
           const duration = (fixes[thermalEnd].time.getTime() - fixes[thermalStart].time.getTime()) / 1000;
 
           if (duration >= minDuration) {

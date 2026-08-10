@@ -170,7 +170,8 @@ export interface CategoricalReportSeries extends ReportSeriesBase {
 export interface WindHourlySeries extends ReportSeriesBase {
   kind: 'wind-hourly';
   hours: { t: string; speedKmh: number; directionDeg: number; n: number }[];
-  /** Vector mean over the whole task (the table's "Whole task" row). */
+  /** Combined wind over the whole task (the table's "Whole task" row) —
+   * median magnitude, vector-mean direction (stats.ts combineWindEstimates). */
   wholeTask: { speedKmh: number; directionDeg: number; n: number } | null;
 }
 

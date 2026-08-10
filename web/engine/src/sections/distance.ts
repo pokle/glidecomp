@@ -17,13 +17,14 @@ import type {
 import {
   km,
   pts,
-  fmtPoints,
   duration,
+  eqResult,
   reconcileWithAvailable,
   kmNum,
   kmEq,
 } from '../score-explanation-format';
 import { rankAmong, rankLabel } from './rank';
+import { scoredPilots } from './shared';
 
 export function buildDistanceSection(
   entry: ScoreEntryInput,
@@ -143,11 +144,7 @@ export function buildDistanceSection(
       id: 'distance-linear',
       text: 'Linear half — half the available points scale with your share of the best distance',
       value: pts(entry.distance_linear_points),
-      detail: `0.5 × (${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} ${
-        reconciles
-          ? `= ${fmtPoints(entry.distance_linear_points)}`
-          : `≈ ${fmtPoints(entry.distance_linear_points)} — the figures are shown rounded; the points come from their full precision.`
-      }`,
+      detail: `0.5 × (${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} ${eqResult(reconciles, entry.distance_linear_points)}`,
     });
     items.push({
       id: 'distance-difficulty',
@@ -165,29 +162,25 @@ export function buildDistanceSection(
       id: 'distance-formula',
       text: 'Distance points scale linearly with your share of the best distance',
       value: pts(entry.distance_points),
-      detail: `(${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} available ${
-        reconciles
-          ? `= ${fmtPoints(entry.distance_points)}`
-          : `≈ ${fmtPoints(entry.distance_points)} — the figures are shown rounded; the points come from their full precision.`
-      }`,
+      detail: `(${kmEq(entry.flown_distance, decimals)} ÷ ${kmEq(best, decimals)}) × ${availStr} available ${eqResult(reconciles, entry.distance_points)}`,
     });
   }
 
   // Where this pilot placed on the section's own input. A goal day is
   // degenerate — every goal pilot ties at full distance — so say that rather
   // than a meaningless "equal 1st of 30".
-  const scoredPilots = classContext.pilots.filter((p) => !p.track_excluded);
-  const goalCount = scoredPilots.filter((p) => p.made_goal).length;
+  const scored = scoredPilots(classContext);
+  const goalCount = scored.filter((p) => p.made_goal).length;
   let rank: string | undefined;
   if (entry.made_goal) {
     rank =
       goalCount > 1
         ? `Full distance — one of ${goalCount} pilots in goal`
         : 'Full distance — the only pilot in goal';
-  } else if (scoredPilots.length >= 2) {
+  } else if (scored.length >= 2) {
     rank = rankLabel(
       rankAmong(
-        scoredPilots.map((p) => p.flown_distance),
+        scored.map((p) => p.flown_distance),
         entry.flown_distance,
         (a, b) => a > b,
       ),

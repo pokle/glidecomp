@@ -1,11 +1,13 @@
 /**
  * CIVL GAP scoring types — the shapes the scorer reads and publishes.
  *
- * Pure declarations, no runtime code: the per-pilot input
- * ({@link FlightScoringData}), the per-pilot and whole-field results
- * ({@link PilotScore}, {@link TaskScoreResult}, {@link TaskStats},
- * {@link StoppedTaskScore}), and the small option/candidate shapes the
- * scoring entry points take.
+ * Declarations first: the per-pilot input ({@link FlightScoringData}), the
+ * per-pilot and whole-field results ({@link PilotScore},
+ * {@link TaskScoreResult}, {@link TaskStats}, {@link StoppedTaskScore}), and
+ * the small option/candidate shapes the scoring entry points take. The only
+ * runtime code here is the pair of one-line readers of these shapes
+ * ({@link isNeutralisingOutcome}, {@link officialStartTimeMs}) — the single
+ * interpretation of a field every scoring module shares.
  *
  * Split out of ./gap-scoring so that module stays inside the 1,000-line
  * boundary; gap-scoring re-exports everything here, so the public surface and
@@ -17,13 +19,12 @@
 import type { IGCFix } from './igc-parser';
 import type { TurnpointSequenceResult, TurnpointReaching } from './turnpoint-sequence';
 import type { GAPParameters } from './gap-params';
+import type { TaskValidity, WeightFractions } from './gap-formulas';
 import type {
-  TaskValidity,
-  WeightFractions,
   LeadingAggregate,
   LeadingFieldTimes,
   LeadingMaxTimeSource,
-} from './gap-formulas';
+} from './gap-leading';
 
 /**
  * Available points in each category.
@@ -40,6 +41,24 @@ export interface AvailablePoints {
   leading: number;
   arrival: number;
   total: number;
+}
+
+/**
+ * How an early start reshaped a pilot's score (FAI S7F §13.3) — see
+ * {@link PilotScore.earlyStartOutcome} for what each case means.
+ */
+export type EarlyStartOutcome = 'pg_launch_to_sss' | 'hg_penalty' | 'hg_min_distance';
+
+/**
+ * Whether an early-start outcome NEUTRALISES the flight (§13.3): the pilot is
+ * scored for a fixed distance only — the PG launch→SSS leg, or the HG minimum
+ * distance — with no time, leading or arrival points. 'hg_penalty' is NOT
+ * neutralising: the complete flight is scored and only a points penalty
+ * applies. The one predicate the scorer's early-start branches share, so the
+ * pair of outcomes can never drift apart between call sites.
+ */
+export function isNeutralisingOutcome(o: EarlyStartOutcome | undefined): boolean {
+  return o === 'pg_launch_to_sss' || o === 'hg_min_distance';
 }
 
 /** Individual pilot's scored result. */
@@ -114,7 +133,7 @@ export interface PilotScore {
    * - 'hg_penalty' — HG within the limit: full flight scored, penalty applied
    * - 'hg_min_distance' — HG beyond the limit: scored for minimum distance
    */
-  earlyStartOutcome?: 'pg_launch_to_sss' | 'hg_penalty' | 'hg_min_distance';
+  earlyStartOutcome?: EarlyStartOutcome;
   /**
    * Jump-the-gun penalty points deducted from the total (HG 'hg_penalty'
    * outcome): earlyStartSeconds ÷ jumpTheGunFactor, with the total floored
@@ -330,6 +349,19 @@ export interface FlightScoringData {
    * back into the type.
    */
   leading: FlightLeadingInput;
+}
+
+/**
+ * A flight's OFFICIAL start time (epoch ms): the gate-snapped start when the
+ * flight recorded one, otherwise the actual SSS crossing — older cached rows
+ * predate {@link FlightScoringData.startTimeMs}, so the crossing is the
+ * fallback. Null when the pilot never started. The one interpretation of the
+ * pair of fields, shared by every consumer (§9.2.4.1, §13.4.4).
+ */
+export function officialStartTimeMs(
+  f: Pick<FlightScoringData, 'startTimeMs' | 'sssTimeMs'>,
+): number | null {
+  return f.startTimeMs ?? f.sssTimeMs;
 }
 
 /** The per-pilot facts the best-time source reads (FAI S7F §9.4.1). */

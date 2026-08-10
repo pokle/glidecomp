@@ -24,9 +24,9 @@
  * Both control-zone shapes carry a tolerance band, exactly as a cylinder
  * does (§9.1.1): the line gets the §9.1.3 line tolerance ({@link goalLineToleranceM})
  * and the semicircle gets the cylinder calculation §9.2.3 sends it to
- * ({@link goalZoneRadius}). The band is measurement slack, not geometry — it
- * is at most a few metres and, like the cylinder bands, is not drawn on the
- * map; the drawn line and semicircle are the nominal ones.
+ * ({@link goalZoneRadius}). The band is measurement slack, not geometry — the
+ * fixed ±5 m of S7F 2026 §9.1.1 — and, like the cylinder bands, is not drawn
+ * on the map; the drawn line and semicircle are the nominal ones.
  *
  * The final leg direction follows the OPTIMISED route (S7F 2026 §6.2.3.1,
  * changed by the 2025 edition): the previous point p is the optimised route
@@ -190,18 +190,12 @@ function toLineFrame(
 }
 
 /**
- * The §9.1.2 line tolerance in metres: the same percentage a cylinder gets
- * (§9.1.1), applied to the line's size, with the same 5 m absolute minimum.
- *
- * The specification says the absolute tolerance "is calculated from the
- * Distance and the Length (whichever is greater)" — the two ways a line's
- * size is written down: the centre-to-endpoint distance (which a task file
- * stores as the goal turnpoint's radius, i.e. `halfWidth`) and the line's
- * full length. Taking the greater of the two, as the sentence directs, makes
- * it the full length. On the goal lines competitions actually set — a few
- * hundred metres to a couple of kilometres — the 5 m floor is what binds
- * either way, so the reading only matters for a very long line, and then it
- * is the pilot-favourable one.
+ * The §9.1.2 line tolerance in metres: the same band a cylinder gets
+ * (§9.1.1) — with S7F 2026 fixing the relative term at 0%, that is the 5 m
+ * absolute minimum, whatever the line's length. (Earlier editions applied a
+ * percentage of the line's size too; on the goal lines competitions
+ * actually set — a few hundred metres to a couple of kilometres — the 5 m
+ * floor bound either way.)
  *
  * What the band buys at a GOAL line is length: a crossing that lands up to
  * this far past an endpoint still counts (see {@link goalLineCrossing}).
@@ -212,8 +206,8 @@ function toLineFrame(
  * band that could move a goal TIME (by tolerance ÷ ground speed, a few tenths
  * of a second) rather than only decide credit, for pilots who did cross.
  */
-export function goalLineToleranceM(line: GoalLine, tolerance: number): number {
-  return Math.max(tolerance * 2 * line.halfWidth, MIN_CYLINDER_TOLERANCE_M);
+export function goalLineToleranceM(_line: GoalLine): number {
+  return MIN_CYLINDER_TOLERANCE_M;
 }
 
 /**
@@ -222,8 +216,8 @@ export function goalLineToleranceM(line: GoalLine, tolerance: number): number {
  * apply as for full cylinders (see 8.1)" — so this is the §9.1.1 outer
  * detection radius of the line's half-width, NOT the §9.1.2 line band.
  */
-export function goalZoneRadius(line: GoalLine, tolerance: number): number {
-  return outerDetectionRadius(line.halfWidth, tolerance);
+export function goalZoneRadius(line: GoalLine): number {
+  return outerDetectionRadius(line.halfWidth);
 }
 
 /**

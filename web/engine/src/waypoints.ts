@@ -8,6 +8,15 @@
 import { ellipsoidDistance } from './geo';
 
 /**
+ * Default waypoint cylinder radius in metres — the paragliding-standard
+ * 400 m, used wherever a waypoint file, task or IGC declaration doesn't
+ * carry a radius of its own. The ONE spelling of this default: the task
+ * parser (xctsk-parser's DEFAULT_TURNPOINT_RADIUS) and every waypoint file
+ * parser/serializer read it from here.
+ */
+export const DEFAULT_WAYPOINT_RADIUS_M = 400;
+
+/**
  * A waypoint record from a competition waypoint database.
  * Named WaypointRecord to avoid conflict with Waypoint in xctsk-parser.ts.
  */
@@ -57,7 +66,7 @@ export function parseWaypointsCSV(csvContent: string): WaypointRecord[] {
       latitude,
       longitude,
       description,
-      radius: isNaN(radius) ? 400 : radius,
+      radius: isNaN(radius) ? DEFAULT_WAYPOINT_RADIUS_M : radius,
       altitude: isNaN(altitude) ? 0 : altitude,
     });
   }

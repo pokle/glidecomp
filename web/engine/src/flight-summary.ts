@@ -26,9 +26,8 @@
 
 import { fixAltitude, type IGCFile, type IGCFix } from './igc-parser';
 import { calculateTrackDistance } from './geo';
-import { detectTakeoffLanding } from './takeoff-landing-detector';
+import { detectTakeoffLandingIndices } from './takeoff-landing-detector';
 import { DEFAULT_THRESHOLDS, type DetectionThresholds } from './thresholds';
-import type { FixIndexDetails } from './event-types';
 
 export interface FlightSummary {
   /**
@@ -116,28 +115,17 @@ function airborneWindow(
   fixes: IGCFix[],
   thresholds: DetectionThresholds
 ): { takeoffIndex: number; landingIndex: number; detected: boolean } {
-  let takeoffIndex = 0;
-  let landingIndex = fixes.length - 1;
-  let sawTakeoff = false;
-  let sawLanding = false;
+  const { takeoff, landing } = detectTakeoffLandingIndices(fixes, thresholds);
+  const takeoffIndex = takeoff?.fixIndex ?? 0;
+  const landingIndex = landing?.fixIndex ?? fixes.length - 1;
 
-  for (const ev of detectTakeoffLanding(fixes, thresholds)) {
-    const fixIndex = (ev.details as FixIndexDetails | undefined)?.fixIndex;
-    if (fixIndex === undefined) continue;
-    if (ev.type === 'takeoff') {
-      takeoffIndex = fixIndex;
-      sawTakeoff = true;
-    }
-    if (ev.type === 'landing') {
-      landingIndex = fixIndex;
-      sawLanding = true;
-    }
-  }
-
+  // The detector's two scans are independent, so it does not guarantee the
+  // landing follows the takeoff (see TakeoffLandingDetection). An inverted —
+  // or empty — window is no window: fall back to the whole file.
   if (landingIndex <= takeoffIndex) {
     return { takeoffIndex: 0, landingIndex: fixes.length - 1, detected: false };
   }
-  return { takeoffIndex, landingIndex, detected: sawTakeoff && sawLanding };
+  return { takeoffIndex, landingIndex, detected: takeoff !== null && landing !== null };
 }
 
 /**

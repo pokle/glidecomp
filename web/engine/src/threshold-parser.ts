@@ -5,11 +5,11 @@
  * SI values back to display strings using the user's preferred units.
  */
 
-import type { UnitPreferences } from './units';
+import { TO_SI, type UnitPreferences } from './units';
 
 /**
  * Dimension describes what kind of quantity a threshold measures.
- * Each dimension has recognized units and a SI base unit.
+ * Each dimension has recognised units and a SI base unit.
  */
 export type ThresholdDimension =
   | 'speed'
@@ -27,29 +27,34 @@ interface UnitConversion {
 }
 
 /**
- * Maps recognized unit strings to SI conversion factors.
+ * Maps recognised unit strings to SI conversion factors.
  * SI base: speed=m/s, altitude=m, climbRate=m/s, time=seconds, angle=deg/s
+ *
+ * The physical factors all come from the canonical TO_SI table in units.ts —
+ * this module owns only the alias spellings (kmh, fpm, feet…) and the
+ * dimensions that have no display-unit counterpart (time, angle, ratio,
+ * count). That keeps parsing and display exact reciprocals of each other.
  */
 const UNIT_CONVERSIONS: Record<ThresholdDimension, Record<string, UnitConversion>> = {
   speed: {
     'm/s': { toSI: 1, label: 'm/s' },
-    'km/h': { toSI: 1 / 3.6, label: 'km/h' },
-    'kmh': { toSI: 1 / 3.6, label: 'km/h' },
-    'mph': { toSI: 0.44704, label: 'mph' },
-    'knots': { toSI: 0.51444, label: 'kts' },
-    'kts': { toSI: 0.51444, label: 'kts' },
+    'km/h': { toSI: TO_SI['km/h'], label: 'km/h' },
+    'kmh': { toSI: TO_SI['km/h'], label: 'km/h' },
+    'mph': { toSI: TO_SI.mph, label: 'mph' },
+    'knots': { toSI: TO_SI.knots, label: 'kts' },
+    'kts': { toSI: TO_SI.knots, label: 'kts' },
   },
   altitude: {
     'm': { toSI: 1, label: 'm' },
-    'ft': { toSI: 0.3048, label: 'ft' },
-    'feet': { toSI: 0.3048, label: 'ft' },
+    'ft': { toSI: TO_SI.ft, label: 'ft' },
+    'feet': { toSI: TO_SI.ft, label: 'ft' },
   },
   climbRate: {
     'm/s': { toSI: 1, label: 'm/s' },
-    'ft/min': { toSI: 0.00508, label: 'ft/min' },
-    'fpm': { toSI: 0.00508, label: 'fpm' },
-    'knots': { toSI: 0.51444, label: 'kts' },
-    'kts': { toSI: 0.51444, label: 'kts' },
+    'ft/min': { toSI: TO_SI['ft/min'], label: 'ft/min' },
+    'fpm': { toSI: TO_SI['ft/min'], label: 'fpm' },
+    'knots': { toSI: TO_SI.knots, label: 'kts' },
+    'kts': { toSI: TO_SI.knots, label: 'kts' },
   },
   time: {
     's': { toSI: 1, label: 's' },

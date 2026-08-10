@@ -51,7 +51,6 @@ export {
   getEffectiveSSSIndex,
   getESSIndex,
   getGoalIndex,
-  getIntermediateTurnpoints,
   getSSSIndex,
   igcTaskToXCTask,
   isValidTask,
@@ -160,6 +159,7 @@ export {
   type GoalLine,
 } from './goal-line';
 export { utmToLatLon } from './utm';
+export { nextDayISO, zonedDayStartMs, zoneOffsetMs } from './zone-offset';
 export {
   DEFAULT_UNITS,
   formatAltitude,
@@ -247,7 +247,6 @@ export {
 } from './segment-extractors';
 export { maxBy, minBy } from './array-utils';
 export {
-  buildPalette,
   colorForName,
   FLOATS_PER_VERTEX,
   packTracks,

@@ -13,6 +13,7 @@
 import { fixAltitude, type IGCFix } from '../igc-parser';
 import type { ThermalSegment } from '../event-types';
 import { percentile } from './stats';
+import { hourStartMs } from './util';
 
 export interface WorkingBandHour {
   hourStartMs: number;
@@ -116,7 +117,7 @@ export function estimateWorkingBand(pilots: PilotBandSpec[]): WorkingBand {
 function buildHourly(timed: { startMs: number; entry: number; exit: number }[]): WorkingBandHour[] {
   const byHour = new Map<number, { entries: number[]; exits: number[] }>();
   for (const t of timed) {
-    const hour = Math.floor(t.startMs / 3_600_000) * 3_600_000;
+    const hour = hourStartMs(t.startMs);
     let b = byHour.get(hour);
     if (!b) byHour.set(hour, (b = { entries: [], exits: [] }));
     b.entries.push(t.entry);
@@ -124,8 +125,8 @@ function buildHourly(timed: { startMs: number; entry: number; exit: number }[]):
   }
   return [...byHour.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([hourStartMs, b]) => ({
-      hourStartMs,
+    .map(([hour, b]) => ({
+      hourStartMs: hour,
       floor: percentile(b.entries.sort((x, y) => x - y), 10),
       ceiling: percentile(b.exits.sort((x, y) => x - y), 90),
       samples: b.entries.length,

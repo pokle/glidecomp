@@ -18,16 +18,18 @@ export interface ChevronPosition {
 }
 
 export interface GlideMarker {
-  type: 'chevron' | 'speed-label';
+  // Every marker is a speed label; the renderer draws its own chevron beside
+  // each one, so no chevron-only marker kind exists.
+  type: 'speed-label';
   lat: number;
   lon: number;
   bearing: number;
-  speedMps?: number; // speed in m/s, only for speed-label type
-  glideRatio?: number; // L/D ratio for the segment (only for speed-label type)
-  altitudeDiff?: number; // altitude change in meters for the segment (negative = descent, only for speed-label type)
-  requiredGlideRatio?: number; // L/D needed to reach next turnpoint (only for speed-label type)
-  targetName?: string; // name of the target turnpoint (only for speed-label type)
-  altitude?: number; // altitude in meters at the label position (only for speed-label type)
+  speedMps: number; // speed in m/s for the trailing segment
+  glideRatio?: number; // L/D ratio for the segment; undefined when climbing
+  altitudeDiff: number; // altitude change in meters for the segment (negative = descent)
+  requiredGlideRatio?: number; // L/D needed to reach next turnpoint, when one is known
+  targetName?: string; // name of the target turnpoint, when one is known
+  altitude: number; // altitude in meters at the label position
 }
 
 export interface GlideContext {
