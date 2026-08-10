@@ -48,7 +48,7 @@ import {
   usesDistanceDifficulty,
 } from './gap-scoring';
 import { duration, fmtPoints, km, trimZeros } from './score-explanation-format';
-import { bestTimeCandidate } from './sections/shared';
+import { bestTimeCandidate, pilotsAtEss, scoredPilots } from './sections/shared';
 import type {
   ClassContextInput,
   ClassPilotInput,
@@ -98,6 +98,12 @@ function pilotKey(p: ClassPilotInput, index: number): string {
   return p.comp_pilot_id ?? `${index}-${p.pilot_name ?? ''}`;
 }
 
+/** Is this row the pilot whose card this is? Only ever true on an id match —
+ *  a payload without ids never guesses on a name. */
+function isYou(entry: ScoreEntryInput, p: ClassPilotInput): boolean {
+  return entry.comp_pilot_id !== undefined && p.comp_pilot_id === entry.comp_pilot_id;
+}
+
 /**
  * Place the field on `f`, keeping only pilots it explains.
  *
@@ -124,8 +130,7 @@ function placeField(
       omitted++;
       return;
     }
-    const you =
-      entry.comp_pilot_id !== undefined && p.comp_pilot_id === entry.comp_pilot_id;
+    const you = isYou(entry, p);
     if (you) youPlotted = true;
     pilots.push({ key: pilotKey(p, i), name: p.pilot_name ?? 'Pilot', x, y, you });
   });
@@ -137,9 +142,7 @@ function placeField(
 /** "…and 3 pilots are not plotted: the curve does not explain their points." */
 function omittedSentence(omitted: number): string {
   if (omitted === 0) return '';
-  return ` ${omitted} pilot${omitted === 1 ? ' is' : 's are'} not shown — ${
-    omitted === 1 ? 'their' : 'their'
-  } points carry a reduction this curve does not include.`;
+  return ` ${omitted} pilot${omitted === 1 ? ' is' : 's are'} not shown — their points carry a reduction this curve does not include.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,9 +297,7 @@ export function buildArrivalChart(
 ): ScoreChart | null {
   const available = classContext.available_points.arrival;
   if (available <= 0) return null;
-  const atEss =
-    classContext.validity_inputs?.num_reached_ess ??
-    classContext.pilots.filter((p) => p.reached_ess).length;
+  const atEss = pilotsAtEss(classContext);
   if (atEss <= 0) return null;
 
   const f = (pos: number) => calculateArrivalPoints(pos, atEss, available);
@@ -376,7 +377,7 @@ export function buildDistanceChart(
 
   // The field as the scorer saw it: withheld tracklogs are seated at 0 after
   // scoring and were not part of the distribution the difficulty is built on.
-  const scored = classContext.pilots.filter((p) => !p.track_excluded);
+  const scored = scoredPilots(classContext);
   const best = Math.max(...scored.map((p) => p.flown_distance), 0);
   if (best <= 0) return null;
 
@@ -453,7 +454,6 @@ function validityCurve(f: (ratio: number) => number): ScoreChartPoint[] {
  */
 export function buildLaunchValidityChart(
   classContext: ClassContextInput,
-  params: GAPParameters,
 ): ScoreChart | null {
   const vi = classContext.validity_inputs;
   if (!vi || vi.num_present <= 0) return null;
@@ -541,18 +541,17 @@ export function buildDistanceValidityChart(
   params: GAPParameters,
 ): ScoreChart | null {
   const vi = classContext.validity_inputs;
-  const scored = classContext.pilots.filter((p) => !p.track_excluded);
+  const scored = scoredPilots(classContext);
   if (scored.length < 4) return null;
 
   const points: ScoreDistributionPoint[] = [];
   scored.forEach((p, i) => {
     if (!Number.isFinite(p.flown_distance)) return;
     points.push({
-      key: p.comp_pilot_id ?? `${i}-${p.pilot_name ?? ''}`,
+      key: pilotKey(p, i),
       name: p.pilot_name ?? 'Pilot',
       x: p.flown_distance,
-      you:
-        entry.comp_pilot_id !== undefined && p.comp_pilot_id === entry.comp_pilot_id,
+      you: isYou(entry, p),
     });
   });
   if (points.length === 0) return null;

@@ -36,6 +36,7 @@ import {
 } from './open-distance-scoring';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import type { XCTask } from './xctsk-parser';
+import { zoneOffsetMs } from './zone-offset';
 
 /** A turnpoint reduced to what flying it needs. */
 export interface ForgeTurnpoint {
@@ -680,12 +681,14 @@ export function forgeIgc(
  * fixes against the task's day IN THE COMPETITION'S ZONE — so a forged flight
  * has to be placed using that same zone or it lands on the wrong side of
  * midnight for half the world.
+ *
+ * Probed at the date's UTC midday, so the answer is the offset in force
+ * during the flying day, whichever side of a daylight-saving transition the
+ * local midnight falls on.
  */
 export function zoneOffsetHours(isoDate: string, timeZone: string): number {
-  const probe = new Date(`${isoDate}T12:00:00Z`);
-  const asUtc = new Date(probe.toLocaleString('en-US', { timeZone: 'UTC' }));
-  const asZone = new Date(probe.toLocaleString('en-US', { timeZone }));
-  return Math.round(((asZone.getTime() - asUtc.getTime()) / 3600000) * 2) / 2;
+  const probeMs = Date.parse(`${isoDate}T12:00:00Z`);
+  return Math.round((zoneOffsetMs(probeMs, timeZone) / 3_600_000) * 2) / 2;
 }
 
 /** Seconds past the header date's UTC midnight for a local "HH:MM" take-off. */

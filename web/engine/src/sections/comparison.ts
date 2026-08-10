@@ -13,6 +13,53 @@ import type {
   ClassPilotInput,
 } from '../score-explanation-types';
 import { fmtPoints, duration } from '../score-explanation-format';
+import { scoredPilots } from './shared';
+
+/**
+ * A single loss must account for this share of the gap before the summary
+ * sentence names it as the culprit — below it, the gap is genuinely spread.
+ */
+const DOMINANT_LOSS_RATIO = 0.75;
+
+/**
+ * How far the net penalty may sit from the published deduction before the
+ * difference is a scoring floor at work rather than display rounding — at
+ * which point the ledger owes the reader a pointer to the full figure.
+ */
+const FLOOR_VS_PUBLISHED_TOLERANCE = 0.3;
+
+/**
+ * The penalty's NET effect, derived from the identity the payload guarantees
+ * — components − total — rather than from the published penalty figures: a
+ * §12.2/§13.5 floor makes the published deduction bigger than its net effect
+ * (the archive's jump-the-gun cases were 74 points apart), and every ledger
+ * here trades in the net.
+ */
+function netPenalty(p: {
+  distance_points?: number;
+  time_points?: number;
+  leading_points?: number;
+  arrival_points?: number;
+  total_score?: number;
+}): number {
+  return (
+    (p.distance_points ?? 0) +
+    (p.time_points ?? 0) +
+    (p.leading_points ?? 0) +
+    (p.arrival_points ?? 0) -
+    (p.total_score ?? 0)
+  );
+}
+
+/** The loss the {@link DOMINANT_LOSS_RATIO} rule lets the summary name, if any. */
+function dominantLoss<T extends { lost: number }>(
+  losses: T[],
+  gap: number,
+): T | null {
+  return losses.length > 0 && losses[0].lost >= DOMINANT_LOSS_RATIO * gap
+    ? losses[0]
+    : null;
+}
 
 /**
  * "Where the points went" — this pilot against the best score in the class,
@@ -40,8 +87,8 @@ export function buildComparisonSection(
 ): ScoreExplanationSection | null {
   // Only pilots the payload carries point components for — older cached
   // bodies narrow to the four validity fields and cannot be compared.
-  const scored = classContext.pilots.filter(
-    (p) => p.total_score !== undefined && !p.track_excluded,
+  const scored = scoredPilots(classContext).filter(
+    (p) => p.total_score !== undefined,
   );
   if (scored.length === 0) return null;
   const leader = scored.reduce((best, p) =>
@@ -87,23 +134,10 @@ export function buildComparisonSection(
 
   // Penalties are points lost to the leader like any component, and a ledger
   // that omits them cannot reconcile with the gap it claims to explain. BOTH
-  // sides are derived from the identity the payload guarantees — components −
-  // total — rather than from the published penalty figures: a §12.2/§13.5
-  // floor makes the published deduction bigger than its net effect (the
-  // archive's jump-the-gun cases were 74 points apart), and the ledger's
-  // business is the net. Tolerance for the total's 0.1 rounding.
-  const minePenalty =
-    entry.distance_points +
-    entry.time_points +
-    entry.leading_points +
-    entry.arrival_points -
-    entry.total_score;
-  const leaderPenalty =
-    (leader.distance_points ?? 0) +
-    (leader.time_points ?? 0) +
-    (leader.leading_points ?? 0) +
-    (leader.arrival_points ?? 0) -
-    leaderTotal;
+  // sides take the net (see netPenalty). Tolerance for the total's 0.1
+  // rounding.
+  const minePenalty = netPenalty(entry);
+  const leaderPenalty = netPenalty(leader);
   const publishedPenalty =
     entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
   if (Math.abs(minePenalty) > 0.1 || Math.abs(leaderPenalty) > 0.1) {
@@ -125,7 +159,8 @@ export function buildComparisonSection(
     // The ledger states the penalty's NET effect; when a floor made that
     // smaller than the published deduction, say where the full figure lives.
     const floorNote =
-      r.id === 'penalty' && Math.abs(minePenalty - publishedPenalty) > 0.3
+      r.id === 'penalty' &&
+      Math.abs(minePenalty - publishedPenalty) > FLOOR_VS_PUBLISHED_TOLERANCE
         ? ' — the net effect after the scoring floor; the penalty section shows the full deduction'
         : '';
     return {
@@ -157,8 +192,7 @@ export function buildComparisonSection(
     }))
     .filter((r) => r.won > 0.05)
     .sort((a, b) => b.won - a.won);
-  const dominant =
-    losses.length > 0 && losses[0].lost >= 0.75 * gap ? losses[0] : null;
+  const dominant = dominantLoss(losses, gap);
 
   let gapDetail: string;
   if (dominant && dominant.lost > gap + 0.05 && gains.length > 0) {
@@ -254,17 +288,9 @@ function shortfallsAgainstOffer(
     ...(ap.arrival > 0
       ? [{ label: 'arrival-points', lost: ap.arrival - entry.arrival_points }]
       : []),
-    {
-      // Net penalty effect, derived from components − total, so a §12.2/§13.5
-      // floor never overstates what the deduction actually cost.
-      label: 'penalties',
-      lost:
-        entry.distance_points +
-        entry.time_points +
-        entry.leading_points +
-        entry.arrival_points -
-        entry.total_score,
-    },
+    // Net penalty effect (see netPenalty), so a §12.2/§13.5 floor never
+    // overstates what the deduction actually cost.
+    { label: 'penalties', lost: netPenalty(entry) },
   ];
   return rows.filter((r) => r.lost > 0.05).sort((a, b) => b.lost - a.lost);
 }
@@ -388,14 +414,9 @@ function buildPointsLeftSection(
         : undefined,
     );
   }
-  // Net penalty effect (components − total), so a §12.2/§13.5 floor never
+  // Net penalty effect (see netPenalty), so a §12.2/§13.5 floor never
   // overstates what the deduction actually cost.
-  const penalties =
-    entry.distance_points +
-    entry.time_points +
-    entry.leading_points +
-    entry.arrival_points -
-    entry.total_score;
+  const penalties = netPenalty(entry);
   const publishedPenalty =
     entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
   if (penalties > 0.1) {
@@ -404,7 +425,7 @@ function buildPointsLeftSection(
       text: 'Penalties',
       value: `−${fmtPoints(penalties)} pts`,
       detail:
-        Math.abs(penalties - publishedPenalty) > 0.3
+        Math.abs(penalties - publishedPenalty) > FLOOR_VS_PUBLISHED_TOLERANCE
           ? 'The net effect after the scoring floor — the penalty section shows the full deduction.'
           : 'See the penalty section above.',
       emphasis: 'warning',
@@ -412,10 +433,9 @@ function buildPointsLeftSection(
   }
 
   // Name what the shortfall mostly is, when one component clearly dominates —
-  // the same 75% threshold as the behind-the-leader variant.
+  // the same dominance threshold as the behind-the-leader variant.
   const losses = shortfallsAgainstOffer(entry, ap);
-  const dominant =
-    losses.length > 0 && losses[0].lost >= 0.75 * left ? losses[0] : null;
+  const dominant = dominantLoss(losses, left);
   // Two ways the component offers and the day's total fail to agree, both of
   // them real. OVERSHOOT: on a day nobody makes goal the GAP weight split can
   // sum to slightly more than 1 (the time weight is clamped at zero —
@@ -483,8 +503,8 @@ export function buildWinnerHeadlineNote(
   entry: ScoreEntryInput,
   classContext: ClassContextInput,
 ): string | undefined {
-  const scored = classContext.pilots.filter(
-    (p) => p.total_score !== undefined && !p.track_excluded,
+  const scored = scoredPilots(classContext).filter(
+    (p) => p.total_score !== undefined,
   );
   if (scored.length === 0) return undefined;
   const leaderTotal = Math.max(...scored.map((p) => p.total_score ?? 0));
@@ -493,8 +513,7 @@ export function buildWinnerHeadlineNote(
   const left = ap.total - entry.total_score;
   if (left <= 0.05) return undefined;
   const losses = shortfallsAgainstOffer(entry, ap);
-  const dominant =
-    losses.length > 0 && losses[0].lost >= 0.75 * left ? losses[0] : null;
+  const dominant = dominantLoss(losses, left);
   // No share claim when the dominant shortfall exceeds the net left (weight
   // overshoot on a nobody-in-goal day, or a bonus) — the ledger explains it.
   const mostly =

@@ -10,6 +10,7 @@ import {
   correlationVerdict,
   roundPercentagesToHundred,
 } from '../src/field-analysis';
+import { combineWindEstimates, pearson } from '../src/field-analysis/stats';
 
 describe('percentile', () => {
   it('interpolates linearly on a sorted array', () => {
@@ -48,6 +49,23 @@ describe('rankWithTies', () => {
 
   it('all-equal series gets the shared average rank', () => {
     expect(rankWithTies([7, 7, 7])).toEqual([2, 2, 2]);
+  });
+});
+
+describe('pearson', () => {
+  it('is ±1 for exact linear relations', () => {
+    expect(pearson([1, 2, 3], [2, 4, 6])).toBeCloseTo(1, 10);
+    expect(pearson([1, 2, 3], [6, 4, 2])).toBeCloseTo(-1, 10);
+  });
+
+  it('matches a hand-computed case', () => {
+    // deviations a: [-1,0,1], b: [-1,1,0] → Σab = 1, Σa² = Σb² = 2 → r = 1/2.
+    expect(pearson([1, 2, 3], [1, 3, 2])).toBeCloseTo(0.5, 10);
+  });
+
+  it('is NaN for n < 2 or a constant series', () => {
+    expect(pearson([1], [2])).toBeNaN();
+    expect(pearson([3, 3, 3], [1, 2, 3])).toBeNaN();
   });
 });
 
@@ -104,6 +122,38 @@ describe('circularMeanWind', () => {
 
   it('returns null for no samples', () => {
     expect(circularMeanWind([])).toBeNull();
+  });
+});
+
+describe('combineWindEstimates', () => {
+  it('takes the median magnitude but the vector-mean direction', () => {
+    // Directions scatter ±60° about north: the vector mean's LENGTH collapses
+    // (5·cos 60° = 2.5) but the median magnitude holds the measured 5 m/s.
+    const samples = [
+      { speed: 5, direction: 300 },
+      { speed: 5, direction: 0 },
+      { speed: 5, direction: 60 },
+    ];
+    const w = combineWindEstimates(samples)!;
+    expect(w.speed).toBeCloseTo(5, 6);
+    expect(Math.min(w.direction, 360 - w.direction)).toBeCloseTo(0, 6);
+    expect(w.n).toBe(3);
+    // …and the vector mean is what it is: consistency, not strength.
+    expect(circularMeanWind(samples)!.speed).toBeLessThan(4);
+  });
+
+  it('agrees with the vector mean when every estimate agrees', () => {
+    const samples = [
+      { speed: 4, direction: 90 },
+      { speed: 4, direction: 90 },
+    ];
+    const w = combineWindEstimates(samples)!;
+    expect(w.speed).toBeCloseTo(4, 6);
+    expect(w.direction).toBeCloseTo(90, 6);
+  });
+
+  it('returns null for no samples', () => {
+    expect(combineWindEstimates([])).toBeNull();
   });
 });
 

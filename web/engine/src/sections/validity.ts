@@ -44,9 +44,9 @@ import { leadingWeightDetail, noEssPointsZeroed } from './shared';
  */
 function launchValidityDetail(
   vi: ClassContextInput['validity_inputs'],
-  params: GAPParameters | undefined,
+  params: GAPParameters,
 ): string | undefined {
-  if (!vi || !params) return undefined;
+  if (!vi) return undefined;
   // Whole pilots: the threshold is fractional (96% of 32 is 30.72) and
   // "30.7 pilots" reads like a unit error. Ceil, because 30 would not clear it.
   const target = Math.ceil(vi.num_present * NOMINAL_LAUNCH);
@@ -60,9 +60,9 @@ function launchValidityDetail(
 
 function distanceValidityDetail(
   vi: ClassContextInput['validity_inputs'],
-  params: GAPParameters | undefined,
+  params: GAPParameters,
 ): string | undefined {
-  if (!vi || !params) return undefined;
+  if (!vi) return undefined;
   return (
     `Measured against a ${km(params.nominalDistance)} nominal distance, ` +
     `a ${trimZeros((NOMINAL_GOAL * 100).toFixed(1), 0)}% nominal goal ` +
@@ -74,9 +74,9 @@ function distanceValidityDetail(
 
 function timeValidityDetail(
   vi: ClassContextInput['validity_inputs'],
-  params: GAPParameters | undefined,
+  params: GAPParameters,
 ): string | undefined {
-  if (!vi || !params) return undefined;
+  if (!vi) return undefined;
   // No best time means nobody completed the speed section, and the spec falls
   // back to the distance ratio — a different comparison, so it must not be
   // described as a time one.
@@ -109,7 +109,7 @@ function goalRatioPhrase(vi: NonNullable<ClassContextInput['validity_inputs']>):
 
 export function buildValiditySection(
   classContext: ClassContextInput,
-  params?: GAPParameters,
+  params: GAPParameters,
 ): ScoreExplanationSection {
   const v = classContext.task_validity;
   const ap = classContext.available_points;
@@ -161,7 +161,7 @@ export function buildValiditySection(
     // never on offer. Stated here, where the day's points are decided, because
     // it caps what ANY pilot could have scored — the time section below can
     // only speak for the pilot whose card this is.
-    ...(params && noEssPointsZeroed(classContext, params)
+    ...(noEssPointsZeroed(classContext, params)
       ? [{
           id: 'no-ess-available',
           text: 'Nobody reached the end of the speed section, so this task offered no time or arrival points at all (FAI S7F §11).',
@@ -211,7 +211,7 @@ export function buildValiditySection(
       : []),
     // The PG leading-weight generation belongs HERE, where the weights are
     // decided, not down in the leading section where it used to sit.
-    ...(params && leadingWeightDetail(params)
+    ...(leadingWeightDetail(params)
       ? [{
           id: 'weight-formula',
           text: leadingWeightDetail(params)!,

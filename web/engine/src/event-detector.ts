@@ -60,7 +60,8 @@ function calculateVario(fix1: IGCFix, fix2: IGCFix): number {
  */
 function detectTurnpointEvents(
   fixes: IGCFix[],
-  task: XCTask
+  task: XCTask,
+  indexOffset: number
 ): FlightEvent[] {
   const events: FlightEvent[] = [];
   const result = resolveTurnpointSequence(task, fixes);
@@ -87,6 +88,9 @@ function detectTurnpointEvents(
     }
 
     events.push({
+      // The id keeps the slice-relative index: existing ids are asserted in
+      // tests and referenced by consumers, so only details.fixIndex carries
+      // the offset back into the original fixes array.
       id: `tp-${crossing.direction}-${crossing.taskIndex}-${crossing.fixIndex}`,
       type: eventType,
       time: crossing.time,
@@ -95,7 +99,7 @@ function detectTurnpointEvents(
       altitude: crossing.altitude,
       description: `${crossing.direction === 'enter' ? 'Entered' : 'Exited'} ${tp.waypoint.name} (${tp.type})`,
       details: {
-        fixIndex: crossing.fixIndex,
+        fixIndex: crossing.fixIndex + indexOffset,
         turnpointIndex: crossing.taskIndex,
         turnpointName: tp.waypoint.name,
         radius: tp.radius,
@@ -144,7 +148,7 @@ function detectTurnpointEvents(
       altitude: reaching.altitude,
       description,
       details: {
-        fixIndex: reaching.fixIndex,
+        fixIndex: reaching.fixIndex + indexOffset,
         turnpointIndex: reaching.taskIndex,
         turnpointName: tp.waypoint.name,
         selectionReason: reaching.selectionReason,
@@ -161,9 +165,10 @@ function detectTurnpointEvents(
 }
 
 /**
- * Detect altitude extremes
+ * Detect altitude extremes. The detector runs on the takeoff slice, so
+ * `indexOffset` shifts each fixIndex back into the original fixes array.
  */
-function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
+function detectAltitudeExtremes(fixes: IGCFix[], indexOffset: number): FlightEvent[] {
   const events: FlightEvent[] = [];
 
   if (fixes.length === 0) return events;
@@ -192,7 +197,7 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
     longitude: fixes[maxAltIdx].longitude,
     altitude: maxAlt,
     description: `Max altitude: ${maxAlt.toFixed(0)}m`,
-    details: { fixIndex: maxAltIdx },
+    details: { fixIndex: maxAltIdx + indexOffset },
   });
 
   events.push({
@@ -203,16 +208,21 @@ function detectAltitudeExtremes(fixes: IGCFix[]): FlightEvent[] {
     longitude: fixes[minAltIdx].longitude,
     altitude: minAlt,
     description: `Min altitude: ${minAlt.toFixed(0)}m`,
-    details: { fixIndex: minAltIdx },
+    details: { fixIndex: minAltIdx + indexOffset },
   });
 
   return events;
 }
 
 /**
- * Detect max climb and sink rates
+ * Detect max climb and sink rates. As with detectAltitudeExtremes,
+ * `indexOffset` shifts fixIndex back into the original fixes array.
  */
-function detectVarioExtremes(fixes: IGCFix[], thresholds: DetectionThresholds): FlightEvent[] {
+function detectVarioExtremes(
+  fixes: IGCFix[],
+  thresholds: DetectionThresholds,
+  indexOffset: number
+): FlightEvent[] {
   const events: FlightEvent[] = [];
   const windowSize = thresholds.vario.varioWindowSize;
 
@@ -245,7 +255,7 @@ function detectVarioExtremes(fixes: IGCFix[], thresholds: DetectionThresholds): 
       longitude: fixes[maxClimbIdx].longitude,
       altitude: fixAltitude(fixes[maxClimbIdx]),
       description: `Max climb: +${maxClimb.toFixed(1)}m/s`,
-      details: { fixIndex: maxClimbIdx, climbRate: maxClimb },
+      details: { fixIndex: maxClimbIdx + indexOffset, climbRate: maxClimb },
     });
   }
 
@@ -258,19 +268,11 @@ function detectVarioExtremes(fixes: IGCFix[], thresholds: DetectionThresholds): 
       longitude: fixes[maxSinkIdx].longitude,
       altitude: fixAltitude(fixes[maxSinkIdx]),
       description: `Max sink: ${maxSink.toFixed(1)}m/s`,
-      details: { fixIndex: maxSinkIdx, sinkRate: maxSink },
+      details: { fixIndex: maxSinkIdx + indexOffset, sinkRate: maxSink },
     });
   }
 
   return events;
-}
-
-/** Adjust fixIndex in event details by the given offset */
-function adjustFixIndex(event: FlightEvent, offset: number): void {
-  const details = event.details as Record<string, unknown> | undefined;
-  if (details && typeof details.fixIndex === 'number') {
-    details.fixIndex += offset;
-  }
 }
 
 /** The `circle_complete` event for one detected 360° circle. */
@@ -361,36 +363,18 @@ export function detectFlightEvents(
     allEvents.push(...glideToEvents(glide, indexOffset, fixes));
   }
 
-  // Detect altitude and vario extremes (only after takeoff)
-  // Apply indexOffset so fixIndex references the original fixes array
-  for (const event of detectAltitudeExtremes(flightFixes)) {
-    adjustFixIndex(event, indexOffset);
-    allEvents.push(event);
-  }
-  for (const event of detectVarioExtremes(flightFixes, thresholds)) {
-    adjustFixIndex(event, indexOffset);
-    allEvents.push(event);
-  }
+  // Detect altitude and vario extremes (only after takeoff). Each detector
+  // takes indexOffset so fixIndex references the original fixes array.
+  allEvents.push(...detectAltitudeExtremes(flightFixes, indexOffset));
+  allEvents.push(...detectVarioExtremes(flightFixes, thresholds, indexOffset));
 
   // Detect turnpoint crossings and scored reachings if task is provided (only after takeoff)
   if (task) {
-    for (const event of detectTurnpointEvents(flightFixes, task)) {
-      adjustFixIndex(event, indexOffset);
-      allEvents.push(event);
-    }
+    allEvents.push(...detectTurnpointEvents(flightFixes, task, indexOffset));
   }
 
   // Detect circles (only after takeoff)
-  const circleResult = detectCircles(flightFixes, {
-    lookbackSeconds: thresholds.circle.lookbackSeconds,
-    minTurnRate: thresholds.circle.minTurnRate,
-    t1Seconds: thresholds.circle.t1Seconds,
-    t2Seconds: thresholds.circle.t2Seconds,
-    minFixesPerCircle: thresholds.circle.minFixesPerCircle,
-    maxBearingRate: thresholds.circle.maxBearingRate,
-    maxReasonableWindSpeed: thresholds.circle.maxReasonableWindSpeed,
-    minGroundSpeedVariation: thresholds.circle.minGroundSpeedVariation,
-  });
+  const circleResult = detectCircles(flightFixes, thresholds.circle);
   for (const circle of circleResult.circles) {
     allEvents.push(circleToEvent(circle, indexOffset, fixes));
   }

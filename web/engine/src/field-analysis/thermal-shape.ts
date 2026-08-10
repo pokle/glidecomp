@@ -30,8 +30,10 @@ import { fixAltitude } from '../igc-parser';
 import type { ThermalSegment } from '../event-types';
 import type { CircleSegment } from '../circle-detector';
 import { bearingFromComponents, localEastNorth, metresPerDegree } from '../geo';
-import { percentile } from './stats';
+import { combineWindEstimates, pearson, percentile, type WindSample } from './stats';
+import { pushInto } from './util';
 import {
+  assembleSharedThermal,
   clusterSharedThermals,
   type SharedThermal,
   type SharedThermalOptions,
@@ -115,7 +117,8 @@ export interface ThermalLean {
 
 export interface ThermalWindEstimate {
   /** Median magnitude of the per-circle estimates (m/s) — see
-   * averageCircleWinds for why speed is not the vector mean's length. */
+   * combineWindEstimates in stats.ts for why speed is not the vector mean's
+   * length. */
   speed: number;
   /** Direction the wind blows FROM (deg), from the vector mean. */
   direction: number;
@@ -261,7 +264,7 @@ function splitOversizedCluster(
 ): SharedThermal[] {
   const groups = splitUses(shared.uses, options, 0);
   if (groups.length === 1) return [shared];
-  return groups.map((uses) => rebuildSharedThermal(shared.id, uses));
+  return groups.map((uses) => assembleSharedThermal(shared.id, uses));
 }
 
 function splitUses(uses: ThermalUse[], options: ThermalShapeOptions, depth: number): ThermalUse[][] {
@@ -342,31 +345,6 @@ function splitAtWidestGap(uses: ThermalUse[], projection: number[]): [ThermalUse
   const b = order.slice(bestAt).map((i) => uses[i]);
   if (a.length === 0 || b.length === 0) return null;
   return [a, b];
-}
-
-function rebuildSharedThermal(id: number, uses: ThermalUse[]): SharedThermal {
-  let lat = 0;
-  let lon = 0;
-  let startMs = Infinity;
-  let endMs = -Infinity;
-  const pilotSet = new Set<number>();
-  for (const u of uses) {
-    lat += u.lat;
-    lon += u.lon;
-    startMs = Math.min(startMs, u.startMs);
-    endMs = Math.max(endMs, u.endMs);
-    pilotSet.add(u.pilotIndex);
-  }
-  const sorted = [...uses].sort((a, b) => a.startMs - b.startMs);
-  return {
-    id,
-    uses: sorted,
-    lat: lat / uses.length,
-    lon: lon / uses.length,
-    startMs,
-    endMs,
-    pilotCount: pilotSet.size,
-  };
 }
 
 /**
@@ -519,10 +497,7 @@ function buildBands(
 
   const byBand = new Map<number, ThermalSample[]>();
   for (const s of samples) {
-    const b = Math.floor(s.altitude / bandH);
-    let g = byBand.get(b);
-    if (!g) byBand.set(b, (g = []));
-    g.push(s);
+    pushInto(byBand, Math.floor(s.altitude / bandH), s);
   }
 
   const bands: ThermalShapeBand[] = [];
@@ -664,10 +639,7 @@ function findSubCores(group: ThermalSample[], options: ThermalShapeOptions): The
 
   const byRoot = new Map<number, ThermalSample[]>();
   for (let i = 0; i < strong.length; i++) {
-    const r = find(i);
-    let g = byRoot.get(r);
-    if (!g) byRoot.set(r, (g = []));
-    g.push(strong[i]);
+    pushInto(byRoot, find(i), strong[i]);
   }
 
   const cores: ThermalSubCore[] = [];
@@ -732,10 +704,13 @@ function fitLean(bands: ThermalShapeBand[], samples: ThermalSample[]): ThermalLe
   const metresPerMetre = Math.hypot(slopeEast, slopeNorth);
   const bearing = bearingFromComponents(slopeEast, slopeNorth);
 
-  const timeAltCorrelation = pearson(
+  // stats' pearson answers NaN for a degenerate series; a persisted lean must
+  // stay a number, so keep the 0 the hand-written pearson used to answer.
+  const r = pearson(
     samples.map((s) => s.altitude),
     samples.map((s) => s.timeMs),
   );
+  const timeAltCorrelation = Number.isFinite(r) ? r : 0;
 
   return {
     bearing,
@@ -747,36 +722,22 @@ function fitLean(bands: ThermalShapeBand[], samples: ThermalSample[]): ThermalLe
 }
 
 /**
- * Combine the circles' wind estimates (both estimator methods).
- *
- * Direction comes from the VECTOR mean, where the scatter of individual
- * estimates cancels. Speed comes from the MEDIAN of the estimate magnitudes:
- * a vector mean's length collapses toward zero as directions scatter, so it
- * answers "how consistent were the estimates", not "how strong was the wind"
- * — measured 5 km/h against a modelled 20 km/h on a day the directions
- * agreed to a degree was this bias, not a calm.
+ * Combine the circles' wind estimates with the canonical policy
+ * (combineWindEstimates in stats.ts: median magnitude, vector-mean
+ * direction). POOLING both estimator methods per circle is deliberately this
+ * caller's own selection rule — a thermal has few circles, so both estimates
+ * are kept for sample count, where day.wind prefers one per circle.
  */
 function averageCircleWinds(circles: CircleSegment[]): ThermalWindEstimate | null {
-  let u = 0;
-  let v = 0;
-  const speeds: number[] = [];
+  const samples: WindSample[] = [];
   for (const c of circles) {
     for (const w of [c.windFromGroundSpeed, c.windFromCenterDrift]) {
-      if (!w) continue;
-      const rad = (w.direction * Math.PI) / 180;
-      u += w.speed * Math.sin(rad);
-      v += w.speed * Math.cos(rad);
-      speeds.push(w.speed);
+      if (w) samples.push({ speed: w.speed, direction: w.direction });
     }
   }
-  if (speeds.length === 0) return null;
-  speeds.sort((a, b) => a - b);
-  const direction = bearingFromComponents(u / speeds.length, v / speeds.length);
-  return {
-    speed: percentile(speeds, 50),
-    direction,
-    samples: speeds.length,
-  };
+  const wind = combineWindEstimates(samples);
+  if (!wind) return null;
+  return { speed: wind.speed, direction: wind.direction, samples: wind.n };
 }
 
 /**
@@ -817,31 +778,6 @@ function summariseStrongestSide(
 }
 
 // --- Small helpers ---
-
-function pearson(a: number[], b: number[]): number {
-  const n = a.length;
-  if (n < 2) return 0;
-  let ma = 0;
-  let mb = 0;
-  for (let i = 0; i < n; i++) {
-    ma += a[i];
-    mb += b[i];
-  }
-  ma /= n;
-  mb /= n;
-  let sab = 0;
-  let saa = 0;
-  let sbb = 0;
-  for (let i = 0; i < n; i++) {
-    const da = a[i] - ma;
-    const db = b[i] - mb;
-    sab += da * db;
-    saa += da * da;
-    sbb += db * db;
-  }
-  if (saa < 1e-9 || sbb < 1e-9) return 0;
-  return sab / Math.sqrt(saa * sbb);
-}
 
 /** Invert localEastNorth for small offsets (the same metres per degree). */
 function offsetToLatLon(

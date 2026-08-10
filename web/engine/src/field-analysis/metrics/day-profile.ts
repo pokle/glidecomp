@@ -3,7 +3,8 @@
 /**
  * Day-profile metric family — what the DAY did, mostly field-level.
  *
- * #24 day.wind — per-circle wind estimates across all pilots, vector-averaged
+ * #24 day.wind — per-circle wind estimates across all pilots, combined
+ *     (stats.ts combineWindEstimates: median magnitude, vector-mean direction)
  *     for the whole task, per UTC hour, and per speed-section leg.
  * #25 day.climb_by_hour — hourly median/p90 climb over every ThermalUse.
  * #26 day.airtime_quality (formerly day.launch_timing) — per pilot, the share of airborne time spent in
@@ -22,7 +23,6 @@ import type {
   FieldContext,
   MetricComputer,
   PilotAnalysisContext,
-  PilotMetricValue,
   ReportCell,
   ReportTable,
   WindHourlySeries,
@@ -34,9 +34,9 @@ import {
   resolveStartGates,
   resolveTaskDeadline,
 } from '../../time-gates';
-import { circularMeanWind, median, percentile, type MeanWind, type WindSample } from '../stats';
-
-const HOUR_MS = 3_600_000;
+import { combineWindEstimates, median, percentile, type MeanWind, type WindSample } from '../stats';
+import { HOUR_MS, hourStartMs, pushInto } from '../util';
+import { allNullPerPilot } from './util';
 
 /** 30 s smoothing window and the "non-sinking" vario floor for #26. */
 const SMOOTH_WINDOW_SECONDS = 30;
@@ -49,16 +49,6 @@ const BEST_HOUR_MIN_SHARE = 0.2;
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
-
-/** One null entry per pilot — the shape field-level metrics must return. */
-function allNullPerPilot(field: FieldContext): PilotMetricValue[] {
-  return field.pilots.map((p) => ({ trackFile: p.trackFile, value: null }));
-}
-
-/** Epoch ms of the start of the UTC hour containing `tMs`. */
-function hourStartMs(tMs: number): number {
-  return Math.floor(tMs / HOUR_MS) * HOUR_MS;
-}
 
 /** A time-of-day report cell — an instant the consumer formats in its zone. */
 function timeCell(tMs: number): ReportCell {
@@ -82,12 +72,6 @@ function tpLabel(task: XCTask, taskIndex: number): string {
           ? 'GOAL'
           : null;
   return role ? `${name} (${role})` : name;
-}
-
-function pushInto<K>(map: Map<K, WindSample[]>, key: K, sample: WindSample): void {
-  const list = map.get(key);
-  if (list) list.push(sample);
-  else map.set(key, [sample]);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +166,7 @@ function legOccupancies(field: FieldContext): Map<number, LegOccupancy> {
   return out;
 }
 
-/** Speed (km/h, 1 dp) / Dir (° FROM) / n cells for a vector-mean wind. */
+/** Speed (km/h, 1 dp) / Dir (° FROM) / n cells for a combined wind. */
 function windCells(w: MeanWind | null): [string, string, string] {
   return [
     w ? (w.speed * 3.6).toFixed(1) : '—',
@@ -197,9 +181,10 @@ function rangeCell(fromMs: number, toMs: number): ReportCell {
 }
 
 const WIND_METHOD_FOOTNOTE =
-  'The vector mean of the wind estimate of each circle. GlideComp uses centre drift where it ' +
-  'can, and ground-speed modulation where it cannot. The direction is the degrees the wind ' +
-  'blows FROM (0° = north).';
+  'Each circle gives one wind estimate. GlideComp uses centre drift where it can, and ' +
+  'ground-speed modulation where it cannot. The direction is the vector mean of the estimates, ' +
+  'in degrees the wind blows FROM (0° = north). The speed is the median of their magnitudes, ' +
+  'because the length of a vector mean falls toward zero when the directions scatter.';
 
 const dayWind: MetricComputer = {
   id: 'day.wind',
@@ -212,10 +197,13 @@ const dayWind: MetricComputer = {
     'What the air did, read from the field itself. We estimate the wind from the circling of ' +
     'every pilot. The first method is the drift of the circle centre, and the second method, ' +
     'used when the first is not available, is the modulation of the ground speed. We then ' +
-    'average the vectors two ways. The table by hour of day shows how the wind increased and ' +
+    'combine the estimates two ways. The table by hour of day shows how the wind increased and ' +
     'changed direction through the day. The table by speed-section leg shows the wind on each ' +
     'part of the course. This metric describes the day, so it has no value for each pilot.',
   compute(field) {
+    // ONE estimate per circle, centre-drift preferred (collectCircleWinds) —
+    // deliberately this metric's own selection rule; only the combining
+    // policy (combineWindEstimates) is shared with the thermal shapes.
     const winds = collectCircleWinds(field);
 
     // 1) By hour of day — a time view. The whole-task total leads as the
@@ -224,10 +212,10 @@ const dayWind: MetricComputer = {
     // never disagree with the table.
     const byHour = new Map<number, WindSample[]>();
     for (const w of winds) pushInto(byHour, hourStartMs(w.tMs), w.sample);
-    const wholeTask = circularMeanWind(winds.map((w) => w.sample));
+    const wholeTask = combineWindEstimates(winds.map((w) => w.sample));
     const hourWinds = [...byHour.keys()]
       .sort((a, b) => a - b)
-      .map((h) => ({ hourMs: h, wind: circularMeanWind(byHour.get(h)!)! }));
+      .map((h) => ({ hourMs: h, wind: combineWindEstimates(byHour.get(h)!)! }));
 
     const hourRows: ReportCell[][] = [['Whole task', ...windCells(wholeTask)]];
     for (const { hourMs, wind } of hourWinds) {
@@ -270,9 +258,7 @@ const dayWind: MetricComputer = {
       for (const w of winds) {
         const legIndex = legIndexAt(w.pilot, w.tMs);
         if (legIndex === null) continue;
-        const list = byLeg.get(legIndex);
-        if (list) list.push(w);
-        else byLeg.set(legIndex, [w]);
+        pushInto(byLeg, legIndex, w);
       }
       const occupancy = legOccupancies(field);
       const legRows: ReportCell[][] = [];
@@ -286,7 +272,7 @@ const dayWind: MetricComputer = {
         if (leg.fromTaskIndex < sssIndex) continue;
         const label = `${tpLabel(field.task, leg.fromTaskIndex)}→${tpLabel(field.task, leg.toTaskIndex)}`;
         const legWinds = byLeg.get(leg.fromTaskIndex) ?? [];
-        const wind = circularMeanWind(legWinds.map((w) => w.sample));
+        const wind = combineWindEstimates(legWinds.map((w) => w.sample));
         const fromMs = legWinds.length ? Math.min(...legWinds.map((w) => w.tMs)) : null;
         const toMs = legWinds.length ? Math.max(...legWinds.map((w) => w.tMs)) : null;
         const flown = occupancy.get(leg.fromTaskIndex) ?? null;
@@ -356,10 +342,7 @@ function hourlyClimbBuckets(field: FieldContext): Map<number, number[]> {
   const buckets = new Map<number, number[]>();
   for (const shared of field.sharedThermals) {
     for (const use of shared.uses) {
-      const h = hourStartMs(use.startMs);
-      const list = buckets.get(h);
-      if (list) list.push(use.avgClimbRate);
-      else buckets.set(h, [use.avgClimbRate]);
+      pushInto(buckets, hourStartMs(use.startMs), use.avgClimbRate);
     }
   }
   return buckets;

@@ -14,6 +14,8 @@ import type { TurnpointReaching } from '../../turnpoint-sequence-types';
 import { ellipsoidDistance, calculateTrackDistance } from '../../geo';
 import { getEffectiveSSSIndex } from '../../xctsk-parser';
 import { mean, median, percentile } from '../stats';
+import { pushInto } from '../util';
+import { fixMsAt, na } from './util';
 import type {
   MetricComputer,
   PilotAnalysisContext,
@@ -37,10 +39,6 @@ const SMOOTH_HALF_WINDOW_MS = 5_000;
 
 // --- Small shared helpers ---
 
-function fixMs(p: PilotAnalysisContext, fixIndex: number): number {
-  return p.fixes[fixIndex].time.getTime();
-}
-
 function clampIndex(p: PilotAnalysisContext, i: number): number {
   return Math.min(Math.max(i, 0), p.fixes.length - 1);
 }
@@ -49,7 +47,7 @@ function clampIndex(p: PilotAnalysisContext, i: number): number {
 function postSssGlides(p: PilotAnalysisContext): GlideSegment[] {
   const sss = p.sssMs;
   if (sss === null) return [];
-  return p.glides.filter((g) => g.duration > 0 && fixMs(p, g.startIndex) >= sss);
+  return p.glides.filter((g) => g.duration > 0 && fixMsAt(p, g.startIndex) >= sss);
 }
 
 interface CompletedLeg {
@@ -159,7 +157,7 @@ const glideSpeed: MetricComputer = {
         distance += g.distance;
         duration += g.duration;
       }
-      if (duration <= 0) return { trackFile: p.trackFile, value: null };
+      if (duration <= 0) return na(p);
       return {
         trackFile: p.trackFile,
         value: (distance / duration) * 3.6,
@@ -205,9 +203,7 @@ const glideLdVsField: MetricComputer = {
     const ldsByLeg = new Map<number, number[]>();
     for (const legMap of perPilotLegs) {
       for (const [leg, ld] of legMap) {
-        const list = ldsByLeg.get(leg);
-        if (list) list.push(ld);
-        else ldsByLeg.set(leg, [ld]);
+        pushInto(ldsByLeg, leg, ld);
       }
     }
     const medianByLeg = new Map<number, number>();
@@ -220,7 +216,7 @@ const glideLdVsField: MetricComputer = {
         if (fieldMedian === undefined || fieldMedian <= 0) continue;
         ratios.push(ld / fieldMedian);
       }
-      if (ratios.length === 0) return { trackFile: p.trackFile, value: null };
+      if (ratios.length === 0) return na(p);
       return {
         trackFile: p.trackFile,
         value: mean(ratios),
@@ -249,19 +245,19 @@ const glideStfProxy: MetricComputer = {
     + 'to fly, because there is no glider polar data.',
   compute(field) {
     const perPilot: PilotMetricValue[] = field.pilots.map((p) => {
-      if (p.sssMs === null) return { trackFile: p.trackFile, value: null };
+      if (p.sssMs === null) return na(p);
       const thermals = [...p.thermals].sort((a, b) => a.startIndex - b.startIndex);
       const pairs: { speedKmh: number; climb: number }[] = [];
       for (const g of postSssGlides(p)) {
-        const glideEndMs = fixMs(p, g.endIndex);
+        const glideEndMs = fixMsAt(p, g.endIndex);
         const next = thermals.find((t) => {
-          const startMs = fixMs(p, t.startIndex);
+          const startMs = fixMsAt(p, t.startIndex);
           return startMs >= glideEndMs && startMs - glideEndMs <= MAX_NEXT_CLIMB_GAP_MS;
         });
         if (!next) continue;
         pairs.push({ speedKmh: (g.distance / g.duration) * 3.6, climb: next.avgClimbRate });
       }
-      if (pairs.length < MIN_STF_PAIRS) return { trackFile: p.trackFile, value: null };
+      if (pairs.length < MIN_STF_PAIRS) return na(p);
       const med = median(pairs.map((x) => x.climb));
       const strong = pairs.filter((x) => x.climb > med);
       const weak = pairs.filter((x) => x.climb < med);
@@ -350,7 +346,7 @@ const glideExtraDistance: MetricComputer = {
         optimizedSum += optimized;
         legCount++;
       }
-      if (optimizedSum <= 0) return { trackFile: p.trackFile, value: null };
+      if (optimizedSum <= 0) return na(p);
       // Optimized-distance-weighted mean of per-leg ratios = Σ actual ÷ Σ optimized,
       // expressed as the percentage excess over the line.
       return {
@@ -380,11 +376,11 @@ const glideDolphinFraction: MetricComputer = {
   compute(field) {
     const perPilot: PilotMetricValue[] = field.pilots.map((p) => {
       const sss = p.sssMs;
-      if (sss === null) return { trackFile: p.trackFile, value: null };
+      if (sss === null) return na(p);
       let start = p.takeoffIndex;
-      while (start <= p.landingIndex && fixMs(p, start) < sss) start++;
+      while (start <= p.landingIndex && fixMsAt(p, start) < sss) start++;
       const end = p.landingIndex;
-      if (end - start < 1) return { trackFile: p.trackFile, value: null };
+      if (end - start < 1) return na(p);
 
       const smoothed = smoothedAltitudes(p.fixes, start, end, SMOOTH_HALF_WINDOW_MS);
       const inThermal = new Array<boolean>(end - start + 1).fill(false);
@@ -403,7 +399,7 @@ const glideDolphinFraction: MetricComputer = {
         if (!inThermal[i - start] && !inThermal[i + 1 - start]) dolphinGain += delta;
       }
       if (totalGain < MIN_DOLPHIN_TOTAL_GAIN_M) {
-        return { trackFile: p.trackFile, value: null };
+        return na(p);
       }
       return {
         trackFile: p.trackFile,

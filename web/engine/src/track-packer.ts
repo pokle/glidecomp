@@ -168,27 +168,10 @@ export interface PackedTracks {
 }
 
 /**
- * Build a categorical palette of `n` visually distinct RGB triples (0..1) by
- * walking the hue circle with the golden-angle increment and alternating
- * lightness/saturation so neighbours stay distinguishable.
- */
-export function buildPalette(n: number): [number, number, number][] {
-  const colors: [number, number, number][] = [];
-  const golden = 137.508; // golden angle in degrees
-  for (let i = 0; i < n; i++) {
-    const h = (i * golden) % 360;
-    const s = 0.62 + 0.18 * (i % 2); // 0.62 / 0.80
-    const l = 0.55 - 0.08 * (i % 3); // 0.55 / 0.47 / 0.39
-    colors.push(hslToRgb(h / 360, s, l));
-  }
-  return colors;
-}
-
-/**
  * Deterministic RGB triple (0..1) for a pilot name, so each pilot keeps the same
  * colour across builds regardless of roster order. The name is hashed (FNV-1a)
- * and the bits drive hue plus the same saturation/lightness bands as
- * `buildPalette`, so colours look consistent with the categorical palette.
+ * and the bits drive hue plus two alternating saturation/lightness bands, so
+ * neighbouring colours stay distinguishable across the roster.
  */
 export function colorForName(name: string): [number, number, number] {
   let h = 0x811c9dc5; // FNV-1a 32-bit offset basis

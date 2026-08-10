@@ -122,6 +122,20 @@ export function reconcileWithAvailable(
   return { availStr: fmtPoints(available), decimals: minDecimals, reconciles: false };
 }
 
+/**
+ * The tail of a printed component equation: "= X" when the display-rounded
+ * figures reconcile with the published points, and the honest "≈ X — …"
+ * hedge when even the maximum precision does not (inconsistent stored data).
+ * One spelling for every section, so the cards never disagree about how they
+ * hedge; anything a caller needs after it (time's "(times in hours)") is
+ * appended by the caller.
+ */
+export function eqResult(reconciles: boolean, points: number): string {
+  return reconciles
+    ? `= ${fmtPoints(points)}`
+    : `≈ ${fmtPoints(points)} — the figures are shown rounded; the points come from their full precision`;
+}
+
 /** A km figure at the given precision, as the number the reader sees. */
 export function kmNum(meters: number, decimals: number): number {
   return Number((meters / 1000).toFixed(decimals));

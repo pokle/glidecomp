@@ -35,6 +35,16 @@ export function bestTimeCandidate(pilot: ClassPilotInput): BestTimeCandidate {
 }
 
 /**
+ * The class as the scorer saw it: withheld tracklogs are seated at 0 after
+ * scoring (track-quality.ts), so any figure derived from the field — a best,
+ * a leader, a distribution — must leave them out or it describes a field the
+ * engine never scored.
+ */
+export function scoredPilots(classContext: ClassContextInput): ClassPilotInput[] {
+  return classContext.pilots.filter((p) => !p.track_excluded);
+}
+
+/**
  * How many pilots in the class reached the end of the speed section.
  *
  * The published count is the divisor the scorer actually used; counting rows

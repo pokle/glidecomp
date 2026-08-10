@@ -247,7 +247,6 @@ export {
 } from './segment-extractors';
 export { maxBy, minBy } from './array-utils';
 export {
-  buildPalette,
   colorForName,
   FLOATS_PER_VERTEX,
   packTracks,
