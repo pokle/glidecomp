@@ -1,5 +1,18 @@
 # Ding et al. (2018) vs the GlideComp task optimiser — an audit
 
+> **Status (2026-08-10, issue #599):** superseded as a description of the
+> engine. The comparison below audits the pre-adoption optimiser
+> (per-cylinder golden-section search on the ellipsoid). The engine now
+> implements PathFinder itself — `web/engine/src/route-optimizer.ts` runs the
+> paper's odd/even sweeps and crossing/reflection case split in the §7.1.2
+> LTM plane, with the corrections this audit recommended: the crossed-cylinder
+> tag is the first intersection (Difference 3 resolved) and GetoptPi follows
+> the paper's §3.1–§3.2 analysis rather than its printed pseudocode. The one
+> surviving divergence is the reflection-case solver: a coarse-scan +
+> golden-section numeric search instead of the closed-form PCP quartic (whose
+> printed coefficients this transcription flags as unreliable) — same
+> minimum, different machinery. The audit remains as the record of why.
+
 A companion to the annotated transcription
 ([ding-2018-touring-n-circles.md](ding-2018-touring-n-circles.md)). The
 paper matters because FAI S7F (2026 Edition, §7.1.3) defines its

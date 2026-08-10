@@ -91,13 +91,22 @@ describe('launch centre rule (§7.2)', () => {
     // AirScore published (airscore-result-raw.json): task_dist 61.239 km,
     // per-waypoint cumulatives 14.791 / 33.097 / 47.410 / 61.239 — all
     // measured from the start cylinder's centre.
+    //
+    // The route crosses MTMITA's 400 m cylinder straight through. §7.1.3
+    // (PathFinder, Ding et al.'s crossing case) tags the FIRST intersection
+    // of the leg with the cylinder, where AirScore's optimiser published the
+    // boundary point nearest the chord — ~157 m later along the same chord.
+    // Both placements cost the identical total, so that one cumulative is
+    // held to a cylinder radius rather than the 30 m the others get.
     const task = fixture('corryong-cup-2022-open-t1.xctsk');
     const segs = getOptimizedSegmentDistances(task);
     const cums: number[] = [0];
     for (const s of segs) cums.push(cums[cums.length - 1] + s);
     const published = [0, 14791, 33097, 47410, 61239];
+    const crossedStraightThrough = new Set([2]); // MTMITA
     for (let i = 0; i < published.length; i++) {
-      expect(Math.abs(cums[i] - published[i])).toBeLessThan(30);
+      const tolerance = crossedStraightThrough.has(i) ? task.turnpoints[i].radius : 30;
+      expect(Math.abs(cums[i] - published[i])).toBeLessThan(tolerance);
     }
   });
 
