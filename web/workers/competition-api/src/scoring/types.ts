@@ -195,6 +195,31 @@ export interface TaskScoreResponse {
   classes: ClassScore[];
 }
 
+/**
+ * The task's `official_results` column (migration 0031) as STORED: the
+ * officially published record the AirScore importer parsed, matched to
+ * comp_pilot ids at import time. Never a GlideComp score — display only.
+ */
+export interface StoredOfficialResults {
+  source: string;
+  comp_url?: string | null;
+  task_url?: string | null;
+  results: Array<{ comp_pilot_id: number; rank: number; total: number }>;
+}
+
+/**
+ * The wire shape of the official annotation, riding on the task score
+ * response OUTSIDE the cached blob (it is not a scoring input, so it must
+ * not invalidate scores): pilot ids sqid-encoded to match the score
+ * entries' `comp_pilot_id`, keyed for O(1) lookup per row.
+ */
+export interface OfficialResultsWire {
+  source: string;
+  comp_url: string | null;
+  task_url: string | null;
+  ranks: Record<string, { rank: number; total: number }>;
+}
+
 // ---------------------------------------------------------------------------
 // Resolved scoring inputs
 // ---------------------------------------------------------------------------

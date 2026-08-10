@@ -92,6 +92,13 @@ import {
   trackLessPilotKey,
 } from './lib/seed-identity';
 import {
+  airscoreCompUrl,
+  airscoreTaskUrl,
+  parseCuratedOfficialRows,
+  parseRawOfficialRows,
+  type OfficialResultRow,
+} from './lib/official-results';
+import {
   REPO_ROOT,
   isTransientWranglerError,
   parseWranglerJson,
@@ -443,6 +450,11 @@ interface TaskSpec {
   pilotClass: string;
   /** Per-task GAP overrides from the manifest (AirScore formula capture). */
   gapParams?: Partial<GAPParameters>;
+  /** AirScore keys for this task's published record (absent for synthetic
+   * comps) — with the manifest's source_host they build the official comp
+   * and task scores page URLs. */
+  comPk?: number;
+  tasPk?: number;
 }
 
 interface SampleTask extends TaskSpec {
@@ -450,17 +462,27 @@ interface SampleTask extends TaskSpec {
   pilots: SamplePilot[];
   /** Published-result pilots with no IGC in the folder (see TrackLessPilot). */
   trackless: TrackLessPilot[];
+  /** The officially published per-pilot results (issue #603) — rank and
+   * total exactly as AirScore published them, stored beside the task as a
+   * display-only annotation. Empty for the synthetic comps. */
+  official: OfficialResultRow[];
 }
 
 interface CompManifest {
   name: string;
   slug: string;
   classes: string[];
+  /** The AirScore host the comp was downloaded from (absent for synthetic
+   * comps) — the base for the official scores page links. */
+  source_host?: string;
   tasks: Array<{
     pilot_class: string;
     name: string;
     date: string;
     dir: string;
+    /** AirScore comp/task keys (absent for synthetic comps). */
+    comPk?: number;
+    tasPk?: number;
     /** Mapped GAP overrides where this task's published AirScore formula
      * differs from the comp-wide gap_params (see download-airscore-comp.ts). */
     gap_params?: Partial<GAPParameters>;
@@ -573,7 +595,25 @@ function readTask(
   // manual flights so validity matches the field AirScore actually scored.
   const trackless = readTrackLessRows(compDir, nonEmptyIgc);
 
-  return { ...spec, xctsk, pilots, trackless };
+  return { ...spec, xctsk, pilots, trackless, official: readOfficialRows(compDir) };
+}
+
+/**
+ * The officially published per-pilot results for a task folder (issue #603):
+ * the verbatim raw result when the downloader kept it, else a `.curated`
+ * fixture's trimmed copy (ranks re-derived from its totals). Empty for the
+ * synthetic comps, which have no published record.
+ */
+function readOfficialRows(compDir: string): OfficialResultRow[] {
+  const rawPath = join(compDir, 'airscore-result-raw.json');
+  if (existsSync(rawPath)) {
+    return parseRawOfficialRows(JSON.parse(readFileSync(rawPath, 'utf-8')));
+  }
+  const trimmedPath = join(compDir, 'airscore-result.json');
+  if (existsSync(trimmedPath)) {
+    return parseCuratedOfficialRows(JSON.parse(readFileSync(trimmedPath, 'utf-8')));
+  }
+  return [];
 }
 
 // --- seed ------------------------------------------------------------------
@@ -671,7 +711,15 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   const tasks: SampleTask[] = [];
   for (const t of manifest.tasks) {
     const task = readTask(
-      { dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class, gapParams: t.gap_params },
+      {
+        dir: t.dir,
+        name: t.name,
+        date: t.date,
+        pilotClass: t.pilot_class,
+        gapParams: t.gap_params,
+        comPk: t.comPk,
+        tasPk: t.tasPk,
+      },
       tzOut,
       ref.root,
       manifest.category ?? 'hg',
@@ -948,6 +996,42 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   for (const t of tasks) {
     const taskName = taskSeedName(t.name, t.pilotClass);
     const gapParamsJson = t.gapParams ? JSON.stringify(t.gapParams) : null;
+
+    // Officially published results (issue #603): resolve each published row
+    // to its comp_pilot by the same name matching the track-less rows use —
+    // import-time matching, stored by id, so nothing matches names at read
+    // time. A row that resolves to no registration (e.g. an ambiguous name)
+    // is dropped and counted below rather than guessed.
+    const officialResolved = t.official
+      .map((row) => ({
+        row,
+        compPilotId: cpByKey.get(trackLessKey(t.pilotClass, row.name)),
+      }))
+      .filter((x): x is { row: OfficialResultRow; compPilotId: number } =>
+        x.compPilotId !== undefined,
+      );
+    const officialTaskUrl =
+      manifest.source_host && t.comPk !== undefined && t.tasPk !== undefined
+        ? airscoreTaskUrl(manifest.source_host, t.comPk, t.tasPk)
+        : null;
+    const officialCompUrl =
+      manifest.source_host && t.comPk !== undefined
+        ? airscoreCompUrl(manifest.source_host, t.comPk)
+        : null;
+    const officialJson =
+      officialResolved.length > 0
+        ? JSON.stringify({
+            source: 'AirScore',
+            comp_url: officialCompUrl,
+            task_url: officialTaskUrl,
+            results: officialResolved.map((x) => ({
+              comp_pilot_id: x.compPilotId,
+              rank: x.row.rank,
+              total: x.row.total,
+            })),
+          })
+        : null;
+
     const reusedTaskId = reusedTaskIds.get(taskName);
     let taskId: number;
     if (reusedTaskId !== undefined) {
@@ -960,14 +1044,15 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       reusedTasks++;
       await store.exec(
         `UPDATE task SET task_date = ${q(t.date)}, xctsk = ${q(t.xctsk)},
-           gap_params = ${q(gapParamsJson)}, stop_announcement_time = NULL, weather_notes = ''
+           gap_params = ${q(gapParamsJson)}, official_results = ${q(officialJson)},
+           stop_announcement_time = NULL, weather_notes = ''
          WHERE task_id = ${taskId};`,
       );
     } else {
       await store.exec(
-        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params)
+        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params, official_results)
          VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)},
-                 ${q(gapParamsJson)});`,
+                 ${q(gapParamsJson)}, ${q(officialJson)});`,
       );
       // Newest first: the row we just wrote, even if a manifest ever repeats a
       // task name within one comp.
@@ -981,6 +1066,22 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       );
     }
     await store.exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, ${q(t.pilotClass)});`);
+
+    // The official annotation is competition data an importer entered, so it
+    // is audited (the reseed wiped this comp's audit_log above, so reruns
+    // don't stack entries). It is NOT a scoring input — nothing derives from
+    // it — so it takes no score bump; same reasoning as comp_pilot.wprs_points.
+    if (officialJson) {
+      await store.exec(
+        `INSERT INTO audit_log (comp_id, timestamp, actor_user_id, actor_name, subject_type, subject_id, subject_name, description)
+         VALUES (${compId}, ${q(now)}, NULL, 'AirScore import', 'task', ${taskId}, ${q(taskName)},
+                 ${q(
+                   `Recorded the officially published AirScore results for ${taskName} — ` +
+                     `${officialResolved.length} pilot${officialResolved.length === 1 ? '' : 's'}` +
+                     (officialTaskUrl ? `, from ${officialTaskUrl}` : ''),
+                 )});`,
+      );
+    }
 
     // Resolve every pilot that has a comp_pilot row into its R2 object + its two
     // D1 rows, then upload the objects concurrently and insert the rows in one
@@ -1062,7 +1163,15 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
         ? `, ${duplicateRows} duplicate published row(s) skipped (pilot already has a track here)`
         : '';
     const how = reusedTaskId !== undefined ? 'rebuilt' : 'created';
-    console.log(`  ${how} ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}${dupes}`);
+    // Name what the official annotation dropped — a published row that
+    // resolved to no registration is a finding, not something to hide.
+    const official =
+      t.official.length > 0
+        ? `, official results for ${officialResolved.length}/${t.official.length} published pilots`
+        : '';
+    console.log(
+      `  ${how} ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}${dupes}${official}`,
+    );
   }
 
   console.log(

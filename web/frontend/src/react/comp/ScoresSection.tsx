@@ -11,13 +11,18 @@ import { Link as AriaLink } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Badge } from "@/react/rac/badge";
 import { api } from "../../comp/api";
-import { formatDuration } from "../lib/format";
+import { formatDuration, ordinal } from "../lib/format";
 import { formatTimeInZone } from "../lib/time";
 import { formatDistance, useUnits } from "../lib/units";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { pilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
-import type { ClassScore, ScoringFormat, TaskScoreData } from "./types";
+import type {
+  ClassScore,
+  OfficialResultsData,
+  ScoringFormat,
+  TaskScoreData,
+} from "./types";
 
 type ScoresState =
   | { kind: "loading" }
@@ -142,6 +147,7 @@ export function ScoresSection({
               timezone={timezone}
               showClassName={state.data.class_scores.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
+              official={state.data.official_results ?? null}
             />
           ))
         : null}
@@ -163,6 +169,7 @@ function ScoreClassTable({
   timezone,
   showClassName,
   format,
+  official = null,
 }: {
   compId: string;
   taskId: string;
@@ -174,6 +181,9 @@ function ScoreClassTable({
   timezone: string | null;
   showClassName: boolean;
   format: ScoringFormat;
+  /** The officially published record (issue #603) — an extra muted column
+   * beside the rescored totals when the import recorded one, else nothing. */
+  official?: OfficialResultsData | null;
 }) {
   const navigate = useNavigate();
   const compName = useCompName();
@@ -196,6 +206,11 @@ function ScoreClassTable({
     cls.validity_inputs?.num_reached_ess ??
     cls.pilots.filter((p) => p.reached_ess).length;
   const hasPenalties = cls.pilots.some((p) => p.penalty_points !== 0);
+  // The officially published record (issue #603): shown only when at least
+  // one pilot in THIS class carries an official entry — most comps are
+  // GlideComp-native and identical, and render no column at all.
+  const hasOfficial =
+    official != null && cls.pilots.some((p) => official.ranks[p.comp_pilot_id]);
 
   const v = cls.task_validity;
   const ap = cls.available_points;
@@ -244,6 +259,7 @@ function ScoreClassTable({
           {hasArrivalPoints ? <Column className="text-right">Arr Pts</Column> : null}
           {hasPenalties ? <Column>Penalty</Column> : null}
           <Column className="text-right">Total</Column>
+          {hasOfficial ? <Column className="text-right">Official</Column> : null}
         </TableHeader>
         <TableBody>
           {cls.pilots.map((p) => {
@@ -360,6 +376,20 @@ function ScoreClassTable({
                 <Cell className="text-right tabular-nums">
                   {Math.round(p.total_score)}
                 </Cell>
+                {hasOfficial ? (
+                  <Cell className="text-right tabular-nums">
+                    {(() => {
+                      const o = official?.ranks[p.comp_pilot_id];
+                      return o ? (
+                        <span className="text-muted-foreground">
+                          {ordinal(o.rank)} · {Math.round(o.total)}
+                        </span>
+                      ) : (
+                        "—"
+                      );
+                    })()}
+                  </Cell>
+                ) : null}
               </Row>
             );
           })}
@@ -395,6 +425,25 @@ function ScoreClassTable({
           ) : null}
         </p>
       )}
+      {hasOfficial ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Official: each pilot&rsquo;s rank and points as published on{" "}
+          {official?.task_url ? (
+            <a
+              href={official.task_url}
+              target="_blank"
+              rel="noopener"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              {official.source}
+            </a>
+          ) : (
+            official?.source
+          )}
+          . GlideComp rescores every task under the current rules, so the two can
+          differ.
+        </p>
+      ) : null}
     </div>
   );
 }

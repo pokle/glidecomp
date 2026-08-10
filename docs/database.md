@@ -123,3 +123,4 @@ of the notable ones.
 | `0026_search_index` | FTS5 site search over comps, tasks (with their routes) and pilots, kept current by triggers |
 | `0029_comp_pilot_civl_ranking_source` | Which CIVL list and month a roster's ranking was copied from — NULL for an organiser's own number |
 | `0030_comp_pilot_wprs_points` | Roster keeps the WPRS **score**, not the rank: a rank is a position within one list's pool and the pools differ 1000-fold. Converts stored ranks back to their points; drops `civl_ranking` |
+| `0031_task_official_results` | The officially published results beside GlideComp's rescored ones (#603): per-pilot rank/total plus links to AirScore's own comp and task scores pages, written by the importer. Display-only — audited, but never a scoring input, so no score bump |

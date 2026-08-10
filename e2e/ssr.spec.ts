@@ -210,6 +210,36 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     // The map is client-only — no rendered mapbox canvas in the server HTML.
     expect(html).not.toContain("mapboxgl-canvas");
   });
+
+  test("officially published results annotate the pilot page (issue #603)", async ({ request }) => {
+    const { compId, taskId, pilotId } = await discover(request);
+    // The annotation exists only for imported comps whose official record the
+    // seed stored — true of the corryong-cup-2026 fixture this suite seeds.
+    // A fallback comp without one should skip, not fail: absence of official
+    // data is a data condition, not an SSR defect.
+    const scoreRes = await request.get(`/api/comp/${compId}/task/${taskId}/score`);
+    expect(scoreRes.ok()).toBeTruthy();
+    const score = (await scoreRes.json()) as {
+      official_results?: { task_url: string | null; ranks: Record<string, unknown> };
+    };
+    test.skip(
+      !score.official_results?.ranks?.[pilotId],
+      "seeded comp carries no official result for this pilot"
+    );
+
+    const res = await request.get(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    // The header carries the published standing, linked to the source's own
+    // task scores page — in the server HTML, not hydrated in later. React
+    // escapes `&` in attributes, so compare against the escaped form.
+    expect(html).toContain("Officially:");
+    if (score.official_results?.task_url) {
+      expect(html).toContain(
+        `href="${score.official_results.task_url.replace(/&/g, "&amp;")}"`
+      );
+    }
+  });
 });
 
 test.describe("SSR — isolation and fallback", () => {
