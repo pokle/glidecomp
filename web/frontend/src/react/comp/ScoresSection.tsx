@@ -199,7 +199,7 @@ function ScoreClassTable({
 
   const v = cls.task_validity;
   const ap = cls.available_points;
-  // FAI S7F §10 (HG): nobody reached ESS, so the task carried no time and no
+  // FAI S7F §11 (HG): nobody reached ESS, so the task carried no time and no
   // arrival points. Gated on the published zero as well as the field count, so
   // a pre-rule cached body keeps its old caption rather than being described
   // as something it is not; a whole-day zero is a different finding.
@@ -375,21 +375,21 @@ function ScoreClassTable({
           {/* Two decimals (trimmed) so a 99.93% day doesn't read as a
               contradictory "100% · 999 pts". */}
           Task validity: {Number((v.task * 100).toFixed(2))}%
-          {/* Stopped tasks (S7F §12.3.3): surface the fourth factor. */}
+          {/* Stopped tasks (S7F §13.4.3): surface the fourth factor. */}
           {v.stopped !== undefined
             ? ` (task stopped — stopped validity ${Number((v.stopped * 100).toFixed(2))}%)`
             : ""}{" "}
           · Available: {Number(ap.total.toFixed(1))} pts
           (dist {Math.round(ap.distance)}, time {Math.round(ap.time)}, lead{" "}
           {Math.round(ap.leading)})
-          {/* FAI S7F §10: nobody reached ESS on an HG task, so the time and
+          {/* FAI S7F §11: nobody reached ESS on an HG task, so the time and
               arrival offers are zero and nothing replaces them — without this
               the split visibly fails to add up to the total. */}
           {noEssOffer ? (
             <>
               {" "}
               — nobody reached the end of the speed section, so no time or arrival
-              points were available (FAI S7F §10) and only{" "}
+              points were available (FAI S7F §11) and only{" "}
               {Number((ap.distance + ap.leading).toFixed(1))} pts could be won.
             </>
           ) : null}

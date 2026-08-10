@@ -26,7 +26,7 @@
  */
 
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   destinationPoint,
 } from './geo';
@@ -115,13 +115,13 @@ export function turnpointsFromTask(task: XCTask): ForgeTurnpoint[] {
  * whole value of a forged track is that the engine agrees it flew the route.
  */
 function towards(p: Pt, q: Pt, metres: number): Pt {
-  if (andoyerDistance(p.lat, p.lon, q.lat, q.lon) < 1) return { lat: p.lat, lon: p.lon };
+  if (ellipsoidDistance(p.lat, p.lon, q.lat, q.lon) < 1) return { lat: p.lat, lon: p.lon };
   const bearing = calculateBearingRadians(p.lat, p.lon, q.lat, q.lon);
   return destinationPoint(p.lat, p.lon, metres, bearing);
 }
 
 function gap(a: Pt, b: Pt): number {
-  return andoyerDistance(a.lat, a.lon, b.lat, b.lon);
+  return ellipsoidDistance(a.lat, a.lon, b.lat, b.lon);
 }
 
 // ── IGC encoding (must satisfy the engine's own B_RECORD_RE) ───────────────
@@ -177,6 +177,46 @@ export function courseFor(task: XCTask): { points: Pt[]; totalMeters: number } {
     totalMeters += gap(points[i - 1], points[i]);
   }
   return { points, totalMeters };
+}
+
+/**
+ * The course actually FLOWN: the optimised line with every turnpoint vertex
+ * pulled inside its cylinder.
+ *
+ * The optimised line is the shortest legal path, so it only ever TOUCHES a
+ * cylinder — each vertex sits exactly on the boundary, and whether a track
+ * through it registers as a crossing is left to floating-point luck. Real
+ * pilots don't shave cylinders to the metre and neither should a fixture:
+ * aim each vertex a little way towards the centre, so the flight provably
+ * enters every cylinder rather than grazing it.
+ *
+ * A goal LINE is crossed, not entered — its optimised point lies ON the
+ * line, and pulling it towards the goal centre would only slide it ALONG
+ * the line. So the final vertex is instead placed past the centre, inside
+ * the control semicircle behind the line, which the incoming leg then has
+ * to cross.
+ */
+function flownCourseFor(task: XCTask): Pt[] {
+  const line = calculateOptimizedTaskLine(task);
+  const goalIsLine = task.goal?.type === 'LINE';
+  return line.map((p, i) => {
+    if (i === 0) return p; // launch: already the centre (§7.2)
+    const tp = task.turnpoints[i];
+    if (!tp || !(tp.radius > 0)) return p;
+    const centre = { lat: tp.waypoint.lat, lon: tp.waypoint.lon };
+    // Comfortably inside without rewriting the geometry: a tenth of the
+    // radius, at least 25 m, never more than 300 m — and never past the
+    // centre on a cylinder small enough that 25 m would overshoot it.
+    const inset = Math.min(tp.radius, Math.max(25, Math.min(tp.radius * 0.1, 300)));
+    if (goalIsLine && i === line.length - 1) {
+      const prev = line[i - 1];
+      const bearing = calculateBearingRadians(prev.lat, prev.lon, centre.lat, centre.lon);
+      return destinationPoint(centre.lat, centre.lon, inset, bearing);
+    }
+    const fromCentre = gap(p, centre);
+    if (fromCentre <= tp.radius - inset) return p; // already deep enough
+    return towards(p, centre, fromCentre - (tp.radius - inset));
+  });
 }
 
 // ── open distance: there is no route, so invent one ────────────────────────
@@ -379,9 +419,12 @@ export function buildFlight(
   }
 
   let climbing = false;
+  // Glides wander: a bounded random walk in heading, so the track drifts off
+  // the direct line and back the way a pilot hunting lift does, instead of
+  // flying the optimised line with impossible precision.
+  let meander = 0;
   for (let i = 1; i < course.length; i++) {
     const to = course[i];
-    if (gap(pos, to) < 30) continue;
     // Following a line rather than aiming at cylinder centres, so the
     // tolerance is one cruise step — enough not to oscillate around a vertex.
     const reach = Math.max(30, cruise * step);
@@ -393,9 +436,27 @@ export function buildFlight(
         if (alt >= ceiling) climbing = false;
       } else {
         alt += sink * step;
-        pos = towards(pos, to, cruise * step);
+        meander = Math.max(-0.4, Math.min(0.4, meander + (rnd() - 0.5) * 0.15));
+        const d = gap(pos, to);
+        // The wander fades out on final approach, so the vertex — pulled
+        // INSIDE its cylinder by flownCourseFor — is approached straight.
+        const fade = Math.min(1, Math.max(0, (d - reach) / 1500));
+        const bearing =
+          calculateBearingRadians(pos.lat, pos.lon, to.lat, to.lon) +
+          meander * fade;
+        pos = destinationPoint(pos.lat, pos.lon, Math.min(cruise * step, d), bearing);
         if (alt <= floor) climbing = true;
       }
+      push();
+      t += step;
+    }
+    // Finish the leg ON the vertex, whatever the fix interval: stopping a
+    // cruise step short of a point 25 m inside a cylinder is how a whole
+    // flight came to miss every turnpoint it was forged to fly.
+    if (gap(pos, to) > 1) {
+      alt += sink * step;
+      if (alt <= floor) climbing = true;
+      pos = { lat: to.lat, lon: to.lon };
       push();
       t += step;
     }
@@ -571,7 +632,13 @@ export function forgeIgc(
   if (isOpenDistanceTask(task)) return forgeOpenDistance(task, opts);
 
   const tps = turnpointsFromTask(task);
-  const { points, totalMeters } = courseFor(task);
+  const { totalMeters } = courseFor(task);
+  // Flown, not the optimised line itself: the same vertices, each pulled
+  // INSIDE its cylinder, because the optimised line only touches boundaries.
+  // The slider's metres are still measured against the optimised length —
+  // that is the distance the scorer credits — and the flown course is only
+  // ever metres longer, so a truncation never runs off its end.
+  const points = flownCourseFor(task);
   if (points.length < 2) throw new Error('A task needs at least two turnpoints');
 
   const target =

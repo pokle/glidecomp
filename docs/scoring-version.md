@@ -58,14 +58,14 @@ script does not touch the mtime and does not restart vite or wrangler.
 
 ## Why it is derived
 
-It used to be a hand-maintained integer (`SCORING_ENGINE_VERSION = 39`) beside
+It used to be a hand-maintained integer (`SCORING_ENGINE_VERSION = 45`) beside
 a hand-pasted hash, kept honest by a test that failed until the two agreed.
 That guard worked. What it cost was a merge conflict — three of them, in one
 file — on every pair of parallel engine branches:
 
 1. the integer, where both branches edited the same line;
 2. the fingerprint, same line again;
-3. the ~400-line changelog comment, where both branches appended at the same
+3. the ~630-line changelog comment, where both branches appended at the same
    spot.
 
 The second one is the one that mattered, because **it could not be resolved by
@@ -79,19 +79,27 @@ Deriving it makes the merged tree produce the right key by construction, which
 is both conflict-free and more correct than the manual step it replaces.
 
 The trade is that the value is now opaque: you can no longer say "we're on
-v39". Nothing in the code needed that, and the readable history moved to the
+v45". Nothing in the code needed that, and the readable history moved to the
 changelog below.
+
+One detail worth knowing when comparing a fingerprint against an older one:
+the delimiter between hashed files is NUL, as it was originally. The S7F 2026
+migration replaced the old guard test's two literal NUL bytes with `§`, which
+silently changed every fingerprint from that point on. A path can contain `§`
+but can never contain NUL, so the original delimiter is the one kept here.
 
 ## The changelog
 
 `web/engine/scoring-changes/` — one markdown file per change, `NNN-slug.md`.
 This is the old changelog comment, split so that two branches adding two
-different notes merge as pure additions. Numbers 002–039 are the entries that
-used to live in `scoring-version.ts`, so `039-…` is the old "v39" and the older
+different notes merge as pure additions. Numbers 002–045 are the entries that
+used to live in `scoring-version.ts`, so `045-…` is the old "v45" and the older
 docs that say "bumped 12 → 13" still point at the right note.
 
-The number is editorial — nothing reads it. Two branches that both take `040-`
-are not a conflict: the filenames differ and git merges both.
+The number is editorial — nothing reads it. Two branches that both take `046-`
+are not a conflict: the filenames differ and git merges both. That happened on
+this very change: it was written as `040-` and renumbered to `046-` when the
+S7F 2026 work landed first.
 
 It is linked from `/scoring` and `/scoring/gap`, because a pilot whose points
 moved is entitled to read why.

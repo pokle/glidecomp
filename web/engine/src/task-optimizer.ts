@@ -10,7 +10,7 @@
  */
 
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   destinationPoint,
   localEastNorth
@@ -24,14 +24,14 @@ import { computeGoalLine, goalLinePointAt, type GoalLine } from './goal-line';
 type LatLon = { lat: number; lon: number };
 
 /**
- * The ESS index the optimizer must pin (FAI S7F Annex A §3.2.4): "The end
+ * The ESS index the optimizer must pin (FAI S7F §7.2): "The end
  * of speed section is taken from its center position, so that its fix is
  * pinned to the preceding points, rather than any subsequent points at a
  * different position." Only an explicit mid-route ESS pins — an ESS at the
  * last turnpoint is already the route's destination and gets the same
  * nearest-point treatment there. -1 when nothing pins.
  *
- * The pin makes the task path's launch→ESS prefix equal the §6.4.2
+ * The pin makes the task path's launch→ESS prefix equal the §7.2
  * launchToESSPath (its own shortest-path optimisation) by construction, so
  * slicing the task path at the ESS yields the spec's launch-to-ESS and
  * speed-section distances, and the task distance deliberately kinks at ESS.
@@ -70,8 +70,8 @@ function findOptimalCirclePoint(
 
   const cost = (angle: number): number => {
     const point = destinationPoint(center.lat, center.lon, radius, angle);
-    const d1 = andoyerDistance(prev.lat, prev.lon, point.lat, point.lon);
-    const d2 = andoyerDistance(point.lat, point.lon, next.lat, next.lon);
+    const d1 = ellipsoidDistance(prev.lat, prev.lon, point.lat, point.lon);
+    const d2 = ellipsoidDistance(point.lat, point.lon, next.lat, next.lon);
     return d1 + d2;
   };
 
@@ -156,7 +156,7 @@ function findOptimalGoalLinePoint(
 ): { lat: number; lon: number } {
   const cost = (t: number): number => {
     const point = goalLinePointAt(goalLine, t);
-    return andoyerDistance(prevLat, prevLon, point.lat, point.lon);
+    return ellipsoidDistance(prevLat, prevLon, point.lat, point.lon);
   };
 
   const phi = (1 + Math.sqrt(5)) / 2;
@@ -213,7 +213,7 @@ function optimizePass(
 
     if (i === 0) {
       // Launch: the first turnpoint's CENTRE, whatever its type or radius
-      // (Annex A §2.2 — "the distance is measured from the center of the
+      // (§7.2 — "the distance is measured from the center of the
       // launch waypoint, regardless of whether it has been given a
       // radius"). A route that begins at the start cylinder therefore
       // includes the centre→boundary kilometres, matching AirScore.
@@ -232,7 +232,7 @@ function optimizePass(
         path.push({ lat: tp.waypoint.lat, lon: tp.waypoint.lon });
       }
     } else if (i === n - 1 || i === pinnedIdx) {
-      // Last turnpoint, or the pinned ESS (Annex A §3.2.4): nearest point
+      // Last turnpoint, or the pinned ESS (§7.2): nearest point
       // on the cylinder toward the previous optimised point — the incoming
       // leg alone places the fix; anything beyond continues FROM it. For a
       // LINE goal, the closest point on the line segment.
@@ -275,18 +275,18 @@ function optimizePass(
 function pathDistance(path: { lat: number; lon: number }[]): number {
   let total = 0;
   for (let i = 1; i < path.length; i++) {
-    total += andoyerDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
+    total += ellipsoidDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
   }
   return total;
 }
 
 /**
- * The §8.6.1 remaining route from an arbitrary position: the shortest path
+ * The §9.3 remaining route from an arbitrary position: the shortest path
  * of the route {point(position), un-reached control zones…, goal},
- * optimised with the §6.4.1 algorithm exactly as the task line is — the
+ * optimised with the §7.2 algorithm exactly as the task line is — the
  * position is the route's first element (a bare point), the un-reached
  * turnpoints keep their types (so a mid-route ESS still pins, Annex A
- * §3.2.4) and the goal keeps its cylinder/LINE handling.
+ * §7.2) and the goal keeps its cylinder/LINE handling.
  *
  * This is the measurement behind a landed-out pilot's flown distance
  * (`taskDistance − remaining`), replacing any fixed-tag approximation: the
@@ -354,7 +354,7 @@ function taskGeometryKey(task: XCTask): string {
  *
  * Two Annex A placement rules apply within each pass: the first point is
  * the launch CENTRE (§2.2), and an explicit mid-route ESS is pinned to the
- * incoming leg (§3.2.4) — see {@link pinnedESSIndex}.
+ * incoming leg (§7.2) — see {@link pinnedESSIndex}.
  *
  * @param task The competition task with turnpoint cylinders
  * @returns Array of lat/lon coordinates representing the optimized path
@@ -453,7 +453,7 @@ export function calculateOptimizedTaskDistance(task: XCTask): number {
 
   let totalDistance = 0;
   for (let i = 1; i < path.length; i++) {
-    totalDistance += andoyerDistance(
+    totalDistance += ellipsoidDistance(
       path[i - 1].lat,
       path[i - 1].lon,
       path[i].lat,
@@ -492,7 +492,7 @@ export function getOptimizedSegmentDistances(task: XCTask): number[] {
   const distances: number[] = [];
   for (let i = 1; i < path.length; i++) {
     distances.push(
-      andoyerDistance(
+      ellipsoidDistance(
         path[i - 1].lat,
         path[i - 1].lon,
         path[i].lat,
@@ -558,7 +558,7 @@ export function computeTurnpointDirections(
     if (i === 0 || i === n - 1) return 'enter';
     const prevTag = line[i - 1];
     if (!prevTag) return 'enter';
-    const prevTagToCenter = andoyerDistance(
+    const prevTagToCenter = ellipsoidDistance(
       prevTag.lat, prevTag.lon,
       tp.waypoint.lat, tp.waypoint.lon,
     );

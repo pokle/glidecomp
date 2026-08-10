@@ -32,15 +32,15 @@ CI checks that a branch touching a hashed scoring source adds a note
 
 ## The number is editorial
 
-Nothing reads it. Numbers 002–039 are the entries that used to live as one
+Nothing reads it. Numbers 002–045 are the entries that used to live as one
 comment block in `web/engine/src/scoring-version.ts`, back when each one
-carried a hand-maintained `SCORING_ENGINE_VERSION` — so `039-…` here is the
-old "v39", and the older docs that say things like "bumped 12 → 13" still
+carried a hand-maintained `SCORING_ENGINE_VERSION` — so `045-…` here is the
+old "v45", and the older docs that say things like "bumped 12 → 13" still
 point at the right note.
 
 The cache key is no longer that sequence. It is a content hash of the scoring
 sources, derived on every build — see [docs/scoring-version.md](../../../docs/scoring-version.md).
 
-Two branches that both take `040-` are **not** a conflict: the filenames
-differ, git merges both, and you can renumber afterwards or leave it. Avoiding
-that conflict is exactly why this is a directory and not a list.
+Two branches that both take the same number are **not** a conflict: the
+filenames differ, git merges both, and you can renumber afterwards or leave
+it. Avoiding that conflict is exactly why this is a directory and not a list.

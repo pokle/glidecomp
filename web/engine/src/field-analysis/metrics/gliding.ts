@@ -11,7 +11,7 @@
 import { fixAltitude as fixAlt, type IGCFix } from '../../igc-parser';
 import type { GlideSegment } from '../../event-types';
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
-import { andoyerDistance, calculateTrackDistance } from '../../geo';
+import { ellipsoidDistance, calculateTrackDistance } from '../../geo';
 import { getEffectiveSSSIndex } from '../../xctsk-parser';
 import { mean, median, percentile } from '../stats';
 import type {
@@ -340,7 +340,7 @@ const glideExtraDistance: MetricComputer = {
           actualSum +=
             phase.phase === 'glide'
               ? calculateTrackDistance(p.fixes, s, e)
-              : andoyerDistance(
+              : ellipsoidDistance(
                   p.fixes[s].latitude,
                   p.fixes[s].longitude,
                   p.fixes[e].latitude,

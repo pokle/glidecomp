@@ -167,10 +167,10 @@ async function scoreEachClass<F>(
 }
 
 /**
- * Launch validity (S7F §9.1) deliberately EXCLUDES pilots whose tracklog was
+ * Launch validity (S7F §10.1) deliberately EXCLUDES pilots whose tracklog was
  * withheld — they count as neither flying nor present-but-did-not-fly.
  *
- * Both §9.1 buckets assert a fact about this task, at this site, on this day.
+ * Both §10.1 buckets assert a fact about this task, at this site, on this day.
  * A tracklog that is not this flight establishes neither, so counting it would
  * be inventing a fact. The decisive argument is blast radius: this is an
  * automatic heuristic, not a scorekeeper's ruling, and if a withheld pilot
@@ -383,7 +383,7 @@ async function scoreGapTask(
   // overlaps R2 latency while capping peak memory from decompressed
   // tracklogs. For a stopped task this pass scores every pilot against the
   // stop-time window — exact for single-start-gate races; the multi-gate
-  // per-pilot equalization happens in the class loop below (§12.3.4).
+  // per-pilot equalization happens in the class loop below (§13.4.4).
   const analyzed = await mapWithConcurrency(
     config.scoredTracks,
     TRACK_FETCH_CONCURRENCY,
@@ -497,7 +497,7 @@ async function scoreGapTask(
 }
 
 /**
- * Stopped multi-gate / elapsed-time tasks (§12.3.4): every pilot in the class
+ * Stopped multi-gate / elapsed-time tasks (§13.4.4): every pilot in the class
  * is scored for the duration the LAST-started pilot had.
  *
  * The equalized windows come from the stop-clipped first pass; affected tracks

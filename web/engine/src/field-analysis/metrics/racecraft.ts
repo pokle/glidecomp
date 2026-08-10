@@ -23,7 +23,7 @@ import type {
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
 import { mean, median } from '../stats';
 import { stepFor } from '../resample';
-import { andoyerDistance, localEastNorth } from '../../geo';
+import { ellipsoidDistance, localEastNorth } from '../../geo';
 import { getEffectiveESSIndex, getEffectiveSSSIndex, getGoalIndex } from '../../xctsk-parser';
 import { resolveGoalAltitude, stoppedGlideRatio } from '../../gap-stopped';
 
@@ -459,7 +459,7 @@ const essMargin: MetricComputer = {
     'Height still available at ESS that the pilot no longer needed. That altitude was available ' +
     'for more speed, and the pilot did not use it. The value is the altitude at ESS minus the altitude ' +
     'needed to glide to goal at the standard glide ratio of the sport, which is 5.0 for HG and ' +
-    '4.0 for PG (S7F §12.3.6). A large positive margin means the pilot arrived too high. A ' +
+    '4.0 for PG (S7F §13.4.6). A large positive margin means the pilot arrived too high. A ' +
     'margin near zero means they flew the final glide with little height to spare.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);
@@ -475,7 +475,7 @@ const essMargin: MetricComputer = {
         perPilot.push({ trackFile: p.trackFile, value: null });
         continue;
       }
-      const distanceToGoal = andoyerDistance(ess.latitude, ess.longitude, goalWp.lat, goalWp.lon);
+      const distanceToGoal = ellipsoidDistance(ess.latitude, ess.longitude, goalWp.lat, goalWp.lon);
       const required = goalAlt + distanceToGoal / ratio;
       const margin = ess.altitude - required;
       margins.set(p.trackFile, margin);
@@ -551,7 +551,7 @@ const finalGlideInit: MetricComputer = {
         continue;
       }
       const exitFix = p.fixes[last.thermal.endIndex];
-      const distanceToGoal = andoyerDistance(
+      const distanceToGoal = ellipsoidDistance(
         exitFix.latitude,
         exitFix.longitude,
         goalWp.lat,

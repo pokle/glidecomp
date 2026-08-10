@@ -1,5 +1,5 @@
 /**
- * Start gates (FAI S7F §6.3.3, §8.3.1, §8.7) and early starts (§12.2).
+ * Start gates (FAI S7F §6.3.1, §9.2.4.1, §9.4) and early starts (§13.3).
  *
  * Covers the gate-time helpers, gate snapping in the turnpoint sequence,
  * and the sport-specific early-start scoring (PG launch→SSS clamp, HG
@@ -186,7 +186,7 @@ describe('resolveTurnpointSequence with start gates', () => {
     expect(result.startGate!.gateCount).toBe(2);
     expect(result.startGate!.time.getTime()).toBe(gate1);
     expect(result.earlyStart).toBeUndefined();
-    // Speed section runs from the gate, not the ~10:40 crossing (§8.7).
+    // Speed section runs from the gate, not the ~10:40 crossing (§9.4).
     expect(result.essReaching).not.toBeNull();
     expect(result.speedSectionTime).toBeCloseTo(
       (result.essReaching!.time.getTime() - gate1) / 1000, 3,
@@ -256,7 +256,7 @@ describe('resolveTurnpointSequence with start gates', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Early-start scoring (§12.2)
+// Early-start scoring (§13.3)
 // ---------------------------------------------------------------------------
 
 // A takeoff→SSS→goal task so PG early starters have a launch→SSS leg to keep.
@@ -289,7 +289,7 @@ const baseParams = {
   nominalDistance: 16000, minimumDistance: 2000, useDistanceDifficulty: false,
 };
 
-describe('early-start scoring (§12.2)', () => {
+describe('early-start scoring (§13.3)', () => {
   it('PG: early starters are scored only for the launch→SSS distance', () => {
     const result = scoreFlights(scoringTask, [
       flight({ trackFile: 'normal.igc' }),
@@ -309,9 +309,9 @@ describe('early-start scoring (§12.2)', () => {
   });
 
   it('PG: the launch→SSS distance is a fixed award, not a cap on what was flown', () => {
-    // Jumped the gun and then landed short of their own start (§12.2 awards
+    // Jumped the gun and then landed short of their own start (§13.3 awards
     // the launch→SSS distance "as calculated when determining the complete
-    // task distance", §6.4.1 — it is not reduced to the flight).
+    // task distance", §7.2 — it is not reduced to the flight).
     const shortFlight = launchToSss / 2;
     const result = scoreFlights(scoringTask, [
       flight({ trackFile: 'normal.igc' }),
@@ -384,10 +384,10 @@ describe('early-start scoring (§12.2)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Jump-the-gun starters and the leading coefficient (§11.3.1 + §12.2)
+// Jump-the-gun starters and the leading coefficient (§12.3.1 + §13.3)
 // ---------------------------------------------------------------------------
 
-describe('early starter leading coefficient (§11.3.1)', () => {
+describe('early starter leading coefficient (§12.3.1)', () => {
   /**
    * An HG pilot who jumps the gun at ~10:20 and covers most of the speed
    * section BEFORE the 10:30 gate, then trickles into the ESS after it.
@@ -426,7 +426,7 @@ describe('early starter leading coefficient (§11.3.1)', () => {
     const result = scoreTask(gatedTask(), pilots, {
       scoring: 'HG', useLeading: true, useDistanceDifficulty: false,
       nominalDistance: 8000, minimumDistance: 1000, nominalTime: 600,
-      // Keep the ~10-min-early start inside the §12.2 limit so the complete
+      // Keep the ~10-min-early start inside the §13.3 limit so the complete
       // flight (and its leading aggregate) stays scored.
       jumpTheGunMaxSeconds: 900,
     });

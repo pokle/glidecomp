@@ -25,6 +25,7 @@ import { formatDistance, useUnits } from "../lib/units";
 import { ordinal } from "../lib/format";
 import { pilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
+import { HistoricalRulesNotice, RulesEditionBadge } from "./RulesEdition";
 import { SectionHeader } from "../components/SectionHeader";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { SubmitTrackDialog } from "./SubmitTrackDialog";
@@ -37,7 +38,7 @@ import type {
 } from "./types";
 
 /**
- * Task-level stopped notice (FAI S7F §12.3): shown above the scores when the
+ * Task-level stopped notice (FAI S7F §13.4): shown above the scores when the
  * task was scored as stopped — the scored-back stop time, and (when the stop
  * came before the minimum scoring time) why every pilot reads 0. The comp
  * zone (or UTC) keeps the SSR markup deterministic.
@@ -60,10 +61,10 @@ function StoppedTaskNotice({
       <span className="text-muted-foreground">
         — flights scored up to{" "}
         {formatInstant(new Date(stopped.stop_time_ms), timezone ?? "UTC", mounted)} (the
-        stop announcement, scored back per FAI S7F §12.3.1).{" "}
+        stop announcement, scored back per FAI S7F §13.4.1).{" "}
         {stopped.requirement_met
           ? "Pilots still flying at the stop keep an altitude bonus for height above goal; a stopped-task validity factor applies."
-          : "The task was stopped before running the minimum scoring time (FAI S7F §12.3.2), so it cannot be scored — every pilot reads 0."}
+          : "The task was stopped before running the minimum scoring time (FAI S7F §13.4.2), so it cannot be scored — every pilot reads 0."}
       </span>
     </p>
   );
@@ -87,6 +88,7 @@ export function TaskScoresPublic({
   refresh,
   onReplayAvailable,
   initialScore,
+  taskDate = null,
 }: {
   compId: string;
   taskId: string;
@@ -107,6 +109,8 @@ export function TaskScoresPublic({
   onReplayAvailable: (available: boolean) => void;
   /** SSR-seeded score so the podium is in the first paint. */
   initialScore?: TaskScoreData;
+  /** The task's ISO date — drives the pre-2026-rules indicative notice. */
+  taskDate?: string | null;
 }) {
   const { user } = useUser();
   const mounted = useMounted();
@@ -273,6 +277,23 @@ export function TaskScoresPublic({
             etag={etag}
             pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
           />
+          {!isOpenDistance ? (
+            <p className="mt-1">
+              <RulesEditionBadge
+                edition={
+                  score.class_scores.find((c) => c.rules_edition)?.rules_edition
+                }
+              />
+            </p>
+          ) : null}
+          <div className="mt-2 empty:hidden">
+            <HistoricalRulesNotice
+              edition={
+                score.class_scores.find((c) => c.rules_edition)?.rules_edition
+              }
+              taskDate={taskDate}
+            />
+          </div>
           <StoppedTaskNotice score={score} timezone={timezone} />
           {score.class_scores.every((c) => c.pilots.length === 0) ? (
             <p className="mt-2 text-muted-foreground">

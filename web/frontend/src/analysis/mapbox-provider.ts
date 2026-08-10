@@ -8,7 +8,7 @@
 
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, andoyerDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, ellipsoidDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
 import type { MapProvider, MapBounds, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
@@ -192,7 +192,7 @@ function findNearbyLabels(
         name,
         lat,
         lon,
-        distanceM: andoyerDistance(tap.lat, tap.lng, lat, lon),
+        distanceM: ellipsoidDistance(tap.lat, tap.lng, lat, lon),
         elevation: elevation ?? undefined,
         withinTapPx: d <= PEAK_AUTO_SNAP_RADIUS_PX,
       };

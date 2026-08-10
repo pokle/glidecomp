@@ -85,7 +85,7 @@ export async function computeScoreStateKey(
     }>();
 
   // Pilot statuses feed launch validity now (non-absent = present, FAI S7F
-  // §9.1), so a status change must alter the served body's identity. Hash the
+  // §10.1), so a status change must alter the served body's identity. Hash the
   // per-task statuses with the pilot's class (the count that matters is
   // per-class). Absent/DNF pilots typically have no track, so this is the
   // only place they enter the key.
@@ -107,7 +107,7 @@ export async function computeScoreStateKey(
     `engine:${SCORING_ENGINE_VERSION}`,
     task?.scoring_format ?? "gap",
     task?.xctsk ?? "",
-    // Stopped tasks (S7F §12.3): the stop announcement reshapes every score.
+    // Stopped tasks (S7F §13.4): the stop announcement reshapes every score.
     `stop:${task?.stop_announcement_time ?? ""}`,
     // The task's day, the comp's zone and the category became scoring inputs
     // with track-quality.ts: together they decide whether a tracklog is

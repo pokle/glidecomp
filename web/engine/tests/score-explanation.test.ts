@@ -11,7 +11,6 @@ import {
   calculateArrivalPoints,
   calculateDistanceDifficulty,
   calculateSpeedFraction,
-  speedExponentValue,
 } from '../src/gap-scoring';
 import type {
   TurnpointSequenceResult,
@@ -277,7 +276,7 @@ describe('explainGapScore — flight narrative', () => {
     expect(explanation.headline).toBe('Made goal in 1:10:00 — 780.5 points');
   });
 
-  it('flags a turnpoint credited by the cylinder tolerance band (§8.1)', () => {
+  it('flags a turnpoint credited by the cylinder tolerance band (§9.1.1)', () => {
     const sss = reaching(1, 30, 'last_before_next');
     // TP reached only via the tolerance band (near-miss graze).
     const tpA = reaching(2, 60, 'first_after_previous', 1, true);
@@ -297,7 +296,7 @@ describe('explainGapScore — flight narrative', () => {
     const flight = section(explanation, 'flight');
     const tp = flight.items.find((i) => i.id === 'reaching-2');
     expect(tp).toBeDefined();
-    expect(tp!.detail).toContain('§8.1');
+    expect(tp!.detail).toContain('§9.1.1');
     expect(tp!.detail).toContain('tolerance');
   });
 
@@ -501,7 +500,7 @@ describe('explainGapScore — point components', () => {
     expect(formula!.text).toContain('Fastest through the speed section');
   });
 
-  it('shows the §12.1 ESS-but-not-goal reduction as an explicit ×0.8 line (HG)', () => {
+  it('shows the §13.2 ESS-but-not-goal reduction as an explicit ×0.8 line (HG)', () => {
     // Our pilot reached ESS in 70 min but landed before goal; the fastest
     // pilot (65 min) made goal. Engine: sf × available × 0.8.
     const sf = calculateSpeedFraction(70 * 60, 65 * 60);
@@ -526,20 +525,20 @@ describe('explainGapScore — point components', () => {
     const reduction = time.items.find((i) => i.id === 'ess-not-goal');
     expect(reduction).toBeDefined();
     expect(reduction!.text).toContain('80%');
-    expect(reduction!.text).toContain('§12.1');
+    expect(reduction!.text).toContain('§13.2');
     expect(reduction!.emphasis).toBe('warning');
     const formula = time.items.find((i) => i.id === 'time-formula');
-    expect(formula!.detail).toContain('× 0.8 (ESS but not goal, §12.1)');
+    expect(formula!.detail).toContain('× 0.8 (ESS but not goal, §13.2)');
     expect(formula!.detail).toContain(`= ${timePoints}`);
 
     const arrival = section(explanation, 'arrival');
     const arrivalNote = arrival.items.find((i) => i.id === 'arrival-ess-not-goal');
     expect(arrivalNote).toBeDefined();
     expect(arrivalNote!.text).toContain('80%');
-    expect(arrivalNote!.text).toContain('§12.1');
+    expect(arrivalNote!.text).toContain('§13.2');
   });
 
-  it('folds the §12.1 factor into the fastest-pilot equation too (HG)', () => {
+  it('folds the §13.2 factor into the fastest-pilot equation too (HG)', () => {
     // The ESS-but-not-goal pilot set the fastest time (AirScore best-time
     // rule) — full speed fraction, then ×0.8.
     const ctx = makeClassContext();
@@ -554,7 +553,7 @@ describe('explainGapScore — point components', () => {
     });
     const formula = section(explanation, 'time').items.find((i) => i.id === 'time-formula');
     expect(formula!.text).toContain('before the goal-validation reduction');
-    expect(formula!.detail).toContain('500 available × 0.8 (ESS but not goal, §12.1) = 400');
+    expect(formula!.detail).toContain('500 available × 0.8 (ESS but not goal, §13.2) = 400');
   });
 
   it('explains a 0% ESS-but-not-goal factor and goal-validates the best time (HG)', () => {
@@ -575,12 +574,13 @@ describe('explainGapScore — point components', () => {
     const time = section(explanation, 'time');
     expect(time.items[0].id).toBe('no-time-points');
     expect(time.items[0].text).toContain('0% of time and arrival points');
-    expect(time.items[0].text).toContain('§12.1');
+    expect(time.items[0].text).toContain('§13.2');
   });
 
-  it('goal-validated best time is shown to goal pilots when the factor is 0 (HG)', () => {
+  it('HG best time counts ESS pilots even when the factor is 0 (§9.4.1)', () => {
     const ctx = makeClassContext();
-    // A faster ESS-only pilot exists (60 min) but must not set the best time.
+    // A faster ESS-only pilot exists (60 min); §9.4.1 pins the HG best time
+    // to all ESS pilots regardless of the ESS-but-not-goal factor.
     ctx.pilots.push({
       flown_distance: 58_000, speed_section_time: 60 * 60,
       made_goal: false, reached_ess: true,
@@ -594,8 +594,8 @@ describe('explainGapScore — point components', () => {
     });
     const time = section(explanation, 'time');
     const best = time.items.find((i) => i.id === 'best-time');
-    expect(best!.value).toBe('1:05:00'); // the fastest GOAL pilot, not 1:00:00
-    expect(best!.text).toContain('among pilots who made goal');
+    expect(best!.value).toBe('1:00:00'); // the fastest ESS pilot
+    expect(best!.text).not.toContain('among pilots who made goal');
     // A goal pilot keeps full points — no reduction line.
     expect(time.items.find((i) => i.id === 'ess-not-goal')).toBeUndefined();
   });
@@ -678,11 +678,11 @@ describe('explainGapScore — point components', () => {
     });
     const total = section(explanation, 'total');
     expect(total.items[0].detail).toContain('100.0 + 0.0 − 90 jump-the-gun would come to 10');
-    expect(total.items[0].detail).toContain('minimum-distance score (FAI S7F §12.2)');
+    expect(total.items[0].detail).toContain('minimum-distance score (FAI S7F §13.3)');
     expect(total.items[0].detail).toContain('the total is 62.5');
   });
 
-  it('narrates the §12.4 zero floor when a penalty takes the score below 0', () => {
+  it('narrates the §13.5 zero floor when a penalty takes the score below 0', () => {
     const explanation = explainGapScore({
       task: makeTask(),
       result: makeReentryResult(),
@@ -696,7 +696,7 @@ describe('explainGapScore — point components', () => {
     });
     const total = section(explanation, 'total');
     expect(total.items[0].detail).toContain('400.0 + 380.5 − 900 penalty would come to −119.5');
-    expect(total.items[0].detail).toContain('scores never go below 0 (FAI S7F §12.4)');
+    expect(total.items[0].detail).toContain('scores never go below 0 (FAI S7F §13.5)');
   });
 
   // The engine's total is exactly 1000 × launch × distance × time, so the
@@ -777,7 +777,7 @@ describe('explainGapScore — point components', () => {
   // must multiply out to the printed points.
   it('prints a speed fraction precise enough to multiply out to the time points', () => {
     const ctx = makeClassContext();
-    const sf = calculateSpeedFraction(70 * 60, 65 * 60, 5 / 6);
+    const sf = calculateSpeedFraction(70 * 60, 65 * 60);
     const timePoints = sf * ctx.available_points.time;
     const explanation = explainGapScore({
       task: makeTask(),
@@ -1003,7 +1003,7 @@ describe('explainOpenDistanceScore — anchorInfo (no fixes at hand)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Start gates & early starts (S7F §8.3.1, §12.2)
+// Start gates & early starts (S7F §9.2.4.1, §13.3)
 // ---------------------------------------------------------------------------
 
 describe('explainGapScore — start gates & early starts', () => {
@@ -1092,7 +1092,7 @@ describe('explainGapScore — start gates & early starts', () => {
   });
 
   it('says so when the launch→SSS leg is below the minimum distance', () => {
-    // 2.8 km of launch→SSS floors to the 5 km minimum (§11.1) — the printed
+    // 2.8 km of launch→SSS floors to the 5 km minimum (§12.1) — the printed
     // figure is then the minimum, so it must not be labelled the leg.
     const x = pgEarlyStart(5_000);
     const item = section(x, 'distance').items.find(
@@ -1198,11 +1198,10 @@ describe('explainGapScore — day quality inputs', () => {
     const item = validityFor(makeValidityInputs(), {
       scoring: 'PG',
       nominalDistance: 70_000,
-      nominalGoal: 0.2,
       minimumDistance: 5_000,
     }).items.find((i) => i.id === 'distance-validity')!;
     expect(item.detail).toContain('70.0 km nominal distance');
-    expect(item.detail).toContain('20% nominal goal');
+    expect(item.detail).toContain('30% nominal goal');
     expect(item.detail).toContain('5.0 km minimum distance');
     expect(item.detail).toContain('44.1 km past the minimum');
   });
@@ -1432,7 +1431,7 @@ describe('explainGapScore — where the points went', () => {
     expect(s.items.find((i) => i.id === 'left-arrival')!.value).toBe('full points');
   });
 
-  // §12.2: a floored jump-the-gun deduction's PUBLISHED figure overstates its
+  // §13.3: a floored jump-the-gun deduction's PUBLISHED figure overstates its
   // net effect — the ledger derives the net from components − total instead.
   it('shows the net penalty effect, not the gross deduction, when a floor engaged', () => {
     const ctx = fieldContext();
@@ -1560,7 +1559,7 @@ describe('explainGapScore — leading points', () => {
         result: makeReentryResult(),
         entry,
         classContext: ctx,
-        params: { scoring: 'PG', leadingFormula: 'weighted' },
+        params: { scoring: 'PG' },
       }),
       'leading',
     );
@@ -1589,7 +1588,7 @@ describe('explainGapScore — leading points', () => {
     expect(s.items.find((i) => i.id === 'leading')!.value).toBe('62.5 pts');
   });
 
-  // §11.3.1's maxTime is the one input to a landed-out pilot's coefficient
+  // §12.3.1's maxTime is the one input to a landed-out pilot's coefficient
   // that comes from outside their own flight, so the page has to name it.
   function landedOutLeading(
     times?: ClassContextInput['leading_times'],
@@ -1614,7 +1613,7 @@ describe('explainGapScore — leading points', () => {
           leading_coefficient: 1.284,
         },
         classContext: ctx,
-        params: { scoring: 'PG', leadingFormula: 'weighted' },
+        params: { scoring: 'PG' },
       }),
       'leading',
     );
@@ -1659,7 +1658,7 @@ describe('explainGapScore — leading points', () => {
         result: makeReentryResult(),
         entry: { ...makeGoalEntry(), leading_points: 100, leading_coefficient: 0.981 },
         classContext: ctx,
-        params: { scoring: 'PG', leadingFormula: 'weighted' },
+        params: { scoring: 'PG' },
       }),
       'leading',
     );
@@ -1768,7 +1767,7 @@ describe('explainGapScore — arrival points', () => {
     );
   }
 
-  it('prints the position, the ESS time, and the substituted §11.4 formula', () => {
+  it('prints the position, the ESS time, and the substituted §13.5 formula', () => {
     const s = arrivalFor(7);
     const pos = s.items.find((i) => i.id === 'arrival-position')!;
     expect(pos.text).toBe('Reached the end of the speed section 7th of 22');
@@ -1822,10 +1821,10 @@ describe('explainGapScore — arrival points', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Nobody reached ESS (FAI S7F §10, issue #583)
+// Nobody reached ESS (FAI S7F §11, issue #583)
 // ---------------------------------------------------------------------------
 
-describe('explainGapScore — nobody reached ESS (S7F §10)', () => {
+describe('explainGapScore — nobody reached ESS (S7F §11)', () => {
   /**
    * An HG class where the whole field landed out: 855.0 distance + 45.0
    * leading of a 950.0-point day, and 50.0 points that were never on offer.
@@ -1895,7 +1894,7 @@ describe('explainGapScore — nobody reached ESS (S7F §10)', () => {
       (i) => i.id === 'no-ess-available',
     )!;
     expect(item.text).toContain('Nobody reached the end of the speed section');
-    expect(item.text).toContain('§10');
+    expect(item.text).toContain('§11');
     expect(item.emphasis).toBe('warning');
     // The arithmetic, substituted: 855.0 + 45.0 = 900.0 of 950.0.
     expect(item.detail).toContain('855 + 45 = 900');
@@ -1907,7 +1906,7 @@ describe('explainGapScore — nobody reached ESS (S7F §10)', () => {
       (i) => i.id === 'no-time-points',
     )!;
     expect(item.text).toContain('Nobody in this class reached the end of the speed section');
-    expect(item.text).toContain('§10');
+    expect(item.text).toContain('§11');
     expect(item.emphasis).toBe('warning');
   });
 
@@ -1916,7 +1915,7 @@ describe('explainGapScore — nobody reached ESS (S7F §10)', () => {
     expect(arrival.pointsAvailable).toBeUndefined();
     const item = arrival.items.find((i) => i.id === 'arrival-no-ess')!;
     expect(item.text).toContain('no arrival order');
-    expect(item.text).toContain('§10');
+    expect(item.text).toContain('§11');
   });
 
   it('drops the arrival section when the competition scores no arrival points', () => {
@@ -1939,12 +1938,12 @@ describe('explainGapScore — nobody reached ESS (S7F §10)', () => {
       },
     });
     expect(explanation.headlineNote).toContain('only 900');
-    expect(explanation.headlineNote).toContain('§10');
+    expect(explanation.headlineNote).toContain('§11');
     const left = section(explanation, 'comparison').items.find(
       (i) => i.id === 'left-total',
     )!;
     expect(left.detail).toContain('50 of the 950 was never on offer');
-    expect(left.detail).toContain('§10');
+    expect(left.detail).toContain('§11');
   });
 
   it('leaves a normal HG day’s wording alone', () => {
@@ -1970,7 +1969,7 @@ describe('explainGapScore — nobody reached ESS (S7F §10)', () => {
 
   it('keeps a stale pre-rule payload’s wording — its time offer is non-zero', () => {
     // The stale-first store still serves bodies written before the rule
-    // existed. Those carry a real time figure, which the §10 sentence would
+    // existed. Those carry a real time figure, which the §11 sentence would
     // flatly contradict.
     const ctx = noEssContext();
     ctx.available_points = {
@@ -2014,9 +2013,8 @@ describe('explainGapScore — component charts', () => {
       leading_points: 0, arrival_points: arrPts,
       arrival_position: pos, ess_time_ms: null,
     });
-    const exp = speedExponentValue('5/6');
     const best = 60 * 60;
-    const tOf = (t: number) => calculateSpeedFraction(t, best, exp) * 500;
+    const tOf = (t: number) => calculateSpeedFraction(t, best) * 500;
     ctx.pilots = [
       mk('a', 'Alpha', best, tOf(best), 1, calculateArrivalPoints(1, 4, 100)),
       mk('b', 'Bravo', 70 * 60, tOf(70 * 60), 2, calculateArrivalPoints(2, 4, 100)),
@@ -2093,7 +2091,7 @@ describe('explainGapScore — component charts', () => {
     expect(section(chartsFor(ctx), 'time').chart).toBeUndefined();
   });
 
-  it('plots arrival against position, sampling the §11.4 curve', () => {
+  it('plots arrival against position, sampling the §13.5 curve', () => {
     const chart = curveChart(section(chartsFor(chartContext()), 'arrival'));
     expect(chart.xUnit).toBe('position');
     expect(chart.pilots.map((p) => p.x)).toEqual([1, 2, 3, 4]);
@@ -2163,7 +2161,7 @@ describe('explainGapScore — component charts', () => {
     // A step function needs real samples; the linear case is drawn with two.
     expect(chart.curve.length).toBeGreaterThan(50);
     expect(chart.caption).toContain('where the field landed out');
-    expect(chart.caption).toContain('§11.1.1');
+    expect(chart.caption).toContain('§12.1.1');
   });
 
   it('draws the plain linear distance line when difficulty is off', () => {

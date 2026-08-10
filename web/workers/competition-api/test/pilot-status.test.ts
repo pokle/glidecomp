@@ -343,7 +343,7 @@ describe("DELETE pilot-status", () => {
 
 describe("a hidden test comp only takes statuses from its admins", () => {
   // The same gate the submission routes carry. A status is a scoring input —
-  // absent/DNF/landed feed launch validity (S7F §9.1) — so a non-admin writing
+  // absent/DNF/landed feed launch validity (S7F §10.1) — so a non-admin writing
   // one into a hidden comp is a write into somebody's unpublished rehearsal.
   async function statusRows(): Promise<number> {
     const row = await env.DB.prepare(

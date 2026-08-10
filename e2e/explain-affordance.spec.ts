@@ -35,15 +35,33 @@ async function analysisUrls(request: APIRequestContext) {
   if (!comp) {
     throw new Error("No public sample comp seeded — run `bun run seed corryong-cup-2026`.");
   }
-  const res = await request.get(`/api/comp/${comp.comp_id}/field-analysis`);
-  expect(res.ok()).toBeTruthy();
-  const analysis = (await res.json()) as { tasks: { task_id: string }[] };
-  const task = analysis.tasks[0];
-  if (!task) throw new Error(`No analysed task in ${comp.name}.`);
-  return {
-    comp: `/comp/${comp.comp_id}/analysis`,
-    task: `/comp/${comp.comp_id}/analysis/task/${task.task_id}`,
-  };
+  // Field analysis is lazy and stale-first (docs/2026-07-18-field-analysis-plan.md):
+  // a cold read returns `pending` and SCHEDULES the compute — it never computes
+  // synchronously — and the app UI polls. So must this helper. A single read
+  // raced the background compute: whenever anything invalidates the
+  // materialised rows (the S7F 2026 single-edition migration did, comp-wide),
+  // the first CI run after it always lost that race, threw here, and the
+  // severed in-flight request then took `wrangler dev` down with it.
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    const res = await request.get(`/api/comp/${comp.comp_id}/field-analysis`);
+    expect(res.ok()).toBeTruthy();
+    const analysis = (await res.json()) as {
+      tasks: { task_id: string }[];
+      pending_task_count: number;
+    };
+    const task = analysis.tasks[0];
+    if (task) {
+      return {
+        comp: `/comp/${comp.comp_id}/analysis`,
+        task: `/comp/${comp.comp_id}/analysis/task/${task.task_id}`,
+      };
+    }
+    if (analysis.pending_task_count === 0 || Date.now() > deadline) {
+      throw new Error(`No analysed task in ${comp.name}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
 }
 
 test("comp analysis: the column notes are behind their headers' ⓘ", async ({
