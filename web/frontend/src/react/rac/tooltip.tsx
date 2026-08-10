@@ -30,10 +30,9 @@ export function Tooltip({
     <AriaTooltip
       offset={6}
       className={cn(
-        // `fixed!` for the same reason rac/select.tsx's popoverClass carries
-        // it: a body-portalled overlay positioned with viewport offsets needs
-        // a viewport containing block, or an upward flip lands off-screen.
-        "fixed! z-50 max-w-64 rounded-md bg-foreground px-2 py-1 text-xs text-background shadow-md",
+        // No `position` override — RAC's own absolute positioning is only
+        // correct against a static body; see rac/select.tsx's popoverClass.
+        "z-50 max-w-64 rounded-md bg-foreground px-2 py-1 text-xs text-background shadow-md",
         "data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-entering:duration-100 data-exiting:duration-100",
         className
       )}
