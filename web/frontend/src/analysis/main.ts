@@ -507,14 +507,6 @@ async function init(): Promise<void> {
               <input type="number" id="gap-nominal-time" value="${params.nominalTime}" min="0" step="1" class="input w-full">
             </div>
             <div class="space-y-1">
-              <label for="gap-nominal-launch" class="text-sm text-muted-foreground">Launch (%)</label>
-              <input type="number" id="gap-nominal-launch" value="${Math.round(params.nominalLaunch * 100)}" min="0" max="100" step="1" class="input w-full">
-            </div>
-            <div class="space-y-1">
-              <label for="gap-nominal-goal" class="text-sm text-muted-foreground">Goal (%)</label>
-              <input type="number" id="gap-nominal-goal" value="${Math.round(params.nominalGoal * 100)}" min="0" max="100" step="1" class="input w-full">
-            </div>
-            <div class="space-y-1">
               ${helpLink('distance-points', 'Min distance (m)')}
               <input type="number" id="gap-minimum-distance" value="${params.minimumDistance}" min="0" step="1" class="input w-full">
             </div>
@@ -556,8 +548,6 @@ async function init(): Promise<void> {
       config.setGAPParameters({
         scoring,
         nominalTime: parseNum('#gap-nominal-time', 5400),
-        nominalLaunch: parseNum('#gap-nominal-launch', 96) / 100,
-        nominalGoal: parseNum('#gap-nominal-goal', 20) / 100,
         minimumDistance: parseNum('#gap-minimum-distance', 5000),
         useLeading: (form.querySelector('#gap-use-leading') as HTMLInputElement).checked,
         useArrival: (form.querySelector('#gap-use-arrival') as HTMLInputElement).checked,
@@ -2247,7 +2237,6 @@ async function init(): Promise<void> {
     config.enterCompScoringMode({
       gapParameters: {
         scoring: comp.gapParams.scoring,
-        nominalGoal: comp.gapParams.nominalGoal,
         nominalTime: comp.gapParams.nominalTime,
         minimumDistance: comp.gapParams.minimumDistance,
         useLeading: comp.gapParams.useLeading,

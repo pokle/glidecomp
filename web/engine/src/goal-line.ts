@@ -1,5 +1,6 @@
 /**
- * GAP goal line geometry (FAI Sporting Code Section 7F §6.3.1).
+ * GAP goal line geometry (FAI Sporting Code Section 7F §6.2.3.1 for the
+ * geometry, §9.2.3 for reaching it, §9.1.2 for its tolerance).
  *
  * A task whose goal is configured as `goal.type === 'LINE'` ends at a goal
  * LINE instead of a cylinder: a line segment centred on the goal waypoint,
@@ -7,31 +8,61 @@
  * "radius" to each side (total length = 2 × radius).
  *
  * Behind the line — on the far side from the course — lies a semicircular
- * control zone of the same radius. Per the GAP definition, goal is achieved
- * when the tracklog crosses the line itself OR contains a fix inside that
- * semicircle (which rescues a fast crossing that falls between two fixes,
- * or a tracklog gap right at the line).
+ * control zone of the same radius (§6.2.3.1). Goal is achieved when the
+ * tracklog crosses the line in the direction of the last leg (§9.2.3), or
+ * when a fix falls inside that semicircle — which rescues a fast crossing
+ * that falls between two fixes, or a tracklog gap right at the line.
  *
- * The final leg direction is taken from turnpoint centres: from the last
- * turnpoint whose centre differs from the goal centre, to the goal centre.
- * (An ESS ring is often concentric with the goal, so concentric turnpoints
- * are skipped when finding the leg.) When no direction can be established —
- * fewer than two distinct centres, or a zero radius — the goal falls back
- * to cylinder behaviour and every function here reports "no goal line".
+ * The semicircle rule is **paragliding-only** in the specification; for hang
+ * gliding §9.2.3 requires the line itself be crossed before a landing is
+ * made. GlideComp applies it to both sports — a deliberate, documented
+ * deviation (see /scoring/gap, "Smaller details"), because getting behind
+ * the line without entering the semicircle is very nearly impossible. The
+ * *direction* requirement is enforced for both sports: a segment crossing
+ * the line the wrong way validates nothing.
+ *
+ * Both control-zone shapes carry a tolerance band, exactly as a cylinder
+ * does (§9.1.1): the line gets the §9.1.3 line tolerance ({@link goalLineToleranceM})
+ * and the semicircle gets the cylinder calculation §9.2.3 sends it to
+ * ({@link goalZoneRadius}). The band is measurement slack, not geometry — it
+ * is at most a few metres and, like the cylinder bands, is not drawn on the
+ * map; the drawn line and semicircle are the nominal ones.
+ *
+ * The final leg direction follows the OPTIMISED route (S7F 2026 §6.2.3.1,
+ * changed by the 2025 edition): the previous point p is the optimised route
+ * point on the last control zone before goal, and the line runs
+ * perpendicular to p→centre. The route is computed with the goal treated as
+ * its centre point, so the geometry has no circular dependency on the line
+ * being constructed. When the route gives no usable direction the leg falls
+ * back to turnpoint centres (skipping turnpoints concentric with the goal —
+ * an ESS ring is often concentric); when no direction can be established at
+ * all — fewer than two distinct centres, or a zero radius — the goal falls
+ * back to cylinder behaviour and every function here reports "no goal
+ * line".
  *
  * All decisions made from this geometry are explainable: the line endpoints
  * and semicircle are exported for rendering, so what the pilot sees on the
- * map is exactly what the scorer measured against.
+ * map is (to within the tolerance band) exactly what the scorer measured
+ * against.
  */
 
 import type { XCTask } from './xctsk-parser';
 import { getGoalIndex } from './xctsk-parser';
+// Runtime-only cycle with task-optimizer (it imports this module's geometry;
+// we call its route optimiser inside a function body) — safe under ESM
+// hoisting, and the derived task passed back always has a CYLINDER goal so
+// the call can never recurse into goal-line construction.
+import { calculateOptimizedTaskLine } from './task-optimizer';
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   destinationPoint,
   localEastNorth,
 } from './geo';
+import {
+  MIN_CYLINDER_TOLERANCE_M,
+  outerDetectionRadius,
+} from './turnpoint-sequence-types';
 
 /** A resolved goal line in world coordinates. */
 export interface GoalLine {
@@ -57,7 +88,51 @@ export interface GoalLine {
  * line (or a line can't be constructed — see the module doc for fallback
  * conditions). Null means: treat the goal as a cylinder, exactly as before.
  */
+// Memoised goal lines and the CYLINDER-goal variant used to compute the
+// orientation route: keyed by task object identity so repeated calls in the
+// crossing detector and renderer don't re-run the route optimiser (which
+// itself caches by task object, hence the persistent derived task).
+const goalLineCache = new WeakMap<XCTask, GoalLine | null>();
+const orientationTaskCache = new WeakMap<XCTask, XCTask>();
+
+/**
+ * S7F 2026 §6.2.3.1: the previous point p — the optimised route point on
+ * the last control zone before goal, from a route computed with the goal
+ * treated as its centre point. Null when the route yields no usable point.
+ */
+function optimizedPreviousPoint(
+  task: XCTask,
+  goalIdx: number,
+  goalCenter: { lat: number; lon: number },
+): { lat: number; lon: number } | null {
+  let derived = orientationTaskCache.get(task);
+  if (!derived) {
+    derived = { ...task, goal: { ...task.goal, type: 'CYLINDER' } };
+    orientationTaskCache.set(task, derived);
+  }
+  const line = calculateOptimizedTaskLine(derived);
+  // The optimised line carries one point per turnpoint. Walk back from the
+  // zone before goal to the nearest route point distinct from the goal
+  // centre (a concentric ESS ring's point can coincide with it when the
+  // route enters from the far side of a zero-progress leg).
+  for (let i = Math.min(goalIdx, line.length) - 1; i >= 0; i--) {
+    const p = line[i];
+    if (!p) continue;
+    if (ellipsoidDistance(p.lat, p.lon, goalCenter.lat, goalCenter.lon) > 1) {
+      return p;
+    }
+  }
+  return null;
+}
+
 export function computeGoalLine(task: XCTask): GoalLine | null {
+  if (goalLineCache.has(task)) return goalLineCache.get(task)!;
+  const line = computeGoalLineUncached(task);
+  goalLineCache.set(task, line);
+  return line;
+}
+
+function computeGoalLineUncached(task: XCTask): GoalLine | null {
   if (task.goal?.type !== 'LINE') return null;
   const goalIdx = getGoalIndex(task);
   if (goalIdx < 1) return null;
@@ -65,19 +140,24 @@ export function computeGoalLine(task: XCTask): GoalLine | null {
   const halfWidth = goal.radius;
   if (!(halfWidth > 0)) return null;
 
-  // Final leg direction from turnpoint centres, skipping any turnpoint
-  // concentric with the goal (commonly the ESS ring around the goal line).
-  let prev: { lat: number; lon: number } | null = null;
-  for (let i = goalIdx - 1; i >= 0; i--) {
-    const wp = task.turnpoints[i].waypoint;
-    if (wp.lat !== goal.waypoint.lat || wp.lon !== goal.waypoint.lon) {
-      prev = { lat: wp.lat, lon: wp.lon };
-      break;
+  const center = { lat: goal.waypoint.lat, lon: goal.waypoint.lon };
+
+  // §6.2.3.1 (2026): orient on the optimised route's previous point.
+  let prev = optimizedPreviousPoint(task, goalIdx, center);
+
+  // Fallback: turnpoint centres, skipping any turnpoint concentric with the
+  // goal (commonly the ESS ring around the goal line).
+  if (!prev) {
+    for (let i = goalIdx - 1; i >= 0; i--) {
+      const wp = task.turnpoints[i].waypoint;
+      if (wp.lat !== center.lat || wp.lon !== center.lon) {
+        prev = { lat: wp.lat, lon: wp.lon };
+        break;
+      }
     }
   }
   if (!prev) return null;
 
-  const center = { lat: goal.waypoint.lat, lon: goal.waypoint.lon };
   const legBearing = calculateBearingRadians(prev.lat, prev.lon, center.lat, center.lon);
   return {
     center,
@@ -109,26 +189,79 @@ function toLineFrame(
 }
 
 /**
- * Is the point inside the goal control semicircle — behind the line (past it
- * in the course direction) and within `halfWidth` of the centre? A fix here
- * counts as goal (S7F §6.3.1) even without a detected line crossing.
+ * The §9.1.2 line tolerance in metres: the same percentage a cylinder gets
+ * (§9.1.1), applied to the line's size, with the same 5 m absolute minimum.
+ *
+ * The specification says the absolute tolerance "is calculated from the
+ * Distance and the Length (whichever is greater)" — the two ways a line's
+ * size is written down: the centre-to-endpoint distance (which a task file
+ * stores as the goal turnpoint's radius, i.e. `halfWidth`) and the line's
+ * full length. Taking the greater of the two, as the sentence directs, makes
+ * it the full length. On the goal lines competitions actually set — a few
+ * hundred metres to a couple of kilometres — the 5 m floor is what binds
+ * either way, so the reading only matters for a very long line, and then it
+ * is the pilot-favourable one.
+ *
+ * What the band buys at a GOAL line is length: a crossing that lands up to
+ * this far past an endpoint still counts (see {@link goalLineCrossing}).
+ * §9.2.2's other half — a tracklog point closer to the line than the tolerance
+ * reaches it without crossing — is a rule for line control zones a pilot flies
+ * THROUGH; at goal §9.2.3 requires the line be crossed in flight, and the
+ * band is not a substitute for that. It would also be the one part of the
+ * band that could move a goal TIME (by tolerance ÷ ground speed, a few tenths
+ * of a second) rather than only decide credit, for pilots who did cross.
  */
-export function isInGoalSemicircle(line: GoalLine, lat: number, lon: number): boolean {
-  const { along, across } = toLineFrame(line, lat, lon);
-  return along > 0 && along * along + across * across <= line.halfWidth * line.halfWidth;
+export function goalLineToleranceM(line: GoalLine, tolerance: number): number {
+  return Math.max(tolerance * 2 * line.halfWidth, MIN_CYLINDER_TOLERANCE_M);
 }
 
 /**
- * Where a straight track segment crosses the goal line, as a fraction of the
- * way from the segment's first point to its second (0..1) — or null when the
- * segment doesn't intersect the line. Both crossing directions intersect;
- * use {@link isForwardGoalCrossing} to tell them apart.
+ * Radius of the goal control semicircle as reaching sees it. §9.2.3 sends the
+ * control zone to the CYLINDER calculation — "the same tolerance calculations
+ * apply as for full cylinders (see 8.1)" — so this is the §9.1.1 outer
+ * detection radius of the line's half-width, NOT the §9.1.2 line band.
  */
-export function goalLineCrossingFraction(
+export function goalZoneRadius(line: GoalLine, tolerance: number): number {
+  return outerDetectionRadius(line.halfWidth, tolerance);
+}
+
+/**
+ * Is the point inside the goal control semicircle — behind the line (past it
+ * in the course direction) and within `radius` of the centre? A fix here
+ * counts as goal (S7F §9.2.3) even without a detected line crossing.
+ *
+ * `radius` defaults to the nominal half-width: that is the drawn semicircle,
+ * which is what rendering and route measurement want. Reaching passes the
+ * §9.2.3/§9.1.1 band edge ({@link goalZoneRadius}).
+ */
+export function isInGoalSemicircle(
+  line: GoalLine,
+  lat: number,
+  lon: number,
+  radius: number = line.halfWidth
+): boolean {
+  const { along, across } = toLineFrame(line, lat, lon);
+  return along > 0 && along * along + across * across <= radius * radius;
+}
+
+/**
+ * Where a straight track segment crosses the goal line, and whether it took
+ * the §9.1.2 tolerance band to get there — or null when the segment doesn't
+ * cross the line.
+ *
+ * `t` is the fraction of the way from the segment's first point to its second
+ * (0..1). `toleranceCredited` is true when the crossing landed PAST an
+ * endpoint of the nominal line but within `toleranceM` of it: the pilot
+ * clipped the very end of the line, and only the band credits them. Both
+ * crossing directions cross; use {@link isForwardGoalCrossing} to tell them
+ * apart.
+ */
+export function goalLineCrossing(
   line: GoalLine,
   from: { lat: number; lon: number },
-  to: { lat: number; lon: number }
-): number | null {
+  to: { lat: number; lon: number },
+  toleranceM = 0
+): { t: number; toleranceCredited: boolean } | null {
   const a = toLineFrame(line, from.lat, from.lon);
   const b = toLineFrame(line, to.lat, to.lon);
   // The line is {along = 0, |across| ≤ halfWidth}. The segment crosses the
@@ -138,8 +271,22 @@ export function goalLineCrossingFraction(
   if (a.along > 0 === b.along > 0 && a.along !== 0) return null;
   const t = a.along / (a.along - b.along);
   if (t < 0 || t > 1) return null;
-  const acrossAtT = a.across + t * (b.across - a.across);
-  return Math.abs(acrossAtT) <= line.halfWidth ? t : null;
+  const acrossAtT = Math.abs(a.across + t * (b.across - a.across));
+  if (acrossAtT > line.halfWidth + toleranceM) return null;
+  return { t, toleranceCredited: acrossAtT > line.halfWidth };
+}
+
+/**
+ * {@link goalLineCrossing} reduced to the crossing fraction, for callers that
+ * only need to know where (and whether) the segment met the line.
+ */
+export function goalLineCrossingFraction(
+  line: GoalLine,
+  from: { lat: number; lon: number },
+  to: { lat: number; lon: number },
+  toleranceM = 0
+): number | null {
+  return goalLineCrossing(line, from, to, toleranceM)?.t ?? null;
 }
 
 /** Did the segment cross in the course direction (approach side → beyond)? */
@@ -161,16 +308,17 @@ export function isForwardGoalCrossing(
 export function goalSemicircleBoundaryFraction(
   line: GoalLine,
   from: { lat: number; lon: number },
-  to: { lat: number; lon: number }
+  to: { lat: number; lon: number },
+  radius: number = line.halfWidth
 ): number {
-  const fromInside = isInGoalSemicircle(line, from.lat, from.lon);
+  const fromInside = isInGoalSemicircle(line, from.lat, from.lon, radius);
   let lo = 0; // same side as `from`
   let hi = 1; // same side as `to`
   for (let i = 0; i < 25; i++) {
     const mid = (lo + hi) / 2;
     const lat = from.lat + mid * (to.lat - from.lat);
     const lon = from.lon + mid * (to.lon - from.lon);
-    if (isInGoalSemicircle(line, lat, lon) === fromInside) {
+    if (isInGoalSemicircle(line, lat, lon, radius) === fromInside) {
       lo = mid;
     } else {
       hi = mid;
@@ -196,7 +344,7 @@ export function goalLinePointAt(line: GoalLine, t: number): { lat: number; lon: 
  * Shortest distance from a point to the goal line segment, in metres.
  *
  * Golden-section search over the position along the line, measuring each
- * candidate with the ellipsoidal {@link andoyerDistance} — accurate at any
+ * candidate with the ellipsoidal {@link ellipsoidDistance} — accurate at any
  * range (the pilot may be 100 km out), unlike a local planar projection.
  * The distance to a geodesic segment is unimodal in the line parameter, so
  * the search converges to the true minimum.
@@ -204,7 +352,7 @@ export function goalLinePointAt(line: GoalLine, t: number): { lat: number; lon: 
 export function distanceToGoalLine(line: GoalLine, lat: number, lon: number): number {
   const cost = (t: number): number => {
     const p = goalLinePointAt(line, t);
-    return andoyerDistance(lat, lon, p.lat, p.lon);
+    return ellipsoidDistance(lat, lon, p.lat, p.lon);
   };
 
   const phi = (1 + Math.sqrt(5)) / 2;

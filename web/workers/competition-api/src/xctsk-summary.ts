@@ -178,7 +178,7 @@ export function turnpointNames(xctskJson: string | null): TurnpointName[] {
 /**
  * True when the task declares a LINE goal. The engine scores a LINE goal
  * against the goal line (perpendicular to the final leg, with its control
- * semicircle — S7F §6.3.1), so this is purely informational: the task list
+ * semicircle — S7F §6.2.3.1), so this is purely informational: the task list
  * shows a "Goal line" badge so organizers can confirm the goal type at a
  * glance. It is no longer a warning (issue #330 is done).
  */

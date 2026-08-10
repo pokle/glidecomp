@@ -430,11 +430,15 @@ test("a select low in a tall dialog opens ON SCREEN, not below the fold", async 
   // displaces — opened higher up it opens downward and lands correctly even
   // when broken. Verified: at ~70px from the bottom RAC emits `bottom: 78px`,
   // which without the fix put the list 735px below the fold.
-  const select = dialog.getByRole("button", { name: "Time points exponent" });
+  // The S7F 2026 migration removed the Advanced section's selects (the
+  // formula generations are no longer settings), so the low-in-a-tall-dialog
+  // geometry is built from the Series scoring select instead — the manual
+  // overlay scroll below positions it near the bottom either way.
+  const select = dialog.getByRole("button", { name: "Series scoring" });
   await select.scrollIntoViewIfNeeded();
   await page.evaluate(() => {
     const trigger = document.querySelector<HTMLElement>(
-      'button[aria-label="Time points exponent"]'
+      'button[aria-label="Series scoring"]'
     );
     const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
       ?.parentElement;
@@ -479,11 +483,13 @@ test("settings dialog: stored GAP values, timezone combobox filter, cancel", asy
     dialog.getByRole("textbox", { name: "Nominal time (min)" })
   ).toHaveValue("90");
   await expect(
-    dialog.getByRole("textbox", { name: "Nominal goal (%)" })
-  ).toHaveValue("30");
-  await expect(
     dialog.getByRole("textbox", { name: "Minimum distance (km)" })
   ).toHaveValue("5");
+  // The §11 Leading Time Ratio resolves to the HG discipline default when
+  // the stored params never pinned one.
+  await expect(
+    dialog.getByRole("textbox", { name: "Leading-time ratio (%)" })
+  ).toHaveValue("17.5");
   await expect(
     dialog.getByRole("textbox", { name: "ESS but not goal: points kept (%, HG)" })
   ).toHaveValue("0");

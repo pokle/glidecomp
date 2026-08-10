@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { parseIGC, type IGCFix } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance, calculateOptimizedTaskLine } from '../src/task-optimizer';
-import { andoyerDistance } from '../src/geo';
+import { ellipsoidDistance } from '../src/geo';
 import { scoreTask, resolveCompGapParams, type PilotFlight } from '../src/gap-scoring';
 import {
   buildFieldContext,
@@ -291,7 +291,7 @@ describe('glide.extra_distance', () => {
     for (let i = 0; i + 1 < line.length; i++) {
       const a = line[i];
       const b = line[i + 1];
-      const d = andoyerDistance(a.lat, a.lon, b.lat, b.lon);
+      const d = ellipsoidDistance(a.lat, a.lon, b.lat, b.lon);
       const steps = Math.max(1, Math.round(d / (SPEED_MPS * STEP_S)));
       tagFixIndex.push(fixes.length);
       for (let k = 0; k < steps; k++) {

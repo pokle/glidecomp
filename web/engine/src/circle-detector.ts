@@ -16,7 +16,7 @@
  */
 
 import { IGCFix, fixAltitude } from './igc-parser';
-import { calculateBearing, andoyerDistance } from './geo';
+import { calculateBearing, ellipsoidDistance } from './geo';
 import { TrackSegment } from './event-types';
 
 // --- Constants ---
@@ -577,7 +577,7 @@ function estimateWindFromGroundSpeed(
   for (let i = startIndex; i < endIndex; i++) {
     const dt = (fixes[i + 1].time.getTime() - fixes[i].time.getTime()) / 1000;
     if (dt <= 0) continue;
-    const dist = andoyerDistance(
+    const dist = ellipsoidDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i + 1].latitude, fixes[i + 1].longitude
     );

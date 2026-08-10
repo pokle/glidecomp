@@ -11,7 +11,7 @@ import {
   getOptimizedSegmentDistances,
 } from '../src/task-optimizer';
 import { parseXCTask, type XCTask, type Turnpoint } from '../src/xctsk-parser';
-import { andoyerDistance, destinationPoint } from '../src/geo';
+import { ellipsoidDistance, destinationPoint } from '../src/geo';
 
 function makeTurnpoint(name: string, lat: number, lon: number, radius: number, type?: string): Turnpoint {
   return {
@@ -58,7 +58,7 @@ describe('task optimizer — iterative convergence', () => {
     const distance = calculateOptimizedTaskDistance(task);
 
     // The route starts at the SSS cylinder (r=3000, no TAKEOFF row), so per
-    // Annex A §2.2 it is measured from the SSS CENTRE: the old edge-measured
+    // §7.2 it is measured from the SSS CENTRE: the old edge-measured
     // single-pass greedy gave 77.513 km, iterative convergence 77.3 km, and
     // the centre rule adds the 3 km radius on top of the converged figure.
     expect(distance / 1000).toBeLessThan(77.5 + 3.0);
@@ -74,15 +74,15 @@ describe('task optimizer — iterative convergence', () => {
     const task = parseXCTask(taskContent);
     const path = calculateOptimizedTaskLine(task);
 
-    // The first point is the launch CENTRE (Annex A §2.2); every other
+    // The first point is the launch CENTRE (§7.2); every other
     // point should lie on its turnpoint's cylinder perimeter.
     const first = task.turnpoints[0];
     expect(
-      andoyerDistance(first.waypoint.lat, first.waypoint.lon, path[0].lat, path[0].lon),
+      ellipsoidDistance(first.waypoint.lat, first.waypoint.lon, path[0].lat, path[0].lon),
     ).toBeLessThan(1.0);
     for (let i = 1; i < task.turnpoints.length; i++) {
       const tp = task.turnpoints[i];
-      const dist = andoyerDistance(tp.waypoint.lat, tp.waypoint.lon, path[i].lat, path[i].lon);
+      const dist = ellipsoidDistance(tp.waypoint.lat, tp.waypoint.lon, path[i].lat, path[i].lon);
       expect(Math.abs(dist - tp.radius)).toBeLessThan(1.0); // within 1m of cylinder
     }
   });

@@ -1,7 +1,7 @@
 /**
  * Time points, with the arithmetic that produced them: the speed fraction
- * against the class best time (FAI S7F §11.2), the §12.1 ESS-but-not-goal
- * reduction, and the §12.3.5 stopped-task deduction, each folded into the
+ * against the class best time (FAI S7F §12.2), the §13.2 ESS-but-not-goal
+ * reduction, and the §13.4.5 stopped-task deduction, each folded into the
  * printed equation so it reconciles with the published points.
  */
 
@@ -11,8 +11,6 @@ import {
   calculateSpeedFraction,
   effectiveEssNotGoalFactor,
   qualifyingSpeedSectionTimes,
-  resolveTimePointsExponent,
-  speedExponentValue,
 } from '../gap-scoring';
 import type { TurnpointSequenceResult } from '../turnpoint-sequence';
 import type {
@@ -43,27 +41,27 @@ export function buildTimeSection(
 
   // PG requires goal (the spec fixes its ESS-but-not-goal factor at 0); HG
   // requires ESS, and a pilot who lands before goal keeps only the
-  // essNotGoalFactor share (§12.1).
+  // essNotGoalFactor share (§13.2).
   const essNotGoalFactor = effectiveEssNotGoalFactor(params);
   const qualifies =
     params.scoring === 'PG'
       ? entry.made_goal
       : entry.reached_ess && (entry.made_goal || essNotGoalFactor > 0);
-  // §12.1 reduction applies: the pilot earns time points, docked below.
+  // §13.2 reduction applies: the pilot earns time points, docked below.
   const essReduction =
     params.scoring === 'HG' &&
     entry.reached_ess &&
     !entry.made_goal &&
     essNotGoalFactor > 0;
 
-  // Best time (§11.2.1) — the scorer's own functions over the published class
+  // Best time (§9.4.1) — the scorer's own functions over the published class
   // field; only the field names have to be translated.
   const candidates = classContext.pilots.map(bestTimeCandidate);
-  const bestTimes = qualifyingSpeedSectionTimes(candidates, essNotGoalFactor);
-  const bestTime = bestTimeFrom(candidates, essNotGoalFactor);
+  const bestTimes = qualifyingSpeedSectionTimes(candidates, params.scoring);
+  const bestTime = bestTimeFrom(candidates, params.scoring);
   let rank: string | undefined;
 
-  // FAI S7F §10 (HG): nobody in the class reached ESS, so there were no time
+  // FAI S7F §11 (HG): nobody in the class reached ESS, so there were no time
   // points to win — a fact about the whole task, not about this pilot, and the
   // reason the section header shows nothing available.
   const noEssAtAll = noEssPointsZeroed(classContext, params);
@@ -72,31 +70,16 @@ export function buildTimeSection(
     items.push({
       id: 'no-time-points',
       text: noEssAtAll
-        ? 'Nobody in this class reached the end of the speed section, so the task offered no time points to anyone (FAI S7F §10). Distance and leading points were all that could be won.'
+        ? 'Nobody in this class reached the end of the speed section, so the task offered no time points to anyone (FAI S7F §11). Distance and leading points were all that could be won.'
         : params.scoring === 'PG'
           ? 'Time points are only awarded to pilots who complete the task.'
           : entry.reached_ess && !entry.made_goal && essNotGoalFactor === 0
-            ? 'Reached the end of the speed section but not goal — this competition scores that at 0% of time and arrival points (FAI S7F §12.1).'
+            ? 'Reached the end of the speed section but not goal — this competition scores that at 0% of time and arrival points (FAI S7F §13.2).'
             : 'Time points are only awarded to pilots who reach the end of the speed section.',
       emphasis: noEssAtAll ? 'warning' : 'muted',
     });
   } else {
-    // Time-points exponent (S7F §11.2) actually used for this comp, decoupled
-    // from the leading-coefficient variant (issue #258).
-    const exp = resolveTimePointsExponent(params);
-    const exponentLabel = exp === '2/3' ? '2⁄3' : '5⁄6';
-    const exponentName =
-      exp === '2/3' ? 'the older GAP2016/2018 curve' : 'the current FAI S7F';
-    const sf = calculateSpeedFraction(
-      entry.speed_section_time,
-      bestTime,
-      speedExponentValue(exp),
-    );
-    items.push({
-      id: 'time-exponent',
-      text: `Time points use the ${exponentLabel} speed-fraction exponent (${exponentName}, S7F §11.2).`,
-      emphasis: 'muted',
-    });
+    const sf = calculateSpeedFraction(entry.speed_section_time, bestTime);
     items.push({
       id: 'your-time',
       text: 'Your speed section time',
@@ -104,7 +87,7 @@ export function buildTimeSection(
       // In a gated race the clock ran from the gate, not the crossing —
       // spell it out so the time never looks wrong next to the tracklog.
       detail: result.startGate
-        ? `Timed from your ${fmt(result.startGate.time)} start gate to the end of the speed section (FAI S7F §8.7)${
+        ? `Timed from your ${fmt(result.startGate.time)} start gate to the end of the speed section (FAI S7F §9.4)${
             result.sssReaching &&
             result.sssReaching.time.getTime() !== result.startGate.time.getTime()
               ? ` — you crossed the start at ${fmt(result.sssReaching.time)}`
@@ -125,15 +108,17 @@ export function buildTimeSection(
       behind > 0
         ? classContext.pilots.find(
             (p) =>
-              (essNotGoalFactor > 0 ? p.reached_ess : p.made_goal) &&
+              (params.scoring === 'HG' ? p.reached_ess : p.made_goal) &&
               p.speed_section_time === bestTime &&
               p.pilot_name,
           )
         : undefined;
     items.push({
       id: 'best-time',
+      // §9.4.1 pins the qualifying set per discipline: HG counts every ESS
+      // pilot, PG only pilots who made goal.
       text:
-        essNotGoalFactor > 0
+        params.scoring === 'HG'
           ? 'Fastest time in class'
           : 'Fastest time in class (among pilots who made goal)',
       value: duration(bestTime),
@@ -147,15 +132,15 @@ export function buildTimeSection(
           : undefined,
       emphasis: 'muted',
     });
-    // §12.1 reduction, stated before the formula so its ×factor is explained.
+    // §13.2 reduction, stated before the formula so its ×factor is explained.
     if (essReduction) {
       items.push({
         id: 'ess-not-goal',
-        text: `Reached the end of the speed section but landed before goal — reaching goal "validates" the speed section, so only ${trimZeros((essNotGoalFactor * 100).toFixed(1), 0)}% of time and arrival points are kept (FAI S7F §12.1).`,
+        text: `Reached the end of the speed section but landed before goal — reaching goal "validates" the speed section, so only ${trimZeros((essNotGoalFactor * 100).toFixed(1), 0)}% of time and arrival points are kept (FAI S7F §13.2).`,
         emphasis: 'warning',
       });
     }
-    // Stopped tasks (S7F §12.3.5): every goal pilot's time points are docked
+    // Stopped tasks (S7F §13.4.5): every goal pilot's time points are docked
     // by a fixed amount — the points a pilot reaching ESS exactly at the end
     // of the scored window would get. Stated before the formula, and folded
     // into the printed equations so they reconcile with the published points.
@@ -166,7 +151,7 @@ export function buildTimeSection(
     if (stopReduction > 0) {
       items.push({
         id: 'stopped-time-reduction',
-        text: `The task was stopped: every goal pilot's time points are reduced by ${fmtPoints(stopReduction)} — the points a pilot reaching the end of the speed section exactly at the task stop would get — so finishing just before the stop scores no better than being stopped just after ESS (FAI S7F §12.3.5).`,
+        text: `The task was stopped: every goal pilot's time points are reduced by ${fmtPoints(stopReduction)} — the time points the best pilot caught between the end of the speed section and goal at the stop would have received — so finishing just before the stop scores no better than being stopped just after ESS. The same amount is added to the day's distance points (FAI S7F §13.4.5).`,
         emphasis: 'warning',
       });
     }
@@ -174,10 +159,10 @@ export function buildTimeSection(
     // printed equations so they reconcile with the published points.
     const factor = essReduction ? essNotGoalFactor : 1;
     const factorEq = essReduction
-      ? ` × ${trimZeros(essNotGoalFactor.toFixed(2), 1)} (ESS but not goal, §12.1)`
+      ? ` × ${trimZeros(essNotGoalFactor.toFixed(2), 1)} (ESS but not goal, §13.2)`
       : '';
     const stopEq = stopReduction > 0
-      ? ` − ${fmtPoints(stopReduction)} (task stopped, §12.3.5)`
+      ? ` − ${fmtPoints(stopReduction)} (task stopped, §13.4.5)`
       : '';
     if (entry.speed_section_time <= bestTime) {
       const { availStr, reconciles } = reconcileWithAvailable(
@@ -197,10 +182,9 @@ export function buildTimeSection(
           : undefined,
       });
     } else {
-      // time points = speed fraction × available (× the §12.1 factor, − the
-      // §12.3.5 stopped reduction), exactly — print the fraction with enough
+      // time points = speed fraction × available (× the §13.2 factor, − the
+      // §13.4.5 stopped reduction), exactly — print the fraction with enough
       // decimals that the multiplication visibly holds at the 0.1-pt step.
-      // exponentLabel is the decoupled time-points exponent (issue #258).
       const { availStr, decimals, reconciles } = reconcileWithAvailable(
         ap.time, 3, 6, entry.time_points,
         (d, avail) => Math.max(0, Number(sf.toFixed(d)) * avail * factor - stopReduction),
@@ -209,7 +193,7 @@ export function buildTimeSection(
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^${exponentLabel}) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^5⁄6) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${
           reconciles
             ? `= ${fmtPoints(entry.time_points)}`
             : `≈ ${fmtPoints(entry.time_points)} — the figures are shown rounded; the points come from their full precision`

@@ -26,7 +26,7 @@
 import type { IGCFix } from '../igc-parser';
 import type { ThermalSegment } from '../event-types';
 import type { CircleDetectionResult } from '../circle-detector';
-import { andoyerDistance } from '../geo';
+import { ellipsoidDistance } from '../geo';
 
 export type FlightPhase = 'climb' | 'glide' | 'search';
 
@@ -126,7 +126,7 @@ function classifyGap(
     let w1 = w0 + 1;
     while (w1 < end && fixes[w1].time.getTime() < windowEndMs) w1++;
     const dt = (fixes[w1].time.getTime() - fixes[w0].time.getTime()) / 1000;
-    const dist = andoyerDistance(
+    const dist = ellipsoidDistance(
       fixes[w0].latitude,
       fixes[w0].longitude,
       fixes[w1].latitude,

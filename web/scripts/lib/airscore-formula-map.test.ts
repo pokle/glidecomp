@@ -52,37 +52,34 @@ describe('parseFormulaName', () => {
 });
 
 describe('mapAirscoreFormula — HG generations', () => {
-  it('gap-2018 HG (Corryong 2021): 2/3 exponent, leading+arrival off, keep 0% at ESS-not-goal — no warnings', () => {
+  it('gap-2018 HG (Corryong 2021): pre-2020 exponent warning, leading+arrival off, keep 0% at ESS-not-goal', () => {
     const { gapParams: p, cylinderTolerance, warnings } =
       mapAirscoreFormula(CORRYONG_2021_OPEN, 'hg');
-    expect(p.timePointsExponent).toBe('2/3');
-    expect(p.leadingFormula).toBe('classic');
     expect(p.useLeading).toBe(false);
     expect(p.useArrival).toBe(false);
     expect(p.essNotGoalFactor).toBe(0);
     expect(p.nominalDistance).toBe(35000);
     expect(p.nominalTime).toBe(5400);
-    expect(p.nominalGoal).toBeCloseTo(0.3, 10);
     expect(p.minimumDistance).toBe(5000);
     expect(cylinderTolerance).toBe(0.0005);
-    expect(warnings).toEqual([]);
+    // The 2/3 exponent generation is not reproducible under S7F 2026.
+    expect(warnings.some((w) => w.includes('2/3-exponent'))).toBe(true);
   });
 
-  it('gap-2021 HG (Corryong 2026): 5/6 exponent; timed arrival_scoring is harmless while arrival is off', () => {
+  it('gap-2021 HG (Corryong 2026): no formula-generation warnings; timed arrival_scoring is harmless while arrival is off', () => {
     const { gapParams: p, warnings } = mapAirscoreFormula(CORRYONG_2026_OPEN, 'hg');
-    expect(p.timePointsExponent).toBe('5/6');
     expect(p.useArrival).toBe(false);
     expect(warnings).toEqual([]);
   });
 
-  it('gap-hg2013 HG (Corryong 2017 open): 2/3 exponent, keep 80%, Dpt departure warns and disables leading', () => {
+  it('gap-hg2013 HG (Corryong 2017 open): keep 80%, Dpt departure warns and disables leading, 20% nominal-goal warning', () => {
     const { gapParams: p, warnings } = mapAirscoreFormula(CORRYONG_2017_OPEN, 'hg');
-    expect(p.timePointsExponent).toBe('2/3');
     expect(p.essNotGoalFactor).toBeCloseTo(0.8, 10);
     expect(p.useLeading).toBe(false);
     expect(p.useArrival).toBe(true);
-    expect(p.nominalGoal).toBeCloseTo(0.2, 10);
     expect(warnings.some((w) => w.includes('Dpt'))).toBe(true);
+    // Published nominal goal 20% differs from the S7F 2026 fixed 30%.
+    expect(warnings.some((w) => w.includes('fixed 30%'))).toBe(true);
   });
 
   it('gap-2021 HG with Ldo + timed arrival (Corryong 2024 t2–4): leading on with the linear-LC warning, timed-arrival warning', () => {
@@ -102,7 +99,6 @@ describe('mapAirscoreFormula — HG generations', () => {
 describe('mapAirscoreFormula — PG generations', () => {
   it('ggap-2018 PG (Unungra 2020): loud GGap warning, Lkm warning, PG glide-bonus warning', () => {
     const { gapParams: p, warnings } = mapAirscoreFormula(UNUNGRA_2020, 'pg');
-    expect(p.timePointsExponent).toBe('2/3');
     expect(p.useLeading).toBe(false);
     expect(p.useArrival).toBe(false);
     expect(p.nominalDistance).toBe(40000);
@@ -112,25 +108,16 @@ describe('mapAirscoreFormula — PG generations', () => {
     expect(warnings.some((w) => w.includes('glide bonus 5:1'))).toBe(true);
   });
 
-  it('gap-2021 PG maps to the s7f2020 generation (with the legacy knob-weights caveat)', () => {
-    const { gapParams: p, warnings } =
+  it('pre-2025 PG generations warn that the 2026 leading-weight split will differ', () => {
+    const { warnings } =
       mapAirscoreFormula({ ...CORRYONG_2026_OPEN, arrival_scoring: 'place' }, 'pg');
-    expect(p.leadingWeightFormula).toBe('s7f2020');
-    expect(p.leadingFormula).toBe('weighted');
-    expect(p.timePointsExponent).toBe('5/6');
-    expect(warnings.some((w) => w.includes('verify parity'))).toBe(true);
+    expect(warnings.some((w) => w.includes('LeadingTimeRatio split'))).toBe(true);
   });
 
-  it('gap-2023 PG maps to s7f2024', () => {
-    const { gapParams: p } =
-      mapAirscoreFormula({ ...CORRYONG_2026_OPEN, formula: 'gap-2023', arrival_scoring: 'place' }, 'pg');
-    expect(p.leadingWeightFormula).toBe('s7f2024');
-  });
-
-  it('gap-2018 PG maps to the gap2020 (GAP2016/2018) weights', () => {
-    const { gapParams: p } = mapAirscoreFormula({ ...CORRYONG_2021_OPEN }, 'pg');
-    expect(p.leadingWeightFormula).toBe('gap2020');
-    expect(p.leadingFormula).toBe('classic');
+  it('gap-2018 PG warns for both the exponent and the leading-weight generation', () => {
+    const { warnings } = mapAirscoreFormula({ ...CORRYONG_2021_OPEN }, 'pg');
+    expect(warnings.some((w) => w.includes('2/3-exponent'))).toBe(true);
+    expect(warnings.some((w) => w.includes('LeadingTimeRatio split'))).toBe(true);
   });
 });
 
@@ -164,7 +151,6 @@ describe('sharedGapParams / taskGapParamOverrides', () => {
     const a = mapAirscoreFormula(CORRYONG_2026_OPEN, 'hg').gapParams;
     const b = mapAirscoreFormula(CORRYONG_2024_OPEN_T2, 'hg').gapParams;
     const shared = sharedGapParams([a, b]);
-    expect(shared.timePointsExponent).toBe('5/6');
     expect(shared.nominalDistance).toBe(35000);
     expect(shared.useLeading).toBeUndefined(); // diverges between the tasks
     expect(taskGapParamOverrides(a, shared)).toEqual({ useLeading: false, useArrival: false });

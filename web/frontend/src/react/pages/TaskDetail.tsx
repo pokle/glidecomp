@@ -230,7 +230,7 @@ export function TaskDetail() {
             </p>
           ) : null}
           {task.stop_announcement_time ? (
-            // Stopped task (FAI S7F §12.3): surface the stop prominently —
+            // Stopped task (FAI S7F §13.4): surface the stop prominently —
             // it reshapes every score. Comp-zone (or UTC) rendering keeps
             // the SSR markup deterministic.
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
@@ -242,7 +242,7 @@ export function TaskDetail() {
                   comp?.timezone ?? "UTC",
                   mounted
                 )}{" "}
-                — scored as a stopped task (FAI S7F §12.3)
+                — scored as a stopped task (FAI S7F §13.4)
               </span>
             </p>
           ) : null}
@@ -440,6 +440,7 @@ export function TaskDetail() {
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}
           initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
+          taskDate={task.task_date}
         />
       </CompNameProvider>
 
@@ -749,7 +750,7 @@ function EditTaskDialog({
   const [selectedClasses, setSelectedClasses] = useState<string[]>(
     compPilotClasses.filter((cls) => task.pilot_classes.includes(cls))
   );
-  // Stopped task (S7F §12.3): the stop time, edited as a comp-local wall-clock
+  // Stopped task (S7F §13.4): the stop time, edited as a comp-local wall-clock
   // time of day ("" = task not stopped) — the stop is always on the task date,
   // so only the time is editable. Recombined with taskDate on save and stored/
   // scored as a UTC instant.
@@ -898,7 +899,7 @@ function EditTaskDialog({
             <Description>
               Set only when the task was stopped mid-flight (weather calldown).
               Scores are recomputed under the stopped-task rules (FAI S7F
-              §12.3): a scored-back stop time, a clipped scoring window, and an
+              §13.4): a scored-back stop time, a clipped scoring window, and an
               altitude bonus for pilots still flying. Leave empty for a task
               that ran to completion.
             </Description>

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { summariseFlight } from '../src/flight-summary';
 import { parseIGC, type IGCFix } from '../src/igc-parser';
 import type { AltitudeCleaningReport } from '../src/altitude-cleaning';
-import { calculateTrackDistance, andoyerDistance } from '../src/geo';
+import { calculateTrackDistance, ellipsoidDistance } from '../src/geo';
 
 /** A synthetic file's altitudes were never repaired. */
 const NO_CLEANING: AltitudeCleaningReport = {
@@ -64,7 +64,7 @@ describe('summariseFlight — a real tracklog', () => {
   it('reports a track longer than the straight line it covers', () => {
     const first = igc.fixes[0];
     const last = igc.fixes[igc.fixes.length - 1];
-    const straightLine = andoyerDistance(
+    const straightLine = ellipsoidDistance(
       first.latitude,
       first.longitude,
       last.latitude,

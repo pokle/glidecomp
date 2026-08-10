@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'bun:test';
 import { packTracks } from '../src/track-packer';
 import { requiredGlideToTarget } from '../src/glide-speed';
-import { andoyerDistance } from '../src/geo';
+import { ellipsoidDistance } from '../src/geo';
 import type { XCTask } from '../src/xctsk-parser';
 
 const task: XCTask = {
@@ -68,7 +68,7 @@ describe('requiredGlideToTarget', () => {
     const lat = 47.0;
     const lon = 11.2;
     const alt = 1400;
-    const expected = andoyerDistance(lat, lon, target.lat, target.lon) / (alt - target.altitude);
+    const expected = ellipsoidDistance(lat, lon, target.lat, target.lon) / (alt - target.altitude);
     expect(requiredGlideToTarget(lat, lon, alt, target)).toBeCloseTo(expected, 10);
     // ~4.56 km over 1000 m height → mid-single-digit L/D
     expect(requiredGlideToTarget(lat, lon, alt, target)!).toBeGreaterThan(4);

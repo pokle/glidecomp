@@ -190,7 +190,7 @@ export const pilotStatusRoutes = new Hono<AuthedEnv>()
 
       // A hidden test comp answers as a missing one, exactly as this file's
       // own GET does. A status is a scoring input — absent/DNF/landed feed
-      // launch validity (S7F §9.1) — so writing one into somebody's
+      // launch validity (S7F §10.1) — so writing one into somebody's
       // unpublished rehearsal is not the harmless annotation it looks like.
       if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
         return c.json({ error: "Competition not found" }, 404);
@@ -283,7 +283,7 @@ export const pilotStatusRoutes = new Hono<AuthedEnv>()
       );
 
       // A pilot's status is a scoring input: non-absent pilots count toward
-      // launch validity's "pilots present" (FAI S7F §9.1). Bump right after
+      // launch validity's "pilots present" (FAI S7F §10.1). Bump right after
       // the write, beside audit().
       await bumpAndRevalidateScores(c, [taskId]);
 

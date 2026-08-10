@@ -26,7 +26,7 @@
  */
 
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   destinationPoint,
 } from './geo';
@@ -115,13 +115,13 @@ export function turnpointsFromTask(task: XCTask): ForgeTurnpoint[] {
  * whole value of a forged track is that the engine agrees it flew the route.
  */
 function towards(p: Pt, q: Pt, metres: number): Pt {
-  if (andoyerDistance(p.lat, p.lon, q.lat, q.lon) < 1) return { lat: p.lat, lon: p.lon };
+  if (ellipsoidDistance(p.lat, p.lon, q.lat, q.lon) < 1) return { lat: p.lat, lon: p.lon };
   const bearing = calculateBearingRadians(p.lat, p.lon, q.lat, q.lon);
   return destinationPoint(p.lat, p.lon, metres, bearing);
 }
 
 function gap(a: Pt, b: Pt): number {
-  return andoyerDistance(a.lat, a.lon, b.lat, b.lon);
+  return ellipsoidDistance(a.lat, a.lon, b.lat, b.lon);
 }
 
 // ── IGC encoding (must satisfy the engine's own B_RECORD_RE) ───────────────

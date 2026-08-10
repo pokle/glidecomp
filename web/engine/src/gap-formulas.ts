@@ -13,9 +13,14 @@ import type { TurnpointReaching } from './turnpoint-sequence';
 import { getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { getOptimizedSegmentDistances } from './task-optimizer';
 import { resolveStartGates } from './time-gates';
-import { andoyerDistance } from './geo';
-import type { GAPParameters, LeadingFormula, LeadingWeightFormula, SpeedExponent } from './gap-params';
-import { DEFAULT_GAP_PARAMETERS } from './gap-params';
+import { ellipsoidDistance } from './geo';
+import type { GAPParameters, LeadingFormula } from './gap-params';
+import {
+  DEFAULT_GAP_PARAMETERS,
+  NOMINAL_LAUNCH,
+  NOMINAL_GOAL,
+  defaultLeadingTimeRatio,
+} from './gap-params';
 
 /** Coefficients of a cubic c0 + c1·x + c2·x² + c3·x³. */
 interface Cubic {
@@ -36,12 +41,17 @@ function poly3(x: number, { c0, c1, c2, c3 }: Cubic): number {
   return c0 + c1 * x + c2 * x * x + c3 * x * x * x;
 }
 
-// FAI S7F validity/arrival polynomial coefficients (the spec's own numbers).
-/** Launch-validity curve in the launch-validity ratio (§ launch validity). */
-const LAUNCH_VALIDITY_CUBIC: Cubic = { c0: 0, c1: 0.027, c2: 2.917, c3: -1.944 };
-/** Time-validity curve in the time-validity ratio (§ time validity). */
+// FAI S7F 2026 validity/arrival polynomial coefficients (the spec's own
+// numbers).
+/**
+ * Launch-validity curve in the launch-validity ratio (S7F 2026 §10.1).
+ * The linear coefficient is 0.028 — the 2025 edition corrected a typo
+ * (0.027) that had stood since about 2014.
+ */
+const LAUNCH_VALIDITY_CUBIC: Cubic = { c0: 0, c1: 0.028, c2: 2.917, c3: -1.944 };
+/** Time-validity curve in the time-validity ratio (S7F 2026 §10.3). */
 const TIME_VALIDITY_CUBIC: Cubic = { c0: -0.271, c1: 2.912, c2: -2.098, c3: 0.457 };
-/** Arrival-points curve in the arrival ratio (S7F §11.4, HG only). */
+/** Arrival-points curve in the arrival ratio (S7F 2026 §13.5, HG only). */
 const ARRIVAL_POINTS_CUBIC: Cubic = { c0: 0.2, c1: 0.037, c2: 0.13, c3: 0.633 };
 
 // ---------------------------------------------------------------------------
@@ -54,9 +64,9 @@ export interface TaskValidity {
   distance: number;
   time: number;
   /**
-   * Stopped-task validity (FAI S7F §12.3.3) — the fourth factor, present
+   * Stopped-task validity (FAI S7F §13.4.3) — the fourth factor, present
    * only when the task was stopped. 1 when anyone reached ESS; 0 when the
-   * stopped task didn't run long enough to be scored (§12.3.2).
+   * stopped task didn't run long enough to be scored (§13.4.2).
    */
   stopped?: number;
   /** Product of launch × distance × time (× stopped when the task was stopped) */
@@ -76,28 +86,27 @@ export interface WeightFractions {
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate launch validity.
- * Reduced when fewer pilots launch than the nominal threshold.
+ * Calculate launch validity (S7F 2026 §10.1).
+ * Reduced when fewer pilots launch than the fixed 96% nominal threshold.
  */
 export function calculateLaunchValidity(
   numFlying: number,
   numPresent: number,
-  nominalLaunch: number,
 ): number {
   if (numPresent === 0) return 0;
-  const lvr = Math.min(1, numFlying / (numPresent * nominalLaunch));
+  const lvr = Math.min(1, numFlying / (numPresent * NOMINAL_LAUNCH));
   return Math.min(1, Math.max(0, poly3(lvr, LAUNCH_VALIDITY_CUBIC)));
 }
 
 /**
- * Calculate distance validity.
+ * Calculate distance validity (S7F 2026 §10.2).
  * Reduced when pilots don't fly far enough relative to nominal parameters.
+ * The formula's DistanceWeight (nominal goal) is fixed at 30% by the spec.
  */
 export function calculateDistanceValidity(
   pilotDistances: number[],
   bestDistance: number,
   nominalDistance: number,
-  nominalGoal: number,
   minimumDistance: number,
 ): number {
   const numFlying = pilotDistances.length;
@@ -107,8 +116,8 @@ export function calculateDistanceValidity(
     (sum, d) => sum + Math.max(0, d - minimumDistance), 0
   );
 
-  const a = (nominalGoal + 1) * (nominalDistance - minimumDistance);
-  const b = Math.max(0, nominalGoal * (bestDistance - nominalDistance));
+  const a = (NOMINAL_GOAL + 1) * (nominalDistance - minimumDistance);
+  const b = Math.max(0, NOMINAL_GOAL * (bestDistance - nominalDistance));
   const nominalDistArea = (a + b) / 2;
 
   if (nominalDistArea <= 0) return 0;
@@ -138,7 +147,7 @@ export function calculateTimeValidity(
 }
 
 /**
- * Inputs to the §12.3.3 stopped-task validity formula, all distances in
+ * Inputs to the §13.4.3 stopped-task validity formula, all distances in
  * METRES (the formula itself works in km, per the spec).
  */
 export interface StoppedValidityInputs {
@@ -153,7 +162,7 @@ export interface StoppedValidityInputs {
 }
 
 /**
- * Stopped-task validity (FAI S7F §12.3.3) — the fourth validity factor for
+ * Stopped-task validity (FAI S7F §13.4.3) — the fourth validity factor for
  * a stopped task:
  *
  *   NumberOfPilotsReachedESS > 0 : StoppedTaskValidity = 1
@@ -193,9 +202,9 @@ export function calculateStoppedTaskValidity(inputs: StoppedValidityInputs): num
 /**
  * Calculate complete task validity.
  *
- * @param stoppedValidity - The §12.3.3 stopped-task validity factor, present
+ * @param stoppedValidity - The §13.4.3 stopped-task validity factor, present
  *   only when the task was stopped ({@link calculateStoppedTaskValidity} — or
- *   0 when the stopped task failed the §12.3.2 minimum-run requirement).
+ *   0 when the stopped task failed the §13.4.2 minimum-run requirement).
  */
 export function calculateTaskValidity(
   params: GAPParameters,
@@ -206,10 +215,10 @@ export function calculateTaskValidity(
   stoppedValidity?: number,
 ): TaskValidity {
   const numFlying = pilotDistances.length;
-  const launch = calculateLaunchValidity(numFlying, numPresent, params.nominalLaunch);
+  const launch = calculateLaunchValidity(numFlying, numPresent);
   const distance = calculateDistanceValidity(
     pilotDistances, bestDistance,
-    params.nominalDistance, params.nominalGoal, params.minimumDistance,
+    params.nominalDistance, params.minimumDistance,
   );
   const time = calculateTimeValidity(
     bestTime, bestDistance,
@@ -230,30 +239,22 @@ export function calculateTaskValidity(
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate weight fractions for the four scoring components.
- *
- * @param useLeading - Whether leading (departure) points are enabled
- * @param useArrival - Whether arrival points are enabled (HG only)
- * @param leadingWeightFormula - PG leading-weight generation (see
- *   {@link GAPParameters.leadingWeightFormula}); ignored for HG
- * @param leadingTimeRatio - PG S7F-2024 LeadingTimeRatio (see
- *   {@link GAPParameters.leadingTimeRatio})
+ * Calculate weight fractions for the four scoring components (S7F 2026 §11).
  */
 export interface WeightInputs {
   goalRatio: number;
-  bestDistance: number;
-  taskDistance: number;
   scoring: 'PG' | 'HG';
   /** Leading (departure) points enabled. Default true. */
   useLeading?: boolean;
   /** Arrival points enabled (HG only). Default true. */
   useArrival?: boolean;
-  /** PG leading-weight generation (ignored for HG). Default 'gap2020'. */
-  leadingWeightFormula?: LeadingWeightFormula;
-  /** PG S7F-2024 LeadingTimeRatio. Default 0.26. */
+  /**
+   * §11 LeadingTimeRatio (0–0.26). Defaults to the discipline default
+   * (26% PG, 17.5% HG).
+   */
   leadingTimeRatio?: number;
   /**
-   * How many pilots reached the end of the speed section (HG only, S7F §10).
+   * How many pilots reached the end of the speed section (HG only, §11).
    * Zero triggers the spec's "nobody at ESS" rule below; omit it when the
    * count is unknown and the rule is left unapplied.
    */
@@ -263,61 +264,39 @@ export interface WeightInputs {
 export function calculateWeights(inputs: WeightInputs): WeightFractions {
   const {
     goalRatio,
-    bestDistance,
-    taskDistance,
     scoring,
     useLeading = true,
     useArrival = true,
-    leadingWeightFormula = 'gap2020',
-    leadingTimeRatio = 0.26,
     numReachedESS,
   } = inputs;
   const gr = goalRatio;
+  const ltr = inputs.leadingTimeRatio ?? defaultLeadingTimeRatio(scoring);
 
-  // Distance weight: the shared polynomial for HG (identical in every
-  // generation) and for PG under the GAP2016/2018 and S7F-2024 generations.
-  // The S7F 2020–2022 PG generation ('s7f2020') replaced it with PWC-derived
-  // fixed weights (S7F 2020 §10): 0.838 when nobody makes goal, else its own
-  // polynomial.
-  const s7f2020Pg = scoring === 'PG' && leadingWeightFormula === 's7f2020';
-  const dw = s7f2020Pg
-    ? (gr === 0 ? 0.838 : 0.805 - 1.374 * gr + 1.413 * gr * gr - 0.484 * gr * gr * gr)
-    : 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
+  // Distance weight (§11): one polynomial, both disciplines.
+  const dw = 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
 
-  // Arrival weight: HG only, when enabled
+  // Arrival weight (§11): HG only, when enabled — 12.5% of the non-distance
+  // weight. (HG Class 2 would be 0; the engine does not model HG classes.)
   const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
 
-  // Leading weight. Hang gliding is generation-independent; paragliding
-  // picks between the legacy split (stored as 'gap2020', actually the
-  // GAP2016/2018 formula — see GAPParameters.leadingWeightFormula), the
-  // S7F 2020–2022 PWC weights, and the S7F-2024 §10 formula.
+  // Leading weight (§11): LeadingTimeRatio of the non-distance weight, both
+  // disciplines — except that for PG, when nobody makes goal, time points
+  // are unearnable and *all* the non-distance weight goes to leading.
   let lw: number;
   if (!useLeading) {
     lw = 0;
-  } else if (s7f2020Pg) {
-    // S7F 2020–2022 §10: PG leading weight is fixed at 0.162 whenever
-    // leading is on; time takes the remainder, which comes out exactly 0
-    // when nobody makes goal (0.838 + 0.162 = 1 — PG time points are
-    // unearnable without goal).
-    lw = 0.162;
-  } else if (scoring === 'PG' && leadingWeightFormula === 's7f2024') {
-    // FAI S7F 2024 §10: leading takes LeadingTimeRatio of the non-distance
-    // weight when someone makes goal; when nobody does (GoalRatio = 0) PG
-    // time points are unearnable, so *all* non-distance weight goes to
-    // leading.
-    lw = gr === 0 ? 1 - dw : (1 - dw) * leadingTimeRatio;
-  } else if (gr === 0) {
-    lw = taskDistance > 0 ? (bestDistance / taskDistance) * 0.1 : 0;
+  } else if (scoring === 'PG' && gr === 0) {
+    lw = 1 - dw;
   } else {
-    const multiplier = scoring === 'PG' ? 1.4 * 2 : 1.4;
-    lw = ((1 - dw) / 8) * multiplier;
+    lw = (1 - dw) * ltr;
   }
 
-  // FAI S7F §10 (HG box): "if nobody reaches ESS, then a maximum of 900 points
-  // are available for distance and 18 points for leading but, of course, no
-  // points for time nor arrival". Nothing is redistributed — the spec leaves
-  // the remaining weight unallocated, so these fractions deliberately sum to
-  // less than 1 and the day's points on offer stop at distance + leading.
+  // S7F 2026 §11 (HG box): "if nobody reaches ESS, then a maximum of 900
+  // points are available for distance and 18 points for leading but, of
+  // course, no points for time nor arrival". Nothing is redistributed — the
+  // spec leaves the remaining weight unallocated, so these fractions
+  // deliberately sum to less than 1 and the day's points on offer stop at
+  // distance + leading.
   //
   // No pilot's score moves: time points require an ESS crossing and the
   // arrival positions are empty, so both components were already zero for
@@ -353,7 +332,7 @@ export function calculateDistancePoints(
 }
 
 /**
- * Distance-difficulty curve for a hang-gliding task (FAI S7F §11.1.1).
+ * Distance-difficulty curve for a hang-gliding task (FAI S7F §12.1.1).
  * Holds the cumulative "difficulty score" per 100 m slot (0 … 0.5) so each
  * pilot's difficulty fraction can be looked up with sub-slot interpolation.
  */
@@ -365,7 +344,7 @@ export interface DistanceDifficulty {
 }
 
 /**
- * Build the distance-difficulty curve from the field (FAI S7F §11.1.1).
+ * Build the distance-difficulty curve from the field (FAI S7F §12.1.1).
  *
  * Only landed-out pilots shape the curve; goal pilots are excluded.
  * Distances are bucketed into 100 m slots, with sub-minimum distances
@@ -466,7 +445,7 @@ export interface DistanceScore {
 
 /**
  * Distance points for a hang-gliding pilot with the difficulty split
- * (FAI S7F §11.1.1): half linear (distance / 2·best) + half difficulty.
+ * (FAI S7F §12.1.1): half linear (distance / 2·best) + half difficulty.
  * Goal pilots get the full available distance points (0.5 + 0.5).
  */
 export interface DistancePointsHGInput {
@@ -511,20 +490,21 @@ export function applyMinimumDistance(
 // ---------------------------------------------------------------------------
 
 /**
- * Calculate the speed fraction for a pilot, matching AirScore's
- * `pilot_speed` (gap2020+ / current FAI S7F):
+ * The S7F 2026 §12.2 time-points exponent: the speed fraction falls off with
+ * the 5/6 power (the spec writes it as the 6th root of the 5th power).
+ */
+const SPEED_FRACTION_EXPONENT = 5 / 6;
+
+/**
+ * Calculate the speed fraction for a pilot (S7F 2026 §12.2):
  *
- *   SF = max(0, 1 − ((Tp − Tmin) / √Tmin)^e)    with times in hours
+ *   SF = max(0, 1 − ((Tp − Tmin) / √Tmin)^(5/6))    with times in hours
  *
- * where e is the time-points exponent (FAI S7F §11.2): 5/6 for the modern
- * formula (current S7F, both sports) and 2/3 for the older GAP2016/2018 curve.
- * Since issue #258 this exponent is chosen independently of the
- * leading-coefficient variant. Tp/Tmin are speed-section times.
+ * Tp/Tmin are speed-section times.
  */
 export function calculateSpeedFraction(
   pilotTimeSeconds: number,
   bestTimeSeconds: number,
-  exponent: number = 5 / 6,
 ): number {
   if (bestTimeSeconds <= 0 || pilotTimeSeconds <= 0) return 0;
   if (pilotTimeSeconds <= bestTimeSeconds) return 1;
@@ -533,26 +513,10 @@ export function calculateSpeedFraction(
   const bestTime = bestTimeSeconds / 3600;
   const sqrtBest = Math.sqrt(bestTime);
   if (sqrtBest <= 0) return 0;
-  return Math.max(0, 1 - Math.pow((pilotTime - bestTime) / sqrtBest, exponent));
-}
-
-/** Numeric value of a time-points exponent (FAI S7F §11.2). */
-export function speedExponentValue(exponent: SpeedExponent): number {
-  return exponent === '2/3' ? 2 / 3 : 5 / 6;
-}
-
-/**
- * Resolve the effective time-points exponent for a parameter set (issue #258).
- * An explicit {@link GAPParameters.timePointsExponent} wins; otherwise the
- * exponent is derived from {@link GAPParameters.leadingFormula} — the value it
- * historically implied (classic → 2/3, weighted → 5/6) — so competitions saved
- * before the two were decoupled keep their exact scores.
- */
-export function resolveTimePointsExponent(
-  params: Pick<GAPParameters, 'timePointsExponent' | 'leadingFormula'>,
-): SpeedExponent {
-  if (params.timePointsExponent) return params.timePointsExponent;
-  return params.leadingFormula === 'classic' ? '2/3' : '5/6';
+  return Math.max(
+    0,
+    1 - Math.pow((pilotTime - bestTime) / sqrtBest, SPEED_FRACTION_EXPONENT),
+  );
 }
 
 /** Inputs to {@link calculateTimePoints} for one pilot. */
@@ -569,21 +533,19 @@ export interface TimePointsInput {
   availableTimePoints: number;
   /** Sport — PG requires goal, HG requires ESS, to earn any time points. */
   scoring: 'PG' | 'HG';
-  /** Time-points exponent (S7F §11.2). Defaults to '5/6' (current spec). */
-  exponent?: SpeedExponent;
   /**
-   * §12.1 share of time points an HG pilot keeps when they reach ESS but not
+   * §13.2 share of time points an HG pilot keeps when they reach ESS but not
    * goal. Defaults to the engine baseline (0.8). PG is fixed at 0 by the spec.
    */
   essNotGoalFactor?: number;
 }
 
 /**
- * Calculate time points for a single pilot.
- * PG: Only pilots who made goal get time points (S7F §12.1 fixes the
+ * Calculate time points for a single pilot (S7F 2026 §12.2).
+ * PG: Only pilots who made goal get time points (§13.2 fixes the
  * ESS-but-not-goal parameter at 0 for paragliding).
  * HG: Pilots who reached ESS get time points, but a pilot who does not go
- * on to reach goal keeps only `essNotGoalFactor` of them (S7F §12.1,
+ * on to reach goal keeps only `essNotGoalFactor` of them (§13.2,
  * default 0.8) — reaching goal "validates" the speed section.
  */
 export function calculateTimePoints({
@@ -593,7 +555,6 @@ export function calculateTimePoints({
   reachedESS,
   availableTimePoints,
   scoring,
-  exponent = '5/6',
   essNotGoalFactor = DEFAULT_GAP_PARAMETERS.essNotGoalFactor,
 }: TimePointsInput): number {
   if (bestTime === null || pilotTime === null) return 0;
@@ -603,9 +564,9 @@ export function calculateTimePoints({
   // HG: must reach ESS
   if (scoring === 'HG' && !reachedESS) return 0;
 
-  const sf = calculateSpeedFraction(pilotTime, bestTime, speedExponentValue(exponent));
+  const sf = calculateSpeedFraction(pilotTime, bestTime);
   const points = sf * availableTimePoints;
-  // §12.1: an HG pilot with ESS but no goal keeps only the configured share.
+  // §13.2: an HG pilot with ESS but no goal keeps only the configured share.
   if (scoring === 'HG' && !madeGoal) return points * essNotGoalFactor;
   return points;
 }
@@ -614,8 +575,11 @@ export function calculateTimePoints({
 // Leading Coefficient
 // ---------------------------------------------------------------------------
 
-// Leading-area weighting envelope (AirScore weightedarea.py). At p≈1
-// (just left SSS) and p≈0 (at ESS) the weight is ~0; it peaks in the
+// Leading-area weighting envelope (S7F 2026 §12.3.1, PG). Written here in
+// terms of the REMAINING fraction p = minToESS / speedSectionDistance; the
+// spec writes weight(v) over the done fraction v = 1 − p, with
+// weight(v) = weightRising(1 − v) · weightFalling(1 − v) — the same curve.
+// At p≈1 (just left SSS) and p≈0 (at ESS) the weight is ~0; it peaks in the
 // middle, so leading is rewarded most for being out front mid-course.
 function weightRising(p: number): number {
   return Math.pow(1 - Math.pow(10, 9 * p - 9), 5);
@@ -623,28 +587,52 @@ function weightRising(p: number): number {
 function weightFalling(p: number): number {
   return Math.pow(1 - Math.pow(10, -3 * p), 2);
 }
-function leadWeight(p: number): number {
+/**
+ * The §12.3.1 leading-weight envelope at remaining fraction p — exported for
+ * the derivative check in tests ({@link leadWeightIntegral} must integrate
+ * exactly this curve) and for the report card's chart sampling.
+ */
+export function leadWeight(p: number): number {
   return weightRising(p) * weightFalling(p);
 }
 
-/** Per-fix-interval contribution to the raw leading-coefficient sum. */
-function lcContribution(
-  formula: LeadingFormula,
-  prevBestKm: number,
-  curBestKm: number,
-  timeSec: number,
-  ssKm: number,
-): number {
-  // Only progress toward ESS (a decrease in best distance) contributes.
-  if (prevBestKm <= curBestKm) return 0;
-  if (formula === 'classic') {
-    // classic: task_time * (best[i-1]² − best[i]²)
-    return timeSec * (prevBestKm * prevBestKm - curBestKm * curBestKm);
+// Binomial coefficients of (1 − u)^5 and (1 − v)^2 — the envelope expands
+// into 18 exponential terms, so its integral has an exact closed form.
+const RISING_COEFFS = [1, -5, 10, -10, 5, -1];
+const FALLING_COEFFS = [1, -2, 1];
+const LN10 = Math.LN10;
+
+/**
+ * Cumulative integral of the leading-weight envelope over the remaining
+ * fraction: W(p) = ∫₀^p leadWeight(q) dq, exactly.
+ *
+ * The §12.3.1 leadingArea integrates weight(x) over the DONE fraction x;
+ * with x = 1 − q that interval integral is a difference of this cumulative:
+ * ∫_{done(prev)}^{done(cur)} weight(x) dx = W(p_prev) − W(p_cur), where
+ * p = minToESS / speedSectionDistance at each end.
+ *
+ * Derivation: leadWeight(q) = (1 − 10^{9q−9})⁵ · (1 − 10^{−3q})² expands to
+ * Σⱼₖ aⱼbₖ · 10^{−9j} · 10^{(9j−3k)q}; each term integrates to
+ * 10^{(9j−3k)q} / ((9j−3k)·ln10) except the (0,0) constant term, which
+ * integrates to q. Exact and deterministic — no quadrature error to move a
+ * score between runs.
+ */
+export function leadWeightIntegral(p: number): number {
+  const q = Math.min(1, Math.max(0, p));
+  let total = 0;
+  for (let j = 0; j <= 5; j++) {
+    for (let k = 0; k <= 2; k++) {
+      const c = RISING_COEFFS[j] * FALLING_COEFFS[k] * Math.pow(10, -9 * j);
+      const alpha = 9 * j - 3 * k;
+      if (alpha === 0) {
+        total += c * q;
+      } else {
+        const scale = alpha * LN10;
+        total += (c * (Math.pow(10, alpha * q) - 1)) / scale;
+      }
+    }
   }
-  // weighted: weight(p) * progress * task_time, with p = best[i] / ssKm
-  const w = leadWeight(curBestKm / ssKm);
-  if (w === 0) return 0;
-  return w * (prevBestKm - curBestKm) * timeSec;
+  return total;
 }
 
 /**
@@ -670,15 +658,21 @@ export interface LeadingAggregate {
   reachedESS: boolean;
   /** Pilot's own SSS reaching time (epoch ms). */
   pilotSSSMs: number;
-  /** Time of the pilot's last fix (epoch ms) — classic land-out tail. */
+  /**
+   * Time of the pilot's last fix (epoch ms) — when the pilot didn't reach
+   * ESS this is their outlanding time, which the field's §12.3.1 `maxTime`
+   * is the latest of (see {@link resolveLeadingMaxTime}).
+   */
   lastFixMs: number;
   /**
-   * weighted: Σ wᵢ·Δbestᵢ·(tᵢ − pilotSSS), summed against the pilot's OWN
-   * start so the epoch-second terms stay small (no catastrophic cancellation).
-   * combineLeadingCoefficient re-references it to the field's first start.
+   * weighted (S7F 2026 §12.3.1): Σ minToESSᵢ·ΔWᵢ·(tᵢ − pilotSSS), where ΔWᵢ
+   * is the exact weight-envelope integral over the done-fraction interval —
+   * summed against the pilot's OWN start so the epoch-second terms stay
+   * small (no catastrophic cancellation). combineLeadingCoefficient
+   * re-references it to the field's first start.
    */
   weightedTimeSum: number;
-  /** weighted: Σ wᵢ·Δbestᵢ — the multiplier for the start-time shift. */
+  /** weighted: Σ minToESSᵢ·ΔWᵢ — the multiplier for the start-time shift. */
   weightedDeltaSum: number;
   /** classic: the field-independent Σ (already referenced to the pilot's own start). */
   classicSum: number;
@@ -739,7 +733,7 @@ export function computeLeadingAggregate(
   const pilotSSSSec = pilotSSSTime / 1000;
   const endTime = pilotESSTime ?? Infinity;
 
-  // §11.3.1/§12.2: in a gated race the leading clock starts at the first
+  // §12.3.1/§12.2: in a gated race the leading clock starts at the first
   // gate. An early ("jump the gun") starter's own SSS crossing precedes it,
   // so once combineLeadingCoefficient rebases the sum to the gate their
   // pre-gate progress would contribute NEGATIVE time — driving their LC
@@ -774,25 +768,34 @@ export function computeLeadingAggregate(
     const tp = task.turnpoints[nextReq];
     const edge = Math.max(
       0,
-      andoyerDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) - tp.radius,
+      ellipsoidDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) - tp.radius,
     );
     const distKm = (edge + cumToESS[nextReq]) / 1000;
 
     if (prevDistKm !== null) {
-      // AirScore appends this fix's distance to the ratchet window, then
-      // weights the interval by this ("next") fix's time.
+      // The ratchet appends this fix's distance to the window, then weights
+      // the interval by this ("next") fix's time — the spec's taskTime(tpᵢ).
       const curBestKm = Math.min(prevDistKm, ssKm, prevBestKm);
       if (formula === 'classic') {
-        // classic is referenced to the pilot's own start and never rebased,
-        // so its times are non-negative as-is — no gate clamp.
-        const localTimeSec = tms / 1000 - pilotSSSSec;
-        classicSum += lcContribution('classic', prevBestKm, curBestKm, localTimeSec, ssKm);
+        // classic (HG, §12.3.1): task_time · (best[i−1]² − best[i]²).
+        // Referenced to the pilot's own start and never rebased, so its
+        // times are non-negative as-is — no gate clamp.
+        if (prevBestKm > curBestKm) {
+          const localTimeSec = tms / 1000 - pilotSSSSec;
+          classicSum +=
+            localTimeSec * (prevBestKm * prevBestKm - curBestKm * curBestKm);
+        }
       } else if (prevBestKm > curBestKm) {
-        // weighted: split w·Δbest·time into (Σ w·Δbest·time) and (Σ w·Δbest)
-        // so the field's start-time offset can be applied later.
-        const w = leadWeight(curBestKm / ssKm);
-        if (w !== 0) {
-          const delta = w * (prevBestKm - curBestKm);
+        // weighted (PG, S7F 2026 §12.3.1):
+        //   minToESS(tpᵢ) · taskTime(tpᵢ) · ∫ weight(x) dx
+        // over the done-fraction interval this fix advanced through. Split
+        // the taskTime factor into (Σ Δ·time) and (Σ Δ) so the field's
+        // start-time offset can be applied later.
+        const delta =
+          curBestKm *
+          (leadWeightIntegral(prevBestKm / ssKm) -
+            leadWeightIntegral(curBestKm / ssKm));
+        if (delta !== 0) {
           weightedTimeSum += delta * (Math.max(tms, clockStartMs) / 1000 - pilotSSSSec);
           weightedDeltaSum += delta;
         }
@@ -816,25 +819,118 @@ export function computeLeadingAggregate(
 }
 
 /**
+ * The whole-field times the §12.3.1 leading clock is built from. Absolute
+ * epoch milliseconds throughout; {@link resolveLeadingMaxTime} turns them
+ * into the single `maxTime` the land-out tail runs to.
+ */
+export interface LeadingFieldTimes {
+  /**
+   * The leading clock's origin (`firstTaskStartTime`): the first start gate
+   * in a gated race, otherwise the first SSS crossing in the field.
+   */
+  firstStartMs: number;
+  /** When the last pilot reached ESS, or null when nobody did. */
+  lastESSMs: number | null;
+  /**
+   * When the last landed-out pilot landed — the end of the latest tracklog
+   * among pilots who never reached ESS — or null when nobody landed out.
+   */
+  lastOutlandingMs: number | null;
+  /** The task's goal deadline (§9.2), or null when the task sets none. */
+  deadlineMs: number | null;
+  /** The task stop time (§13.4.1) on a stopped task, else null. */
+  stopTimeMs: number | null;
+}
+
+/** Which of the {@link LeadingFieldTimes} the resolved `maxTime` came from. */
+export type LeadingMaxTimeSource =
+  | 'last_outlanding'
+  | 'last_ess'
+  | 'deadline'
+  | 'stop'
+  | 'fallback';
+
+/** A resolved §12.3.1 `maxTime`, and the field time it came from. */
+export interface LeadingMaxTime {
+  /** The instant the land-out tail runs to (epoch ms). */
+  timeMs: number;
+  source: LeadingMaxTimeSource;
+}
+
+/**
+ * How long the tail runs when the field gives nothing to measure it by —
+ * nobody reached ESS and nobody has a scannable tracklog. Arbitrary, and
+ * only reachable on a degenerate field.
+ */
+const LEADING_TAIL_FALLBACK_MS = 3_600_000;
+
+/**
+ * Resolve the field's §12.3.1 `maxTime`:
+ *
+ *   maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline)
+ *
+ * This is the instant a landed-out pilot's leading graph is carried to, and
+ * it is a property of the FIELD, not of the pilot: "for pilots who land out
+ * after the last pilot reached ESS, the calculation keeps going until they
+ * land" extends the clock for everyone still owed a tail, not only for the
+ * pilot who flew longest.
+ *
+ * A stopped task (§13.4.1) bounds it the same way the deadline does —
+ * nothing after the stop time is scored, so a tracklog that kept recording
+ * past it cannot lengthen anyone's tail.
+ */
+export function resolveLeadingMaxTime(times: LeadingFieldTimes): LeadingMaxTime {
+  const { firstStartMs, lastESSMs, lastOutlandingMs, deadlineMs, stopTimeMs } = times;
+
+  let timeMs: number;
+  let source: LeadingMaxTimeSource;
+  if (lastOutlandingMs !== null && (lastESSMs === null || lastOutlandingMs > lastESSMs)) {
+    timeMs = lastOutlandingMs;
+    source = 'last_outlanding';
+  } else if (lastESSMs !== null) {
+    timeMs = lastESSMs;
+    source = 'last_ess';
+  } else {
+    timeMs = firstStartMs + LEADING_TAIL_FALLBACK_MS;
+    source = 'fallback';
+  }
+
+  // The two caps. Reported as the source when either actually bites, because
+  // "the tail stopped at the deadline" is a different fact about the day from
+  // "the tail stopped when the last pilot landed".
+  if (stopTimeMs !== null && stopTimeMs < timeMs) {
+    timeMs = stopTimeMs;
+    source = 'stop';
+  }
+  if (deadlineMs !== null && deadlineMs < timeMs) {
+    timeMs = deadlineMs;
+    source = 'deadline';
+  }
+  return { timeMs, source };
+}
+
+/**
  * Fold the field-level scalars into a per-pilot {@link LeadingAggregate} to
  * produce the final leading coefficient — the cheap, field-dependent half of
  * `tot_lc_calculation` (late-start rectangle for classic, land-out tail, and
  * normalization). Lower LC = more leading = more points.
  *
  * @param agg - The pilot's cached/computed field-independent aggregate
- * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
- * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
+ * @param taskFirstSSSTime - The leading clock's origin (ms since epoch): the
+ *   first start gate, else the field's first SSS crossing
+ * @param taskMaxTime - The field's §12.3.1 `maxTime` (ms since epoch), from
+ *   {@link resolveLeadingMaxTime} — where a landed-out pilot's graph ends
  * @param formula - 'weighted' (modern default) or 'classic'
  * @returns Normalized leading coefficient (lower is better), or Infinity
  */
 export function combineLeadingCoefficient(
   agg: LeadingAggregate,
   taskFirstSSSTime: number,
-  taskLastESSTime: number,
+  taskMaxTime: number,
   formula: LeadingFormula = 'weighted',
 ): number {
   if (!agg.valid) return Infinity;
-  const { ssKm, bestDistKm, reachedESS, pilotSSSMs, lastFixMs } = agg;
+  const { ssKm, bestDistKm, reachedESS, pilotSSSMs } = agg;
 
   if (formula === 'classic') {
     let total = agg.classicSum;
@@ -843,34 +939,42 @@ export function combineLeadingCoefficient(
       total += ssKm * ssKm * (pilotSSSMs - taskFirstSSSTime) / 1000;
     }
     if (!reachedESS) {
-      const maxTime = Math.max(taskLastESSTime, lastFixMs);
-      total += bestDistKm * bestDistKm * (maxTime - pilotSSSMs) / 1000;
+      // Measured from the pilot's own start because classicSum is: the
+      // rectangle above already carries the graph back to the field's first
+      // start. Floored at zero — the deadline cap can land maxTime before a
+      // very late starter's own crossing, and a NEGATIVE tail would hand
+      // that pilot the field's best coefficient.
+      total += bestDistKm * bestDistKm * Math.max(0, taskMaxTime - pilotSSSMs) / 1000;
     }
     return total / (1800 * ssKm * ssKm);
   }
 
   // weighted: rebase the per-pilot sum from the pilot's own start to the
-  // field's first start — Σ w·Δbest·(t − first) = weightedTimeSum + (pilotSSS − first)·weightedDeltaSum.
+  // field's first start — Σ Δ·(t − first) = weightedTimeSum + (pilotSSS − first)·weightedDeltaSum.
   const shiftSec = pilotSSSMs / 1000 - taskFirstSSSTime / 1000;
   let total = agg.weightedTimeSum + shiftSec * agg.weightedDeltaSum;
   if (!reachedESS) {
-    const missingTimeSec = (taskLastESSTime - taskFirstSSSTime) / 1000;
-    total += weightFalling(bestDistKm / ssKm) * missingTimeSec * bestDistKm;
+    // §12.3.1 missingArea: minToESS(best) · maxTime · ∫ weight over the
+    // remaining (never-flown) part of the speed section.
+    const missingTimeSec = Math.max(0, (taskMaxTime - taskFirstSSSTime) / 1000);
+    total += bestDistKm * missingTimeSec * leadWeightIntegral(bestDistKm / ssKm);
   }
   return total / (1800 * ssKm);
 }
 
 /**
- * Calculate the leading coefficient (LC) for a single pilot, matching
- * AirScore's `classic` and `weighted` formulas (CIVL GAP / FAI S7F).
+ * Calculate the leading coefficient (LC) for a single pilot — the `classic`
+ * (HG) and `weighted` (PG) formulas of CIVL GAP / FAI S7F §12.3.1.
  *
  * The curve is distance-to-ESS measured **along the optimized course**
  * (distance to the next un-reached turnpoint's cylinder edge plus the
  * optimized legs from there to ESS), sampled per fix, with a ratchet:
  * the best distance never increases even if the pilot flies away from ESS.
  * Lower LC = more leading = more points. The raw per-interval sum is then
- * normalized and given a late-start (classic) and/or land-out tail term,
- * exactly as AirScore's `tot_lc_calculation`.
+ * normalized and given a late-start (classic) and/or land-out tail term, as
+ * in AirScore's `tot_lc_calculation` — except that the tail runs to the
+ * spec's field-level `maxTime` (issue #585) rather than to AirScore's
+ * per-pilot landing / last-ESS time.
  *
  * Thin wrapper over {@link computeLeadingAggregate} + {@link combineLeadingCoefficient};
  * see those for the cacheable split.
@@ -878,8 +982,9 @@ export function combineLeadingCoefficient(
  * @param fixes - Pilot's tracklog fixes (time-ordered)
  * @param task - The competition task
  * @param sequence - The pilot's resolved turnpoint reachings (for progress)
- * @param taskFirstSSSTime - Time the first pilot crossed SSS (ms since epoch)
- * @param taskLastESSTime - Time the last pilot reached ESS (ms since epoch)
+ * @param taskFirstSSSTime - The leading clock's origin (ms since epoch)
+ * @param taskMaxTime - The field's §12.3.1 `maxTime` (ms since epoch), from
+ *   {@link resolveLeadingMaxTime}
  * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
  * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached
  * @param formula - 'weighted' (modern default) or 'classic'
@@ -890,13 +995,13 @@ export function calculateLeadingCoefficient(
   task: XCTask,
   sequence: TurnpointReaching[],
   taskFirstSSSTime: number,
-  taskLastESSTime: number,
+  taskMaxTime: number,
   pilotSSSTime: number | null,
   pilotESSTime: number | null,
   formula: LeadingFormula = 'weighted',
 ): number {
   const agg = computeLeadingAggregate(fixes, task, sequence, pilotSSSTime, pilotESSTime, formula);
-  return combineLeadingCoefficient(agg, taskFirstSSSTime, taskLastESSTime, formula);
+  return combineLeadingCoefficient(agg, taskFirstSSSTime, taskMaxTime, formula);
 }
 
 // ---------------------------------------------------------------------------

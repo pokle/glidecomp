@@ -59,6 +59,27 @@ def classify_fill(rgb):
     return None
 
 
+def is_red(colour):
+    """Chars printed red mark changes from the previous edition (S7F §1.3)."""
+    return (isinstance(colour, tuple) and len(colour) == 3
+            and colour[0] > 0.6 and colour[1] < 0.4 and colour[2] < 0.4)
+
+
+def red_spans(page):
+    """Group red chars into per-line spans: [{'top', 'text'}, ...]."""
+    lines = {}
+    for ch in page.chars:
+        if is_red(ch.get("non_stroking_color")):
+            lines.setdefault(round(ch["top"]), []).append(ch)
+    spans = []
+    for top in sorted(lines):
+        chs = sorted(lines[top], key=lambda c: c["x0"])
+        text = "".join(c["text"] for c in chs).strip()
+        if text:
+            spans.append({"top": top, "text": text})
+    return spans
+
+
 def words_in(page, bbox, pad=1.5):
     x0, top, x1, bottom = bbox
     out = []
@@ -137,13 +158,16 @@ def main(pdf_path, outdir):
                 figures.append({"file": name,
                                 "bbox": [round(v, 1) for v in (x0, top, x1, bottom)]})
 
-            annot = {"page": n, "highlights": highlights, "figures": figures}
+            reds = red_spans(page)
+            annot = {"page": n, "highlights": highlights, "figures": figures,
+                     "red_changes": reds}
             (outdir / "annot" / f"p{n:02d}.json").write_text(json.dumps(annot, indent=1))
-            if highlights or figures:
+            if highlights or figures or reds:
                 summary["per_page"][n] = {
                     "hg": sum(1 for h in highlights if h["discipline"] == "hg"),
                     "pg": sum(1 for h in highlights if h["discipline"] == "pg"),
                     "figures": len(figures),
+                    "red_lines": len(reds),
                 }
 
     (outdir / "summary.json").write_text(json.dumps(summary, indent=1))

@@ -5,7 +5,7 @@
  * profile has no national ids, nothing matches — and the upload route used to
  * INSERT a second roster row. Jane was then registered twice, the organiser's
  * entry sitting empty, and nobody was told. The pilot count feeds launch
- * validity (S7F §9.1), so the phantom is a scoring input too.
+ * validity (S7F §10.1), so the phantom is a scoring input too.
  *
  * Every test here is written so that the DUPLICATE is what fails, not merely
  * the status code: a route that answered 409 and still inserted would pass a

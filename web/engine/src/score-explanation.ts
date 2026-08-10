@@ -92,7 +92,7 @@ export { turnpointLabel } from './score-explanation-sections';
  * Attach a chart to a section, when there is one to attach.
  *
  * A null chart is the normal case, not a failure: a component whose curve
- * would not explain this pilot's own points (the §12.1 or §12.3.5 reductions)
+ * would not explain this pilot's own points (the §12.1 or §13.4.5 reductions)
  * deliberately gets no chart, and the section's prose still explains the
  * score. See score-explanation-charts.ts.
  */
@@ -129,7 +129,7 @@ function withItemCharts(
  * Does this card get an arrival section?
  *
  * Normally when there were arrival points to win, or the pilot won some. The
- * third case is FAI S7F §10: on an HG task with arrival points switched on
+ * third case is FAI S7F §11: on an HG task with arrival points switched on
  * where nobody reached ESS, the available figure is now zero, and dropping the
  * section would delete the only place that says why the component is missing —
  * exactly what the reader of a no-ESS day came for.
@@ -178,7 +178,7 @@ export function explainGapScore(input: ExplainGapScoreInput): ScoreExplanation {
   if (classContext.available_points.leading > 0 || entry.leading_points > 0) {
     sections.push(
       withChart(
-        buildLeadingSection(entry, classContext, params),
+        buildLeadingSection(entry, classContext, params, fmt),
         buildLeadingChart(entry, classContext),
       ),
     );
@@ -335,7 +335,7 @@ export function explainOpenDistanceScore(
 }
 
 /**
- * Explain a manual-flight-scored pilot's result (FAI S7F §8.4). The narrative
+ * Explain a manual-flight-scored pilot's result (FAI S7F §9.2.2). The narrative
  * states the last turnpoint reached and the landing point (with the routed
  * distance-to-goal line on the map); the point-component sections reuse the
  * same GAP builders, driven by the authoritative published score entry, so the

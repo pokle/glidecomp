@@ -59,8 +59,10 @@ export interface AirscoreFormulaBlock {
 }
 
 export interface MappedAirscoreFormula {
-  /** GAP parameters for the task, ready to store (always sets the exponent
-   * and formula generation explicitly, so no back-compat inference applies). */
+  /** GAP parameters for the task, ready to store. GlideComp scores every
+   * task under the FAI S7F 2026 edition, so only the parameters that edition
+   * still exposes are mapped; formula-generation differences (exponent,
+   * leading-weight generation, nominal goal/launch) become warnings. */
   gapParams: Partial<GAPParameters>;
   /** Cylinder tolerance fraction for the task's xctsk (from error_margin),
    * or undefined when unpublished. */
@@ -113,9 +115,25 @@ export function mapAirscoreFormula(
   const p: Partial<GAPParameters> = {};
   const { cls, year } = parseFormulaName(block.formula);
 
-  // --- formula generation → exponent + leading/weight variants -------------
+  // --- formula generation → parity warnings --------------------------------
+  // GlideComp scores everything under the FAI S7F 2026 edition, so a comp
+  // published under an earlier generation cannot be reproduced exactly; the
+  // warnings record the known formula-level differences for the import's
+  // parity report.
   if (cls === 'gap' && year !== null) {
-    p.timePointsExponent = year >= 2020 ? '5/6' : '2/3';
+    if (year < 2020) {
+      warnings.push(
+        `formula "${block.formula}" scored time points with the classic 2/3-exponent ` +
+          'curve; GlideComp scores with the S7F 2026 5/6 exponent — time points will differ',
+      );
+    }
+    if (category === 'pg' && year < 2025) {
+      warnings.push(
+        `PG formula "${block.formula}" used an earlier leading-weight generation; ` +
+          'GlideComp applies the S7F 2026 §11 LeadingTimeRatio split — leading/time ' +
+          'points will differ',
+      );
+    }
   } else if (cls === 'ggap') {
     // GGap.pm is Geoff Wong's own variant: median-based distance validity,
     // LINEAR distance quality, time curve 1−(Δt/√(Tmin/1800))^(2/3), and a
@@ -124,9 +142,8 @@ export function mapAirscoreFormula(
     warnings.push(
       `formula "${block.formula}" is GGap (Geoff's GAP variant) — median distance validity, ` +
         'linear distance quality, √(Tmin/1800) time curve and flat leading weight are not ' +
-        'reproducible; mapped to the nearest GAP-generation parameters',
+        'reproducible; scored under the S7F 2026 formula instead',
     );
-    p.timePointsExponent = '2/3';
   } else {
     warnings.push(
       `unknown formula "${block.formula ?? '(missing)'}" — only nominal parameters mapped`,
@@ -134,36 +151,6 @@ export function mapAirscoreFormula(
   }
 
   const gapYear = cls === 'gap' ? year : null;
-  if (category === 'pg') {
-    if (gapYear !== null && gapYear >= 2023) {
-      p.leadingFormula = 'weighted';
-      p.leadingWeightFormula = 's7f2024';
-    } else if (gapYear !== null && gapYear >= 2020) {
-      p.leadingFormula = 'weighted';
-      p.leadingWeightFormula = 's7f2020';
-      // The legacy Perl PG weights are knob-driven (the published
-      // start/arrival/speed weights), NOT the spec's PWC generation the
-      // Python AirScore ships. The parity report decides which one the
-      // host actually ran.
-      warnings.push(
-        'PG gap-2020..2022: mapped to the S7F 2020–2022 PWC weights; the legacy Perl ' +
-          `AirScore instead used its published weight knobs (start ${block.start_weight}, ` +
-          `arrival ${block.arrival_weight}, speed ${block.speed_weight}) — verify parity`,
-      );
-    } else {
-      p.leadingFormula = 'classic';
-      p.leadingWeightFormula = 'gap2020';
-      warnings.push(
-        'PG pre-2020 formula: mapped to the GAP2016/2018 weights (the "GAP2020" setting); the ' +
-          'legacy Perl AirScore used its published weight knobs — verify parity',
-      );
-    }
-  } else {
-    // HG weights are identical in every GAP generation; only the LC variant
-    // moved (squared-distance "classic" — which legacy AirScore only adopted
-    // for post-2022 formulas, see the departure mapping below).
-    p.leadingFormula = 'classic';
-  }
 
   // --- nominal parameters --------------------------------------------------
   const nomDist = parseKm(block.nominal_distance);
@@ -181,10 +168,19 @@ export function mapAirscoreFormula(
   else if (block.nominal_time !== undefined)
     warnings.push(`unparsable nominal_time "${block.nominal_time}"`);
 
+  // Nominal goal is fixed at 30% in the S7F 2026 edition; a published value
+  // that differs shifts the distance validity and cannot be reproduced.
   const nomGoal = parsePercent(block.nominal_goal);
-  if (nomGoal !== null) p.nominalGoal = nomGoal;
-  else if (block.nominal_goal !== undefined)
+  if (nomGoal !== null) {
+    if (Math.abs(nomGoal - 0.3) > 1e-9) {
+      warnings.push(
+        `nominal_goal "${block.nominal_goal}" differs from the S7F 2026 fixed 30% — ` +
+          'distance validity will differ',
+      );
+    }
+  } else if (block.nominal_goal !== undefined) {
     warnings.push(`unparsable nominal_goal "${block.nominal_goal}"`);
+  }
 
   // --- departure (leading) — per task --------------------------------------
   const departure = (block.departure ?? '').toLowerCase();
@@ -261,7 +257,7 @@ export function mapAirscoreFormula(
     warnings.push('scale_to_validity is not implemented');
   }
   const glide = Number(block.stop_glide_bonus ?? 0);
-  const engineGlide = category === 'pg' ? 4 : 5;
+  const engineGlide = category === 'pg' ? 2.5 : 5;
   if (Number.isFinite(glide) && glide > 0 && glide !== engineGlide) {
     warnings.push(
       `stopped-task glide bonus ${glide}:1 differs from the engine's spec-fixed ` +

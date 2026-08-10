@@ -90,7 +90,7 @@ type PilotAnalysisPayload = Pick<
 >;
 
 /**
- * Recover one pilot's §12.3.4 equalized scored-window end for a stopped
+ * Recover one pilot's §13.4.4 equalized scored-window end for a stopped
  * multi-gate / elapsed-time task, from the cached per-track analyses
  * computeTaskScore wrote (variant "gap", the stop-aware pass-1 hash) for the
  * pilot's class. Returns null when the common window applies (single-gate
@@ -167,9 +167,9 @@ export async function computePilotAnalysis(
     return manualFlightAnalysis(db, geometry, compPilotId, alphabet);
   }
 
-  // Stopped tasks (S7F §12.3): mirror the scorer's stop context so the
+  // Stopped tasks (S7F §13.4): mirror the scorer's stop context so the
   // transparency narrative matches the published score exactly. The pilot's
-  // §12.3.4 equalized window (multi-gate/elapsed tasks) is recovered from the
+  // §13.4.4 equalized window (multi-gate/elapsed tasks) is recovered from the
   // cached analyses the scorer wrote — best effort: when they're not available
   // yet the stop time is used (exact for single-gate races).
   let stopOptions: StopResolutionOptions | null = geometry.stopBase;

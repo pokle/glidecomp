@@ -8,6 +8,7 @@
  */
 
 import type { GAPParameters } from '../gap-scoring';
+import { NOMINAL_LAUNCH, NOMINAL_GOAL } from '../gap-scoring';
 import type {
   ScoreExplanationItem,
   ScoreExplanationSection,
@@ -48,11 +49,11 @@ function launchValidityDetail(
   if (!vi || !params) return undefined;
   // Whole pilots: the threshold is fractional (96% of 32 is 30.72) and
   // "30.7 pilots" reads like a unit error. Ceil, because 30 would not clear it.
-  const target = Math.ceil(vi.num_present * params.nominalLaunch);
+  const target = Math.ceil(vi.num_present * NOMINAL_LAUNCH);
   const pilots = (n: number) => `${n} pilot${n === 1 ? '' : 's'}`;
   return (
     `${pilots(vi.num_flying)} flew out of ${vi.num_present} present. ` +
-    `Nominal launch is ${trimZeros((params.nominalLaunch * 100).toFixed(1), 0)}%, ` +
+    `Nominal launch is ${trimZeros((NOMINAL_LAUNCH * 100).toFixed(1), 0)}%, ` +
     `so launch validity is full once ${pilots(target)} are in the air.`
   );
 }
@@ -64,7 +65,7 @@ function distanceValidityDetail(
   if (!vi || !params) return undefined;
   return (
     `Measured against a ${km(params.nominalDistance)} nominal distance, ` +
-    `a ${trimZeros((params.nominalGoal * 100).toFixed(1), 0)}% nominal goal ` +
+    `a ${trimZeros((NOMINAL_GOAL * 100).toFixed(1), 0)}% nominal goal ` +
     `and a ${km(params.minimumDistance)} minimum distance. ` +
     `The field flew ${km(vi.mean_distance_over_minimum)} past the minimum on average, ` +
     `with a best of ${km(vi.best_distance)}.`
@@ -138,14 +139,14 @@ export function buildValiditySection(
       value: pctValidity(v.time, decimals),
       detail: timeValidityDetail(vi, params),
     },
-    // Stopped tasks (S7F §12.3.3): the fourth validity factor.
+    // Stopped tasks (S7F §13.4.3): the fourth validity factor.
     ...(v.stopped !== undefined
       ? [{
           id: 'stopped-validity',
           text:
             classContext.stopped && !classContext.stopped.requirement_met
-              ? 'Stopped-task validity — the task was stopped before running the minimum time (min(1 h, half the nominal time) after the start), so it cannot be scored (FAI S7F §12.3.2).'
-              : 'Stopped-task validity — the task was stopped; when nobody has reached the end of the speed section, the day is devalued by how settled the field already was (FAI S7F §12.3.3).',
+              ? 'Stopped-task validity — the task was stopped before running the minimum time (min(1 h, half the nominal time) after the start), so it cannot be scored (FAI S7F §13.4.2).'
+              : 'Stopped-task validity — the task was stopped; when nobody has reached the end of the speed section, the day is devalued by how settled the field already was (FAI S7F §13.4.3).',
           value: pctValidity(v.stopped, decimals),
           emphasis: (v.stopped < 1 ? 'warning' : 'muted') as 'warning' | 'muted',
         }]
@@ -156,14 +157,14 @@ export function buildValiditySection(
       value: pts(ap.total),
       detail: availableTotalDetail(v, ap.total, decimals),
     },
-    // FAI S7F §10, HG: nobody reached ESS, so time and arrival points were
+    // FAI S7F §11, HG: nobody reached ESS, so time and arrival points were
     // never on offer. Stated here, where the day's points are decided, because
     // it caps what ANY pilot could have scored — the time section below can
     // only speak for the pilot whose card this is.
     ...(params && noEssPointsZeroed(classContext, params)
       ? [{
           id: 'no-ess-available',
-          text: 'Nobody reached the end of the speed section, so this task offered no time or arrival points at all (FAI S7F §10).',
+          text: 'Nobody reached the end of the speed section, so this task offered no time or arrival points at all (FAI S7F §11).',
           // The bare figure, so it sits under the day's total in the same
           // column rather than overflowing it with a phrase.
           value: pts(ap.distance + ap.leading),

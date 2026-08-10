@@ -1,5 +1,5 @@
 /**
- * The penalty section: the jump-the-gun deduction (FAI S7F §12.2) with its
+ * The penalty section: the jump-the-gun deduction (FAI S7F §13.3) with its
  * division printed, and any penalty or bonus an official applied after
  * scoring.
  */
@@ -39,7 +39,7 @@ export function buildPenaltySection(
     );
     items.push({
       id: 'jump-the-gun',
-      text: `Jump the gun (FAI S7F §12.2): started ${duration(secs)} before the first start gate. The complete flight is scored, with 1 penalty point per ${jumpTheGunFactor} seconds early; the total never drops below the minimum-distance score.`,
+      text: `Jump the gun (FAI S7F §13.3): started ${duration(secs)} before the first start gate. The complete flight is scored, with 1 penalty point per ${jumpTheGunFactor} seconds early; the total never drops below the minimum-distance score.`,
       value: `−${fmtPoints(jtg)} pts`,
       detail: `${trimZeros(secs.toFixed(decimals), 0)} s early ÷ ${jumpTheGunFactor} s per point ${reconciles ? '=' : '≈'} ${fmtPoints(jtg)} points`,
       emphasis: 'warning',

@@ -417,7 +417,219 @@
 //      still applies underneath). The report card's distance section now
 //      prints which value applied — the launch→start leg beside what was
 //      actually flown, or the minimum when the leg falls below it.
-export const SCORING_ENGINE_VERSION = 36;
+// v37: HG leading weight follows the S7F §10 HG box on a no-goal day (the
+//      adjacent deviation found while fixing #583). The spec gives hang
+//      gliding ONE formula, (1 − DistanceWeight) ÷ 8 × 1.4, with no GoalRatio
+//      case; the "0.1 × BestDist ÷ TaskDist when nobody makes goal" rule is
+//      the PARAGLIDING GAP2016/2018 legacy weight (stored as 'gap2020', kept
+//      for AirScore parity). The branch testing it never tested the sport, so
+//      it caught HG too — handing a no-goal HG day a leading weight that
+//      scaled with how far the field flew, up to 0.1, where the spec offers
+//      0.0175. It also made the weight JUMP discontinuously the moment the
+//      first pilot reached goal.
+//      This MOVES POINTS, unlike v35. Over the 211-comp archive: 184 GAP
+//      tasks scored with their own stored formula, 9 affected (all HG, no
+//      goal, leading enabled), 70 pilot totals changed, largest 82.4 points
+//      — a Dalby Big Air 2022 sports-class leader whose available leading
+//      points fall from 99.9 to 17.5. Every affected task also had nobody at
+//      ESS, so under v35 those points are not redistributed: the day now caps
+//      at the spec's 900 + 18 = 918. The 41 HG tasks with leading on and
+//      pilots in goal, and all 30 PG tasks, are unchanged.
+// v38: the leading coefficient's land-out tail runs to the spec's field-level
+//      `maxTime` (issue #585, S7F §11.3.1):
+//
+//        maxTime = min(max(lastOutlandingTime, lastESStime), taskDeadline)
+//
+//      Both variants inherited AirScore's tail instead. The classic (HG) one
+//      ran to max(lastESStime, the pilot's OWN last fix) — per-pilot, so a
+//      pilot who landed early was never carried out to the field's last
+//      land-out; the weighted (PG) one ran to lastESStime alone and never
+//      extended at all for the pilots the prose is about ("for pilots who land
+//      out after the last pilot reached ESS, the calculation keeps going until
+//      they land"). Neither capped anything at the task deadline.
+//      `maxTime` is now resolved once per class from the whole field — the
+//      last land-out is the latest tracklog end among started pilots who never
+//      reached ESS — and capped at the goal deadline (§8.3.c) and, on a
+//      stopped task, at the stop time (§12.3.1), since nothing after either is
+//      scored and a recorder left running would otherwise stretch every
+//      pilot's tail. A deadline at or before the first start is ignored, the
+//      same task-setting mistake resolveTimingWindow already ignores. Both
+//      tails are floored at zero: the cap can land maxTime before a very late
+//      starter's own crossing, and a negative tail would hand that pilot the
+//      field's best coefficient.
+//      Measured over the 58 leading-scored tasks of the 211-comp archive
+//      (1,521 scored pilots), against a master that already carries v37:
+//      12.6% of pilots' leading points move, mean |Δ| 0.6 points, p95 3.3,
+//      largest 17.8, and 2.0% change rank. Distance, time and arrival points
+//      are untouched, and 34 of the 58 tasks are unchanged — every one whose
+//      last land-out came before the last ESS.
+//      The movement concentrates on the 9 archive tasks where NOBODY reached
+//      ESS, and there it is a correction, not a perturbation. With no last-ESS
+//      time the old tail fell back to each pilot's OWN last fix, so a pilot
+//      was charged for the whole time they stayed up and credited for landing
+//      early — the leading order came out close to the landing order. On
+//      Forbes 2022 task 7 the pilot with the old best coefficient (1.63, all
+//      17.5 leading points on offer) is the first to land; under one shared
+//      maxTime they hold the WORST of the field (7.93) at 0 points, and the
+//      pilot who got nearest ESS takes the 17.5. Those tasks also moved CLOSER
+//      to AirScore's published totals (Forbes 2022 task 7: mean |Δtotal|
+//      33.7 → 25.8; Forbes 2025 task 4: 27.6 → 25.5), despite the change being
+//      a deliberate departure from AirScore.
+//      v37 is why the numbers are small: it cut a no-goal HG day's leading
+//      offer from up to 100 points to the spec's 17.5, and those are exactly
+//      the days this changes most. Against the pre-v37 master the same run
+//      moved a pilot by as much as 93 points.
+//      The scored payload also carries the resolved clock per class
+//      (`leading_times`: first start, last ESS, last land-out, deadline, stop,
+//      and the maxTime they produce), because `maxTime` is the one input to a
+//      landed-out pilot's coefficient that lives entirely outside their own
+//      flight — the report card now names it and says which field time set it.
+
+// v39: goal-line tolerance and crossing direction (issue #359, S7F §8.2,
+//      §8.5.2). Two changes at a LINE goal, both at the margins of the line:
+//      (a) §8.2 line tolerance — the goal line now carries the same
+//      percentage band a cylinder gets (§8.1), with the same 5 m floor,
+//      taken over the line's length. At a goal line what the band buys is
+//      LENGTH: a crossing that lands up to the tolerance past an endpoint is
+//      credited, flagged toleranceCredited so the report card says so. The
+//      band never moves a crossing's time or position — a pilot who clipped
+//      the end is credited where their track met the line's plane. §8.4's
+//      other half (a fix closer to the line than the tolerance reaches it
+//      without crossing) is deliberately NOT applied at goal: §8.5.2 requires
+//      the goal line be crossed in flight, and that clause is the only part
+//      of the band that could shift an ordinary goal TIME. The control
+//      semicircle behind the line gets the §8.1 cylinder band too, which
+//      §8.5.2 mandates in as many words ("the same tolerance calculations
+//      apply as for full cylinders") — so its radius grows by max(0.5%, 5 m).
+//      (b) §8.5.2 direction — a track segment crossing the goal line the
+//      WRONG way (both fixes outside the control zone, the pilot leaving
+//      across the line) no longer records a crossing. It used to emit an
+//      instantaneous enter+exit pair, and the goal task position accepts the
+//      first crossing of either direction, so flying out across the line
+//      could credit goal to a pilot heading away from it.
+//      Only tasks with a LINE goal can move, and only pilots within a few
+//      metres of an endpoint or crossing the line backwards; every bundled
+//      comp scores identically.
+
+// v40: FAI S7F 2026 edition, phase 1 — parameter model + constants
+//      (docs/2026-08-09-s7f-2026-migration-plan.md). GlideComp now scores
+//      every task under the 2026 edition; the pre-2026 formula variants are
+//      deleted, not selectable. In this phase:
+//      - Launch validity linear coefficient 0.027 → 0.028 (§10.1; the 2025
+//        edition fixed a typo dating from ~2014). Every task's launch
+//        validity moves by up to ~0.0005.
+//      - Nominal Launch (96%) and Nominal Goal (30%) are fixed spec values,
+//        no longer parameters (§10.1, §10.2). Comps that stored other values
+//        (engine baseline nominalGoal 0.2 included) are now scored at the
+//        fixed ones.
+//      - The PG leading-weight generations ('gap2020' GAP2016/2018,
+//        's7f2020' PWC, 's7f2024') are gone; §11 is the one formula for both
+//        disciplines: LeadingWeight = (1 − DW) · LeadingTimeRatio, with the
+//        whole non-distance weight to leading on a no-goal PG day. HG gains
+//        LeadingTimeRatio as a settable task parameter (default 17.5%,
+//        numerically identical to the old hard-wired (1 − DW)/8 · 1.4).
+//      - LeadingTimeRatio range 0–26% (§11; was 0–50%).
+//      - The 2/3 time-points exponent is gone; §12.2's 5/6 is the only curve.
+//      - The LC variant (classic/weighted) is pinned per discipline
+//        (§12.3.1), no longer a parameter.
+//      - Best time (§9.4.1) is discipline-pinned: HG from all ESS pilots,
+//        PG goal-validated — no longer keyed off essNotGoalFactor.
+//      - Stopped tasks: score-back fixed at HG 15 min / PG 5 min (§13.4.1;
+//        the PG scoreBackTime parameter and the HG gate-interval rule are
+//        gone); PG has no minimum-duration requirement (§13.4.2); the PG
+//        altitude-bonus glide ratio is 2.5 (§13.4.6; was 4.0).
+//      Historical comps and AirScore imports are rescored under these rules
+//      by design (owner decision, 2026-08-09): GlideComp keeps no
+//      multi-edition support, and pre-2026 comps carry an "indicative
+//      scores" notice in the UI instead.
+
+// v41: FAI S7F 2026 edition, phase 2 — the new PG leading coefficient
+//      (§12.3.1, introduced by the 2025 edition). The weighted leadingArea
+//      is now minToESS(tpᵢ) · taskTime(tpᵢ) · ∫ weight(x) dx over each
+//      fix interval's done-fraction span, with the envelope integral in
+//      exact closed form (leadWeightIntegral — the (1−10^{9p−9})⁵(1−10^{−3p})²
+//      product expands to 18 integrable exponential terms). The missingArea
+//      tail is minToESS(best) · maxTime · ∫ weight over the never-flown
+//      remainder, replacing the old weightFalling(best)·maxTime·best term.
+//      The previous implementation was the AirScore weightedarea form
+//      (weight(p)·Δbest·time — a point-sampled Riemann sum with progress as
+//      the amplitude); the 2026 form weights by REMAINING distance instead,
+//      so every PG leading coefficient moves and land-out tails shift most.
+//      HG (classic) is unchanged. The LeadingAggregate cache split
+//      (weightedTimeSum/weightedDeltaSum) keeps the same rebasing shape, so
+//      cached aggregates recompute under the new contribution formula via
+//      the version bump alone.
+
+// v42: FAI S7F 2026 edition, phase 3 — stopped tasks (§13.4.5, §13.4.6).
+//      Three changes to stopped-task scoring:
+//      (a) §13.4.5 truncation: EVERY pilot is scored only up to the task
+//          stop time. The 2024 exemption — a pilot at/after ESS at the stop
+//          scored for the complete flight, including a goal crossing after
+//          the stop — is gone; such a pilot is now scored as between ESS
+//          and goal (distance + leading + their ESS time, no goal).
+//      (b) §13.4.5 points scheme: with nobody in goal at the stop the task
+//          offers no time points at all; with goal pilots, the reduction is
+//          the standard §12.2 time points the best pilot between ESS and
+//          goal would have received (falling back to the hypothetical
+//          ESS-at-window-end pilot when nobody is between), every goal
+//          pilot's time points are docked by it, and the SAME AMOUNT is
+//          added to the day's available distance points — the published
+//          availablePoints.distance now carries the boost.
+//      (c) §13.4.6 bonus position: the altitude bonus is computed only for
+//          the pilot's position at the task stop time (the last in-window
+//          fix), not as the best over every fix; the scored distance is
+//          max(best distance up to the stop, stop position + bonus).
+
+// v43: FAI S7F 2026 edition, phase 4 — task evaluation (§9.1, §6.2.3.1).
+//      (a) Tolerances are the fixed 2026 values: 0% relative + 5 m absolute
+//          for cylinders (§9.1.1, decided at the 2025 Plenary), a flat 5 m
+//          for lines and the goal-line band (§9.1.2, §9.1.3). A task file's
+//          declared `cylinderTolerance` is now IGNORED by scoring (owner
+//          decision, 2026-08-09 — supersedes issue #580's behaviour); the
+//          field still parses and round-trips, and the route editor no
+//          longer edits it. Tasks that scored under the old 0.5% default
+//          (or a declared value) get narrower bands, so tolerance-credited
+//          reachings at band edges can change.
+//      (b) Goal line orientation (§6.2.3.1, changed by the 2025 edition):
+//          the line is perpendicular to the OPTIMISED route's previous
+//          point p on the last control zone before goal — computed from a
+//          route with the goal treated as its centre — instead of the
+//          previous turnpoint centre. Angled final legs rotate the line by
+//          the difference between the centre-to-centre bearing and the
+//          optimised approach.
+
+// v44: FAI S7F 2026 edition, phase 5 — geodesic distances (§7.1.4, §7.1.5).
+//      The engine's one inverse-distance function is now the Vincenty
+//      (1975) inverse — one of §7.1.4's three sanctioned InverseGeodesic
+//      algorithms — replacing Andoyer-Lambert, which §7.1.5 relegates to
+//      navigation devices ("scoring software shall calculate this distance
+//      by using the InverseGeodesic algorithm"). andoyerDistance is gone;
+//      ellipsoidDistance (the spec's own name) is the export, with Andoyer
+//      retained only as the non-convergence fallback that task-scale
+//      geometry cannot reach. Every distance in the engine moves by up to
+//      ~2 ppm (centimetres at task scale); snapshot values corrected to the
+//      published Vincenty references (e.g. the 1° meridian arc is now
+//      110 574.39 m, exact). Best-progress eligibility also changed from
+//      strictly-after to at-or-after the last reaching time: a crossing
+//      that interpolates exactly onto a fix (a fix landing precisely on a
+//      cylinder's nominal radius — now possible, since Vincenty inverse
+//      round-trips Vincenty direct exactly) no longer costs that fix its
+//      measurement.
+//      The §7.1.3 PathFinder route optimisation (LTM projection + Ding et
+//      al. 2018) is NOT yet adopted: the existing corpus-verified optimiser
+//      stands in, as a documented deviation on /scoring/gap.
+
+// v45: FAI S7F 2026 edition, phase 7 — transparency. NO numeric change:
+//      every spec citation in the scoring sources (comments and the
+//      explanation strings the report card prints) is renumbered from the
+//      2024 edition's section numbers to the 2026 edition's (§8→§9 task
+//      evaluation, §9→§10 validity, §10→§11 allocation, §11→§12 pilot
+//      score, §12→§13 special cases, §15→§16 FTV, Annex A→§7.2), and the
+//      published payload now carries `rules_edition: "s7f-2026"` so every
+//      consumer can say which edition scored it. The bump exists because
+//      the explanation strings live inside scoring sources; recomputation
+//      changes only those strings.
+export const SCORING_ENGINE_VERSION = 45;
 
 /**
  * SHA-256 (hex) over the scoring-relevant engine sources, maintained by
@@ -425,4 +637,4 @@ export const SCORING_ENGINE_VERSION = 36;
  * when the test tells you to.
  */
 export const SCORING_SOURCE_FINGERPRINT =
-  "5a42c862b6ff204d9b09d442334f4205207ecb406333f08b5b62048cea7cfe68";
+  "281f72a3853a29035d44f83d3d3cce1d8e98d5133a3486c35c77bf0c25caf0e0";

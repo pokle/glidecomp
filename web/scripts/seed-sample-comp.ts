@@ -63,7 +63,7 @@ import { resolve, join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   calculateOptimizedTaskLine,
   destinationPoint,
@@ -421,7 +421,7 @@ function landingAtRouteDistance(
   let remaining = Math.max(0, targetMeters);
   let index = 0;
   for (let i = 0; i + 1 < line.length; i++) {
-    const leg = andoyerDistance(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
+    const leg = ellipsoidDistance(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
     if (remaining <= leg || i + 2 === line.length) {
       // Land on this leg — capped 100 m short of its end so a published
       // distance at/near full course stays a land-out, never a goal.
