@@ -259,14 +259,30 @@ export interface FieldAnalysisStoreContext {
  * Schedule background recomputation of these tasks' field analyses. Called
  * from the READ path when it serves a stale or pending row (and from the
  * explicit refresh action) — never from a mutation.
+ *
+ * ONE task at a time, deliberately. A whole-field compute is the heaviest
+ * thing this worker does (every pilot's raw fixes in memory at once — see
+ * MAX_FIELD_ANALYSIS_TRACKS), and everything here shares the scheduling
+ * request's isolate and budget: waitUntil extends the invocation, it doesn't
+ * move the work. Running a cold comp's tasks concurrently multiplied that
+ * peak by the task count — in local dev the burst (6 tasks × ~25 tracks,
+ * ~60 R2 reads in flight) overwhelmed miniflare's loopback storage bridge,
+ * which snapped a connection, which `wrangler dev` treats as fatal: every
+ * cold CI run died here and cost the polling test its first attempt. The
+ * caller already answered `pending` before this runs, so serial costs
+ * nothing a reader can see; each task's row still lands as it finishes.
  */
 export function scheduleFieldAnalysisRevalidation(
   c: FieldAnalysisStoreContext,
   taskIds: number[]
 ): void {
   if (taskIds.length === 0) return;
-  const run = () =>
-    Promise.allSettled(taskIds.map((id) => revalidateFieldAnalysis(c.env, id)));
+  const run = async () => {
+    for (const id of taskIds) {
+      // One failed task must not cost the rest their recompute.
+      await revalidateFieldAnalysis(c.env, id).catch(() => {});
+    }
+  };
   try {
     c.executionCtx.waitUntil(run());
   } catch {
