@@ -62,6 +62,7 @@ import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync, existsSy
 import { resolve, join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import {
   ellipsoidDistance,
   calculateBearingRadians,
@@ -98,6 +99,11 @@ import {
   parseRawOfficialRows,
   type OfficialResultRow,
 } from './lib/official-results';
+import {
+  orphanedTrackKeys,
+  trackSyncDecision,
+  type OldTrackInfo,
+} from './lib/seed-track-sync';
 import {
   REPO_ROOT,
   isTransientWranglerError,
@@ -326,6 +332,10 @@ interface SamplePilot {
   id: string | null;
   gz: Buffer;
   fileSize: number;
+  /** SHA-256 (hex) of the RAW IGC text (migration 0032) — the content
+   * identity a re-seed compares to skip uploading an unchanged track. Raw
+   * text, not the gzip: compressed bytes vary across zlib versions. */
+  sha256: string;
   /** True when a HARD data-quality check withholds this track from scoring
    * (engine track-quality.ts). The track is still seeded — it is a real
    * archive file and the regression fixture — but the pilot must not be
@@ -587,6 +597,7 @@ function readTask(
       id: idFromFilename(file),
       gz,
       fileSize: gz.byteLength,
+      sha256: createHash('sha256').update(text).digest('hex'),
       qualityHardFailed: quality.hardFailed,
     });
   }
@@ -787,6 +798,15 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
 
   const registrations = [...registry.values()];
 
+  // What the previous seed left in R2, keyed by object key, so the task loop
+  // can skip re-uploading a track whose content is unchanged (migration 0032,
+  // lib/seed-track-sync.ts). Populated on the re-seed path; empty for a new
+  // comp, where everything uploads.
+  const oldTracks = new Map<string, OldTrackInfo>();
+  // Every R2 key this seed claims (uploaded or kept); what the previous seed
+  // holds beyond these is orphaned and deleted at the end.
+  const liveKeys = new Set<string>();
+
   // 1) Find or create the comp (stable comp_id across reruns).
   const existing = await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`);
   let compId: number;
@@ -863,15 +883,26 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       );
     }
 
-    // Delete R2 objects for the comp's tracks first (need the keys from D1).
-    // Every track is re-uploaded below, so this is a delete-then-put over the
-    // same keys for the pilots that survive, and a real removal for those that
-    // don't.
-    const oldKeys = await store.rows(
-      `SELECT tt.igc_filename AS k FROM task_track tt
-       JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId};`,
+    // Remember what the previous seed put in R2 — key, content hash and
+    // stored gzip size — BEFORE the wipe below deletes the rows that say so.
+    // The task loop compares each source track against this map and only
+    // deletes-and-puts where the content actually changed; the objects
+    // nothing claims are removed at the END of the seed (orphanedTrackKeys),
+    // so a crash mid-seed can leave at worst a few unreachable objects,
+    // never a live row pointing at a deleted one. (The rows are wiped before
+    // any upload, so a crashed seed also can't leave a stale hash behind —
+    // the next run finds no rows and re-uploads everything.)
+    const oldTrackRows = await store.rows(
+      `SELECT tt.igc_filename AS k, tt.igc_sha256 AS h, tt.file_size AS s
+         FROM task_track tt
+         JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId};`,
     );
-    await mapPool(oldKeys, R2_CONCURRENCY, (r) => store.r2Delete(String(r.k)));
+    for (const r of oldTrackRows) {
+      oldTracks.set(String(r.k), {
+        hash: r.h == null ? null : String(r.h),
+        size: Number(r.s),
+      });
+    }
     await store.exec([
       // Clear the materialized derived caches FIRST, while the rows they key
       // off still exist. task_scores / task_field_analysis are served verbatim
@@ -989,6 +1020,7 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   //    Open and floater "Task 1" share a date but are distinct rows, named by
   //    class so the app's task list disambiguates them.
   let totalTracks = 0;
+  let totalUnchanged = 0;
   let reusedTasks = 0;
   /** Everything a `--remote` seed needs to purge this comp's now-stable public
    *  URLs from the edge (see purgeCompCache). */
@@ -1092,6 +1124,8 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     const uploads: Array<{ key: string; gz: Buffer }> = [];
     const trackInserts: string[] = [];
     const scoredPilots: SeededTask['pilots'] = [];
+    /** Tracks whose content matched the object already in R2 — no upload. */
+    let unchanged = 0;
     /** comp_pilots with a real track in THIS task — see the track-less loop. */
     const withTrack = new Set<number>();
     for (const p of t.pilots) {
@@ -1100,10 +1134,16 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       withTrack.add(compPilotId);
       scoredPilots.push({ compPilotId, name: p.name });
       const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
-      uploads.push({ key, gz: p.gz });
+      liveKeys.add(key);
+      // Skip the delete-and-put when the object already in R2 holds exactly
+      // this track (hash match, migration 0032); a kept row records the OLD
+      // gzip's byte size — the object that is actually there.
+      const sync = trackSyncDecision(oldTracks.get(key), p.sha256, p.fileSize);
+      if (sync.upload) uploads.push({ key, gz: p.gz });
+      else unchanged++;
       trackInserts.push(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
-         VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${p.fileSize}, ${q(p.name)});`,
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, igc_sha256)
+         VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${sync.fileSize}, ${q(p.name)}, ${q(p.sha256)});`,
       );
       // A withheld track is not evidence the pilot flew this task, so it must
       // not claim "Landed" — the same rule the upload route follows.
@@ -1155,7 +1195,8 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     await mapPool(uploads, R2_CONCURRENCY, (u) => store.r2Put(u.key, u.gz));
     await store.exec(trackInserts);
     seededTasks.push({ taskId, taskName, pilots: scoredPilots });
-    totalTracks += uploads.length;
+    totalTracks += uploads.length + unchanged;
+    totalUnchanged += unchanged;
     const seededTrackLess = t.trackless.length - duplicateRows;
     const extras = seededTrackLess > 0 ? `, ${seededTrackLess} track-less published pilot(s)` : '';
     const dupes =
@@ -1169,14 +1210,25 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       t.official.length > 0
         ? `, official results for ${officialResolved.length}/${t.official.length} published pilots`
         : '';
+    const skipNote =
+      unchanged > 0 ? ` (${unchanged} unchanged, not re-uploaded)` : '';
     console.log(
-      `  ${how} ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}${dupes}${official}`,
+      `  ${how} ${taskName}: task_id=${taskId}, ${uploads.length + unchanged} tracks${skipNote}${extras}${dupes}${official}`,
     );
+  }
+
+  // The previous seed's objects nothing claimed this time — tracks of pilots
+  // or tasks the source no longer describes. Deleted last, after every upload
+  // landed (see lib/seed-track-sync.ts for the crash-safety reasoning).
+  const orphans = orphanedTrackKeys(oldTracks.keys(), liveKeys);
+  await mapPool(orphans, R2_CONCURRENCY, (k) => store.r2Delete(k));
+  if (orphans.length > 0) {
+    console.log(`  removed ${orphans.length} orphaned R2 object(s)`);
   }
 
   console.log(
     `  Done. comp_id=${compId} — ${tasks.length} tasks (${reusedTasks} kept their ids), ` +
-      `${totalTracks} tracks total`,
+      `${totalTracks} tracks total (${totalUnchanged} unchanged in R2, ${totalTracks - totalUnchanged} uploaded)`,
   );
   if (REMOTE) await purgeCompCache(compId, compName, seededTasks);
 }

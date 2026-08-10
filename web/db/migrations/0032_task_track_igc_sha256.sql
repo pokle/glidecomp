@@ -1,0 +1,24 @@
+-- Content identity for tracklogs, so a re-seed can skip R2 uploads whose
+-- content has not changed.
+--
+-- A re-seed used to delete and re-upload every one of a comp's tracks —
+-- hundreds of objects per comp, and on `--remote` each upload is a ~1s
+-- wrangler subprocess — even when not a byte had changed, which is the
+-- normal case (a re-seed after a schema change, e.g. 0031's official
+-- results backfill). The seed now hashes each source IGC and skips the
+-- upload when the stored row already carries the same hash.
+--
+-- The hash is SHA-256 (hex) of the RAW IGC text, not of the gzipped bytes
+-- R2 stores: gzip output is not stable across zlib versions, so a
+-- compressed-bytes hash would spuriously re-upload the whole archive after
+-- a toolchain upgrade.
+--
+-- NULL means "content unknown" and always re-uploads — never skips. That is
+-- the safety rule: a wrong skip would silently serve stale track content,
+-- which is scoring evidence. Rows written before this migration are NULL
+-- until their next seed or upload; the live upload path sets the column on
+-- every insert AND every replacement, so a row can never keep a stale hash
+-- for new content (a user-replaced track must be overwritten by the next
+-- re-seed, and is, because its hash no longer matches the archive's file).
+
+ALTER TABLE task_track ADD COLUMN igc_sha256 TEXT;
