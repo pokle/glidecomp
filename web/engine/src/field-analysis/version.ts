@@ -15,9 +15,10 @@
  * removed, or the shared foundation (context/resample/shared-thermals/
  * phase-partition/working-band/stats/evaluate) changes a number.
  *
- * Unlike SCORING_ENGINE_VERSION there is no fingerprint guard here: these
- * metrics are exploratory and not a scoring input, so a missed bump costs a
- * stale admin report, not a wrong score.
+ * Unlike SCORING_ENGINE_VERSION, which derives itself from a hash of the
+ * scoring sources, this one is hand-maintained. These metrics are exploratory
+ * and not a scoring input, so a missed bump costs a stale admin report rather
+ * than a wrong score — not worth a second fingerprint closure to guard.
  */
 // v1: initial release — 26 metrics across 6 families (day profile & wind,
 //     climbing, gliding, decision-making, gaggle, race craft), each ranked

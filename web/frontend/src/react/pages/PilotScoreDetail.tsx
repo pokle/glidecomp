@@ -46,7 +46,7 @@ import {
 import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
 import type { BestProgressRoute, OpenDistanceLine } from "../../analysis/map-provider";
-import { formatTaskDate } from "../lib/format";
+import { formatTaskDate, ordinal } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
@@ -103,6 +103,13 @@ interface DetailData {
   /** The published rules edition ("s7f-2026"), or undefined for payloads
    * cached before the field existed — the badge degrades to "FAI S7F". */
   rulesEdition?: "s7f-2026";
+  /** This pilot's officially published standing (issue #603), when the
+   * import recorded one — display only, never a GlideComp score. */
+  official: { rank: number; total: number; source: string; url: string | null } | null;
+  /** The official task scores page for the whole task — set whenever the
+   * task carries official results, even when THIS pilot has no entry there,
+   * so the historical-rules notice can always link the published record. */
+  officialTaskUrl: string | null;
   explanation: ScoreExplanation;
   /** The task drawn on the map (the sequence was resolved against it). */
   mapTask: XCTask;
@@ -314,6 +321,19 @@ function buildDetailData(
     throw new Error("No score found for this pilot");
   }
 
+  // The pilot's officially published standing (issue #603) — an annotation
+  // from the import, matched by stored id, so no lookup can misattribute it.
+  const officialEntry = score.official_results?.ranks?.[pilotId];
+  const officialTaskUrl = score.official_results?.task_url ?? null;
+  const official = officialEntry
+    ? {
+        rank: officialEntry.rank,
+        total: officialEntry.total,
+        source: score.official_results!.source,
+        url: officialTaskUrl,
+      }
+    : null;
+
   const trackQuality = analysis.track_quality ?? null;
 
   // A tracklog a HARD check withheld gets its own narrative. Running the
@@ -328,6 +348,8 @@ function buildDetailData(
       entry,
       pilotClass: cls.pilot_class,
       rulesEdition: cls.rules_edition,
+      official,
+      officialTaskUrl,
       explanation: explainExcludedTrack({
         entry,
         findings: (trackQuality?.findings ?? []).filter((f) => f.severity === "hard"),
@@ -386,6 +408,8 @@ function buildDetailData(
       entry,
       pilotClass: cls.pilot_class,
       rulesEdition: cls.rules_edition,
+      official,
+      officialTaskUrl,
       explanation,
       mapTask: task.xctsk,
       eventsByItem: anchoredEvents(explanation),
@@ -465,6 +489,8 @@ function buildDetailData(
       entry,
       pilotClass: cls.pilot_class,
       rulesEdition: cls.rules_edition,
+      official,
+      officialTaskUrl,
       explanation,
       mapTask: scoringTask,
       eventsByItem: anchoredEvents(explanation),
@@ -507,6 +533,13 @@ function buildDetailData(
     task,
     entry,
     pilotClass: cls.pilot_class,
+    // This return — the main GAP path — used to omit rulesEdition, so a
+    // tracked pilot's report card degraded the badge to plain "FAI S7F" and
+    // never showed the historical-rules notice. The other three paths always
+    // carried it.
+    rulesEdition: cls.rules_edition,
+    official,
+    officialTaskUrl,
     explanation,
     mapTask: scoringTask,
     eventsByItem: anchoredEvents(explanation),
@@ -814,6 +847,27 @@ export function PilotScoreDetail() {
             data.comp.timezone ?? undefined
           )}
         </p>
+        {/* The officially published standing (issue #603) — display only,
+            never a GlideComp score, so it sits as an annotation under the
+            rank rather than inside the explanation. */}
+        {data.official ? (
+          <p className="text-sm text-muted-foreground">
+            Officially: {ordinal(data.official.rank)} · {Math.round(data.official.total)} pts (
+            {data.official.url ? (
+              <a
+                href={data.official.url}
+                target="_blank"
+                rel="noopener"
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                {data.official.source}
+              </a>
+            ) : (
+              data.official.source
+            )}
+            )
+          </p>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           Scores computed{" "}
           <Timestamp value={data.scoreComputedAt} compTimezone={data.comp.timezone} />
@@ -825,6 +879,7 @@ export function PilotScoreDetail() {
           <HistoricalRulesNotice
             edition={data.rulesEdition}
             taskDate={data.task.task_date}
+            officialUrl={data.officialTaskUrl}
           />
         </div>
         <p className="mt-1 font-medium">{explanation.headline}</p>

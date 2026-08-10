@@ -1,0 +1,32 @@
+-- Officially published results, displayed beside GlideComp's rescored ones
+-- (issue #603).
+--
+-- Under the single-edition strategy (#602) GlideComp rescores historical
+-- competitions under the current S7F edition, so its results can disagree
+-- with the officially published record. This column lets a task carry the
+-- official result as an ANNOTATION: per-pilot rank and total as published,
+-- plus links to the source's own comp and task scores pages, written by the
+-- AirScore importer (seed-sample-comp.ts) at import time.
+--
+-- JSON shape (null when no official result is known — every GlideComp-native
+-- comp):
+--
+--   {
+--     "source": "AirScore",
+--     "comp_url": "https://xc.highcloud.net/comp_overall.html?comPk=466",
+--     "task_url": "https://xc.highcloud.net/task_result.html?comPk=466&tasPk=2027",
+--     "results": [ { "comp_pilot_id": 123, "rank": 3, "total": 812 }, … ]
+--   }
+--
+-- Pilots are matched by name at IMPORT time (the same matching that builds
+-- the roster) and stored by resolved comp_pilot_id — no runtime name
+-- matching. These are never GlideComp scores: they are not explained, not
+-- fed into field analysis or series totals, and a mismatch with GlideComp's
+-- rescored numbers is the point, not a defect.
+--
+-- It IS competition data an importer entered, so writing it takes an
+-- audit_log entry; it is NOT a scoring input (nothing derives from it), so
+-- it takes no bumpAndRevalidateScores() — the same reasoning as
+-- comp_pilot.wprs_points (0029/0030).
+
+ALTER TABLE task ADD COLUMN official_results TEXT;

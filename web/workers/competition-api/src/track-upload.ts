@@ -259,6 +259,18 @@ export class TaskPilotLimitError extends Error {
   }
 }
 
+/** SHA-256 (hex) of a track's raw IGC text — the content identity a
+ * re-seed compares against (migration 0032). */
+export async function igcSha256Hex(igcText: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(igcText)
+  );
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /**
  * Put the file in R2 and record it in D1, replacing this pilot's existing
  * track for the task if there is one.
@@ -281,10 +293,14 @@ export async function storeUploadedTrack(
     compPilotId: number;
     body: ArrayBuffer;
     igcPilotName: string | null;
+    /** SHA-256 (hex) of the RAW IGC text (migration 0032) — lets a re-seed
+     * skip re-uploading this exact content. Written on insert AND on
+     * replacement, so a row can never keep a stale hash for new content. */
+    igcSha256: string | null;
     uploader: TrackUploader;
   }
 ): Promise<StoredTrack> {
-  const { compId, taskId, compPilotId, body, igcPilotName, uploader } = opts;
+  const { compId, taskId, compPilotId, body, igcPilotName, igcSha256, uploader } = opts;
 
   const existingTrack = await db
     .prepare(
@@ -325,7 +341,7 @@ export async function storeUploadedTrack(
       .prepare(
         `UPDATE task_track
          SET igc_filename = ?, uploaded_at = ?, file_size = ?, igc_pilot_name = ?,
-             uploaded_by_user_id = ?, uploaded_by_name = ?, active = 1
+             igc_sha256 = ?, uploaded_by_user_id = ?, uploaded_by_name = ?, active = 1
          WHERE task_track_id = ?`
       )
       .bind(
@@ -333,6 +349,7 @@ export async function storeUploadedTrack(
         now,
         body.byteLength,
         igcPilotName,
+        igcSha256,
         uploader.userId,
         uploader.name,
         existingTrack.task_track_id
@@ -351,8 +368,8 @@ export async function storeUploadedTrack(
 
   const inserted = await db
     .prepare(
-      `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, uploaded_by_user_id, uploaded_by_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, igc_sha256, uploaded_by_user_id, uploaded_by_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       taskId,
@@ -361,6 +378,7 @@ export async function storeUploadedTrack(
       now,
       body.byteLength,
       igcPilotName,
+      igcSha256,
       uploader.userId,
       uploader.name
     )
@@ -508,6 +526,7 @@ export async function ingestTrackSubmission(
       compPilotId,
       body: sub.body,
       igcPilotName: igcPilotNameOf(igc),
+      igcSha256: await igcSha256Hex(igcText),
       uploader: sub.uploader,
     });
   } catch (err) {

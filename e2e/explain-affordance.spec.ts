@@ -18,7 +18,7 @@
  * happily while the printout has lost half its method.
  */
 import type { APIRequestContext } from "@playwright/test";
-import { test, expect } from "./fixtures/test";
+import { test, expect, waitForStack } from "./fixtures/test";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
 const RANKING_HEADING = /Which behaviours went with better ranks/;
@@ -35,15 +35,55 @@ async function analysisUrls(request: APIRequestContext) {
   if (!comp) {
     throw new Error("No public sample comp seeded — run `bun run seed corryong-cup-2026`.");
   }
-  const res = await request.get(`/api/comp/${comp.comp_id}/field-analysis`);
-  expect(res.ok()).toBeTruthy();
-  const analysis = (await res.json()) as { tasks: { task_id: string }[] };
-  const task = analysis.tasks[0];
-  if (!task) throw new Error(`No analysed task in ${comp.name}.`);
-  return {
-    comp: `/comp/${comp.comp_id}/analysis`,
-    task: `/comp/${comp.comp_id}/analysis/task/${task.task_id}`,
-  };
+  // Field analysis is lazy and stale-first (docs/2026-07-18-field-analysis-plan.md):
+  // a cold read returns `pending` and SCHEDULES the compute — it never computes
+  // synchronously — and the app UI polls. So must this helper. A single read
+  // raced the background compute: whenever anything invalidates the
+  // materialised rows (the S7F 2026 single-edition migration did, comp-wide),
+  // the first CI run after it always lost that race and threw here.
+  //
+  // (Seeding warms these rows now, so the usual case is one poll. The loop —
+  // and its tolerance below of a mid-poll stack restart — stay for whatever
+  // invalidates the rows next.)
+  let deadline = Date.now() + 120_000;
+  for (;;) {
+    let analysis: { tasks: { task_id: string }[]; pending_task_count: number } | null =
+      null;
+    try {
+      const res = await request.get(`/api/comp/${comp.comp_id}/field-analysis`);
+      // 5xx / no answer: `wrangler dev` kills itself over a severed connection
+      // and its supervisor brings it back (docs/local-dev.md) — the same blip
+      // the stackUp fixture rides out BETWEEN tests. Wait it out and poll on;
+      // only a 4xx is a real answer about this comp.
+      if (res.status() >= 400 && res.status() < 500) {
+        throw new Error(
+          `field-analysis answered ${res.status()} for ${comp.name}`
+        );
+      }
+      if (res.ok()) analysis = await res.json();
+    } catch (err) {
+      if (err instanceof Error && /answered 4\d\d/.test(err.message)) throw err;
+      // Network error — the stack is likely between lives; fall through.
+    }
+    if (analysis) {
+      const task = analysis.tasks[0];
+      if (task) {
+        return {
+          comp: `/comp/${comp.comp_id}/analysis`,
+          task: `/comp/${comp.comp_id}/analysis/task/${task.task_id}`,
+        };
+      }
+      if (analysis.pending_task_count === 0) {
+        throw new Error(`No analysed task in ${comp.name}.`);
+      }
+    } else {
+      deadline += await waitForStack();
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`No analysed task in ${comp.name}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
 }
 
 test("comp analysis: the column notes are behind their headers' ⓘ", async ({

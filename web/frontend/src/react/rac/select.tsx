@@ -25,23 +25,21 @@ import { CheckIcon, ChevronDownIcon } from "lucide-react";
 /**
  * Shared surface for every kit popover (Select, ComboBox, Menu, Popover).
  *
- * **`fixed!` is load-bearing, not styling.** RAC portals a popover to `<body>`
- * and positions it with viewport-relative offsets under an inline
- * `position: absolute`. Our `body` is `position: relative` (globals.css — it
- * is what iOS 26+ Safari needs for dialog backdrops), so the containing block
- * is the *body box*, not the viewport: on any page taller than the window, a
- * popover placed with `bottom:` — which is what RAC emits whenever it flips a
- * popover UPWARDS, near the bottom of the screen — lands
- * `scrollHeight - innerHeight` pixels too low. On a long page that is
- * off-screen entirely, and the control silently opens onto nothing.
- *
- * Anchoring to the viewport makes the offsets mean what RAC computed. The
- * important modifier is required because RAC's `position` is an inline style.
- * Found by the CIVL ranking picker, which sits low in a tall dialog and so
- * flipped upwards every time; it applies to every popover in the kit.
+ * **Never add `position` here (no `fixed!`, no positioned ancestor).** RAC
+ * portals a popover to `<body>` and positions it with `position: absolute`
+ * against the initial containing block: `top` in document coordinates, and —
+ * when a popover flips UPWARDS — `bottom` against the viewport-sized ICB.
+ * Both are only correct while `body` is *static* (globals.css keeps it so).
+ * The two historical failures, each found in production: with
+ * `body { position: relative }` an upward-flipped popover (the CIVL ranking
+ * picker, low in a tall dialog) landed `scrollHeight - innerHeight` px too
+ * low; with `fixed!` patched over that, every downward popover on a scrolled
+ * page (the manual-flight dialog's turnpoint select, deep in the task page)
+ * opened `scrollY` px below the viewport. Diagnose by rect, not by eye — the
+ * popover is open and in the DOM either way, just off-screen.
  */
 export const popoverClass =
-  "fixed! z-50 min-w-36 overflow-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 data-entering:duration-100 data-exiting:duration-100";
+  "z-50 min-w-36 overflow-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 data-entering:duration-100 data-exiting:duration-100";
 
 export function Select<T extends object>({
   label,

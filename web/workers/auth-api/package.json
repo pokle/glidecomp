@@ -11,10 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@better-auth/api-key": "^1.6.25",
+    "@better-auth/api-key": "^1.6.26",
     "@glidecomp/worker-kit": "workspace:*",
-    "better-auth": "^1.6.25",
-    "hono": "^4.13.0",
+    "better-auth": "^1.6.26",
+    "hono": "^4.13.1",
     "kysely": "^0.28.17",
     "kysely-d1": "^0.4.0"
   },

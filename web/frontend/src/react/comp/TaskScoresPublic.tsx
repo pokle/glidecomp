@@ -292,6 +292,7 @@ export function TaskScoresPublic({
                 score.class_scores.find((c) => c.rules_edition)?.rules_edition
               }
               taskDate={taskDate}
+              officialUrl={score.official_results?.task_url ?? null}
             />
           </div>
           <StoppedTaskNotice score={score} timezone={timezone} />

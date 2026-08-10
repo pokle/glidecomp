@@ -53,8 +53,10 @@ CLAUDE.md "Updating bundled data" notes). Refresh the source folders with
 
 - **Idempotent:** each comp is identified by name (its manifest's `comp_name`,
   else `SAMPLE_COMP_NAME`). Reruns wipe that comp's tasks / pilots / tracks (D1)
-  and IGC objects (R2) and rebuild under the **same `comp_id`** — so a
-  messed-with sample is fixed back up.
+  and rebuild under the **same `comp_id`** — so a messed-with sample is fixed
+  back up. R2 objects are only re-uploaded where the track's content actually
+  changed (compared via `task_track.igc_sha256`, migration 0032), which is what
+  keeps a `--remote` re-seed after a schema change cheap.
 - **Local:** `bun run seed` writes to `web/.wrangler/state` (start the
   dev servers with `bun run dev` to view it).
 - **Production:** `bun run seed --remote` (needs wrangler auth + the same
@@ -123,3 +125,5 @@ of the notable ones.
 | `0026_search_index` | FTS5 site search over comps, tasks (with their routes) and pilots, kept current by triggers |
 | `0029_comp_pilot_civl_ranking_source` | Which CIVL list and month a roster's ranking was copied from — NULL for an organiser's own number |
 | `0030_comp_pilot_wprs_points` | Roster keeps the WPRS **score**, not the rank: a rank is a position within one list's pool and the pools differ 1000-fold. Converts stored ranks back to their points; drops `civl_ranking` |
+| `0031_task_official_results` | The officially published results beside GlideComp's rescored ones (#603): per-pilot rank/total plus links to AirScore's own comp and task scores pages, written by the importer. Display-only — audited, but never a scoring input, so no score bump |
+| `0032_task_track_igc_sha256` | Content identity for tracklogs (SHA-256 of the raw IGC text), so a re-seed only re-uploads tracks whose content changed. NULL never skips; the upload path restamps the hash on every replacement |

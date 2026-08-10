@@ -11,6 +11,13 @@ dist/
 .wrangler/
 web/frontend/public/js/
 
+# The scoring engine's generation, derived from its own sources by
+# web/scripts/generate-scoring-fingerprint.ts. Deliberately not committed:
+# a checked-in hash is a merge conflict on every pair of parallel engine
+# branches, and one that no side of the merge holds the right answer to.
+# See docs/scoring-version.md.
+web/engine/src/scoring-fingerprint.generated.ts
+
 # Environment files
 .env
 .env.local

@@ -17,6 +17,8 @@ import { computePilotAnalysis } from "../pilot-analysis";
 import {
   rankByTotalScore,
   shortHash,
+  type OfficialResultsWire,
+  type StoredOfficialResults,
   type TaskScoreResponse,
 } from "../scoring";
 import {
@@ -63,10 +65,49 @@ const COMP_TASK_CONCURRENCY = 3;
  */
 function toTaskScoreWire(
   body: StoredTaskScore | TaskScoreResponse,
-  stale: boolean
+  stale: boolean,
+  official?: OfficialResultsWire | null
 ): Record<string, unknown> {
   const { classes, ...rest } = body;
-  return { ...rest, class_scores: classes, stale };
+  return {
+    ...rest,
+    class_scores: classes,
+    stale,
+    ...(official ? { official_results: official } : {}),
+  };
+}
+
+/**
+ * The task's officially published results (migration 0031, issue #603) in
+ * wire shape: stored comp_pilot ids become the same sqids the score entries
+ * carry, keyed for per-row lookup. Read live from the task row — NOT from
+ * the cached score blob, because official results are display-only and must
+ * never invalidate or ride inside a scoring artefact. Returns null for the
+ * common case (no official record) and for an unreadable column, which is
+ * an annotation not worth failing a scores page over.
+ */
+function officialResultsWire(
+  raw: string | null,
+  alphabet: string
+): OfficialResultsWire | null {
+  if (!raw) return null;
+  try {
+    const stored = JSON.parse(raw) as StoredOfficialResults;
+    if (!Array.isArray(stored.results) || stored.results.length === 0) return null;
+    const ranks: OfficialResultsWire["ranks"] = {};
+    for (const r of stored.results) {
+      ranks[encodeId(alphabet, r.comp_pilot_id)] = { rank: r.rank, total: r.total };
+    }
+    return {
+      source: stored.source ?? "AirScore",
+      comp_url: stored.comp_url ?? null,
+      task_url: stored.task_url ?? null,
+      ranks,
+    };
+  } catch (err) {
+    console.error("unreadable task.official_results", err);
+    return null;
+  }
 }
 
 /**
@@ -122,10 +163,14 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       // Verify task exists, belongs to comp, and has an xctsk
       const task = await c.env.DB.prepare(
-        "SELECT task_id, xctsk FROM task WHERE task_id = ? AND comp_id = ?"
+        "SELECT task_id, xctsk, official_results FROM task WHERE task_id = ? AND comp_id = ?"
       )
         .bind(taskId, compId)
-        .first<{ task_id: number; xctsk: string | null }>();
+        .first<{
+          task_id: number;
+          xctsk: string | null;
+          official_results: string | null;
+        }>();
 
       if (!task) return c.json({ error: "Task not found" }, 404);
 
@@ -135,6 +180,17 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           422
         );
       }
+
+      // The official annotation rides OUTSIDE the cached score blob (it is
+      // not a scoring input), so it joins the response — and the ETag, which
+      // is the identity of the served body — at read time.
+      const official = officialResultsWire(
+        task.official_results,
+        c.env.SQIDS_ALPHABET
+      );
+      const officialTag = task.official_results
+        ? `:official:${await shortHash(task.official_results)}`
+        : "";
 
       const row = await readTaskScoreRow(c.env.DB, taskId);
 
@@ -148,7 +204,8 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         // stale ETag: 304 while the row is unchanged (one D1 read, no body),
         // 200 the moment the re-score lands — even a no-op re-score whose
         // recomputed state_key is identical.
-        const etagKey = stale ? `${row.state_key}:stale` : row.state_key;
+        const etagKey =
+          (stale ? `${row.state_key}:stale` : row.state_key) + officialTag;
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
@@ -158,7 +215,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           return c.body(null, 304, headers);
         }
         const body = JSON.parse(row.response_json) as StoredTaskScore;
-        return c.json(toTaskScoreWire(body, stale), 200, headers);
+        return c.json(toTaskScoreWire(body, stale, official), 200, headers);
       }
 
       // Cold — no servable blob. Compute synchronously, store, serve.
@@ -167,8 +224,8 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         taskId,
         row?.inputs_rev ?? 0
       );
-      return c.json(toTaskScoreWire(response, false), 200, {
-        ETag: toEtag(stateKey),
+      return c.json(toTaskScoreWire(response, false, official), 200, {
+        ETag: toEtag(stateKey + officialTag),
         "X-Cache": "MISS",
         "Cache-Control": cacheControl(c, response.computed_at, false),
       });
@@ -588,4 +645,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 export type ServedTaskScore = TaskScoreResponse & {
   computed_at: string;
   stale: boolean;
+  /** The officially published record beside the rescored one (issue #603) —
+   * read live from the task row, absent when no official result is known. */
+  official_results?: OfficialResultsWire;
 };

@@ -279,6 +279,23 @@ export interface ClassScore {
   stopped?: ClassStoppedInfo;
 }
 
+/**
+ * The officially published results for a task (issue #603), riding on the
+ * task score response when the AirScore importer recorded them. These are
+ * NEVER GlideComp scores: display-only, unexplained, and absent for every
+ * GlideComp-native comp — every consumer must render nothing without them.
+ */
+export interface OfficialResultsData {
+  /** Where the official record was published ("AirScore"). */
+  source: string;
+  /** The source's own comp scores page (one per pilot class), when known. */
+  comp_url: string | null;
+  /** The source's own task scores page — the published record itself. */
+  task_url: string | null;
+  /** comp_pilot_id (sqid, matching the score entries) → published standing. */
+  ranks: Record<string, { rank: number; total: number }>;
+}
+
 export interface TaskScoreData {
   task_id: string;
   comp_id: string;
@@ -289,6 +306,8 @@ export interface TaskScoreData {
   computed_at: string;
   /** True when newer inputs exist and a re-score is in flight or pending. */
   stale: boolean;
+  /** The officially published record beside the rescored one (issue #603). */
+  official_results?: OfficialResultsData | null;
 }
 
 /** One endpoint of the scored open-distance line, with fix time/altitude.
