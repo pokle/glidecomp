@@ -177,17 +177,22 @@
     @apply bg-background text-foreground;
   }
 
-  /* Both rules serve the body-level portals (RAC dialogs and popovers, and the
-     sonner toaster):
-     - the app root needs its own stacking context so portaled popups layer
-       above page content
-     - body { position: relative } is required for iOS 26+ Safari backdrops */
+  /* The app root needs its own stacking context so body-level portals (RAC
+     dialogs and popovers, the sonner toaster) layer above page content.
+
+     Do NOT give body a position. React Aria positions its portaled popovers
+     with `position: absolute` against the initial containing block: `top` in
+     document coordinates, and — when a popover flips upwards — `bottom`
+     against the viewport-sized ICB. A `body { position: relative }` (a Base UI
+     quick-start requirement that outlived the Base UI kit) made the
+     document-height body box the containing block instead, which landed every
+     upward-flipped popover off-screen on long pages, and the `fixed!`
+     patch for that in turn landed every downward popover off-screen once the
+     page was scrolled. Nothing else needs it: RAC's modal overlay is
+     position: fixed, sonner is fixed, and the analysis page's native <dialog>
+     backdrop is browser-positioned in the top layer. */
   #root {
     isolation: isolate;
-  }
-
-  body {
-    position: relative;
   }
 
   /* The map renders its own tiles/theme and is not part of the app's light/dark
