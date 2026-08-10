@@ -135,13 +135,12 @@ function ClearButton({ onClear }: { onClear: () => void }) {
 /**
  * The calendar dropdown shared by DatePicker and DateTimePicker.
  *
- * `fixed!` for the same reason rac/select.tsx's popoverClass carries it: a
- * body-portalled popover positioned with viewport offsets needs a viewport
- * containing block, or an upward flip lands off-screen (gotcha #22).
+ * No `position` override — RAC's own absolute positioning is only correct
+ * against a static body; see rac/select.tsx's popoverClass (gotcha #22).
  */
 function CalendarPopover() {
   return (
-    <Popover className="fixed! z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md outline-none">
+    <Popover className="z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md outline-none">
       <Dialog className="outline-none">
         <Calendar className="w-fit">
           <header className="flex items-center justify-between pb-2">

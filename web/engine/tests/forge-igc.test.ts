@@ -24,6 +24,7 @@ import {
   OPEN_DISTANCE_DEFAULT_METERS,
 } from '../src/forge-igc';
 import { parseIGC } from '../src/igc-parser';
+import { resolveTurnpointSequence } from '../src/turnpoint-sequence';
 import { assessTrackQuality } from '../src/track-quality';
 import { summariseFlight } from '../src/flight-summary';
 import { openDistanceForFlight } from '../src/open-distance-scoring';
@@ -142,6 +143,81 @@ describe('a forged flight is one the engine accepts', () => {
       }).format(first)
     );
     expect(localHour).toBe(13);
+  });
+});
+
+describe('the flight flies INTO the turnpoints, not past them', () => {
+  // The regression this pins down: the forge used to follow the optimised
+  // line exactly, whose vertices sit ON each cylinder boundary — and then
+  // turned for the next vertex a cruise step early. The track grazed or
+  // missed every cylinder, the sequence resolver credited none of them, and
+  // a "made goal" forge scored as a land-out a few km past the start.
+  it('a full-distance forge is credited with every turnpoint and goal', () => {
+    const { igc } = judge(forge().text);
+    const seq = resolveTurnpointSequence(TASK, igc.fixes);
+    expect(seq.madeGoal).toBe(true);
+    expect(seq.lastTurnpointReached).toBe(TASK.turnpoints.length - 1);
+  });
+
+  it('puts a fix at least 5 m inside every cylinder', () => {
+    const { igc } = judge(forge().text);
+    for (const tp of TASK.turnpoints) {
+      const closest = Math.min(
+        ...igc.fixes.map((f) =>
+          ellipsoidDistance(tp.waypoint.lat, tp.waypoint.lon, f.latitude, f.longitude)
+        )
+      );
+      expect(closest).toBeLessThan(tp.radius - 5);
+    }
+  });
+
+  it('crosses a goal LINE, not just its nearest point', () => {
+    // A goal line is crossed, not entered: pulling its optimised point
+    // "towards the centre" would only slide it along the line, so the forge
+    // has to fly through it instead.
+    const lineTask = {
+      ...TASK,
+      goal: { type: 'LINE' },
+    } as unknown as XCTask;
+    const { text } = forgeIgc(lineTask, {
+      stopAfterMeters: null,
+      pilot: 'Test Pilot',
+      glider: 'Forged Wing',
+      startSec: startSecondsFor('13:00', TASK_DATE, ZONE),
+      rate: 5,
+      speedKmh: 32,
+      headerDate: new Date(`${TASK_DATE}T00:00:00Z`),
+      random: seeded(),
+    });
+    const seq = resolveTurnpointSequence(lineTask, parseIGC(text).fixes);
+    expect(seq.madeGoal).toBe(true);
+  });
+
+  it('drifts off the optimised line rather than flying it exactly', () => {
+    // A real pilot wanders hunting lift; a track lying pixel-perfect on the
+    // optimised line reads as fabricated on the very map it is shown on. The
+    // wander is bounded, though — it must never cost the cylinder hits above.
+    const { points } = courseFor(TASK);
+    const samples: { lat: number; lon: number }[] = [];
+    for (let i = 1; i < points.length; i++) {
+      const leg = ellipsoidDistance(
+        points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon
+      );
+      const bearing = calculateBearingRadians(
+        points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon
+      );
+      for (let m = 0; m <= leg; m += 100) {
+        samples.push(destinationPoint(points[i - 1].lat, points[i - 1].lon, m, bearing));
+      }
+    }
+    const offLine = (f: { latitude: number; longitude: number }) =>
+      Math.min(
+        ...samples.map((s) => ellipsoidDistance(s.lat, s.lon, f.latitude, f.longitude))
+      );
+    const { igc } = judge(forge().text);
+    const worst = Math.max(...igc.fixes.map(offLine));
+    expect(worst).toBeGreaterThan(60); // visibly not the optimised line
+    expect(worst).toBeLessThan(2_000); // but still recognisably flying it
   });
 });
 
