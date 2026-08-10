@@ -15,8 +15,9 @@
  * Mutation-free: drives the bundled sample track and the seeded sample comp
  * read-only, and creates nothing that the pre-run sweep would need to clear.
  */
+import { execSync } from "node:child_process";
 import { test, expect } from "./fixtures/test";
-import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
+import { SUPER_ADMIN } from "./fixtures/stack";
 import { installMapbox, mapboxMode } from "./fixtures/mapbox";
 
 /** A bundled sample flight — public/data/tracks, no comp or upload needed. */
@@ -46,6 +47,43 @@ async function openAnalysis(
 
 const scaleBar = (page: import("@playwright/test").Page) =>
   page.locator(".mapboxgl-ctrl-scale");
+
+/**
+ * The seeded sample comp's id, seeding it first if the store is cold.
+ *
+ * Seeding matters here more than it does in the specs this is copied from
+ * (comp-detail, comp-waypoints, field-analysis, full-screen-sheets), because
+ * Playwright runs spec FILES in alphabetical order and `analysis-map` sorts
+ * ahead of every one of them. On a developer's machine that is invisible — the
+ * store was seeded weeks ago — but CI starts from an empty D1 (nothing in the
+ * workflow seeds; `test:e2e` only migrates), so this spec meets the cold store
+ * FIRST and cannot free-ride on a later spec having filled it in. Two specs do
+ * free-ride today, lazy-map-in-view and explain-affordance; both sort after
+ * comp-detail, which is the only reason they work.
+ */
+async function findOrSeedSampleComp(page: import("@playwright/test").Page): Promise<string> {
+  const COMP_NAME = "Corryong Cup 2026";
+
+  const find = async (): Promise<string | null> => {
+    const res = await page.request.get("/api/comp");
+    if (!res.ok()) return null;
+    const { comps } = (await res.json()) as {
+      comps: Array<{ comp_id: string; name: string }>;
+    };
+    return comps.find((c) => c.name === COMP_NAME)?.comp_id ?? null;
+  };
+
+  const existing = await find();
+  if (existing) return existing;
+
+  // Idempotent, and safe to run against a live dev stack — same call the other
+  // sample-comp specs make.
+  execSync("bun run seed corryong-cup-2026", { stdio: "inherit", timeout: 240_000 });
+
+  const seeded = await find();
+  if (!seeded) throw new Error(`Sample comp "${COMP_NAME}" not found after seeding`);
+  return seeded;
+}
 
 test("the map loads its style and flies to the loaded track", async ({ page, context }) => {
   const mapbox = await installMapbox(context);
@@ -149,17 +187,14 @@ test("waypoint elevations come back from the Mapbox terrain DEM", async ({ page,
 });
 
 test("place search reaches the Mapbox geocoder", async ({ page, context }) => {
+  // Seeding a cold store is slow, and this is the spec that pays for it.
+  test.setTimeout(300_000);
   const mapbox = await installMapbox(context);
   await signIn(page);
 
-  const api = await page.request.get("/api/comp");
-  const { comps } = (await api.json()) as Array<never> & {
-    comps: Array<{ comp_id: string; name: string }>;
-  };
-  const comp = comps.find((c) => c.name === "Corryong Cup 2026");
-  if (!comp) throw new Error('Sample comp "Corryong Cup 2026" not found — run `bun run seed`');
+  const compId = await findOrSeedSampleComp(page);
 
-  await page.goto(`/comp/${comp.comp_id}/waypoints`);
+  await page.goto(`/comp/${compId}/waypoints`);
   await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible({ timeout: 15_000 });
 
   // The geocoder is keyed by the query string, so a recording of "Corryong"
