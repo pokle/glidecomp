@@ -77,6 +77,7 @@ import {
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 import { encodeId } from '../workers/competition-api/src/sqids';
+import { revalidateFieldAnalysis } from '../workers/competition-api/src/field-analysis-store';
 import {
   compPath,
   compScoresPath,
@@ -179,6 +180,21 @@ interface SeedStore {
   rows(sql: string): Promise<Record<string, unknown>[]>;
   r2Put(key: string, body: Buffer): Promise<void>;
   r2Delete(key: string): Promise<void>;
+  /**
+   * Compute and store each task's field analysis, one task at a time — local
+   * backend only. Seeding leaves the field-analysis store cold, and the first
+   * read then schedules a whole-field compute (every pilot's raw fixes at
+   * once) inside `wrangler dev`'s workerd — which, on a CPU-starved machine
+   * (CI runners), pegs the process long enough for wrangler's internal
+   * loopback to drop a connection, and wrangler treats that as fatal (issue
+   * #477's crash, reproduced under a CPU-constrained container). Doing the
+   * same compute HERE — in this bun process, against the same on-disk state,
+   * with no wrangler involved — means seeded comps always serve warm and the
+   * dev stack never runs the cold burst. The remote backend omits it: prod
+   * workerd doesn't share the fragility, and the compute would pull every
+   * track down from real R2.
+   */
+  warmFieldAnalysis?(taskIds: number[]): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -251,6 +267,25 @@ async function createLocalStore(): Promise<SeedStore> {
     },
     async r2Delete(key) {
       await bucket.delete(key);
+    },
+    async warmFieldAnalysis(taskIds) {
+      // Same alphabet note as PURGE_SQIDS_ALPHABET below: the report body
+      // embeds sqid-encoded ids, so this must match what the dev workers
+      // serve under (the competition-api wrangler.toml default).
+      const env = {
+        DB: db,
+        R2: bucket,
+        SQIDS_ALPHABET: process.env.SQIDS_ALPHABET ?? 'abcdefghijklmnopqrstuvwxyz',
+      };
+      for (const taskId of taskIds) {
+        const started = Date.now();
+        // Best-effort: a task the analysis refuses (open distance, no tracks)
+        // stores its refusal, which is exactly what the endpoint would do.
+        await revalidateFieldAnalysis(env, taskId).catch((err) => {
+          console.warn(`  field analysis warm failed for task ${taskId}:`, err);
+        });
+        console.log(`  warmed field analysis: task_id=${taskId} (${Date.now() - started}ms)`);
+      }
     },
     async dispose() {
       await mf.dispose();
@@ -1069,6 +1104,10 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     `  Done. comp_id=${compId} — ${tasks.length} tasks (${reusedTasks} kept their ids), ` +
       `${totalTracks} tracks total`,
   );
+  // Leave the comp warm (see SeedStore.warmFieldAnalysis). AFTER the Done log:
+  // this is a bonus pass over a fully-seeded comp, and its per-task lines
+  // explain themselves.
+  await store.warmFieldAnalysis?.(seededTasks.map((t) => t.taskId));
   if (REMOTE) await purgeCompCache(compId, compName, seededTasks);
 }
 
