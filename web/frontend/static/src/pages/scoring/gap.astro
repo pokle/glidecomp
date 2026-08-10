@@ -1209,7 +1209,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Distance computation (<SpecRef section="4.2" />)</td>
                   <td class="py-2 pr-3">WGS84 ellipsoid.</td>
-                  <td class="py-2 pr-3">WGS84 Vincenty inverse and direct — one of the three algorithms <SpecRef section="7.1.4" label="§7.1.4" /> sanctions. Route optimisation is GlideComp's own corpus-verified optimiser rather than the <SpecRef section="7.1.3" label="§7.1.3" /> PathFinder algorithm; the two agree to metre scale.</td>
+                  <td class="py-2 pr-3">WGS84 Vincenty inverse and direct — one of the three algorithms <SpecRef section="7.1.4" label="§7.1.4" /> sanctions. Route optimisation is the <SpecRef section="7.1.3" label="§7.1.3" /> PathFinder algorithm over the <SpecRef section="7.1.2" label="§7.1.2" /> local projection, with the path corrected back onto the control-zone boundaries (<SpecRef section="7.1.7" label="§7.1.7" />).</td>
                   <td class="py-2">WGS84 Karney geodesics (geographiclib). The routes differ by metres, which gives small differences in the absolute points.</td>
                 </tr>
                 <tr class="border-b border-border/50">
@@ -1440,12 +1440,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 <li>
                   <strong>Distance precision:</strong> GlideComp computes the distances on the
                   WGS84 ellipsoid, as the specification requires (<SpecRef section="4.2" />).
-                  The route optimiser honours the Annex A rules that fix the result — the 1 m
-                  convergence tolerance, sequential evaluation, the launch measured from its
-                  centre, and the pinned mid-route ESS — but it converges with a numeric search
-                  on each cylinder instead of the Annex A intersection and reflection
-                  constructions. The
-                  optimised route is therefore not bit-identical to the route of another tool such as
+                  The route optimiser is the specification's own algorithm set (<SpecRef section="7.1" label="§7.1" />):
+                  the local projection, the PathFinder crossing and reflection constructions
+                  with the 0.1 m threshold, and the projection correction back onto the
+                  control-zone boundaries. One internal difference remains: the reflection case
+                  is solved with a numeric search instead of the closed form of the referenced
+                  paper — the same point, found a different way. The optimised route is
+                  therefore not bit-identical to the route of another tool such as
                   <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>.
                   The points of a landed-out pilot can therefore differ by a small quantity. This
                   changes the absolute values more than the relative ranking.

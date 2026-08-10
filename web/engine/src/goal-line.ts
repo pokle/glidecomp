@@ -55,6 +55,7 @@ import { getGoalIndex } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import {
   ellipsoidDistance,
+  inverseGeodesic,
   calculateBearingRadians,
   destinationPoint,
   localEastNorth,
@@ -329,15 +330,18 @@ export function goalSemicircleBoundaryFraction(
 
 /**
  * Point on the goal line at fraction t (0 = end1, 1 = end2).
- * Follows the geodesic between the endpoints — indistinguishable from the
- * constructed line over goal-line lengths (≤ a few km).
+ * Follows the geodesic between the endpoints, walked along the GEODESIC
+ * azimuth (S7F 2026 §7.1.4 InverseGeodesic): a spherical bearing is off by
+ * ~0.08° here, which would sag the drawn line metres away from the goal
+ * centre at its middle — the §7.1.7-corrected route tag sits on the
+ * geodesic, and this function must agree with it.
  */
 export function goalLinePointAt(line: GoalLine, t: number): { lat: number; lon: number } {
-  const bearing = calculateBearingRadians(
+  const { azimuth } = inverseGeodesic(
     line.end1.lat, line.end1.lon,
     line.end2.lat, line.end2.lon
   );
-  return destinationPoint(line.end1.lat, line.end1.lon, t * 2 * line.halfWidth, bearing);
+  return destinationPoint(line.end1.lat, line.end1.lon, t * 2 * line.halfWidth, azimuth);
 }
 
 /**

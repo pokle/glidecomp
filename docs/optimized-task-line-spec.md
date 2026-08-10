@@ -34,18 +34,39 @@ Each turnpoint cylinder is tagged at **one optimal point** on its perimeter that
 
 ### Implementation
 
-The algorithm has two layers: a per-cylinder optimizer and an outer iterative loop.
+Since issue #599 the implementation is the S7F 2026 §7.1 normative algorithm
+set, split across two modules:
 
-#### Per-Cylinder Optimization (Golden Section Search)
+- **`web/engine/src/route-optimizer.ts`** — the spec's machinery, task-shape
+  agnostic: the §7.1.2 localised Transverse Mercator projection (LTM, Annex
+  A's alternative implementation, with the latitude-dependent scaling), the
+  §7.1.3 **PathFinder** algorithm (Ding, Xie & Jiang 2018 — see the annotated
+  transcription in
+  [docs/reference/ding-2018-touring-n-circles/](reference/ding-2018-touring-n-circles/ding-2018-touring-n-circles.md))
+  extended to line control zones per Annex B, §7.1.6 FindTaskAreaCentre,
+  §7.1.7 ProjectionCorrection and the composed §7.1.8 RouteOptimizer.
+- **`web/engine/src/task-optimizer.ts`** — what a task's route MEANS: which
+  point is the launch, where the ESS pins, how a cylinder or LINE goal
+  terminates the route. It builds the §7.1.1 route definition and hands it to
+  RouteOptimizer.
 
-For each intermediate turnpoint, find the angle θ ∈ [0, 2π] that minimizes:
-```
-cost(θ) = distance(prevPoint, pointOnCircle(θ)) + distance(pointOnCircle(θ), nextPoint)
-```
+The pipeline per route: project every control zone into a Cartesian plane
+about the task-area centre (computed once per task and cached), run
+PathFinder's odd/even block-coordinate sweeps until the path length changes by
+no more than ε = 0.1 m, project the path points back to WGS84, snap each one
+onto its control zone's true boundary (ProjectionCorrection, via the Vincenty
+inverse azimuth + direct step), and measure the corrected path with the
+§7.1.5 EllipsoidDistance.
 
-This cost function is unimodal, so golden section search converges in ~30 iterations (tolerance 1e-5 radians).
+Per circle, PathFinder follows Ding et al.'s case split: when the
+neighbouring path points admit a straight crossing, the tag is the **first
+intersection** of the leg with the circle; when both neighbours are strictly
+inside, or the leg misses the circle, the tag is the reflection point (found
+by a coarse angular scan plus golden-section refinement — the closed-form PCP
+quartic is not used, the paper's own printed coefficients being unreliable;
+the minimum is the same point).
 
-Three placements are fixed by rule rather than searched (FAI S7F Annex A):
+Three placements are fixed by rule rather than searched (FAI S7F §7.2):
 
 **First turnpoint (launch):** the turnpoint's **centre**, whatever its type or
 radius — Annex A §2.2: "the distance is measured from the center of the launch
@@ -68,24 +89,22 @@ optimised point (constructed from the goal centre's bearing to it), or the
 closest point on a LINE goal.
 
 **Crossed cylinders:** when the prev→next leg passes straight through a
-cylinder, every chord point ties on distance; the tag is placed
-deterministically at the boundary point nearest the chord (the perpendicular
-foot projected onto the circle), matching AirScore's published per-leg
-cumulatives.
+cylinder, every chord point ties on distance; §7.1.3 places the tag at the
+leg's **first intersection** with the cylinder (Ding et al.'s crossing case).
+This is the one visible departure from AirScore's published per-leg
+cumulatives, which reflect the boundary point nearest the chord — the same
+chord, up to a radius apart along it, at identical total distance.
 
-#### Iterative Convergence
+#### Convergence
 
-A single forward pass uses the next turnpoint's *center* as the target, which is suboptimal — the actual touching point on the next cylinder may be far from its center, especially for large cylinders. The algorithm therefore iterates:
-
-1. **First pass:** Optimize each cylinder using the previous optimized point and the next turnpoint *center*
-2. **Subsequent passes:** Re-optimize each cylinder using the previous optimized point and the next *optimized point from the previous iteration*
-3. **Converge:** Stop when total path distance changes by < 1 meter, keeping the best (converged) pass
-
-This matches the CIVL GAP specification (Section 7F, Annex A) approach. On real tasks with large cylinders (e.g. `face.xctsk` with a 7 km cylinder), iteration shortens the task distance by ~200 m vs a single pass.
+PathFinder alternates: solve every odd-numbered circle with the even ones
+held fixed, then the evens with the odds fixed, until a full round moves the
+planar path length by no more than the spec's threshold:
 
 ```
-max_iterations = num_turnpoints × 10
-convergence_tolerance = 1.0  // meters
+ε = 0.1 m           // §7.1.3
+iteration cap = 50 + num_elements × 10   // safety net only; the sweep length
+                                         // is monotone non-increasing
 ```
 
 ### Cylinder Tolerance
@@ -111,14 +130,14 @@ past the ring — see issue #577 and the changelog below.
 All geographic calculations use the centralized `geo.ts` module, which implements WGS84 ellipsoid formulas for CIVL-accurate scoring:
 
 ```typescript
-import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
+import { ellipsoidDistance, inverseGeodesic, destinationPoint } from './geo';
 ```
 
 ### Available Functions
 
-- `andoyerDistance(lat1, lon1, lat2, lon2)` - WGS84 ellipsoid distance in meters (Andoyer-Lambert formula, ~2 ppm vs Vincenty)
-- `calculateBearingRadians(lat1, lon1, lat2, lon2)` - Initial bearing in radians
-- `destinationPoint(lat, lon, distanceMeters, bearingRadians)` - Destination point on WGS84 ellipsoid (Vincenty direct formula)
+- `ellipsoidDistance(lat1, lon1, lat2, lon2)` - the §7.1.5 EllipsoidDistance: WGS84 distance in metres (Vincenty inverse)
+- `inverseGeodesic(lat1, lon1, lat2, lon2)` - the §7.1.4 InverseGeodesic: distance AND initial azimuth (Vincenty inverse)
+- `destinationPoint(lat, lon, distanceMeters, bearingRadians)` - the §7.1.4 DirectGeodesic: destination point on WGS84 ellipsoid (Vincenty direct)
 
 **Note**: Never implement inline geo math. Always use the `geo.ts` module.
 
@@ -194,22 +213,25 @@ When a task is set:
 ## Performance Considerations
 
 ### Computational Complexity
-- **Two turnpoints**: O(1) - simple bearing calculation
-- **N turnpoints**: O(I · N · log(1/ε)) where I = iterations to converge, ε = angle tolerance (1e-5)
-  - Golden section search: O(log(1/ε)) per turnpoint per iteration (~30 evaluations)
-  - Convergence iterations: typically 3-5 for most tasks
 
-For typical tasks (5-10 turnpoints), optimization completes in < 10ms even with iteration.
+PathFinder is O(kn) sweeps of cheap planar geometry (Ding et al.'s Theorem
+3); the expensive ellipsoid work — projecting the route in, correcting the
+tags back onto boundaries, summing distances — is O(n) Vincenty evaluations
+per route. This is substantially cheaper than the previous implementation,
+whose per-circle golden-section search evaluated dozens of Vincenty distances
+per cylinder per pass. A typical task optimises in well under a millisecond.
 
 ### Caching
 The optimised task line is cached per task object in a `WeakMap`, keyed on a
 cheap content string (turnpoint types/radii/coordinates + goal type) so an
 in-place edit — the analysis page's task editor adjusts radii on the live
-object — can never be served a stale line. Sequence resolution, the
-explainers and the field analysis all recompute the line per pilot, so the
-cache is what keeps the §8.6.1 per-fix optimisations affordable.
-Remaining-route optimisations (fresh synthetic route per position) are not
-cached.
+object — can never be served a stale line. The §7.1.6 task-area centre and
+its LTM projection are cached the same way (the spec computes the centre
+ONCE per task and reuses it for every route of that task). Sequence
+resolution, the explainers and the field analysis all recompute the line per
+pilot, so the caches are what keep the §9.3 per-fix remaining-route
+optimisations affordable; the remaining routes themselves (fresh route per
+position, but the task's cached projection) are not cached.
 
 ## Limitations and Future Enhancements
 
@@ -260,6 +282,20 @@ rules covered by three dedicated files:
 - **Andoyer-Lambert Formula**: WGS84 ellipsoid distance approximation (~2 ppm accuracy vs Vincenty)
 
 ## Change Log
+
+### 2026-08-10: S7F 2026 §7.1 PathFinder route optimisation (issue #599)
+- Adopted the 2026 edition's normative algorithm set in
+  `route-optimizer.ts`: LTM projection (§7.1.2, Annex A, latitude-dependent
+  scaling), PathFinder (§7.1.3, Ding et al. 2018, ε = 0.1 m; Annex B line
+  extension), FindTaskAreaCentre (§7.1.6), ProjectionCorrection (§7.1.7),
+  RouteOptimizer (§7.1.8)
+- Replaced the per-cylinder ellipsoidal golden-section search; a crossed
+  cylinder now tags the leg's first intersection (§7.1.3) instead of the
+  boundary point nearest the chord
+- `goalLinePointAt` walks the geodesic azimuth instead of a spherical
+  bearing (the drawn line sagged metres off the goal centre)
+- Task distances move by at most metre scale over the archive; the
+  /scoring/gap deviation note about the route optimiser is removed
 
 ### 2026-08-08: Declared cylinder tolerance honoured (issue #577)
 - `parseXCTask` reads the task file's `cylinderTolerance` field; the 0.5%
