@@ -4,10 +4,11 @@
  * Its own module rather than a helper on score-explanation-format so that the
  * two callers can share one spelling of the format without dragging the report
  * card into the scoring fingerprint. track-quality.ts is one of the scoring
- * roots hashed by tests/scoring-version.test.ts, and that hash walks the
+ * roots hashed by web/scripts/scoring-fingerprint.ts, and that hash walks the
  * transitive import closure — so importing km() from the explanation formatter
  * would put the report card's presentation inside the closure, and every tweak
- * to explanation copy would roll every scoring cache on the site. This file
+ * to explanation copy would roll the engine generation and every scoring cache
+ * on the site. This file
  * holds the shared formatter alone and changes about as often as a unit.
  */
 

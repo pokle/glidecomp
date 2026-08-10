@@ -1,17 +1,18 @@
 /**
  * The import closure the scoring fingerprint guard hashes.
  *
- * Split out of scoring-version.test.ts so the traversal itself can be tested.
+ * Split out of the old scoring-version guard test so the traversal itself can
+ * be tested.
  * It could not be before: it read the real src/ directory, so the only way to
  * ask "does this follow a subdirectory import?" was to move a scoring source
  * into a subdirectory and see what happened.
  *
  * Why the traversal has to be exact: the guard's promise is that changing any
- * file that can affect a score fails the build until SCORING_ENGINE_VERSION is
- * bumped. A dependency the walk fails to follow is not a missing file in a
- * list someone will notice — it is a hole that stays open until a scoring
- * change slips through it and two engine generations serve contradictory
- * cached scores. So a specifier this module cannot resolve is a hard error,
+ * file that can affect a score changes the engine generation, and so rolls
+ * every scoring cache keyed by it. A dependency the walk fails to follow is
+ * not a missing file in a list someone will notice — it is a hole that stays
+ * open until a scoring change slips through it and two engine generations
+ * serve contradictory cached scores. So a specifier this module cannot resolve is a hard error,
  * never a skip.
  */
 
