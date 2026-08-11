@@ -254,27 +254,38 @@ export function lanesAccessibleName(lanes: Lane[], subject: string): string {
 }
 
 /**
- * The visible caption. Says what the position means, what orders the lanes,
- * and — deliberately — the two things a reader would otherwise infer wrongly:
- * that a percentile axis says nothing about spread, and that the right-hand
- * end is only the end the metric EXPECTS to be better, not a claim about this
- * task.
+ * The caption's opening sentence — what a dot is, and what its position does
+ * and does not say. Always visible: it is the reading instruction, not a
+ * caveat, and a reader who takes nothing else must take this.
  */
-export function lanesCaption(lanes: Lane[]): string {
-  const parts = [
+export function lanesCaptionLead(): string {
+  return (
     "One lane per behaviour, one dot per pilot, placed by percentile within " +
-      "the pilots that behaviour could be measured on — so a dot's position " +
-      "says where a pilot sat, never how spread the field was. Hover a pilot " +
-      "to light them up in every lane at once.",
+    "the pilots that behaviour could be measured on — so a dot's position " +
+    "says where a pilot sat, never how spread the field was. Hover a pilot " +
+    "to light them up in every lane at once."
+  );
+}
+
+/**
+ * The standing caveats behind the lead: what orders the lanes, what the
+ * right-hand end does (and does not) claim, and the two conditional clauses.
+ *
+ * Split out of the lead because the chart now lives in a height-capped pinned
+ * pane (MasterDetail), where six sentences of standing prose pushed the chart
+ * itself out of view and cut the last clause off mid-word. It renders behind
+ * an `Explain` popover on screen — and, per that component's contract, in full
+ * on paper, where a popover cannot exist.
+ */
+export function lanesCaptionDetail(lanes: Lane[]): string {
+  const parts = [
     "Lanes run strongest separator first, the ones that separated nobody last; " +
-      "the table below keeps its usual order.",
+      "the table beside them keeps its usual order.",
     "Right is the end the behaviour is expected to be better at — whether it " +
       "paid on this task is the ranking's question, not this chart's.",
   ];
   if (lanes.some((l) => l.neutral)) {
-    parts.push(
-      "† No good or bad direction: right is simply the larger value."
-    );
+    parts.push("† No good or bad direction: right is simply the larger value.");
   }
   if (lanes.some((l) => l.missing > 0)) {
     parts.push(
@@ -283,4 +294,9 @@ export function lanesCaption(lanes: Lane[]): string {
     );
   }
   return parts.join(" ");
+}
+
+/** Lead and caveats as one block — the printed form, and what the audit reads. */
+export function lanesCaption(lanes: Lane[]): string {
+  return `${lanesCaptionLead()} ${lanesCaptionDetail(lanes)}`;
 }

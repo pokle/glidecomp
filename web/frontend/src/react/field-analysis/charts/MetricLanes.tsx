@@ -38,17 +38,19 @@
  * measurement — so it renders identically in a test, on workerd, and in a
  * browser. See charts/chart-utils.ts and day-profile/met-shared.ts.
  */
-import { useMemo, useState } from "react";
-import { formatMetricValue, type FieldAnalysisReport, type MetricReport } from "../types";
+import { useState } from "react";
+import { formatMetricValue, type FieldAnalysisReport } from "../types";
 import { unitWords } from "../units";
 import { usePilotHighlight } from "../PilotHighlightContext";
 import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 import { formatTickValue, linearScale } from "./chart-utils";
+import { Explain } from "@/react/rac/explain";
 import {
-  buildLanes,
   defaultProfileTrack,
   lanesAccessibleName,
   lanesCaption,
+  lanesCaptionDetail,
+  lanesCaptionLead,
   type Lane,
   type LanePoint,
 } from "./metric-lanes";
@@ -78,22 +80,25 @@ function pointOf(lane: Lane, trackFile: string | null): LanePoint | null {
 }
 
 export function MetricLanes({
-  metrics,
+  lanes,
   pilots,
   /** Names the figure — "Climbing" for a family, the selection for a builder. */
   subject,
 }: {
-  metrics: MetricReport[];
+  /** Built by `buildLanes`. The CALLER builds them so it can decide whether
+   * there is a chart at all before laying out around it — MasterDetail needs a
+   * literal `null` detail to render its master alone, and a component that
+   * returns null from inside a JSX element cannot give it one. */
+  lanes: Lane[];
   pilots: FieldAnalysisReport["pilots"];
   subject: string;
 }) {
   const { highlight, setHighlight } = usePilotHighlight();
   const [readout, setReadout] = useState<{ lane: Lane; point: LanePoint } | null>(null);
 
-  const lanes = useMemo(() => buildLanes(metrics, pilots), [metrics, pilots]);
-
-  // One lane is a worse DistributionStrip, and the strip is already one ⓘ
-  // away from every metric name. The comparison is the point.
+  // Defensive: callers gate on this, since one lane is a worse
+  // DistributionStrip and the strip is already one ⓘ away from every metric
+  // name. The comparison is the point.
   if (lanes.length < 2) return null;
 
   // Whose profile the connector draws. A percentile axis spreads the field
@@ -366,8 +371,20 @@ export function MetricLanes({
         </p>
       ) : null}
 
+      {/* The reading instruction stays visible; the standing caveats move
+          behind the ⓘ. The chart lives in a height-capped pinned pane now, and
+          six sentences of prose pushed the chart itself out of it and cut the
+          last clause off mid-word. Per rac/explain.tsx's contract, anything put
+          behind a popover must still reach paper — hence the print-only full
+          caption below, since a popover cannot exist there. */}
       <figcaption className="text-xs text-muted-foreground">
-        {lanesCaption(lanes)}
+        <span className="print:hidden">
+          {lanesCaptionLead()}
+          <Explain label="these lanes" className="ml-0.5 inline-flex align-text-bottom">
+            <p>{lanesCaptionDetail(lanes)}</p>
+          </Explain>
+        </span>
+        <span className="hidden print:inline">{lanesCaption(lanes)}</span>
       </figcaption>
     </figure>
   );

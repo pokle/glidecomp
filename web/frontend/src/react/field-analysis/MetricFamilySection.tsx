@@ -14,6 +14,9 @@ import { MetricMethod } from "./MetricExplanation";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
 import { MetricLanes } from "./charts/MetricLanes";
+import { buildLanes } from "./charts/metric-lanes";
+import { MasterDetail } from "@/react/components/MasterDetail";
+import { cn } from "@/react/lib/utils";
 import { SeriesChart } from "./charts/SeriesChart";
 import { bestCorrelation } from "./SeparationRanking";
 import { verdictWords } from "./units";
@@ -74,6 +77,10 @@ export function MetricFamilySection({
     [metrics]
   );
 
+  // Built here rather than inside MetricLanes so the layout below can ask how
+  // many lanes there are before deciding whether there is a detail pane at all.
+  const lanes = useMemo(() => buildLanes(metrics, report.pilots), [metrics, report.pilots]);
+
   if (metrics.length === 0) return null;
 
   const best = bestCorrelation(metrics);
@@ -116,21 +123,45 @@ export function MetricFamilySection({
             DayProfilePanel) onto one axis with the modelled weather, which
             is also why SeriesChart skips those kinds. This family keeps the
             exact tables. */}
-        {/* The shape of the family first, then the exact numbers — the same
-            "charts before their tables" order the metric blocks below use.
-            MetricLanes renders nothing when fewer than two of these metrics
-            can be a lane, so the gate lives in one place rather than here. */}
-        <MetricLanes
-          metrics={metrics}
-          pilots={report.pilots}
-          subject={familyLabel}
-        />
 
+        {/* Table and lanes are a master/detail pair, so they use the shared
+            layout the ranking and the thermal census use. The pairing is real:
+            hovering a row lights that pilot in every lane (PilotHighlightContext
+            already carries it), and before this the chart sat above the table
+            and scrolled away — so on a phone, pointing at a row updated
+            something off screen, the exact failure MasterDetail exists to fix.
+            Wide, the table keeps the left column and the lanes pin beside it. */}
         {perPilotMetrics.length > 0 ? (
-          <PerPilotMetricTable
-            report={report}
-            metrics={perPilotMetrics}
-            familyLabel={familyLabel}
+          <MasterDetail
+            stackedTop="toc-bar"
+            detailLabel="chart"
+            detailAriaLabel={`${familyLabel}: behaviour lanes`}
+            master={
+              <PerPilotMetricTable
+                report={report}
+                metrics={perPilotMetrics}
+                familyLabel={familyLabel}
+                // Stacked, the table spans the card edge to edge: 20px of side
+                // padding is a tenth of a phone's width, and paying it here
+                // pushes columns into a sideways scroll. Side by side the bleed
+                // comes off — the column is already inside the grid. Same
+                // treatment, and same reasoning, as RankingTable.
+                viewportClassName={cn(
+                  "-mx-5 w-auto border-y",
+                  "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
+                )}
+              />
+            }
+            // Built here, not inside the chart: MasterDetail needs a literal
+            // null to render the table alone, which a component that returns
+            // null from within a JSX element cannot give it.
+            detail={
+              lanes.length >= 2 ? (
+                <div className="p-4">
+                  <MetricLanes lanes={lanes} pilots={report.pilots} subject={familyLabel} />
+                </div>
+              ) : null
+            }
           />
         ) : null}
 

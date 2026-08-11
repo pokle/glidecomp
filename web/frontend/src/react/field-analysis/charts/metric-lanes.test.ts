@@ -5,6 +5,8 @@ import {
   laneEndWords,
   laneSentence,
   lanesCaption,
+  lanesCaptionDetail,
+  lanesCaptionLead,
 } from "./metric-lanes";
 import type {
   FieldAnalysisReport,
@@ -384,6 +386,22 @@ describe("lane prose", () => {
 
 describe("lanesCaption", () => {
   const lanes = (metrics: MetricReport[]) => buildLanes(metrics, PILOTS);
+
+  // The lead is the reading instruction and stays on screen; the caveats sit
+  // behind an ⓘ. lanesCaption is the printed form, so it must be both — a
+  // popover cannot exist on paper (rac/explain.tsx).
+  it("is the lead and the caveats together, so paper loses nothing", () => {
+    const l = lanes([metric("m", "neutral", -0.5)]);
+    const full = lanesCaption(l);
+    expect(full).toContain(lanesCaptionLead());
+    expect(full).toContain(lanesCaptionDetail(l));
+  });
+
+  it("keeps the position warning in the always-visible lead", () => {
+    // If this ever migrates behind the ⓘ, a reader could take a dot's position
+    // for a statement about spread — the one misreading the chart invites.
+    expect(lanesCaptionLead()).toContain("never how spread the field was");
+  });
 
   it("says what orders the lanes, since the table below is ordered differently", () => {
     expect(lanesCaption(lanes([metric("m", "higher", -0.5)]))).toContain(
