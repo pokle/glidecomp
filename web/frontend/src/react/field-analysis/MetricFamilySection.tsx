@@ -134,7 +134,12 @@ export function MetricFamilySection({
         {perPilotMetrics.length > 0 ? (
           <MasterDetail
             stackedTop="toc-bar"
-            detailLabel="chart"
+            // Named for the family, not "chart". Every open family adds a fold
+            // toggle, and the separation ranking above has one too, so a page
+            // with four of them all reading "Hide chart" tells a screen-reader
+            // user nothing about WHICH chart — and made the e2e's own
+            // `/chart$/` locator ambiguous, which is how it was noticed.
+            detailLabel={`${familyLabel} lanes`}
             detailAriaLabel={`${familyLabel}: behaviour lanes`}
             master={
               <PerPilotMetricTable
