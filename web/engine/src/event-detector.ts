@@ -16,6 +16,13 @@ import { detectCircles, type CircleSegment } from './circle-detector';
 import { resolveThresholds, type DetectionThresholds, type PartialThresholds } from './thresholds';
 import { detectTakeoffLandingIndices, takeoffLandingToEvents } from './takeoff-landing-detector';
 import { detectThermals, detectGlides, thermalToEvents, glideToEvents } from './flight-phase-detectors';
+import {
+  glideDataFromSegment,
+  climbDataFromSegment,
+  type ClimbData,
+  type FlightSegments,
+  type GlideData,
+} from './segment-extractors';
 import type { FlightEvent, FlightEventType } from './event-types';
 
 // The flight-event type vocabulary lives in event-types.ts (dependency-free so
@@ -316,16 +323,28 @@ function circleToEvent(
   };
 }
 
+/** Events plus the typed segment data they were built from. */
+export interface FlightDetectionResult {
+  events: FlightEvent[];
+  segments: FlightSegments;
+}
+
 /**
- * Main function to detect all flight events
+ * Main function to detect all flight events.
+ *
+ * Returns the flattened, time-sorted event list alongside the typed
+ * glide/climb segment data, built here while the detected segments still
+ * exist — consumers must not re-pair start/end events to reconstruct them.
  */
-export function detectFlightEvents(
+export function detectFlight(
   fixes: IGCFix[],
   task?: XCTask,
   partialThresholds?: PartialThresholds
-): FlightEvent[] {
+): FlightDetectionResult {
   const thresholds = resolveThresholds(partialThresholds);
   const allEvents: FlightEvent[] = [];
+  const glideData: GlideData[] = [];
+  const climbData: ClimbData[] = [];
 
   // IMPORTANT: Detect takeoff and landing FIRST
   // All other events should only be detected after takeoff
@@ -335,7 +354,7 @@ export function detectFlightEvents(
   // If no takeoff detected, we shouldn't detect flight events
   // (pilot might still be on the ground)
   if (!takeoffLanding.takeoff) {
-    return allEvents;
+    return { events: allEvents, segments: { glides: glideData, climbs: climbData } };
   }
 
   // The typed result carries the takeoff fix index directly. Looking it up
@@ -351,13 +370,17 @@ export function detectFlightEvents(
   // Detect thermals (only after takeoff)
   const thermals = detectThermals(flightFixes, thresholds);
   for (const thermal of thermals) {
-    allEvents.push(...thermalToEvents(thermal, indexOffset, fixes));
+    const [entryEvent, exitEvent] = thermalToEvents(thermal, indexOffset, fixes);
+    allEvents.push(entryEvent, exitEvent);
+    climbData.push(climbDataFromSegment(thermal, indexOffset, fixes, entryEvent));
   }
 
   // Detect glides (only after takeoff)
   const glides = detectGlides(flightFixes, thermals, thresholds);
   for (const glide of glides) {
-    allEvents.push(...glideToEvents(glide, indexOffset, fixes));
+    const [startEvent, endEvent] = glideToEvents(glide, indexOffset, fixes);
+    allEvents.push(startEvent, endEvent);
+    glideData.push(glideDataFromSegment(glide, indexOffset, fixes, startEvent));
   }
 
   // Detect altitude and vario extremes (only after takeoff). Each detector
@@ -379,7 +402,20 @@ export function detectFlightEvents(
   // Sort by time
   allEvents.sort((a, b) => a.time.getTime() - b.time.getTime());
 
-  return allEvents;
+  // Segment data keeps the sort orders the analysis lists present
+  glideData.sort((a, b) => b.distance - a.distance);
+  climbData.sort((a, b) => b.altitudeGain - a.altitudeGain);
+
+  return { events: allEvents, segments: { glides: glideData, climbs: climbData } };
+}
+
+/** The flattened event list alone, for consumers with no use for segments. */
+export function detectFlightEvents(
+  fixes: IGCFix[],
+  task?: XCTask,
+  partialThresholds?: PartialThresholds
+): FlightEvent[] {
+  return detectFlight(fixes, task, partialThresholds).events;
 }
 
 /**

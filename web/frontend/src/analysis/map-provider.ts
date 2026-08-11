@@ -4,7 +4,7 @@
  * Abstraction layer for map visualization, backed by MapBox GL JS.
  */
 
-import type { IGCFix, XCTask, FlightEvent, PilotScore } from '@glidecomp/engine';
+import type { IGCFix, XCTask, FlightEvent, FlightSegments, PilotScore } from '@glidecomp/engine';
 import type { MapAnnotationLayer } from './map-annotations';
 
 /** A loaded track with metadata for multi-track display */
@@ -14,6 +14,8 @@ export interface LoadedTrack {
     filename: string;
     fixes: IGCFix[];
     events: FlightEvent[];
+    /** Typed glide/climb data built by detectFlight alongside the events */
+    segments: FlightSegments;
 }
 
 /** One pilot's scored open-distance line: take-off cylinder exit → furthest fix */

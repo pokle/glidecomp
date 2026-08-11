@@ -7,7 +7,7 @@
  * restore rule.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, resolveLeadingTimeRatio, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GapTaskScoreResult, type OpenDistanceTaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, sinksFromGlides, resolveLeadingTimeRatio, type FlightEvent, type FlightEventType, type FlightSegments, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GapTaskScoreResult, type OpenDistanceTaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
@@ -60,7 +60,7 @@ export interface FlightInfo {
 }
 
 export interface AnalysisPanel {
-  setEvents(events: FlightEvent[]): void;
+  setEvents(events: FlightEvent[], segments: FlightSegments): void;
   setFlightInfo(info: FlightInfo): void;
   setTask(task: XCTask | null): void;
   setScore(result: TurnpointSequenceResult | null): void;
@@ -388,6 +388,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   // State
   let allEvents: FlightEvent[] = [];
+  let segments: FlightSegments = { glides: [], climbs: [] };
   let filteredEvents: FlightEvent[] = [];
   let currentTask: XCTask | null = null;
   let isPanelHidden = true;
@@ -850,7 +851,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   function renderGlides(): void {
     renderSegmentList({
-      items: extractGlides(allEvents),
+      items: segments.glides,
       itemClass: 'glide-item',
       dataAttr: 'data-glide-id',
       emptyLabel: 'No glides detected',
@@ -859,7 +860,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       renderItem: (glide, i) => {
         const distanceStr = formatDistance(glide.distance).withUnit;
         const speedStr = formatSpeed(glide.averageSpeed).withUnit;
-        const glideRatioStr = glide.glideRatio > 0 ? glide.glideRatio.toFixed(1) : '∞';
+        const glideRatioStr = glide.glideRatio !== undefined && glide.glideRatio > 0 ? glide.glideRatio.toFixed(1) : '∞';
         const altLostStr = formatAltitude(glide.altitudeLost).withUnit;
         const startAltStr = formatAltitude(glide.startAltitude).withUnit;
         const endAltStr = formatAltitude(glide.endAltitude).withUnit;
@@ -887,7 +888,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   function renderClimbs(): void {
     renderSegmentList({
-      items: extractClimbs(allEvents),
+      items: segments.climbs,
       itemClass: 'climb-item',
       dataAttr: 'data-climb-id',
       emptyLabel: 'No thermals detected',
@@ -920,7 +921,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   function renderSinks(): void {
     renderSegmentList({
-      items: extractSinks(allEvents, config.getThresholds().glide.maxGlideRatioForSink),
+      items: sinksFromGlides(segments.glides, config.getThresholds().glide.maxGlideRatioForSink),
       itemClass: 'sink-item',
       dataAttr: 'data-sink-id',
       emptyLabel: 'No descents detected',
@@ -1239,13 +1240,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     let matchingEvent: FlightEvent | null = null;
 
     if (currentTab === 'glides') {
-      const glides = extractGlides(allEvents);
-      matchingEvent = findNearestSegmentEvent(fixIndex, glides);
+      matchingEvent = findNearestSegmentEvent(fixIndex, segments.glides);
     } else if (currentTab === 'climbs') {
-      const climbs = extractClimbs(allEvents);
-      matchingEvent = findNearestSegmentEvent(fixIndex, climbs);
+      matchingEvent = findNearestSegmentEvent(fixIndex, segments.climbs);
     } else if (currentTab === 'sinks') {
-      const sinks = extractSinks(allEvents, config.getThresholds().glide.maxGlideRatioForSink);
+      const sinks = sinksFromGlides(segments.glides, config.getThresholds().glide.maxGlideRatioForSink);
       matchingEvent = findNearestSegmentEvent(fixIndex, sinks);
     } else if (currentTab === 'events') {
       // For the events tab, find the nearest event by fixIndex or segment
@@ -1705,8 +1704,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   }
 
   return {
-    setEvents(events: FlightEvent[]) {
+    setEvents(events: FlightEvent[], flightSegments: FlightSegments) {
       allEvents = events;
+      segments = flightSegments;
       updateFilteredEvents();
       if (currentTab !== 'task') {
         renderTrack();

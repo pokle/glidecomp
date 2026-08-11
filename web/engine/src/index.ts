@@ -29,10 +29,12 @@ export {
   type TrackQualitySeverity,
 } from './track-quality';
 export {
+  detectFlight,
   detectFlightEvents,
   filterEventsByBounds,
   getEventStyle,
   type CircleEventDetails,
+  type FlightDetectionResult,
   type EventDetails,
   type FixIndexDetails,
   type FlightEvent,
@@ -237,11 +239,9 @@ export {
   type WindEstimate,
 } from './circle-detector';
 export {
-  extractClimbs,
-  extractGlides,
-  extractSinks,
+  sinksFromGlides,
   type ClimbData,
-  type ClimbEventDetails,
+  type FlightSegments,
   type GlideData,
   type SinkData,
 } from './segment-extractors';
