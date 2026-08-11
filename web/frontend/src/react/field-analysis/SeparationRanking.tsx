@@ -181,22 +181,19 @@ export function SeparationRanking({
               ranked={ranked}
               ariaLabel="Behaviour ranking"
               subjectLabel="Behaviour"
-              // Stacked, the table is the only thing that scrolls — capped so
-              // the chart above stays on screen while you work down the rows.
-              // Side by side the cap comes off and the page scrolls normally.
               // Stacked, the table spans the panel edge to edge: the card's
               // 20px of side padding is a tenth of a phone's width, and paying
               // it here pushed the Strength column into a sideways scroll the
               // old full-width layout never had. Horizontal rules only, since
               // the box now meets the card's own sides.
               //
-              // Side by side the cap and the bleed both come off — the page
-              // scrolls normally and the column is already inside the grid.
-              // w-auto is load-bearing: the viewport is `w-full`, so negative
-              // margins alone would slide it left rather than widen it.
+              // Side by side the bleed comes off — the column is already
+              // inside the grid. w-auto is load-bearing: the viewport is
+              // `w-full`, so negative margins alone would slide it left
+              // rather than widen it.
               viewportClassName={cn(
-                "max-h-[60dvh] -mx-5 w-auto border-y",
-                "@5xl:mx-0 @5xl:w-full @5xl:max-h-none @5xl:border-y-0"
+                "-mx-5 w-auto border-y",
+                "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
               )}
               fieldSize={fieldSize}
               pilots={report?.pilots}
@@ -301,15 +298,25 @@ export function SeparationRanking({
  * it reads, and appears, above the table it details — which is why it carries
  * its own heading and `role="region"`.
  *
- * STACKED, NOTHING IS PINNED. The chart sits in normal flow and the TABLE is
- * the capped, scrollable box; that is what keeps the chart on screen while you
- * work down the rows. It used to be the other way round — the chart stuck to
- * the viewport, full-bleed, covering rows as they passed under it — and that
- * cost more than it paid: the pane could not live inside a panel (Chromium
- * stopped hit-testing its buttons once an ancestor had horizontal padding, so
- * Expand silently took no clicks), and it needed a stack of scroll-margin
- * constants to keep focused rows out from behind itself (WCAG 2.4.11). With
- * nothing overlapping, both problems simply do not arise.
+ * STACKED, THE PANE IS PINNED. It sticks to the top of the viewport while any
+ * of the table is still on screen, and releases with the last row — so a row
+ * picked at the bottom of the ranking swaps a chart that is right there, not
+ * one scrolled far off the top. The interim design (#553) tried the opposite:
+ * chart in normal flow, the TABLE capped to a `60dvh` scrollbox. That kept the
+ * chart on screen only while you scrolled INSIDE the box — one page-level
+ * scroll (the natural gesture) carried the chart away, and every lower row
+ * then charted itself off screen, which is the complaint that reverted it.
+ *
+ * Pinning is why the stacked layout is BLOCK flow with grid applied only at
+ * `@5xl`: as a single-column grid item the pane's containing block would be
+ * its own grid row, and `position: sticky` could never carry it over the
+ * table below.
+ *
+ * The pinned pane owes the two debts #553 documented, now owed knowingly:
+ * scroll-margin constants sized to its stuck footprint keep keyboard-focused
+ * rows from stopping behind it (WCAG 2.4.11), and its buttons must stay
+ * hit-testable inside the padded panel while stuck — a Chromium regression
+ * the e2e covers by clicking Expand mid-scroll.
  *
  * The split is a CONTAINER query, not `lg:`, because the width this section
  * gets is not a function of the viewport alone: at `xl` the page gives 12rem
@@ -319,8 +326,10 @@ export function SeparationRanking({
  * min-content at the 5fr share below — under that the table would go back to
  * scrolling sideways, which is the complaint issue #453 was closed on.
  *
- * The one remaining sticky offset is the wide layout's, dictated by the
- * Shell's 60px glass header.
+ * Sticky offsets are dictated by whatever owns the top of the viewport:
+ * stacked that is PageToc's fixed 60px bar (up as soon as you have scrolled
+ * 160px — long before this section), and side by side it is the Shell's 60px
+ * glass header.
  */
 function MasterDetail({
   table,
@@ -344,18 +353,20 @@ function MasterDetail({
 
   return (
     <div className="@container">
-      <div className="grid items-start gap-4 @5xl:grid-cols-[minmax(0,5fr)_minmax(0,3fr)] @5xl:gap-6 print:block">
+      <div className="@5xl:grid @5xl:grid-cols-[minmax(0,5fr)_minmax(0,3fr)] @5xl:items-start @5xl:gap-6 print:block">
         <div
           className={cn(
-            // Stacked, the chart simply sits above the table, in normal flow.
-            // Nothing is pinned to the viewport, so nothing can cover the
-            // table, its rows or its controls — what keeps the chart in view
-            // while you work down the ranking is that the TABLE scrolls
-            // inside its own box, not that the chart is stuck to the glass.
-            "pb-3 @5xl:pb-0",
+            // Stacked, the pane pins under PageToc's 60px bar and the table
+            // pages beneath it. Full-bleed to the card's edges (the table
+            // bleeds the same -mx-5) with the card's own surface behind it,
+            // so rows passing under are covered edge to edge rather than
+            // peeking out beside the centred pane.
+            "sticky top-[60px] z-10 -mx-5 bg-card px-5 pb-3",
             // Side by side it becomes the sticky right-hand column, where it
             // pins against the Shell's 60px glass header and covers nothing.
-            "@5xl:sticky @5xl:top-20 @5xl:order-2",
+            "@5xl:top-20 @5xl:order-2 @5xl:mx-0 @5xl:bg-transparent @5xl:px-0 @5xl:pb-0",
+            // Paper has no viewport to pin to.
+            "print:static print:z-auto print:m-0 print:bg-transparent print:p-0",
             hideDetailInPrint && "print:hidden"
           )}
         >
@@ -399,10 +410,21 @@ function MasterDetail({
         <div
           className={cn(
             "min-w-0 @5xl:order-1",
-            // Side by side the pane IS sticky, so a row focused by keyboard
-            // still has to clear the Shell's header. Stacked, nothing
-            // overlaps the table at all, which is the point of the change:
-            // the WCAG 2.4.11 offsets the old pinned pane needed are gone.
+            // Focus must not stop behind the pinned pane (WCAG 2.4.11). Its
+            // stacked height is a constant cap, so its bottom edge is a
+            // constant too: 60px sticky offset + the ~2.25rem toggle row +
+            // the pane's 19rem (sm: 23rem) cap + its pb-3. Rows AND cells,
+            // because RAC's grid navigation scrolls whichever it moved focus
+            // to. Folded, only the toggle row is stuck, so the clearance
+            // shrinks with it rather than shoving rows mid-screen.
+            collapsed
+              ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28"
+              : cn(
+                  "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem]",
+                  "sm:[&_tr]:scroll-mt-[30rem] sm:[&_td]:scroll-mt-[30rem] sm:[&_th]:scroll-mt-[30rem]"
+                ),
+            // Side by side the pane is a column that covers nothing, but a
+            // focused row still has to clear the Shell's glass header.
             "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24"
           )}
         >
