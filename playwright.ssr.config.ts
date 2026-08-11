@@ -1,7 +1,12 @@
 import { defineConfig } from "@playwright/test";
 import { API_URL, API_READY_URL } from "./e2e/fixtures/stack";
 
-const SSR_URL = "http://localhost:3100";
+// Must match the port web/scripts/ssr-e2e-serve.sh serves on — both default to
+// 3100 and both honour SSR_PORT (the webServer command inherits our env), so
+// the documented `SSR_PORT=…` override works end-to-end. Without this, a dev
+// server already on :3100 (e.g. a worktree following the DEV_FRONTEND_PORT
+// advice) gets silently reused as "the Pages runtime" via reuseExistingServer.
+const SSR_URL = `http://localhost:${process.env.SSR_PORT || 3100}`;
 
 /**
  * SSR e2e config: runs e2e/ssr.spec.ts against the built output served through
