@@ -292,10 +292,12 @@ export function DayProfilePanel({
             <DayProfileNote />
           </Explain>
         </span>
-        <span className="hidden print:block">
-          <DayProfileNote />
-        </span>
       </p>
+      {/* The note renders <p>s, so its print copy sits beside the paragraph,
+          not inside it — a <p> cannot hold another <p>. */}
+      <div className="hidden text-xs text-muted-foreground print:block">
+        <DayProfileNote />
+      </div>
       {showWeather && weather ? <MetAttribution weather={weather} /> : null}
     </figure>
   );
