@@ -381,15 +381,17 @@ test("narrow: the thermals census drives its own pinned pane", async () => {
   expect(box.y + box.height).toBeLessThanOrEqual(781);
 });
 
-test("the thermal figure expands to a full-screen sheet", async () => {
+test("the map's maximise control fills the screen, and the same control restores it", async () => {
   await setViewport(390, 780);
   const thermalsCard = page.locator("section", {
     has: page.getByRole("heading", { name: /The day's thermals/ }),
   });
   await thermalsCard.scrollIntoViewIfNeeded();
-  await thermalsCard
-    .getByRole("button", { name: "Show this thermal full screen" })
-    .click();
+  // The map (and its corner controls) only exist with a Mapbox token.
+  const mapToggle = thermalsCard.getByRole("button", { name: "Map", exact: true });
+  test.skip((await mapToggle.count()) === 0, "no Mapbox token in this environment");
+  await mapToggle.click();
+  await thermalsCard.getByRole("button", { name: "Maximise map" }).click();
 
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();
@@ -398,8 +400,12 @@ test("the thermal figure expands to a full-screen sheet", async () => {
   await expect(dialog.getByRole("img", { name: /Top-down lift rose/ })).toBeVisible();
   await expect(page.locator(":focus")).toHaveText("Close");
 
-  await page.keyboard.press("Escape");
+  // The SAME control, in the same corner of the map, brings it back.
+  await dialog.getByRole("button", { name: "Restore map size" }).click();
   await expect(dialog).toHaveCount(0);
+
+  // Serial suite: leave the page as found — fold the map away again.
+  await mapToggle.click();
 });
 
 test("narrow: the chart can be folded away to read the table", async () => {

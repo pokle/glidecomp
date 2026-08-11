@@ -470,10 +470,13 @@ function RoseLegend() {
 
 /**
  * The rose over its optional satellite backdrop, with the figure's own
- * controls: the Map toggle, Expand, the legend, and — once the camera has
- * been panned or zoomed away — Re-centre. One component for the inline
- * detail pane AND the full-screen sheet, so the two can never disagree
- * about behaviour.
+ * controls: the Map toggle, the maximise/restore control on the map's own
+ * corner (one button, one place — press to fill the screen, press again to
+ * come back; the browser Fullscreen API mapbox's own control rides on does
+ * not exist on iPhones, so the "full screen" is the app's FullScreenSheet),
+ * the legend, and — once the camera has been panned or zoomed away —
+ * Re-centre. One component for the inline detail pane AND the full-screen
+ * sheet, so the two can never disagree about behaviour.
  *
  * While the map is shown the rose stops taking pointer events: drags and
  * pinches belong to the map (inline, touch panning takes two fingers so one
@@ -491,7 +494,8 @@ function RoseFigure({
   distanceText,
   showMap,
   onShowMapChange,
-  onExpand,
+  expanded = false,
+  onToggleExpand,
   cooperativeGestures = true,
   className,
 }: {
@@ -503,8 +507,11 @@ function RoseFigure({
   /** Lifted to the panel so the inline figure and the sheet stay in step. */
   showMap: boolean;
   onShowMapChange: (on: boolean) => void;
-  /** Renders the Expand control (absent inside the sheet, which IS it). */
-  onExpand?: () => void;
+  /** Whether this instance IS the full-screen one (flips the control's
+   * glyph from maximise to restore). */
+  expanded?: boolean;
+  /** The maximise/restore control's action. */
+  onToggleExpand?: () => void;
   /** Two-finger touch pan — on inline maps embedded in the scrolling page. */
   cooperativeGestures?: boolean;
   className?: string;
@@ -566,17 +573,6 @@ function RoseFigure({
             Map
           </ToggleButton>
         ) : null}
-        {onExpand ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Show this thermal full screen"
-            onPress={onExpand}
-          >
-            <ExpandIcon />
-            Expand
-          </Button>
-        ) : null}
         {/* In the toolbar, not floated at the figure's foot: stacked, the
             pinned pane clips the figure's bottom edge off screen, and an
             affordance to find your way back must not need finding itself. */}
@@ -590,10 +586,41 @@ function RoseFigure({
           </Button>
         ) : null}
       </div>
+      {/* The map's own maximise/restore control, mapbox-style on the map's
+          corner: ONE button in ONE place, whose glyph flips — press to take
+          the whole screen, press the same button to come back. Shown while
+          the map is (or full screen, so the way back never disappears if the
+          map is toggled off in there). */}
+      {onToggleExpand && (showMap || expanded) ? (
+        <div className="absolute top-8 right-0 print:hidden">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label={expanded ? "Restore map size" : "Maximise map"}
+            onPress={onToggleExpand}
+          >
+            {expanded ? <CollapseIcon /> : <ExpandIcon />}
+          </Button>
+        </div>
+      ) : null}
       <div className="absolute top-0 right-0">
         <RoseLegend />
       </div>
     </div>
+  );
+}
+
+/** Four corners pulling in — ExpandIcon's inverse, for the restore state of
+ * the map's maximise control. */
+function CollapseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path
+        d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -788,7 +815,7 @@ export function ThermalsPanel({
             distanceText={(m) => altWithUnit(m)}
             showMap={showMap}
             onShowMapChange={setShowMap}
-            onExpand={() => setExpanded(true)}
+            onToggleExpand={() => setExpanded(true)}
           />
           <div className="space-y-3 text-sm">
             <ul className="space-y-2">
@@ -1007,6 +1034,8 @@ export function ThermalsPanel({
               distanceText={(m) => altWithUnit(m)}
               showMap={showMap}
               onShowMapChange={setShowMap}
+              expanded
+              onToggleExpand={() => setExpanded(false)}
               cooperativeGestures={false}
               className="max-w-[min(100%,calc(100dvh-8rem))]"
             />
