@@ -234,6 +234,26 @@ export async function invalidateWeather(
 
 export type WeatherStoreEnv = Pick<Env, "DB">;
 
+/**
+ * Did this write fail because the task no longer exists?
+ *
+ * The fetch takes an HTTP round trip, and nothing stops an organiser (or the
+ * e2e reseed) deleting the task while it is in flight — the ON DELETE CASCADE
+ * removes the weather row, and the result write then fails its foreign key.
+ * That is the fetch outliving the task, an expected outcome of scheduling
+ * background work, not a fault worth a log line. `task_id → task` is the
+ * table's ONLY foreign key, so an FK failure on a task_weather write can
+ * mean nothing else.
+ */
+function isVanishedTaskError(err: unknown): boolean {
+  const seen = new Set<unknown>();
+  for (let e = err; e instanceof Error && !seen.has(e); e = e.cause as Error) {
+    seen.add(e);
+    if (/FOREIGN KEY constraint failed/i.test(e.message)) return true;
+  }
+  return false;
+}
+
 /** Structural view of a Hono context — see ScoreStoreContext. */
 export interface WeatherStoreContext {
   env: Env;
@@ -289,6 +309,7 @@ async function ensureWeatherRow(db: D1Database, taskId: number): Promise<void> {
       .bind(taskId)
       .run();
   } catch (err) {
+    if (isVanishedTaskError(err)) return;
     console.error("ensureWeatherRow failed", err, { taskId });
   }
 }
@@ -405,6 +426,7 @@ async function storeWeather(
       )
       .run();
   } catch (err) {
+    if (isVanishedTaskError(err)) return;
     console.error("task_weather store write failed", err, { taskId });
   }
 }
@@ -460,6 +482,7 @@ async function storeWeatherFailure(
       )
       .run();
   } catch (err) {
+    if (isVanishedTaskError(err)) return;
     console.error("task_weather failure write failed", err, { taskId });
   }
 }

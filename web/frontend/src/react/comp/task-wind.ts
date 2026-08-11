@@ -9,17 +9,22 @@
  * **One vector for the whole task, deliberately.** A task that hasn't been
  * flown has no per-leg timing to hang hourly wind on — nobody knows when the
  * field will be on leg 4 — so pretending to a per-leg wind would be inventing
- * precision. The mean over the task's window at flying height is the honest
- * summary, and the UI says as much. (Once a task HAS been flown, the field
- * analysis computes real per-leg wind from the pilots' own circling; that is a
- * different, better number for a different, later question.)
+ * precision. The combined wind over the task's window at flying height is the
+ * honest summary, and the UI says as much. (Once a task HAS been flown, the
+ * field analysis computes real per-leg wind from the pilots' own circling;
+ * that is a different, better number for a different, later question.)
+ *
+ * The hourly estimates are combined by the engine's `combineWindEstimates` —
+ * the ONE policy every wind-reporting surface shares (median magnitude,
+ * vector-mean direction) — so this page and the field-analysis report cannot
+ * disagree about the same wind.
  *
  * Wind direction is degrees the wind blows FROM, matching the engine's weather
  * module and every met convention; speeds are km/h, converted at the display
  * boundary like the other weather charts.
  */
 import {
-  circularMeanWind,
+  combineWindEstimates,
   flyingHeightLevel,
   type TaskWeather,
 } from "@glidecomp/engine";
@@ -28,10 +33,10 @@ export interface TaskWind {
   /** Degrees the wind blows FROM, 0–360 true. */
   fromDeg: number;
   speedKmh: number;
-  /** How many hourly samples went into the mean. */
+  /** How many hourly samples went into the combined wind. */
   hours: number;
   /**
-   * Which part of the column the mean came from. `flying` is a pressure level
+   * Which part of the column the wind came from. `flying` is a pressure level
    * near typical thermal height; `surface` is screen height — all some
    * datasets carry (ERA5 has no pressure-level winds), and a much weaker
    * proxy for what a glider feels, so the UI labels it.
@@ -55,8 +60,9 @@ export interface LegWind {
  * Reduce a task's modelled weather to a single flying-height wind.
  *
  * Prefers pressure-level winds and falls back to surface only when NO hour has
- * a usable level — never mixing the two into one mean, which would average
- * numbers that mean different things. Returns null when neither is available.
+ * a usable level — never mixing the two into one combination, which would
+ * average numbers that mean different things. Returns null when neither is
+ * available.
  */
 export function taskWindFromWeather(weather: TaskWeather | null): TaskWind | null {
   if (!weather || weather.hours.length === 0) return null;
@@ -81,13 +87,13 @@ export function taskWindFromWeather(weather: TaskWeather | null): TaskWind | nul
 
   const useLevels = levelSamples.length > 0;
   const samples = useLevels ? levelSamples : surfaceSamples;
-  const mean = circularMeanWind(samples);
-  if (!mean) return null;
+  const combined = combineWindEstimates(samples);
+  if (!combined) return null;
 
   return {
-    fromDeg: mean.direction,
-    speedKmh: mean.speed,
-    hours: mean.n,
+    fromDeg: combined.direction,
+    speedKmh: combined.speed,
+    hours: combined.n,
     level: useLevels ? "flying" : "surface",
     heightM: useLevels ? Math.round(heightSum / levelSamples.length) : null,
   };

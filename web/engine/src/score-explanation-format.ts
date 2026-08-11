@@ -12,16 +12,17 @@ import type { ClassContextInput } from './score-explanation-types';
 // Formatting helpers (fixed metric — the UI can localise via formatTime)
 // ---------------------------------------------------------------------------
 
-export function km(meters: number, decimals = 1): string {
-  return `${(meters / 1000).toFixed(decimals)} km`;
-}
+// km lives in its own module because track-quality.ts shares it, and that file
+// is a scoring root — see the note in format-distance.ts. Re-exported here so
+// the section builders keep importing their formatting from one place.
+export { km, type KmOptions } from './format-distance';
 
 export function pts(points: number): string {
   return `${fmtPoints(points)} pts`;
 }
 
 /**
- * Format a point value at the spec's one-decimal precision (S7F §11), dropping
+ * Format a point value at the spec's one-decimal precision (S7F §12), dropping
  * a trailing ".0" so whole scores read as whole numbers.
  */
 export function fmtPoints(points: number): string {
@@ -57,7 +58,7 @@ const VALIDITY_MIN_DECIMALS = 2;
 const VALIDITY_MAX_DECIMALS = 5;
 
 /** The validity factors in play: the three S7F basics, plus the stopped-task
- * factor (§12.3.3) when the task was stopped. */
+ * factor (§13.4.3) when the task was stopped. */
 function validityFactors(v: ClassContextInput['task_validity']): number[] {
   return [v.launch, v.distance, v.time, ...(v.stopped !== undefined ? [v.stopped] : [])];
 }
@@ -119,6 +120,20 @@ export function reconcileWithAvailable(
     if (r.reconciles) return { availStr, ...r };
   }
   return { availStr: fmtPoints(available), decimals: minDecimals, reconciles: false };
+}
+
+/**
+ * The tail of a printed component equation: "= X" when the display-rounded
+ * figures reconcile with the published points, and the honest "≈ X — …"
+ * hedge when even the maximum precision does not (inconsistent stored data).
+ * One spelling for every section, so the cards never disagree about how they
+ * hedge; anything a caller needs after it (time's "(times in hours)") is
+ * appended by the caller.
+ */
+export function eqResult(reconciles: boolean, points: number): string {
+  return reconciles
+    ? `= ${fmtPoints(points)}`
+    : `≈ ${fmtPoints(points)} — the figures are shown rounded; the points come from their full precision`;
 }
 
 /** A km figure at the given precision, as the number the reader sees. */

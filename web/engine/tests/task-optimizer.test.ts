@@ -11,7 +11,7 @@ import {
   getOptimizedSegmentDistances,
 } from '../src/task-optimizer';
 import { parseXCTask, type XCTask, type Turnpoint } from '../src/xctsk-parser';
-import { andoyerDistance, destinationPoint } from '../src/geo';
+import { ellipsoidDistance, destinationPoint } from '../src/geo';
 
 function makeTurnpoint(name: string, lat: number, lon: number, radius: number, type?: string): Turnpoint {
   return {
@@ -57,11 +57,13 @@ describe('task optimizer — iterative convergence', () => {
     const task = parseXCTask(taskContent);
     const distance = calculateOptimizedTaskDistance(task);
 
-    // The old single-pass greedy gave 77.513 km.
-    // Iterative convergence should give a shorter distance.
-    expect(distance / 1000).toBeLessThan(77.5);
+    // The route starts at the SSS cylinder (r=3000, no TAKEOFF row), so per
+    // §7.2 it is measured from the SSS CENTRE: the old edge-measured
+    // single-pass greedy gave 77.513 km, iterative convergence 77.3 km, and
+    // the centre rule adds the 3 km radius on top of the converged figure.
+    expect(distance / 1000).toBeLessThan(77.5 + 3.0);
     // But still reasonable (not collapsed)
-    expect(distance / 1000).toBeGreaterThan(70);
+    expect(distance / 1000).toBeGreaterThan(70 + 3.0);
   });
 
   it('should converge: total distance decreases monotonically', () => {
@@ -72,10 +74,15 @@ describe('task optimizer — iterative convergence', () => {
     const task = parseXCTask(taskContent);
     const path = calculateOptimizedTaskLine(task);
 
-    // Each point should lie on its turnpoint's cylinder perimeter
-    for (let i = 0; i < task.turnpoints.length; i++) {
+    // The first point is the launch CENTRE (§7.2); every other
+    // point should lie on its turnpoint's cylinder perimeter.
+    const first = task.turnpoints[0];
+    expect(
+      ellipsoidDistance(first.waypoint.lat, first.waypoint.lon, path[0].lat, path[0].lon),
+    ).toBeLessThan(1.0);
+    for (let i = 1; i < task.turnpoints.length; i++) {
       const tp = task.turnpoints[i];
-      const dist = andoyerDistance(tp.waypoint.lat, tp.waypoint.lon, path[i].lat, path[i].lon);
+      const dist = ellipsoidDistance(tp.waypoint.lat, tp.waypoint.lon, path[i].lat, path[i].lon);
       expect(Math.abs(dist - tp.radius)).toBeLessThan(1.0); // within 1m of cylinder
     }
   });
@@ -134,11 +141,12 @@ describe('task optimizer — cylinder tolerance', () => {
       makeTurnpoint('B', 47.1, 11.0, 500, 'ESS'),
     ]);
 
-    // Default is undefined (0.5% applied in detectCylinderCrossings)
+    // Default is undefined; the field is round-trip-only — scoring uses the
+    // fixed S7F 2026 ±5 m band regardless of what a task file declares.
     expect(task.cylinderTolerance).toBeUndefined();
 
-    // Can be set explicitly
-    task.cylinderTolerance = 0.001; // Cat 1
+    // Can be set explicitly (and survives, even though scoring ignores it)
+    task.cylinderTolerance = 0.001;
     expect(task.cylinderTolerance).toBe(0.001);
   });
 });

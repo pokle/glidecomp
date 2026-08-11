@@ -170,7 +170,8 @@ export interface CategoricalReportSeries extends ReportSeriesBase {
 export interface WindHourlySeries extends ReportSeriesBase {
   kind: 'wind-hourly';
   hours: { t: string; speedKmh: number; directionDeg: number; n: number }[];
-  /** Vector mean over the whole task (the table's "Whole task" row). */
+  /** Combined wind over the whole task (the table's "Whole task" row) —
+   * median magnitude, vector-mean direction (stats.ts combineWindEstimates). */
   wholeTask: { speedKmh: number; directionDeg: number; n: number } | null;
 }
 
@@ -516,7 +517,7 @@ export type SignConsistency = 'consistent' | 'leaning' | 'split' | 'quiet';
 
 export interface CompAggregateReport {
   taskLabels: string[];
-  /** Comp standings: total score across tasks, rank 1 = best. */
+  /** Comp scores: total score across tasks, rank 1 = best. */
   pilots: { key: string; name: string; taskCount: number; totalScore: number; rank: number }[];
   /** Registry order (union across tasks, first-seen order). */
   metrics: CompMetricAggregate[];

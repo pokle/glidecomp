@@ -86,6 +86,20 @@ describe("AnalysisBasis", () => {
     expect(out).toContain("23%");
     expect(out).toContain("39%");
   });
+
+  /**
+   * Reading order, worst to best use of the air — not the order the fields sit
+   * in on `FieldAirtimeSplit`. The rounding still runs in field order, so which
+   * phase collects the largest remainder does not depend on the layout: 37.6 /
+   * 23.4 / 39.0 rounds to 38 / 23 / 39 either way.
+   */
+  it("orders the phases searching, climbing, gliding", () => {
+    const out = html({ ...OLD_BASIS, airtimeSplit: SPLIT });
+    expect(out.indexOf("searching")).toBeLessThan(out.indexOf("climbing"));
+    expect(out.indexOf("climbing")).toBeLessThan(out.indexOf("gliding"));
+    // Each row is a label at the bar's start and the percentage at its end.
+    expect(out.indexOf("climbing")).toBeLessThan(out.indexOf("38%"));
+  });
 });
 
 describe("AnalysisBasis excluded pilots", () => {
@@ -102,7 +116,7 @@ describe("AnalysisBasis excluded pilots", () => {
   it("keeps the count but sends the names to the footnote", () => {
     const out = html(OLD_BASIS, EIGHT);
     expect(out).toContain("8");
-    expect(out).toContain("in the standings but not in this analysis");
+    expect(out).toContain("in the scores but not in this analysis");
     expect(out).not.toContain("Pilot 0");
     expect(out).not.toContain("no tracklog to analyse");
     // ...via a link that lands on the footnote's heading.
@@ -111,11 +125,11 @@ describe("AnalysisBasis excluded pilots", () => {
 
   it("says nothing at all when every pilot was analysed", () => {
     const out = html(OLD_BASIS, []);
-    expect(out).not.toContain("in the standings");
+    expect(out).not.toContain("in the scores");
     expect(out).not.toContain("excluded-pilots");
   });
 
   it("keeps the singular readable for one pilot", () => {
-    expect(html(OLD_BASIS, EIGHT.slice(0, 1))).toContain("pilot is in the standings");
+    expect(html(OLD_BASIS, EIGHT.slice(0, 1))).toContain("pilot is in the scores");
   });
 });

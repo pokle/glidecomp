@@ -48,7 +48,7 @@ describe("loadCompDetail", () => {
         body: { comp_id: "abc", name: "Corryong", timezone: "Australia/Melbourne", tasks: [] },
       },
       "/api/comp/abc/scores": {
-        body: { comp_id: "abc", tasks: [], standings: [], computed_at: null, stale: false },
+        body: { comp_id: "abc", tasks: [], class_scores: [], computed_at: null, stale: false },
         etag: 'W/"v1"',
       },
     });

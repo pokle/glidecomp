@@ -111,7 +111,7 @@ export default function ScoreDetailMap({
   // the fixes (re)load, not just when the scrub position moves.
   useEffect(() => {
     if (!provider) return;
-    provider.setTrackScrub?.(scrubIndex ?? null);
+    provider.setTrackScrub(scrubIndex ?? null);
   }, [provider, fixes, scrubIndex]);
 
   useEffect(() => {
@@ -124,17 +124,17 @@ export default function ScoreDetailMap({
 
   useEffect(() => {
     if (!provider || !openDistanceLine) return;
-    provider.setOpenDistanceLines?.([openDistanceLine]);
+    provider.setOpenDistanceLines([openDistanceLine]);
     return () => {
-      if (!destroyedRef.current) provider.clearOpenDistanceLines?.();
+      if (!destroyedRef.current) provider.clearOpenDistanceLines();
     };
   }, [provider, openDistanceLine]);
 
   useEffect(() => {
     if (!provider || !bestProgressRoute) return;
-    provider.setBestProgressRoute?.(bestProgressRoute);
+    provider.setBestProgressRoute(bestProgressRoute);
     return () => {
-      if (!destroyedRef.current) provider.clearBestProgressRoute?.();
+      if (!destroyedRef.current) provider.clearBestProgressRoute();
     };
   }, [provider, bestProgressRoute]);
 

@@ -11,13 +11,17 @@
  *
  * Black and white by construction: everything is `currentColor` at varying
  * opacity and stroke weight, so it inherits the page's foreground in both
- * themes and prints correctly. Nothing here encodes meaning in colour.
+ * themes and prints correctly. Nothing here encodes meaning in colour — the
+ * one splash of it, the highlighter over the turnpoint under the reader's
+ * attention, states no fact about the task and is gone the moment they look
+ * elsewhere.
  *
  * Interaction (optional): hovering, tapping or tabbing to a turnpoint raises
  * it in the diagram and fires `onTurnpointHover` / `onTurnpointSelect`, so a
  * host page can tie the diagram to whatever else is on screen (the task page
- * highlights the matching row of its turnpoint listing). Without a handler
- * the diagram is inert and marked up as a single image.
+ * highlights the matching row of its turnpoint listing, and drives
+ * `highlightIndex` back the other way when the reader is in the table).
+ * Without a handler the diagram is inert and marked up as a single image.
  *
  * SSR-safe: geometry comes from the pure layout module, nothing touches
  * `window`, and coordinates are rounded so the server and client emit the
@@ -136,7 +140,8 @@ export interface TaskDiagramProps {
    * The DIAGRAM gets the vector, not per-leg components: on a geographic
    * drawing you compare the arrow with the legs by eye, which is the thing a
    * map-like view is uniquely good at. The per-leg head/cross/tail numbers
-   * belong on the strip, where every leg is already a separate row.
+   * belong in the turnpoint table (TurnpointsTable), where every leg is
+   * already a separate row.
    */
   wind?: { fromDeg: number; speedKmh: number } | null;
 }
@@ -214,7 +219,14 @@ export function TaskDiagram({
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       width={layout.width}
       height={layout.height}
-      className={cn("text-foreground", className)}
+      // --tp-hl is the highlighter ink, declared once here so the dab behind
+      // the marker and the swipe behind the name are the same colour. Pen
+      // yellow on paper in light mode; in dark mode a deep yellow the page's
+      // light foreground still reads against.
+      className={cn(
+        "text-foreground [--tp-hl:#fde047d9] dark:[--tp-hl:#a16207d9]",
+        className
+      )}
       // A decorative diagram is hidden outright; otherwise it is one image
       // with the route as its text alternative (individual turnpoints add
       // their own names below when they are interactive).
@@ -300,29 +312,46 @@ export function TaskDiagram({
 
       {/* Names. Painted over the geometry with a background-coloured halo so a
           label crossing a cylinder arc stays readable. */}
-      {layout.labels.map((textLabel) => (
-        <text
-          key={`label-${textLabel.index}`}
-          x={textLabel.x}
-          y={textLabel.y}
-          textAnchor={textLabel.anchor}
-          fontSize={labelFontSize}
-          className={cn(
-            "select-none fill-current",
-            active === textLabel.index ? "font-semibold" : "font-medium"
-          )}
-          style={{
-            // Halo: paint the background colour underneath the glyphs so a
-            // name crossing a cylinder arc or a leg stays readable.
-            paintOrder: "stroke",
-            stroke: "var(--background)",
-            strokeWidth: labelFontSize * 0.3,
-            strokeLinejoin: "round",
-          }}
-        >
-          {textLabel.text}
-        </text>
-      ))}
+      {layout.labels.map((textLabel) => {
+        const isActive = active === textLabel.index;
+        return (
+          <g key={`label-${textLabel.index}`}>
+            {/* Highlighter swipe. Drawn under the name and slightly askew, so
+                the reader's eye lands on the same turnpoint the table row
+                they are pointing at names. */}
+            {isActive ? (
+              <LabelHighlight
+                label={textLabel}
+                fontSize={labelFontSize}
+                frameWidth={layout.width}
+              />
+            ) : null}
+            <text
+              x={textLabel.x}
+              y={textLabel.y}
+              textAnchor={textLabel.anchor}
+              fontSize={labelFontSize}
+              className={cn(
+                "select-none fill-current",
+                isActive ? "font-semibold" : "font-medium"
+              )}
+              style={{
+                // Halo: paint the background colour underneath the glyphs so
+                // a name crossing a cylinder arc or a leg stays readable —
+                // except on the highlighted name, where the ink itself is the
+                // bed the glyphs sit in and a background halo would scrub it
+                // back off around every letter.
+                paintOrder: "stroke",
+                stroke: isActive ? "var(--tp-hl)" : "var(--background)",
+                strokeWidth: labelFontSize * 0.3,
+                strokeLinejoin: "round",
+              }}
+            >
+              {textLabel.text}
+            </text>
+          </g>
+        );
+      })}
 
       {/* Hit targets last so they sit on top of everything they select. Each is
           ≥ 24 units across (WCAG 2.5.8 — the radius is half of that).
@@ -439,6 +468,57 @@ function WindRoseLabel({
   );
 }
 
+/**
+ * The highlighter swipe behind an active turnpoint's name.
+ *
+ * The width is ESTIMATED from the character count rather than measured: an
+ * SVG text box can only be measured in a browser, and this diagram is server-
+ * rendered. A swipe a little wide or a little narrow still reads as a
+ * highlighter; a hydration mismatch would not. Names are already truncated to
+ * the preset's `labelMaxChars`, so the estimate cannot run away.
+ */
+function LabelHighlight({
+  label,
+  fontSize,
+  frameWidth,
+}: {
+  label: { text: string; x: number; y: number; anchor: "start" | "middle" | "end" };
+  fontSize: number;
+  /** Diagram width; the swipe is kept inside it rather than cut off by the
+   *  SVG viewport, which reads as a rectangle running off the page. */
+  frameWidth: number;
+}) {
+  // 0.6em per character suits the mostly-uppercase waypoint names in the UI
+  // font; the padding hides the error either way.
+  const width = round2(label.text.length * fontSize * 0.6 + fontSize * 0.7);
+  const height = round2(fontSize * 1.25);
+  const rawLeft =
+    label.anchor === "start"
+      ? label.x - fontSize * 0.35
+      : label.anchor === "end"
+        ? label.x - width + fontSize * 0.35
+        : label.x - width / 2;
+  const left = Math.min(Math.max(rawLeft, 0.5), Math.max(0.5, frameWidth - width - 0.5));
+  // y is the text baseline; the swipe sits mostly above it, as a pen stroke
+  // over a printed word does.
+  const top = label.y - fontSize * 0.95;
+  const cx = round2(left + width / 2);
+  const cy = round2(top + height / 2);
+
+  return (
+    <rect
+      x={round2(left)}
+      y={round2(top)}
+      width={width}
+      height={height}
+      rx={round2(fontSize * 0.22)}
+      transform={`rotate(-1.5 ${cx} ${cy})`}
+      fill="var(--tp-hl)"
+      stroke="none"
+    />
+  );
+}
+
 /** Role glyph for one turnpoint — see the marker comment in TaskDiagram. */
 function TurnpointMarker({
   turnpoint,
@@ -459,14 +539,15 @@ function TurnpointMarker({
   return (
     <g>
       {raised ? (
-        // Focus/hover halo: a wider soft ring, so the raised turnpoint is
-        // obvious without changing hue.
-        <circle
+        // Focus/hover mark: a dab of highlighter under the marker, wider than
+        // tall and set a shade off-square the way a pen leaves it.
+        <ellipse
           cx={tag.x}
           cy={tag.y}
-          r={round2(ringR * 1.7)}
-          fill="currentColor"
-          fillOpacity={0.12}
+          rx={round2(ringR * 2.1)}
+          ry={round2(ringR * 1.6)}
+          transform={`rotate(-8 ${round2(tag.x)} ${round2(tag.y)})`}
+          fill="var(--tp-hl)"
           stroke="none"
         />
       ) : null}

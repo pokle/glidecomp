@@ -41,60 +41,61 @@ const pilotClassesArray = z
 
 const gapParamsSchema = z
   .object({
-    nominalLaunch: z.number().min(0).max(1),
     // Optional: when omitted the scorer auto-computes it per task
     // (70% of the optimized task distance), preserving the historical
     // default. Set it to pin a fixed comp-wide nominal distance.
     nominalDistance: z.number().positive().nullable().optional(),
-    nominalGoal: z.number().min(0).max(1),
     nominalTime: z.number().positive(),
     minimumDistance: z.number().positive(),
     scoring: z.enum(["PG", "HG"]),
     useLeading: z.boolean(),
     useArrival: z.boolean(),
-    // Leading coefficient variant (AirScore lc_formula). Optional; the
-    // per-category default is 'weighted' for PG and 'classic' for HG (2024
-    // spec, issue #258) when omitted.
-    leadingFormula: z.enum(["classic", "weighted"]).optional(),
-    // Leading-weight generation (paragliding only; issue #257). Optional; the
-    // default is date-based — new PG comps default to 's7f2024' and older ones
-    // to 'gap2020' (AirScore parity) — resolved in resolveCompGapParams.
-    leadingWeightFormula: z.enum(["gap2020", "s7f2020", "s7f2024"]).optional(),
-    // S7F 2024 §10 LeadingTimeRatio (0–0.5, spec default 0.26). Optional;
-    // only used for PG under the 's7f2024' leadingWeightFormula.
-    leadingTimeRatio: z.number().min(0).max(0.5).optional(),
-    // Time-points exponent (FAI S7F §11.2), decoupled from the leading
-    // variant (issue #258). Optional; the per-category default is '5/6'.
-    // When omitted for a comp that saved a leadingFormula, the scorer keeps
-    // the exponent that formula historically implied (classic → 2/3,
-    // weighted → 5/6) so older saved comps keep their scores.
-    timePointsExponent: z.enum(["2/3", "5/6"]).optional(),
+    // S7F 2026 §11 LeadingTimeRatio (0–0.26). Optional; the scorer defaults
+    // per discipline (26% PG, 17.5% HG).
+    leadingTimeRatio: z.number().min(0).max(0.26).optional(),
     // Where scored distance begins. Optional; defaults to 'takeoff'
     // (FAI CIVL GAP / PWCA) when omitted. 'start' excludes the
     // take-off→SSS leg (HGFA wording / "Move Origin").
     distanceOrigin: z.enum(["takeoff", "start"]).optional(),
-    // HG distance difficulty (FAI S7F §11.1.1). Optional; defaults to true.
+    // HG distance difficulty (S7F 2026 §12.1.1). Optional; defaults to true.
     // No effect on paragliding.
     useDistanceDifficulty: z.boolean().optional(),
-    // HG jump-the-gun (FAI S7F §12.2): seconds of early start per 1 penalty
+    // HG jump-the-gun (S7F 2026 §13.3): seconds of early start per 1 penalty
     // point (X) and the maximum seconds early (Y) before the pilot is
     // scored for minimum distance. Optional; the scorer defaults to the
     // spec's X=2 / Y=300. PG early starts are handled without settings
     // (scored launch→SSS only).
     jumpTheGunFactor: z.number().positive().max(3600).optional(),
     jumpTheGunMaxSeconds: z.number().min(0).max(86400).optional(),
-    // HG "ESS but not goal" (FAI S7F §12.1): fraction of time and arrival
+    // HG "ESS but not goal" (S7F 2026 §13.2): fraction of time and arrival
     // points KEPT by a pilot who reaches ESS but lands before goal.
     // Optional; the scorer defaults to the spec's recommended 0.8. The spec
     // fixes PG at 0 — the engine ignores the value for PG comps.
     essNotGoalFactor: z.number().min(0).max(1).optional(),
-    // PG score-back time in seconds (FAI S7F §5.6, §12.3.1): when a task is
-    // stopped, the PG stop time is the announcement minus this. Optional;
-    // the scorer defaults to the spec's 300 s (5 minutes). HG score-back is
-    // one start-gate interval (or 15 min single-gate) and has no setting.
-    scoreBackTime: z.number().min(0).max(3600).optional(),
+    // ---- Legacy keys from pre-2026 editions ----
+    // Accepted so older clients and re-submitted stored payloads don't
+    // hard-fail, then STRIPPED: the 2026 edition fixes these values
+    // (nominal launch 96%, nominal goal 30%, score-back HG 15 min / PG
+    // 5 min) and pins the formula variants per discipline, so nothing may
+    // depend on them. resolveCompGapParams ignores them in old stored rows
+    // the same way.
+    nominalLaunch: z.unknown().optional(),
+    nominalGoal: z.unknown().optional(),
+    scoreBackTime: z.unknown().optional(),
+    leadingFormula: z.unknown().optional(),
+    leadingWeightFormula: z.unknown().optional(),
+    timePointsExponent: z.unknown().optional(),
   })
-  .strict();
+  .strict()
+  .transform(({
+    nominalLaunch: _nl,
+    nominalGoal: _ng,
+    scoreBackTime: _sb,
+    leadingFormula: _lf,
+    leadingWeightFormula: _lwf,
+    timePointsExponent: _tpe,
+    ...kept
+  }) => kept);
 
 // Competition-local timezone — see migration 0011. Anything the runtime's
 // Intl accepts (IANA names like "Australia/Melbourne"); null clears the
@@ -113,7 +114,7 @@ export const timezoneSchema = z
 export const scoringFormatSchema = z.enum(["gap", "open_distance"]);
 
 // Competition series-scoring method — see migration 0022. "total" sums all
-// task scores; "ftv" (Fixed Total Validity, S7F §15) counts only each pilot's
+// task scores; "ftv" (Fixed Total Validity, S7F §16) counts only each pilot's
 // best tasks up to a fixed validity. ftv_factor is the discard fraction
 // (0 < f < 1); null auto-derives it from the task count (0.2 for ≤6, 0.25 ≥7).
 export const seriesScoringSchema = z.enum(["total", "ftv"]);
@@ -146,6 +147,7 @@ export const updateCompSchema = z.object({
   ftv_factor: ftvFactorSchema.nullable().optional(),
   timezone: timezoneSchema.nullable().optional(),
   open_igc_upload: z.boolean().optional(),
+  open_registration: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
 });
 
@@ -165,7 +167,7 @@ export const upsertPilotStatusSchema = z.object({
 // ── Manual flight (per-task, per-pilot) validators ──
 //
 // A manual flight scores a track-less pilot from the last turnpoint they
-// legally reached plus where they landed (FAI S7F §8.4). last_reached_tp_index
+// legally reached plus where they landed (FAI S7F §9.2.2). last_reached_tp_index
 // is an index into the FULL task turnpoints[] (Start/SSS … Goal); the server
 // computes the made-good distance via the engine. duration_seconds is the
 // speed-section time, only meaningful when the pilot is in goal.
@@ -220,6 +222,9 @@ export const trackQualityOverrideSchema = z.object({
 
 // ── Comp pilot validators ──
 
+/** Shared by the comp-pilot ranking date and the task validators below. */
+const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
 const optionalText = z.string().max(MAX_TEXT).nullable().optional();
 
 /**
@@ -243,6 +248,30 @@ export const compPilotFieldsSchema = z.object({
   pilot_class: pilotClassString,
   team_name: optionalText,
   driver_contact: optionalText,
+  // The pilot's WPRS score, copied onto the roster (never looked up live —
+  // see migrations 0029/0030) and overridable by the organiser. The two source
+  // fields say which CIVL list and which monthly snapshot it came from; both
+  // null means a hand-entered number.
+  //
+  // REAL and not an integer: CIVL publishes one decimal, and near the top of a
+  // list that decimal is the whole difference between two pilots. The ceiling
+  // is far above the best score ever published (431.2 in August 2026) and only
+  // exists so the column cannot be used as free numeric storage.
+  wprs_points: z.number().positive().max(10000).nullable().optional(),
+  civl_ranking_slug: z
+    .string()
+    .max(MAX_TEXT)
+    // A civlcomps.org URL segment ('hang-gliding-class-1-xc'). Constrained
+    // because it is rendered as the source of a published number; free text
+    // here would let a roster import label a rank with anything at all.
+    .regex(/^[a-z0-9-]+$/, "must be a CIVL ranking list slug")
+    .nullable()
+    .optional(),
+  civl_ranking_date: z
+    .string()
+    .regex(isoDateRegex, "must be an ISO date (YYYY-MM-DD)")
+    .nullable()
+    .optional(),
   first_start_order: z.number().int().positive().nullable().optional(),
 });
 
@@ -269,9 +298,24 @@ export const bulkPilotsSchema = z.object({
     .max(250),
 });
 
-// ── Task validators ──
+/**
+ * The roster to look up against the CIVL ranking lists — the grid's CURRENT
+ * contents, which is why it is a body rather than the stored roster. Only the
+ * two fields the matching uses are accepted; the same 250-row cap applies, and
+ * it bounds the bound-parameter count of the lookup's single query.
+ */
+export const civlRankingLookupSchema = z.object({
+  pilots: z
+    .array(
+      z.object({
+        name: z.string().max(MAX_TEXT),
+        civl_id: optionalText,
+      })
+    )
+    .max(250),
+});
 
-const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+// ── Task validators ──
 
 // ── XCTask (xctsk) — strict schema, SEC-12 ──
 //
@@ -372,7 +416,7 @@ export const updateTaskSchema = z.object({
     .optional(),
   pilot_classes: pilotClassesArray.optional(),
   xctsk: xctskSchema.nullable().optional(),
-  // Stopped tasks (issue #264, S7F §12.3): the task stop announcement time
+  // Stopped tasks (issue #264, S7F §13.4): the task stop announcement time
   // as an ISO 8601 UTC datetime. Setting it scores the task as stopped;
   // null clears the stop (task scored as run to completion).
   stop_announcement_time: z
@@ -384,4 +428,9 @@ export const updateTaskSchema = z.object({
   // by 2pm, glass off at 3". Longer than MAX_TEXT because this is prose, not a
   // label; not a scoring input, so no format is imposed beyond a length cap.
   weather_notes: z.string().max(MAX_WEATHER_NOTES).optional(),
+  // "This task is done — stop sending me files." Blocks tracks and manual
+  // flights for THIS task only; organisers still upload, so a recovered SD
+  // card does not need the switch flipped twice. Not a scoring input: whether
+  // FURTHER evidence may arrive changes no score that exists.
+  submissions_closed: z.boolean().optional(),
 });

@@ -20,7 +20,7 @@ import type {
   TaskFieldAnalysisData,
 } from "./field-analysis/types";
 import type { WaypointFileRecord } from "@glidecomp/engine";
-import type { ClassStanding, TaskInfo } from "../scores-views";
+import type { CompClassScore, TaskInfo } from "../scores-views";
 import { todayInZone } from "./lib/format";
 import { retry } from "./lib/retry";
 
@@ -92,14 +92,14 @@ export function loadCompetitions(f: FetchFn): Promise<CompetitionsLoaderData> {
 
 // ── /comp/:compId ────────────────────────────────────────────────────────────
 
-/** GET /api/comp/:id/scores — whole-comp standings (see CompScoresSection). */
+/** GET /api/comp/:id/scores — whole-comp scores (see CompScoresSection). */
 export interface CompScores {
   comp_id: string;
   tasks: TaskInfo[];
-  standings: ClassStanding[];
+  class_scores: CompClassScore[];
   computed_at: string | null;
   stale: boolean;
-  /** Series-scoring method the standings were computed with (migration 0022). */
+  /** Series-scoring method the scores were computed with (migration 0022). */
   series_scoring: "total" | "ftv";
   /** FTV comps only: the resolved discard fraction used (0<f<1). */
   ftv_factor?: number | null;
@@ -111,7 +111,7 @@ export interface CompDetailLoaderData {
   scores: CompScores | null;
   scoresEtag: string | null;
   /** "today" as YYYY-MM-DD in the comp timezone, computed server-side so that
-   *  "has this comp finished flying?" — which decides whether the standings or
+   *  "has this comp finished flying?" — which decides whether the scores or
    *  the tasks lead the page — is deterministic across server and client. */
   today: string;
 }

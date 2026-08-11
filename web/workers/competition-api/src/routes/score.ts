@@ -6,17 +6,19 @@ import {
   computeFtvForPilot,
   type FtvTaskStatus,
 } from "@glidecomp/engine";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { audit } from "../audit";
 import { encodeId } from "../sqids";
+import { mapWithConcurrency } from "../lib/concurrency";
+import { computePilotAnalysis } from "../pilot-analysis";
 import {
-  computePilotAnalysis,
-  mapWithConcurrency,
   rankByTotalScore,
   shortHash,
+  type OfficialResultsWire,
+  type StoredOfficialResults,
   type TaskScoreResponse,
 } from "../scoring";
 import {
@@ -40,12 +42,73 @@ import {
  * never hit this path. */
 const COMP_TASK_CONCURRENCY = 3;
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
+/**
+ * Storage shape → wire shape for a task score.
+ *
+ * The wire calls the per-class array `class_scores`, matching the comp-level
+ * endpoint so a consumer can read both with one code path. The STORED blob
+ * (`task_scores.response_json`) still calls it `classes`, and deliberately
+ * keeps doing so:
+ *
+ *  - the store is stale-first, so a row written before this change is still
+ *    SERVED while its revalidation runs. Renaming the stored key would mean
+ *    every such row arrives at a client reading `class_scores` as undefined —
+ *    a task page showing no scores at all until that row happened to be
+ *    recomputed;
+ *  - `routes/pilot-profile.ts` reads the blob with raw SQL
+ *    (`json_each(ts.response_json, '$.classes')`) to get per-task ranks for a
+ *    pilot's profile. A migration that blanked or reshaped the cache would
+ *    empty that column for every task not yet re-read.
+ *
+ * So the rename lives here, at the boundary, and the cache format is left
+ * alone. It is an internal derived cache, not a contract with anyone.
+ */
+function toTaskScoreWire(
+  body: StoredTaskScore | TaskScoreResponse,
+  stale: boolean,
+  official?: OfficialResultsWire | null
+): Record<string, unknown> {
+  const { classes, ...rest } = body;
+  return {
+    ...rest,
+    class_scores: classes,
+    stale,
+    ...(official ? { official_results: official } : {}),
+  };
+}
 
-type HonoEnv = { Bindings: Env; Variables: Variables };
+/**
+ * The task's officially published results (migration 0031, issue #603) in
+ * wire shape: stored comp_pilot ids become the same sqids the score entries
+ * carry, keyed for per-row lookup. Read live from the task row — NOT from
+ * the cached score blob, because official results are display-only and must
+ * never invalidate or ride inside a scoring artefact. Returns null for the
+ * common case (no official record) and for an unreadable column, which is
+ * an annotation not worth failing a scores page over.
+ */
+function officialResultsWire(
+  raw: string | null,
+  alphabet: string
+): OfficialResultsWire | null {
+  if (!raw) return null;
+  try {
+    const stored = JSON.parse(raw) as StoredOfficialResults;
+    if (!Array.isArray(stored.results) || stored.results.length === 0) return null;
+    const ranks: OfficialResultsWire["ranks"] = {};
+    for (const r of stored.results) {
+      ranks[encodeId(alphabet, r.comp_pilot_id)] = { rank: r.rank, total: r.total };
+    }
+    return {
+      source: stored.source ?? "AirScore",
+      comp_url: stored.comp_url ?? null,
+      task_url: stored.task_url ?? null,
+      ranks,
+    };
+  } catch (err) {
+    console.error("unreadable task.official_results", err);
+    return null;
+  }
+}
 
 /**
  * Cache-Control for score responses (matches the SSR plan): signed-in
@@ -56,7 +119,7 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
  * while a live one stays near-realtime; a stale row always gets 0.
  */
 function cacheControl(
-  c: Context<HonoEnv>,
+  c: Context<AuthedEnv>,
   computedAt: string | null,
   stale: boolean
 ): string {
@@ -65,7 +128,7 @@ function cacheControl(
   return `public, max-age=${maxAge}, must-revalidate`;
 }
 
-export const scoreRoutes = new Hono<HonoEnv>()
+export const scoreRoutes = new Hono<AuthedEnv>()
 
   // ── GET /api/comp/:comp_id/task/:task_id/score ── Task scores (public for non-test)
   //
@@ -100,10 +163,14 @@ export const scoreRoutes = new Hono<HonoEnv>()
 
       // Verify task exists, belongs to comp, and has an xctsk
       const task = await c.env.DB.prepare(
-        "SELECT task_id, xctsk FROM task WHERE task_id = ? AND comp_id = ?"
+        "SELECT task_id, xctsk, official_results FROM task WHERE task_id = ? AND comp_id = ?"
       )
         .bind(taskId, compId)
-        .first<{ task_id: number; xctsk: string | null }>();
+        .first<{
+          task_id: number;
+          xctsk: string | null;
+          official_results: string | null;
+        }>();
 
       if (!task) return c.json({ error: "Task not found" }, 404);
 
@@ -113,6 +180,17 @@ export const scoreRoutes = new Hono<HonoEnv>()
           422
         );
       }
+
+      // The official annotation rides OUTSIDE the cached score blob (it is
+      // not a scoring input), so it joins the response — and the ETag, which
+      // is the identity of the served body — at read time.
+      const official = officialResultsWire(
+        task.official_results,
+        c.env.SQIDS_ALPHABET
+      );
+      const officialTag = task.official_results
+        ? `:official:${await shortHash(task.official_results)}`
+        : "";
 
       const row = await readTaskScoreRow(c.env.DB, taskId);
 
@@ -126,7 +204,8 @@ export const scoreRoutes = new Hono<HonoEnv>()
         // stale ETag: 304 while the row is unchanged (one D1 read, no body),
         // 200 the moment the re-score lands — even a no-op re-score whose
         // recomputed state_key is identical.
-        const etagKey = stale ? `${row.state_key}:stale` : row.state_key;
+        const etagKey =
+          (stale ? `${row.state_key}:stale` : row.state_key) + officialTag;
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
@@ -136,7 +215,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
           return c.body(null, 304, headers);
         }
         const body = JSON.parse(row.response_json) as StoredTaskScore;
-        return c.json({ ...body, stale }, 200, headers);
+        return c.json(toTaskScoreWire(body, stale, official), 200, headers);
       }
 
       // Cold — no servable blob. Compute synchronously, store, serve.
@@ -145,8 +224,8 @@ export const scoreRoutes = new Hono<HonoEnv>()
         taskId,
         row?.inputs_rev ?? 0
       );
-      return c.json({ ...response, stale: false }, 200, {
-        ETag: toEtag(stateKey),
+      return c.json(toTaskScoreWire(response, false, official), 200, {
+        ETag: toEtag(stateKey + officialTag),
         "X-Cache": "MISS",
         "Cache-Control": cacheControl(c, response.computed_at, false),
       });
@@ -169,7 +248,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
 
       // Check comp exists and handle test visibility
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test, pilot_classes, scoring_format, series_scoring, ftv_factor FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, pilot_classes, scoring_format, series_scoring, ftv_factor, category FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
@@ -179,6 +258,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
           scoring_format: string;
           series_scoring: string;
           ftv_factor: number | null;
+          category: string | null;
         }>();
 
       if (!comp) return c.json({ error: "Not found" }, 404);
@@ -262,7 +342,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
 
       const anyStale = taskScores.some((t) => t.stale);
       // Oldest constituent compute: the honest "as of" for aggregated
-      // standings. Null for a comp with no scoreable tasks.
+      // scores. Null for a comp with no scoreable tasks.
       const computedAt = taskScores.reduce<string | null>(
         (oldest, t) =>
           oldest === null || t.computed_at < oldest ? t.computed_at : oldest,
@@ -273,7 +353,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
       // from — each task's stored state_key plus the team assignments, with
       // the staleness label folded in (as on the task endpoint) so a
       // stale-labelled body never revalidates a fresh one.
-      // The series-scoring settings change the standings (FTV vs sum, and the
+      // The series-scoring settings change the scores (FTV vs sum, and the
       // discard factor) without touching any per-task state_key, so they must
       // be folded in here or a toggle would serve a stale cached body.
       const compStateString = [
@@ -315,13 +395,25 @@ export const scoreRoutes = new Hono<HonoEnv>()
         calculated_ftv?: number;
       };
 
-      const classStandings: Record<string, Record<string, PilotTotals>> = {};
+      const classTotals: Record<string, Record<string, PilotTotals>> = {};
       // Per class, per task: the day-winner's score (max in the class).
       const classTaskWinner: Record<string, Record<string, number>> = {};
 
       for (const task of taskScores) {
         for (const cls of task.classes) {
-          classStandings[cls.pilot_class] ??= {};
+          // S7F 2026 §16 (PG only): a stopped task with a task validity
+          // under 0.05 (the winner has fewer than 50 points) is excluded
+          // from the competition ranking. It stays on the task's own scores
+          // page — only the comp aggregation skips it.
+          if (
+            comp.category === "pg" &&
+            comp.scoring_format === "gap" &&
+            cls.stopped &&
+            cls.task_validity.task < 0.05
+          ) {
+            continue;
+          }
+          classTotals[cls.pilot_class] ??= {};
           classTaskWinner[cls.pilot_class] ??= {};
           const winnerScore = cls.pilots.reduce(
             (max, p) => Math.max(max, p.total_score),
@@ -329,8 +421,8 @@ export const scoreRoutes = new Hono<HonoEnv>()
           );
           classTaskWinner[cls.pilot_class][task.task_id] = winnerScore;
           for (const pilot of cls.pilots) {
-            if (!classStandings[cls.pilot_class][pilot.comp_pilot_id]) {
-              classStandings[cls.pilot_class][pilot.comp_pilot_id] = {
+            if (!classTotals[cls.pilot_class][pilot.comp_pilot_id]) {
+              classTotals[cls.pilot_class][pilot.comp_pilot_id] = {
                 pilot_name: pilot.pilot_name,
                 comp_pilot_id: pilot.comp_pilot_id,
                 team_name: teamByPilot.get(pilot.comp_pilot_id) ?? null,
@@ -338,7 +430,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
                 tasks: [],
               };
             }
-            const entry = classStandings[cls.pilot_class][pilot.comp_pilot_id];
+            const entry = classTotals[cls.pilot_class][pilot.comp_pilot_id];
             // Default (sum-of-tasks) total; overwritten below under FTV.
             entry.total_score += pilot.total_score;
             entry.tasks.push({
@@ -352,7 +444,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
         }
       }
 
-      // FTV (S7F §15): applies to GAP comps set to FTV with more than one task
+      // FTV (S7F §16): applies to GAP comps set to FTV with more than one task
       // (a single task can't discard anything). Pure re-aggregation over the
       // per-task scores already loaded above — no task is re-scored.
       const ftvActive =
@@ -364,7 +456,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
         : null;
 
       if (ftvActive && ftvFactor !== null) {
-        for (const [clsKey, pilots] of Object.entries(classStandings)) {
+        for (const [clsKey, pilots] of Object.entries(classTotals)) {
           const target = calculatedFtv(
             Object.values(classTaskWinner[clsKey] ?? {}),
             ftvFactor
@@ -392,10 +484,10 @@ export const scoreRoutes = new Hono<HonoEnv>()
         }
       }
 
-      // Build ranked standings per class. rankByTotalScore applies S7A
+      // Build the ranked scores per class. rankByTotalScore applies S7A
       // §5.2.5.4 ties (equal published totals share a rank; no tie-break) to
       // whatever total_score holds — the sum, or the FTV total set above.
-      const standings = Object.entries(classStandings).map(
+      const classScores = Object.entries(classTotals).map(
         ([pilotClass, pilots]) => ({
           pilot_class: pilotClass,
           pilots: rankByTotalScore(Object.values(pilots)).map((p) => ({
@@ -433,7 +525,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
           task_date: t.task_date,
           classes: t.classes.map((cls) => cls.pilot_class),
         })),
-        standings,
+        class_scores: classScores,
         computed_at: computedAt,
         stale: anyStale,
         series_scoring: ftvActive ? "ftv" : "total",
@@ -553,4 +645,7 @@ export const scoreRoutes = new Hono<HonoEnv>()
 export type ServedTaskScore = TaskScoreResponse & {
   computed_at: string;
   stale: boolean;
+  /** The officially published record beside the rescored one (issue #603) —
+   * read live from the task row, absent when no official result is known. */
+  official_results?: OfficialResultsWire;
 };

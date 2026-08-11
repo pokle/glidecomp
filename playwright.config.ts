@@ -1,12 +1,20 @@
 import { defineConfig } from "@playwright/test";
-import { FRONTEND_URL, API_URL, API_READY_URL } from "./e2e/fixtures/stack";
+import { FRONTEND_URL, API_READY_URL } from "./e2e/fixtures/stack";
 
 export default defineConfig({
   testDir: "./e2e",
   // ssr.spec.ts needs the built output served through the real Pages runtime
   // (wrangler pages dev), not this config's SPA dev server — it has its own
   // config (playwright.ssr.config.ts, run via `bun run test:e2e:ssr`).
-  testIgnore: ["**/ssr.spec.ts"],
+  //
+  // e2e/fixtures/ holds the suite's plumbing, and one bun:test file that guards
+  // it. Playwright's default testMatch claims any `*.test.ts` under testDir, and
+  // loading that one fails the whole run before a single spec starts:
+  // `Only URLs with a scheme in: file, data, and node are supported by the
+  // default ESM loader. Received protocol 'bun:'`. It is run by `bun run test`,
+  // not from here. (playwright.ssr.config.ts needs no such line — it selects
+  // with testMatch rather than sweeping the directory.)
+  testIgnore: ["**/ssr.spec.ts", "**/fixtures/**"],
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
   // Sequential. The original reason was the cross-process D1 race (two
@@ -64,10 +72,35 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
+      // The port comes from DEV_FRONTEND_PORT via vite.config.ts, not a CLI
+      // flag: `dev` runs vite under concurrently, which swallows extra args.
       command: "bun run dev:frontend",
       url: FRONTEND_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      env: {
+        // The map specs serve every Mapbox response from recordings and
+        // synthetic tiles (e2e/fixtures/mapbox.ts), so they need no real token
+        // — but they DO need a non-empty one, and that is easy to miss because
+        // a developer's shell usually has the real thing exported.
+        //
+        // With the variable absent, mapbox-gl refuses to construct a Map at
+        // all: no canvas, no controls, no scale bar, so every map assertion
+        // fails on `element(s) not found`, PLACE_SEARCH_AVAILABLE is false so
+        // the geocoder combobox never renders, and analysis/elevation.ts
+        // throws "Mapbox access token is not configured". None of that names
+        // the missing variable, and CI has no VITE_MAPBOX_TOKEN — which is how
+        // a suite that was green on six machines went red on the runner.
+        //
+        // A FAKE token is the right default rather than a secret: it keeps the
+        // suite runnable by anyone with no credentials, spends no Mapbox quota,
+        // and proves the offline path really is offline. A real one still wins
+        // when it is present, which is what MAPBOX_RECORD=1 and MAPBOX_LIVE=1
+        // need.
+        VITE_MAPBOX_TOKEN:
+          process.env.VITE_MAPBOX_TOKEN ||
+          "pk.eyJ1IjoiZTJlLWZpeHR1cmUiLCJhIjoiZTJlIn0.not-a-real-token",
+      },
     },
   ],
 });

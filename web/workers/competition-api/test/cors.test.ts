@@ -20,6 +20,46 @@ async function preflight(origin: string): Promise<Response> {
   });
 }
 
+describe("CORS allows the headers our own clients send", () => {
+  /**
+   * A header missing from `allowHeaders` fails ONLY in a real browser — every
+   * worker test calls the route directly and never preflights, so nothing else
+   * in this suite can notice. These are the headers that would break silently.
+   */
+  test.each([
+    ["x-pilot-ident-kind", "the anonymous submit route's identifier kind"],
+    ["x-pilot-ident", "the anonymous submit route's identifier value"],
+    ["x-filename", "the personal track library's upload"],
+    ["x-comp-pilot", "which registration a signed-in pilot is claiming"],
+  ])("preflight permits %s (%s)", async (header) => {
+    const res = await SELF.fetch("https://test/api/comp", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://glidecomp.com",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": header,
+      },
+    });
+    const allowed = (res.headers.get("Access-Control-Allow-Headers") ?? "")
+      .toLowerCase();
+    expect(allowed).toContain(header);
+  });
+
+  test("exposes Retry-After, so a rate-limited pilot can be told how long", async () => {
+    const res = await SELF.fetch("https://test/api/comp", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://glidecomp.com",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+      },
+    });
+    expect(
+      (res.headers.get("Access-Control-Expose-Headers") ?? "").toLowerCase()
+    ).toContain("retry-after");
+  });
+});
+
 describe("CORS allowlist (SEC-01)", () => {
   test.each([
     "https://glidecomp.com",

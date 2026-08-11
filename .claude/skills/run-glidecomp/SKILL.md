@@ -59,10 +59,10 @@ screenshots them. Paths below are relative to the repo root.
    ```
    Expected output ends with `✓ drove Corryong Cup 2026 end-to-end`. Screenshots
    land in `.claude/skills/run-glidecomp/shots/` (`comp.png`, `scores.png`) —
-   **open `scores.png` and look at it**; it should show a ~99-row GAP standings
+   **open `scores.png` and look at it**; it should show a ~99-row GAP scores
    table with per-task points and a descending total (Jon Durand tops it at
    ~2,433). Known quirk: `comp.png` and `scores.png` currently come out
-   byte-identical — `/comp/:id` carries the standings inline now, so the
+   byte-identical — `/comp/:id` carries the scores inline now, so the
    driver's second stop (`/scores?comp_id=…`) renders the same view.
 
    To drive the open-distance path instead, use the hidden Big Chip comp — it
@@ -99,6 +99,22 @@ screenshots them. Paths below are relative to the repo root.
    Cross-check the rendered separation ranking against the engine directly:
    `bun run score-task -- --wing HG --field-analysis web/samples/comps/corryong-cup-2026-open-t1/task.xctsk web/samples/comps/corryong-cup-2026-open-t1/`
    — the ρ values must match exactly.
+
+5. **Review a restyle across the whole app** — `shoot-contact-sheet.mjs` shoots
+   every page (static + SPA + the SSR'd comp pages) at desktop and mobile
+   widths in both themes, then writes an HTML index that pairs the passes:
+   ```bash
+   LABEL=before bun .claude/skills/run-glidecomp/shoot-contact-sheet.mjs
+   git switch the-branch
+   LABEL=after  bun .claude/skills/run-glidecomp/shoot-contact-sheet.mjs
+   open .claude/skills/run-glidecomp/shots/sheet/index.html
+   ```
+   19 pages x 2 widths x 2 themes = 76 shots a pass, ~90s. Use it for any token
+   or kit change: those land on dozens of surfaces at once and are **not**
+   reviewable as a diff. `ONLY=settings` filters to one page while iterating;
+   `THEMES` / `WIDTHS` narrow the matrix. Ids are resolved at runtime (the comp
+   sqid changes per seed) and the task/pilot are scraped from the pages that
+   link to them, so nothing is hardcoded.
 
 ## Run (human path)
 

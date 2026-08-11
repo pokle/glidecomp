@@ -1,13 +1,15 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
 /**
- * Small dependency-free statistics helpers for field analysis.
+ * Small statistics helpers for field analysis.
  *
  * Spearman correlation is the field-analysis eval: each behavioural metric is
  * correlated against GAP rank to find which behaviours separate the
  * leaderboard. Ties get average ranks (the standard Spearman treatment), so a
  * field where many pilots share a value doesn't fabricate correlation.
  */
+
+import { bearingFromComponents } from '../geo';
 
 /**
  * Linear-interpolated percentile of an ASCENDING-sorted array.
@@ -55,28 +57,43 @@ export function rankWithTies(values: number[]): number[] {
 }
 
 /**
- * Spearman rank correlation of two parallel series: Pearson correlation of
- * their tied ranks. Returns NaN when n < 3 or either series is constant.
+ * Pearson correlation of two parallel series (over the first
+ * min(a.length, b.length) pairs). Returns NaN when fewer than 2 pairs or
+ * either series is constant.
  */
-export function spearman(a: number[], b: number[]): number {
+export function pearson(a: number[], b: number[]): number {
   const n = Math.min(a.length, b.length);
-  if (n < 3) return NaN;
-  const ra = rankWithTies(a.slice(0, n));
-  const rb = rankWithTies(b.slice(0, n));
-  const ma = mean(ra);
-  const mb = mean(rb);
+  if (n < 2) return NaN;
+  let ma = 0;
+  let mb = 0;
+  for (let i = 0; i < n; i++) {
+    ma += a[i];
+    mb += b[i];
+  }
+  ma /= n;
+  mb /= n;
   let cov = 0;
   let va = 0;
   let vb = 0;
   for (let i = 0; i < n; i++) {
-    const da = ra[i] - ma;
-    const db = rb[i] - mb;
+    const da = a[i] - ma;
+    const db = b[i] - mb;
     cov += da * db;
     va += da * da;
     vb += db * db;
   }
   if (va === 0 || vb === 0) return NaN;
   return cov / Math.sqrt(va * vb);
+}
+
+/**
+ * Spearman rank correlation of two parallel series: Pearson correlation of
+ * their tied ranks. Returns NaN when n < 3 or either series is constant.
+ */
+export function spearman(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length);
+  if (n < 3) return NaN;
+  return pearson(rankWithTies(a.slice(0, n)), rankWithTies(b.slice(0, n)));
 }
 
 /**
@@ -141,8 +158,31 @@ export function circularMeanWind(samples: WindSample[]): MeanWind | null {
   u /= samples.length;
   v /= samples.length;
   const speed = Math.hypot(u, v);
-  const direction = ((Math.atan2(-u, -v) * 180) / Math.PI + 360) % 360;
+  const direction = bearingFromComponents(-u, -v);
   return { speed, direction, n: samples.length };
+}
+
+/**
+ * The ONE combining policy for per-circle wind estimates, shared by every
+ * surface that reports a wind (day.wind's tables and the thermal shapes), so
+ * one report can never print two different winds for the same circles.
+ *
+ * Direction comes from the VECTOR mean ({@link circularMeanWind}), where the
+ * scatter of individual estimates cancels. Speed comes from the MEDIAN of the
+ * estimate magnitudes: a vector mean's length collapses toward zero as
+ * directions scatter, so it answers "how consistent were the estimates", not
+ * "how strong was the wind" — measured 5 km/h against a modelled 20 km/h on a
+ * day the directions agreed to a degree was this bias, not a calm.
+ *
+ * Which estimates a caller feeds in (one per circle, or both estimator
+ * methods pooled) is deliberately the caller's own rule — only the combining
+ * is canonical here. Null when no samples.
+ */
+export function combineWindEstimates(samples: WindSample[]): MeanWind | null {
+  const vector = circularMeanWind(samples);
+  if (!vector) return null;
+  const speeds = samples.map((s) => s.speed).sort((a, b) => a - b);
+  return { speed: percentile(speeds, 50), direction: vector.direction, n: samples.length };
 }
 
 /**

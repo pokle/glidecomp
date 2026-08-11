@@ -10,9 +10,9 @@
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, calculateTrackDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, scoreOpenDistance, openDistanceGeometryForFlight, isOpenDistanceTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { parseIGC, parseXCTask, detectFlight, calculateOptimizedTaskDistance, calculateTrackDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, scoreOpenDistance, openDistanceGeometryForFlight, isOpenDistanceTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type FlightSegments, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { SAMPLE_COMPS } from '@glidecomp/samples';
-import { getCurrentUserOnce } from '../auth/client';
+import { getCurrentUserOnce, needsOnboarding } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
 import { createMapProvider, type MapProvider, type LoadedTrack, type OpenDistanceLine } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo, type OpenDistancePilotStats } from './analysis-panel';
@@ -35,6 +35,8 @@ interface AppState {
   task: XCTask | null;
   fixes: IGCFix[];
   events: FlightEvent[];
+  /** Typed glide/climb data built by detectFlight alongside the events */
+  segments: FlightSegments;
   /** All loaded tracks (for multi-track mode) */
   tracks: LoadedTrack[];
   /** Currently selected track index, or 'all' for multi-track view */
@@ -50,6 +52,7 @@ const state: AppState = {
   task: null,
   fixes: [],
   events: [],
+  segments: { glides: [], climbs: [] },
   tracks: [],
   selectedTrack: 0,
   compScore: null,
@@ -81,10 +84,10 @@ interface FeatureToggleConfig {
   urlParam: string;
   /** Whether the feature is on by default (affects URL param parsing) */
   defaultOn: boolean;
-  /** Optional mapRenderer property that must be truthy; menu is hidden if unsupported */
-  supportsProp?: keyof MapProvider;
-  /** mapRenderer method name to call with the boolean state */
-  providerMethod: keyof MapProvider;
+  /** Optional capability check; the menu item is hidden when it returns false */
+  isSupported?: (map: MapProvider) => boolean;
+  /** Push the new state to the map */
+  apply: (map: MapProvider, enabled: boolean) => void;
   /** Called after each toggle with the new state */
   onToggle?: (enabled: boolean) => void;
 }
@@ -98,7 +101,7 @@ async function init(): Promise<void> {
     window.location.href = "/u/me/";
     return;
   }
-  if (!user.username) {
+  if (needsOnboarding(user)) {
     window.location.href = "/onboarding";
     return;
   }
@@ -224,8 +227,8 @@ async function init(): Promise<void> {
       statusId: '3d-track-status',
       urlParam: '3d',
       defaultOn: false,
-      supportsProp: 'supports3D',
-      providerMethod: 'set3DMode',
+      isSupported: (map) => map.supports3D,
+      apply: (map, enabled) => map.set3DMode(enabled),
       onToggle: () => analysisPanel?.clearSelection(),
     },
     {
@@ -233,14 +236,14 @@ async function init(): Promise<void> {
       statusId: 'task-visibility-status',
       urlParam: 'task-visible',
       defaultOn: true,
-      providerMethod: 'setTaskVisibility',
+      apply: (map, enabled) => map.setTaskVisibility(enabled),
     },
     {
       menuId: 'menu-toggle-track',
       statusId: 'track-visibility-status',
       urlParam: 'track-visible',
       defaultOn: true,
-      providerMethod: 'setTrackVisibility',
+      apply: (map, enabled) => map.setTrackVisibility(enabled),
       onToggle: (enabled) => { if (!enabled) analysisPanel?.clearSelection(); },
     },
     {
@@ -248,7 +251,7 @@ async function init(): Promise<void> {
       statusId: 'show-speed-status',
       urlParam: 'speed',
       defaultOn: false,
-      providerMethod: 'setSpeedOverlay',
+      apply: (map, enabled) => map.setSpeedOverlay(enabled),
       onToggle: (enabled) => {
         if (showSpeedLabel) {
           showSpeedLabel.textContent = enabled ? 'Hide track metrics' : 'Show track metrics';
@@ -266,7 +269,7 @@ async function init(): Promise<void> {
     const statusEl = document.getElementById(toggle.statusId);
 
     // If the feature requires provider support and it's missing, hide the menu item
-    if (toggle.supportsProp && !mapRenderer[toggle.supportsProp]) {
+    if (toggle.isSupported && !toggle.isSupported(mapRenderer)) {
       if (menuEl) menuEl.style.display = 'none';
       continue;
     }
@@ -282,10 +285,7 @@ async function init(): Promise<void> {
     updateFeatureStatus(statusEl, enabled);
 
     // Apply initial state to provider
-    const method = mapRenderer[toggle.providerMethod];
-    if (typeof method === 'function') {
-      (method as (v: boolean) => void).call(mapRenderer, enabled);
-    }
+    toggle.apply(mapRenderer, enabled);
 
     // Apply initial side-effects (e.g. speed label text)
     if (enabled) {
@@ -298,16 +298,20 @@ async function init(): Promise<void> {
       featureState[toggle.urlParam] = newState;
       updateFeatureStatus(statusEl, newState);
 
-      const providerFn = mapRenderer?.[toggle.providerMethod];
-      if (typeof providerFn === 'function') {
-        (providerFn as (v: boolean) => void).call(mapRenderer, newState);
-        // For on-by-default features, remove param when on (default); set '0' when off
-        // For off-by-default features, set '1' when on; remove param when off (default)
-        const urlValue = toggle.defaultOn
-          ? (newState ? null : '0')
-          : (newState ? '1' : null);
-        updateUrlParam(toggle.urlParam, urlValue);
-      }
+      if (mapRenderer) toggle.apply(mapRenderer, newState);
+
+      // The URL is updated whatever the map did with the state. It used to sit
+      // inside a `typeof providerFn === 'function'` guard, so a toggle whose
+      // provider method was missing reported itself on, recorded itself on, and
+      // left the URL saying otherwise. With the method required there is no such
+      // case left, and no reason to make the address bar wait on the map.
+      //
+      // For on-by-default features, remove param when on (default); set '0' when off
+      // For off-by-default features, set '1' when on; remove param when off (default)
+      const urlValue = toggle.defaultOn
+        ? (newState ? null : '0')
+        : (newState ? '1' : null);
+      updateUrlParam(toggle.urlParam, urlValue);
 
       toggle.onToggle?.(newState);
       commandDialog?.close();
@@ -318,7 +322,7 @@ async function init(): Promise<void> {
   const annotateStatusEl = document.getElementById('annotate-status');
 
   function toggleAnnotation() {
-    const layer = mapRenderer?.getAnnotationLayer?.();
+    const layer = mapRenderer?.getAnnotationLayer();
     if (!layer) return;
     const newState = !layer.isEnabled();
     layer.setEnabled(newState);
@@ -328,7 +332,7 @@ async function init(): Promise<void> {
   }
 
   // Sync menu status when annotation is toggled via the map button
-  mapRenderer?.getAnnotationLayer?.()?.onToggle((on) => {
+  mapRenderer?.getAnnotationLayer()?.onToggle((on) => {
     if (annotateStatusEl) {
       annotateStatusEl.textContent = on ? '(on) D' : '(off) D';
     }
@@ -506,14 +510,6 @@ async function init(): Promise<void> {
               <input type="number" id="gap-nominal-time" value="${params.nominalTime}" min="0" step="1" class="input w-full">
             </div>
             <div class="space-y-1">
-              <label for="gap-nominal-launch" class="text-sm text-muted-foreground">Launch (%)</label>
-              <input type="number" id="gap-nominal-launch" value="${Math.round(params.nominalLaunch * 100)}" min="0" max="100" step="1" class="input w-full">
-            </div>
-            <div class="space-y-1">
-              <label for="gap-nominal-goal" class="text-sm text-muted-foreground">Goal (%)</label>
-              <input type="number" id="gap-nominal-goal" value="${Math.round(params.nominalGoal * 100)}" min="0" max="100" step="1" class="input w-full">
-            </div>
-            <div class="space-y-1">
               ${helpLink('distance-points', 'Min distance (m)')}
               <input type="number" id="gap-minimum-distance" value="${params.minimumDistance}" min="0" step="1" class="input w-full">
             </div>
@@ -555,8 +551,6 @@ async function init(): Promise<void> {
       config.setGAPParameters({
         scoring,
         nominalTime: parseNum('#gap-nominal-time', 5400),
-        nominalLaunch: parseNum('#gap-nominal-launch', 96) / 100,
-        nominalGoal: parseNum('#gap-nominal-goal', 20) / 100,
         minimumDistance: parseNum('#gap-minimum-distance', 5000),
         useLeading: (form.querySelector('#gap-use-leading') as HTMLInputElement).checked,
         useArrival: (form.querySelector('#gap-use-arrival') as HTMLInputElement).checked,
@@ -583,7 +577,7 @@ async function init(): Promise<void> {
       computeCompetitionScore();
       pushCompetitionScoreToPanel();
       const pilotScores = state.compScore?.pilotScores ?? [];
-      mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+      mapRenderer?.setMultiTrack(state.tracks, pilotScores);
       updateOpenDistanceMapLines(state.tracks);
     }
   }
@@ -599,6 +593,7 @@ async function init(): Promise<void> {
     state.task = null;
     state.fixes = [];
     state.events = [];
+    state.segments = { glides: [], climbs: [] };
     state.tracks = [];
     state.selectedTrack = 0;
     state.compScore = null;
@@ -610,20 +605,20 @@ async function init(): Promise<void> {
       mapRenderer.clearTrack();
       mapRenderer.clearTask();
       mapRenderer.clearEvents();
-      mapRenderer.clearMultiTrack?.();
-      mapRenderer.clearOpenDistanceLines?.();
+      mapRenderer.clearMultiTrack();
+      mapRenderer.clearOpenDistanceLines();
     }
 
     // Reset speed overlay state (must call setSpeedOverlay to clear provider flag)
     featureState['speed'] = false;
-    mapRenderer?.setSpeedOverlay?.(false);
+    mapRenderer?.setSpeedOverlay(false);
     updateFeatureStatus(document.getElementById('show-speed-status'), false);
     if (showSpeedLabel) showSpeedLabel.textContent = 'Show track metrics';
     updateUrlParam('speed', null);
 
     // Clear analysis panel
     analysisPanel?.setMultiTrackMode(false);
-    analysisPanel?.setEvents([]);
+    analysisPanel?.setEvents([], { glides: [], climbs: [] });
     analysisPanel?.setAltitudes([]);
     analysisPanel?.setFlightInfo({});
     analysisPanel?.setTask(null);
@@ -927,7 +922,7 @@ async function init(): Promise<void> {
 
   // Handle map click mode request from the task editor
   const handleMapClickModeRequest = (enabled: boolean) => {
-    mapRenderer?.setInteractionMode?.(enabled ? 'add-waypoint' : 'view');
+    mapRenderer?.setInteractionMode(enabled ? 'add-waypoint' : 'view');
   };
 
   // Initialize analysis panel with hide/show callbacks for sidebar visibility
@@ -953,7 +948,7 @@ async function init(): Promise<void> {
       if (selected === null) {
         // All selected — show all tracks, no event markers
         mapRenderer?.clearEvents();
-        mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+        mapRenderer?.setMultiTrack(state.tracks, pilotScores);
         updateOpenDistanceMapLines(state.tracks);
       } else {
         const filteredTracks = state.tracks.filter(t => selected.has(t.pilotName));
@@ -964,7 +959,7 @@ async function init(): Promise<void> {
         } else {
           mapRenderer?.clearEvents();
         }
-        mapRenderer?.setMultiTrack?.(filteredTracks, filteredScores);
+        mapRenderer?.setMultiTrack(filteredTracks, filteredScores);
         updateOpenDistanceMapLines(filteredTracks);
       }
     },
@@ -977,23 +972,23 @@ async function init(): Promise<void> {
   }
 
   // Wire multi-track click handler
-  mapRenderer.onMultiTrackClick?.((trackIndex: number, fixIndex: number) => {
+  mapRenderer.onMultiTrackClick((trackIndex: number, fixIndex: number) => {
     const track = state.tracks[trackIndex];
     if (!track) return;
     // Show HUD with pilot name for the clicked track
-    mapRenderer?.showTrackPointHUDWithName?.(fixIndex, track.pilotName);
+    mapRenderer?.showTrackPointHUDWithName(fixIndex, track.pilotName);
   });
 
   // Wire map click handler for task editor "click on map" mode
-  mapRenderer.onMapClick?.((lat: number, lon: number) => {
+  mapRenderer.onMapClick((lat: number, lon: number) => {
     analysisPanel?.addTurnpoint(lat, lon);
   });
 
   // Wire native map control buttons
-  mapRenderer.onMenuButtonClick?.(() => {
+  mapRenderer.onMenuButtonClick(() => {
     commandDialog?.showModal();
   });
-  mapRenderer.onPanelToggleClick?.(() => {
+  mapRenderer.onPanelToggleClick(() => {
     analysisPanel?.show();
   });
 
@@ -1026,7 +1021,7 @@ async function init(): Promise<void> {
   }
 
   // Register track click handler to select events when clicking on the track
-  mapRenderer.onTrackClick?.((fixIndex: number) => {
+  mapRenderer.onTrackClick((fixIndex: number) => {
     // Don't allow glide segment selection when speed overlay is active,
     // but still allow HUD stats
     if (!featureState['speed']) {
@@ -1051,7 +1046,7 @@ async function init(): Promise<void> {
   });
 
   // Register turnpoint click handler to open Task tab when clicking on a turnpoint on the map
-  mapRenderer.onTurnpointClick?.((turnpointIndex: number) => {
+  mapRenderer.onTurnpointClick((turnpointIndex: number) => {
     if (analysisPanel?.isHidden()) {
       analysisPanel.show();
     }
@@ -1220,7 +1215,7 @@ async function init(): Promise<void> {
     }
 
     // --- Annotation keyboard shortcuts ---
-    const layer = mapRenderer?.getAnnotationLayer?.();
+    const layer = mapRenderer?.getAnnotationLayer();
 
     // Undo/redo only when annotation mode is active (avoid hijacking browser undo)
     if (layer?.isEnabled()) {
@@ -1280,8 +1275,10 @@ async function init(): Promise<void> {
 
   function redetectEvents(): void {
     if (state.fixes.length > 0) {
-      state.events = detectFlightEvents(state.fixes, state.task || undefined, config.getPartialThresholds());
-      analysisPanel?.setEvents(state.events);
+      const flight = detectFlight(state.fixes, state.task || undefined, config.getPartialThresholds());
+      state.events = flight.events;
+      state.segments = flight.segments;
+      analysisPanel?.setEvents(state.events, state.segments);
       mapRenderer?.setEvents(state.events);
     }
     updateFlightInfo();
@@ -1299,12 +1296,14 @@ async function init(): Promise<void> {
     if (state.selectedTrack === 'all' && state.tracks.length > 1) {
       // Re-detect events for all tracks with the new task
       for (const track of state.tracks) {
-        track.events = detectFlightEvents(track.fixes, task, config.getPartialThresholds());
+        const flight = detectFlight(track.fixes, task, config.getPartialThresholds());
+        track.events = flight.events;
+        track.segments = flight.segments;
       }
       computeCompetitionScore();
       pushCompetitionScoreToPanel();
       const pilotScores = state.compScore?.pilotScores ?? [];
-      mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+      mapRenderer?.setMultiTrack(state.tracks, pilotScores);
       updateOpenDistanceMapLines(state.tracks);
     }
   }
@@ -1328,7 +1327,7 @@ async function init(): Promise<void> {
     trackId: string | null,
     options?: { readonly?: boolean }
   ): void {
-    const layer = mapRenderer?.getAnnotationLayer?.();
+    const layer = mapRenderer?.getAnnotationLayer();
     void layer?.setTrack(trackId, options);
   }
 
@@ -1337,19 +1336,20 @@ async function init(): Promise<void> {
     state.fixes = igcFile.fixes;
 
     // Also update multi-track state for single-track legacy flow
-    const events = detectFlightEvents(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
+    const flight = detectFlight(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
     state.tracks = [{
       pilotName: igcFile.header.pilot || 'Unknown',
       date: igcFile.header.date || null,
       filename: '',
       fixes: igcFile.fixes,
-      events,
+      events: flight.events,
+      segments: flight.segments,
     }];
     state.selectedTrack = 0;
     state.compScore = null;
 
     // Clear any multi-track rendering
-    mapRenderer?.clearMultiTrack?.();
+    mapRenderer?.clearMultiTrack();
     analysisPanel?.setMultiTrackMode(false);
 
     mapRenderer?.setTrack(igcFile.fixes);
@@ -1358,7 +1358,7 @@ async function init(): Promise<void> {
     analysisPanel?.setAltitudes(igcFile.fixes.map(f => f.gnssAltitude), igcFile.fixes.map(f => f.time));
 
     // Pulse the Analysis button to draw attention to the newly available data
-    mapRenderer?.highlightPanelToggle?.();
+    mapRenderer?.highlightPanelToggle();
   }
 
   /**
@@ -1460,14 +1460,15 @@ async function init(): Promise<void> {
           applyTask(xcTask);
         }
 
-        const events = detectFlightEvents(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
+        const flight = detectFlight(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
 
         tracks.push({
           pilotName: pilotNames?.get(file.name) || igcFile.header.pilot || file.name.replace(/\.igc$/i, ''),
           date: igcFile.header.date || null,
           filename: file.name,
           fixes: igcFile.fixes,
-          events,
+          events: flight.events,
+          segments: flight.segments,
         });
 
         // Store in browser storage (skip for sample data or anonymous users)
@@ -1514,9 +1515,10 @@ async function init(): Promise<void> {
     // Set up single-track state
     state.fixes = track.fixes;
     state.events = track.events;
+    state.segments = track.segments;
 
     // Clear multi-track rendering
-    mapRenderer?.clearMultiTrack?.();
+    mapRenderer?.clearMultiTrack();
 
     // Render single track
     mapRenderer?.setTrack(track.fixes);
@@ -1525,7 +1527,7 @@ async function init(): Promise<void> {
 
     // Update analysis panel for single-track mode
     analysisPanel?.setMultiTrackMode(false);
-    analysisPanel?.setEvents(track.events);
+    analysisPanel?.setEvents(track.events, track.segments);
     analysisPanel?.setAltitudes(track.fixes.map(f => f.gnssAltitude), track.fixes.map(f => f.time));
 
     // Update flight info
@@ -1569,7 +1571,7 @@ async function init(): Promise<void> {
     mapRenderer?.clearEvents();
 
     // Render all tracks on map with rank colors
-    mapRenderer?.setMultiTrack?.(state.tracks, pilotScores);
+    mapRenderer?.setMultiTrack(state.tracks, pilotScores);
     updateOpenDistanceMapLines(state.tracks);
 
     // Push score + format before entering multi-track mode, which switches to
@@ -1681,7 +1683,7 @@ async function init(): Promise<void> {
    */
   function updateOpenDistanceMapLines(visibleTracks: LoadedTrack[]): void {
     if (!state.task || !isOpenDistanceMode()) {
-      mapRenderer?.clearOpenDistanceLines?.();
+      mapRenderer?.clearOpenDistanceLines();
       return;
     }
 
@@ -1700,7 +1702,7 @@ async function init(): Promise<void> {
         distance: geometry.distance,
       });
     }
-    mapRenderer?.setOpenDistanceLines?.(lines);
+    mapRenderer?.setOpenDistanceLines(lines);
   }
 
   /**
@@ -2246,7 +2248,6 @@ async function init(): Promise<void> {
     config.enterCompScoringMode({
       gapParameters: {
         scoring: comp.gapParams.scoring,
-        nominalGoal: comp.gapParams.nominalGoal,
         nominalTime: comp.gapParams.nominalTime,
         minimumDistance: comp.gapParams.minimumDistance,
         useLeading: comp.gapParams.useLeading,

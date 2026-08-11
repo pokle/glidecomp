@@ -12,7 +12,8 @@ import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
-import { Button } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { Loading } from "@/react/rac/progress";
 import {
   Dialog,
@@ -46,6 +47,7 @@ import {
   taskPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { useSeededResource } from "../lib/use-seeded-resource";
 import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSummary } from "../comp/CompScoresSummary";
@@ -53,11 +55,12 @@ import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
 import {
-  fetchWithRetry,
+  isPastCloseDate,
   type CompDetailData,
   type TaskSummary,
 } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
+import { useMounted } from "../lib/use-mounted";
 import type { CompDetailLoaderData, CompScores } from "../loaders";
 
 export function CompDetail() {
@@ -69,9 +72,14 @@ export function CompDetail() {
   // SSR seed: the server ran loadCompDetail for this URL, so render the comp in
   // the first paint and hydrate the same markup. Null on client boot / SPA nav.
   const initial = useInitialData<CompDetailLoaderData>();
-  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
-  const [notFound, setNotFound] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+    ids: [compId],
+    seed: initial?.comp ?? null,
+    load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
+    title: (c) => `GlideComp - ${c.name}`,
+    refresh,
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -84,47 +92,6 @@ export function CompDetail() {
     if (!comp || !location.hash) return;
     document.getElementById(location.hash.slice(1))?.scrollIntoView();
   }, [comp, location.hash]);
-
-  useEffect(() => {
-    // Clear any previous verdict first. react-router keeps this component
-    // mounted when only the id in the path changes, so a "not found" left over
-    // from the old id would mask whatever the new one loads. That is not
-    // hypothetical: the 404 page's own "did you mean" links point back at this
-    // very route, so clicking one changed the URL and nothing else.
-    setNotFound(false);
-    if (!compId) {
-      setNotFound(true);
-      return;
-    }
-    // Seeded from SSR on the first render — set the title and skip the fetch.
-    // A mutation bumps `refresh`, which re-runs this and fetches fresh data.
-    if (initial && refresh === 0) {
-      document.title = `GlideComp - ${initial.comp.name}`;
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchWithRetry(() =>
-          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } })
-        );
-        if (cancelled) return;
-        if (!res.ok) {
-          setNotFound(true);
-          return;
-        }
-        const data = (await res.json()) as unknown as CompDetailData;
-        if (cancelled) return;
-        setComp(data);
-        document.title = `GlideComp - ${data.name}`;
-      } catch {
-        if (!cancelled) setNotFound(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [compId, refresh]);
 
   if (notFound || !compId) {
     return <NotFound title="Competition not found" />;
@@ -188,6 +155,10 @@ function CompDetailView({
   const isAdmin = useAdminView(
     user != null && comp.admins.some((a) => a.email === user.email)
   );
+  // This page is server-rendered, so anything clock-dependent has to settle
+  // after hydration rather than differ from the server's markup.
+  const mounted = useMounted();
+  const isClosed = isPastCloseDate(comp.close_date);
 
   const facts = [
     categoryLabel(comp.category),
@@ -200,13 +171,13 @@ function CompDetailView({
   }
 
   // Once the last task date is behind us the visitor's job flips from "what
-  // am I flying today?" to "who won?" — standings lead, tasks follow.
+  // am I flying today?" to "who won?" — scores lead, tasks follow.
   // Derived from the loader-injected "today", so SSR and hydration agree.
   const finished = isCompFinished(comp.tasks, comp.timezone, today);
 
   const tasksSection = (
     // break-before-page: when printing, each major section starts a fresh page.
-    <section id="tasks" className="scroll-mt-24 break-before-page">
+    <Card id="tasks" className="scroll-mt-24 break-before-page">
       <SectionHeader
         title="Tasks"
         action={
@@ -227,7 +198,7 @@ function CompDetailView({
         isAdmin={isAdmin}
         onCreateTask={() => setCreateOpen(true)}
       />
-    </section>
+    </Card>
   );
 
   const scoresSection = (
@@ -252,6 +223,17 @@ function CompDetailView({
             {comp.test ? " · Hidden" : null}
           </p>
         </div>
+        {/* Submitting is the one thing a pilot comes to a live comp to DO, so
+            it leads. It goes to /submit with the comp prefilled rather than
+            opening the dialog here: from the comp page the task is still an
+            open question, and the page is where that question is answered.
+            Mount-gated for the same reason as the task page's button — this
+            page is server-rendered. */}
+        {mounted && !isClosed ? (
+          <LinkButton size="sm" href={`/submit?comp=${encodeURIComponent(compId)}`}>
+            Submit track
+          </LinkButton>
+        ) : null}
         {isAdmin ? (
           <Button variant="outline" size="sm" onPress={() => setSettingsOpen(true)}>
             Settings
@@ -296,20 +278,24 @@ function CompDetailView({
         />
       ) : null}
 
-      {finished ? (
-        <>
-          {scoresSection}
-          {tasksSection}
-        </>
-      ) : (
-        <>
-          {tasksSection}
-          {scoresSection}
-        </>
-      )}
+      {/* The card stack owns the rhythm between sections, which is why
+          SectionHeader no longer carries a margin of its own. */}
+      <div className="mt-6 flex flex-col gap-6">
+        {finished ? (
+          <>
+            {scoresSection}
+            {tasksSection}
+          </>
+        ) : (
+          <>
+            {tasksSection}
+            {scoresSection}
+          </>
+        )}
 
-      <div id="activity" className="scroll-mt-24 break-before-page">
-        <ActivitySection compId={compId} collapsible />
+        <Card id="activity" className="scroll-mt-24 break-before-page">
+          <ActivitySection compId={compId} collapsible />
+        </Card>
       </div>
 
       {/* Organizer credit + contact — a footnote, not a section. The scores
@@ -359,7 +345,7 @@ function CompDetailView({
 
 /**
  * True once every task date is behind us in the comp's own timezone — the
- * comp has finished flying, so the page leads with the standings.
+ * comp has finished flying, so the page leads with the scores.
  *
  * The task list itself makes nothing of the calendar: every task is presented
  * alike, whether it flew last year or flies tomorrow.
@@ -513,7 +499,7 @@ function TasksList({
   const days = groupTasksByDateAndClass(tasks, pilotClasses);
 
   return (
-    <div className="mt-3 divide-y rounded-lg border">
+    <div className="divide-y rounded-lg border">
       {days.map((day) => (
         <Disclosure
           key={day.date}

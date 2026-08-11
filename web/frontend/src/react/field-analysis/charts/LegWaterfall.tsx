@@ -188,11 +188,13 @@ export function LegWaterfall({
         })}
       </svg>
 
+      {/* The y axis says "time against the winner" and the x says the legs are
+          in order, so the caption drops both. The running total is the reading
+          the chart cannot state in a label, so it stays. */}
       <figcaption className="text-xs text-muted-foreground">
-        {selected.name} against the winner, leg by leg: bars hanging below the
-        line are time lost, bars above are time gained
+        {selected.name}
         {comparedLegs > 0
-          ? `; over the ${comparedLegs} compared leg${comparedLegs === 1 ? "" : "s"}, ${
+          ? `, over ${comparedLegs} compared leg${comparedLegs === 1 ? "" : "s"}: ${
               total === 0 ? "dead level" : `${fmtSignedMinSec(total)} overall`
             }`
           : ""}

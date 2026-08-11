@@ -23,7 +23,7 @@ rendered as a sentence.
 Soft checks only annotate because a short honest flight still earns the S7F
 §5.3/§8.6.1 minimum distance.
 
-## A withheld pilot is never deleted from the standings
+## A withheld pilot is never deleted from the scores
 
 `buildClassScore` seats them last at 0 with the reasons
 (`PilotScoreEntry.track_excluded`).
@@ -55,5 +55,7 @@ GLIDECOMP_COMPS_DIR=<archive>/comps bun web/scripts/audit-track-quality.ts
 
 which must report **exactly one HARD finding across 5,112 real tracks**.
 
-`track-quality.ts` is in `SCORING_ROOTS`, so a threshold change cannot ship
-without a `SCORING_ENGINE_VERSION` bump.
+`track-quality.ts` is in `SCORING_ROOTS`, so a threshold change rolls the
+engine generation on its own and re-scores every competition — and CI asks for
+a note in `web/engine/scoring-changes/` saying what moved. See
+[scoring-version.md](scoring-version.md).

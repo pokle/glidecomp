@@ -1,5 +1,5 @@
 /**
- * React Aria Components Table, styled to match ui/table.tsx.
+ * React Aria Components Table, styled to match the shadcn kit it replaced.
  *
  * Unlike the plain shadcn table (styling over <table>), RAC Table is an ARIA
  * grid: arrow-key cell navigation, focusable rows with onAction/href (whole-row
@@ -29,9 +29,17 @@ import { cn } from "@/react/lib/utils";
 export function Table({
   className,
   scrollLabel,
+  viewportClassName,
   ...props
 }: Omit<TableProps, "className"> & {
   className?: string;
+  /**
+   * Classes for the scroll VIEWPORT rather than the table. Use it to cap the
+   * viewport's height so the table scrolls inside a box instead of running the
+   * page down — one scroll region, so `scrollLabel` still names the only tab
+   * stop rather than nesting a second one inside it.
+   */
+  viewportClassName?: string;
   /**
    * Turns the horizontal overflow wrapper into a labelled, focusable scroll
    * region. Pass this on any table wide enough to actually scroll: without a
@@ -46,7 +54,10 @@ export function Table({
       // print:overflow-x-visible: a scroll viewport would print only its
       // visible slice; letting the table overflow at least keeps every
       // column present for browsers' shrink-to-fit.
-      className="relative w-full overflow-x-auto print:overflow-x-visible"
+      className={cn(
+        "relative w-full overflow-x-auto print:overflow-x-visible",
+        viewportClassName
+      )}
       {...(scrollLabel
         ? { role: "region", "aria-label": scrollLabel, tabIndex: 0 }
         : {})}
@@ -101,7 +112,7 @@ export function Row<T extends object>({
         "border-b transition-colors outline-none data-hovered:bg-muted/50 data-selected:bg-muted",
         "data-focus-visible:ring-2 data-focus-visible:ring-ring/50",
         // Row-level actions (onAction/href) get a pointer, matching the old
-        // cursor-pointer standings rows.
+        // cursor-pointer scores rows.
         "data-[href]:cursor-pointer",
         // Drag-and-drop states (route editor grid).
         "data-dragging:opacity-50 data-drop-target:outline-2 data-drop-target:outline-primary",

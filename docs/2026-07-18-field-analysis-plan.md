@@ -371,7 +371,7 @@ rollout note below):
 
 | Route | Page | Content |
 |---|---|---|
-| `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the standings behind them |
+| `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the scores behind them |
 | `/comp/:compId/analysis/task/:taskId` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
 
 The per-task page is nested **under the comp report**, not under the task
@@ -434,7 +434,7 @@ the bump later.
   fixes. Both paths run from the extracted `resolveTaskScoringConfig()`, so the
   GAP parameters cannot drift apart.
 - **Correlations use OFFICIAL ranks.** The re-score covers tracked pilots only,
-  but manual flights (issue #306) count toward the published standings. Ranking
+  but manual flights (issue #306) count toward the published scores. Ranking
   within the tracked subset would correlate against a leaderboard nobody
   recognises, so official rank/total are overlaid by `trackFile` before
   `buildFieldContext`. Excluded pilots are listed on the page.

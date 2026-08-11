@@ -1,6 +1,6 @@
 /**
- * React Aria Components Checkbox + CheckboxGroup, styled to match
- * ui/checkbox.tsx. The label is part of the component (a real <label> wrapping
+ * React Aria Components Checkbox + CheckboxGroup, styled to match the shadcn
+ * kit it replaced. The label is part of the component (a real <label> wrapping
  * the box), so call sites don't wire htmlFor/ids. CheckboxGroup manages the
  * selected-values array — the pilot-classes field becomes value/onChange of a
  * string[] with zero toggle bookkeeping.

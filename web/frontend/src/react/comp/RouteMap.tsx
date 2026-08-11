@@ -20,7 +20,12 @@ import {
   type MapProvider,
   type MapWaypoint,
 } from "../../analysis/map-provider";
+import { PLACE_SEARCH_AVAILABLE } from "@/react/lib/geocode";
+import { PlaceSearchField } from "./PlaceSearchField";
 import "mapbox-gl/dist/mapbox-gl.css";
+
+/** How far the camera comes in for a place the geocoder gave no extent for. */
+const PLACE_FALLBACK_ZOOM = 10;
 
 export default function RouteMap({
   task,
@@ -28,6 +33,7 @@ export default function RouteMap({
   addMode,
   fitNonce,
   focus,
+  placeSearch = false,
   onWaypointPick,
   onMapPick,
 }: {
@@ -53,6 +59,14 @@ export default function RouteMap({
    * user has panned away; the coordinates themselves don't retrigger.
    */
   focus?: { lat: number; lon: number; key: number } | null;
+  /**
+   * Show the place-search box above the map. Off by default, and meant for
+   * editing surfaces: a brand-new competition has no waypoints to fit to, so
+   * the map opens on the whole globe and searching is the only way to reach
+   * the valley the organiser is setting up. Each search is a billed geocoding
+   * request, so leave it off on read-only public views.
+   */
+  placeSearch?: boolean;
   onWaypointPick: (waypoint: MapWaypoint) => void;
   /** Ground pick. `details` carries best-effort extras from the Mapbox data
    *  (ground elevation, nearby place name), when available. */
@@ -90,8 +104,8 @@ export default function RouteMap({
           return;
         }
         created = p;
-        p.onWaypointClick?.((wp) => onWaypointPickRef.current(wp));
-        p.onMapClick?.((lat, lon, details) => onMapPickRef.current(lat, lon, details));
+        p.onWaypointClick((wp) => onWaypointPickRef.current(wp));
+        p.onMapClick((lat, lon, details) => onMapPickRef.current(lat, lon, details));
         setProvider(p);
       })
       .catch((err) => {
@@ -128,9 +142,9 @@ export default function RouteMap({
 
   useEffect(() => {
     if (!provider) return;
-    provider.setWaypoints?.(waypoints);
+    provider.setWaypoints(waypoints);
     return () => {
-      if (!destroyedRef.current) provider.clearWaypoints?.();
+      if (!destroyedRef.current) provider.clearWaypoints();
     };
   }, [provider, waypoints]);
 
@@ -141,13 +155,13 @@ export default function RouteMap({
     if (!provider || waypoints.length === 0) return;
     if (fitNonce !== lastFitNonce.current) {
       lastFitNonce.current = fitNonce;
-      provider.fitToWaypoints?.();
+      provider.fitToWaypoints();
     }
   }, [provider, fitNonce, waypoints]);
 
   useEffect(() => {
     if (!provider) return;
-    provider.setInteractionMode?.(addMode ? "add-waypoint" : "view");
+    provider.setInteractionMode(addMode ? "add-waypoint" : "view");
   }, [provider, addMode]);
 
   // Fly to a waypoint when a table row asks to (keyed so repeat clicks re-centre).
@@ -156,7 +170,7 @@ export default function RouteMap({
     if (!provider || !focus) return;
     if (focus.key === lastFocusKey.current) return;
     lastFocusKey.current = focus.key;
-    provider.panTo?.(focus.lat, focus.lon);
+    provider.panTo(focus.lat, focus.lon);
   }, [provider, focus]);
 
   // Keep the map painted correctly as the responsive layout resizes it.
@@ -168,5 +182,26 @@ export default function RouteMap({
     return () => observer.disconnect();
   }, [provider]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  // The search box sits above the map rather than floating over it: both
+  // top corners already carry Mapbox controls (style picker, navigation,
+  // geolocate), and a popover listbox in normal flow can't be clipped by the
+  // container's overflow-hidden.
+  const showSearch = placeSearch && PLACE_SEARCH_AVAILABLE;
+  return (
+    <div className="flex h-full w-full flex-col">
+      {showSearch ? (
+        <div className="shrink-0 border-b border-border bg-card p-1.5">
+          <PlaceSearchField
+            isDisabled={!provider}
+            onPick={(place) => {
+              if (!provider) return;
+              if (place.bounds) provider.fitToBounds(place.bounds);
+              else provider.panTo(place.lat, place.lon, PLACE_FALLBACK_ZOOM);
+            }}
+          />
+        </div>
+      ) : null}
+      <div ref={containerRef} className="min-h-0 w-full flex-1" />
+    </div>
+  );
 }

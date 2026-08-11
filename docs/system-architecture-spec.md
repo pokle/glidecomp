@@ -13,8 +13,9 @@ Production: https://glidecomp.com
 │                        Cloudflare Pages                          │
 │                                                                  │
 │  Prerendered Astro pages   /, /about, /legal, /scoring/*         │
-│  React SPA (app.html)      /comp, /u/:username, /scores,         │
-│                            /settings, /onboarding, /admin/*      │
+│  React SPA (app.html)      /comp, /u/:username, /submit,         │
+│                            /scores, /settings, /signin,          │
+│                            /onboarding, /admin/*                 │
 │  Vanilla-TS entries        /analysis (map app), /replay (3D)     │
 │                                                                  │
 │  Pages Functions           functions/api/* → service-binding     │
@@ -45,8 +46,8 @@ All flight analysis (IGC parsing, event detection, scoring math) runs **client-s
 One Pages project (`glidecomp`, output `web/frontend/dist`) with three kinds of surface:
 
 - **Prerendered static pages** — a small Astro app in `web/frontend/static/` builds the content pages (`/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`, `/scoring/open-distance`) as zero-client-JS HTML (KaTeX on the GAP page is rendered at build time). `bun run build` runs the Vite build, then the Astro build, and merges both into `dist/`.
-- **React SPA** — the main UI (`src/react/`, served from `app.html`): competitions, comp/task detail, pilot score detail, scores, dashboard, settings, onboarding, super-admin pages. Built with shadcn/ui components on the Base UI foundation and Tailwind. Most SPA routes reach the shell via `public/_redirects` rewrites (`/u/*`, `/scores`, … → `/app` 200); `/comp*` is handed to the SSR Pages Function below via `public/_routes.json`.
-- **SSR public comp pages** — the five public competition pages (`/comp`, `/comp/:id`, waypoints, task, pilot) are server-rendered by the Pages Function `functions/comp/[[path]].ts`, which renders the same React tree the SPA hydrates (this is the SEO strategy). Shipped 2026-07-09; full design in [docs/2026-07-06-ssr-public-pages-plan.md](2026-07-06-ssr-public-pages-plan.md).
+- **React SPA** — the main UI (`src/react/`, served from `app.html`): competitions, comp/task detail, pilot score detail, the field-analysis reports, scores, `/submit` (the public track-submission page), sign-in, dashboard, the admin-only comp roster, settings, onboarding, super-admin pages. The authoritative list is the route tree in `src/react/routes.tsx`. Built with **react-aria-components** (the one kit, `src/react/rac/`) and Tailwind — the shadcn/Base UI kit was removed in July 2026, and `src/react/one-kit.test.ts` fails the build if it comes back; see [docs/2026-07-18-rac-adoption-guide.md](2026-07-18-rac-adoption-guide.md). Most SPA routes reach the shell via `public/_redirects` rewrites (`/u/*`, `/scores`, … → `/app` 200); `/comp*` is handed to the SSR Pages Function below via `public/_routes.json`.
+- **SSR public comp pages** — the eight public competition pages (`/comp`, `/comp/:id`, scores, waypoints, task, pilot report card, comp field analysis, task field analysis) are server-rendered by the Pages Function `functions/comp/[[path]].ts`, which renders the same React tree the SPA hydrates (this is the SEO strategy). The `ROUTES` array in that file is the authoritative list. Shipped 2026-07-09; full design in [docs/2026-07-06-ssr-public-pages-plan.md](2026-07-06-ssr-public-pages-plan.md).
 - **Vanilla-TS Vite entries** — the analysis page (`src/analysis/`, an imperative map app) and the 3D replay (`src/replay/`, three.js + Mapbox) are separate entries from the SPA.
 
 Local dev (`bun run dev`) runs all the Workers in one wrangler session plus Vite and `astro dev` together; the Vite dev server proxies `/api/*` to the dev-router on `:8790` and the static routes to Astro, so everything is seamless on `:3000`.

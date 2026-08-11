@@ -48,10 +48,16 @@ async function main() {
   console.log(`task: ${task.name} (${task.task_id})`);
 
   // 1. Task page — is the Field analysis link there for an admin?
+  // `domcontentloaded`, not `networkidle`: once a task's scores are stale the
+  // freshness poller keeps a conditional request in flight for as long as the
+  // page is open, so networkidle never settles here and the goto times out.
+  // Wait on the thing we actually came for instead. (SKILL.md's gotcha; this
+  // driver was still carrying the bug it warns about.)
   await page.goto(`${BASE}/comp/${comp.comp_id}/task/${task.task_id}`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
   });
   const link = page.getByRole("link", { name: "Field analysis" });
+  await link.first().waitFor({ timeout: 20_000 }).catch(() => {});
   const linkCount = await link.count();
   console.log(`task page: Field analysis link present = ${linkCount > 0}`);
   if (linkCount === 0) throw new Error("no Field analysis link on the task page");

@@ -1,223 +1,214 @@
 /**
  * Task Optimization
  *
- * Calculates the optimized (shortest) path through a competition task by finding
- * the optimal point to tag each turnpoint cylinder. Uses iterative convergence
- * matching the CIVL GAP specification (Section 7F, Annex A).
+ * Calculates the optimized (shortest) path through a competition task by
+ * finding the optimal point to tag each turnpoint cylinder, with the
+ * S7F 2026 §7.1 algorithm set: the task's route is projected into a
+ * localised Transverse Mercator plane about the §7.1.6 task-area centre,
+ * solved by the §7.1.3 PathFinder algorithm (Ding et al. 2018, Annex B for
+ * the goal line), corrected back onto the control-zone boundaries (§7.1.7)
+ * and measured on the ellipsoid (§7.1.5) — see route-optimizer.ts.
+ *
+ * This module owns what the route MEANS: which turnpoint is the launch,
+ * where the ESS pins, how a goal cylinder or LINE terminates the route.
+ * route-optimizer.ts owns how a route, once defined, is solved.
  *
  * @see /docs/optimized-task-line-spec.md - Full algorithm documentation
  * @see /docs/research/task-optimization-comparison.md - Comparison with AirScore/CIVL
  */
 
+import { ellipsoidDistance } from './geo';
 import {
-  andoyerDistance,
-  calculateBearingRadians,
-  destinationPoint
-} from './geo';
+  createLtmProjection,
+  findTaskAreaCentre,
+  routeOptimizer,
+  type GeoPoint,
+  type GeodesicRouteDefinition,
+  type GeodesicRouteElement,
+  type LtmProjection,
+} from './route-optimizer';
 
 import type { XCTask, Turnpoint } from './xctsk-parser';
-import { getSSSIndex } from './xctsk-parser';
-import { computeGoalLine, goalLinePointAt, type GoalLine } from './goal-line';
+import { getSSSIndex, getESSIndex } from './xctsk-parser';
+import { computeGoalLine, type GoalLine } from './goal-line';
 
 /** A geographic point in this module's (lat, lon) convention. */
 type LatLon = { lat: number; lon: number };
 
 /**
- * Effective radius of the first turnpoint for optimization.
+ * The ESS index the optimizer must pin (FAI S7F §7.2): "The end
+ * of speed section is taken from its center position, so that its fix is
+ * pinned to the preceding points, rather than any subsequent points at a
+ * different position." Only an explicit mid-route ESS pins — an ESS at the
+ * last turnpoint is already the route's destination and gets the same
+ * nearest-point treatment there. -1 when nothing pins.
  *
- * A TAKEOFF turnpoint is the launch point: per FAI CIVL GAP / PWCA it is a
- * fixed point (its centre), not a radius-optimized cylinder, so the
- * take-off→SSS leg is measured from the centre. Every other first
- * turnpoint (e.g. an SSS) is radius-optimized to its edge as usual.
+ * The pin makes the task path's launch→ESS prefix equal the §7.2
+ * launchToESSPath (its own shortest-path optimisation) by construction, so
+ * slicing the task path at the ESS yields the spec's launch-to-ESS and
+ * speed-section distances, and the task distance deliberately kinks at ESS.
  */
-function firstTurnpointRadius(tp: Turnpoint): number {
-  return tp.type === 'TAKEOFF' ? 0 : tp.radius;
+function pinnedESSIndex(task: XCTask): number {
+  const essIdx = getESSIndex(task);
+  return essIdx > 0 && essIdx < task.turnpoints.length - 1 ? essIdx : -1;
 }
 
-/**
- * Find the optimal point on a circle that minimizes total path distance.
- *
- * For a circle at position (centerLat, centerLon) with radius r, find the point
- * on its perimeter that minimizes: distance(prevPoint, circlePoint) + distance(circlePoint, nextPoint)
- *
- * Uses golden section search — the cost function is unimodal (single minimum),
- * so this converges in O(log(1/ε)) iterations (~30 for ε=1e-5).
- */
-function findOptimalCirclePoint(
-  prev: LatLon,
-  center: LatLon,
-  radius: number,
-  next: LatLon
-): LatLon {
-  const cost = (angle: number): number => {
-    const point = destinationPoint(center.lat, center.lon, radius, angle);
-    const d1 = andoyerDistance(prev.lat, prev.lon, point.lat, point.lon);
-    const d2 = andoyerDistance(point.lat, point.lon, next.lat, next.lon);
-    return d1 + d2;
-  };
-
-  const phi = (1 + Math.sqrt(5)) / 2;
-  const resphi = 2 - phi;
-
-  let a = 0;
-  let b = 2 * Math.PI;
-  const tol = 1e-5;
-
-  let x1 = a + resphi * (b - a);
-  let x2 = b - resphi * (b - a);
-  let f1 = cost(x1);
-  let f2 = cost(x2);
-
-  while (Math.abs(b - a) > tol) {
-    if (f1 < f2) {
-      b = x2;
-      x2 = x1;
-      f2 = f1;
-      x1 = a + resphi * (b - a);
-      f1 = cost(x1);
-    } else {
-      a = x1;
-      x1 = x2;
-      f1 = f2;
-      x2 = b - resphi * (b - a);
-      f2 = cost(x2);
-    }
-  }
-
-  const optimalAngle = (a + b) / 2;
-  return destinationPoint(center.lat, center.lon, radius, optimalAngle);
-}
+const centre = (tp: Turnpoint): GeoPoint => ({ lat: tp.waypoint.lat, lon: tp.waypoint.lon });
 
 /**
- * Closest point on a goal line to a given point — the optimal "tag" of a
- * LINE goal (S7F §6.3.1): the task ends where the shortest route meets the
- * line. Golden-section search over the position along the line; distance to
- * a geodesic segment is unimodal, so this converges like the circle search.
- */
-function findOptimalGoalLinePoint(
-  prevLat: number,
-  prevLon: number,
-  goalLine: GoalLine
-): { lat: number; lon: number } {
-  const cost = (t: number): number => {
-    const point = goalLinePointAt(goalLine, t);
-    return andoyerDistance(prevLat, prevLon, point.lat, point.lon);
-  };
-
-  const phi = (1 + Math.sqrt(5)) / 2;
-  const resphi = 2 - phi;
-
-  let a = 0;
-  let b = 1;
-  const tol = 1e-7;
-
-  let x1 = a + resphi * (b - a);
-  let x2 = b - resphi * (b - a);
-  let f1 = cost(x1);
-  let f2 = cost(x2);
-
-  while (Math.abs(b - a) > tol) {
-    if (f1 < f2) {
-      b = x2;
-      x2 = x1;
-      f2 = f1;
-      x1 = a + resphi * (b - a);
-      f1 = cost(x1);
-    } else {
-      a = x1;
-      x1 = x2;
-      f1 = f2;
-      x2 = b - resphi * (b - a);
-      f2 = cost(x2);
-    }
-  }
-
-  return goalLinePointAt(goalLine, (a + b) / 2);
-}
-
-/**
- * Run a single forward pass of the optimization, producing one touching
- * point per turnpoint cylinder.
+ * The §7.1.1 geodesicRouteDefinition for a task (or a tail of one — see
+ * {@link optimizeRemainingRoute}), encoding the FAI placement rules:
  *
- * For intermediate turnpoints, each point is optimized using the previous
- * optimized point and the next point (either the next already-optimized
- * point from a previous iteration, or the next turnpoint center on the
- * first pass).
+ * - The route STARTS at `startPoint` — the launch centre (§7.2: "measured
+ *   from the center of the launch waypoint, regardless of whether it has
+ *   been given a radius"), or a pilot's position for a remaining route.
+ *   When `startCylinder` is set (the explicit
+ *   `XCTask.firstTurnpointAtBoundary` directive), that first cylinder is
+ *   added as a control zone so the path begins on its boundary; the centre
+ *   start point is dropped from the result by the caller.
+ * - A mid-route ESS is `pinned`: its path point is the nearest boundary
+ *   point to the incoming leg, ignoring everything beyond (§7.2).
+ * - A CYLINDER goal terminates the route via `endPoint` at the goal
+ *   CENTRE with the goal cylinder as the last control zone: the cylinder's
+ *   path point then falls on the boundary nearest the incoming leg (the
+ *   crossing case of the centre-bound final segment), and the caller drops
+ *   the endPoint. A LINE goal is a terminal `line` element (Annex B.1.2:
+ *   the closest point on the line) with no endPoint.
  */
-function optimizePass(
-  task: XCTask,
-  previousPath: { lat: number; lon: number }[] | null,
+function buildRoute(
+  startPoint: GeoPoint,
+  startCylinder: Turnpoint | null,
+  turnpoints: Turnpoint[],
+  pinnedIdx: number,
   goalLine: GoalLine | null
-): { lat: number; lon: number }[] {
-  const path: { lat: number; lon: number }[] = [];
-  const n = task.turnpoints.length;
-
-  for (let i = 0; i < n; i++) {
-    const tp = task.turnpoints[i];
-
-    if (i === 0) {
-      // First turnpoint: point toward next optimized point (or center on first pass)
-      const nextPoint = previousPath
-        ? previousPath[1]
-        : { lat: task.turnpoints[1].waypoint.lat, lon: task.turnpoints[1].waypoint.lon };
-      const bearing = calculateBearingRadians(
-        tp.waypoint.lat, tp.waypoint.lon,
-        nextPoint.lat, nextPoint.lon
-      );
-      path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, firstTurnpointRadius(tp), bearing));
-    } else if (i === n - 1) {
-      // Last turnpoint: nearest point on the goal — the cylinder entry point
-      // toward the previous optimized point, or for a LINE goal the closest
-      // point on the line segment.
-      const prevPoint = path[path.length - 1];
-      if (goalLine) {
-        path.push(findOptimalGoalLinePoint(prevPoint.lat, prevPoint.lon, goalLine));
-      } else {
-        const bearing = calculateBearingRadians(
-          prevPoint.lat, prevPoint.lon,
-          tp.waypoint.lat, tp.waypoint.lon
-        );
-        path.push(destinationPoint(tp.waypoint.lat, tp.waypoint.lon, tp.radius, bearing + Math.PI));
-      }
-    } else {
-      // Intermediate: minimize distance through this cylinder
-      const prevPoint = path[path.length - 1];
-      // Use next optimized point from previous iteration if available,
-      // otherwise fall back to next turnpoint center
-      const nextPoint = previousPath
-        ? previousPath[i + 1]
-        : { lat: task.turnpoints[i + 1].waypoint.lat, lon: task.turnpoints[i + 1].waypoint.lon };
-
-      path.push(findOptimalCirclePoint(
-        prevPoint,
-        { lat: tp.waypoint.lat, lon: tp.waypoint.lon },
-        tp.radius,
-        nextPoint
-      ));
-    }
+): GeodesicRouteDefinition {
+  const elements: GeodesicRouteElement[] = [];
+  if (startCylinder) {
+    elements.push({ kind: 'cylinder', center: centre(startCylinder), radius: startCylinder.radius });
   }
+  const n = turnpoints.length;
+  for (let i = 0; i < n - 1; i++) {
+    elements.push({
+      kind: 'cylinder',
+      center: centre(turnpoints[i]),
+      radius: turnpoints[i].radius,
+      pinned: i === pinnedIdx,
+    });
+  }
+  const goal = turnpoints[n - 1];
+  if (goalLine) {
+    elements.push({ kind: 'line', point1: goalLine.end1, point2: goalLine.end2 });
+    return { startPoint, elements };
+  }
+  elements.push({ kind: 'cylinder', center: centre(goal), radius: goal.radius });
+  return { startPoint, elements, endPoint: centre(goal) };
+}
 
-  return path;
+/**
+ * The task's §7.1.6 task-area centre and its LTM projection, cached per
+ * task object (with the same content key as the task-line cache): the spec
+ * computes the centre ONCE per task and reuses it for every route
+ * optimisation of that task — including the §9.3 per-fix remaining routes,
+ * where recomputing it would dominate the cost. The centre derives from the
+ * cylinder-form route (a goal LINE spans at most a few km of the box, and
+ * resolving it needs an optimised route — a circularity the spec avoids the
+ * same way, by defining the centre over the route definition's points).
+ */
+const projectionCache = new WeakMap<XCTask, { key: string; projection: LtmProjection }>();
+
+function taskAreaProjection(task: XCTask): LtmProjection {
+  const key = taskGeometryKey(task);
+  const cached = projectionCache.get(task);
+  if (cached && cached.key === key) return cached.projection;
+  const tps = task.turnpoints;
+  const route = buildRoute(centre(tps[0]), null, tps.slice(1), pinnedESSIndex(task) - 1, null);
+  const areaCentre = findTaskAreaCentre(route);
+  const projection = createLtmProjection(areaCentre.lat, areaCentre.lon);
+  projectionCache.set(task, { key, projection });
+  return projection;
 }
 
 /** Sum path distance for a sequence of points */
 function pathDistance(path: { lat: number; lon: number }[]): number {
   let total = 0;
   for (let i = 1; i < path.length; i++) {
-    total += andoyerDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
+    total += ellipsoidDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
   }
   return total;
 }
 
 /**
- * Calculate the optimized task line with iterative convergence.
+ * The §9.3 remaining route from an arbitrary position: the shortest path
+ * of the route {point(position), un-reached control zones…, goal},
+ * optimised with the §7.1.8 RouteOptimizer exactly as the task line is —
+ * the position is the route's start point, the un-reached turnpoints keep
+ * their types (so a mid-route ESS still pins) and the goal keeps its
+ * cylinder/LINE handling. The projection is the TASK's cached one: §7.1.6
+ * fixes the task-area centre once per task, for all of its routes.
  *
- * Runs multiple forward passes, each time using the previous iteration's
- * optimized points as targets for the next turnpoint. Converges when the
- * total path distance changes by less than 1 meter between iterations.
+ * This is the measurement behind a landed-out pilot's flown distance
+ * (`taskDistance − remaining`), replacing any fixed-tag approximation: the
+ * optimal crossing points depend on where the route is anchored, so they
+ * must be re-derived per position.
  *
- * This matches the CIVL GAP specification (Annex A) approach of iterating
- * until no further distance reduction occurs.
+ * @param task - The scoring task (already trimmed for the distance origin)
+ * @param lastReachedIndex - Index of the last turnpoint reached; the route
+ *   runs through indices lastReachedIndex+1 … goal.
+ * @param position - Where the route starts (a track fix, a landing point).
+ * @returns The optimised line (first element = the position) and its
+ *   distance, or null when nothing remains (position at/past goal).
+ */
+export function optimizeRemainingRoute(
+  task: XCTask,
+  lastReachedIndex: number,
+  position: LatLon,
+): { line: LatLon[]; distance: number } | null {
+  const n = task.turnpoints.length;
+  if (lastReachedIndex >= n - 1) return null;
+  const remaining = task.turnpoints.slice(lastReachedIndex + 1);
+  // The ESS pins in the remaining route under the same rule as in the task:
+  // it must not be the route's terminal element (the position anchors the
+  // start, so an ESS anywhere in `remaining` but last pins).
+  const essIdx = remaining.findIndex((tp) => tp.type === 'ESS');
+  const pinnedIdx = essIdx >= 0 && essIdx < remaining.length - 1 ? essIdx : -1;
+  // The goal line (when the task has one) is resolved from the TASK's own
+  // final leg, never from the position-anchored route — re-deriving it here
+  // would tilt the line toward the pilot.
+  const goalLine = computeGoalLine(task);
+  const route = buildRoute(position, null, remaining, pinnedIdx, goalLine);
+  const { path } = routeOptimizer(route, taskAreaProjection(task));
+  // Drop the synthetic endPoint (the goal centre) for a cylinder goal: the
+  // line ends at the goal's boundary tag, as consumers expect.
+  const line = route.endPoint ? path.slice(0, -1) : path;
+  return { line, distance: pathDistance(line) };
+}
+
+/**
+ * Cache of optimised lines, keyed on the exact task object PLUS a cheap
+ * content key: the task line is recomputed per pilot during sequence
+ * resolution (and again by every explainer), and the optimisation is by far
+ * the most expensive part. The content key guards the one live mutation
+ * site (the analysis page's task editor adjusts radii in place), so a
+ * stale entry can never be served for edited geometry.
+ */
+const taskLineCache = new WeakMap<XCTask, { key: string; line: LatLon[] }>();
+
+function taskGeometryKey(task: XCTask): string {
+  let key = task.goal?.type === 'LINE' ? 'L' : 'C';
+  if (task.firstTurnpointAtBoundary) key += 'B';
+  for (const tp of task.turnpoints) {
+    key += `|${tp.type ?? ''};${tp.radius};${tp.waypoint.lat};${tp.waypoint.lon}`;
+  }
+  return key;
+}
+
+/**
+ * Calculate the optimized task line with the §7.1.8 RouteOptimizer.
+ *
+ * Returns one point per turnpoint: the launch CENTRE first (§7.2), then
+ * each cylinder's optimal tag point, with an explicit mid-route ESS pinned
+ * to the incoming leg (§7.2) — see {@link pinnedESSIndex} — and the goal's
+ * boundary tag (or goal-line tag) last.
  *
  * @param task The competition task with turnpoint cylinders
  * @returns Array of lat/lon coordinates representing the optimized path
@@ -228,41 +219,39 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
     return [{ lat: task.turnpoints[0].waypoint.lat, lon: task.turnpoints[0].waypoint.lon }];
   }
 
-  const goalLine = computeGoalLine(task);
+  const key = taskGeometryKey(task);
+  const cached = taskLineCache.get(task);
+  if (cached && cached.key === key) return cached.line;
 
-  if (task.turnpoints.length === 2) {
-    const tp1 = task.turnpoints[0];
-    const tp2 = task.turnpoints[1];
-    const bearing = calculateBearingRadians(
-      tp1.waypoint.lat, tp1.waypoint.lon,
-      tp2.waypoint.lat, tp2.waypoint.lon
-    );
-    const start = destinationPoint(tp1.waypoint.lat, tp1.waypoint.lon, firstTurnpointRadius(tp1), bearing);
-    return [
-      start,
-      goalLine
-        ? findOptimalGoalLinePoint(start.lat, start.lon, goalLine)
-        : destinationPoint(tp2.waypoint.lat, tp2.waypoint.lon, tp2.radius, bearing + Math.PI)
-    ];
-  }
+  const line = computeOptimizedTaskLine(task, computeGoalLine(task));
+  taskLineCache.set(task, { key, line });
+  return line;
+}
 
-  // First pass: no previous path to reference
-  let path = optimizePass(task, null, goalLine);
-  let prevDistance = pathDistance(path);
-
-  // Iterate until convergence (< 1m change) or max iterations
-  const maxIterations = task.turnpoints.length * 10;
-  for (let iter = 0; iter < maxIterations; iter++) {
-    const newPath = optimizePass(task, path, goalLine);
-    const newDistance = pathDistance(newPath);
-
-    if (prevDistance - newDistance < 1.0) break;
-
-    path = newPath;
-    prevDistance = newDistance;
-  }
-
-  return path;
+/**
+ * @param goalLine - The resolved goal line, or null for a cylinder goal.
+ *   Passed in (not derived here) because deriving it needs an optimised
+ *   route of the CYLINDER-goal form of this task — computeGoalLine owns
+ *   that recursion and memoises the result.
+ */
+function computeOptimizedTaskLine(task: XCTask, goalLine: GoalLine | null): LatLon[] {
+  const tps = task.turnpoints;
+  const first = tps[0];
+  const boundaryStart = Boolean(task.firstTurnpointAtBoundary && first.radius > 0);
+  const route = buildRoute(
+    centre(first),
+    boundaryStart ? first : null,
+    tps.slice(1),
+    pinnedESSIndex(task) - 1,
+    goalLine,
+  );
+  const { path } = routeOptimizer(route, taskAreaProjection(task));
+  // path = [startPoint, one tag per element, endPoint?]. Reduce to one point
+  // per turnpoint: the start centre (or, under the boundary directive, the
+  // first cylinder's tag), each mid-route tag, and the goal tag — dropping
+  // the synthetic goal-centre endPoint of a cylinder goal.
+  const tags = route.endPoint ? path.slice(1, -1) : path.slice(1);
+  return boundaryStart ? tags : [path[0], ...tags];
 }
 
 /**
@@ -270,7 +259,7 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
  *
  * This is the shortest achievable distance through the task by optimally
  * tagging each turnpoint cylinder. The distance is computed as the sum
- * of great circle distances between consecutive optimized points.
+ * of the §7.1.5 EllipsoidDistance over consecutive optimized points.
  *
  * @param task The competition task with turnpoint cylinders
  * @returns Total optimized distance in meters
@@ -284,18 +273,7 @@ export function calculateOptimizedTaskLine(task: XCTask): { lat: number; lon: nu
 export function calculateOptimizedTaskDistance(task: XCTask): number {
   const path = calculateOptimizedTaskLine(task);
   if (path.length < 2) return 0;
-
-  let totalDistance = 0;
-  for (let i = 1; i < path.length; i++) {
-    totalDistance += andoyerDistance(
-      path[i - 1].lat,
-      path[i - 1].lon,
-      path[i].lat,
-      path[i].lon
-    );
-  }
-
-  return totalDistance;
+  return pathDistance(path);
 }
 
 /**
@@ -326,7 +304,7 @@ export function getOptimizedSegmentDistances(task: XCTask): number[] {
   const distances: number[] = [];
   for (let i = 1; i < path.length; i++) {
     distances.push(
-      andoyerDistance(
+      ellipsoidDistance(
         path[i - 1].lat,
         path[i - 1].lon,
         path[i].lat,
@@ -392,7 +370,7 @@ export function computeTurnpointDirections(
     if (i === 0 || i === n - 1) return 'enter';
     const prevTag = line[i - 1];
     if (!prevTag) return 'enter';
-    const prevTagToCenter = andoyerDistance(
+    const prevTagToCenter = ellipsoidDistance(
       prevTag.lat, prevTag.lon,
       tp.waypoint.lat, tp.waypoint.lon,
     );

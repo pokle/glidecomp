@@ -5,7 +5,8 @@
 import { describe, it, expect } from 'bun:test';
 
 import {
-  andoyerDistance,
+  ellipsoidDistance,
+  inverseGeodesic,
   getBoundingBox,
   calculateBearing,
   destinationPoint,
@@ -16,7 +17,7 @@ import {
 import { createFix } from './test-helpers';
 
 describe('Geo Math Functions - Characterization Tests', () => {
-  describe('andoyerDistance', () => {
+  describe('ellipsoidDistance', () => {
     it('should calculate distance from London to Paris (~344km)', () => {
       // Big Ben to Eiffel Tower
       const londonLat = 51.5007;
@@ -24,7 +25,7 @@ describe('Geo Math Functions - Characterization Tests', () => {
       const parisLat = 48.8584;
       const parisLon = 2.2945;
 
-      const distance = andoyerDistance(londonLat, londonLon, parisLat, parisLon);
+      const distance = ellipsoidDistance(londonLat, londonLon, parisLat, parisLon);
 
       // Expected ~344km, allow 5km tolerance
       expect(distance).toBeGreaterThan(339000);
@@ -32,20 +33,20 @@ describe('Geo Math Functions - Characterization Tests', () => {
     });
 
     it('should return 0 for same point', () => {
-      const distance = andoyerDistance(47.0, 11.0, 47.0, 11.0);
+      const distance = ellipsoidDistance(47.0, 11.0, 47.0, 11.0);
       expect(distance).toBe(0);
     });
 
     it('should calculate roughly 111km for 1 degree of latitude', () => {
       // 1 degree of latitude is approximately 110-111km (varies with ellipsoid)
-      const distance = andoyerDistance(47.0, 11.0, 48.0, 11.0);
+      const distance = ellipsoidDistance(47.0, 11.0, 48.0, 11.0);
       expect(distance).toBeGreaterThan(110000);
       expect(distance).toBeLessThan(112000);
     });
 
     it('should calculate distance across equator', () => {
       // From 1°N to 1°S at same longitude
-      const distance = andoyerDistance(1.0, 0.0, -1.0, 0.0);
+      const distance = ellipsoidDistance(1.0, 0.0, -1.0, 0.0);
       // 2 degrees of latitude ≈ 221-222km
       expect(distance).toBeGreaterThan(220000);
       expect(distance).toBeLessThan(223000);
@@ -58,7 +59,7 @@ describe('Geo Math Functions - Characterization Tests', () => {
       const sydneyLat = -33.8688;
       const sydneyLon = 151.2093;
 
-      const distance = andoyerDistance(melbourneLat, melbourneLon, sydneyLat, sydneyLon);
+      const distance = ellipsoidDistance(melbourneLat, melbourneLon, sydneyLat, sydneyLon);
 
       // Expected ~713km
       expect(distance).toBeGreaterThan(700000);
@@ -72,7 +73,7 @@ describe('Geo Math Functions - Characterization Tests', () => {
       const tongaLat = -21.1789;
       const tongaLon = -175.1982;
 
-      const distance = andoyerDistance(fijiLat, fijiLon, tongaLat, tongaLon);
+      const distance = ellipsoidDistance(fijiLat, fijiLon, tongaLat, tongaLon);
 
       // Expected ~804km (actual value from implementation)
       expect(distance).toBeGreaterThan(800000);
@@ -87,7 +88,7 @@ describe('Geo Math Functions - Characterization Tests', () => {
       const lat2 = 47.0;
       const lon2 = 11.000657;
 
-      const distance = andoyerDistance(lat1, lon1, lat2, lon2);
+      const distance = ellipsoidDistance(lat1, lon1, lat2, lon2);
 
       expect(distance).toBeGreaterThan(45);
       expect(distance).toBeLessThan(55);
@@ -99,15 +100,15 @@ describe('Geo Math Functions - Characterization Tests', () => {
       const lat2 = 48.789;
       const lon2 = 12.012;
 
-      const distanceAB = andoyerDistance(lat1, lon1, lat2, lon2);
-      const distanceBA = andoyerDistance(lat2, lon2, lat1, lon1);
+      const distanceAB = ellipsoidDistance(lat1, lon1, lat2, lon2);
+      const distanceBA = ellipsoidDistance(lat2, lon2, lat1, lon1);
 
-      expect(distanceAB).toBe(distanceBA);
+      expect(distanceAB).toBeCloseTo(distanceBA, 6); // Vincenty iteration is symmetric to sub-micrometre
     });
 
     it('should handle antipodal points (~20,000km)', () => {
       // Roughly antipodal: 0,0 to 0,180
-      const distance = andoyerDistance(0, 0, 0, 180);
+      const distance = ellipsoidDistance(0, 0, 0, 180);
       // Half circumference ≈ 20,015km
       expect(distance).toBeGreaterThan(20000000);
       expect(distance).toBeLessThan(20050000);
@@ -266,9 +267,9 @@ describe('Geo Math Functions - Characterization Tests', () => {
       const latB = 47.5, lonB = 11.5;
       const latC = 48.0, lonC = 12.0;
 
-      const distAB = andoyerDistance(latA, lonA, latB, lonB);
-      const distBC = andoyerDistance(latB, lonB, latC, lonC);
-      const distAC = andoyerDistance(latA, lonA, latC, lonC);
+      const distAB = ellipsoidDistance(latA, lonA, latB, lonB);
+      const distBC = ellipsoidDistance(latB, lonB, latC, lonC);
+      const distAC = ellipsoidDistance(latA, lonA, latC, lonC);
 
       expect(distAC).toBeLessThanOrEqual(distAB + distBC + 1); // +1 for floating point
     });
@@ -296,24 +297,24 @@ describe('Snapshot Tests for Known Values', () => {
   // These tests capture specific values that the current implementation produces
   // so we can verify the new implementation matches exactly
 
-  describe('andoyerDistance snapshots', () => {
+  describe('ellipsoidDistance snapshots', () => {
     it('should match snapshot: London to Paris', () => {
-      const distance = andoyerDistance(51.5007, -0.1246, 48.8584, 2.2945);
-      expect(distance).toBeCloseTo(340896.67, 0);
+      const distance = ellipsoidDistance(51.5007, -0.1246, 48.8584, 2.2945);
+      expect(distance).toBeCloseTo(340894.82, 0); // Vincenty reference value
     });
 
     it('should match snapshot: 1 degree latitude at equator', () => {
-      const distance = andoyerDistance(0, 0, 1, 0);
-      expect(distance).toBeCloseTo(110573.14, 0);
+      const distance = ellipsoidDistance(0, 0, 1, 0);
+      expect(distance).toBeCloseTo(110574.39, 0); // exact meridian arc for 1°
     });
 
     it('should match snapshot: 1 degree longitude at equator', () => {
-      const distance = andoyerDistance(0, 0, 0, 1);
+      const distance = ellipsoidDistance(0, 0, 0, 1);
       expect(distance).toBeCloseTo(111319.49, 0);
     });
 
     it('should match snapshot: 1 degree longitude at 47°N', () => {
-      const distance = andoyerDistance(47, 0, 47, 1);
+      const distance = ellipsoidDistance(47, 0, 47, 1);
       expect(distance).toBeCloseTo(76055.34, 0);
     });
   });
@@ -364,8 +365,8 @@ describe('destinationPoint tests (WGS84 Vincenty direct)', () => {
     expect(returnTrip.lon).toBeCloseTo(11.0, 3);
   });
 
-  it('should be consistent with andoyerDistance (<0.1m at 5km, <0.5m at 50km)', () => {
-    // Place a point away, then measure with andoyerDistance — both use WGS84
+  it('should be consistent with ellipsoidDistance (<0.1m at 5km, <0.5m at 50km)', () => {
+    // Place a point away, then measure with ellipsoidDistance — both use WGS84
     // but Vincenty direct and Andoyer inverse are different algorithms,
     // so they agree to ~10 ppm (0.05m per 5km, 0.5m per 50km)
     const testCases = [
@@ -377,7 +378,7 @@ describe('destinationPoint tests (WGS84 Vincenty direct)', () => {
 
     for (const tc of testCases) {
       const dest = destinationPoint(tc.lat, tc.lon, tc.dist, tc.bearing);
-      const measured = andoyerDistance(tc.lat, tc.lon, dest.lat, dest.lon);
+      const measured = ellipsoidDistance(tc.lat, tc.lon, dest.lat, dest.lon);
       expect(Math.abs(measured - tc.dist)).toBeLessThan(tc.tol);
     }
   });
@@ -455,7 +456,7 @@ describe('getCirclePoints tests (WGS84)', () => {
     const points = getCirclePoints(centerLat, centerLon, radius, 16);
 
     for (let i = 0; i < points.length - 1; i++) {
-      const dist = andoyerDistance(centerLat, centerLon, points[i].lat, points[i].lon);
+      const dist = ellipsoidDistance(centerLat, centerLon, points[i].lat, points[i].lon);
       expect(Math.abs(dist - radius)).toBeLessThan(0.1);
     }
   });
@@ -486,7 +487,7 @@ describe('getCirclePoints tests (WGS84)', () => {
     expect(points).toHaveLength(9);
 
     for (let i = 0; i < points.length - 1; i++) {
-      const dist = andoyerDistance(47.0, 11.0, points[i].lat, points[i].lon);
+      const dist = ellipsoidDistance(47.0, 11.0, points[i].lat, points[i].lon);
       expect(Math.abs(dist - 100)).toBeLessThan(0.01);
     }
   });
@@ -497,7 +498,7 @@ describe('getCirclePoints tests (WGS84)', () => {
 
     // Vincenty direct and Andoyer inverse agree to ~10 ppm
     for (let i = 0; i < points.length - 1; i++) {
-      const dist = andoyerDistance(47.0, 11.0, points[i].lat, points[i].lon);
+      const dist = ellipsoidDistance(47.0, 11.0, points[i].lat, points[i].lon);
       expect(Math.abs(dist - 50000)).toBeLessThan(0.5);
     }
   });
@@ -508,9 +509,9 @@ describe('getCirclePoints tests (WGS84)', () => {
     const southPoints = getCirclePoints(-36.0, 148.0, 1000, 8);
 
     for (let i = 0; i < 8; i++) {
-      const equatorDist = andoyerDistance(0.0, 11.0, equatorPoints[i].lat, equatorPoints[i].lon);
-      const highLatDist = andoyerDistance(70.0, 11.0, highLatPoints[i].lat, highLatPoints[i].lon);
-      const southDist = andoyerDistance(-36.0, 148.0, southPoints[i].lat, southPoints[i].lon);
+      const equatorDist = ellipsoidDistance(0.0, 11.0, equatorPoints[i].lat, equatorPoints[i].lon);
+      const highLatDist = ellipsoidDistance(70.0, 11.0, highLatPoints[i].lat, highLatPoints[i].lon);
+      const southDist = ellipsoidDistance(-36.0, 148.0, southPoints[i].lat, southPoints[i].lon);
       expect(Math.abs(equatorDist - 1000)).toBeLessThan(0.1);
       expect(Math.abs(highLatDist - 1000)).toBeLessThan(0.1);
       expect(Math.abs(southDist - 1000)).toBeLessThan(0.1);
@@ -520,5 +521,59 @@ describe('getCirclePoints tests (WGS84)', () => {
   it('should use default numPoints of 64', () => {
     const points = getCirclePoints(47.0, 11.0, 1000);
     expect(points).toHaveLength(65);
+  });
+});
+
+/**
+ * ellipsoidDistance and inverseGeodesic deliberately duplicate the same
+ * Vincenty inverse iteration (the former stays allocation-free for the
+ * hottest loop; the latter also returns the azimuth). Their doc comments
+ * carry reciprocal KEEP IN SYNC markers; this suite is the executable half
+ * of that promise. The two run the identical sequence of float operations
+ * (same initialisation, convergence test and series), and even the
+ * non-convergence guard falls back to the same Andoyer-Lambert distance —
+ * so the distances must be EXACTLY equal, bit for bit, not merely close.
+ */
+describe('inverseGeodesic ↔ ellipsoidDistance parity', () => {
+  const pairs: Array<[string, number, number, number, number]> = [
+    ['zero-length (identical points)', -36.5, 147.9, -36.5, 147.9],
+    ['short hop (~150 m, task scale)', -36.5675, 146.723, -36.5688, 146.7241],
+    ['cylinder scale (~5 km)', 47.0, 11.0, 47.04, 11.02],
+    ['task leg (~50 km)', -36.186, 147.977, -36.6, 148.3],
+    ['equatorial line (both on the equator)', 0, 10, 0, 12],
+    ['meridian line (same longitude)', 47.0, 11.0, 49.0, 11.0],
+    ['polar (near the pole)', 89.9, 0, 89.8, 120],
+    ['southern high latitude', -75.0, 166.0, -74.5, 168.0],
+    ['continental (~1,000 km)', 51.5007, -0.1246, 48.8584, 2.2945],
+    ['hemisphere crossing (~10,000 km)', 51.5, -0.12, -33.86, 151.21],
+    ['antipodal-ish (near non-convergence territory)', 0, 0, 0.5, 179.7],
+    ['near-antipodal off-equator', 30.0, 20.0, -29.9, -159.8],
+  ];
+
+  for (const [label, lat1, lon1, lat2, lon2] of pairs) {
+    it(`agrees exactly: ${label}`, () => {
+      const { distance } = inverseGeodesic(lat1, lon1, lat2, lon2);
+      // toBe, not toBeCloseTo: the implementations must not drift apart
+      // even in the last ulp — a divergence means one side was edited
+      // without the other (see the KEEP IN SYNC markers in geo.ts).
+      expect(distance).toBe(ellipsoidDistance(lat1, lon1, lat2, lon2));
+    });
+  }
+
+  it('agrees exactly across a spread of pseudo-random pairs', () => {
+    // Deterministic LCG so the corpus is stable run to run.
+    let s = 0x9e3779b9 >>> 0;
+    const rnd = () => {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      return s / 0x100000000;
+    };
+    for (let i = 0; i < 200; i++) {
+      const lat1 = rnd() * 170 - 85;
+      const lon1 = rnd() * 360 - 180;
+      const lat2 = rnd() * 170 - 85;
+      const lon2 = rnd() * 360 - 180;
+      expect(inverseGeodesic(lat1, lon1, lat2, lon2).distance)
+        .toBe(ellipsoidDistance(lat1, lon1, lat2, lon2));
+    }
   });
 });

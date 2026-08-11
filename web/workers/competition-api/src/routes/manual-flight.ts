@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth } from "../middleware/auth";
@@ -17,13 +17,11 @@ import {
   type ManualFlightInput,
 } from "../manual-flight-store";
 import { mergeStoredGapParamsJson } from "../scoring";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
+import {
+  submissionsBlockedFor,
+  submissionsClosedBody,
+} from "../submission-gate";
+import { hiddenFromCaller } from "../comp-visibility";
 
 interface ManualFlightRow {
   task_manual_flight_id: number;
@@ -112,7 +110,7 @@ function turnpointName(
   }
 }
 
-export const manualFlightRoutes = new Hono<HonoEnv>()
+export const manualFlightRoutes = new Hono<AuthedEnv>()
   // ── GET .../manual-flight ── List active manual flights for a task.
   // Public with the same visibility rules as scores/statuses (test comps
   // require admin).
@@ -219,11 +217,17 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // A manual flight is evidence for a task exactly as a tracklog is, so a
+      // hidden test comp answers it as a missing one — same rule, same gate.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const taskRow = await loadScoringTask(c.env.DB, compId, taskId);
       if (!taskRow) return c.json({ error: "Task not found" }, 404);
@@ -249,6 +253,14 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
         !!comp.open_igc_upload
       );
       if (authErr) return c.json({ error: authErr.error }, authErr.status);
+
+      // A closed task stops manual flights too. This is not optional: a manual
+      // flight is evidence for the task in exactly the way a tracklog is, and
+      // leaving it open would make "closed for submissions" false. Organisers
+      // still pass, as they do on the upload routes.
+      if (await submissionsBlockedFor(c.env.DB, compId, taskId, user)) {
+        return c.json(await submissionsClosedBody(c.env.DB, compId, taskId), 403);
+      }
 
       // Compute made-good against the task geometry, by scoring format. Open
       // distance ignores turnpoints (measured from the take-off exit); GAP
@@ -351,11 +363,17 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       const user = c.var.user;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the record route above: a hidden test comp is missing to
+      // everyone but its admins, on the way in and on the way back out.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const cp = await c.env.DB.prepare(
         "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
@@ -408,6 +426,11 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
   // ── POST .../manual-flight/:comp_pilot_id/restore/:manual_flight_id ──
   // Reactivate a superseded manual flight, re-materializing its made-good
   // against the current route. Supersedes any other active evidence.
+  //
+  // Deliberately NOT gated by task.submissions_closed. Restoring evidence the
+  // task already holds is a CORRECTION, not a submission — it is precisely
+  // what an organiser does after closing the task, and it adds nothing that
+  // was not sent while the task was open.
   .post(
     "/api/comp/:comp_id/task/:task_id/manual-flight/:comp_pilot_id/restore/:manual_flight_id",
     requireAuth,
@@ -425,11 +448,17 @@ export const manualFlightRoutes = new Hono<HonoEnv>()
       }
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the record route above: a hidden test comp is missing to
+      // everyone but its admins, on the way in and on the way back out.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const taskRow = await loadScoringTask(c.env.DB, compId, taskId);
       if (!taskRow) return c.json({ error: "Task not found" }, 404);

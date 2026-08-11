@@ -37,22 +37,22 @@ export function signConsistency(s: SignSummary): SignConsistency {
 export function aggregateComp(tasks: CompTaskResult[]): CompAggregateReport {
   const taskLabels = tasks.map((t) => t.label);
 
-  // --- comp standings: total score per pilot key across tasks ---
-  const standings = new Map<string, { name: string; taskCount: number; totalScore: number }>();
+  // --- comp scores: total score per pilot key across tasks ---
+  const scores = new Map<string, { name: string; taskCount: number; totalScore: number }>();
   for (const task of tasks) {
     for (const t of task.totals) {
       const key = task.pilotKeyByTrackFile[t.trackFile];
       if (key === undefined) continue;
-      const s = standings.get(key);
+      const s = scores.get(key);
       if (s) {
         s.taskCount++;
         s.totalScore += t.totalScore;
       } else {
-        standings.set(key, { name: t.pilotName, taskCount: 1, totalScore: t.totalScore });
+        scores.set(key, { name: t.pilotName, taskCount: 1, totalScore: t.totalScore });
       }
     }
   }
-  const pilots = [...standings.entries()]
+  const pilots = [...scores.entries()]
     .map(([key, s]) => ({ key, ...s, rank: 0 }))
     .sort((a, b) => b.totalScore - a.totalScore);
   pilots.forEach((p, i) => (p.rank = i + 1));

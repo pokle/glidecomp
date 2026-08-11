@@ -16,36 +16,59 @@ export interface UnitPreferences {
   climbRate: ClimbRateUnit;
 }
 
+/**
+ * The canonical SI value of one non-SI unit — multiply a display value by
+ * this to get metres or metres per second.
+ *
+ * This is the single table both directions derive from: the display factors
+ * below are its reciprocals, and the threshold parser imports it for input
+ * parsing, so "1 ft" parsed and 0.3048 m displayed can never disagree. The
+ * foot, mile and nautical mile values are exact by international definition
+ * (and mph follows from the mile); the knot is the conventional five-figure
+ * rounding of 1852/3600 m/s.
+ */
+export const TO_SI = {
+  'km/h': 1 / 3.6,
+  mph: 0.44704, // exact: 1609.344 m per mile / 3600 s
+  knots: 0.51444,
+  ft: 0.3048, // exact
+  'ft/min': 0.3048 / 60,
+  mi: 1609.344, // exact: metres per statute mile
+  nmi: 1852, // exact: metres per nautical mile
+} as const;
+
 interface ConversionInfo {
   factor: number;
   decimals: number;
   label: string;
 }
 
-// Conversion factors from SI base units
-const CONVERSIONS = {
+type UnitType = keyof UnitPreferences;
+
+// Display factors from SI base units — reciprocals of TO_SI where the unit
+// is not itself SI. Keyed by the unit unions above so an entry cannot drift
+// from the types, and a typo is a compile error rather than a runtime miss.
+const CONVERSIONS: { [K in UnitType]: Record<UnitPreferences[K], ConversionInfo> } = {
   speed: {
     'km/h': { factor: 3.6, decimals: 0, label: 'km/h' },
-    mph: { factor: 2.237, decimals: 0, label: 'mph' },
-    knots: { factor: 1.944, decimals: 0, label: 'kts' },
-  } as Record<string, ConversionInfo>,
+    mph: { factor: 1 / TO_SI.mph, decimals: 0, label: 'mph' },
+    knots: { factor: 1 / TO_SI.knots, decimals: 0, label: 'kts' },
+  },
   altitude: {
     m: { factor: 1, decimals: 0, label: 'm' },
-    ft: { factor: 3.281, decimals: 0, label: 'ft' },
-  } as Record<string, ConversionInfo>,
+    ft: { factor: 1 / TO_SI.ft, decimals: 0, label: 'ft' },
+  },
   distance: {
     km: { factor: 0.001, decimals: 2, label: 'km' },
-    mi: { factor: 0.000621371, decimals: 2, label: 'mi' },
-    nmi: { factor: 0.000539957, decimals: 2, label: 'NM' },
-  } as Record<string, ConversionInfo>,
+    mi: { factor: 1 / TO_SI.mi, decimals: 2, label: 'mi' },
+    nmi: { factor: 1 / TO_SI.nmi, decimals: 2, label: 'NM' },
+  },
   climbRate: {
     'm/s': { factor: 1, decimals: 1, label: 'm/s' },
-    'ft/min': { factor: 196.85, decimals: 0, label: 'fpm' },
-    knots: { factor: 1.944, decimals: 1, label: 'kts' },
-  } as Record<string, ConversionInfo>,
-} as const;
-
-type UnitType = keyof typeof CONVERSIONS;
+    'ft/min': { factor: 1 / TO_SI['ft/min'], decimals: 0, label: 'fpm' },
+    knots: { factor: 1 / TO_SI.knots, decimals: 1, label: 'kts' },
+  },
+};
 
 export const DEFAULT_UNITS: UnitPreferences = {
   speed: 'km/h',
@@ -57,16 +80,16 @@ export const DEFAULT_UNITS: UnitPreferences = {
 export interface FormattedValue {
   value: number;
   formatted: string; // e.g., "45"
-  withUnit: string; // e.g., "45km/h"
+  withUnit: string; // e.g., "45 km/h" — joined with a non-breaking space
   unit: string; // e.g., "km/h"
 }
 
 /**
  * Convert and format a value for display
  */
-export function formatUnit(
+export function formatUnit<K extends UnitType>(
   value: number,
-  unitType: UnitType,
+  unitType: K,
   options?: {
     unit?: string; // Override unit preference
     decimals?: number; // Override decimal places
@@ -75,18 +98,15 @@ export function formatUnit(
   }
 ): FormattedValue {
   const prefs = options?.prefs ?? DEFAULT_UNITS;
-  const unitKey = options?.unit ?? prefs[unitType];
-  const conv = CONVERSIONS[unitType][unitKey];
-
-  if (!conv) {
-    // Fallback if unit not found
-    return {
-      value,
-      formatted: value.toFixed(0),
-      withUnit: value.toFixed(0),
-      unit: unitKey,
-    };
-  }
+  // `options.unit` is this module's one stringly edge — overrides arrive from
+  // persisted preferences and other untyped callers — so validate it here: an
+  // override the table doesn't know falls back to the caller's preference.
+  const requested = options?.unit;
+  const unitKey: UnitPreferences[K] =
+    requested !== undefined && requested in CONVERSIONS[unitType]
+      ? (requested as UnitPreferences[K])
+      : prefs[unitType];
+  const conv: ConversionInfo = CONVERSIONS[unitType][unitKey];
 
   const converted = value * conv.factor;
   const decimals = options?.decimals ?? conv.decimals;
@@ -95,13 +115,11 @@ export function formatUnit(
   const sign = options?.showSign && converted > 0 ? '+' : '';
   const displayValue = sign + formatted;
 
-  const withUnit = conv.label ? `${displayValue}\u{00A0}${conv.label}` : displayValue;
-
   return {
     value: converted,
     formatted: displayValue,
-    withUnit,
-    unit: conv.label || unitKey,
+    withUnit: `${displayValue}\u{00A0}${conv.label}`,
+    unit: conv.label,
   };
 }
 
@@ -169,8 +187,8 @@ export function formatRadius(meters: number, opts?: { prefs?: UnitPreferences })
 export function getSegmentLengthMeters(distanceUnit: DistanceUnit): number {
   const lengths: Record<DistanceUnit, number> = {
     km: 1000,
-    mi: 1609.344,
-    nmi: 1852,
+    mi: TO_SI.mi,
+    nmi: TO_SI.nmi,
   };
   return lengths[distanceUnit];
 }
@@ -178,11 +196,9 @@ export function getSegmentLengthMeters(distanceUnit: DistanceUnit): number {
 /**
  * Get the current unit label for a unit type
  */
-export function getUnitLabel(unitType: UnitType, prefs?: UnitPreferences): string {
+export function getUnitLabel<K extends UnitType>(unitType: K, prefs?: UnitPreferences): string {
   const p = prefs ?? DEFAULT_UNITS;
-  const unitKey = p[unitType];
-  const conv = CONVERSIONS[unitType][unitKey];
-  return conv?.label || unitKey;
+  return CONVERSIONS[unitType][p[unitType]].label;
 }
 
 /**

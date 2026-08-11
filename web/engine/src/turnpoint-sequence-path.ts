@@ -8,9 +8,13 @@
 
 import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
-import { andoyerDistance } from './geo';
-import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
-import { distanceToGoalLine } from './goal-line';
+import { ellipsoidDistance } from './geo';
+import {
+  computeTurnpointDirections,
+  optimizeRemainingRoute,
+  type TurnpointDirection,
+} from './task-optimizer';
+import { computeGoalLine, distanceToGoalLine } from './goal-line';
 import type {
   CylinderCrossing,
   TurnpointReaching,
@@ -21,7 +25,7 @@ import type {
 /**
  * Build a forward path from an SSS crossing through subsequent turnpoints.
  *
- * Reaching a turnpoint is presence-based (FAI S7F §8 / FS semantics), on the
+ * Reaching a turnpoint is presence-based (FAI S7F §9 / FS semantics), on the
  * side of the boundary the turnpoint's direction requires: an ENTER cylinder
  * needs the pilot inside it at or after the previous reaching, an EXIT
  * cylinder (one the route arrives at from inside — see
@@ -49,6 +53,33 @@ interface BuildForwardPathParams {
   startSelectionReason?: TurnpointReaching['selectionReason'];
 }
 
+/**
+ * One {@link TurnpointReaching}, anchored at a position (a crossing, or the
+ * previous reaching for the presence-based case). Spelled once so the three
+ * construction sites below cannot drift: `goalSemicircleCredited` is written
+ * only when true, so the JSON payload stays absent otherwise.
+ */
+function reachingAt(
+  taskIndex: number,
+  at: Pick<TurnpointReaching, 'fixIndex' | 'time' | 'latitude' | 'longitude' | 'altitude'>,
+  selectionReason: TurnpointReaching['selectionReason'],
+  candidateCount: number,
+  flags: { toleranceCredited: boolean; goalSemicircleCredited?: boolean },
+): TurnpointReaching {
+  return {
+    taskIndex,
+    fixIndex: at.fixIndex,
+    time: at.time,
+    latitude: at.latitude,
+    longitude: at.longitude,
+    altitude: at.altitude,
+    selectionReason,
+    candidateCount,
+    toleranceCredited: flags.toleranceCredited,
+    ...(flags.goalSemicircleCredited ? { goalSemicircleCredited: true } : {}),
+  };
+}
+
 export function buildForwardPath(params: BuildForwardPathParams): TurnpointReaching[] {
   const {
     sssCrossing,
@@ -63,17 +94,13 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
   const sequence: TurnpointReaching[] = [];
 
   // Add SSS reaching
-  sequence.push({
-    taskIndex: sssCrossing.taskIndex,
-    fixIndex: sssCrossing.fixIndex,
-    time: sssCrossing.time,
-    latitude: sssCrossing.latitude,
-    longitude: sssCrossing.longitude,
-    altitude: sssCrossing.altitude,
-    selectionReason: startSelectionReason,
-    candidateCount: crossingsByTP.get(sssIdx)?.length ?? 0,
-    toleranceCredited: sssCrossing.toleranceCredited,
-  });
+  sequence.push(reachingAt(
+    sssCrossing.taskIndex,
+    sssCrossing,
+    startSelectionReason,
+    crossingsByTP.get(sssIdx)?.length ?? 0,
+    { toleranceCredited: sssCrossing.toleranceCredited },
+  ));
 
   let prevReachingTime = sssCrossing.time.getTime();
 
@@ -113,20 +140,16 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
 
     if (satisfiedAtPrevReaching) {
       const prev = sequence[sequence.length - 1];
-      sequence.push({
-        taskIndex: tpIdx,
-        fixIndex: prev.fixIndex,
-        time: prev.time,
-        latitude: prev.latitude,
-        longitude: prev.longitude,
-        altitude: prev.altitude,
-        selectionReason: isExit ? 'already_outside' : 'already_inside',
-        candidateCount: tpCrossings.length,
-        toleranceCredited: lastCrossingBefore?.toleranceCredited ?? false,
-        ...(lastCrossingBefore?.goalSemicircleCredited
-          ? { goalSemicircleCredited: true }
-          : {}),
-      });
+      sequence.push(reachingAt(
+        tpIdx,
+        prev,
+        isExit ? 'already_outside' : 'already_inside',
+        tpCrossings.length,
+        {
+          toleranceCredited: lastCrossingBefore?.toleranceCredited ?? false,
+          goalSemicircleCredited: lastCrossingBefore?.goalSemicircleCredited,
+        },
+      ));
       continue; // reached at the same moment — prevReachingTime unchanged
     }
 
@@ -157,20 +180,16 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
       break; // Pilot didn't reach this TP
     }
 
-    sequence.push({
-      taskIndex: validCrossing.taskIndex,
-      fixIndex: validCrossing.fixIndex,
-      time: validCrossing.time,
-      latitude: validCrossing.latitude,
-      longitude: validCrossing.longitude,
-      altitude: validCrossing.altitude,
-      selectionReason: isESS ? 'first_crossing' : 'first_after_previous',
-      candidateCount: tpCrossings.length,
-      toleranceCredited: validCrossing.toleranceCredited,
-      ...(validCrossing.goalSemicircleCredited
-        ? { goalSemicircleCredited: true }
-        : {}),
-    });
+    sequence.push(reachingAt(
+      validCrossing.taskIndex,
+      validCrossing,
+      isESS ? 'first_crossing' : 'first_after_previous',
+      tpCrossings.length,
+      {
+        toleranceCredited: validCrossing.toleranceCredited,
+        goalSemicircleCredited: validCrossing.goalSemicircleCredited,
+      },
+    ));
 
     prevReachingTime = validCrossing.time.getTime();
   }
@@ -205,33 +224,74 @@ export function buildRemainingPath(
 }
 
 /**
+ * How close to the true minimum the 'exact' best-progress search is
+ * guaranteed to land (metres). Published competition distances carry 10 m
+ * resolution and the tag-point approximation this search replaced erred by
+ * 60–400 m, so 5 m is far inside both; a non-zero tolerance is what lets
+ * the search skip a thermal's worth of near-identical fixes instead of
+ * optimising every one of them.
+ */
+const BEST_PROGRESS_TOLERANCE_M = 5;
+
+/**
  * Compute best progress for a non-goal pilot.
- * Scans all fixes after the last reaching time to find the point
- * with minimum remaining distance to goal.
  *
- * Per CIVL GAP, remaining distance is the shortest path from the pilot's
- * position through any un-reached intermediate turnpoints to goal — not
- * a straight line to goal.
+ * Scans all fixes after the last reaching time and finds the one with the
+ * minimum remaining distance to goal. What "remaining distance" means
+ * depends on the mode:
  *
+ * - `'exact'` — the §9.3 measurement: "for every remaining track point,
+ *   the shortest distance to goal is calculated using the method described
+ *   in section 6.4.1" — a fresh shortest-path optimisation of the route
+ *   {point(fix), un-reached control zones…, goal}
+ *   ({@link optimizeRemainingRoute}), NOT the distance to a tag point
+ *   frozen by the launch-anchored task line. Used for the sequence that
+ *   actually scores.
+ *
+ * - `'approx'` — the cheap single-pass tag/edge measure (the pre-§9.3
+ *   behaviour): fix→next-turnpoint by {@link NextTPMeasure}, plus the task
+ *   line's frozen legs. Used by the resolver's candidate-start RANKING
+ *   loop, where each of many candidate sequences needs a comparable
+ *   distance and a few-hundred-metre approximation cannot realistically
+ *   reorder candidates whose distances differ by whole turnpoints.
+ *
+ * The exact mode is a small branch-and-bound, not a per-fix sweep: the
+ * approx measure seeds the incumbent; a per-fix LOWER bound — the larger
+ * of (edge distance to the next zone + the sum of centre-to-centre-minus-
+ * radii minimums between remaining zones) and the straight edge distance
+ * to goal, no path can beat either — prunes; evaluated fixes prune their
+ * neighbours by the Lipschitz property (remaining distance between two
+ * positions can differ by at most their separation). Fixes are evaluated
+ * in ascending-bound order until no bound can improve the incumbent by
+ * more than {@link BEST_PROGRESS_TOLERANCE_M}.
+ *
+ * @param task - The scoring task (already trimmed for the distance origin).
+ * @param lastReachedIndex - Index of the last turnpoint reached.
  * @param remainingTPs - Turnpoints from lastReached+1 to goal (inclusive),
- *   each with lat/lon/radius. When the next unreached TP is goal itself,
- *   this is a single-element array and degenerates to straight-line.
+ *   each with lat/lon/radius (used by the heuristic and the bound).
  * @param remainingLegDistances - Optimized distances between consecutive
- *   remaining TPs (length = remainingTPs.length - 1).
- * @param nextMeasure - How to measure the fix→next-turnpoint distance
- *   (see {@link NextTPMeasure}).
- * @param deadlineMs - The task deadline (FAI S7F §11.1): best distance is
+ *   remaining TPs (heuristic only).
+ * @param nextMeasure - The cheap fix→next-turnpoint measure used by the
+ *   approx mode and the seeding heuristic (see {@link NextTPMeasure}).
+ * @param deadlineMs - The task deadline (FAI S7F §12.1): best distance is
  *   measured up until the pilot landed or the deadline, whichever comes
  *   first — fixes after it are not scanned. Null when the task has none.
- *   For a stopped task the caller folds the scored-window end (§12.3.4)
+ *   For a stopped task the caller folds the scored-window end (§13.4.4)
  *   into this same clip.
- * @param altitudeBonus - Stopped tasks only (§12.3.6): credit each scanned
- *   fix a bonus distance of glideRatio × (GNSS altitude − goalAltitude),
- *   clamped to the geometric remaining distance, and pick the best
- *   EFFECTIVE (bonus-adjusted) remaining distance. Null when no bonus
- *   applies (task not stopped, or the pilot landed before the stop).
+ * @param altitudeBonus - Stopped tasks only (S7F 2026 §13.4.6): credit the
+ *   pilot's position at the task stop time — the LAST scanned fix, since
+ *   the caller folds the scored-window end into `deadlineMs` — a bonus
+ *   distance of glideRatio × (GNSS altitude − goalAltitude), clamped to the
+ *   geometric remaining distance there, and pick the best EFFECTIVE
+ *   remaining distance ("if the Bonus Distance exceeds the pilot's best
+ *   distance up to Task Stop Time, it is used"). Earlier fixes never carry
+ *   a bonus — the 2026 edition computes it only for the position at stop,
+ *   "disregarding any better distances achieved previously". Null when no
+ *   bonus applies (task not stopped, or the pilot landed before the stop).
  */
 interface BestProgressParams {
+  task: XCTask;
+  lastReachedIndex: number;
   fixes: IGCFix[];
   lastReachingTime: number;
   remainingTPs: Array<{ lat: number; lon: number; radius: number }>;
@@ -241,8 +301,13 @@ interface BestProgressParams {
   altitudeBonus?: { glideRatio: number; goalAltitude: number } | null;
 }
 
-export function computeBestProgress(params: BestProgressParams): BestProgress | null {
+export function computeBestProgress(
+  params: BestProgressParams,
+  mode: 'approx' | 'exact' = 'exact',
+): BestProgress | null {
   const {
+    task,
+    lastReachedIndex,
     fixes,
     lastReachingTime,
     remainingTPs,
@@ -251,68 +316,172 @@ export function computeBestProgress(params: BestProgressParams): BestProgress | 
     deadlineMs,
     altitudeBonus = null,
   } = params;
-  // Sum of optimized leg distances between remaining TPs (TP[1]→TP[2]→...→Goal)
+  // Sum of optimised leg distances between remaining TPs (heuristic term).
   let interTPDistance = 0;
   for (const d of remainingLegDistances) {
     interTPDistance += d;
   }
+  // Lower-bound term: no path visiting the remaining zones in order can
+  // have an inter-zone leg shorter than centre distance minus both radii.
+  let minInterZone = 0;
+  for (let i = 0; i + 1 < remainingTPs.length; i++) {
+    const a = remainingTPs[i];
+    const b = remainingTPs[i + 1];
+    minInterZone += Math.max(
+      0,
+      ellipsoidDistance(a.lat, a.lon, b.lat, b.lon) - a.radius - b.radius,
+    );
+  }
+  // Straight-to-goal lower bound pieces (exact mode): the goal zone's
+  // centre/radius, or its LINE geometry.
+  const goalTP = remainingTPs[remainingTPs.length - 1];
+  const goalLine =
+    nextMeasure.kind === 'goal-line' ? nextMeasure.line : computeGoalLine(task);
 
   const nextTP = remainingTPs[0];
-  let bestFix: { index: number; distToGoal: number; bonus: number } | null = null;
 
+  // §13.4.6 (2026): the altitude bonus belongs ONLY to the pilot's position
+  // at the task stop time — the last eligible fix, since the caller folds
+  // the scored-window end into deadlineMs. Find that index first so the
+  // per-fix cap can be zero everywhere else.
+  let lastEligibleIndex = -1;
+  if (altitudeBonus) {
+    for (let i = 0; i < fixes.length; i++) {
+      const t = fixes[i].time.getTime();
+      if (t < lastReachingTime) continue;
+      if (deadlineMs !== null && t > deadlineMs) break;
+      lastEligibleIndex = i;
+    }
+  }
+  const capFor = (fix: IGCFix, index: number): number =>
+    altitudeBonus && index === lastEligibleIndex
+      ? altitudeBonus.glideRatio * Math.max(0, fixAltitude(fix) - altitudeBonus.goalAltitude)
+      : 0;
+
+  // Pass 1 — cheap scan: the approx value for every eligible fix (the
+  // whole answer in approx mode; the incumbent seed in exact mode), plus
+  // the lower bound used for pruning.
+  interface Candidate { index: number; lb: number }
+  const candidates: Candidate[] = [];
+  let seed: { index: number; value: number; bonus: number } | null = null;
   for (let i = 0; i < fixes.length; i++) {
     const fix = fixes[i];
-    if (fix.time.getTime() <= lastReachingTime) continue;
-    // §11.1: flying after the task deadline earns no further distance.
-    // (For a stopped task the caller folds the §12.3.4 window end in here.)
+    // Strictly BEFORE the reaching is excluded; a fix exactly AT the
+    // reaching moment is the pilot's position when the turnpoint was
+    // completed, and measuring the remaining task from there is valid. The
+    // distinction only bites when a crossing interpolates exactly onto a
+    // fix — e.g. a fix landing precisely on a cylinder's nominal radius.
+    if (fix.time.getTime() < lastReachingTime) continue;
+    // §12.1: flying after the task deadline earns no further distance.
+    // (For a stopped task the caller folds the §13.4.4 window end in here.)
     if (deadlineMs !== null && fix.time.getTime() > deadlineMs) break;
 
-    // Distance to the next un-reached turnpoint — see NextTPMeasure for
-    // which measurement applies and why. Measuring to a tag point avoids
-    // the small over-credit of reaching the nearest edge then jumping to
-    // the optimal tag; the edge measurements handle the cases where the
-    // tag point is the wrong reference (goal, exit cylinders, and the
-    // return leg after one).
-    const distToNextTP =
+    const dCentre = ellipsoidDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon);
+    // The fix→next-zone LOWER-BOUND measure. For every kind except 'tag'
+    // this is also the heuristic measure — 'tag' alone aims at the frozen
+    // tag point while its lower bound is the nearest-edge distance.
+    const lbNext =
+      nextMeasure.kind === 'exit-boundary'
+        ? Math.max(0, nextTP.radius - dCentre)
+        : nextMeasure.kind === 'goal-line'
+          ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
+          : Math.max(0, dCentre - nextTP.radius);
+    const heuristicNext =
       nextMeasure.kind === 'tag'
-        ? andoyerDistance(fix.latitude, fix.longitude, nextMeasure.point.lat, nextMeasure.point.lon)
-        : nextMeasure.kind === 'exit-boundary'
-          ? Math.max(0, nextTP.radius - andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon))
-          : nextMeasure.kind === 'goal-line'
-            ? distanceToGoalLine(nextMeasure.line, fix.latitude, fix.longitude)
-            : Math.max(0, andoyerDistance(fix.latitude, fix.longitude, nextTP.lat, nextTP.lon) - nextTP.radius);
-    // Total remaining = distance to next TP + optimized path from there to goal
-    const geometricDist = distToNextTP + interTPDistance;
+        ? ellipsoidDistance(fix.latitude, fix.longitude, nextMeasure.point.lat, nextMeasure.point.lon)
+        : lbNext;
+    const cap = capFor(fix, i);
+    const geometric = heuristicNext + interTPDistance;
+    const bonus = Math.min(geometric, cap);
+    const heuristic = geometric - bonus;
+    if (!seed || heuristic < seed.value) seed = { index: i, value: heuristic, bonus };
 
-    // §12.3.6 altitude bonus (stopped tasks, pilot still flying at the
-    // stop): height above goal glides out at the spec's fixed glide ratio.
-    // Clamped so the effective remaining distance never goes negative —
-    // the bonus can bring a pilot to goal distance, not past it.
-    const bonus = altitudeBonus
-      ? Math.min(
-          geometricDist,
-          altitudeBonus.glideRatio *
-            Math.max(0, fixAltitude(fix) - altitudeBonus.goalAltitude),
-        )
-      : 0;
-    const distToGoal = geometricDist - bonus;
+    if (mode === 'exact') {
+      const lbGoal = goalLine
+        ? distanceToGoalLine(goalLine, fix.latitude, fix.longitude)
+        : Math.max(
+            0,
+            ellipsoidDistance(fix.latitude, fix.longitude, goalTP.lat, goalTP.lon) - goalTP.radius,
+          );
+      const lb = Math.max(0, Math.max(lbNext + minInterZone, lbGoal) - cap);
+      candidates.push({ index: i, lb });
+    }
+  }
+  if (!seed) return null;
 
-    if (!bestFix || distToGoal < bestFix.distToGoal) {
-      bestFix = { index: i, distToGoal, bonus };
+  if (mode === 'approx') {
+    const fix = fixes[seed.index];
+    return {
+      fixIndex: seed.index,
+      time: fix.time,
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      distanceToGoal: seed.value,
+      ...(altitudeBonus
+        ? { altitudeBonus: seed.bonus, altitude: fixAltitude(fix) }
+        : {}),
+    };
+  }
+
+  // Exact effective remaining distance at one fix.
+  const exactAt = (i: number): {
+    eff: number; geom: number; bonus: number; line: { lat: number; lon: number }[];
+  } => {
+    const fix = fixes[i];
+    const route = optimizeRemainingRoute(task, lastReachedIndex, {
+      lat: fix.latitude,
+      lon: fix.longitude,
+    });
+    // remainingTPs is non-empty here, so a route always exists.
+    const geometric = route ? route.distance : 0;
+    const bonus = altitudeBonus ? Math.min(geometric, capFor(fix, i)) : 0;
+    return { eff: geometric - bonus, geom: geometric, bonus, line: route ? route.line : [] };
+  };
+
+  // Pass 2 — seed the incumbent with the approx argmin, then evaluate
+  // candidates in ascending lower-bound order until no remaining bound can
+  // improve the incumbent by more than the tolerance. Each evaluated fix
+  // also prunes later ones by the Lipschitz property: the GEOMETRIC
+  // remaining distance between two positions differs by at most their
+  // separation, so eff(fix) ≥ geom(evaluated) − separation − cap(fix).
+  // Ties go to the earliest fix, matching the previous scan.
+  const TOL = BEST_PROGRESS_TOLERANCE_M;
+  let best = { index: seed.index, ...exactAt(seed.index) };
+  const evaluated: Array<{ lat: number; lon: number; geom: number }> = [
+    { lat: fixes[seed.index].latitude, lon: fixes[seed.index].longitude, geom: best.geom },
+  ];
+  candidates.sort((a, b) => a.lb - b.lb);
+  for (const c of candidates) {
+    if (c.lb >= best.eff - TOL) break;
+    if (c.index === seed.index) continue;
+    const fix = fixes[c.index];
+    const capHere = capFor(fix, c.index);
+    let ruledOut = false;
+    for (const e of evaluated) {
+      const sep = ellipsoidDistance(e.lat, e.lon, fix.latitude, fix.longitude);
+      if (e.geom - sep - capHere >= best.eff - TOL) {
+        ruledOut = true;
+        break;
+      }
+    }
+    if (ruledOut) continue;
+    const e = exactAt(c.index);
+    evaluated.push({ lat: fix.latitude, lon: fix.longitude, geom: e.geom });
+    if (e.eff < best.eff - 1e-6 || (Math.abs(e.eff - best.eff) <= 1e-6 && c.index < best.index)) {
+      best = { index: c.index, ...e };
     }
   }
 
-  if (!bestFix) return null;
-
-  const fix = fixes[bestFix.index];
+  const fix = fixes[best.index];
   return {
-    fixIndex: bestFix.index,
+    fixIndex: best.index,
     time: fix.time,
     latitude: fix.latitude,
     longitude: fix.longitude,
-    distanceToGoal: bestFix.distToGoal,
+    distanceToGoal: best.eff,
+    ...(best.line.length >= 2 ? { remainingRoute: best.line } : {}),
     ...(altitudeBonus
-      ? { altitudeBonus: bestFix.bonus, altitude: fixAltitude(fix) }
+      ? { altitudeBonus: best.bonus, altitude: fixAltitude(fix) }
       : {}),
   };
 }

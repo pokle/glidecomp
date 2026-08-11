@@ -1,26 +1,27 @@
 /**
  * Dedicated competition scores page (/comp/:id/scores) — the canonical public
- * scores surface. The comp page keeps only a compact standings summary that
- * links here; this page holds the full apparatus: per-class standings tabs,
- * Top 3 per task & class, Teams, and Results by task (which is the public
- * per-task results surface — task pages link here with ?task=<id>).
+ * scores surface. The comp page keeps only a compact scores summary that
+ * links here; this page holds the full apparatus: per-class scores tabs,
+ * Top 3 per task & class, Teams, and Scores by task (which is the public
+ * per-task scores surface — task pages link here with ?task=<id>).
  *
  * Server-rendered like the other public comp pages (loadCompScores +
  * functions/comp/[[path]].ts); the views themselves live in
  * comp/CompScoresSection so this page and the comp summary share one
  * implementation.
  */
-import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Button } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Card } from "@/react/rac/card";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compPath, compScoresPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { useSeededResource } from "../lib/use-seeded-resource";
 import {
   ScoresEmptyState,
   ScoresViews,
@@ -28,7 +29,7 @@ import {
 } from "../comp/CompScoresSection";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { ScoresDownload } from "../comp/ScoresDownload";
-import { fetchWithRetry, type CompDetailData } from "../comp/types";
+import type { CompDetailData } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { CompScoresLoaderData } from "../loaders";
 
@@ -40,8 +41,12 @@ export function CompScoresPage() {
   // SSR seed: the server ran loadCompScores for this URL. Null on client
   // boot / SPA navigations, where the effects below fetch instead.
   const initial = useInitialData<CompScoresLoaderData>();
-  const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
-  const [notFound, setNotFound] = useState(false);
+  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+    ids: [compId],
+    seed: initial?.comp ?? null,
+    load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
+    title: (c) => `GlideComp - ${c.name} scores`,
+  });
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
   useCanonicalPath(comp ? compScoresPath(compId, comp.name) : null);
@@ -51,47 +56,6 @@ export function CompScoresPage() {
     initial?.scores ?? undefined,
     initial?.scoresEtag ?? undefined
   );
-
-  useEffect(() => {
-    // Clear any previous verdict first. react-router keeps this component
-    // mounted when only the id in the path changes, so a "not found" left over
-    // from the old id would mask whatever the new one loads. That is not
-    // hypothetical: the 404 page's own "did you mean" links point back at this
-    // very route, so clicking one changed the URL and nothing else.
-    setNotFound(false);
-    if (!compId) {
-      setNotFound(true);
-      return;
-    }
-    if (initial) {
-      document.title = `GlideComp - ${initial.comp.name} scores`;
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchWithRetry(() =>
-          api.api.comp[":comp_id"].$get({ param: { comp_id: compId } })
-        );
-        if (cancelled) return;
-        if (!res.ok) {
-          setNotFound(true);
-          return;
-        }
-        const data = (await res.json()) as unknown as CompDetailData;
-        if (cancelled) return;
-        setComp(data);
-        document.title = `GlideComp - ${data.name} scores`;
-      } catch {
-        if (!cancelled) setNotFound(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // `initial` is stable for the life of the SSR'd URL; compId is the real key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compId]);
 
   const isAdmin = useAdminView(
     user != null && comp != null && comp.admins.some((a) => a.email === user.email)
@@ -116,7 +80,7 @@ export function CompScoresPage() {
           <h1 className="text-2xl font-bold">Scores</h1>
           <p className="text-sm text-muted-foreground">{comp.name}</p>
         </div>
-        {state.kind === "ready" && state.scores.standings.length > 0 ? (
+        {state.kind === "ready" && state.scores.class_scores.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
             <ScoresDownload compId={compId} compName={comp.name} isTestComp={comp.test} />
             {isAdmin ? (
@@ -134,47 +98,60 @@ export function CompScoresPage() {
         ) : null}
       </div>
 
-      {state.kind === "loading" ? (
-        <Loading className="mt-2">Loading scores…</Loading>
-      ) : state.kind === "unavailable" ? (
-        <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
-      ) : (
-        <>
-          <ScoreFreshness
-            computedAt={state.scores.computed_at}
-            stale={state.scores.stale}
-            timezone={comp.timezone}
-            etag={state.etag}
-            pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
-          />
-          {state.scores.standings.length === 0 ? (
-            <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
-          ) : (
-            <>
-              <ScoresViews
-                scores={state.scores}
-                compId={compId}
-                compName={comp.name}
-                timezone={comp.timezone}
-                tasks={comp.tasks}
-                defaultTaskId={null}
-                deepLinkTaskId={searchParams.get("task")}
+      {/* One card holds the whole scores apparatus: when it was computed, the
+          view switcher, the table, and the caption under it. A card owns its
+          controls and its caption — tabs that filter a table and a footnote
+          that explains it belong INSIDE the panel they act on, not floating
+          beside it. Only the hero above stays on the page ground, which is
+          what the comp and task pages do too. */}
+      <Card className="mt-6">
+        {state.kind === "loading" ? (
+          <Loading>Loading scores…</Loading>
+        ) : state.kind === "unavailable" ? (
+          <ScoresEmptyState isAdmin={isAdmin} tasksHref={`${compPath(compId, comp.name)}#tasks`} />
+        ) : (
+          <>
+            <ScoreFreshness
+              computedAt={state.scores.computed_at}
+              stale={state.scores.stale}
+              timezone={comp.timezone}
+              etag={state.etag}
+              pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
+            />
+            {state.scores.class_scores.length === 0 ? (
+              <ScoresEmptyState
+                isAdmin={isAdmin}
+                tasksHref={`${compPath(compId, comp.name)}#tasks`}
               />
-              <p className="mt-4 text-sm text-muted-foreground">
-                Click any score for a step-by-step explanation. Questions about a
-                score?{" "}
-                <Link
-                  to={`${compPath(compId, comp.name)}#admins`}
-                  className="underline underline-offset-4"
-                >
-                  Ask the comp admins
-                </Link>
-                .
-              </p>
-            </>
-          )}
-        </>
-      )}
+            ) : (
+              <>
+                <ScoresViews
+                  scores={state.scores}
+                  compId={compId}
+                  compName={comp.name}
+                  timezone={comp.timezone}
+                  tasks={comp.tasks}
+                  defaultTaskId={null}
+                  deepLinkTaskId={searchParams.get("task")}
+                />
+                <p className="text-sm text-muted-foreground">
+                  {/* "Click any score for a step-by-step explanation" was
+                      here too — the tables ScoresViews renders each already
+                      say it directly under themselves. */}
+                  Questions about a score?{" "}
+                  <Link
+                    to={`${compPath(compId, comp.name)}#admins`}
+                    className="underline underline-offset-4"
+                  >
+                    Ask the comp admins
+                  </Link>
+                  .
+                </p>
+              </>
+            )}
+          </>
+        )}
+      </Card>
     </div>
   );
 }

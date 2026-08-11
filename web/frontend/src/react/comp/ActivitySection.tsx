@@ -104,7 +104,7 @@ export function ActivitySection({
     const digest = entries.slice(0, 3);
     return (
       <section>
-        <h2 className="mt-8 text-lg font-bold">Activity</h2>
+        <h2 className="text-lg font-bold">Activity</h2>
         {error ? (
           <p className="mt-2 text-muted-foreground">Could not load activity</p>
         ) : loaded && entries.length === 0 ? (
@@ -139,7 +139,7 @@ export function ActivitySection({
 
   return (
     <section>
-      <h2 className="mt-8 text-lg font-bold">Activity</h2>
+      <h2 className="text-lg font-bold">Activity</h2>
       <Tabs
         className="mt-2"
         selectedKey={selectedKey}

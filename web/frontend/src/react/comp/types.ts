@@ -12,9 +12,9 @@ import type {
 /** How a competition's tasks are scored (see competition-api migration 0009). */
 export type ScoringFormat = "gap" | "open_distance";
 
-/** How a competition's per-task scores are aggregated into standings
+/** How a competition's per-task scores are aggregated into scores
  * (migration 0022). "total" = sum of task scores; "ftv" = Fixed Total
- * Validity (S7F §15) — best tasks kept up to a fixed validity. */
+ * Validity (S7F §16) — best tasks kept up to a fixed validity. */
 export type SeriesScoring = "total" | "ftv";
 
 /** Where scored distance begins (GAPParameters.distanceOrigin). Mirrors the
@@ -40,7 +40,7 @@ export interface CompDetailData {
   default_pilot_class: string;
   gap_params: CompGapParams | null;
   scoring_format: ScoringFormat;
-  /** Series-scoring method for standings (migration 0022). */
+  /** Series-scoring method for scores (migration 0022). */
   series_scoring: SeriesScoring;
   /** FTV discard fraction (0<f<1); null = auto-derive from task count. */
   ftv_factor: number | null;
@@ -51,6 +51,8 @@ export interface CompDetailData {
    */
   timezone: string | null;
   open_igc_upload: boolean;
+  /** Off means only an admin can add pilots; on means a pilot joins by uploading. */
+  open_registration: boolean;
   tasks: TaskSummary[];
   admins: Array<{ email: string; name: string }>;
   pilot_count: number;
@@ -94,13 +96,17 @@ export interface TaskDetailData {
   task_date: string;
   creation_date: string;
   xctsk: XCTask | null;
-  /** Stopped tasks (S7F §12.3): the recorded stop announcement time (ISO
+  /** Stopped tasks (S7F §13.4): the recorded stop announcement time (ISO
    * UTC), or null when the task ran to completion. */
   stop_announcement_time: string | null;
   /** The organizer's free-text account of the day's conditions. Public to
    * read, comp-admin writable. Empty string when unset — never null, so no
    * caller has to distinguish "no notes" from "not loaded". */
   weather_notes: string;
+  /** The organiser has closed THIS task for submissions (migration 0028).
+   * Distinct from the comp's close_date, which closes everything. Organisers
+   * can still upload; everyone else is refused. */
+  submissions_closed: boolean;
   pilot_classes: string[];
   track_count: number;
 }
@@ -160,28 +166,28 @@ export interface PilotScoreEntry {
   penalty_points: number;
   penalty_reason: string | null;
   total_score: number;
-  /** Seconds started before the first start gate (S7F §12.2), when early. */
+  /** Seconds started before the first start gate (S7F §13.3), when early. */
   early_start_seconds?: number | null;
   /** How the early start reshaped the score. */
   early_start_outcome?: "pg_launch_to_sss" | "hg_penalty" | "hg_min_distance" | null;
   /** Automatic jump-the-gun penalty points deducted (HG early starts). */
   jump_the_gun_penalty?: number | null;
-  /** Stopped tasks (S7F §12.3.6): altitude-bonus metres folded into
+  /** Stopped tasks (S7F §13.4.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. */
   stopped_altitude_bonus?: number | null;
-  /** The pilot's leading coefficient (S7F §11.3), lower is better — the sole
+  /** The pilot's leading coefficient (S7F §13.4), lower is better — the sole
    * input to leading points. Null when leading isn't scored; absent on
    * payloads cached before it was published. */
   leading_coefficient?: number | null;
   /** Position in the ESS arrival order (1-based) — with the ESS field size,
-   * the whole input to the §11.4 arrival formula. Null when arrival isn't
+   * the whole input to the §13.5 arrival formula. Null when arrival isn't
    * scored or the pilot never reached ESS; absent on older payloads. */
   arrival_position?: number | null;
   /** When the pilot reached ESS (epoch ms). What the arrival order sorts by:
    * wall-clock time, not speed. */
   ess_time_ms?: number | null;
   /** Set when a HARD data-quality check withheld this pilot's tracklog from
-   * scoring: they hold a place in the standings at 0 rather than vanishing.
+   * scoring: they hold a place in the scores at 0 rather than vanishing.
    * Null/absent for every normally-scored pilot. */
   track_excluded?: { reasons: string[] } | null;
 }
@@ -202,7 +208,23 @@ export interface ClassValidityInputs {
   weights: { distance: number; time: number; leading: number; arrival: number };
 }
 
-/** Whole-class stopped-task outcome (S7F §12.3) — see the API's ClassStoppedInfo. */
+/**
+ * The §12.3.1 leading clock the class's coefficients were measured against —
+ * see the API's ClassLeadingTimes. `max_time_ms` is where a landed-out
+ * pilot's leading graph ends, and it is the whole field's number, not the
+ * pilot's: min(max(last land-out, last ESS), deadline).
+ */
+export interface ClassLeadingTimes {
+  first_start_ms: number;
+  last_ess_ms: number | null;
+  last_outlanding_ms: number | null;
+  deadline_ms: number | null;
+  stop_time_ms: number | null;
+  max_time_ms: number;
+  max_time_source: "last_outlanding" | "last_ess" | "deadline" | "stop" | "fallback";
+}
+
+/** Whole-class stopped-task outcome (S7F §13.4) — see the API's ClassStoppedInfo. */
 export interface ClassStoppedInfo {
   stop_time_ms: number;
   scored_window_seconds: number | null;
@@ -219,7 +241,7 @@ export interface ClassScore {
     launch: number;
     distance: number;
     time: number;
-    /** Stopped-task validity (S7F §12.3.3), present when the task was stopped. */
+    /** Stopped-task validity (S7F §13.4.3), present when the task was stopped. */
     stopped?: number;
     task: number;
   };
@@ -231,6 +253,12 @@ export interface ClassScore {
     total: number;
   };
   pilots: PilotScoreEntry[];
+  /**
+   * Which edition of the FAI Sporting Code S7F scored this class
+   * ("s7f-2026"). Absent on payloads cached before the field was published
+   * — degrade the badge to plain "FAI S7F" there, never guess an edition.
+   */
+  rules_edition?: "s7f-2026";
   /** The numbers behind `task_validity` and the available-points split. */
   validity_inputs?: ClassValidityInputs;
   /**
@@ -242,8 +270,30 @@ export interface ClassScore {
    * distance and on payloads cached before it was published.
    */
   gap_params?: GAPParameters;
-  /** Present when the task was scored as stopped (S7F §12.3). */
+  /**
+   * The §12.3.1 leading clock, when the class scored leading points: where a
+   * landed-out pilot's graph was carried to, and which field time decided it.
+   */
+  leading_times?: ClassLeadingTimes;
+  /** Present when the task was scored as stopped (S7F §13.4). */
   stopped?: ClassStoppedInfo;
+}
+
+/**
+ * The officially published results for a task (issue #603), riding on the
+ * task score response when the AirScore importer recorded them. These are
+ * NEVER GlideComp scores: display-only, unexplained, and absent for every
+ * GlideComp-native comp — every consumer must render nothing without them.
+ */
+export interface OfficialResultsData {
+  /** Where the official record was published ("AirScore"). */
+  source: string;
+  /** The source's own comp scores page (one per pilot class), when known. */
+  comp_url: string | null;
+  /** The source's own task scores page — the published record itself. */
+  task_url: string | null;
+  /** comp_pilot_id (sqid, matching the score entries) → published standing. */
+  ranks: Record<string, { rank: number; total: number }>;
 }
 
 export interface TaskScoreData {
@@ -251,11 +301,13 @@ export interface TaskScoreData {
   comp_id: string;
   task_date: string;
   scoring_format: ScoringFormat;
-  classes: ClassScore[];
+  class_scores: ClassScore[];
   /** ISO timestamp of when these scores were computed (stale-first store). */
   computed_at: string;
   /** True when newer inputs exist and a re-score is in flight or pending. */
   stale: boolean;
+  /** The officially published record beside the rescored one (issue #603). */
+  official_results?: OfficialResultsData | null;
 }
 
 /** One endpoint of the scored open-distance line, with fix time/altitude.
@@ -374,8 +426,15 @@ const FETCH_RETRY_DELAY_MS = 400;
  * The comp/task GET right after this same session's create/update write can
  * transiently 500 (e.g. D1 lock contention under the write that just
  * happened) even though the write itself succeeded. Retry before treating it
- * as a real failure — a 404 is left alone since that's a genuine "not found",
- * not a transient error.
+ * as a real failure.
+ *
+ * Only 5xx and dropped requests are retried. **Every 4xx is a real answer** and
+ * is handed straight back: the server understood the request and declined it,
+ * and asking twice more changes nothing. This used to read
+ * `res.ok || res.status === 404` — 404 was the only 4xx spared, so a 401, a 403
+ * or the 429 an API key gets when rate-limited cost three round trips and two
+ * delays before returning the same verdict, and the retries pushed a
+ * rate-limited caller further past its limit.
  *
  * A *dropped* request is retried too (issue #481). It used to escape as a
  * rejected promise: every caller wraps this in a try/catch that renders
@@ -401,7 +460,7 @@ export async function fetchWithRetry<T extends { ok: boolean; status: number }>(
     }
     try {
       const res = await fetcher();
-      if (res.ok || res.status === 404) return res;
+      if (res.status < 500) return res;
       lastRes = res;
     } catch (err) {
       if (options.signal?.aborted) throw err;

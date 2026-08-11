@@ -7,7 +7,7 @@
  * non-admins, and this page reflects that rather than second-guessing it).
  *
  * Its own page rather than a section on the task page: it is a long,
- * exploratory read that shouldn't compete with the official standings.
+ * exploratory read that shouldn't compete with the official scores.
  *
  * Lives at /comp/:compId/analysis/task/:taskId — a chapter of the comp's
  * field analysis, NOT a leaf of the task page, so the breadcrumb's parent is
@@ -23,6 +23,7 @@
  * separation ranking FIRST, then per-family detail. Which metrics have
  * explanatory power is the finding; the per-pilot numbers are the evidence.
  */
+import { Card } from "@/react/rac/card";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";
@@ -34,6 +35,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { underCompAnalysis } from "../lib/crumbs";
 import { idFromSegment, taskPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { usePollWhile } from "../lib/use-poll-while";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { toast } from "../lib/toast";
@@ -42,6 +44,11 @@ import { TaskDiagram } from "../comp/TaskDiagram";
 import { useInitialData } from "../lib/initial-data";
 import type { TaskFieldAnalysisLoaderData } from "../loaders";
 import { SeparationRanking, rankMetrics } from "../field-analysis/SeparationRanking";
+import { Explain } from "@/react/rac/explain";
+import {
+  HowToReadFootnote,
+  OneDayCaveatNote,
+} from "../field-analysis/ReadingNotes";
 import {
   MetricFamilySection,
   familySectionId,
@@ -76,7 +83,11 @@ import {
   type MetricReport,
   type TaskFieldAnalysisData,
 } from "../field-analysis/types";
-import type { CompDetailData, TaskDetailData } from "../comp/types";
+import {
+  fetchWithRetry,
+  type CompDetailData,
+  type TaskDetailData,
+} from "../comp/types";
 
 export function TaskFieldAnalysis() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
@@ -137,7 +148,14 @@ export function TaskFieldAnalysis() {
     (async () => {
       if (refetchTick === 0) setStatus("loading");
       try {
-        const res = await fetch(analysisUrl, { credentials: "include" });
+        // Through fetchWithRetry, not a bare fetch: this page is public and
+        // SSR'd, and its "error" branch is a dead end — nothing re-fetches it
+        // (the pending poll below only runs once status is "ready"). A dropped
+        // request would otherwise turn a millisecond blip into a page that
+        // stays broken until someone reloads by hand.
+        const res = await fetchWithRetry(() =>
+          fetch(analysisUrl, { credentials: "include" })
+        );
         if (cancelled) return;
         // 404 = missing (or a test comp hidden from this visitor); 400 = an id
         // sqid that doesn't decode at all. Both mean "no such page", and both
@@ -186,28 +204,11 @@ export function TaskFieldAnalysis() {
   }, [compId, taskId, analysisUrl, refetchTick]);
 
   // While the first-ever compute runs in the background (the cold path never
-  // computes on the request), poll by refetching — the pending banner
-  // promises "this page refreshes itself". Backs off 3s → 10s and gives up
-  // after ~2 minutes (the banner stays; a manual reload picks up whatever is
-  // newest). The ScoreFreshness ETag poll can't cover this: the pending
-  // response has no stored body to validate against.
+  // computes on the request), poll by refetching — the pending banner promises
+  // "this page refreshes itself". The ScoreFreshness ETag poll can't cover
+  // this: the pending response has no stored body to validate against.
   const pending = status === "ready" && data?.pending === true;
-  useEffect(() => {
-    if (!pending) return;
-    const startedAt = Date.now();
-    let delay = 3_000;
-    let timer: number | undefined;
-    const schedule = () => {
-      if (Date.now() - startedAt > 120_000) return;
-      timer = window.setTimeout(() => {
-        if (!document.hidden) setRefetchTick((t) => t + 1);
-        else schedule();
-      }, delay);
-      delay = Math.min(delay * 1.5, 10_000);
-    };
-    schedule();
-    return () => window.clearTimeout(timer);
-  }, [pending, refetchTick]);
+  usePollWhile(pending, () => setRefetchTick((t) => t + 1), refetchTick);
 
   // Task + comp names for the heading and breadcrumbs. Non-critical: the
   // analysis renders fine without them.
@@ -334,7 +335,7 @@ export function TaskFieldAnalysis() {
       ...(hasThermalsSection
         ? [{ id: "thermals-heading", label: "The day's thermals" }]
         : []),
-      { id: "separation-heading", label: "Which behaviours went with better results" },
+      { id: "separation-heading", label: "Which behaviours went with better ranks" },
       { id: "heatmap-heading", label: "The whole field at a glance" },
       { id: "clusters-heading", label: "Pilot style clusters" },
       { id: "families-heading", label: "The metrics in detail" },
@@ -504,9 +505,8 @@ export function TaskFieldAnalysis() {
             <TaskDiagram task={task.xctsk} size="md" className="shrink-0" />
           </div>
           <figcaption className="mt-1 text-center text-xs text-muted-foreground">
-            The optimised route. Pilots fly it in the direction of the
-            arrows. The radii, the leg distances and the start times are on the
-            task page.
+            The optimised route — radii, leg distances and start times are on
+            the task page.
           </figcaption>
         </figure>
       ) : null}
@@ -585,7 +585,7 @@ export function TaskFieldAnalysis() {
                 time axis so the predicted day can be read against the day
                 the field actually flew. */}
             {hasWeatherSection ? (
-              <section aria-labelledby="weather-heading" className="space-y-3">
+              <Card aria-labelledby="weather-heading" className="gap-3">
                 <h2 id="weather-heading" className="scroll-mt-20 text-lg font-semibold">
                   What the weather did
                 </h2>
@@ -598,7 +598,7 @@ export function TaskFieldAnalysis() {
                   weather={weather.data?.weather ?? null}
                   weatherPending={weatherPending}
                 />
-              </section>
+              </Card>
             ) : null}
 
             {/* After the weather, before the metrics: the thermals ARE the
@@ -606,7 +606,7 @@ export function TaskFieldAnalysis() {
                 which side worked. Grounding, like the weather section, for
                 everything the metrics then claim about how pilots used it. */}
             {hasThermalsSection && report.thermals ? (
-              <section aria-labelledby="thermals-heading" className="space-y-3">
+              <Card aria-labelledby="thermals-heading" className="gap-3">
                 <h2 id="thermals-heading" className="scroll-mt-20 text-lg font-semibold">
                   The day's thermals
                 </h2>
@@ -621,37 +621,51 @@ export function TaskFieldAnalysis() {
                       : null
                   }
                 />
-              </section>
+              </Card>
             ) : null}
 
-            <section aria-labelledby="separation-heading" className="space-y-3">
-              <h2 id="separation-heading" className="scroll-mt-20 text-lg font-semibold">
-                Which behaviours went with better results
+            <Card aria-labelledby="separation-heading" className="gap-3">
+              <h2
+                id="separation-heading"
+                className="flex items-center gap-1 scroll-mt-20 text-lg font-semibold"
+              >
+                Which behaviours went with better ranks
+                {/* Why a strong-looking coefficient on ONE task is not yet a
+                    finding — a caveat about the whole section, so it hangs off
+                    the section's heading rather than a column. */}
+                <Explain
+                  label="One task is not a finding"
+                 
+                >
+                  <OneDayCaveatNote
+                    behaviourCount={rankMetrics(report.metrics).length}
+                  />
+                </Explain>
               </h2>
               <SeparationRanking metrics={report.metrics} report={report} />
-            </section>
+            </Card>
 
-            <section aria-labelledby="heatmap-heading" className="space-y-3">
+            <Card aria-labelledby="heatmap-heading" className="gap-3">
               <h2 id="heatmap-heading" className="scroll-mt-20 text-lg font-semibold">
                 The whole field at a glance
               </h2>
               <PercentileHeatmap report={report} />
-            </section>
+            </Card>
 
-            <section aria-labelledby="clusters-heading" className="space-y-3">
+            <Card aria-labelledby="clusters-heading" className="gap-3">
               <h2 id="clusters-heading" className="scroll-mt-20 text-lg font-semibold">
                 Pilot style clusters
               </h2>
               <StyleClusters report={report} />
-            </section>
+            </Card>
 
             {/* In print, this whole section starts a fresh page and every
                 family after the first breaks onto its own page — the families
                 are the report's chapters. The first family stays under the
                 heading so the heading is never orphaned at a page's end. */}
-            <section
+            <Card
               aria-labelledby="families-heading"
-              className="space-y-2 print:break-before-page"
+              className="gap-2 print:break-before-page"
             >
               <h2 id="families-heading" className="scroll-mt-20 text-lg font-semibold">
                 The metrics in detail
@@ -671,7 +685,7 @@ export function TaskFieldAnalysis() {
                   />
                 )
               )}
-            </section>
+            </Card>
 
             {/* Everything a reader consults once rather than reads: who
                 couldn't be analysed, how the field is compared, and every
@@ -681,6 +695,12 @@ export function TaskFieldAnalysis() {
               {active.excluded.length > 0 ? (
                 <ExcludedPilots excluded={active.excluded} />
               ) : null}
+              {/* The static form of the ranking's column ⓘs — popovers are
+                  print:hidden and cannot exist on paper. */}
+              <HowToReadFootnote
+                page="task"
+                behaviourCount={rankMetrics(report.metrics).length}
+              />
               <MethodNote gridStepSeconds={report.basis.gridStepSeconds} />
               <MetricGlossary entries={report.metrics} nested />
             </Footnotes>

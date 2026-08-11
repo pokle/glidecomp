@@ -5,16 +5,17 @@
  * Reference: http://xctrack.org/Competition_Interfaces.html
  */
 
-import { andoyerDistance } from './geo';
+import { ellipsoidDistance } from './geo';
 import { sanitizeText } from './sanitize';
 import type { IGCTask, IGCTaskPoint } from './igc-parser';
-import { findWaypoint, type WaypointRecord } from './waypoints';
+import { DEFAULT_WAYPOINT_RADIUS_M, findWaypoint, type WaypointRecord } from './waypoints';
 
 /**
  * Default turnpoint radius in meters, used when a task or IGC declaration
- * doesn't specify one (400m is the paragliding standard).
+ * doesn't specify one — the shared 400 m paragliding standard
+ * ({@link DEFAULT_WAYPOINT_RADIUS_M}).
  */
-const DEFAULT_TURNPOINT_RADIUS = 400;
+const DEFAULT_TURNPOINT_RADIUS = DEFAULT_WAYPOINT_RADIUS_M;
 
 export interface Waypoint {
   name: string;
@@ -57,15 +58,27 @@ export interface XCTask {
   goal?: GoalConfig;
 
   /**
-   * Cylinder tolerance as a fraction (e.g. 0.005 = 0.5%).
-   * Applied to turnpoint radii when checking cylinder crossings (FAI S7F §8.1).
-   * The tolerance band is the percentage OR a 5 m absolute minimum, whichever
-   * is larger — see MIN_CYLINDER_TOLERANCE_M in turnpoint-sequence.ts — and
-   * extends both outward (entry cylinders) and inward (the EXIT start).
-   * CIVL GAP: 0.001 (0.1%) for Cat 1, up to 0.005 (0.5%) for Cat 2.
-   * Default: 0.005 (0.5%) — the Cat 2 maximum.
+   * Cylinder tolerance as a fraction (e.g. 0.005 = 0.5%), as declared by the
+   * task file. Parsed (and re-serialized by {@link toXctskJSON}) only so
+   * task files round-trip: scoring ignores it. S7F 2026 §9.1.1 fixes the
+   * band at ±5 m — see MIN_CYLINDER_TOLERANCE_M in
+   * turnpoint-sequence-types.ts — and every task is evaluated at that spec
+   * band (owner decision, 2026-08-09,
+   * docs/2026-08-09-s7f-2026-migration-plan.md).
    */
   cylinderTolerance?: number;
+
+  /**
+   * Optimizer directive, never parsed from a file: measure the route from
+   * the first turnpoint's BOUNDARY (its optimal tag point) instead of its
+   * centre. §7.2 measures every route from the first point's centre
+   * regardless of radius; the one caller that wants edge semantics is
+   * `taskForDistanceOrigin('start')` (gap-scoring.ts), whose trimmed task
+   * starts at the start cylinder and must not gain the centre→edge
+   * kilometres — scored distance under that origin begins at the start
+   * crossing.
+   */
+  firstTurnpointAtBoundary?: boolean;
 }
 
 /**
@@ -159,6 +172,20 @@ function parseV1(data: Record<string, unknown>): XCTask {
     earthModel: (data.earthModel as XCTask['earthModel']) || 'WGS84',
     turnpoints,
   };
+
+  // Cylinder tolerance is parsed for round-trip fidelity only: the AirScore
+  // importer writes the comp's error_margin here (issue #577, when the field
+  // still drove scoring), but S7F 2026 §9.1.1 evaluates every task at the
+  // fixed ±5 m band, so scoring ignores the value. Bounds mirror the API
+  // validator's ([0, 0.1]); an explicit 0 is kept as a real declaration.
+  if (
+    typeof data.cylinderTolerance === 'number' &&
+    Number.isFinite(data.cylinderTolerance) &&
+    data.cylinderTolerance >= 0 &&
+    data.cylinderTolerance <= 0.1
+  ) {
+    task.cylinderTolerance = data.cylinderTolerance;
+  }
 
   // Parse takeoff times
   if (typeof data.takeoff === 'object' && data.takeoff !== null) {
@@ -347,18 +374,25 @@ export function parseXCTask(content: string): XCTask {
 
   // Determine format based on structure, not just version number
   // v1 format uses 'turnpoints' array, v2 uses 't' array
+  let task: XCTask;
   if ('turnpoints' in data && Array.isArray(data.turnpoints)) {
-    return parseV1(data);
+    task = parseV1(data);
   } else if ('t' in data && Array.isArray(data.t)) {
-    return parseV2(data);
+    task = parseV2(data);
   } else {
     // Fallback: try v1 first, then v2
     const v1Task = parseV1(data);
-    if (isValidTask(v1Task)) {
-      return v1Task;
-    }
-    return parseV2(data);
+    task = isValidTask(v1Task) ? v1Task : parseV2(data);
   }
+
+  // Every path is validated, not just the fallback: a malformed file whose
+  // turnpoints carry missing or out-of-range coordinates must surface as a
+  // clean, catchable Error here — not flow as undefined/NaN into the
+  // Vincenty distance maths and quietly score garbage.
+  if (!isValidTask(task)) {
+    throw new Error('Invalid XCTSK: no turnpoints with valid coordinates');
+  }
+  return task;
 }
 
 /**
@@ -473,6 +507,12 @@ export function toXctskJSON(task: XCTask): Record<string, unknown> {
     result.goal = goal;
   }
 
+  // Round-trip promise (see XCTask.cylinderTolerance): the declared value is
+  // inert for scoring, but a file that carried one must serialize it back.
+  if (task.cylinderTolerance !== undefined) {
+    result.cylinderTolerance = task.cylinderTolerance;
+  }
+
   return result;
 }
 
@@ -521,13 +561,6 @@ export function getEffectiveESSIndex(task: XCTask): number {
   const explicit = getESSIndex(task);
   if (explicit >= 0) return explicit;
   return task.turnpoints.length >= 2 ? getGoalIndex(task) : -1;
-}
-
-/**
- * Get all turnpoints that are intermediate (not SSS/ESS/TAKEOFF)
- */
-export function getIntermediateTurnpoints(task: XCTask): Turnpoint[] {
-  return task.turnpoints.filter(tp => !tp.type);
 }
 
 /**
@@ -665,7 +698,7 @@ export function calculateNominalTaskDistance(task: XCTask): number {
   for (let i = 1; i < tps.length; i++) {
     const p1 = tps[i - 1].waypoint;
     const p2 = tps[i].waypoint;
-    distance += andoyerDistance(p1.lat, p1.lon, p2.lat, p2.lon);
+    distance += ellipsoidDistance(p1.lat, p1.lon, p2.lat, p2.lon);
   }
 
   return distance;

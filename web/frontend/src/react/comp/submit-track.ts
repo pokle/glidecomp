@@ -1,0 +1,534 @@
+/**
+ * The decisions the submit-track flow makes before anyone types anything.
+ *
+ * Which task is probably the right one, what kind of identifier somebody just
+ * typed, and which step a given failure sends them back to. All of it is
+ * DOM-free so it can be tested directly (submit-track.test.ts) rather than
+ * through a rendered dialog — and so the same rules hold whether the flow is
+ * rendered as the /submit page or as the compact dialog on a task page.
+ */
+import {
+  formatAltitude,
+  formatDistance,
+  type UnitPreferences,
+} from "@glidecomp/engine";
+
+/** How the submitter names themselves. Mirrors the worker's kind union. */
+export type IdentifierKind =
+  | "email"
+  | "civl_id"
+  | "safa_id"
+  | "ushpa_id"
+  | "bhpa_id"
+  | "dhv_id"
+  | "ffvl_id"
+  | "fai_id";
+
+/**
+ * Email first, deliberately. Every other kind is on the public roster
+ * (`GET /api/comp/:comp_id/pilot` returns them), so email is the only one that
+ * is not simply readable by anyone — which makes it the strongest thing a
+ * pilot can name themselves with.
+ */
+export const IDENTIFIER_KINDS: { value: IdentifierKind; label: string }[] = [
+  { value: "email", label: "Email address" },
+  { value: "civl_id", label: "CIVL ID" },
+  { value: "safa_id", label: "SAFA ID" },
+  { value: "ushpa_id", label: "USHPA ID" },
+  { value: "bhpa_id", label: "BHPA ID" },
+  { value: "dhv_id", label: "DHV ID" },
+  { value: "ffvl_id", label: "FFVL ID" },
+  { value: "fai_id", label: "FAI ID" },
+];
+
+export interface OpenTask {
+  task_id: string;
+  name: string;
+  task_date: string;
+  pilot_classes: string[];
+  has_xctsk: boolean;
+}
+
+export interface OpenComp {
+  comp_id: string;
+  name: string;
+  category: string;
+  timezone: string | null;
+  close_date: string | null;
+  suggested_task_id: string;
+  tasks: OpenTask[];
+}
+
+export interface OpenCompsResponse {
+  generated_at: string;
+  window: { from: string; to: string; today: string };
+  comps: OpenComp[];
+}
+
+/**
+ * The pilot classes a task is for, minus any the task's own name already says.
+ *
+ * Most organisers name the class into the task ("Task 1 (Open)"), and repeating
+ * it turns the picker into "Task 1 (Open) · open". But a task named "Boosfy" is
+ * a class the pilot cannot see, and picking the wrong one files their track
+ * against a field they did not fly in. So: say it only when the name doesn't.
+ *
+ * Returns null when there is nothing to add.
+ */
+export function unnamedClasses(
+  taskName: string,
+  pilotClasses: string[] | undefined
+): string | null {
+  if (!pilotClasses || pilotClasses.length === 0) return null;
+  const name = taskName.toLowerCase();
+  const missing = pilotClasses.filter((c) => !name.includes(c.toLowerCase()));
+  return missing.length === 0 ? null : missing.join(", ");
+}
+
+/**
+ * The two caps the server actually enforces, in
+ * `web/workers/competition-api/src/igc-validation.ts`: the gzip body it
+ * receives, and the IGC text that comes out of it.
+ *
+ * BOTH have to be checked here, and the second is the one that matters. An IGC
+ * compresses roughly eight to one, so a tracklog big enough to breach the
+ * compressed cap barely exists — but 3 MB of raw IGC is an ordinary
+ * all-day flight logged at 1 Hz, it gzips to about 350 KB, and it is refused
+ * by the DECOMPRESSED cap. Checking only the compressed size therefore looks
+ * correct, passes every file anyone tries, and still hands the pilot a bare
+ * 400 for the one case that happens.
+ */
+export const MAX_COMPRESSED_BYTES = 1024 * 1024;
+export const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024;
+
+export const NOT_AN_IGC_MESSAGE = "That is not an IGC file.";
+
+/**
+ * Why the server will refuse this file on size alone, or null if it will not.
+ *
+ * Say the number, and say what to do about it: "too large" with no limit and
+ * no remedy is the same dead end as the 400 it replaced.
+ */
+export function tooLargeReason(
+  rawBytes: number,
+  compressedBytes: number
+): string | null {
+  if (rawBytes > MAX_DECOMPRESSED_BYTES) {
+    return "That tracklog is over the 2 MB limit. Trim it to the flight itself — most loggers record for hours either side — and try again.";
+  }
+  if (compressedBytes > MAX_COMPRESSED_BYTES) {
+    return "That file is too big to accept, even compressed. Trim the tracklog to the flight and try again.";
+  }
+  return null;
+}
+
+export interface TrackQualityWire {
+  hard_failed: boolean;
+  findings: { id: string; severity: string; title: string; detail: string }[];
+}
+
+/**
+ * What to say once an upload has been accepted.
+ *
+ * A stored track is not the same as a scored one: a wrong-day or wrong-place
+ * file is kept, audited and then WITHHELD from scoring
+ * (docs/track-quality.md). Announcing a bare "Track uploaded" over the top of
+ * that tells the uploader the opposite of what happened, and on the admin grid
+ * it is worse — the pilot whose track it is never sees this screen, so the one
+ * person who could notice has been told everything is fine.
+ *
+ * `tone` is "warning" for anything the uploader should look at, so the message
+ * does not arrive dressed as a success.
+ */
+export function describeUploadOutcome(
+  pilotName: string,
+  replaced: boolean,
+  quality: TrackQualityWire | null | undefined
+): { tone: "success" | "warning"; message: string } {
+  const what = replaced ? "Track replaced" : "Track uploaded";
+  const findings = quality?.findings ?? [];
+
+  if (quality?.hard_failed) {
+    const why = findings[0]?.title;
+    return {
+      tone: "warning",
+      message: `${what} for ${pilotName}, but it will not be scored${why ? `: ${why.toLowerCase()}` : ""}`,
+    };
+  }
+  if (findings.length > 0) {
+    return {
+      tone: "warning",
+      message: `${what} for ${pilotName} — needs checking: ${findings[0].title.toLowerCase()}`,
+    };
+  }
+  return { tone: "success", message: `${what} for ${pilotName}` };
+}
+
+/** The naming half of a caller's prefill — all `taskLine` needs. */
+export interface TaskLinePrefill {
+  compName?: string;
+  taskName?: string;
+}
+
+/**
+ * The one line a collapsed task step gets.
+ *
+ * Three sources, in order of how directly they were given: the open-comps
+ * entry the pilot picked, the names the caller passed in, then the names
+ * looked up for a task that arrived as a bare id. The last is what stops
+ * `/submit?comp=…&task=…` reading "Selected task" — a URL off a poster names
+ * a task the pilot has to be able to check.
+ */
+export function taskLine(
+  comp: OpenComp | null,
+  task: { name: string; task_date: string; pilot_classes?: string[] } | null,
+  prefill: TaskLinePrefill | undefined,
+  linked?: {
+    compName: string | null;
+    taskName: string | null;
+    pilotClasses?: string[];
+  } | null
+): string {
+  const compName = comp?.name ?? prefill?.compName ?? linked?.compName ?? null;
+  const taskName = task?.name ?? prefill?.taskName ?? linked?.taskName ?? null;
+  // The collapsed step has to name the class for the same reason the picker
+  // does — it is the last chance to notice the wrong field.
+  const classes = task?.pilot_classes ?? linked?.pilotClasses;
+  const extra = taskName ? unnamedClasses(taskName, classes) : null;
+  const named = extra ? `${taskName} (${extra})` : taskName;
+  if (compName && named) return `${named} — ${compName}`;
+  return named ?? compName ?? "Selected task";
+}
+
+
+/** What the pilot last submitted, remembered so day two costs no typing. */
+export interface LastSubmission {
+  compId: string;
+  taskId: string;
+  identifierKind: IdentifierKind;
+  identifierValue: string;
+}
+
+export const LAST_SUBMISSION_KEY = "glidecomp:last-submit";
+
+/**
+ * Read what the pilot last submitted.
+ *
+ * Convenience only, never proof of identity — the worker re-checks the
+ * identifier against the roster on every submission regardless of what was in
+ * here. Anything malformed is treated as nothing.
+ */
+export function readLastSubmission(
+  storage: Pick<Storage, "getItem"> | undefined
+): LastSubmission | null {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(LAST_SUBMISSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LastSubmission>;
+    if (
+      typeof parsed.compId !== "string" ||
+      typeof parsed.taskId !== "string" ||
+      typeof parsed.identifierValue !== "string" ||
+      !IDENTIFIER_KINDS.some((k) => k.value === parsed.identifierKind)
+    ) {
+      return null;
+    }
+    return parsed as LastSubmission;
+  } catch {
+    return null;
+  }
+}
+
+export function writeLastSubmission(
+  storage: Pick<Storage, "setItem"> | undefined,
+  value: LastSubmission
+): void {
+  try {
+    storage?.setItem(LAST_SUBMISSION_KEY, JSON.stringify(value));
+  } catch {
+    // Private browsing, a full quota — none of it is worth failing an upload.
+  }
+}
+
+/**
+ * Guess which kind of identifier a string is, so somebody who ignores the
+ * dropdown and types straight into the field still gets matched.
+ *
+ * Only two guesses are safe: an `@` means an email address, and an all-digit
+ * value means a CIVL ID (the only kind that is numeric in practice). Anything
+ * else keeps whatever the pilot chose, because guessing between six national
+ * bodies from a string like "A-4821" would be a coin toss dressed up as help.
+ */
+export function inferIdentifierKind(
+  value: string,
+  current: IdentifierKind
+): IdentifierKind {
+  const trimmed = value.trim();
+  if (trimmed === "") return current;
+  if (trimmed.includes("@")) return "email";
+  if (/^\d{3,}$/.test(trimmed) && current === "email") return "civl_id";
+  return current;
+}
+
+export interface TaskChoice {
+  compId: string;
+  taskId: string;
+}
+
+/**
+ * The task the pilot most likely means, in order of how strong the evidence is:
+ *
+ *   1. what the URL asked for — somebody followed a link or a QR code;
+ *   2. where they submitted last, if that comp is still open — a pilot at a
+ *      six-day comp submits to the same comp every evening;
+ *   3. the comp whose task is nearest today, and that comp's own suggestion.
+ *
+ * Returns null when there is nothing to go on, which is a real state: the
+ * picker shows the list and asks.
+ */
+export function pickDefaultTask(
+  comps: OpenComp[],
+  opts: {
+    fromUrl?: { compId?: string | null; taskId?: string | null };
+    last?: LastSubmission | null;
+  } = {}
+): TaskChoice | null {
+  const { fromUrl, last } = opts;
+
+  if (fromUrl?.compId && fromUrl?.taskId) {
+    return { compId: fromUrl.compId, taskId: fromUrl.taskId };
+  }
+
+  const findComp = (compId: string) => comps.find((c) => c.comp_id === compId);
+
+  // A comp named in the URL but no task: fall through to that comp's own pick.
+  if (fromUrl?.compId) {
+    const comp = findComp(fromUrl.compId);
+    if (comp) return { compId: comp.comp_id, taskId: comp.suggested_task_id };
+    return null;
+  }
+
+  if (last) {
+    const comp = findComp(last.compId);
+    if (comp) {
+      // Prefer the exact task if it is still listed, else the comp's own
+      // suggestion — the pilot has moved on to the next day's task.
+      const stillThere = comp.tasks.some((t) => t.task_id === last.taskId);
+      return {
+        compId: comp.comp_id,
+        taskId: stillThere ? last.taskId : comp.suggested_task_id,
+      };
+    }
+  }
+
+  const first = comps[0];
+  if (!first) return null;
+  return { compId: first.comp_id, taskId: first.suggested_task_id };
+}
+
+/** The steps of the flow, in the order they are asked. */
+export type SubmitStep = "task" | "identity" | "file";
+
+/** Every failure code the worker can answer a submission with. */
+export type SubmitErrorCode =
+  | "bad_identifier"
+  | "anonymous_not_permitted"
+  | "registration_closed"
+  | "comp_closed"
+  | "comp_not_found"
+  | "task_not_found"
+  | "no_pilot_match"
+  | "ambiguous_pilot_match"
+  | "invalid_file"
+  | "task_pilot_limit"
+  | "rate_limited"
+  /** The organiser closed this one task (migration 0028). */
+  | "submissions_closed"
+  /** The server will not guess which registration a signed-in pilot is. The
+   *  form normally settles this before a file is chosen, so this arrives only
+   *  from a stale bundle — but it must still be repairable in place. */
+  | "identity_ambiguous"
+  /** The registration they named cannot be theirs. */
+  | "claim_rejected";
+
+export interface Organiser {
+  name: string;
+  email: string;
+}
+
+/** A registration the pilot might be. */
+export interface RegistrationCandidate {
+  comp_pilot_id: string;
+  registered_pilot_name: string;
+  pilot_class: string;
+  /** "j***@example.com" — often how somebody recognises their own old address. */
+  notify_email_masked: string | null;
+}
+
+/**
+ * What `POST /api/comp/:comp_id/registration/resolve` answers.
+ *
+ * `choose` is the interesting one: the comp has registrations nobody has
+ * claimed, so the server will not guess which (if any) is this pilot. Asking
+ * here — before a file is chosen — is what keeps that refusal from ever
+ * interrupting an upload.
+ */
+export type RegistrationState =
+  | {
+      state: "linked";
+      comp_pilot: {
+        comp_pilot_id: string;
+        registered_pilot_name: string;
+        pilot_class: string;
+      };
+    }
+  | {
+      state: "choose";
+      matched_by?: IdentifierKind;
+      may_register: boolean;
+      candidates: RegistrationCandidate[];
+    }
+  | { state: "new"; may_register: boolean; candidates: [] };
+
+/** The header value meaning "none of these — register me as a new pilot". */
+export const NEW_PILOT_SENTINEL = "new-pilot";
+
+export interface SubmitError {
+  error: string;
+  code?: SubmitErrorCode;
+  comp?: { comp_id: string; name: string };
+  organisers?: Organiser[];
+  identifier_label?: string;
+  close_date?: string | null;
+  match_count?: number;
+  retry_after_seconds?: number;
+}
+
+/**
+ * Which step can actually fix a given failure.
+ *
+ * Null means no step can — the pilot has to talk to somebody, or wait — and
+ * the panel says so instead of pretending a retry will help.
+ */
+export function repairStepFor(code: SubmitErrorCode | undefined): SubmitStep | null {
+  switch (code) {
+    case "bad_identifier":
+    case "no_pilot_match":
+    case "identity_ambiguous":
+    case "claim_rejected":
+      return "identity";
+    case "invalid_file":
+      return "file";
+    case "comp_not_found":
+    case "task_not_found":
+    // Picking a different task is a real repair here: the pilot may well have
+    // meant yesterday's, which is probably still open.
+    case "submissions_closed":
+      return "task";
+    // An ambiguous roster, a closed comp, a comp that wants a sign-in, a full
+    // task, a spent budget: none of these are repairable by trying again.
+    default:
+      return null;
+  }
+}
+
+/** True when the pilot's own answer is to sign in rather than to edit a field. */
+export function needsSignIn(code: SubmitErrorCode | undefined): boolean {
+  return code === "anonymous_not_permitted";
+}
+
+// ---------------------------------------------------------------------------
+// Formatting the summary the upload comes back with
+// ---------------------------------------------------------------------------
+
+export interface FlightSummaryWire {
+  flight_date: string | null;
+  takeoff_at: string | null;
+  landing_at: string | null;
+  duration_seconds: number | null;
+  first_fix_at: string | null;
+  last_fix_at: string | null;
+  track_length_m: number | null;
+  track_length_airborne_only: boolean;
+  max_altitude_m: number | null;
+  max_altitude_above_takeoff_m: number | null;
+  fix_count: number;
+  median_fix_interval_seconds: number | null;
+  header_pilot_name: string | null;
+  header_glider_type: string | null;
+  header_glider_id: string | null;
+  header_competition_id: string | null;
+}
+
+/**
+ * How long a rate-limited pilot has to wait, as the tail of "Try again …".
+ *
+ * Returns the whole phrase, preposition included, because the units change the
+ * grammar: "in about 10 minutes" but "tomorrow", not "in tomorrow". The
+ * budgets are daily, so a naive minutes rendering would also say "in 1440
+ * minutes", which reads as a bug rather than an answer.
+ */
+export function formatRetryAfter(seconds: number): string {
+  if (seconds < 90) return "in a moment";
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 90) return `in about ${minutes} minutes`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `in about ${hours} hour${hours === 1 ? "" : "s"}`;
+  return "tomorrow";
+}
+
+/** "4h 31m", "18m", "—". */
+export function formatDuration(seconds: number | null): string {
+  if (seconds === null || seconds <= 0) return "—";
+  const total = Math.round(seconds / 60);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+/** Clock time in the competition's own zone, which is the one the pilot flew in. */
+export function formatClockInZone(
+  iso: string | null,
+  timeZone: string | null
+): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    ...(timeZone ? { timeZone } : {}),
+  }).format(date);
+}
+
+/**
+ * The two figures on the submission receipt, in the pilot's own units.
+ *
+ * These used to be `formatKm` and `formatMetres`, which re-derived
+ * `(metres / 1000).toFixed(1)` and `Math.round(metres)` and hard-coded "km"
+ * and "m". Every other surface in the app reads the pilot's distance and
+ * altitude preferences through the engine's formatters, so a pilot who had
+ * chosen feet and miles was shown kilometres and metres here — on the one
+ * screen that confirms what was just filed for them.
+ *
+ * All they add over `formatDistance`/`formatAltitude` is the em dash for a
+ * figure the IGC file didn't carry.
+ */
+export function formatTrackDistance(
+  metres: number | null,
+  prefs: UnitPreferences
+): string {
+  if (metres === null) return "—";
+  return formatDistance(metres, { decimals: 1, prefs }).withUnit;
+}
+
+export function formatTrackAltitude(
+  metres: number | null,
+  prefs: UnitPreferences
+): string {
+  if (metres === null) return "—";
+  return formatAltitude(metres, { prefs }).withUnit;
+}

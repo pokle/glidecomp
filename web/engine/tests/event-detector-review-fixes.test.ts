@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { detectFlightEvents, type GlideEventDetails } from '../src/event-detector';
-import { extractSinks, extractGlides } from '../src/segment-extractors';
+import { detectFlight, detectFlightEvents, type GlideEventDetails } from '../src/event-detector';
+import { sinksFromGlides } from '../src/segment-extractors';
 import { createFix, type IGCFix } from './test-helpers';
 
 /**
@@ -70,14 +70,14 @@ describe('Glide ratio convention (no Infinity)', () => {
   });
 
   it('never classifies a climbing glide as a sink', () => {
-    const events = detectFlightEvents(createClimbingGlideTrack());
+    const { segments } = detectFlight(createClimbingGlideTrack());
 
-    const glides = extractGlides(events);
-    expect(glides.length).toBeGreaterThanOrEqual(1);
+    expect(segments.glides.length).toBeGreaterThanOrEqual(1);
 
-    const sinks = extractSinks(events);
+    const sinks = sinksFromGlides(segments.glides);
     // The climbing glide (missing ratio) must not fall into the sink bucket
     for (const sink of sinks) {
+      expect(sink.glideRatio).toBeDefined();
       expect((sink.sourceEvent.details as GlideEventDetails).glideRatio).toBeDefined();
     }
   });

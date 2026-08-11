@@ -38,7 +38,7 @@ function restampedTenDaysLater(igcText: string): string {
 
 interface ScoreBody {
   stale: boolean;
-  classes: Array<{
+  class_scores: Array<{
     pilot_class: string;
     task_validity: { launch: number; distance: number; time: number; task: number };
     pilots: Array<{
@@ -102,8 +102,97 @@ beforeEach(async () => {
   }
 });
 
-describe("hard-failed tracks in the standings", () => {
-  // THE regression guard. Before the standings fix, removing a track from
+/**
+ * The `if (!quality?.hardFailed)` guard around applyStatusOnTrackUpload.
+ *
+ * Every other upload test uses a fixture with no B records, so
+ * assessUploadedTrack returns null and this guard is only ever exercised in
+ * its "quality is absent" form. These are the tests that actually run it in
+ * its "quality says no" form — the one the source comment says would
+ * otherwise "destroy a real result on the strength of a rejected upload".
+ */
+describe("a rejected tracklog must not claim the pilot flew", () => {
+  async function onlyTaskDbId(): Promise<number> {
+    const row = await env.DB.prepare("SELECT task_id FROM task").first<{
+      task_id: number;
+    }>();
+    return row!.task_id;
+  }
+
+  test("does not stamp Landed", async () => {
+    const compId = await createComp({ category: "hg" });
+    const taskId = await createTask(compId, {
+      xctsk: JSON.parse(env.SAMPLE_TASK_XCTSK),
+      pilot_classes: ["open"],
+    });
+    const entries = sampleIgcEntries();
+
+    const res = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(restampedTenDaysLater(entries[0][1])),
+      { user: "user-1" }
+    );
+    expect(res.status).toBe(201);
+    // The file IS stored and IS reported as hard-failed on the wire.
+    const body = (await res.json()) as {
+      track_quality: { hard_failed: boolean; findings: { id: string }[] };
+    };
+    expect(body.track_quality.hard_failed).toBe(true);
+    expect(body.track_quality.findings.map((f) => f.id)).toContain("wrong-day");
+
+    // …but it is not evidence that this pilot flew this task.
+    const status = await env.DB.prepare(
+      "SELECT status_key FROM task_pilot_status WHERE task_id = ?"
+    )
+      .bind(await onlyTaskDbId())
+      .first<{ status_key: string }>();
+    expect(status).toBeNull();
+  });
+
+  test("does not supersede a scorekeeper's manual flight", async () => {
+    const compId = await createComp({ category: "hg" });
+    const taskId = await createTask(compId, {
+      xctsk: JSON.parse(env.SAMPLE_TASK_XCTSK),
+      pilot_classes: ["open"],
+    });
+
+    // user-1 joins and gets a manual flight recorded by the scorekeeper.
+    const entries = sampleIgcEntries();
+    await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(entries[0][1]),
+      { user: "user-1" }
+    );
+    const roster = (await (
+      await request("GET", `/api/comp/${compId}/pilot`)
+    ).json()) as { pilots: { comp_pilot_id: string; name: string }[] };
+    const me = roster.pilots[0];
+
+    const manualRes = await authRequest(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/manual-flight/${me.comp_pilot_id}`,
+      { last_reached_tp_index: 1, landing_lat: 0, landing_lon: 0.15 }
+    );
+    expect(manualRes.status).toBe(200);
+
+    // Now the same pilot uploads a tracklog from another day.
+    const bad = await uploadRequest(
+      `/api/comp/${compId}/task/${taskId}/igc`,
+      await compressText(restampedTenDaysLater(entries[1][1])),
+      { user: "user-1" }
+    );
+    expect(bad.status).toBe(200); // a replacement
+
+    // The manual flight is the real result and must still be the active one.
+    const manual = await env.DB.prepare(
+      "SELECT active FROM task_manual_flight ORDER BY rowid DESC LIMIT 1"
+    ).first<{ active: number }>();
+    expect(manual?.active).toBe(1);
+  });
+});
+
+describe("hard-failed tracks in the scores", () => {
+  // THE regression guard. Before the scores fix, removing a track from
   // scoring removed its pilot from the results entirely: uploading a track
   // auto-stamps the pilot "Landed", which counts in neither numFlying nor
   // numDNF, so they appeared in no pilots[] array at all and their score page
@@ -112,7 +201,7 @@ describe("hard-failed tracks in the standings", () => {
     const { compId, taskId } = await seedTask({ good: 2, bad: true });
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
 
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(3);
 
     const withheld = open.pilots.filter((p) => p.track_excluded);
@@ -128,7 +217,7 @@ describe("hard-failed tracks in the standings", () => {
   });
 
   // The blast-radius guarantee: an automatic heuristic must not be able to
-  // move anyone else's points. If a withheld pilot counted toward S7F §9.1
+  // move anyone else's points. If a withheld pilot counted toward S7F §10.1
   // "pilots present", one false positive would cut the whole field's score.
   test("withholding a track leaves the rest of the field's scores untouched", async () => {
     const withBad = await seedTask({ good: 2, bad: true });
@@ -145,8 +234,8 @@ describe("hard-failed tracks in the standings", () => {
       `/api/comp/${clean.compId}/task/${clean.taskId}/score`
     );
 
-    const withBadOpen = badData.classes.find((c) => c.pilot_class === "open")!;
-    const cleanOpen = cleanData.classes.find((c) => c.pilot_class === "open")!;
+    const withBadOpen = badData.class_scores.find((c) => c.pilot_class === "open")!;
+    const cleanOpen = cleanData.class_scores.find((c) => c.pilot_class === "open")!;
 
     expect(withBadOpen.task_validity).toEqual(cleanOpen.task_validity);
     expect(withBadOpen.pilots.filter((p) => !p.track_excluded).map((p) => p.total_score)).toEqual(
@@ -157,7 +246,7 @@ describe("hard-failed tracks in the standings", () => {
   test("a class whose only track is withheld still seats that pilot", async () => {
     const { compId, taskId } = await seedTask({ good: 0, bad: true });
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(1);
     expect(open.pilots[0].total_score).toBe(0);
     expect(open.pilots[0].track_excluded!.reasons.length).toBeGreaterThan(0);
@@ -168,7 +257,7 @@ describe("hard-failed tracks in the standings", () => {
   test("a scorekeeper override puts the track back into scoring", async () => {
     const { compId, taskId } = await seedTask({ good: 2, bad: true });
     const before = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const withheld = before.classes
+    const withheld = before.class_scores
       .find((c) => c.pilot_class === "open")!
       .pilots.find((p) => p.track_excluded)!;
 
@@ -180,7 +269,7 @@ describe("hard-failed tracks in the standings", () => {
     expect(res.status).toBe(200);
 
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(3);
     expect(open.pilots.some((p) => p.track_excluded)).toBe(false);
     // It scores like any other short flight — the S7F §5.3 minimum distance,
@@ -210,7 +299,7 @@ describe("the quality cache interlock", () => {
     await env.DB.prepare("UPDATE task_scores SET inputs_rev = inputs_rev + 1").run();
 
     const again = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = again.classes.find((c) => c.pilot_class === "open")!;
+    const open = again.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots.filter((p) => p.track_excluded)).toHaveLength(1);
 
     const relearned = await env.DB.prepare(
@@ -281,7 +370,7 @@ describe("hard-failed tracks in the 3D replay bundle", () => {
     const before = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
     expect(await fetchManifest(compId, taskId)).toHaveProperty("pilots.length", 2);
 
-    const withheld = before.classes
+    const withheld = before.class_scores
       .find((c) => c.pilot_class === "open")!
       .pilots.find((p) => p.track_excluded)!;
     const res = await authRequest(

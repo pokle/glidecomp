@@ -19,7 +19,7 @@
  * no more — no comp, no track, nothing public — so `bun run kill-state` remains
  * the way to clear them.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/test";
 
 let ipCounter = 0;
 /** Unique per test AND per run (runs seconds apart never collide). */
@@ -54,6 +54,29 @@ async function expectSignedIn(
   await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
 }
 
+/**
+ * Clear the onboarding gate, which every email sign-up hits: Better Auth's
+ * email-otp route creates the account with no name, and nothing else in the
+ * app ever asks for one. The username is already filled in — auto-derived at
+ * sign-up from the email local-part — so a name is all that's left to give.
+ *
+ * Returns the username the account ended up with.
+ */
+async function completeOnboarding(
+  page: import("@playwright/test").Page,
+  name: string
+): Promise<string> {
+  await page.waitForURL("**/onboarding");
+  const usernameField = page.getByLabel("Username");
+  const username = await usernameField.inputValue();
+  expect(username).not.toBe("");
+
+  await page.getByLabel("Full name").fill(name);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL(`**/u/${username}`);
+  return username;
+}
+
 async function fetchDevOtp(
   request: import("@playwright/test").APIRequestContext,
   email: string
@@ -84,10 +107,23 @@ test("sign in with an emailed code (manual entry)", async ({ page }) => {
   const otp = await fetchDevOtp(page.request, email);
   await otpInput.fill(otp);
 
-  // Fresh user: username is auto-derived at sign-up (no onboarding gate),
-  // so the post-sign-in redirect lands on /comp signed in.
-  await page.waitForURL("**/comp");
+  // Fresh user: the account has a derived username but no name, so the
+  // post-sign-in landing bounces to onboarding for the one thing missing.
+  const username = await completeOnboarding(page, "Otto Lilienthal");
   await expectSignedIn(page, email);
+
+  // The name went to the ACCOUNT, not just the pilot profile — that's what
+  // the gate reads, so anything less would send them straight back.
+  const me = await page.request.get("/api/auth/me");
+  const { user } = (await me.json()) as {
+    user: { name: string; username: string };
+  };
+  expect(user).toMatchObject({ name: "Otto Lilienthal", username });
+
+  // And a return visit sails past onboarding.
+  await page.goto("/comp");
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/comp");
 });
 
 test("sign in via the emailed deep link (#otp=…&email=…)", async ({ page }) => {
@@ -103,7 +139,7 @@ test("sign in via the emailed deep link (#otp=…&email=…)", async ({ page }) 
   // The link the email carries: code in the FRAGMENT (never sent to the
   // server); the page consumes it, strips it, and signs in unprompted.
   await page.goto(`/signin#otp=${otp}&email=${encodeURIComponent(email)}`);
-  await page.waitForURL("**/comp");
+  await completeOnboarding(page, "Lawrence Hargrave");
   await expectSignedIn(page, email);
 });
 
@@ -123,7 +159,7 @@ test("a wrong code shows an error and allows retry", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText(/didn't work/);
   // Still on the code step — the right code recovers the flow.
   await otpInput.fill(otp);
-  await page.waitForURL("**/comp");
+  await page.waitForURL("**/onboarding");
 });
 
 test("send endpoint rate-limits with Retry-After", async ({ request }) => {

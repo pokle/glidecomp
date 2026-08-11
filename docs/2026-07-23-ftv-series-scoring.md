@@ -6,7 +6,7 @@ schema/API and the `/scoring/gap` explainer for the pilot-facing version.
 
 ## What FTV is
 
-A competition's standings combine each pilot's task scores. Two methods, chosen
+A competition's scores combine each pilot's task scores. Two methods, chosen
 per comp (`comp.series_scoring`):
 
 - **`total`** — sum of all task scores. The default; used by HG comps and short
@@ -55,15 +55,15 @@ annotating each per-task entry with `ftv_status` / `ftv_counted_score` /
 never change silently) and via `PATCH /api/comp/:id` (SettingsDialog).
 
 Deliberate departure from `scoring_format`: these two fields change the
-**standings** but not any per-task score. So they are **audit-logged** (they
-change published results) but do **not** call `bumpAndRevalidateScores` — bumping
+**scores** but not any per-task score. So they are **audit-logged** (they
+change published scores) but do **not** call `bumpAndRevalidateScores` — bumping
 every task's materialized score would be wasted work. Cache correctness comes
 from folding `series_scoring` + `ftv_factor` into the `/scores` comp ETag, so a
 toggle invalidates the cached response.
 
 ## UI
 
-- `CompScoresSection` standings: FTV total in the Total column; discarded
+- `CompScoresSection` scores: FTV total in the Total column; discarded
   per-task scores struck through, part-counted marked "(part)", both with
   tooltips; a caption naming the discard %; and a per-pilot **breakdown** dialog
   (`FtvBreakdown`) listing counted/discarded tasks and the arithmetic.
@@ -74,7 +74,7 @@ toggle invalidates the cached response.
 
 - **PG default = new comps only.** New PG GAP comps default to FTV; existing
   comps keep sum-of-tasks until an admin opts in. Avoids silently rewriting
-  already-published standings. A backfill (`UPDATE comp SET series_scoring='ftv'
+  already-published scores. A backfill (`UPDATE comp SET series_scoring='ftv'
   WHERE category='pg' AND scoring_format='gap'`) can flip them all if wanted.
 - **FTV core in the engine**, not the worker — pure, unit-testable, reusable by
   the CLI, and the home of the sibling `score-explanation` module.

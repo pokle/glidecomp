@@ -46,13 +46,15 @@ import {
 import { api } from "../../comp/api";
 import { gunzipResponse } from "../../analysis/storage";
 import type { BestProgressRoute, OpenDistanceLine } from "../../analysis/map-provider";
-import { formatTaskDate } from "../lib/format";
+import { formatTaskDate, ordinal } from "../lib/format";
 import { formatTimeInZone, zoneNameWithOffset } from "../lib/time";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
 import { retry } from "../lib/retry";
-import { idFromSegment, pilotPath } from "../lib/slug";
+import { idFromSegment, pilotPath, taskPath } from "../lib/slug";
+import { LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { Timestamp } from "../components/Timestamp";
 import { NotFound } from "../components/NotFound";
@@ -66,11 +68,21 @@ import type {
   TaskScoreData,
   TrackQualityData,
 } from "../comp/types";
-import { Badge } from "@/react/rac/badge";
-import { ScoreChartView } from "@/react/charts/ScoreChartView";
-import { TrackCleaningChart } from "@/react/charts/TrackCleaningChart";
+import { TrackScrubber, nearestFixIndexByTime } from "../score-detail/TrackScrubber";
+import {
+  TrackDataCleaningNote,
+  TrackQualityNote,
+  TrackValidityDocLink,
+} from "../score-detail/TrackNotes";
+import { ExplanationSection } from "../score-detail/Explanation";
+import {
+  AnalysisMapIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+} from "../score-detail/icons";
 import { ScoringGlossary } from "../components/ScoringGlossary";
-import { TaskInStandings } from "../comp/TaskInStandings";
+import { TaskInCompScores } from "../comp/TaskInCompScores";
+import { HistoricalRulesNotice, RulesEditionBadge } from "../comp/RulesEdition";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
 import { useUser } from "../lib/user";
@@ -88,6 +100,16 @@ interface DetailData {
   task: TaskDetailData;
   entry: PilotScoreEntry;
   pilotClass: string;
+  /** The published rules edition ("s7f-2026"), or undefined for payloads
+   * cached before the field existed — the badge degrades to "FAI S7F". */
+  rulesEdition?: "s7f-2026";
+  /** This pilot's officially published standing (issue #603), when the
+   * import recorded one — display only, never a GlideComp score. */
+  official: { rank: number; total: number; source: string; url: string | null } | null;
+  /** The official task scores page for the whole task — set whenever the
+   * task carries official results, even when THIS pilot has no entry there,
+   * so the historical-rules notice can always link the published record. */
+  officialTaskUrl: string | null;
   explanation: ScoreExplanation;
   /** The task drawn on the map (the sequence was resolved against it). */
   mapTask: XCTask;
@@ -125,6 +147,7 @@ function assertAnalysisMatchesScore(analysedDistance: number, scoredDistance: nu
 
 type DetailState =
   | { kind: "loading" }
+  | { kind: "pending" }
   | { kind: "error"; message: string; notFound?: boolean }
   | { kind: "ready"; data: DetailData };
 
@@ -137,6 +160,29 @@ type DetailState =
 class DetailNotFoundError extends Error {
   readonly notFound = true;
 }
+
+/**
+ * The pilot has a track on this task but the served scores predate it.
+ *
+ * Scores are stale-first: a read never computes, so straight after an upload
+ * the stored blob is still the pre-upload one and does not contain this pilot.
+ * That is a WAIT, not a 404 — and telling a pilot who has just submitted that
+ * their score cannot be found is the worst possible answer, since it reads as
+ * "your track did not go in".
+ */
+class ScorePendingError extends Error {
+  readonly pending = true;
+}
+
+/**
+ * How hard to chase a score that has not landed yet. Same shape as the rescore
+ * poll in comp/ScoreFreshness.tsx: quick at first, backing off, and giving up
+ * rather than hammering a task whose revalidation has genuinely failed.
+ */
+const PENDING_INITIAL_MS = 2_000;
+const PENDING_BACKOFF = 1.6;
+const PENDING_MAX_MS = 15_000;
+const PENDING_MAX_ATTEMPTS = 8;
 
 /** True for the statuses that mean "no such thing": a real 404, or a 400 from
  *  an id sqid that doesn't decode at all. */
@@ -261,7 +307,7 @@ function buildDetailData(
 
   let cls: ClassScore | undefined;
   let entry: PilotScoreEntry | undefined;
-  for (const c of score.classes) {
+  for (const c of score.class_scores) {
     const found = c.pilots.find((p) => p.comp_pilot_id === pilotId);
     if (found) {
       cls = c;
@@ -269,7 +315,24 @@ function buildDetailData(
       break;
     }
   }
-  if (!cls || !entry) throw new Error("No score found for this pilot");
+  if (!cls || !entry) {
+    // A stale blob simply has not caught up with this pilot's upload yet.
+    if (score.stale) throw new ScorePendingError("Scores are being recomputed");
+    throw new Error("No score found for this pilot");
+  }
+
+  // The pilot's officially published standing (issue #603) — an annotation
+  // from the import, matched by stored id, so no lookup can misattribute it.
+  const officialEntry = score.official_results?.ranks?.[pilotId];
+  const officialTaskUrl = score.official_results?.task_url ?? null;
+  const official = officialEntry
+    ? {
+        rank: officialEntry.rank,
+        total: officialEntry.total,
+        source: score.official_results!.source,
+        url: officialTaskUrl,
+      }
+    : null;
 
   const trackQuality = analysis.track_quality ?? null;
 
@@ -284,6 +347,9 @@ function buildDetailData(
       task,
       entry,
       pilotClass: cls.pilot_class,
+      rulesEdition: cls.rules_edition,
+      official,
+      officialTaskUrl,
       explanation: explainExcludedTrack({
         entry,
         findings: (trackQuality?.findings ?? []).filter((f) => f.severity === "hard"),
@@ -341,6 +407,9 @@ function buildDetailData(
       task,
       entry,
       pilotClass: cls.pilot_class,
+      rulesEdition: cls.rules_edition,
+      official,
+      officialTaskUrl,
       explanation,
       mapTask: task.xctsk,
       eventsByItem: anchoredEvents(explanation),
@@ -378,14 +447,9 @@ function buildDetailData(
     if (cls.gap_params) return cls.gap_params;
     const { nominalDistance: _nd, ...stored } = comp.gap_params ?? {};
     void _nd;
-    // Pass the comp's creation time so the PG leading-weight default matches the
-    // scorer's date-based choice (S7F-2024 for new comps, GAP2020 for older
-    // ones — issue #257).
-    const createdAtMs = Date.parse(comp.creation_date);
     return resolveCompGapParams(
       comp.category === "pg" ? "pg" : "hg",
       comp.gap_params ? stored : null,
-      Number.isNaN(createdAtMs) ? null : createdAtMs,
     );
   })();
 
@@ -424,6 +488,9 @@ function buildDetailData(
       task,
       entry,
       pilotClass: cls.pilot_class,
+      rulesEdition: cls.rules_edition,
+      official,
+      officialTaskUrl,
       explanation,
       mapTask: scoringTask,
       eventsByItem: anchoredEvents(explanation),
@@ -466,6 +533,13 @@ function buildDetailData(
     task,
     entry,
     pilotClass: cls.pilot_class,
+    // This return — the main GAP path — used to omit rulesEdition, so a
+    // tracked pilot's report card degraded the badge to plain "FAI S7F" and
+    // never showed the historical-rules notice. The other three paths always
+    // carried it.
+    rulesEdition: cls.rules_edition,
+    official,
+    officialTaskUrl,
     explanation,
     mapTask: scoringTask,
     eventsByItem: anchoredEvents(explanation),
@@ -513,6 +587,7 @@ export function PilotScoreDetail() {
         ),
       };
     } catch (err) {
+      if (err instanceof ScorePendingError) return { kind: "pending" };
       return {
         kind: "error",
         message: err instanceof Error ? err.message : "Failed to load score details",
@@ -521,6 +596,8 @@ export function PilotScoreDetail() {
     }
   });
   const seededRef = useRef(initial != null);
+  // Bumped by the pending poll below; re-runs the load effect.
+  const [pendingAttempt, setPendingAttempt] = useState(0);
   const [fixes, setFixes] = useState<IGCFix[] | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
@@ -566,10 +643,14 @@ export function PilotScoreDetail() {
       return;
     }
     let cancelled = false;
-    setState({ kind: "loading" });
-    setFocus(null);
-    setSelectedItem(null);
-    setMapExpanded(false);
+    // A poll re-entry keeps the "scores are being recomputed" panel up rather
+    // than flashing the spinner every few seconds.
+    if (pendingAttempt === 0) {
+      setState({ kind: "loading" });
+      setFocus(null);
+      setSelectedItem(null);
+      setMapExpanded(false);
+    }
     // Retry through a transient D1 blip (the 4 concurrent reads can 404 one
     // spuriously on a cold DB) so we don't flash a false "not found".
     retry(() => loadDetail(compId, taskId, pilotId))
@@ -577,17 +658,50 @@ export function PilotScoreDetail() {
         if (!cancelled) setState({ kind: "ready", data });
       })
       .catch((err: unknown) => {
-        if (!cancelled)
-          setState({
-            kind: "error",
-            message: err instanceof Error ? err.message : "Failed to load score details",
-            notFound: err instanceof DetailNotFoundError,
-          });
+        if (cancelled) return;
+        if (err instanceof ScorePendingError) {
+          setState({ kind: "pending" });
+          return;
+        }
+        setState({
+          kind: "error",
+          message: err instanceof Error ? err.message : "Failed to load score details",
+          notFound: err instanceof DetailNotFoundError,
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [compId, taskId, pilotId]);
+  }, [compId, taskId, pilotId, pendingAttempt]);
+
+  // While the scores are catching up with a just-uploaded track, keep asking.
+  // Backoff and give-up match ScoreFreshness's rescore poll: a revalidation is
+  // usually under a second, but it queues behind whatever else the task is
+  // doing. Pauses with the tab, because nobody is reading a hidden page.
+  useEffect(() => {
+    if (state.kind !== "pending") return;
+    if (pendingAttempt >= PENDING_MAX_ATTEMPTS) return;
+    const delay = Math.min(
+      PENDING_INITIAL_MS * Math.pow(PENDING_BACKOFF, pendingAttempt),
+      PENDING_MAX_MS,
+    );
+    let onVisible: (() => void) | null = null;
+    const again = () => setPendingAttempt((n) => n + 1);
+    const timer = window.setTimeout(() => {
+      if (!document.hidden) return again();
+      // Hidden when the timer fired: wait for the reader to come back rather
+      // than dropping the poll, which would leave the page saying "recomputing"
+      // forever.
+      onVisible = () => {
+        if (!document.hidden) again();
+      };
+      document.addEventListener("visibilitychange", onVisible);
+    }, delay);
+    return () => {
+      window.clearTimeout(timer);
+      if (onVisible) document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [state.kind, pendingAttempt]);
 
   // The tracklog is only needed to draw the flight on the map — the
   // explanation renders from the analysis endpoint without it, so load it
@@ -658,6 +772,36 @@ export function PilotScoreDetail() {
     );
   }
 
+  if (state.kind === "pending") {
+    // The pilot's track is in, but the served scores predate it — a wait, not
+    // a 404. This page is where the submit flow sends someone the moment they
+    // upload, so "no score found" would read as "your track did not go in".
+    const gaveUp = pendingAttempt >= PENDING_MAX_ATTEMPTS;
+    return (
+      <div>
+        {breadcrumbs}
+        <div className="mt-4">
+          {gaveUp ? (
+            <p role="status" className="text-muted-foreground">
+              Your track is in, but the scores are taking longer than usual to
+              recompute. Reload in a minute, or open the task to see the field.
+            </p>
+          ) : (
+            <Loading>
+              Your track is in. Working out the scores — they depend on
+              everyone else's tracks too…
+            </Loading>
+          )}
+          <p className="mt-4">
+            <LinkButton variant="outline" href={taskPath(compId, null, taskId, null)}>
+              Go to the task
+            </LinkButton>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (state.kind === "error") {
     // A dead id gets the 404 page, which searches the URL's own slugs for the
     // pilot/task/comp that exist now. Any other failure is a failure, not a
@@ -703,11 +847,41 @@ export function PilotScoreDetail() {
             data.comp.timezone ?? undefined
           )}
         </p>
+        {/* The officially published standing (issue #603) — display only,
+            never a GlideComp score, so it sits as an annotation under the
+            rank rather than inside the explanation. */}
+        {data.official ? (
+          <p className="text-sm text-muted-foreground">
+            Officially: {ordinal(data.official.rank)} · {Math.round(data.official.total)} pts (
+            {data.official.url ? (
+              <a
+                href={data.official.url}
+                target="_blank"
+                rel="noopener"
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                {data.official.source}
+              </a>
+            ) : (
+              data.official.source
+            )}
+            )
+          </p>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           Scores computed{" "}
           <Timestamp value={data.scoreComputedAt} compTimezone={data.comp.timezone} />
           {data.scoreStale ? " — a re-score is in progress" : ""}
+          {" · "}
+          <RulesEditionBadge edition={data.rulesEdition} />
         </p>
+        <div className="mt-2 empty:hidden">
+          <HistoricalRulesNotice
+            edition={data.rulesEdition}
+            taskDate={data.task.task_date}
+            officialUrl={data.officialTaskUrl}
+          />
+        </div>
         <p className="mt-1 font-medium">{explanation.headline}</p>
         {/* The winner's bridging sentence — why the top score is still short
             of the points on offer. The one question the day's leader arrives
@@ -829,9 +1003,9 @@ export function PilotScoreDetail() {
           ))}
           {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
           {/* Closes the loop from this task back to the competition. Loads
-              after hydration — see TaskInStandings for why it is not in the
+              after hydration — see TaskInCompScores for why it is not in the
               SSR payload. */}
-          <TaskInStandings
+          <TaskInCompScores
             compId={compId}
             compName={data.comp.name}
             taskId={taskId}
@@ -851,481 +1025,3 @@ export function PilotScoreDetail() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Time scrubber
-// ---------------------------------------------------------------------------
-
-/**
- * Index of the fix closest in time to `timeMs` (fix times are ascending).
- * Binary search — tracklogs run to tens of thousands of fixes.
- */
-function nearestFixIndexByTime(fixes: IGCFix[], timeMs: number): number {
-  let lo = 0;
-  let hi = fixes.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (fixes[mid].time.getTime() < timeMs) lo = mid + 1;
-    else hi = mid;
-  }
-  if (
-    lo > 0 &&
-    timeMs - fixes[lo - 1].time.getTime() < fixes[lo].time.getTime() - timeMs
-  ) {
-    return lo - 1;
-  }
-  return lo;
-}
-
-/**
- * Map time scrubber: drag to draw the track only up to a moment — when a
- * pilot crosses the same cylinder repeatedly, the clipped track is what
- * makes the sequence readable. At the right end the scrub clears and the
- * whole flight shows again.
- *
- * A native range input (not a kit slider) on purpose: it lets us set
- * aria-valuetext to the wall-clock flight time, where the RAC/shadcn
- * sliders would announce a meaningless fix index.
- */
-function TrackScrubber({
-  fixes,
-  scrubIndex,
-  timezone,
-  onScrub,
-}: {
-  fixes: IGCFix[];
-  scrubIndex: number | null;
-  timezone: string | null;
-  onScrub: (index: number | null) => void;
-}) {
-  const max = fixes.length - 1;
-  const value = Math.min(scrubIndex ?? max, max);
-  const time = formatTimeInZone(fixes[value].time, timezone ?? undefined);
-  return (
-    <div className="flex items-center gap-3">
-      <input
-        type="range"
-        min={0}
-        max={max}
-        step={1}
-        value={value}
-        aria-label="Flight time"
-        aria-valuetext={time}
-        onChange={(e) => {
-          const v = Number(e.currentTarget.value);
-          onScrub(v >= max ? null : v);
-        }}
-        className="h-6 min-w-0 flex-1 accent-primary"
-      />
-      <span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-        {scrubIndex == null ? "Whole flight" : `Until ${time}`}
-      </span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Explanation rendering
-// ---------------------------------------------------------------------------
-
-/**
- * What the data-quality checks made of this tracklog (engine
- * track-quality.ts, FAI S7A §4.4.2).
- *
- * Renders ABOVE the explanation, unlike TrackDataCleaningNote below it,
- * because it changes the meaning of everything under it. A hard verdict says
- * the file is not this flight; a soft one is information for a scorekeeper
- * about a flight that is still scored — the two must not read the same, and
- * the soft wording is deliberately not accusatory, because soft findings fire
- * routinely on legitimate 0-scoring tracks.
- *
- * Every string comes from the engine already rendered, so there is nothing
- * here to format and no hydration surface. Static content, so it is a plain
- * labelled section rather than an alert live region, and the badge carries
- * text so colour is never the only signal.
- */
-function TrackQualityNote({
-  quality,
-  /** True when the explanation itself is the excluded-track narrative, which
-   * already lists these findings — showing them twice on one page reads as a
-   * bug. The note still carries them for an OVERRIDDEN track, where the
-   * explanation is the normal one and this is the only place they appear. */
-  inExplanation,
-}: {
-  quality: TrackQualityData | null;
-  inExplanation: boolean;
-}) {
-  if (!quality || quality.findings.length === 0 || inExplanation) return null;
-  const hard = quality.hardFailed;
-  return (
-    <section
-      aria-labelledby="track-quality-heading"
-      className={`rounded-lg border p-4 ${hard ? "border-destructive/50" : ""}`}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 id="track-quality-heading" className="font-semibold">
-          {hard ? "Tracklog excluded from scoring" : "Check this tracklog"}
-        </h2>
-        <Badge variant={hard ? "destructive" : "outline"} className="shrink-0">
-          {hard ? "Excluded" : "Flagged"}
-        </Badge>
-      </div>
-      <ul className="mt-2 space-y-2">
-        {quality.findings.map((f) => (
-          <li key={f.id}>
-            <p className={`text-sm ${hard ? "font-medium" : ""}`}>{f.title}</p>
-            <p className="text-xs text-muted-foreground">{f.detail}</p>
-          </li>
-        ))}
-      </ul>
-      <TrackValidityDocLink className="mt-3" />
-    </section>
-  );
-}
-
-/**
- * The public explainer for the validity checks. Rendered inside the note
- * above for a flagged-but-scored track, and separately under the explanation
- * for a withheld one — where the note suppresses itself, but the pilot has
- * just been shown a zero and needs this link most.
- */
-function TrackValidityDocLink({ className = "" }: { className?: string }) {
-  return (
-    <p className={`text-xs text-muted-foreground ${className}`}>
-      <a href="/scoring/track-validity" className="underline underline-offset-2">
-        How track validity checks work
-      </a>
-    </p>
-  );
-}
-
-/**
- * Transparency note: what the engine's altitude plausibility pass repaired
- * in this track before analysis (GPS glitches cross-checked against the
- * barometric channel, or caught by vertical-speed limits). Rendered only
- * when something was actually repaired — a clean track needs no disclaimer.
- * Times are formatted in the comp's zone (SSR-deterministic).
- *
- * The list is the exact record and always renders. Once the tracklog the map
- * needs has arrived, the same repairs are also drawn — raw GPS, raw barometer
- * and the cleaned line the analysis used, the figure /scoring/data-cleaning
- * explains — and each list entry becomes the control that zooms the chart to
- * that stretch. Text first, picture second, on purpose: the chart is
- * client-only (there are no fixes server-side), so the page's server-rendered
- * content is unchanged.
- */
-function TrackDataCleaningNote({
-  cleaning,
-  timezone,
-  fixes,
-}: {
-  cleaning: AltitudeCleaningData | null;
-  timezone: string | null;
-  /** The parsed tracklog, once downloaded — null until then. */
-  fixes: IGCFix[] | null;
-}) {
-  // Unconditional: `cleaning` arrives with the SSR seed on some paths and a
-  // fetch on others, so this component must not choose a hook path by it.
-  const [selected, setSelected] = useState<number | null>(null);
-  if (!cleaning || cleaning.repairedFixCount === 0) return null;
-  const time = (ms: number) => formatTimeInZone(new Date(ms), timezone ?? undefined);
-  const pct = (100 * cleaning.repairedFixCount) / cleaning.totalFixCount;
-  const charted = fixes != null && fixes.length > 1;
-  const entryText = (r: AltitudeCleaningData["ranges"][number]) =>
-    `${
-      r.startTimeMs === r.endTimeMs
-        ? time(r.startTimeMs)
-        : `${time(r.startTimeMs)}–${time(r.endTimeMs)}`
-    } · ${r.fixCount} fix${r.fixCount === 1 ? "" : "es"} · up to ${Math.round(
-      r.maxCorrectionMeters,
-    )} m off`;
-  return (
-    <section className="rounded-lg border p-4">
-      <h2 className="font-semibold">Track data cleaning</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {cleaning.repairedFixCount} of {cleaning.totalFixCount} GPS fixes (
-        {pct < 0.1 ? "<0.1" : pct.toFixed(1)}%) carried an implausible altitude
-        and were repaired before analysis —{" "}
-        {cleaning.crossChecked
-          ? "flagged by cross-checking GPS altitude against the barometric channel"
-          : "flagged by vertical-speed limits (no barometric channel to cross-check)"}
-        . Positions and times are never altered.{" "}
-        <a href="/scoring/data-cleaning" className="underline underline-offset-2">
-          How data cleaning works
-        </a>
-      </p>
-      {charted ? (
-        <TrackCleaningChart
-          fixes={fixes}
-          ranges={cleaning.ranges}
-          selected={selected}
-          timezone={timezone}
-          onSelectRange={setSelected}
-        />
-      ) : null}
-      {charted ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {selected === null ? (
-            "Pick a stretch below to zoom the chart to it."
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              className="cursor-pointer underline underline-offset-2"
-            >
-              Show the whole flight
-            </button>
-          )}
-        </p>
-      ) : null}
-      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-        {cleaning.ranges.map((r, i) => (
-          <li key={r.startIndex} className="tabular-nums">
-            {charted ? (
-              // Selecting an entry zooms the chart to it; selecting it again
-              // returns to the whole flight. aria-pressed rather than a link
-              // or a radio: it toggles what the figure beside it shows.
-              <button
-                type="button"
-                aria-pressed={i === selected}
-                onClick={() => setSelected(i === selected ? null : i)}
-                className={`cursor-pointer rounded text-left underline-offset-2 hover:underline ${
-                  i === selected ? "font-medium text-foreground underline" : ""
-                }`}
-              >
-                {entryText(r)}
-              </button>
-            ) : (
-              entryText(r)
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function ExplanationSection({
-  section,
-  selectedItem,
-  hasAnchor,
-  onItemClick,
-}: {
-  section: ScoreExplanationSection;
-  selectedItem: string | null;
-  hasAnchor: (item: ScoreExplanationItem) => boolean;
-  onItemClick: (item: ScoreExplanationItem) => void;
-}) {
-  return (
-    <section className="rounded-lg border p-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="font-semibold">{section.title}</h2>
-        {section.points !== undefined ? (
-          <span className="shrink-0 font-semibold tabular-nums">
-            {Math.round(section.points * 10) / 10}
-            {/* "of 156.2" — the component's offer beside its points, so a
-                not-maxed component is scannable without reading a formula. */}
-            {section.pointsAvailable !== undefined ? (
-              <span className="font-normal text-muted-foreground">
-                {" of "}
-                {Math.round(section.pointsAvailable * 10) / 10}
-              </span>
-            ) : null}{" "}
-            pts
-          </span>
-        ) : null}
-      </div>
-      {/* Where this pilot placed on the section's own input ("2nd fastest of
-          12 through the speed section") — worded by the engine. */}
-      {section.rank ? (
-        <p className="mt-0.5 text-sm text-muted-foreground">{section.rank}</p>
-      ) : null}
-      {section.summary ? (
-        <p className="mt-1 text-sm text-muted-foreground">{section.summary}</p>
-      ) : null}
-      {/* The way out of this page for a reader who doesn't know GAP. The
-          explainer at /scoring/gap is written for exactly this person and,
-          until now, nothing on the report card linked to it — the only doc
-          links here fired when something had gone wrong with the track. The
-          accessible name carries the section, so a screen-reader user
-          scanning links doesn't hear "How this works" six times. */}
-      {section.docHref ? (
-        <p className="mt-1">
-          <a
-            href={section.docHref}
-            aria-label={`How ${section.title.toLowerCase()} works`}
-            className="text-xs text-muted-foreground underline underline-offset-2"
-          >
-            How this works
-          </a>
-        </p>
-      ) : null}
-      <div className="mt-2 space-y-1">
-        {section.items.map((item) => (
-          <ExplanationItem
-            key={item.id}
-            item={item}
-            anchored={hasAnchor(item)}
-            selected={selectedItem === item.id}
-            onClick={() => onItemClick(item)}
-          />
-        ))}
-      </div>
-      {/* The component's formula with the field on it, UNDER the arithmetic
-          it illustrates: the numbers are the answer, the curve is the shape.
-          Inline SVG, so it is in the server-rendered first paint. */}
-      {section.chart ? <ScoreChartView chart={section.chart} /> : null}
-    </section>
-  );
-}
-
-function ExplanationItem({
-  item,
-  anchored,
-  selected,
-  onClick,
-}: {
-  item: ScoreExplanationItem;
-  anchored: boolean;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const textClass =
-    item.emphasis === "warning"
-      ? "text-amber-600 dark:text-amber-500"
-      : item.emphasis === "muted"
-        ? "text-muted-foreground"
-        : "";
-
-  // A sparkline belongs beside its row's number, not under its prose — it is
-  // an annotation on the figure. Anything larger (the distance distribution)
-  // is a figure in its own right and goes below the whole row.
-  const inlineChart = item.chart?.kind === "validity";
-
-  const body = (
-    <>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className={`text-sm ${textClass}`}>
-          {anchored ? (
-            <MapPinIcon className="mr-1 inline-block size-3.5 shrink-0 -translate-y-px text-muted-foreground" />
-          ) : null}
-          {item.text}
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          {inlineChart ? <ScoreChartView chart={item.chart!} /> : null}
-          {item.value ? (
-            <span className="text-sm tabular-nums text-muted-foreground">
-              {item.value}
-            </span>
-          ) : null}
-        </span>
-      </div>
-      {item.detail ? (
-        <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
-      ) : null}
-      {item.chart && !inlineChart ? <ScoreChartView chart={item.chart} /> : null}
-    </>
-  );
-
-  if (!anchored) {
-    return <div className="rounded-md px-2 py-1.5">{body}</div>;
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="Show on map"
-      className={`block w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60 ${
-        selected ? "bg-muted" : ""
-      }`}
-    >
-      {body}
-    </button>
-  );
-}
-
-function MaximizeIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="15 3 21 3 21 9" />
-      <polyline points="9 21 3 21 3 15" />
-      <line x1="21" y1="3" x2="14" y2="10" />
-      <line x1="3" y1="21" x2="10" y2="14" />
-    </svg>
-  );
-}
-
-function AnalysisMapIcon() {
-  // A map/track glyph with an "open in new" arrow in the corner.
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M20 11V5l-6 2-4-2-7 3v13l7-3 4 2 2-.667" />
-      <path d="M10 5v13M7 3.5v13" />
-      <polyline points="16 14 21 14 21 19" />
-      <line x1="21" y1="14" x2="14" y2="21" />
-    </svg>
-  );
-}
-
-function MinimizeIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="4 14 10 14 10 20" />
-      <polyline points="20 10 14 10 14 4" />
-      <line x1="14" y1="10" x2="21" y2="3" />
-      <line x1="3" y1="21" x2="10" y2="14" />
-    </svg>
-  );
-}
-
-function MapPinIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}

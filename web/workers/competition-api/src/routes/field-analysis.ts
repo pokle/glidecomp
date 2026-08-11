@@ -19,7 +19,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { aggregateComp, type CompTaskResult } from "@glidecomp/engine";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
@@ -39,13 +39,6 @@ import {
   type TaskFieldAnalysisRow,
 } from "../field-analysis-store";
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
-
 /**
  * Who may read field analysis. Public for a normal comp; a hidden `test` comp
  * stays admin-only (competition admins + super-admins — isCompAdmin grants
@@ -62,7 +55,7 @@ type HonoEnv = { Bindings: Env; Variables: Variables };
  * it needs a pre-warming strategy first.
  */
 async function canViewFieldAnalysis(
-  c: Context<HonoEnv>,
+  c: Context<AuthedEnv>,
   compId: number,
   isTest: boolean
 ): Promise<boolean> {
@@ -80,7 +73,7 @@ async function canViewFieldAnalysis(
  * analysis stops being re-fetched while a live one stays near-realtime.
  */
 function cacheControl(
-  c: Context<HonoEnv>,
+  c: Context<AuthedEnv>,
   computedAt: string | null,
   stale: boolean
 ): string {
@@ -96,7 +89,7 @@ function taskLabel(name: string, index: number): string {
   return short ? `T${short[1]}` : `T${index + 1}`;
 }
 
-export const fieldAnalysisRoutes = new Hono<HonoEnv>()
+export const fieldAnalysisRoutes = new Hono<AuthedEnv>()
 
   // ── GET /api/comp/:comp_id/task/:task_id/field-analysis ── (public)
   .get(

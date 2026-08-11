@@ -53,8 +53,10 @@ CLAUDE.md "Updating bundled data" notes). Refresh the source folders with
 
 - **Idempotent:** each comp is identified by name (its manifest's `comp_name`,
   else `SAMPLE_COMP_NAME`). Reruns wipe that comp's tasks / pilots / tracks (D1)
-  and IGC objects (R2) and rebuild under the **same `comp_id`** — so a
-  messed-with sample is fixed back up.
+  and rebuild under the **same `comp_id`** — so a messed-with sample is fixed
+  back up. R2 objects are only re-uploaded where the track's content actually
+  changed (compared via `task_track.igc_sha256`, migration 0032), which is what
+  keeps a `--remote` re-seed after a schema change cheap.
 - **Local:** `bun run seed` writes to `web/.wrangler/state` (start the
   dev servers with `bun run dev` to view it).
 - **Production:** `bun run seed --remote` (needs wrangler auth + the same
@@ -92,7 +94,7 @@ after the initial schema.
 | Competition | `pilot`, `comp`, `comp_admin`, `comp_pilot`, `comp_waypoints` (0015), `task`, `task_class`, `task_track`, `task_manual_flight` (0014), `task_pilot_status` (0006), `audit_log` (0005) |
 | Derived, stale-first | `task_scores` (0012), `track_analysis` (0012), `task_field_analysis` (0019), `task_weather` (0023) |
 | Derived, trigger-fed | `search_doc` + `search_fts` + `search_dirty` (0026) — the site search index. The only derived store that maintains itself: SQL triggers queue the changed keys, so no route handler calls it. See [2026-08-01-site-search.md](2026-08-01-site-search.md) |
-| Rankings | `pilot_ranking` (0025) — the FAI/CIVL monthly world ranking; deliberately standalone, no FK to `pilot`/`comp_pilot`. See [civl-rankings.md](civl-rankings.md) |
+| Rankings | `pilot_ranking` (0025) — the FAI/CIVL monthly world ranking; deliberately standalone, no FK to `pilot`/`comp_pilot`. A roster COPIES a pilot's WPRS score out of it onto `comp_pilot.wprs_points` + `civl_ranking_slug`/`_date` (0029, 0030) rather than joining, so a competition's launch order does not move when CIVL publishes. See [civl-rankings.md](civl-rankings.md) |
 | User files | `user_preferences` (0007), `user_track`, `user_task`, `user_annotation` (0008) |
 
 ## Schema History
@@ -121,3 +123,7 @@ of the notable ones.
 | `0024_track_quality_override` | The organiser's per-track override of a track-quality verdict (S7A §4.4.6) |
 | `0025_pilot_ranking` | CIVL world rankings import |
 | `0026_search_index` | FTS5 site search over comps, tasks (with their routes) and pilots, kept current by triggers |
+| `0029_comp_pilot_civl_ranking_source` | Which CIVL list and month a roster's ranking was copied from — NULL for an organiser's own number |
+| `0030_comp_pilot_wprs_points` | Roster keeps the WPRS **score**, not the rank: a rank is a position within one list's pool and the pools differ 1000-fold. Converts stored ranks back to their points; drops `civl_ranking` |
+| `0031_task_official_results` | The officially published results beside GlideComp's rescored ones (#603): per-pilot rank/total plus links to AirScore's own comp and task scores pages, written by the importer. Display-only — audited, but never a scoring input, so no score bump |
+| `0032_task_track_igc_sha256` | Content identity for tracklogs (SHA-256 of the raw IGC text), so a re-seed only re-uploads tracks whose content changed. NULL never skips; the upload path restamps the hash on every replacement |

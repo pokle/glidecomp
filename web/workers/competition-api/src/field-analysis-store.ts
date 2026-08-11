@@ -28,12 +28,12 @@
 
 import { SCORING_ENGINE_VERSION, FIELD_ANALYSIS_VERSION } from "@glidecomp/engine";
 import type { Env } from "./env";
+import { computeScoreStateKey } from "./scoring";
 import {
-  computeScoreStateKey,
   computeTaskFieldAnalysis,
   FieldAnalysisUnsupported,
   type TaskFieldAnalysisResponse,
-} from "./scoring";
+} from "./field-analysis";
 
 /**
  * A BLOB as D1 hands it back. D1 accepts an ArrayBuffer on the way in but
@@ -256,22 +256,65 @@ export interface FieldAnalysisStoreContext {
 }
 
 /**
+ * All scheduled compute work in this isolate forms ONE serial queue — at most
+ * one whole-field compute runs at a time, no matter how many requests
+ * schedule work. Never rejects: every link swallows its own failure.
+ *
+ * Why a module-level queue and not just a serial loop per call: the pending
+ * UI (and the e2e helper) POLLS this endpoint every couple of seconds, and
+ * every poll schedules the still-cold tasks again. A per-call loop starts a
+ * new chain per poll; the per-task lease makes the duplicate work a no-op
+ * but each new chain skips the leased task and starts computing the NEXT
+ * cold one — so polling quietly rebuilt the very concurrency the loop was
+ * meant to remove, one compute per poll. Chaining every batch onto one
+ * isolate-wide promise is what actually bounds it.
+ */
+let revalidationQueue: Promise<void> = Promise.resolve();
+
+/**
  * Schedule background recomputation of these tasks' field analyses. Called
  * from the READ path when it serves a stale or pending row (and from the
  * explicit refresh action) — never from a mutation.
+ *
+ * ONE task at a time, deliberately (via revalidationQueue above). A
+ * whole-field compute is the heaviest thing this worker does (every pilot's
+ * raw fixes in memory at once — see MAX_FIELD_ANALYSIS_TRACKS), and
+ * everything here shares the isolate and budget of the requests that
+ * schedule it: waitUntil extends the invocation, it doesn't move the work.
+ * Serial bounds the peak at one field's worth however hard the endpoint is
+ * polled.
+ *
+ * Under `wrangler dev`, know that even ONE such compute can kill the
+ * session on a CPU-starved machine: multi-second CPU-pegged stretches in
+ * workerd starve wrangler's internal loopback until a connection drops, and
+ * wrangler treats that as fatal (issue #477's crash — reproduced in a
+ * CPU-constrained container, where the same polling under the same load
+ * WITHOUT the compute never died, PR #609). The supervisor restarts it, but
+ * that is why seeding warms these rows (seed-sample-comp.ts) instead of
+ * leaving the first reader to trigger the compute inside workerd, and why
+ * the e2e poll helper tolerates a mid-poll restart. The caller already
+ * answered `pending`/stale before this runs, so serial costs nothing a
+ * reader can see; each task's row still lands as it finishes.
  */
 export function scheduleFieldAnalysisRevalidation(
   c: FieldAnalysisStoreContext,
   taskIds: number[]
 ): void {
   if (taskIds.length === 0) return;
-  const run = () =>
-    Promise.allSettled(taskIds.map((id) => revalidateFieldAnalysis(c.env, id)));
+  const chained = (revalidationQueue = revalidationQueue.then(async () => {
+    for (const id of taskIds) {
+      // One failed task must not cost the rest their recompute.
+      await revalidateFieldAnalysis(c.env, id).catch(() => {});
+    }
+  }));
   try {
-    c.executionCtx.waitUntil(run());
+    // The queue may be carrying earlier batches; waiting on `chained` keeps
+    // this invocation alive through those too. That is the point — the work
+    // must outlive whichever request happens to be at the head of the queue.
+    c.executionCtx.waitUntil(chained);
   } catch {
     // No ExecutionContext (e.g. tests invoking the app directly).
-    void run().catch(() => {});
+    void chained.catch(() => {});
   }
 }
 

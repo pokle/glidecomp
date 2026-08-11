@@ -1,5 +1,5 @@
 /**
- * React Aria Components Select, styled to match ui/select.tsx.
+ * React Aria Components Select, styled to match the shadcn kit it replaced.
  *
  * A single component with label/description wiring (like rac/field.tsx):
  * <Select label="…"><SelectItem id="…">…</SelectItem></Select>. Items use RAC
@@ -22,6 +22,22 @@ import { cn } from "@/react/lib/utils";
 import { Label, Description, FieldError } from "./field";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 
+/**
+ * Shared surface for every kit popover (Select, ComboBox, Menu, Popover).
+ *
+ * **Never add `position` here (no `fixed!`, no positioned ancestor).** RAC
+ * portals a popover to `<body>` and positions it with `position: absolute`
+ * against the initial containing block: `top` in document coordinates, and —
+ * when a popover flips UPWARDS — `bottom` against the viewport-sized ICB.
+ * Both are only correct while `body` is *static* (globals.css keeps it so).
+ * The two historical failures, each found in production: with
+ * `body { position: relative }` an upward-flipped popover (the CIVL ranking
+ * picker, low in a tall dialog) landed `scrollHeight - innerHeight` px too
+ * low; with `fixed!` patched over that, every downward popover on a scrolled
+ * page (the manual-flight dialog's turnpoint select, deep in the task page)
+ * opened `scrollY` px below the viewport. Diagnose by rect, not by eye — the
+ * popover is open and in the DOM either way, just off-screen.
+ */
 export const popoverClass =
   "z-50 min-w-36 overflow-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none data-entering:animate-in data-entering:fade-in-0 data-entering:zoom-in-95 data-exiting:animate-out data-exiting:fade-out-0 data-exiting:zoom-out-95 data-entering:duration-100 data-exiting:duration-100";
 
@@ -108,6 +124,7 @@ export function SimpleSelect({
   onChange,
   options,
   disabled,
+  label,
   ariaLabel,
   className,
 }: {
@@ -115,6 +132,8 @@ export function SimpleSelect({
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
+  /** A VISIBLE label, wired up by RAC — prefer this to `ariaLabel`. */
+  label?: React.ReactNode;
   ariaLabel?: string;
   className?: string;
 }) {
@@ -122,7 +141,11 @@ export function SimpleSelect({
   const fromKey = (k: Key): string => (k === EMPTY_KEY ? "" : String(k));
   return (
     <Select
-      aria-label={ariaLabel}
+      label={label}
+      // aria-label WINS over a visible <Label>, so passing both would leave the
+      // name a screen reader announces free to drift from the words on screen
+      // (WCAG 2.2 SC 2.5.3). The visible label is the better one when present.
+      aria-label={label ? undefined : ariaLabel}
       selectedKey={toKey(value)}
       onSelectionChange={(k) => {
         if (k != null) onChange(fromKey(k));

@@ -1,18 +1,18 @@
 /**
  * Task detail page — React port of the task view in comp-detail.ts.
  *
- * RAC EXPLORATION: this page (and everything it opens) is built entirely from
- * react-aria-components primitives (src/react/rac/) instead of the shadcn /
- * Base UI kit, to evaluate RAC as the app-wide foundation. Visuals match the
- * rest of the app; the interaction layer (dialogs, tables, fields, menus) is
- * RAC. See the PR/issue discussion before extending the pattern elsewhere.
+ * Built on the RAC kit (src/react/rac/) — see
+ * docs/2026-07-18-rac-adoption-guide.md. This page (and everything it opens)
+ * is built entirely from react-aria-components primitives: visuals match the
+ * rest of the app, and the interaction layer (dialogs, tables, fields, menus)
+ * is RAC.
  *
- * Everyone sees a read-only "Route" section (summary, diagram, task strip and
- * turnpoint listing); admins additionally get the route editor dialog
+ * Everyone sees a read-only "Route" section (summary, diagram and turnpoint
+ * listing); admins additionally get the route editor dialog
  * (comp/RouteEditorDialog) covering turnpoints, start gates, goal, and
  * .xctsk / XContest import-export (#270).
  */
-import { useEffect, useId, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
@@ -32,6 +32,7 @@ import { TextField, Label, Description } from "@/react/rac/field";
 import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { Tag, TagGroup } from "@/react/rac/tag-group";
 import { DatePicker, TimePicker } from "@/react/rac/date-picker";
+import { CheckboxField } from "../comp/fields";
 import { api } from "../../comp/api";
 import {
   formatInstant,
@@ -43,24 +44,24 @@ import {
 } from "../lib/time";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
-import { useAdminView, useGoToSignIn, useUser } from "../lib/user";
+import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
 import { WeatherSection } from "../weather/WeatherSection";
 import { useTaskWeather } from "../weather/use-task-weather";
 import { taskWindFromWeather, type TaskWind } from "../comp/task-wind";
 import { TaskExportButtons } from "../comp/TaskExportButtons";
-import { TaskResults } from "../comp/TaskResults";
+import { TaskScoresPublic } from "../comp/TaskScoresPublic";
 import { CompNameProvider } from "../comp/comp-name-context";
-import { TaskStandings } from "../comp/TaskStandings";
+import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
 import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
-import { TaskStrip } from "../comp/TaskStrip";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
+// Comp admins only, so its code has no business in every pilot's bundle.
+const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
 import {
-  fetchWithRetry,
   isPastCloseDate,
   type CompDetailData,
   type TaskDetailData,
@@ -71,7 +72,9 @@ import type { TaskDetailLoaderData } from "../loaders";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compPath, taskPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
+import { Card } from "@/react/rac/card";
 
 export function TaskDetail() {
   const { compId: compParam, taskId: taskParam } = useParams<{ compId: string; taskId: string }>();
@@ -80,23 +83,38 @@ export function TaskDetail() {
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
-  const goToSignIn = useGoToSignIn();
   // Gate the ICU zone abbreviation in SSR-rendered instants (the stop notice
   // below) until mounted, so the server markup and first client render agree.
   const mounted = useMounted();
   // SSR seed for the public half of the page (header, route, scores). Null on
   // client boot / SPA navigations, where the effect below fetches instead.
   const initial = useInitialData<TaskDetailLoaderData>();
-  const [task, setTask] = useState<TaskDetailData | null>(initial?.task ?? null);
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
+
+  const [refresh, setRefresh] = useState(0);
+  // The task is the page. A dead task id is a dead URL; the comp above is
+  // supporting detail the page degrades without.
+  const {
+    data: task,
+    notFound,
+    setData: setTask,
+  } = useSeededResource<TaskDetailData>({
+    ids: [compId, taskId],
+    seed: initial?.task ?? null,
+    load: ([comp_id, task_id]) =>
+      api.api.comp[":comp_id"].task[":task_id"].$get({
+        param: { comp_id, task_id },
+      }),
+    title: (t) => `GlideComp - ${t.name}`,
+    refresh,
+  });
 
   // Canonicalise once both names are known (comp is a non-critical fetch, so
   // wait for it rather than 301-ing to a bare comp segment).
   useCanonicalPath(
     comp && task ? taskPath(compId, comp.name, taskId, task.name) : null
   );
-  const [notFound, setNotFound] = useState(false);
-  const [refresh, setRefresh] = useState(0);
+
   const [scoresRefresh, setScoresRefresh] = useState(0);
   // Bumped when the admin manage grid mutates, so the public results (a
   // separate component with its own score fetch) pick up the change too.
@@ -105,62 +123,34 @@ export function TaskDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [forgeOpen, setForgeOpen] = useState(false);
 
+  // The comp, for the admin check and the comp name in the trail. Non-critical
+  // and deliberately its own request: it used to run only after the task
+  // resolved, inside the same async block, so a page that works without it
+  // waited for it anyway. A failure here costs the admin controls, not the page.
   useEffect(() => {
-    // Clear any previous verdict first. react-router keeps this component
-    // mounted when only the id in the path changes, so a "not found" left over
-    // from the old id would mask whatever the new one loads. That is not
-    // hypothetical: the 404 page's own "did you mean" links point back at this
-    // very route, so clicking one changed the URL and nothing else.
-    setNotFound(false);
-    if (!compId || !taskId) {
-      setNotFound(true);
-      return;
-    }
-    // Seeded from SSR on the first render — set the title, skip the fetch.
-    if (initial && refresh === 0) {
-      document.title = `GlideComp - ${initial.task.name}`;
-      return;
-    }
+    if (!compId) return;
+    if (initial?.comp && refresh === 0) return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
-        // Fetch task first — this is the primary data we need
-        const taskRes = await fetchWithRetry(() =>
-          api.api.comp[":comp_id"].task[":task_id"].$get({
-            param: { comp_id: compId, task_id: taskId },
-          })
-        );
-        if (cancelled) return;
-        if (!taskRes.ok) {
-          setNotFound(true);
-          return;
-        }
-        const taskData = (await taskRes.json()) as unknown as TaskDetailData;
-        if (cancelled) return;
-        setTask(taskData);
-        document.title = `GlideComp - ${taskData.name}`;
-
-        // Fetch comp for admin check + comp name (non-critical)
-        try {
-          const compRes = await api.api.comp[":comp_id"].$get({
-            param: { comp_id: compId },
-          });
-          if (compRes.ok) {
-            const compData = (await compRes.json()) as unknown as CompDetailData;
-            if (!cancelled) setComp(compData);
-          }
-        } catch {
-          // Comp fetch failed — degrade gracefully (no admin features)
+        const res = await api.api.comp[":comp_id"].$get({
+          param: { comp_id: compId },
+        });
+        if (!cancelled && res.ok) {
+          setComp((await res.json()) as unknown as CompDetailData);
         }
       } catch {
-        if (!cancelled) setNotFound(true);
+        // Degrade gracefully — no admin features.
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [compId, taskId, refresh]);
+    // `initial` is stable for the life of the SSR'd URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compId, refresh]);
 
   const isAdmin = useAdminView(
     user != null && comp != null && comp.admins.some((a) => a.email === user.email)
@@ -229,8 +219,18 @@ export function TaskDetail() {
                 itself in the turnpoint table below. */}
             {!task.xctsk ? <span> · Route not set yet</span> : null}
           </p>
+          {task.submissions_closed ? (
+            // Above the fold, so a pilot learns the task stopped taking files
+            // without first choosing one and being refused.
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <Badge>Submissions closed</Badge>
+              <span className="text-muted-foreground">
+                The organisers are no longer accepting tracks for this task.
+              </span>
+            </p>
+          ) : null}
           {task.stop_announcement_time ? (
-            // Stopped task (FAI S7F §12.3): surface the stop prominently —
+            // Stopped task (FAI S7F §13.4): surface the stop prominently —
             // it reshapes every score. Comp-zone (or UTC) rendering keeps
             // the SSR markup deterministic.
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
@@ -242,7 +242,7 @@ export function TaskDetail() {
                   comp?.timezone ?? "UTC",
                   mounted
                 )}{" "}
-                — scored as a stopped task (FAI S7F §12.3)
+                — scored as a stopped task (FAI S7F §13.4)
               </span>
             </p>
           ) : null}
@@ -275,13 +275,24 @@ export function TaskDetail() {
           share, map, replay, analysis — is a uniform outline cluster, because
           those are places to go rather than things to do. */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {/* Auth-dependent, so mount-gated: the server renders this page for
-            anyone, and a button that depends on who is asking would not match
-            the server's markup on hydration (same rule as TaskResults). */}
-        {mounted && user && !isClosed ? (
+        {/* Mount-gated: the dialog's contents still depend on who is asking
+            (the on-behalf picker), and the server renders this page for
+            anyone, so the markup must settle after hydration rather than
+            before. The button itself no longer depends on a session —
+            submitting is open to anyone the comp's roster knows. */}
+        {mounted && !isClosed && (!task.submissions_closed || isAdmin) ? (
           <Button size="sm" onPress={() => setSubmitOpen(true)}>
             Submit track
           </Button>
+        ) : null}
+        {/* A sentence, not a disabled button: a greyed-out control invites
+            tapping and explains nothing. Admins see it AND keep the button,
+            because the flag stops pilots, not the scorekeeper. */}
+        {mounted && !isClosed && task.submissions_closed ? (
+          <p className="self-center text-sm text-muted-foreground">
+            Submissions for this task are closed.
+            {isAdmin ? " You can still upload as an organiser." : ""}
+          </p>
         ) : null}
         {task.xctsk ? (
           <TaskExportButtons
@@ -330,23 +341,42 @@ export function TaskDetail() {
             Field analysis
           </LinkButton>
         ) : null}
-        {/* Last, and deliberately not the primary: a signed-out visitor came to
-            READ the task, and the page they want is the one they are on. */}
-        {mounted && !user && !isClosed ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => goToSignIn(window.location.pathname)}
-          >
-            Sign in to submit your track
+        {/* An organiser's tool: the people who need a file to test submission
+            and scoring with are the ones running the competition, so it is
+            gated like every other manage action on this page. `useAdminView`
+            is the right check precisely because it also makes the button
+            disappear while a super admin previews as a pilot. Nothing here
+            reaches the server — the dialog makes a file and offers it as a
+            download — so this widens who SEES it and nothing more. A route is
+            required because there is nothing to fly without one. */}
+        {isAdmin && comp && task.xctsk ? (
+          <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
+            Create test IGC
           </Button>
         ) : null}
       </div>
+
+      {forgeOpen && comp && task.xctsk ? (
+        <Suspense fallback={null}>
+          <ForgeIgcDialog
+            open
+            onClose={() => setForgeOpen(false)}
+            taskName={task.name}
+            taskDate={task.task_date}
+            compName={comp.name}
+            timezone={comp.timezone ?? null}
+            category={comp.category === "pg" ? "pg" : "hg"}
+            xctsk={task.xctsk}
+          />
+        </Suspense>
+      ) : null}
 
       {submitOpen ? (
         <SubmitTrackDialog
           compId={compId}
           taskId={taskId}
+          compName={comp?.name}
+          taskName={task.name}
           canUploadOnBehalf={canUploadOnBehalf}
           onClose={() => setSubmitOpen(false)}
           onUploaded={() => {
@@ -359,6 +389,9 @@ export function TaskDetail() {
         />
       ) : null}
 
+      {/* The sections below are cards; the stack owns the rhythm between them
+          (SectionHeader no longer carries a margin of its own). */}
+      <div className="mt-6 flex flex-col gap-6">
       <TurnpointsSection
         xctsk={task.xctsk}
         taskDate={task.task_date}
@@ -385,11 +418,16 @@ export function TaskDetail() {
       />
 
       {/* Public results: top-3 podium per class + the link to the comp's
-          scores page (the canonical results surface), plus pilot self-service
+          scores page (the canonical scores surface), plus pilot self-service
           (Submit track, your-submission line). The management grid below is
-          admin-only. */}
+          admin-only.
+
+          submissionsClosed is passed `&& !isAdmin` for the same reason the
+          page's action row keeps its button for admins: the stop is aimed at
+          pilots, and this section renders its OWN Submit action, so gating the
+          action row alone would leave a button here the server refuses. */}
       <CompNameProvider value={comp?.name ?? null}>
-        <TaskResults
+        <TaskScoresPublic
           compId={compId}
           taskId={taskId}
           taskName={task.name}
@@ -397,19 +435,21 @@ export function TaskDetail() {
           isOpenDistance={comp?.scoring_format === "open_distance"}
           isAuthenticated={user != null}
           isClosed={isClosed}
+          submissionsClosed={task.submissions_closed && !isAdmin}
           canUploadOnBehalf={canUploadOnBehalf}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}
           initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}
+          taskDate={task.task_date}
         />
       </CompNameProvider>
 
       {/* Admin management grid (statuses, uploads on behalf, manual flights,
-          restores) — the tool the old public "standings" table was secretly
+          restores) — the tool the old public "scores" table was secretly
           doubling as. Admin-only and never server-rendered. */}
       {isAdmin && comp ? (
         <CompNameProvider value={comp.name}>
-        <TaskStandings
+        <TaskScoresAdmin
           compId={compId}
           taskId={taskId}
           taskName={task.name}
@@ -419,11 +459,13 @@ export function TaskDetail() {
           distanceOrigin={comp.gap_params?.distanceOrigin ?? "takeoff"}
           timezone={comp.timezone ?? null}
           taskXctsk={task.xctsk}
+          submissionsClosed={task.submissions_closed}
           refresh={scoresRefresh}
           onMutated={() => setResultsRefresh((n) => n + 1)}
         />
         </CompNameProvider>
       ) : null}
+      </div>
 
       {isAdmin && comp && editOpen ? (
         <EditTaskDialog
@@ -566,7 +608,7 @@ function TaskSummaryHeader({
   if (!xctsk.sss && !goal) return null;
 
   return (
-    <dl className="mt-2 grid gap-x-6 gap-y-2 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+    <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(min(15rem,100%),1fr))] gap-x-6 gap-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
       {xctsk.sss ? (
         <div>
           <dt className="text-xs text-muted-foreground">Start of speed section</dt>
@@ -589,11 +631,11 @@ function TaskSummaryHeader({
 }
 
 /**
- * The task's route — headed "Route", because it is the start/goal summary,
- * the diagram and the task strip as well as the turnpoint listing (the
- * component keeps its older name). Read-only for everyone; admins get an Edit
- * route button that opens the full route editor dialog (turnpoints, start
- * gates, goal, .xctsk / XContest import-export).
+ * The task's route — headed "Route", because it is the start/goal summary and
+ * the diagram as well as the turnpoint listing (the component keeps its older
+ * name). Read-only for everyone; admins get an Edit route button that opens
+ * the full route editor dialog (turnpoints, start gates, goal, .xctsk /
+ * XContest import-export).
  */
 function TurnpointsSection({
   xctsk,
@@ -612,14 +654,15 @@ function TurnpointsSection({
   isAdmin: boolean;
   onEditRoute: () => void;
 }) {
-  // Which turnpoint the diagram is pointing at, mirrored into the table below
-  // so the shape and the numbers stay tied together. Client-only state, so it
-  // does not affect the server-rendered markup.
+  // Which turnpoint the reader is pointing at, shared by the diagram and the
+  // table so the shape and the numbers stay tied together — either one can
+  // set it, and both show it. Client-only state, so it does not affect the
+  // server-rendered markup.
   const [focused, setFocused] = useState<number | null>(null);
 
   if (!xctsk && !isAdmin) return null;
   return (
-    <section>
+    <Card>
       <SectionHeader
         title="Route"
         action={
@@ -637,31 +680,46 @@ function TurnpointsSection({
             taskDate={taskDate}
             timezone={timezone}
           />
-          {/* The task's shape, drawn from the same optimised line the table
-              measures and the scorer uses. Not a map — "View on map" above is
-              for that; this is the at-a-glance read. */}
-          <div className="mt-3 flex justify-center overflow-x-auto rounded-lg border bg-muted/20 p-2">
-            <TaskDiagram
-              task={xctsk}
-              size="md"
-              className="shrink-0"
-              onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
-              onTurnpointSelect={(tp) => setFocused(tp.index)}
-              highlightIndex={focused}
-              wind={wind}
-            />
+          {/* Two views of one route, paired: the diagram is the shape on the
+              ground (drawn from the same optimised line the table measures and
+              the scorer uses — not a map, "View on map" above is for that),
+              the table is the numbers and the accessible reading of it.
+
+              The diagram leads in the DOM because it is the at-a-glance read,
+              which is also the stacked order on a phone. Wide enough for two
+              columns, the row reverses so the numbers sit left and the shape
+              right, beside them rather than a scroll above them. */}
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row-reverse lg:items-start">
+            <div className="flex justify-center rounded-lg border bg-muted/20 p-2 lg:shrink-0">
+              <TaskDiagram
+                task={xctsk}
+                size="md"
+                // Scales down rather than scrolling sideways: on a phone the
+                // diagram now leads the section, and the `md` preset is a few
+                // pixels wider than the content column. The viewBox keeps the
+                // drawing intact at any width.
+                className="h-auto max-w-full"
+                onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
+                onTurnpointSelect={(tp) => setFocused(tp.index)}
+                highlightIndex={focused}
+                wind={wind}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <TurnpointsTable
+                xctsk={xctsk}
+                wind={wind}
+                highlightIndex={focused}
+                onTurnpointHover={setFocused}
+                onTurnpointSelect={setFocused}
+              />
+            </div>
           </div>
-          {/* Two views of one route: the diagram is the shape on the ground,
-              the strip is the order and the winding with geography
-              straightened out. The table underneath is the numbers, and the
-              accessible equivalent for both. */}
-          <TaskStrip xctsk={xctsk} wind={wind} />
-          <TurnpointsTable xctsk={xctsk} highlightIndex={focused} />
         </>
       ) : (
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -692,7 +750,7 @@ function EditTaskDialog({
   const [selectedClasses, setSelectedClasses] = useState<string[]>(
     compPilotClasses.filter((cls) => task.pilot_classes.includes(cls))
   );
-  // Stopped task (S7F §12.3): the stop time, edited as a comp-local wall-clock
+  // Stopped task (S7F §13.4): the stop time, edited as a comp-local wall-clock
   // time of day ("" = task not stopped) — the stop is always on the task date,
   // so only the time is editable. Recombined with taskDate on save and stored/
   // scored as a UTC instant.
@@ -703,6 +761,9 @@ function EditTaskDialog({
           16
         ) ?? "")
       : ""
+  );
+  const [submissionsClosed, setSubmissionsClosed] = useState(
+    task.submissions_closed
   );
   const [saving, setSaving] = useState(false);
 
@@ -731,6 +792,7 @@ function EditTaskDialog({
           task_date: taskDate,
           pilot_classes: selectedClasses,
           stop_announcement_time: stopIso,
+          submissions_closed: submissionsClosed,
         },
       });
 
@@ -837,11 +899,17 @@ function EditTaskDialog({
             <Description>
               Set only when the task was stopped mid-flight (weather calldown).
               Scores are recomputed under the stopped-task rules (FAI S7F
-              §12.3): a scored-back stop time, a clipped scoring window, and an
+              §13.4): a scored-back stop time, a clipped scoring window, and an
               altitude bonus for pilots still flying. Leave empty for a task
               that ran to completion.
             </Description>
           </div>
+          <CheckboxField
+            checked={submissionsClosed}
+            onChange={setSubmissionsClosed}
+            label="Closed for track submissions"
+            hint="Pilots can no longer send tracks or manual flights for this task. Organisers still can, so a late recovery does not need this turned off."
+          />
           <DialogFooter>
             <Button
               variant="destructive"

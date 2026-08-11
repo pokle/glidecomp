@@ -13,10 +13,9 @@ import { fixAltitude as fixAlt, type IGCFix } from '../../igc-parser';
 import type { ThermalSegment } from '../../event-types';
 import type { MetricComputer, PilotMetricValue, ReportCell, ReportTable } from '../types';
 import { mean, median } from '../stats';
-
-function fixMs(f: IGCFix): number {
-  return f.time.getTime();
-}
+import { sharedClimbPercentiles } from '../shared-thermals';
+import { hourStartMs, pushInto } from '../util';
+import { fixMs, na } from './util';
 
 /** Thermal start time (epoch ms) from its start fix; null when out of range. */
 function thermalStartMs(fixes: IGCFix[], t: ThermalSegment): number | null {
@@ -49,27 +48,19 @@ const sharedPercentile: MetricComputer = {
     const weight = new Array<number>(n).fill(0);
     const useCount = new Array<number>(n).fill(0);
 
-    for (const st of field.sharedThermals) {
-      if (st.pilotCount < 2) continue;
-      const uses = st.uses;
-      if (uses.length < 2) continue;
-      for (const u of uses) {
-        let slower = 0;
-        for (const v of uses) {
-          if (v.avgClimbRate < u.avgClimbRate) slower++;
-        }
-        const pct = (100 * slower) / (uses.length - 1);
-        const durationMs = Math.max(1, u.endMs - u.startMs);
-        weightedSum[u.pilotIndex] += pct * durationMs;
-        weight[u.pilotIndex] += durationMs;
-        useCount[u.pilotIndex]++;
-      }
+    // The ranking is shared-thermals' sharedClimbPercentiles; the duration
+    // weighting of each use is this metric's own.
+    for (const { use: u, percentile: pct } of sharedClimbPercentiles(field.sharedThermals)) {
+      const durationMs = Math.max(1, u.endMs - u.startMs);
+      weightedSum[u.pilotIndex] += pct * durationMs;
+      weight[u.pilotIndex] += durationMs;
+      useCount[u.pilotIndex]++;
     }
 
     return {
       perPilot: field.pilots.map((p): PilotMetricValue => {
         const i = p.pilotIndex;
-        if (weight[i] <= 0) return { trackFile: p.trackFile, value: null };
+        if (weight[i] <= 0) return na(p);
         return {
           trackFile: p.trackFile,
           value: weightedSum[i] / weight[i],
@@ -144,7 +135,7 @@ const timeToCore: MetricComputer = {
           const ttc = timeToCoreSeconds(p.fixes, t);
           if (ttc !== null) values.push(ttc);
         }
-        if (values.length === 0) return { trackFile: p.trackFile, value: null };
+        if (values.length === 0) return na(p);
         return {
           trackFile: p.trackFile,
           value: median(values),
@@ -200,7 +191,7 @@ const exitDecay: MetricComputer = {
           const rate = exitDecayRate(p.fixes, t);
           if (rate !== null) values.push(rate);
         }
-        if (values.length === 0) return { trackFile: p.trackFile, value: null };
+        if (values.length === 0) return na(p);
         return {
           trackFile: p.trackFile,
           value: median(values),
@@ -237,7 +228,7 @@ const selectivity: MetricComputer = {
     const hourly = new Map<number, number[]>();
 
     const perPilot = field.pilots.map((p): PilotMetricValue => {
-      if (p.sssMs === null) return { trackFile: p.trackFile, value: null };
+      if (p.sssMs === null) return na(p);
       const sssMs = p.sssMs;
 
       let encounters = 0;
@@ -257,7 +248,7 @@ const selectivity: MetricComputer = {
         encounters++;
         if (isAccepted) accepted++;
 
-        const hour = Math.floor(startMs / 3_600_000) * 3_600_000;
+        const hour = hourStartMs(startMs);
         const bucket = byHour.get(hour) ?? { acc: 0, tot: 0 };
         bucket.tot++;
         if (isAccepted) bucket.acc++;
@@ -265,12 +256,10 @@ const selectivity: MetricComputer = {
       }
 
       for (const [hour, bucket] of byHour) {
-        let list = hourly.get(hour);
-        if (!list) hourly.set(hour, (list = []));
-        list.push((100 * bucket.acc) / bucket.tot);
+        pushInto(hourly, hour, (100 * bucket.acc) / bucket.tot);
       }
 
-      if (encounters < MIN_ENCOUNTERS) return { trackFile: p.trackFile, value: null };
+      if (encounters < MIN_ENCOUNTERS) return na(p);
       return {
         trackFile: p.trackFile,
         value: (100 * accepted) / encounters,
@@ -331,7 +320,7 @@ const departureBand: MetricComputer = {
     const band = field.workingBand;
 
     const perPilot = field.pilots.map((p): PilotMetricValue => {
-      if (p.sssMs === null) return { trackFile: p.trackFile, value: null };
+      if (p.sssMs === null) return na(p);
 
       const exits: number[] = [];
       for (const t of p.thermals) {
@@ -339,7 +328,7 @@ const departureBand: MetricComputer = {
         if (startMs === null || startMs < p.sssMs) continue;
         exits.push(100 * band.bandFraction(t.endAltitude));
       }
-      if (exits.length === 0) return { trackFile: p.trackFile, value: null };
+      if (exits.length === 0) return na(p);
 
       // Note: the pilot's mean altitude on course (post-start), as band %.
       const onCourse: number[] = [];

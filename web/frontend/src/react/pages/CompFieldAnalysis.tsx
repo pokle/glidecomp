@@ -22,13 +22,24 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { DivergingMeter } from "@/react/rac/meter";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { cn } from "@/react/lib/utils";
-import { VerdictBadge, VerdictLegend } from "../field-analysis/SeparationRanking";
+import { Card } from "@/react/rac/card";
+import { Explain } from "@/react/rac/explain";
+import { VerdictBadge } from "../field-analysis/SeparationRanking";
+import {
+  AcrossTasksNote,
+  AgainstCompScoresNote,
+  DayToDayNote,
+  HowToReadFootnote,
+  OutcomeChecksNote,
+  VerdictLegend,
+} from "../field-analysis/ReadingNotes";
 import { ConsistencyChip } from "../field-analysis/ConsistencyChip";
 import { ConsistencyMap } from "../field-analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../field-analysis/MetricGlossary";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compAnalysisPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
+import { usePollWhile } from "../lib/use-poll-while";
 import { api } from "../../comp/api";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { useInitialData } from "../lib/initial-data";
@@ -38,7 +49,7 @@ import {
   type CompFieldAnalysisData,
   type CompMetricAggregate,
 } from "../field-analysis/types";
-import type { CompDetailData } from "../comp/types";
+import { fetchWithRetry, type CompDetailData } from "../comp/types";
 
 export function CompFieldAnalysis() {
   const { compId: compParam } = useParams<{ compId: string }>();
@@ -83,7 +94,14 @@ export function CompFieldAnalysis() {
     (async () => {
       if (refetchTick === 0) setStatus("loading");
       try {
-        const res = await fetch(analysisUrl, { credentials: "include" });
+        // Through fetchWithRetry, not a bare fetch: this page is public and
+        // SSR'd, and its "error" branch is a dead end — nothing re-fetches it
+        // (the pending poll below only runs once status is "ready"). A dropped
+        // request would otherwise turn a millisecond blip into a page that
+        // stays broken until someone reloads by hand.
+        const res = await fetchWithRetry(() =>
+          fetch(analysisUrl, { credentials: "include" })
+        );
         if (cancelled) return;
         // 404 = missing (or a test comp hidden from this visitor); 400 = an id
         // sqid that doesn't decode at all. Both mean "no such page", and both
@@ -120,25 +138,9 @@ export function CompFieldAnalysis() {
   }, [compId, analysisUrl, refetchTick]);
 
   // While any task's first analysis computes in the background, refetch so
-  // the aggregate fills in as reports land — mirrors the task page's pending
-  // poll. Backs off 3s → 10s, gives up after ~2 minutes.
+  // the aggregate fills in as reports land — same poll the task page runs.
   const pendingTasks = status === "ready" && (data?.pending_task_count ?? 0) > 0;
-  useEffect(() => {
-    if (!pendingTasks) return;
-    const startedAt = Date.now();
-    let delay = 3_000;
-    let timer: number | undefined;
-    const schedule = () => {
-      if (Date.now() - startedAt > 120_000) return;
-      timer = window.setTimeout(() => {
-        if (!document.hidden) setRefetchTick((t) => t + 1);
-        else schedule();
-      }, delay);
-      delay = Math.min(delay * 1.5, 10_000);
-    };
-    schedule();
-    return () => window.clearTimeout(timer);
-  }, [pendingTasks, refetchTick]);
+  usePollWhile(pendingTasks, () => setRefetchTick((t) => t + 1), refetchTick);
 
   useEffect(() => {
     if (!compId) return;
@@ -261,91 +263,98 @@ export function CompFieldAnalysis() {
         </p>
       </div>
 
+      {/* The report's masthead: when it was computed, which chapters it has,
+          and which class it is showing. These belong together in one panel —
+          the class select filters the WHOLE report rather than any single
+          table, so it is page furniture and not a table's own control. */}
       {data ? (
-        <ScoreFreshness
-          computedAt={data.computed_at}
-          stale={data.stale}
-          timezone={comp?.timezone ?? null}
-          etag={etag}
-          pollUrl={analysisUrl}
-          variant="analysis"
-        />
-      ) : null}
+        <Card className="mt-4 gap-3">
+          <ScoreFreshness
+            computedAt={data.computed_at}
+            stale={data.stale}
+            timezone={comp?.timezone ?? null}
+            etag={etag}
+            pollUrl={analysisUrl}
+            variant="analysis"
+          />
 
-      {data && data.pending_task_count > 0 ? (
-        <Alert className="mt-3" role="status">
-          <AlertTitle>
-            {data.pending_task_count} of {data.total_task_count} task
-            {data.total_task_count === 1 ? "" : "s"} not analysed yet
-          </AlertTitle>
-          <AlertDescription>
-            GlideComp is computing them in the background, and the figures below
-            leave them out. This page refreshes itself as each one arrives.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+          {data.pending_task_count > 0 ? (
+            <Alert role="status">
+              <AlertTitle>
+                {data.pending_task_count} of {data.total_task_count} task
+                {data.total_task_count === 1 ? "" : "s"} not analysed yet
+              </AlertTitle>
+              <AlertDescription>
+                GlideComp is computing them in the background, and the figures
+                below leave them out. This page refreshes itself as each one
+                arrives.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-      {/* The per-task reports are chapters of this page, so they get a real
-          nav landmark rather than a prose footnote — this is the only way in
-          to them, and each is now a child URL of this one. */}
-      {data && data.tasks.length > 0 ? (
-        <nav
-          aria-label="Per-task field analysis"
-          className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
-        >
-          <span className="text-muted-foreground">Per task:</span>
-          {data.tasks.map((t) => (
-            <Link
-              key={t.task_id}
-              to={taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name)}
-              className="underline underline-offset-4 hover:text-foreground"
+          {/* The per-task reports are chapters of this page, so they get a real
+              nav landmark rather than a prose footnote — this is the only way
+              in to them, and each is now a child URL of this one. */}
+          {data.tasks.length > 0 ? (
+            <nav
+              aria-label="Per-task field analysis"
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
             >
-              {t.label} {t.task_name}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
+              <span className="text-muted-foreground">Per task:</span>
+              {data.tasks.map((t) => (
+                <Link
+                  key={t.task_id}
+                  to={taskAnalysisPath(compId, canonicalName, t.task_id, t.task_name)}
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  {t.label} {t.task_name}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
 
-      {classes.length > 1 ? (
-        <div className="mt-4">
-          {/* The select is a control, so print swaps it for a plain
-              statement of which class this printout covers. */}
-          <div className="print:hidden">
-            <SimpleSelect
-              ariaLabel="Pilot class"
-              value={selectedClass}
-              onChange={(value) => {
-                const next = new URLSearchParams(searchParams);
-                next.set("class", value);
-                setSearchParams(next, { replace: true });
-              }}
-              options={classes.map((c) => ({
-                value: c.pilot_class,
-                label: c.pilot_class,
-              }))}
-            />
-          </div>
-          <p className="hidden text-sm print:block">
-            Pilot class: <strong>{selectedClass}</strong>
-          </p>
-        </div>
+          {classes.length > 1 ? (
+            <div>
+              {/* The select is a control, so print swaps it for a plain
+                  statement of which class this printout covers. */}
+              <div className="print:hidden">
+                <SimpleSelect
+                  ariaLabel="Pilot class"
+                  value={selectedClass}
+                  onChange={(value) => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("class", value);
+                    setSearchParams(next, { replace: true });
+                  }}
+                  options={classes.map((c) => ({
+                    value: c.pilot_class,
+                    label: c.pilot_class,
+                  }))}
+                />
+              </div>
+              <p className="hidden text-sm print:block">
+                Pilot class: <strong>{selectedClass}</strong>
+              </p>
+            </div>
+          ) : null}
+        </Card>
       ) : null}
 
       {active && rankedMetrics.length > 0 ? (
-        <div className="mt-6 space-y-8">
-          <section aria-labelledby="consistency-heading" className="space-y-3">
+        // Each reading is its own panel. The order is deliberately unchanged —
+        // which behaviours have explanatory power IS the finding, so the
+        // separation ranking leads and everything else follows it.
+        <div className="mt-6 flex flex-col gap-6">
+          <Card aria-labelledby="consistency-heading" className="gap-3">
             <h2 id="consistency-heading" className="text-lg font-semibold">
-              Which behaviours went with better results, across tasks
+              Which behaviours went with better ranks, across tasks
             </h2>
+            {/* One line, and it says the thing the heading does not: what the
+                order means. Everything else this paragraph used to carry is on
+                the column headers' ⓘ, where the question is asked. */}
             <p className="text-sm text-muted-foreground">
-              A behaviour that keeps its sign and its size across every task
-              tells you about flying. A behaviour that changes between tasks
-              tells you about the weather on those days. Rank 1 is the best
-              rank, so a behaviour where more is better shows a{" "}
-              <strong>negative</strong> ρ, and its bar is left of centre. Read
-              each row from left to right: the average of the behaviour over the
-              tasks, whether it held from day to day, how it looks against the
-              overall standings, and then each task.
+              Sorted so the behaviours that pulled the same way on every task
+              come first.
             </p>
             <SeparationTable
               metrics={rankedMetrics}
@@ -354,68 +363,63 @@ export function CompFieldAnalysis() {
               subjectLabel="Behaviour"
               fieldSize={active.aggregate.pilots.length}
             />
-            <p className="text-xs text-muted-foreground">
-              <strong>Across tasks</strong> is the average of the coefficients
-              of each task, weighted by n, with the signs kept. It is also the
-              order of the table. A behaviour that pulled the same way every day
-              comes first, because days that pull opposite ways cancel each
-              other there. <strong>Day to day</strong> reads only the tasks
-              whose coefficient cleared its own noise floor, which are the solid
-              bars. A <strong>hollow bar</strong> is a day whose coefficient can
-              be chance. A behaviour that depends on the day is a finding, not a
-              fault. <strong>Against comp standings</strong> is a separate
-              reading. It takes the average of each pilot for that behaviour
-              over the whole competition, and correlates it against their
-              overall place. The verdict and the pilot count belong to that
-              reading.
-            </p>
-            <VerdictLegend />
             {uncorrelated.length > 0 ? (
               <p className="text-xs text-muted-foreground">
                 {uncorrelated.length} more metric
-                {uncorrelated.length === 1 ? "" : "s"} describe the day and not
-                a pilot, for example the wind and the strength of the climbs.
-                They have no value for each pilot to correlate, so they have no
-                row here. They are in the glossary below, and on the analysis of
-                each task.
+                {uncorrelated.length === 1 ? "" : "s"} describe the day, not a
+                pilot, so they have no row here — see the glossary.
               </p>
             ) : null}
+          </Card>
 
-            <div className="space-y-3 pt-2">
-              <h3 className="text-base font-semibold">Consistency map</h3>
-              <p className="text-sm text-muted-foreground">
-                The same table as a picture. It plots how much each behaviour
-                separated the field on each day (across) against how
-                consistently that behaviour pulled one way (up).
-              </p>
-              <ConsistencyMap metrics={rankedMetrics} />
-            </div>
-
-            {outcomeMetrics.length > 0 ? (
-              <div className="space-y-3 pt-2">
-                <h3 className="text-base font-semibold">Outcome checks</h3>
-                <p className="text-sm text-muted-foreground">
-                  These are not behaviours. They measure the result itself, so
-                  they always follow the places. They are here as a check on the
-                  analysis. A weak pattern means that something is wrong in the
-                  numbers, and not in the flying of any pilot.
-                </p>
-                <SeparationTable
-                  metrics={outcomeMetrics}
-                  taskLabels={active.aggregate.taskLabels}
-                  ariaLabel="Outcome checks across tasks"
-                  subjectLabel="Outcome"
-                  fieldSize={active.aggregate.pilots.length}
-                />
-              </div>
-            ) : null}
-          </section>
-
-          <section aria-labelledby="standings-heading" className="space-y-3">
-            <h2 id="standings-heading" className="text-lg font-semibold">
-              Standings behind these figures
+          {/* The map and the outcome checks were h3s nested inside the ranking
+              section. They are peer READINGS of the same data, not sub-parts of
+              the ranking, so each gets its own panel and its own h2 — nesting a
+              panel inside a panel to keep them subordinate would have been the
+              wrong way to say it. */}
+          <Card aria-labelledby="consistency-map-heading" className="gap-3">
+            <h2 id="consistency-map-heading" className="text-lg font-semibold">
+              Consistency map
             </h2>
-            <Table aria-label="Competition standings used for the analysis">
+            {/* The second sentence used to read the axes aloud. ConsistencyMap
+                is the one chart here that draws proper axis titles — it is the
+                model the others were told to copy — so the chart says it. */}
+            <p className="text-sm text-muted-foreground">
+              The same table as a picture.
+            </p>
+            <ConsistencyMap metrics={rankedMetrics} />
+          </Card>
+
+          {outcomeMetrics.length > 0 ? (
+            <Card aria-labelledby="outcome-heading" className="gap-3">
+              <h2
+                id="outcome-heading"
+                className="flex items-center gap-1 text-lg font-semibold"
+              >
+                Outcome checks
+                <Explain label="Outcome checks">
+                  <OutcomeChecksNote />
+                </Explain>
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                These measure the result, not a behaviour, so they always follow
+                the ranks.
+              </p>
+              <SeparationTable
+                metrics={outcomeMetrics}
+                taskLabels={active.aggregate.taskLabels}
+                ariaLabel="Outcome checks across tasks"
+                subjectLabel="Outcome"
+                fieldSize={active.aggregate.pilots.length}
+              />
+            </Card>
+          ) : null}
+
+          <Card aria-labelledby="comp-scores-heading" className="gap-3">
+            <h2 id="comp-scores-heading" className="text-lg font-semibold">
+              Scores behind these figures
+            </h2>
+            <Table aria-label="Competition scores used for the analysis">
               <TableHeader>
                 <Column className="w-14 text-right">#</Column>
                 <Column isRowHeader className="min-w-40">
@@ -439,11 +443,18 @@ export function CompFieldAnalysis() {
                 ))}
               </TableBody>
             </Table>
-          </section>
+          </Card>
 
-          {/* Method descriptions for every metric named above — this page has
-              no ⓘ popovers, so the glossary is the one place to read them
-              (and the printed reference). */}
+          {/* The static form of every column header's ⓘ — popovers are
+              print:hidden and cannot exist on paper, so without this the prose
+              that left the reading flow would have left the page. Print-only:
+              on screen the ⓘs already carry it, and rendering it here as well
+              would put the paragraphs straight back under the table. */}
+          <HowToReadFootnote page="comp" />
+
+          {/* Method descriptions for every metric named above. Visible, unlike
+              the note above: 26 entries a reader may want in bulk, and the one
+              place this page states them at all. */}
           <MetricGlossary
             entries={glossaryEntries}
             intro="How GlideComp measures every metric named above. These are the current method descriptions of the engine. The report of each task carries the same text beside its numbers."
@@ -498,7 +509,7 @@ function taskInformative(m: CompMetricAggregate, i: number): boolean | null {
  *    words — and the consistency map below plots both to the pixel;
  *  - comp ρ, its n and its verdict were three columns describing ONE reading.
  *    They are one cell now, and the cell says whose reading it is: the
- *    coefficient against the comp standings, not the average of the tasks.
+ *    coefficient against the comp scores, not the average of the tasks.
  *
  * The bar column is the n-weighted signed mean, which is also the sort key, so
  * the bars descend with the rows. Ranking by comp ρ instead would have let a
@@ -517,7 +528,7 @@ function SeparationTable({
   /** First column's header — "Behaviour" for the ranking, "Outcome" for the
    * checks, same distinction the task page draws. */
   subjectLabel: string;
-  /** Pilots in the comp standings — the denominator for "39 of 44 pilots". */
+  /** Pilots in the comp scores — the denominator for "39 of 44 pilots". */
   fieldSize: number;
 }) {
   return (
@@ -526,9 +537,28 @@ function SeparationTable({
         <Column isRowHeader className="min-w-56">
           {subjectLabel}
         </Column>
-        <Column className="w-44">Across tasks</Column>
-        <Column className="w-40">Day to day</Column>
-        <Column className="w-44">Against comp standings</Column>
+        {/* Each header carries the paragraph that used to sit under the table
+            explaining it — the place the reader's question actually arises.
+            Every one is mirrored in HowToReadFootnote for print. */}
+        <Column className="w-44">
+          <HeaderWithNote label="Across tasks">
+            <AcrossTasksNote />
+          </HeaderWithNote>
+        </Column>
+        <Column className="w-40">
+          <HeaderWithNote label="Day to day">
+            <DayToDayNote />
+          </HeaderWithNote>
+        </Column>
+        {/* The verdict chip lives in this cell, so the thresholds behind it
+            belong on this header — the comp table has no separate "What it
+            means" column for them the way the task ranking does. */}
+        <Column className="w-44">
+          <HeaderWithNote label="Against comp scores">
+            <AgainstCompScoresNote />
+            <VerdictLegend />
+          </HeaderWithNote>
+        </Column>
         {taskLabels.map((label, i) => (
           <Column
             key={label}
@@ -624,6 +654,28 @@ function SeparationTable({
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+/**
+ * A column header with its ⓘ. `whitespace-normal` because the kit's Column is
+ * `whitespace-nowrap` by default and "Against comp scores" plus a 24px
+ * button does not fit a 11rem column on one line.
+ */
+function HeaderWithNote({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-normal">
+      {label}
+      <Explain label={label}>
+        {children}
+      </Explain>
+    </span>
   );
 }
 

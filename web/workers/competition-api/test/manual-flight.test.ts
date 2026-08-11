@@ -78,7 +78,7 @@ async function statusKey(): Promise<string | null> {
 
 /** Poll the score endpoint until fresh (stale-first serving). */
 async function getFreshScores(path: string): Promise<{
-  classes: Array<{
+  class_scores: Array<{
     pilot_class: string;
     task_validity: { launch: number };
     pilots: Array<{ pilot_name: string; flown_distance: number; made_goal: boolean; total_score: number }>;
@@ -452,6 +452,40 @@ describe("GET manual-flight list + history", () => {
   });
 });
 
+describe("a hidden test comp only takes evidence from its admins", () => {
+  // Same rule as the upload routes: a manual flight IS evidence for the task,
+  // so it cannot be the way into a competition every read route hides.
+  test("a non-admin's manual flight answers as a missing comp", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId, { xctsk: TASK_XCTSK });
+    const cp = await registerPilot(compId);
+
+    const res = await request(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/manual-flight/${cp}`,
+      {
+        body: { last_reached_tp_index: 1, landing_lat: 0, landing_lon: 0.15 },
+        user: "user-2",
+      }
+    );
+    expect(res.status).toBe(404);
+    expect(await manualRows()).toHaveLength(0);
+  });
+
+  test("its own admin records one as usual", async () => {
+    const compId = await createComp({ test: true });
+    const taskId = await createTask(compId, { xctsk: TASK_XCTSK });
+    const cp = await registerPilot(compId);
+
+    const res = await authRequest(
+      "PUT",
+      `/api/comp/${compId}/task/${taskId}/manual-flight/${cp}`,
+      { last_reached_tp_index: 1, landing_lat: 0, landing_lon: 0.15 }
+    );
+    expect(res.status).toBe(200);
+  });
+});
+
 // ── Scoring ──────────────────────────────────────────────────────────────────
 
 describe("manual flights feed scoring", () => {
@@ -469,7 +503,7 @@ describe("manual flights feed scoring", () => {
     });
 
     const data = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = data.classes.find((c) => c.pilot_class === "open")!;
+    const open = data.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(2);
     // Launch validity is positive → the field was counted as flying.
     expect(open.task_validity.launch).toBeGreaterThan(0);
@@ -580,7 +614,7 @@ describe("open-distance manual flights", () => {
 
     // Scores: the manual flight is scored as open distance (numFlying).
     const scores = await getFreshScores(`/api/comp/${compId}/task/${taskId}/score`);
-    const open = scores.classes.find((c) => c.pilot_class === "open")!;
+    const open = scores.class_scores.find((c) => c.pilot_class === "open")!;
     expect(open.pilots).toHaveLength(1);
     expect(open.pilots[0].pilot_name).toBe("Downwind Dan");
     expect(open.pilots[0].flown_distance).toBeGreaterThan(15000);

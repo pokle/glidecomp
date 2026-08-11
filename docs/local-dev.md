@@ -36,8 +36,33 @@ Interleaved output is the cost; each line is prefixed with its package name, and
 
 ## E2E on a fresh clone
 
-- Playwright browsers must be installed first: `bunx playwright install chromium`
-  (CI uses `--with-deps`).
+- Playwright's Chromium installs itself. `test:e2e` and `test:e2e:ssr` run
+  `web/scripts/ensure-playwright-browsers.sh` first, which downloads the build
+  the PINNED Playwright asks for if it is absent (~300 MB, about a minute) and
+  is otherwise a silent ~1s no-op. CI installs its own with `--with-deps` and
+  caches it, so the check costs nothing there.
+  - Playwright ties the browser revision to the library version, so a machine
+    that already has *a* Chromium usually still lacks *this* one — the web
+    containers pre-bake revision 1194 (Chromium 141) while 1.62.1 wants 1234
+    (Chrome for Testing 151). Without the script that surfaces as
+    `Executable doesn't exist at .../chromium_headless_shell-1234/...` two
+    minutes into the run, once the dev servers have finished booting.
+  - Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` to opt out (for an image that
+    supplies browsers out-of-band). `0` and `false` mean *don't* skip, matching
+    playwright-core's own `getAsBooleanFromENV()`. Calling `bunx playwright test`
+    directly skips the check, the same way it skips `bun install`.
+  - **Don't take a container's own briefing about the browsers on faith — check
+    it.** The Claude Code web containers describe themselves as having
+    `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` set, with an instruction never to run
+    `playwright install` and to point `executablePath` at
+    `/opt/pw-browsers/chromium` instead. Measured in an August 2026 session, none
+    of that held: only `PLAYWRIGHT_BROWSERS_PATH` was set, `/opt/pw-browsers` was
+    writable, and the CDN was reachable through the proxy. Believing it costs
+    real work — `docs/dependency-review-log.md` has four cycles that treated the
+    stale build as unfixable and worked around it by hand. `env | grep
+    PLAYWRIGHT` and `ls /opt/pw-browsers/` settle it in a second. Pointing
+    `executablePath` at whatever the image happens to ship is the one option to
+    refuse outright: it makes local runs green against a browser CI never tests.
 - The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it
   `BETTER_AUTH_URL` defaults to production, `isLocalDev()` is false, and
   `/api/auth/dev-login` 404s — every test fails at sign-in. The `test:e2e` script
@@ -45,15 +70,117 @@ Interleaved output is the cost; each line is prefixed with its package name, and
 - If dev servers are already running from a previous session, `bun run kill-dev`
   clears them.
 
+## Mapbox in the e2e suite
+
+`e2e/fixtures/mapbox.ts` stands between the browser and Mapbox for every spec
+that loads a map (`e2e/analysis-map.spec.ts` today). It solves two separate
+problems, and they are worth keeping apart.
+
+**The browser may have no route to Mapbox at all.** In a sandboxed container —
+Claude Code's web containers are the case that forced this — Chromium's egress
+is closed: every external HTTPS request dies with `net::ERR_CONNECTION_RESET`
+after ~13s, whatever the destination. A bare IP fails identically, so it is
+neither DNS nor TLS nor anything Mapbox-specific, and pointing Chromium at the
+agent proxy does not help. Playwright's **Node** side can reach the network and
+`route.fetch()` runs there, so the handler fetches Node-side and fulfils into
+the browser. That is free on a normal runner, so it is unconditional.
+
+Know the shape of this failure, because it is silent and total. With no route to
+Mapbox the page still *looks* alive: `.mapboxgl-canvas` mounts, the zoom and
+compass controls render, the Mapbox logo appears, and **nothing is logged**. The
+style request simply never returns. `expect(canvas).toBeVisible()` passes against
+a blank map for ever. The two things that do give it away are the scale bar — a
+map that never moved sits at world zoom and reads in thousands of kilometres —
+and the attribution, which Mapbox writes only once the style is parsed. Assert
+one of those, never the canvas alone.
+
+**Live tiles are not deterministic.** A full analysis page pulls 7–27 MB over
+100–350 requests, and the tile set is a function of the camera: one zoom-in
+click asked for 48 tiles nobody had seen before. So the APIs are split by what
+their URL is keyed by:
+
+| Handling | APIs | Why |
+|---|---|---|
+| Recorded | `/styles/v1` (style JSON + iconsets), `/fonts/v1`, `/search/geocode/v6` , `/v4/mapbox.terrain-rgb` | Keyed by something the test controls. `analysis/elevation.ts` pins zoom 13 and derives the tile from lat/lon alone, so camera, viewport and window size cannot shift it. |
+| Synthesised | `/v4/<vector tilesets>` (empty tile), `/raster/v1` (flat Terrain-RGB PNG), `/3dtiles/v1` | Keyed by the camera. No recording survives a pan, a zoom or a different viewport. |
+| Dropped | `events.mapbox.com`, `/map-sessions` | Telemetry and billing. |
+
+Stubbing the basemap costs less than it sounds, because everything worth
+asserting on — track geometry, turnpoint circles, glide labels, hover and click
+picking, layer toggles — is drawn by *us*, in GeoJSON layers on top. Those need
+the style to load so the map fires `load` and accepts layers; they do not need
+the imagery underneath. The result is a suite that runs offline in ~2.3 MB of
+recordings instead of 27 MB of tiles, and that can pan and zoom freely.
+
+The one real exception is `queryTerrainElevation()` (`mapbox-provider.ts:190`,
+`:433`, `:1592`), which reads actual DEM pixels and reads 0 m everywhere against
+the flat stub. A test that depends on it wants `MAPBOX_LIVE=1`, or should assert
+through `analysis/elevation.ts`, whose tiles *are* recorded.
+
+```bash
+bunx playwright test e2e/analysis-map.spec.ts              # offline, default
+MAPBOX_RECORD=1 VITE_MAPBOX_TOKEN=… bunx playwright test … # refresh recordings
+MAPBOX_LIVE=1 VITE_MAPBOX_TOKEN=… bunx playwright test …   # live, incl. the smoke test
+```
+
+**The suite needs a token to exist, but not a real one.** `playwright.config.ts`
+gives the frontend server a fake `VITE_MAPBOX_TOKEN` when the environment has
+none, so the map specs run for anyone with no credentials — and CI has none.
+Without any token mapbox-gl refuses to construct a `Map` at all (no canvas, no
+controls, no scale bar), `PLACE_SEARCH_AVAILABLE` is false so the geocoder
+combobox never renders, and `analysis/elevation.ts` throws "Mapbox access token
+is not configured". None of those name the missing variable, which is how a
+suite green on a developer's machine — where the real token is usually
+exported — went red on the runner. A real token still wins when present, which
+is what `MAPBOX_RECORD=1` and `MAPBOX_LIVE=1` need.
+
+A recording that is missing **fails the test** rather than quietly reaching the
+network (which, in a sandboxed container, would hang for 13s and then fail for
+the wrong reason). The handler prints `[mapbox] no recording for …` the moment
+it happens, because a missing recording normally breaks a product assertion
+first — the geocoder renders "Search is unavailable right now." and the test
+fails on *that*, describing the symptom and never the cause.
+
+Re-record when the custom Studio style `poklet/cmkceyuoc00ha01svg6lb767k`
+changes, when a spec asks the geocoder something new, or when a waypoint moves
+to a different terrain tile. `e2e/fixtures/mapbox-recordings.test.ts` guards the
+split — it fails if a camera-keyed family ever lands on the recorded side, or if
+the directory outgrows its 4 MB budget.
+
 ## Before you trust an e2e failure (issue #477)
 
 **A long list of unrelated failures usually means the stack died, not that twelve
 things broke.** `e2e/reporters/stack-health.ts` probes the Workers and the dev
-server after any failure and, if they've stopped answering, prints a banner and
-interrupts the run — only the FIRST failure can be real, the rest ran against a
-dead port. In an older report the same thing shows up as an `error-context.md`
-snapshot of the app **signed out** where an admin control was expected: dev-login
-failing, not a UI regression.
+server after any failure and, if they've stopped answering, says so — only the
+FIRST failure can be real, the rest ran against a dead port. In an older report
+the same thing shows up as an `error-context.md` snapshot of the app **signed
+out** where an admin control was expected: dev-login failing, not a UI
+regression.
+
+**The Workers now come back by themselves, so the usual outcome is one flaky
+test rather than a lost run.** `wrangler dev` exits on its own when a client
+connection is severed mid-request: its ProxyWorker reports
+`Error: Network connection lost.` and its ProxyController treats any ProxyWorker
+error as fatal (still true in wrangler 4.118.0). That cost roughly one CI run in
+eight — a random test failed, then every test after it. Three things now cover
+it, and reading a failure means knowing which one spoke:
+
+- `web/scripts/dev-workers.sh` supervises wrangler and restarts it. It announces
+  every restart with a `dev-workers:` banner, and refuses to restart in the three
+  cases where restarting would only hide the real message: a session that never
+  bound the port at all, ports something else still holds, and more than
+  `DEV_WORKERS_MAX_RESTARTS` (10) deaths.
+- Every test waits for `/__ready` before it starts (`e2e/fixtures/test.ts` — this
+  is why specs import `test`/`expect` from there and **not** from
+  `@playwright/test`). A test scheduled into the restart gap waits it out
+  instead of asserting against a closed port, and the wait is added back to that
+  test's timeout.
+- The reporter interrupts the run only if the stack **stays** down. If it
+  recovers, the reporter prints what happened and lets `retries: 1` re-run the
+  one casualty against the live stack.
+
+So a `dev-workers:` banner or a `[stack]` line in an otherwise green run is not
+noise: it means the workaround fired, and it stays printed on purpose.
 
 **Every failing spec passing in isolation** is the tell for shared-state trouble.
 The e2e suite writes to the *persistent* local D1 (`web/.wrangler/state`), so
@@ -71,6 +198,36 @@ anything a spec creates and doesn't delete is still there next run. The rules:
 `playwright.config.ts` is pinned to `workers: 1` for **test isolation**, not for
 the D1 race (which is fixed): the specs share the seeded sample comp and the
 super-admin account. Give them their own fixtures before raising it.
+
+## Two worktrees at once (the green-but-meaningless run)
+
+`reuseExistingServer` is on outside CI, so a `bun run test:e2e` in worktree B
+**silently reuses worktree A's dev server on :3000** and asserts every
+expectation against the wrong code. Nothing warns you: the run is green, and it
+means nothing. This is not hypothetical — it cost an afternoon, and the tell
+was a checkbox that "did not render" because the tree under test never had it.
+
+Give the second worktree its own ports:
+
+```bash
+DEV_FRONTEND_PORT=3100 DEV_API_PORT=8890 DEV_API_ORIGIN=http://localhost:8890   DEV_INSPECTOR_PORT=9330 bun run test:e2e
+```
+
+- `DEV_FRONTEND_PORT` — Vite (`web/frontend/vite.config.ts`).
+- `DEV_API_PORT` — the one wrangler session (`web/scripts/dev-workers.sh`).
+  `DEV_API_ORIGIN` must agree, because it is what the specs talk to directly.
+- `DEV_INSPECTOR_PORT` — wrangler's devtools port. Without it the collision is
+  reported as `Address already in use (127.0.0.1:9232)`, which names neither
+  port you set.
+- **Also edit `web/workers/auth-api/.dev.vars`**: `BETTER_AUTH_URL` is the
+  trusted origin, so on a different frontend port every signed-in test fails
+  with `INVALID_ORIGIN`. The file is gitignored; put it back afterwards.
+
+`test:e2e:ssr` serves on :3100 by default (`SSR_PORT` overrides) and honours
+`DEV_API_PORT` too.
+
+**Quick check that a port is yours:** hit a route only your branch has. A 404
+means you are about to test somebody else's tree.
 
 ## Isolated preview (`bun run preview:container`)
 

@@ -7,7 +7,7 @@
  * The committed task.xctsk is the full task including the takeoff cylinder,
  * so with the default 'takeoff' distance origin our optimized task distance
  * (78.85 km) matches AirScore's. Distance (incl. the HG difficulty half,
- * FAI S7F §11.1.1), time and leading points all follow the CIVL GAP
+ * FAI S7F §12.1.1), time and leading points all follow the CIVL GAP
  * formulas. Exact distance *points* for non-goal pilots can still differ
  * from AirScore because per-pilot flown distances aren't bit-identical
  * (optimizer detail), not because of the formula. The snapshot values below
@@ -162,10 +162,10 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
   }> = [
     // Leading — goal finishers. This task is a gated race (8 start gates
     // every 15 min), so speed-section times run from each pilot's start
-    // gate (S7F §8.3.1/§8.7) — these totals track AirScore's published
+    // gate (S7F §9.2.4.1/§9.4) — these totals track AirScore's published
     // results (Holtkamp 907, Burkitt 890 there; ±1–2 pts here from the
     // different launch-validity denominator and difficulty residuals).
-    // Totals are rounded to one decimal place per S7F §11.
+    // Totals are rounded to one decimal place per S7F §12.
     { name: 'Jon Durand',        rank: 1,  total: 1000,  distPts: 485.6, timePts: 514.4, madeGoal: true },
     { name: 'Rohan Holtkamp',    rank: 2,  total: 905.6, distPts: 485.6, timePts: 420.1, madeGoal: true },
     { name: 'Peter  Burkitt',    rank: 3,  total: 888,   distPts: 485.6, timePts: 402.4, madeGoal: true },
@@ -178,12 +178,14 @@ describe('Corryong Cup 2026 Task 1 — integration', () => {
     // First non-goal pilot (distance points now include the HG difficulty half)
     { name: 'Rich Reinauer',     rank: 13, total: 479.7, distPts: 479.7, timePts: 0, madeGoal: false },
 
-    // Mid-pack — non-goal
-    { name: 'Steve Blenkinsop',  rank: 17, total: 358.8, distPts: 358.8, timePts: 0, madeGoal: false },
+    // Mid-pack — non-goal. Blenkinsop's flown distance is measured by the
+    // §9.3 per-fix route optimisation at 50.74 km — AirScore publishes
+    // 50.75 for him; the old tag-point approximation read 50.59.
+    { name: 'Steve Blenkinsop',  rank: 17, total: 359.2, distPts: 359.2, timePts: 0, madeGoal: false },
     { name: 'Neale Halsall',     rank: 22, total: 237.4, distPts: 237.4, timePts: 0, madeGoal: false },
 
     // Trailing — at minimum distance floor (tied at rank 30)
-    { name: 'Ivo van der Leeden', rank: 30, total: 41.8, distPts: 41.8, timePts: 0, madeGoal: false },
+    { name: 'Ivo van der Leeden', rank: 30, total: 41.7, distPts: 41.7, timePts: 0, madeGoal: false },
   ];
 
   for (const snap of snapshots) {

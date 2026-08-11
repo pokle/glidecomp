@@ -34,7 +34,17 @@ jobs:
         with:
           node-version: 22
 
+      # Two attempts, because the first one is a download from GitHub's release
+      # CDN and that has answered 500 three times in a row (run 30809701372, 33s
+      # and the job was over). The action retries internally on a 15s/17s
+      # schedule; a fourth try a moment later is what actually got past it.
       - name: Setup Bun
+        id: setup-bun
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+
+      - name: Setup Bun (retry)
+        if: steps.setup-bun.outcome == 'failure'
         uses: oven-sh/setup-bun@v2
 
       # Insurance, not speed: a warm install is ~3s, but one run in ten
@@ -57,6 +67,18 @@ jobs:
       - name: Run tests
         run: bun run test:all
 
+      # The scoring changelog is the transparency record for a pilot whose
+      # points moved, so a branch that changes scoring behaviour has to add a
+      # note. This lives here rather than in a bun test because it compares
+      # against the MERGE BASE: keeping no baseline in the tree is what leaves
+      # parallel engine branches nothing to conflict over. The checkout is
+      # shallow, so master is fetched first; the check skips itself rather
+      # than failing if the merge base is still out of reach.
+      - name: Check for a scoring change note
+        run: |
+          git fetch --no-tags --depth=100 origin master || true
+          bun run check:scoring-note
+
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
@@ -70,6 +92,14 @@ jobs:
           node-version: 22
 
       - name: Setup Bun
+        id: setup-bun
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+
+      # See the note on the Test job — the release CDN 500s often enough to
+      # cost a run, and the retry is the whole fix.
+      - name: Setup Bun (retry)
+        if: steps.setup-bun.outcome == 'failure'
         uses: oven-sh/setup-bun@v2
 
       - name: Cache bun dependencies
@@ -106,7 +136,7 @@ jobs:
           cat > web/workers/auth-api/.dev.vars << 'EOF'
           GOOGLE_CLIENT_ID=dummy-for-ci
           GOOGLE_CLIENT_SECRET=dummy-for-ci
-          BETTER_AUTH_SECRET=ci-test-secret
+          BETTER_AUTH_SECRET=ci-only-not-for-production-J7Oz93uJjYD6f2bkvkO220QquD7a1jUOaSDrrWsDUOvp
           BETTER_AUTH_URL=http://localhost:3000
           EOF
 
@@ -164,6 +194,14 @@ jobs:
           node-version: 22
 
       - name: Setup Bun
+        id: setup-bun
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+
+      # See the note on the Test job — the release CDN 500s often enough to
+      # cost a run, and the retry is the whole fix.
+      - name: Setup Bun (retry)
+        if: steps.setup-bun.outcome == 'failure'
         uses: oven-sh/setup-bun@v2
 
       - name: Cache bun dependencies

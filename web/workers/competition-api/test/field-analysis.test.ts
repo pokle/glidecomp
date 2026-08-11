@@ -11,7 +11,7 @@
  */
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
-import { request, uploadRequest, clearCompData } from "./helpers";
+import { AS_NEW_PILOT, request, uploadRequest, clearCompData } from "./helpers";
 import { encodeId } from "../src/sqids";
 import {
   computeAndStoreFieldAnalysis,
@@ -219,7 +219,7 @@ describe("field analysis read path", () => {
     }
   });
 
-  test("ranks come from the official standings, and totals match them", async () => {
+  test("ranks come from the official scores, and totals match them", async () => {
     const t = await seedTask();
     await computeAndStoreFieldAnalysis(env, t.taskIdNum, 0);
 
@@ -229,16 +229,18 @@ describe("field analysis read path", () => {
       `/api/comp/${t.compId}/task/${t.taskId}/score`
     );
     const scores = (await scoreRes.json()) as {
-      classes: Array<{
+      class_scores: Array<{
         pilots: Array<{ comp_pilot_id: string; rank: number; total_score: number }>;
       }>;
     };
 
+    // `fa.classes` (field analysis) and `scores.class_scores` (task score) are
+    // different endpoints — only the score one was renamed.
     const cls = fa.classes[0];
     const totalByTrackFile = new Map(
       cls.totals.map((x) => [x.trackFile, x.totalScore])
     );
-    for (const official of scores.classes[0].pilots) {
+    for (const official of scores.class_scores[0].pilots) {
       // Pair by comp_pilot_id → trackFile, never by array index.
       const idx = t.pilotIdNums.findIndex(
         (n) => encodeId(env.SQIDS_ALPHABET, n) === official.comp_pilot_id
@@ -505,13 +507,15 @@ describe("field analysis invalidation is shared with scores", () => {
     const before = await getRow(t.taskIdNum);
     expect(isFieldRowStale(before)).toBe(false);
 
-    // The upload route takes gzipped IGC and auto-registers the pilot it
-    // finds in the file's own header.
+    // The upload route takes gzipped IGC and registers the uploading account
+    // as a pilot. AS_NEW_PILOT because the seeded task already has unclaimed
+    // registrations, and the route now refuses to guess whether user-1 is one
+    // of them rather than silently making a duplicate.
     const entries = sampleIgcEntries();
     const res = await uploadRequest(
       `/api/comp/${t.compId}/task/${t.taskId}/igc`,
       await compressText(entries[TRACK_COUNT][1]),
-      { user: "user-1" }
+      { user: "user-1", headers: AS_NEW_PILOT }
     );
     expect(res.status).toBeLessThan(300);
 

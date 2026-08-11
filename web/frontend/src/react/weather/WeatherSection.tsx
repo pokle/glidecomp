@@ -37,6 +37,7 @@ import { toast } from "../lib/toast";
 import { WeatherNotesBlock } from "./WeatherNotesBlock";
 import { TaskWeatherPanel } from "./TaskWeatherPanel";
 import type { TaskWeatherState } from "./use-task-weather";
+import { Card } from "@/react/rac/card";
 
 /** Mirrors MAX_WEATHER_NOTES in the worker's validators — the server is the
  * authority; this stops a paste that would only be rejected on save. */
@@ -79,7 +80,7 @@ export function WeatherSection({
   if (!hasNotes && !hasWeather && !isAdmin) return null;
 
   return (
-    <section>
+    <Card>
       <SectionHeader
         title="Weather"
         action={
@@ -120,7 +121,7 @@ export function WeatherSection({
           }}
         />
       ) : null}
-    </section>
+    </Card>
   );
 }
 

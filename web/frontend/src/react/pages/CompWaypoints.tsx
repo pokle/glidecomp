@@ -584,6 +584,7 @@ export function CompWaypoints() {
                   addMode={addMode}
                   fitNonce={fitNonce}
                   focus={focus}
+                  placeSearch={isAdmin}
                   onWaypointPick={() => {}}
                   onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
                 />

@@ -51,7 +51,7 @@ Tables referenced from the auth-api worker:
   - default_pilot_class (TEXT NOT NULL) — the class assigned to auto-registered pilots. Must be one of the values in `pilot_classes`.
   - gap_params (TEXT) — JSON object matching the GAPParameters interface
   - scoring_format (TEXT NOT NULL DEFAULT 'gap') — 'gap' or 'open_distance' (migration 0009).
-  - series_scoring (TEXT NOT NULL DEFAULT 'total') — how per-task scores combine into competition standings (migration 0022): 'total' (sum of task scores) or 'ftv' (Fixed Total Validity, FAI S7F §15). FTV applies only to GAP comps with more than one task. New PG GAP comps are created with 'ftv'; the DB default stays 'total' so existing comps are unchanged.
+  - series_scoring (TEXT NOT NULL DEFAULT 'total') — how per-task scores combine into competition scores (migration 0022): 'total' (sum of task scores) or 'ftv' (Fixed Total Validity, FAI S7F §15). FTV applies only to GAP comps with more than one task. New PG GAP comps are created with 'ftv'; the DB default stays 'total' so existing comps are unchanged.
   - ftv_factor (REAL) — the FTV discard fraction (0<f<1). NULL auto-derives it from the scoreable-task count per S7A §5.2.5.1 (0.2 for ≤6 tasks, 0.25 for ≥7). Changing series_scoring / ftv_factor is audit-logged but does **not** bump per-task scores (FTV is a pure aggregation over stored task scores, computed live in `/scores`, whose ETag folds these fields in).
   - open_igc_upload (INTEGER NOT NULL DEFAULT 1) — boolean. When 1, any registered pilot in the comp can upload an IGC on behalf of any other pilot. Admins can always upload regardless.
 
@@ -79,8 +79,8 @@ Tables referenced from the auth-api worker:
   - pilot_class (TEXT NOT NULL) — e.g. 'open', 'novice', 'sport', 'floater'. Must be one of the comp's `pilot_classes` values. A pilot belongs to exactly one class per competition. Set to `comp.default_pilot_class` when auto-registered.
   - team_name (TEXT)
   - driver_contact (TEXT) — driver name, phone, radio channel
-  - civl_ranking (INTEGER) — CIVL world ranking snapshot at time of competition
-  - first_start_order (INTEGER) — pilot's starting order for the first competition day only (typically reverse CIVL ranking). For subsequent days, starting order is computed on-demand: reverse the previous day's top N scores for the same pilot classes, where N = the number of pilots with a day-1 `starting_order` set.
+  - wprs_points (REAL) — the pilot's WPRS score, copied from the CIVL rankings when the roster was built (migrations 0029/0030; `civl_ranking_slug` / `civl_ranking_date` record which list and month, NULL when an organiser typed the number). The score rather than a rank because a rank is only a position within one list's pool, and two pilots taken from different lists cannot be compared by it — see [civl-rankings.md](civl-rankings.md).
+  - first_start_order (INTEGER) — pilot's starting order for the first competition day only (typically reverse WPRS order). For subsequent days, starting order is computed on-demand: reverse the previous day's top N scores for the same pilot classes, where N = the number of pilots with a day-1 `starting_order` set.
 
   **Linking priority** (used at admin import and user signup): CIVL ID → any of SAFA/USHPA/BHPA/DHV/FFVL/FAI IDs → email → exact name. Name-only matches must be confirmed by an admin; they do not auto-link.
 
@@ -126,7 +126,7 @@ Tables referenced from the auth-api worker:
 
 ### Open registration
 
-Competitions operate with open registration by default. When an authenticated user uploads a track to a task:
+Competitions operate with open registration by default — `comp.open_registration`, on unless an organiser turns it off in Competition settings (migration 0027; see [track-submission.md](track-submission.md)). When it is off, an upload from someone not already on the roster is refused with `403 registration_closed`. When an authenticated user uploads a track to a task and registration is open:
 
 1. If `comp.close_date` is set and the current date is past it, reject the upload.
 2. Look up the user's `pilot` profile (create one from `user.name` if it doesn't exist yet).
@@ -263,7 +263,7 @@ same test-comp visibility rules as the rest of the API.
 | ~~POST~~ | ~~`/api/comp/:comp_id/task/:task_id/reprocess`~~ | — | **Never shipped** (see the note above and Iteration 6/7 below). No such route exists. |
 | GET | `/api/comp/:comp_id/task/:task_id/score` | Public | Return scores for a single task. ~~No stored results — computed fresh each request.~~ — **superseded:** the read serves a materialized `task_scores` row in one D1 query (`src/score-store.ts`), with `computed_at` / `stale` fields and ETag/304 support; mutations bump `inputs_rev` and recompute in the background. Ranked pilot list with individual point breakdowns. No auth required. |
 | POST | `/api/comp/:comp_id/rescore` | Admin | Force revalidation of every task in the comp (the "Re-score" button). |
-| GET | `/api/comp/:comp_id/scores` | Public | Compute and return competition-level standings on-demand. Aggregates each task's stored scores into per-class standings (S7A §5.2.5.4 shared ranks on ties). When the comp's `series_scoring` is `ftv`, the total is the Fixed Total Validity result (S7F §15) instead of the plain sum, and each pilot's per-task entries carry `ftv_status` (full/partial/discarded), `ftv_counted_score`, and `validity`. Response includes `series_scoring` and the resolved `ftv_factor`. No auth required. |
+| GET | `/api/comp/:comp_id/scores` | Public | Compute and return competition-level scores on-demand. Aggregates each task's stored scores into per-class scores (S7A §5.2.5.4 shared ranks on ties). When the comp's `series_scoring` is `ftv`, the total is the Fixed Total Validity result (S7F §15) instead of the plain sum, and each pilot's per-task entries carry `ftv_status` (full/partial/discarded), `ftv_counted_score`, and `validity`. Response includes `series_scoring` and the resolved `ftv_factor`. No auth required. |
 
 **Scoring pipeline:** Scoring is split into two concerns:
 
@@ -495,7 +495,7 @@ Scoring fetches IGC files from R2 at query time and caches results in Workers KV
 - [x] Add `SCORES_CACHE` KV namespace binding (run `bunx wrangler kv namespace create SCORES_CACHE` to get production IDs)
 - [x] Implement cache key computation (`src/scoring.ts` — SHA-256 of task state from D1)
 - [x] Implement `GET /api/comp/:comp_id/task/:task_id/score` with KV cache layer (`src/routes/score.ts`)
-- [x] Implement `GET /api/comp/:comp_id/scores` — aggregate across tasks, return overall standings per class
+- [x] Implement `GET /api/comp/:comp_id/scores` — aggregate across tasks, return overall scores per class
 - [x] Apply `penalty_points` after `scoreTask()` (engine does not accept penalties); re-rank within class
 - [x] Class-based scoring: call `scoreTask()` separately per `task_class` entry
 - [x] Write scoring tests using real sample IGC + xctsk from `web/samples/` (`test/scoring.test.ts`)

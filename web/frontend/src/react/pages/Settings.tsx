@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Form } from "react-aria-components";
-import { Button } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
+import { Card, CardGrid, CardHeader } from "@/react/rac/card";
 import {
   Dialog,
   DialogFooter,
@@ -19,7 +20,6 @@ import { FieldGroup, TextField } from "@/react/rac/field";
 import { Loading } from "@/react/rac/progress";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/react/rac/table";
-import { cn } from "@/react/lib/utils";
 import { api } from "../../comp/api";
 import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
@@ -28,47 +28,6 @@ import { useConfirm } from "../lib/confirm";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
-
-/**
- * The page is a stack of separated panels. `ui/card` was a styled <div> with
- * a grid header and this was its last consumer, so it lives here now — RAC has
- * no card (there is no behaviour to own), and one local helper beats seven
- * copies of the same markup.
- */
-function SettingsCard({
-  title,
-  description,
-  action,
-  className,
-  children,
-}: {
-  title: React.ReactNode;
-  description?: React.ReactNode;
-  /** Right-aligned slot on the title row (the "Saved ✓" flash). */
-  action?: React.ReactNode;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      className={cn(
-        "flex flex-col gap-4 overflow-hidden rounded-xl bg-card p-4 text-sm text-card-foreground ring-1 ring-foreground/10",
-        className
-      )}
-    >
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
-        <div className="grid gap-1">
-          <h2 className="text-base leading-snug font-medium">{title}</h2>
-          {description ? (
-            <div className="text-sm text-muted-foreground">{description}</div>
-          ) : null}
-        </div>
-        {action ? <div className="ml-auto shrink-0">{action}</div> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 interface ApiKey {
   id: string;
@@ -122,7 +81,7 @@ export function Settings() {
     return (
       <section className="mx-auto flex max-w-3xl flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">Sign in to manage your account</p>
           <Button className="mt-4" onPress={() => goToSignIn("/settings")}>
             Sign in
@@ -136,7 +95,7 @@ export function Settings() {
 
   return (
     <section className="mx-auto flex max-w-3xl flex-col gap-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
       <AccountSection />
       <ProfileSection />
       <AppearanceSection />
@@ -160,19 +119,20 @@ function AccountSection() {
   ];
 
   return (
-    <SettingsCard
-      title="Account"
-      description="You can sign in with Google or an emailed code — both use this address."
-    >
+    <Card>
+      <CardHeader
+        title="Account"
+        description="Sign in with Google or an emailed code — both use this address."
+      />
       <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-[auto_1fr]">
         {rows.map((row) => (
           <div key={row.label} className="contents">
             <dt className="text-sm text-muted-foreground">{row.label}</dt>
-            <dd className="text-sm font-medium break-all">{row.value}</dd>
+            <dd className="font-mono text-sm break-all">{row.value}</dd>
           </div>
         ))}
       </dl>
-    </SettingsCard>
+    </Card>
   );
 }
 
@@ -189,11 +149,12 @@ function AppearanceSection() {
   const [savedNonce, setSavedNonce] = useState(0);
 
   return (
-    <SettingsCard
-      title="Appearance"
-      description="Choose how GlideComp looks on this device. Changes apply immediately."
-      action={<SavedFlash nonce={savedNonce} />}
-    >
+    <Card>
+      <CardHeader
+        title="Appearance"
+        description="How GlideComp looks on this device."
+        action={<SavedFlash nonce={savedNonce} />}
+      />
       {/* RAC's Radio IS the label, so the card styling goes on the Radio
           itself rather than a wrapping <label> with htmlFor. */}
       <RadioGroup
@@ -203,22 +164,24 @@ function AppearanceSection() {
           setSavedNonce((n) => n + 1);
         }}
         aria-label="Theme"
-        className="gap-3"
+        // Three short options side by side rather than stacked full-width —
+        // they drop to one column on their own when the card gets narrow.
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(12rem,100%),1fr))] gap-3"
       >
         {THEME_OPTIONS.map((option) => (
           <Radio
             key={option.value}
             value={option.value}
-            className="w-full cursor-pointer gap-3 rounded-lg border p-3 data-selected:border-primary data-selected:bg-accent/50"
+            className="w-full cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors data-hovered:bg-muted/60 data-selected:border-primary data-selected:bg-primary/5 data-selected:data-hovered:bg-primary/5"
           >
-            <span className="grid gap-0.5">
-              <span className="text-sm font-medium leading-none">{option.label}</span>
+            <span className="grid gap-1">
+              <span className="text-sm leading-none font-medium">{option.label}</span>
               <span className="text-sm text-muted-foreground">{option.description}</span>
             </span>
           </Radio>
         ))}
       </RadioGroup>
-    </SettingsCard>
+    </Card>
   );
 }
 
@@ -277,12 +240,13 @@ function UnitsSection() {
   const [savedNonce, setSavedNonce] = useState(0);
 
   return (
-    <SettingsCard
-      title="Units"
-      description="How speeds, altitudes, climb rates and distances are displayed. Changes apply immediately, and sync to your account when you're signed in."
-      action={<SavedFlash nonce={savedNonce} />}
-    >
-      <div className="grid gap-4">
+    <Card>
+      <CardHeader
+        title="Units"
+        description="How speeds, altitudes, climb rates and distances are displayed. Synced to your account when you're signed in."
+        action={<SavedFlash nonce={savedNonce} />}
+      />
+      <div className="grid gap-1">
         {UNIT_GROUPS.map((group) => (
           // The group's own label + description ARE the RadioGroup's label
           // and description slots now, so there is no aria-labelledby to wire.
@@ -294,18 +258,39 @@ function UnitsSection() {
               setSavedNonce((n) => n + 1);
             }}
             aria-label={group.label}
-            className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
+            // An iOS-style grouped row: label left, control right, hairline
+            // between rows rather than a gap. The four rows then read as one
+            // list instead of four floating clusters.
+            //
+            // `flex-row` is load-bearing: RadioGroup's own base is `flex-col`,
+            // and `flex-wrap` does NOT override it (different CSS property, so
+            // tailwind-merge keeps both) — which is why these rows were
+            // stacking and centring rather than sitting label-left/control-right.
+            className="flex flex-row flex-wrap items-center justify-between gap-x-8 gap-y-2 border-b border-border py-3 first:pt-0 last:border-b-0 last:pb-0"
           >
-            <span className="grid gap-0.5">
-              <span className="text-sm font-medium leading-none">{group.label}</span>
+            <span className="grid gap-1">
+              <span className="text-sm leading-none font-medium">{group.label}</span>
               <span className="text-sm text-muted-foreground">{group.description}</span>
             </span>
-            <span className="flex flex-row gap-2">
+            {/* Segmented control: one bordered track, the selected pill filled.
+                Short mutually-exclusive options read better joined than as
+                separate outlined chips — and it halves the width they take. */}
+            <span className="flex shrink-0 flex-row overflow-hidden rounded-lg bg-muted p-0.5">
               {group.options.map((option) => (
                 <Radio
                   key={option.value}
                   value={option.value}
-                  className="cursor-pointer rounded-lg border px-3 py-1.5 font-medium data-selected:border-primary data-selected:bg-accent/50"
+                  // The radio dot is hidden INSIDE the track: the raised pill
+                  // is already the selected indicator, and drawing both says
+                  // the same thing twice in a 40px-wide chip. It stays a real
+                  // radio — RAC keeps the roving focus and aria-checked.
+                  //
+                  // Selection is carried by fill, elevation, a ring AND text
+                  // colour, never by hue alone. `bg-card` on a `bg-muted`
+                  // track is what separates them in BOTH themes; the earlier
+                  // `bg-muted/40` track put the pill within a hair of its own
+                  // background in dark mode and the selection vanished.
+                  className="cursor-pointer rounded-md px-3 py-1 font-mono text-[0.8rem] font-medium text-muted-foreground tabular-nums transition-colors [&>span[aria-hidden]]:hidden data-hovered:text-foreground data-selected:bg-card data-selected:text-foreground data-selected:shadow-card data-selected:ring-1 data-selected:ring-border"
                 >
                   {option.label}
                 </Radio>
@@ -314,7 +299,7 @@ function UnitsSection() {
           </RadioGroup>
         ))}
       </div>
-    </SettingsCard>
+    </Card>
   );
 }
 
@@ -491,7 +476,10 @@ function ProfileSection() {
       key={field.key}
       label={field.label}
       // The display name reads better full-width above the paired contact rows.
-      className={field.key === "name" ? "sm:col-span-2" : undefined}
+      // `1 / -1` rather than `col-span-2`: an auto-fit grid may resolve to a
+      // SINGLE column, and spanning 2 there would conjure an implicit second
+      // one and push the field off the card.
+      className={field.key === "name" ? "[grid-column:1/-1]" : undefined}
       value={values[field.key]}
       onChange={(value) => {
         setValues((v) => ({ ...v, [field.key]: value }));
@@ -503,10 +491,11 @@ function ProfileSection() {
   );
 
   return (
-    <SettingsCard
-      title="Profile"
-      description="Your pilot details, used when you register for competitions. Changes take effect when you save."
-    >
+    <Card>
+      <CardHeader
+        title="Profile"
+        description="Your pilot details, used when you register for competitions."
+      />
       {state === "loading" ? (
         <Loading>Loading your profile…</Loading>
       ) : state === "error" ? (
@@ -514,15 +503,13 @@ function ProfileSection() {
       ) : (
         <Form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <FieldGroup label="Name &amp; contact">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {NAME_CONTACT_FIELDS.map(renderField)}
-            </div>
+            <CardGrid min="15rem">{NAME_CONTACT_FIELDS.map(renderField)}</CardGrid>
           </FieldGroup>
 
+          {/* Seven short codes — they pack tighter than the contact fields, so
+              a narrower floor lets more sit on a row when there is room. */}
           <FieldGroup label="Pilot IDs">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {ID_FIELDS.map(renderField)}
-            </div>
+            <CardGrid min="10rem">{ID_FIELDS.map(renderField)}</CardGrid>
           </FieldGroup>
 
           {status ? (
@@ -557,7 +544,7 @@ function ProfileSection() {
           </div>
         </Form>
       )}
-    </SettingsCard>
+    </Card>
   );
 }
 
@@ -645,43 +632,50 @@ function ApiKeysSection() {
   }
 
   return (
-    <SettingsCard
-      title="API keys"
-      description={
-        <>
-          Grant scoring agents programmatic access to your account. See the{" "}
-          <a
-            href="https://github.com/pokle/glidecomp/blob/master/docs/api.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-4 hover:text-foreground"
+    <Card>
+      {/* The create action is section-scoped, so it belongs right-aligned on
+          the header row (design language) rather than stacked above the table. */}
+      <CardHeader
+        title="API keys"
+        description={
+          <>
+            Grant scoring agents programmatic access to your account. See the{" "}
+            <a
+              href="https://github.com/pokle/glidecomp/blob/master/docs/api.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              API documentation
+            </a>{" "}
+            for endpoints, examples, and rate limits.
+          </>
+        }
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => {
+              setKeyName("");
+              setCreateOpen(true);
+            }}
           >
-            API documentation
-          </a>{" "}
-          for endpoints, examples, and rate limits.
-        </>
-      }
-    >
+            Create API key
+          </Button>
+        }
+      />
       <div>
-        <Button
-          onPress={() => {
-            setKeyName("");
-            setCreateOpen(true);
-          }}
-        >
-          Create API key
-        </Button>
-
         {loadError ? (
-          <p role="alert" className="mt-4">
-            {loadError}
-          </p>
+          <p role="alert">{loadError}</p>
         ) : keys === null ? (
-          <Loading className="mt-4">Loading API keys…</Loading>
+          <Loading>Loading API keys…</Loading>
         ) : keys.length === 0 ? (
-          <p className="mt-4 text-muted-foreground">No API keys yet.</p>
+          // An empty state is an invitation to act, not a dead end.
+          <p className="rounded-lg border border-dashed px-4 py-6 text-center text-muted-foreground">
+            No API keys yet. Create one to let a scoring agent reach your account.
+          </p>
         ) : (
-          <div className="mt-4 rounded-lg border">
+          <div className="rounded-lg border">
             <Table aria-label="API keys">
               <TableHeader>
                 <Column isRowHeader>Label</Column>
@@ -695,9 +689,14 @@ function ApiKeysSection() {
                 {keys.map((key) => (
                   <Row key={key.id} id={key.id}>
                     <Cell>{key.name ?? <em>Unnamed</em>}</Cell>
-                    <Cell>{new Date(key.createdAt).toLocaleDateString()}</Cell>
-                    <Cell>
-                      {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : "Never"}
+                    {/* Dates read down the column, so they get the figure face. */}
+                    <Cell className="font-mono tabular-nums">
+                      {new Date(key.createdAt).toLocaleDateString()}
+                    </Cell>
+                    <Cell className="font-mono tabular-nums">
+                      {key.lastUsedAt
+                        ? new Date(key.lastUsedAt).toLocaleDateString()
+                        : "Never"}
                     </Cell>
                     <Cell>
                       <Button
@@ -779,26 +778,31 @@ function ApiKeysSection() {
           </DialogFooter>
         </Dialog>
       </Modal>
-    </SettingsCard>
+    </Card>
   );
 }
 
 function SuperadminSection() {
   return (
-    <SettingsCard title="Superadmin">
-      <ul className="list-inside list-disc">
-          <li>
-            <a href="/admin/users" className="underline underline-offset-4">
-              Users
-            </a>
-          </li>
-          <li>
-            <a href="/admin/cache" className="underline underline-offset-4">
-              Cache
-            </a>
-          </li>
-      </ul>
-    </SettingsCard>
+    <Card>
+      <CardHeader title="Superadmin" />
+      {/* Two destinations, side by side at their natural width — a full-bleed
+          button implies a weightier action than "open the users list". */}
+      <div className="flex flex-wrap gap-3">
+        <LinkButton variant="outline" href="/admin/users">
+          Users
+        </LinkButton>
+        <LinkButton variant="outline" href="/admin/cache">
+          Cache
+        </LinkButton>
+        {/* A Pages Function, not a react-router route. `download` (no value)
+            forces a save under the server's Content-Disposition filename, and
+            keeps RAC from client-navigating a URL the SPA has no route for. */}
+        <LinkButton variant="outline" href="/civl-rankings.csv" download="">
+          CIVL rankings (CSV)
+        </LinkButton>
+      </div>
+    </Card>
   );
 }
 
@@ -829,21 +833,21 @@ function DangerZoneSection() {
   }
 
   return (
-    <SettingsCard
-      title="Danger zone"
-      description="Permanently delete your account and all associated data. This cannot be undone."
-      className="ring-destructive/20"
-    >
-      <div>
-        <Button
-          variant="destructive"
-          isPending={deleting}
-          pendingLabel="Deleting your account"
-          onPress={() => void handleDeleteAccount()}
-        >
-          Delete account
-        </Button>
-      </div>
-    </SettingsCard>
+    <Card className="border-destructive/30">
+      <CardHeader
+        title="Danger zone"
+        description="Permanently delete your account and all associated data. This cannot be undone."
+        action={
+          <Button
+            variant="destructive"
+            isPending={deleting}
+            pendingLabel="Deleting your account"
+            onPress={() => void handleDeleteAccount()}
+          >
+            Delete account
+          </Button>
+        }
+      />
+    </Card>
   );
 }

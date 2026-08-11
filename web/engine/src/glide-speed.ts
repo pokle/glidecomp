@@ -5,7 +5,7 @@
  */
 
 import { fixAltitude, type IGCFix } from './igc-parser';
-import { andoyerDistance, calculateBearing, calculateTrackDistance } from './geo';
+import { ellipsoidDistance, calculateBearing, calculateTrackDistance } from './geo';
 
 
 export interface ChevronPosition {
@@ -18,16 +18,18 @@ export interface ChevronPosition {
 }
 
 export interface GlideMarker {
-  type: 'chevron' | 'speed-label';
+  // Every marker is a speed label; the renderer draws its own chevron beside
+  // each one, so no chevron-only marker kind exists.
+  type: 'speed-label';
   lat: number;
   lon: number;
   bearing: number;
-  speedMps?: number; // speed in m/s, only for speed-label type
-  glideRatio?: number; // L/D ratio for the segment (only for speed-label type)
-  altitudeDiff?: number; // altitude change in meters for the segment (negative = descent, only for speed-label type)
-  requiredGlideRatio?: number; // L/D needed to reach next turnpoint (only for speed-label type)
-  targetName?: string; // name of the target turnpoint (only for speed-label type)
-  altitude?: number; // altitude in meters at the label position (only for speed-label type)
+  speedMps: number; // speed in m/s for the trailing segment
+  glideRatio?: number; // L/D ratio for the segment; undefined when climbing
+  altitudeDiff: number; // altitude change in meters for the segment (negative = descent)
+  requiredGlideRatio?: number; // L/D needed to reach next turnpoint, when one is known
+  targetName?: string; // name of the target turnpoint, when one is known
+  altitude: number; // altitude in meters at the label position
 }
 
 export interface GlideContext {
@@ -48,7 +50,7 @@ export function requiredGlideToTarget(
   target: { lat: number; lon: number; altitude: number },
 ): number | undefined {
   if (altitude <= target.altitude) return undefined;
-  const dist = andoyerDistance(lat, lon, target.lat, target.lon);
+  const dist = ellipsoidDistance(lat, lon, target.lat, target.lon);
   return dist / (altitude - target.altitude);
 }
 
@@ -72,7 +74,7 @@ export function calculateGlidePositions(
     const prevFix = fixes[i - 1];
     const currFix = fixes[i];
 
-    const segmentDistance = andoyerDistance(
+    const segmentDistance = ellipsoidDistance(
       prevFix.latitude,
       prevFix.longitude,
       currFix.latitude,
@@ -256,7 +258,7 @@ export function calculatePointMetrics(
   let startIndex = centerIndex;
   let backDist = 0;
   for (let i = centerIndex; i > 0; i--) {
-    const d = andoyerDistance(
+    const d = ellipsoidDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i - 1].latitude, fixes[i - 1].longitude,
     );
@@ -269,7 +271,7 @@ export function calculatePointMetrics(
   let endIndex = centerIndex;
   let fwdDist = 0;
   for (let i = centerIndex; i < fixes.length - 1; i++) {
-    const d = andoyerDistance(
+    const d = ellipsoidDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i + 1].latitude, fixes[i + 1].longitude,
     );

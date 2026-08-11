@@ -15,9 +15,10 @@
  * removed, or the shared foundation (context/resample/shared-thermals/
  * phase-partition/working-band/stats/evaluate) changes a number.
  *
- * Unlike SCORING_ENGINE_VERSION there is no fingerprint guard here: these
- * metrics are exploratory and not a scoring input, so a missed bump costs a
- * stale admin report, not a wrong score.
+ * Unlike SCORING_ENGINE_VERSION, which derives itself from a hash of the
+ * scoring sources, this one is hand-maintained. These metrics are exploratory
+ * and not a scoring input, so a missed bump costs a stale admin report rather
+ * than a wrong score — not worth a second fingerprint closure to guard.
  */
 // v1: initial release — 26 metrics across 6 families (day profile & wind,
 //     climbing, gliding, decision-making, gaggle, race craft), each ranked
@@ -225,4 +226,22 @@
 //     parallel to `pilots`. Purely additive: no metric moves. The bump rolls
 //     stored reports so the thermals section can show its per-pilot climb
 //     table after the next lazy revalidation instead of never.
-export const FIELD_ANALYSIS_VERSION = 21;
+// v22: day.wind's SPEEDS use the one combining policy the thermal shapes
+//     already used (now stats.ts combineWindEstimates): the median of the
+//     per-circle estimate magnitudes, with direction still the vector mean.
+//     The vector mean's LENGTH collapses toward zero as directions scatter —
+//     it measures how consistent the estimates were, not how strong the wind
+//     was — so one report could print two different winds for the same
+//     circles: the thermal panel's median against the wind tables' vector
+//     mean. Directions and n are unchanged (same vector mean, same samples);
+//     speeds move UP wherever estimates scattered, by more the more they
+//     scattered. On Corryong 2021 open T1 the whole-task speed rises
+//     4.2 → 10.3 km/h (n = 2,520 estimates) and the hourly rows rise from
+//     2.8–9.7 km/h to 8.0–11.8 km/h (+4% on the tightest hour, +228% on the
+//     most scattered). Each caller's estimate SELECTION is untouched —
+//     day.wind still takes one estimate per circle (centre-drift preferred)
+//     and the thermal shapes still pool both methods — so the thermal shapes
+//     are bit-identical; only the day.wind tables/series change. The bump
+//     rolls stored reports onto the new speeds on their next lazy
+//     revalidation.
+export const FIELD_ANALYSIS_VERSION = 22;

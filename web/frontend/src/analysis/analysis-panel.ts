@@ -1,20 +1,20 @@
 /**
  * Analysis Panel Component
  *
- * Main tabbed panel with Track, Task, and Terrain tabs.
- * Provides a unified interface for flight analysis data.
+ * The right-hand tabbed panel. Single-track mode shows Task, Score, Events,
+ * Glides, Climbs and Sinks; multi-track mode swaps in Competition Score and
+ * Task. Which tab is open persists across loads — see `panel-tab.ts` for the
+ * restore rule.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, extractGlides, extractClimbs, extractSinks, resolveTimePointsExponent, type FlightEvent, type FlightEventType, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type GlideData, type ClimbData, type SinkData, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, sinksFromGlides, resolveLeadingTimeRatio, type FlightEvent, type FlightEventType, type FlightSegments, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GapTaskScoreResult, type OpenDistanceTaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
 import { escapeHtml } from '../escape-html';
+import { restorePanelTab, type PanelTabType } from './panel-tab';
 
-/**
- * Unified panel tabs
- */
-export type PanelTabType = 'task' | 'score' | 'events' | 'glides' | 'climbs' | 'sinks' | 'comp-score' | 'gap-config';
+export type { PanelTabType };
 
 /** Which scoring format the multi-track score tab should present */
 export type CompScoringFormat = 'gap' | 'open_distance';
@@ -60,7 +60,7 @@ export interface FlightInfo {
 }
 
 export interface AnalysisPanel {
-  setEvents(events: FlightEvent[]): void;
+  setEvents(events: FlightEvent[], segments: FlightSegments): void;
   setFlightInfo(info: FlightInfo): void;
   setTask(task: XCTask | null): void;
   setScore(result: TurnpointSequenceResult | null): void;
@@ -388,21 +388,19 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   // State
   let allEvents: FlightEvent[] = [];
+  let segments: FlightSegments = { glides: [], climbs: [] };
   let filteredEvents: FlightEvent[] = [];
   let currentTask: XCTask | null = null;
   let isPanelHidden = true;
   let isMultiTrackMode = false;
   let currentCompScore: TaskScoreResult | null = null;
-  /** Scoring format the comp-score tab presents (GAP vs open distance) */
-  let compScoringFormat: CompScoringFormat = 'gap';
   /** Per-pilot flown/airtime stats for the open-distance table (by pilot name) */
   let openDistanceStats: Map<string, OpenDistancePilotStats> | null = null;
   /** Selected pilot names in competition score tab (null = all selected) */
   let selectedPilots: Set<string> | null = null;
   const TAB_STORAGE_KEY = 'glidecomp-active-tab';
-  const validTabs: PanelTabType[] = ['task', 'score', 'events', 'glides', 'climbs', 'sinks', 'comp-score', 'gap-config'];
-  const savedTab = localStorage.getItem(TAB_STORAGE_KEY) as PanelTabType | null;
-  let currentTab: PanelTabType = savedTab && validTabs.includes(savedTab) ? savedTab : 'events';
+  // A stored tab is only as good as the tab still existing — see panel-tab.ts.
+  let currentTab: PanelTabType = restorePanelTab(localStorage.getItem(TAB_STORAGE_KEY));
   let selectedSegment: { startIndex: number; endIndex: number } | null = null;
   let selectedTurnpointIndex: number | null = null;
   let currentScore: TurnpointSequenceResult | null = null;
@@ -607,7 +605,6 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       climbs: tabClimbs,
       sinks: tabSinks,
       'comp-score': tabCompScore,
-      'gap-config': null, // removed — now a dialog
     };
     tabMap[tab]?.setAttribute('aria-selected', 'true');
 
@@ -854,7 +851,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   function renderGlides(): void {
     renderSegmentList({
-      items: extractGlides(allEvents),
+      items: segments.glides,
       itemClass: 'glide-item',
       dataAttr: 'data-glide-id',
       emptyLabel: 'No glides detected',
@@ -863,7 +860,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       renderItem: (glide, i) => {
         const distanceStr = formatDistance(glide.distance).withUnit;
         const speedStr = formatSpeed(glide.averageSpeed).withUnit;
-        const glideRatioStr = glide.glideRatio > 0 ? glide.glideRatio.toFixed(1) : '∞';
+        const glideRatioStr = glide.glideRatio !== undefined && glide.glideRatio > 0 ? glide.glideRatio.toFixed(1) : '∞';
         const altLostStr = formatAltitude(glide.altitudeLost).withUnit;
         const startAltStr = formatAltitude(glide.startAltitude).withUnit;
         const endAltStr = formatAltitude(glide.endAltitude).withUnit;
@@ -891,7 +888,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   function renderClimbs(): void {
     renderSegmentList({
-      items: extractClimbs(allEvents),
+      items: segments.climbs,
       itemClass: 'climb-item',
       dataAttr: 'data-climb-id',
       emptyLabel: 'No thermals detected',
@@ -924,7 +921,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
   function renderSinks(): void {
     renderSegmentList({
-      items: extractSinks(allEvents, config.getThresholds().glide.maxGlideRatioForSink),
+      items: sinksFromGlides(segments.glides, config.getThresholds().glide.maxGlideRatioForSink),
       itemClass: 'sink-item',
       dataAttr: 'data-sink-id',
       emptyLabel: 'No descents detected',
@@ -1243,13 +1240,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     let matchingEvent: FlightEvent | null = null;
 
     if (currentTab === 'glides') {
-      const glides = extractGlides(allEvents);
-      matchingEvent = findNearestSegmentEvent(fixIndex, glides);
+      matchingEvent = findNearestSegmentEvent(fixIndex, segments.glides);
     } else if (currentTab === 'climbs') {
-      const climbs = extractClimbs(allEvents);
-      matchingEvent = findNearestSegmentEvent(fixIndex, climbs);
+      matchingEvent = findNearestSegmentEvent(fixIndex, segments.climbs);
     } else if (currentTab === 'sinks') {
-      const sinks = extractSinks(allEvents, config.getThresholds().glide.maxGlideRatioForSink);
+      const sinks = sinksFromGlides(segments.glides, config.getThresholds().glide.maxGlideRatioForSink);
       matchingEvent = findNearestSegmentEvent(fixIndex, sinks);
     } else if (currentTab === 'events') {
       // For the events tab, find the nearest event by fixIndex or segment
@@ -1383,7 +1378,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       return;
     }
 
-    if (compScoringFormat === 'open_distance') {
+    // Branch on the result's own discriminant, not the comp record — a GAP
+    // renderer pointed at an open-distance result would print validity and
+    // parameters the result does not have.
+    if (currentCompScore.format === 'open-distance') {
       renderOpenDistanceScore(currentCompScore);
     } else {
       renderGapCompetitionScore(currentCompScore);
@@ -1437,7 +1435,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    * Render the open-distance score table: every pilot's straight-line scored
    * distance next to what they actually flew (track distance and airtime).
    */
-  function renderOpenDistanceScore(result: TaskScoreResult): void {
+  function renderOpenDistanceScore(result: OpenDistanceTaskScoreResult): void {
     const stats = result.stats;
     const allSelected = selectedPilots === null;
     const neverLeft = result.pilotScores.filter(
@@ -1504,7 +1502,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   /**
    * Render the GAP competition score table (multi-track mode)
    */
-  function renderGapCompetitionScore(result: TaskScoreResult): void {
+  function renderGapCompetitionScore(result: GapTaskScoreResult): void {
     const params = result.parameters;
     const stats = result.stats;
 
@@ -1521,34 +1519,21 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const pct1 = (n: number) => `${(n * 100).toFixed(1)}%`;
     const wPct = (n: number) => `${Math.round(n * 100)}%`;
 
-    // Scoring configuration in effect (so scores are reproducible)
-    const lwf = params.leadingWeightFormula ?? 'gap2020';
-    // PG leading weight has a second, orthogonal knob (issue #257): the
-    // GAP2020 vs S7F-2024 generation. Surface it so the split is reproducible.
-    const leadWeightCfg =
-      params.scoring === 'PG' && lwf === 's7f2024'
-        ? `, S7F 2024 ratio ${Math.round((params.leadingTimeRatio ?? 0.26) * 100)}%`
-        : params.scoring === 'PG' && lwf === 's7f2020'
-          ? ', S7F 2020–2022 weights'
-          : params.scoring === 'PG'
-            ? ', GAP2020 weight'
-            : '';
+    // Scoring configuration in effect (so scores are reproducible). Scored
+    // under FAI S7F 2026 — nominal launch/goal and the formula generations
+    // are fixed by that edition, so only the real knobs are listed.
     const leadCfg = params.useLeading
-      ? `on (${params.leadingFormula}${leadWeightCfg})`
+      ? `on (ratio ${Math.round(resolveLeadingTimeRatio(params) * 100)}%)`
       : 'off';
-    const timeExp = resolveTimePointsExponent(params).replace('/', '⁄');
     html += `
       <div class="rounded-lg border border-border bg-muted/30 p-3">
-        <div class="text-xs text-muted-foreground mb-1">${docLink('what-is-gap', 'Scoring configuration')}</div>
+        <div class="text-xs text-muted-foreground mb-1">${docLink('what-is-gap', 'Scoring configuration')} — FAI S7F 2026</div>
         <div class="flex gap-x-3 gap-y-1 text-sm flex-wrap">
           <span>Sport: ${params.scoring}</span>
           <span title="Nominal distance">Nom dist: ${formatDistance(params.nominalDistance).withUnit}</span>
           <span title="Nominal task time">Nom time: ${Math.round(params.nominalTime / 60)} min</span>
-          <span title="Nominal goal ratio">Nom goal: ${pct1(params.nominalGoal)}</span>
-          <span title="Nominal launch ratio">Nom launch: ${pct1(params.nominalLaunch)}</span>
           <span>Min dist: ${formatDistance(params.minimumDistance).withUnit}</span>
           <span>${docLink('leading-points', 'Leading')}: ${leadCfg}</span>
-          <span title="Time-points speed-fraction exponent (S7F §11.2)">${docLink('time-points', 'Time exp')}: ${timeExp}</span>
           ${params.scoring === 'HG' ? `<span>${docLink('arrival-points', 'Arrival')}: ${params.useArrival ? 'on' : 'off'}</span>` : ''}
           <span title="Where scored distance begins (take-off vs start cylinder)">${docLink('distance-origin', 'Dist origin')}: ${params.distanceOrigin}</span>
           ${params.scoring === 'HG' ? `<span>${docLink('distance-difficulty', 'Difficulty')}: ${params.useDistanceDifficulty ? 'on' : 'off'}</span>` : ''}
@@ -1561,7 +1546,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">${docLink('task-validity', 'Task Validity')}</div>
         <div class="flex gap-3 text-sm flex-wrap">
-          <span title="Pilots flying ${stats.numFlying} of ${stats.numPresent} present; nominal launch ${pct1(params.nominalLaunch)}">Launch: ${pct1(result.taskValidity.launch)}</span>
+          <span title="Pilots flying ${stats.numFlying} of ${stats.numPresent} present; nominal launch 96%">Launch: ${pct1(result.taskValidity.launch)}</span>
           <span title="Best distance ${formatDistance(stats.bestDistance).withUnit} vs nominal ${formatDistance(params.nominalDistance).withUnit}">Dist: ${pct1(result.taskValidity.distance)}</span>
           <span title="Best time ${stats.bestTime ? formatHMS(stats.bestTime) : '—'} vs nominal ${Math.round(params.nominalTime / 60)} min">Time: ${pct1(result.taskValidity.time)}</span>
           <span class="font-medium" title="Launch × Distance × Time">Task: ${pct1(result.taskValidity.task)}</span>
@@ -1579,6 +1564,14 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           <span title="Leading weight ${wPct(result.weights.leading)}">Leading: ${result.availablePoints.leading.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.leading)})</span></span>
           ${params.scoring === 'HG' ? `<span title="Arrival weight ${wPct(result.weights.arrival)}">Arrival: ${result.availablePoints.arrival.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.arrival)})</span></span>` : ''}
         </div>
+        ${
+          // FAI S7F §11 (HG): nobody reached ESS, so the time and arrival
+          // offers are zero and nothing replaces them — say why, or the row
+          // above visibly fails to add up to the total.
+          params.scoring === 'HG' && stats.numReachedESS === 0 && result.availablePoints.total > 0
+            ? `<div class="text-xs text-muted-foreground mt-1">Nobody reached ESS, so no time or arrival points were available (FAI S7F §12) — only ${(result.availablePoints.distance + result.availablePoints.leading).toFixed(0)} points could be won.</div>`
+            : ''
+        }
       </div>
     `;
 
@@ -1711,8 +1704,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   }
 
   return {
-    setEvents(events: FlightEvent[]) {
+    setEvents(events: FlightEvent[], flightSegments: FlightSegments) {
       allEvents = events;
+      segments = flightSegments;
       updateFilteredEvents();
       if (currentTab !== 'task') {
         renderTrack();
@@ -1870,8 +1864,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       }
     },
 
+    // Names the comp-score tab; which table renders is decided by the score
+    // result's own `format` discriminant, not this.
     setCompetitionScoringFormat(format: CompScoringFormat) {
-      compScoringFormat = format;
       tabCompScore.textContent = format === 'open_distance' ? 'Open Distance' : 'Competition Score';
     },
 

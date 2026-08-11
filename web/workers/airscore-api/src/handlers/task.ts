@@ -57,8 +57,7 @@ function transformResponse(raw: AirScoreRawResponse): AirScoreTaskResponse {
  */
 export async function handleTaskRequest(
   request: Request,
-  env: Env,
-  _ctx: ExecutionContext
+  env: Env
 ): Promise<Response> {
   const url = new URL(request.url);
 

@@ -10,18 +10,37 @@
 import type { GoalLine } from './goal-line';
 
 /**
- * Default cylinder tolerance as a fraction of the radius. 0.5% is the Cat 2
- * maximum (FAI S7F §8.1); Cat 1 uses 0.1%. Kept as the default for club
- * scoring — a task can override it via {@link XCTask.cylinderTolerance}.
- */
-export const DEFAULT_CYLINDER_TOLERANCE = 0.005;
-
-/**
- * Absolute minimum cylinder tolerance in metres (FAI S7F §8.1). The tolerance
- * band is at least ±5 m, so small cylinders (where the percentage is tiny —
- * 0.5% of a 400 m turnpoint is only 2 m) still get the full spec allowance.
+ * Absolute cylinder tolerance in metres (S7F 2026 §9.1.1): the band is ±5 m
+ * around the nominal radius. The relative (percentage) tolerance of earlier
+ * editions was fixed at 0% by the 2025 Plenary, so this IS the whole band —
+ * and scoring no longer honours a task file's declared `cylinderTolerance`
+ * either (owner decision, 2026-08-09,
+ * docs/2026-08-09-s7f-2026-migration-plan.md): every task is evaluated at
+ * the spec band. The field is still parsed so task files round-trip.
  */
 export const MIN_CYLINDER_TOLERANCE_M = 5;
+
+/**
+ * Outer edge of a cylinder's tolerance band (§9.1.1): the radius at which an
+ * entry cylinder is credited. Shared by crossing detection, the
+ * presence-based reaching check and the goal control zone (§9.2.3 sends the
+ * semicircle behind a goal line to this same calculation), so every one of
+ * them uses the same notion of "inside".
+ */
+export function outerDetectionRadius(radius: number): number {
+  return radius + MIN_CYLINDER_TOLERANCE_M;
+}
+
+/**
+ * Inner edge of a cylinder's tolerance band (§9.1.1): the radius at which an
+ * EXIT cylinder is credited — the pilot leaving is credited a touch early
+ * rather than a touch late. Applies to the EXIT start and to inferred exit
+ * turnpoints (see {@link computeTurnpointDirections}). Clamped at 0 for a
+ * cylinder smaller than the band.
+ */
+export function innerDetectionRadius(radius: number): number {
+  return Math.max(0, radius - MIN_CYLINDER_TOLERANCE_M);
+}
 
 // ---------------------------------------------------------------------------
 // Raw crossing detection
@@ -35,7 +54,7 @@ export const MIN_CYLINDER_TOLERANCE_M = 5;
  * XCTask.turnpoints[]), NOT per waypoint — the same waypoint appearing
  * at two task positions produces independent crossings.
  *
- * For a task with a goal LINE (S7F §6.3.1), crossings of the goal task
+ * For a task with a goal LINE (S7F §6.2.3.1), crossings of the goal task
  * position use the same shape: the boundary is the goal line + its control
  * semicircle instead of a circle, `distanceToCenter` is measured to the
  * goal waypoint (the line's midpoint), and 'enter'/'exit' mean crossing
@@ -67,17 +86,20 @@ export interface CylinderCrossing {
   distanceToCenter: number;
 
   /**
-   * True when the crossing counts only because of the cylinder tolerance band
-   * (FAI S7F §8.1): the track came within the tolerance of the cylinder edge
-   * but never physically crossed the nominal radius during this band episode.
-   * Lets the UI explain a near-miss that was credited by tolerance.
+   * True when the crossing counts only because of the control zone's
+   * tolerance band: for a cylinder, the §9.1.1 band — the track came within
+   * the tolerance of the cylinder edge but never physically crossed the
+   * nominal radius during this band episode; for a goal LINE, the §9.1.3 line
+   * band — the track crossed within tolerance of the line (beside it, or
+   * just past an end) without crossing the line itself. Lets the UI explain
+   * a near-miss that was credited by tolerance.
    */
   toleranceCredited: boolean;
 
   /**
    * Goal-LINE tasks only: true when this goal crossing was detected on the
    * control semicircle's arc rather than on the goal line itself — a fix in
-   * the semicircle behind the line counts as goal (S7F §6.3.1), which
+   * the semicircle behind the line counts as goal (S7F §9.2.3), which
    * rescues a line crossing that fell between two fixes or a tracklog gap
    * at the line. Lets the UI explain why goal was credited without a line
    * crossing. Absent for cylinder turnpoints and for line crossings.
@@ -141,10 +163,11 @@ export interface TurnpointReaching {
   candidateCount: number;
 
   /**
-   * True when this reaching was credited by the cylinder tolerance band
-   * (FAI S7F §8.1) rather than a physical crossing of the nominal radius.
-   * Copied from the underlying {@link CylinderCrossing}. Absent for the
-   * no-crossing 'track_start' anchor.
+   * True when this reaching was credited by the control zone's tolerance
+   * band — §9.1.1 for a cylinder, §9.1.3 for a goal line — rather than a
+   * physical crossing of the nominal boundary. Copied from the underlying
+   * {@link CylinderCrossing}. Absent for the no-crossing 'track_start'
+   * anchor.
    */
   toleranceCredited?: boolean;
 
@@ -183,14 +206,24 @@ export interface BestProgress {
 
   /**
    * Shortest remaining distance to goal from this point (meters). For a
-   * stopped task with an altitude bonus (§12.3.6) this is the EFFECTIVE
+   * stopped task with an altitude bonus (§13.4.6) this is the EFFECTIVE
    * remaining distance — geometric distance minus {@link altitudeBonus} —
    * so `flownDistance = taskDistance − distanceToGoal` stays true.
    */
   distanceToGoal: number;
 
   /**
-   * Stopped tasks only (§12.3.6): the altitude-bonus distance credited at
+   * The measured remaining route (§9.3/§7.2): the optimised line from
+   * this point through each un-reached control zone to goal — the very
+   * geometry {@link distanceToGoal} was summed over, exported so the map
+   * draws exactly what the scorer measured. First element is this point.
+   * Absent on payloads cached before the field existed; consumers fall
+   * back to the task line's tag points.
+   */
+  remainingRoute?: { lat: number; lon: number }[];
+
+  /**
+   * Stopped tasks only (§13.4.6): the altitude-bonus distance credited at
    * this point — glideRatio × (GNSS altitude − goal altitude), clamped to
    * the geometric remaining distance. Absent when no bonus applied.
    */
@@ -224,8 +257,8 @@ export interface LegDistance {
 
 /**
  * The start gate that defined a pilot's official start time in a gated
- * race to goal (FAI S7F §8.3.1): the last gate at or before the pilot's
- * start-cylinder crossing. Early starters (§12.2) are anchored to the
+ * race to goal (FAI S7F §9.2.4.1): the last gate at or before the pilot's
+ * start-cylinder crossing. Early starters (§13.3) are anchored to the
  * first gate.
  */
 export interface StartGateTaken {
@@ -238,7 +271,7 @@ export interface StartGateTaken {
 }
 
 /**
- * An early start ("jumping the gun", FAI S7F §12.2): the pilot's scored
+ * An early start ("jumping the gun", FAI S7F §13.3): the pilot's scored
  * start-cylinder crossing happened before the first start gate opened.
  * How this reshapes the score is sport-specific and decided by the scorer
  * (PG: scored launch→SSS only; HG: penalty or minimum distance) — the
@@ -258,8 +291,8 @@ export interface EarlyStart {
 // ---------------------------------------------------------------------------
 
 /**
- * The task deadline as applied to this flight (FAI S7F §8.3.c, §8.6.1,
- * §11.1): crossings after the deadline don't count toward the sequence, and
+ * The task deadline as applied to this flight (FAI S7F §9.2, §9.3,
+ * §12.1): crossings after the deadline don't count toward the sequence, and
  * a landed-out pilot's best distance is measured only up to it. Present on
  * the result whenever the task defines an enforceable deadline, so the
  * score explanation can state the cutoff and point at any ignored
@@ -277,14 +310,14 @@ export interface TaskDeadlineInfo {
 
   /**
    * True when the tracklog continues past the deadline. Distance and
-   * crossings from that part of the track earn nothing (§11.1); the flag
+   * crossings from that part of the track earn nothing (§12.1); the flag
    * lets the explanation say so without re-scanning the fixes.
    */
   trackContinuesPastDeadline: boolean;
 }
 
 /**
- * The launch window's open time as applied to this flight (FAI S7F §8.6.1,
+ * The launch window's open time as applied to this flight (FAI S7F §9.3,
  * from the task's `takeoff.timeOpen`). A start-cylinder crossing before the
  * window opens proves the pilot was airborne before launching was allowed,
  * so such crossings cannot validate a start. Present whenever the task
@@ -302,29 +335,29 @@ export interface LaunchWindowInfo {
 }
 
 // ---------------------------------------------------------------------------
-// Stopped task (FAI S7F §12.3)
+// Stopped task (FAI S7F §13.4)
 // ---------------------------------------------------------------------------
 
 /**
  * How a stopped task is applied to one flight's sequence resolution
- * (FAI S7F §12.3). Passed to resolveTurnpointSequence when the task was
+ * (FAI S7F §13.4). Passed to resolveTurnpointSequence when the task was
  * stopped; the resolver clips the scored flight to the pilot's scored time
- * window (§12.3.4), scores a pilot at/after ESS for their complete flight
- * (§12.3.5), and credits the altitude bonus (§12.3.6).
+ * window (§13.4.4), scores a pilot at/after ESS for their complete flight
+ * (§13.4.5), and credits the altitude bonus (§13.4.6).
  */
 export interface StopResolutionOptions {
-  /** The resolved task stop time (epoch ms) — see resolveTaskStop (§12.3.1). */
+  /** The resolved task stop time (epoch ms) — see resolveTaskStop (§13.4.1). */
   stopTimeMs: number;
 
   /**
-   * This pilot's scored-window end (epoch ms, §12.3.4). Defaults to
+   * This pilot's scored-window end (epoch ms, §13.4.4). Defaults to
    * `stopTimeMs` — the single-start-gate common window. For multi-gate /
    * elapsed-time tasks pass the per-pilot window end from
    * resolveScoredWindowEnds.
    */
   windowEndMs?: number;
 
-  /** §12.3.6 altitude-bonus glide ratio: 5.0 HG, 4.0 PG. */
+  /** §13.4.6 altitude-bonus glide ratio: 5.0 HG, 4.0 PG. */
   glideRatio: number;
 
   /** Goal altitude (m GNSS) the altitude bonus is measured above. */
@@ -332,27 +365,29 @@ export interface StopResolutionOptions {
 }
 
 /**
- * How the task stop shaped this flight's scoring (§12.3) — present on the
+ * How the task stop shaped this flight's scoring (§13.4) — present on the
  * result whenever the task was scored as stopped, so the score explanation
  * can narrate the stop time, the clipped window, and any altitude bonus.
  */
 export interface TaskStopInfo {
-  /** The task stop time the field was scored against (§12.3.1). */
+  /** The task stop time the field was scored against (§13.4.1). */
   stopTime: Date;
 
-  /** This pilot's scored-window end (§12.3.4; equals stopTime for a common window). */
+  /** This pilot's scored-window end (§13.4.4; equals stopTime for a common window). */
   windowEnd: Date;
 
   /**
-   * True when the pilot reached ESS within their scored window (§12.3.5):
-   * the complete flight is scored, including anything flown after the stop.
+   * True when the pilot reached ESS within their scored window. Since the
+   * 2026 edition this is transparency only — §13.4.5 truncates EVERY pilot
+   * at the stop; it decides which §13.4.5 case (between ESS and goal) the
+   * pilot falls under, never an exemption from the clip.
    */
   essBeforeStop: boolean;
 
   /**
    * True when the tracklog reaches the scored-window end — the pilot was
-   * still flying at the stop, making them eligible for the §12.3.6 altitude
-   * bonus (and counted as "still flying" in the §12.3.3 stopped validity).
+   * still flying at the stop, making them eligible for the §13.4.6 altitude
+   * bonus (and counted as "still flying" in the §13.4.3 stopped validity).
    */
   flyingAtStop: boolean;
 
@@ -364,7 +399,7 @@ export interface TaskStopInfo {
   crossingsAfterStop: number;
 
   /**
-   * §12.3.6 altitude bonus folded into flownDistance (meters); 0 when the
+   * §13.4.6 altitude bonus folded into flownDistance (meters); 0 when the
    * pilot landed before the stop, made goal, or the bonus never helped.
    */
   altitudeBonus: number;
@@ -448,7 +483,7 @@ export interface TurnpointSequenceResult {
    *
    * In a gated race to goal (RACE type with start gates) the clock runs
    * from the start gate taken (see {@link startGate}) to the ESS reaching
-   * (FAI S7F §8.7) — not from the pilot's actual crossing. For elapsed-time
+   * (FAI S7F §9.4) — not from the pilot's actual crossing. For elapsed-time
    * tasks and races without usable gates it is ESS reaching time minus SSS
    * reaching time.
    */
@@ -456,7 +491,7 @@ export interface TurnpointSequenceResult {
 
   /**
    * Present for gated races when the pilot started: the gate that defined
-   * their official start time (§8.3.1) — the last gate at or before their
+   * their official start time (§9.2.4.1) — the last gate at or before their
    * crossing, or the first gate for early starters. Absent for elapsed-time
    * tasks, races without gates, and pilots who never started.
    */
@@ -464,7 +499,7 @@ export interface TurnpointSequenceResult {
 
   /**
    * Present when the pilot's scored start crossing was before the first
-   * start gate (§12.2 "jumping the gun"). The sequence and distances are
+   * start gate (§13.3 "jumping the gun"). The sequence and distances are
    * still resolved from the actual flight; the sport-specific consequences
    * (PG launch→SSS distance, HG penalty) are applied by the scorer.
    */
@@ -492,7 +527,7 @@ export interface TurnpointSequenceResult {
   essFallback?: 'last_turnpoint';
 
   /**
-   * Present when the task defines an enforceable goal deadline (§8.3.c):
+   * Present when the task defines an enforceable goal deadline (§9.2):
    * crossings after it were excluded from the sequence and best-progress
    * distance was measured only up to it. See {@link TaskDeadlineInfo}.
    */
@@ -500,26 +535,28 @@ export interface TurnpointSequenceResult {
 
   /**
    * Present when the task defines an enforceable launch-window open time
-   * (§8.6.1): start crossings before it cannot validate a start. See
+   * (§9.3): start crossings before it cannot validate a start. See
    * {@link LaunchWindowInfo}.
    */
   launchWindow?: LaunchWindowInfo;
 
   /**
-   * Present when the task was scored as stopped (§12.3): how the stop
-   * shaped this flight — the scored window, the §12.3.5 complete-flight
-   * exemption, and any §12.3.6 altitude bonus. See {@link TaskStopInfo}.
+   * Present when the task was scored as stopped (§13.4): how the stop
+   * shaped this flight — the scored window, the §13.4.5 complete-flight
+   * exemption, and any §13.4.6 altitude bonus. See {@link TaskStopInfo}.
    */
   stopInfo?: TaskStopInfo;
 }
 
 /**
- * How the distance from a fix to the next un-reached turnpoint is measured
- * by {@link computeBestProgress}:
+ * How the CHEAP fix→next-turnpoint measure in {@link computeBestProgress}
+ * works. This is no longer the scored measurement: the scored remaining
+ * distance is the §9.3 per-fix route optimisation (`optimizeRemainingRoute`
+ * in task-optimizer.ts), and these measures serve the 'approx' mode — the
+ * candidate-start ranking loop and the exact search's seeding heuristic.
  * - 'tag': to the optimizer's tag point on the cylinder — keeps the
- *   remaining route continuous with the onward optimized legs (and matches
- *   AirScore's flown distances closely). The default for an intermediate
- *   ENTER turnpoint.
+ *   remaining route continuous with the onward optimized legs. The default
+ *   for an intermediate ENTER turnpoint.
  * - 'edge': to the cylinder's nearest boundary point from outside. Used for
  *   a cylinder goal (no onward leg — the pilot only needs to reach it) and
  *   for the ENTER turnpoint right after a reached EXIT cylinder: the
@@ -530,7 +567,7 @@ export interface TurnpointSequenceResult {
  * - 'exit-boundary': to the cylinder's nearest boundary point from inside
  *   (radius − distance-to-centre) — the next un-reached turnpoint is an
  *   EXIT cylinder the pilot has yet to leave.
- * - 'goal-line': to the nearest point on a LINE goal (S7F §6.3.1).
+ * - 'goal-line': to the nearest point on a LINE goal (S7F §6.2.3.1).
  */
 export type NextTPMeasure =
   | { kind: 'tag'; point: { lat: number; lon: number } }

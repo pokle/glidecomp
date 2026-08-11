@@ -10,12 +10,14 @@
  * import directly.
  *
  * Like ./waypoint-files this module is deliberately OUTSIDE the scoring import
- * closure (see scoring-version.test.ts): it's pure number→string formatting, so
- * adding export formats never forces a scoring-engine version bump. The only
+ * closure (see web/scripts/scoring-fingerprint.ts): it's pure number→string
+ * formatting, so adding export formats never rolls the scoring-engine
+ * generation. The only
  * geo maths it needs (lat/lon → UTM) lives in ./utm; never hand-roll it here.
  */
 import type { WaypointFileRecord } from './waypoint-files';
 import { latLonToUtm } from './utm';
+import { DEFAULT_WAYPOINT_RADIUS_M } from './waypoints';
 
 /** A downloadable waypoint file format. */
 export interface WaypointExportFormat {
@@ -110,7 +112,7 @@ function altMeters(w: WaypointFileRecord): number {
 
 /** Radius in metres, defaulting to 400 only when absent/non-finite (0 is kept). */
 function radiusMeters(w: WaypointFileRecord): number {
-  return Number.isFinite(w.radius) ? w.radius : 400;
+  return Number.isFinite(w.radius) ? w.radius : DEFAULT_WAYPOINT_RADIUS_M;
 }
 
 /**
@@ -395,7 +397,7 @@ function encodePolylineValue(num: number): string {
 export function encodeTurnpointZ(w: WaypointFileRecord): string {
   // Preserve an explicit radius of 0 (real waypoint QRs use it for points with
   // no cylinder); only fall back to 400 when the value is missing/non-finite.
-  const radius = Number.isFinite(w.radius) ? w.radius : 400;
+  const radius = Number.isFinite(w.radius) ? w.radius : DEFAULT_WAYPOINT_RADIUS_M;
   const altitude = Number.isFinite(w.altitude) ? w.altitude : 0;
   return (
     encodePolylineValue(Math.round(w.longitude * 1e5)) +

@@ -1,14 +1,19 @@
 /**
- * Compact whole-comp standings summary for the comp hub: the top 3 of each
+ * Compact whole-comp scores summary for the comp hub: the top 3 of each
  * class (overall totals) and the link to the full scores page — the hub
  * answers "who's winning?" at a glance, /comp/:id/scores holds the full
- * apparatus (all pilots, per-task results, Top 3 per task, Teams).
+ * apparatus (all pilots, per-task scores, Top 3 per task, Teams).
+ *
+ * That last sentence used to be printed under the list, in prose. It said
+ * nothing the section header's "Full scores" button and the "+ N more pilots"
+ * link either side of it did not already say, so it is a comment now.
  *
  * Shares the SSR-seedable useCompScores state machine with the scores page,
  * so the summary is in the server HTML like the old inline section was.
  */
 import { Link } from "react-router-dom";
 import { LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
 import { SectionHeader } from "../components/SectionHeader";
 import { formatScore, ordinal } from "../lib/format";
 import { ScoreFreshness } from "./ScoreFreshness";
@@ -34,11 +39,11 @@ export function CompScoresSummary({
   const scoresHref = `/comp/${compId}/scores`;
 
   return (
-    <section id="scores" className="scroll-mt-24 break-before-page">
+    <Card id="scores" className="scroll-mt-24 break-before-page">
       <SectionHeader
-        title="Standings"
+        title="Scores"
         action={
-          state.kind === "ready" && state.scores.standings.length > 0 ? (
+          state.kind === "ready" && state.scores.class_scores.length > 0 ? (
             <LinkButton variant="outline" size="sm" href={scoresHref}>
               Full scores
             </LinkButton>
@@ -47,7 +52,7 @@ export function CompScoresSummary({
       />
       {state.kind === "loading" ? (
         <p className="mt-2 text-muted-foreground">Loading scores…</p>
-      ) : state.kind === "unavailable" || state.scores.standings.length === 0 ? (
+      ) : state.kind === "unavailable" || state.scores.class_scores.length === 0 ? (
         <ScoresEmptyState isAdmin={isAdmin} />
       ) : (
         <>
@@ -59,12 +64,12 @@ export function CompScoresSummary({
             pollUrl={`/api/comp/${encodeURIComponent(compId)}/scores`}
           />
           <div className="mt-1 flex flex-wrap gap-x-12 gap-y-4">
-            {state.scores.standings.map((cls) => {
+            {state.scores.class_scores.map((cls) => {
               const top = cls.pilots.slice(0, 3);
               const more = cls.pilots.length - top.length;
               return (
                 <div key={cls.pilot_class} className="min-w-56">
-                  {state.scores.standings.length > 1 ? (
+                  {state.scores.class_scores.length > 1 ? (
                     <h3 className="mt-2 font-semibold">{cls.pilot_class}</h3>
                   ) : null}
                   <ol className="mt-1.5 space-y-1 text-sm">
@@ -98,14 +103,8 @@ export function CompScoresSummary({
               );
             })}
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            <Link className="underline underline-offset-4" to={scoresHref}>
-              Full scores
-            </Link>{" "}
-            has every pilot, per-task results, top 3 per task, and team standings.
-          </p>
         </>
       )}
-    </section>
+    </Card>
   );
 }

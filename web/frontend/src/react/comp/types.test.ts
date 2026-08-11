@@ -18,6 +18,10 @@ interface FakeRes {
 const ok: FakeRes = { ok: true, status: 200 };
 const notFound: FakeRes = { ok: false, status: 404 };
 const serverError: FakeRes = { ok: false, status: 500 };
+const badRequest: FakeRes = { ok: false, status: 400 };
+const unauthorized: FakeRes = { ok: false, status: 401 };
+const forbidden: FakeRes = { ok: false, status: 403 };
+const rateLimited: FakeRes = { ok: false, status: 429 };
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -47,6 +51,20 @@ describe("fetchWithRetry", () => {
   test("a 404 is a real answer and is not retried", async () => {
     const fetcher = vi.fn<() => Promise<FakeRes>>().mockResolvedValue(notFound);
     expect(await settle(fetchWithRetry(fetcher))).toBe(notFound);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  // 404 was once the ONLY 4xx spared. The rest cost three round trips and two
+  // delays to arrive at the same verdict — and for the rate-limited case, the
+  // retries pushed the caller further past the limit they had just hit.
+  test.each([
+    ["400", badRequest],
+    ["401", unauthorized],
+    ["403", forbidden],
+    ["429", rateLimited],
+  ])("a %s is a real answer and is not retried", async (_label, res) => {
+    const fetcher = vi.fn<() => Promise<FakeRes>>().mockResolvedValue(res);
+    expect(await settle(fetchWithRetry(fetcher))).toBe(res);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 

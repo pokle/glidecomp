@@ -1,0 +1,92 @@
+{
+  "earthModel": "WGS84",
+  "goal": {
+    "deadline": "07:30:00Z",
+    "type": "CYLINDER"
+  },
+  "sss": {
+    "direction": "EXIT",
+    "timeGates": [
+      "01:45:00Z"
+    ],
+    "type": "RACE"
+  },
+  "taskType": "CLASSIC",
+  "turnpoints": [
+    {
+      "radius": 400,
+      "waypoint": {
+        "lat": -36.757881,
+        "lon": 146.965392,
+        "altSmoothed": 800,
+        "name": "MYS080",
+        "description": "MysticTO"
+      },
+      "type": "TAKEOFF"
+    },
+    {
+      "radius": 3000,
+      "waypoint": {
+        "lat": -36.756981,
+        "lon": 146.937408,
+        "altSmoothed": 980,
+        "name": "6T-098",
+        "description": "Clearspot"
+      },
+      "type": "SSS"
+    },
+    {
+      "radius": 6000,
+      "waypoint": {
+        "lat": -36.829158,
+        "lon": 147.109703,
+        "altSmoothed": 1080,
+        "name": "STT108",
+        "description": "StoneytopsTrack"
+      }
+    },
+    {
+      "radius": 6000,
+      "waypoint": {
+        "lat": -36.667,
+        "lon": 146.860122,
+        "altSmoothed": 250,
+        "name": "5G-025",
+        "description": "DeerFarm"
+      }
+    },
+    {
+      "radius": 16000,
+      "waypoint": {
+        "lat": -36.395961,
+        "lon": 147.090042,
+        "altSmoothed": 700,
+        "name": "BOB070",
+        "description": "GundowringTO"
+      }
+    },
+    {
+      "radius": 10000,
+      "waypoint": {
+        "lat": -36.730197,
+        "lon": 147.259497,
+        "altSmoothed": 1640,
+        "name": "BOG164",
+        "description": "LittleBogong"
+      },
+      "type": "ESS"
+    },
+    {
+      "radius": 600,
+      "waypoint": {
+        "lat": -36.731767,
+        "lon": 147.1687,
+        "altSmoothed": 340,
+        "name": "8F-034",
+        "description": "MtBeautyAir"
+      }
+    }
+  ],
+  "version": 1,
+  "cylinderTolerance": 0.0005
+}

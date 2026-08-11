@@ -1,7 +1,8 @@
 ---
 /**
  * Shared shell for every static page: <head>, design-token stylesheet and the
- * OS-preference dark-mode sync (mirrors react/main.tsx's `.dark` class toggle).
+ * OS-preference dark-mode sync (mirrors the `.dark` class toggle the SPA runs
+ * from react/entry-client.tsx via react/lib/theme.ts).
  */
 import "../styles/global.css";
 import SiteHeader from "../components/SiteHeader.astro";
@@ -37,6 +38,12 @@ const metaDescription =
       type="font/woff2"
       crossorigin
     />
+    {/* "Submit track" is in the header of every one of these pages and is the
+        homepage's primary action, but it lives in the SPA — so the app shell
+        is fetched ahead of the click rather than after it. Prefetching
+        /submit rather than /app primes the cache under the URL actually
+        navigated to (Pages rewrites /submit to /app). */}
+    <link rel="prefetch" href="/submit" />
     <title>{title}</title>
     <meta name="description" content={metaDescription} />
     <meta property="og:site_name" content="GlideComp" />

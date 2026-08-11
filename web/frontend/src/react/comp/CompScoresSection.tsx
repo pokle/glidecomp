@@ -1,10 +1,10 @@
 /**
  * Whole-competition scores machinery, shared by the dedicated scores page
  * (pages/CompScoresPage — the canonical scores surface) and the comp hub's
- * compact standings summary (CompScoresSummary): the SSR-seedable fetch +
+ * compact scores summary (CompScoresSummary): the SSR-seedable fetch +
  * rescore state machine (useCompScores) and the score views (per-class
- * standings, top-3, teams, results-by-task). View transforms (class rollups,
- * top-3, teams) come from the shared scores-views module; the "Results by
+ * scores, top-3, teams, scores-by-task). View transforms (class rollups,
+ * top-3, teams) come from the shared scores-views module; the "Scores by
  * task" tab reuses the task page's ScoresSection one task at a time. Built on
  * the RAC kit: the view tabs are ARIA tabs, and each view is a sortable
  * ARIA-grid table (RAC sorting with per-column first-click directions —
@@ -21,12 +21,13 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
 import { Modal, Dialog, DialogHeader, DialogTitle } from "@/react/rac/dialog";
 import { Button } from "@/react/rac/button";
+import { Explain } from "@/react/rac/explain";
 import {
   aggregateTeams,
   buildClassGroups,
   computeTop3Rows,
-  type ClassStanding,
-  type PilotStanding,
+  type CompClassScore,
+  type CompPilotScore,
 } from "../../scores-views";
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
@@ -48,7 +49,7 @@ export type CompScoresState =
 /**
  * Whole-comp scores state machine: one fetch per compId (skipped when seeded
  * from SSR), plus the admin "Recompute scores" action. Shared by the dedicated
- * scores page (pages/CompScores) and the comp page's standings summary.
+ * scores page (pages/CompScores) and the comp page's scores summary.
  */
 export function useCompScores(
   compId: string,
@@ -176,23 +177,23 @@ export function ScoresViews({
   tasks: TaskSummary[];
   defaultTaskId: string | null;
   /**
-   * ?task= deep link (task pages link "Results" here): opens the
-   * "Results by task" tab on that task. Applied in an effect, so the first
+   * ?task= deep link (task pages link "Scores" here): opens the
+   * "Scores by task" tab on that task. Applied in an effect, so the first
    * render is the default tab on both sides and only then switches.
    *
    * That used to be forced: the server rendered the pathname alone, so a
    * query-driven tab in the first render was guaranteed to mismatch. The
    * server now renders the query too (entry-server.tsx), so selecting the tab
    * in the first render would be safe — and would put the deep-linked task's
-   * results in the server HTML, which is the reason to do it. Deliberately not
+   * scores in the server HTML, which is the reason to do it. Deliberately not
    * done here: it is a behaviour change to the tab logic, not part of the SSR
    * fix.
    */
   deepLinkTaskId?: string | null;
 }) {
-  const teams = useMemo(() => aggregateTeams(scores.standings), [scores]);
-  const groups = useMemo(() => buildClassGroups(scores.standings), [scores]);
-  const firstTab = `standings:${scores.standings[0].pilot_class}`;
+  const teams = useMemo(() => aggregateTeams(scores.class_scores), [scores]);
+  const groups = useMemo(() => buildClassGroups(scores.class_scores), [scores]);
+  const firstTab = `scores:${scores.class_scores[0].pilot_class}`;
   const [tab, setTab] = useState(firstTab);
   const scorableTasks = tasks.filter((t) => t.has_xctsk);
   const [pickedTaskId, setPickedTaskId] = useState(
@@ -213,22 +214,21 @@ export function ScoresViews({
     <Tabs
       selectedKey={tab}
       onSelectionChange={(key) => setTab(String(key))}
-      className="mt-4"
     >
       <TabList aria-label="Score views">
-        {scores.standings.map((cls) => (
-          <Tab key={cls.pilot_class} id={`standings:${cls.pilot_class}`}>
+        {scores.class_scores.map((cls) => (
+          <Tab key={cls.pilot_class} id={`scores:${cls.pilot_class}`}>
             {cls.pilot_class}
           </Tab>
         ))}
         <Tab id="top3">Top 3 per task &amp; class</Tab>
         {teams.length > 0 ? <Tab id="teams">Teams</Tab> : null}
-        {scorableTasks.length > 0 ? <Tab id="bytask">Results by task</Tab> : null}
+        {scorableTasks.length > 0 ? <Tab id="bytask">Scores by task</Tab> : null}
       </TabList>
 
-      {scores.standings.map((cls) => (
-        <TabPanel key={cls.pilot_class} id={`standings:${cls.pilot_class}`}>
-          <StandingsTable scores={scores} cls={cls} />
+      {scores.class_scores.map((cls) => (
+        <TabPanel key={cls.pilot_class} id={`scores:${cls.pilot_class}`}>
+          <ScoresTable scores={scores} cls={cls} />
         </TabPanel>
       ))}
 
@@ -349,7 +349,7 @@ function SortableTable({
   }, [rows, sort]);
 
   return (
-    <div className="mt-3 overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto rounded-lg border">
       <Table
         aria-label={label}
         sortDescriptor={sort ?? undefined}
@@ -416,7 +416,7 @@ function SortableTable({
 
 // ── Views ─────────────────────────────────────────────────────────────────────
 
-function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStanding }) {
+function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore }) {
   const compName = useCompName();
   // Only show columns for tasks flown by this pilot class — classes fly
   // different tasks, so mixing them would leave every off-class cell blank.
@@ -491,17 +491,32 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
   return (
     <>
       {isFtv ? (
+        // The headline fact stays on the page; how to read the struck-through
+        // and "(part)" rows is method, so it sits behind the ⓘ. Every pilot's
+        // own arithmetic is already a click away in FtvBreakdown, which is
+        // where a reader who wants the detail is going anyway.
         <p className="mt-3 text-sm text-muted-foreground">
-          <strong className="font-medium text-foreground">FTV — Fixed Total Validity.</strong>{" "}
-          Each pilot's total counts only their best tasks up to a fixed validity
+          <strong className="font-medium text-foreground">FTV</strong> — only each
+          pilot&rsquo;s best tasks count
           {scores.ftv_factor != null
-            ? ` (${Math.round(scores.ftv_factor * 100)}% discarded)`
+            ? ` (${Math.round(scores.ftv_factor * 100)}% of validity discarded)`
             : ""}
-          ; struck-through scores were discarded, "(part)" scores counted only in
-          part. Open a total's breakdown for the arithmetic.
+          .{" "}
+          <Explain label="Fixed Total Validity" className="align-middle">
+            <p>
+              Each pilot&rsquo;s total counts only their best tasks up to a fixed
+              validity
+              {scores.ftv_factor != null
+                ? ` (${Math.round(scores.ftv_factor * 100)}% discarded)`
+                : ""}
+              . Struck-through scores were discarded, &ldquo;(part)&rdquo; scores
+              counted only in part.
+            </p>
+            <p>Open a total&rsquo;s breakdown for the arithmetic.</p>
+          </Explain>
         </p>
       ) : null}
-      <SortableTable label={`Standings — ${cls.pilot_class}`} columns={columns} rows={rows} />
+      <SortableTable label={`Scores — ${cls.pilot_class}`} columns={columns} rows={rows} />
     </>
   );
 }
@@ -509,7 +524,7 @@ function StandingsTable({ scores, cls }: { scores: CompScores; cls: ClassStandin
 /**
  * Per-pilot FTV explainer (transparency): which tasks counted (in full or in
  * part), which were discarded under the validity cap, and the total arithmetic.
- * Rendered straight from the standings' FTV fields — the same numbers the
+ * Rendered straight from the scores' FTV fields — the same numbers the
  * scoreboard shows.
  */
 function FtvBreakdown({
@@ -517,7 +532,7 @@ function FtvBreakdown({
   nameById,
   ftvFactor,
 }: {
-  pilot: PilotStanding;
+  pilot: CompPilotScore;
   nameById: Map<string, string>;
   ftvFactor: number | null;
 }) {
@@ -604,7 +619,7 @@ function Top3Table({
   const compName = useCompName();
   const rows = computeTop3Rows(group, scores.tasks);
 
-  // Left-aligned throughout: the place columns read "PilotName · score", so the
+  // Left-aligned throughout: the rank columns read "PilotName · score", so the
   // number sits behind a name of varying length and right-aligning it would not
   // line the scores up anyway.
   const columns: ColumnSpec[] = [
@@ -621,8 +636,8 @@ function Top3Table({
         sort: row.label,
         node: isTotal ? <strong title={row.task_date ?? undefined}>{row.label}</strong> : row.label,
       },
-      ...[0, 1, 2].map((place): CellSpec => {
-        const entry = row.entries[place];
+      ...[0, 1, 2].map((rankIndex): CellSpec => {
+        const entry = row.entries[rankIndex];
         if (!entry) return { sort: "", node: "—" };
         const content = (
           <>
@@ -693,5 +708,5 @@ function TeamsTable({
     { sort: String(team.total_score), node: <strong>{formatScore(team.total_score)}</strong> },
   ]);
 
-  return <SortableTable label="Team standings" columns={columns} rows={rows} />;
+  return <SortableTable label="Team scores" columns={columns} rows={rows} />;
 }

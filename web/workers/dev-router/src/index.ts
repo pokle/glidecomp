@@ -71,6 +71,12 @@ const ROUTES: Array<[string, keyof Env]> = [
  *
  * So: 200 only when every binding answers. Anything less is 503, which
  * Playwright reads as "not ready yet" and keeps polling (it accepts 200–403).
+ *
+ * Startup is only half of it: wrangler exits the same way when a client
+ * connection is severed mid-request, at any point in a run. So this path is now
+ * asked the same question twice — once by Playwright's `webServer` at startup,
+ * and again by every test (`e2e/fixtures/test.ts`) so none of them runs while
+ * the supervisor in `web/scripts/dev-workers.sh` is bringing wrangler back.
  */
 async function readiness(env: Env): Promise<Response> {
   const probes: Array<[keyof Env, string]> = [

@@ -62,8 +62,9 @@ import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync, existsSy
 import { resolve, join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import {
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   calculateOptimizedTaskLine,
   destinationPoint,
@@ -77,6 +78,7 @@ import {
 import { timezoneForXctsk } from '@glidecomp/engine/timezone';
 import { SAMPLE_COMP_NAME } from '../workers/competition-api/src/sample';
 import { encodeId } from '../workers/competition-api/src/sqids';
+import { revalidateFieldAnalysis } from '../workers/competition-api/src/field-analysis-store';
 import {
   compPath,
   compScoresPath,
@@ -91,6 +93,18 @@ import {
   taskSeedName,
   trackLessPilotKey,
 } from './lib/seed-identity';
+import {
+  airscoreCompUrl,
+  airscoreTaskUrl,
+  parseCuratedOfficialRows,
+  parseRawOfficialRows,
+  type OfficialResultRow,
+} from './lib/official-results';
+import {
+  orphanedTrackKeys,
+  trackSyncDecision,
+  type OldTrackInfo,
+} from './lib/seed-track-sync';
 import {
   REPO_ROOT,
   isTransientWranglerError,
@@ -179,6 +193,21 @@ interface SeedStore {
   rows(sql: string): Promise<Record<string, unknown>[]>;
   r2Put(key: string, body: Buffer): Promise<void>;
   r2Delete(key: string): Promise<void>;
+  /**
+   * Compute and store each task's field analysis, one task at a time — local
+   * backend only. Seeding leaves the field-analysis store cold, and the first
+   * read then schedules a whole-field compute (every pilot's raw fixes at
+   * once) inside `wrangler dev`'s workerd — which, on a CPU-starved machine
+   * (CI runners), pegs the process long enough for wrangler's internal
+   * loopback to drop a connection, and wrangler treats that as fatal (issue
+   * #477's crash, reproduced under a CPU-constrained container). Doing the
+   * same compute HERE — in this bun process, against the same on-disk state,
+   * with no wrangler involved — means seeded comps always serve warm and the
+   * dev stack never runs the cold burst. The remote backend omits it: prod
+   * workerd doesn't share the fragility, and the compute would pull every
+   * track down from real R2.
+   */
+  warmFieldAnalysis?(taskIds: number[]): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -252,6 +281,25 @@ async function createLocalStore(): Promise<SeedStore> {
     async r2Delete(key) {
       await bucket.delete(key);
     },
+    async warmFieldAnalysis(taskIds) {
+      // Same alphabet note as PURGE_SQIDS_ALPHABET below: the report body
+      // embeds sqid-encoded ids, so this must match what the dev workers
+      // serve under (the competition-api wrangler.toml default).
+      const env = {
+        DB: db,
+        R2: bucket,
+        SQIDS_ALPHABET: process.env.SQIDS_ALPHABET ?? 'abcdefghijklmnopqrstuvwxyz',
+      };
+      for (const taskId of taskIds) {
+        const started = Date.now();
+        // Best-effort: a task the analysis refuses (open distance, no tracks)
+        // stores its refusal, which is exactly what the endpoint would do.
+        await revalidateFieldAnalysis(env, taskId).catch((err) => {
+          console.warn(`  field analysis warm failed for task ${taskId}:`, err);
+        });
+        console.log(`  warmed field analysis: task_id=${taskId} (${Date.now() - started}ms)`);
+      }
+    },
     async dispose() {
       await mf.dispose();
     },
@@ -319,6 +367,10 @@ interface SamplePilot {
   id: string | null;
   gz: Buffer;
   fileSize: number;
+  /** SHA-256 (hex) of the RAW IGC text (migration 0032) — the content
+   * identity a re-seed compares to skip uploading an unchanged track. Raw
+   * text, not the gzip: compressed bytes vary across zlib versions. */
+  sha256: string;
   /** True when a HARD data-quality check withholds this track from scoring
    * (engine track-quality.ts). The track is still seeded — it is a real
    * archive file and the regression fixture — but the pilot must not be
@@ -421,7 +473,7 @@ function landingAtRouteDistance(
   let remaining = Math.max(0, targetMeters);
   let index = 0;
   for (let i = 0; i + 1 < line.length; i++) {
-    const leg = andoyerDistance(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
+    const leg = ellipsoidDistance(line[i].lat, line[i].lon, line[i + 1].lat, line[i + 1].lon);
     if (remaining <= leg || i + 2 === line.length) {
       // Land on this leg — capped 100 m short of its end so a published
       // distance at/near full course stays a land-out, never a goal.
@@ -443,6 +495,11 @@ interface TaskSpec {
   pilotClass: string;
   /** Per-task GAP overrides from the manifest (AirScore formula capture). */
   gapParams?: Partial<GAPParameters>;
+  /** AirScore keys for this task's published record (absent for synthetic
+   * comps) — with the manifest's source_host they build the official comp
+   * and task scores page URLs. */
+  comPk?: number;
+  tasPk?: number;
 }
 
 interface SampleTask extends TaskSpec {
@@ -450,17 +507,27 @@ interface SampleTask extends TaskSpec {
   pilots: SamplePilot[];
   /** Published-result pilots with no IGC in the folder (see TrackLessPilot). */
   trackless: TrackLessPilot[];
+  /** The officially published per-pilot results (issue #603) — rank and
+   * total exactly as AirScore published them, stored beside the task as a
+   * display-only annotation. Empty for the synthetic comps. */
+  official: OfficialResultRow[];
 }
 
 interface CompManifest {
   name: string;
   slug: string;
   classes: string[];
+  /** The AirScore host the comp was downloaded from (absent for synthetic
+   * comps) — the base for the official scores page links. */
+  source_host?: string;
   tasks: Array<{
     pilot_class: string;
     name: string;
     date: string;
     dir: string;
+    /** AirScore comp/task keys (absent for synthetic comps). */
+    comPk?: number;
+    tasPk?: number;
     /** Mapped GAP overrides where this task's published AirScore formula
      * differs from the comp-wide gap_params (see download-airscore-comp.ts). */
     gap_params?: Partial<GAPParameters>;
@@ -565,6 +632,7 @@ function readTask(
       id: idFromFilename(file),
       gz,
       fileSize: gz.byteLength,
+      sha256: createHash('sha256').update(text).digest('hex'),
       qualityHardFailed: quality.hardFailed,
     });
   }
@@ -573,7 +641,25 @@ function readTask(
   // manual flights so validity matches the field AirScore actually scored.
   const trackless = readTrackLessRows(compDir, nonEmptyIgc);
 
-  return { ...spec, xctsk, pilots, trackless };
+  return { ...spec, xctsk, pilots, trackless, official: readOfficialRows(compDir) };
+}
+
+/**
+ * The officially published per-pilot results for a task folder (issue #603):
+ * the verbatim raw result when the downloader kept it, else a `.curated`
+ * fixture's trimmed copy (ranks re-derived from its totals). Empty for the
+ * synthetic comps, which have no published record.
+ */
+function readOfficialRows(compDir: string): OfficialResultRow[] {
+  const rawPath = join(compDir, 'airscore-result-raw.json');
+  if (existsSync(rawPath)) {
+    return parseRawOfficialRows(JSON.parse(readFileSync(rawPath, 'utf-8')));
+  }
+  const trimmedPath = join(compDir, 'airscore-result.json');
+  if (existsSync(trimmedPath)) {
+    return parseCuratedOfficialRows(JSON.parse(readFileSync(trimmedPath, 'utf-8')));
+  }
+  return [];
 }
 
 // --- seed ------------------------------------------------------------------
@@ -671,7 +757,15 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   const tasks: SampleTask[] = [];
   for (const t of manifest.tasks) {
     const task = readTask(
-      { dir: t.dir, name: t.name, date: t.date, pilotClass: t.pilot_class, gapParams: t.gap_params },
+      {
+        dir: t.dir,
+        name: t.name,
+        date: t.date,
+        pilotClass: t.pilot_class,
+        gapParams: t.gap_params,
+        comPk: t.comPk,
+        tasPk: t.tasPk,
+      },
       tzOut,
       ref.root,
       manifest.category ?? 'hg',
@@ -738,6 +832,15 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   console.log(`  close date: ${closeDate}`);
 
   const registrations = [...registry.values()];
+
+  // What the previous seed left in R2, keyed by object key, so the task loop
+  // can skip re-uploading a track whose content is unchanged (migration 0032,
+  // lib/seed-track-sync.ts). Populated on the re-seed path; empty for a new
+  // comp, where everything uploads.
+  const oldTracks = new Map<string, OldTrackInfo>();
+  // Every R2 key this seed claims (uploaded or kept); what the previous seed
+  // holds beyond these is orphaned and deleted at the end.
+  const liveKeys = new Set<string>();
 
   // 1) Find or create the comp (stable comp_id across reruns).
   const existing = await store.rows(`SELECT comp_id FROM comp WHERE name = ${q(compName)};`);
@@ -815,15 +918,26 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       );
     }
 
-    // Delete R2 objects for the comp's tracks first (need the keys from D1).
-    // Every track is re-uploaded below, so this is a delete-then-put over the
-    // same keys for the pilots that survive, and a real removal for those that
-    // don't.
-    const oldKeys = await store.rows(
-      `SELECT tt.igc_filename AS k FROM task_track tt
-       JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId};`,
+    // Remember what the previous seed put in R2 — key, content hash and
+    // stored gzip size — BEFORE the wipe below deletes the rows that say so.
+    // The task loop compares each source track against this map and only
+    // deletes-and-puts where the content actually changed; the objects
+    // nothing claims are removed at the END of the seed (orphanedTrackKeys),
+    // so a crash mid-seed can leave at worst a few unreachable objects,
+    // never a live row pointing at a deleted one. (The rows are wiped before
+    // any upload, so a crashed seed also can't leave a stale hash behind —
+    // the next run finds no rows and re-uploads everything.)
+    const oldTrackRows = await store.rows(
+      `SELECT tt.igc_filename AS k, tt.igc_sha256 AS h, tt.file_size AS s
+         FROM task_track tt
+         JOIN task t ON tt.task_id = t.task_id WHERE t.comp_id = ${compId};`,
     );
-    await mapPool(oldKeys, R2_CONCURRENCY, (r) => store.r2Delete(String(r.k)));
+    for (const r of oldTrackRows) {
+      oldTracks.set(String(r.k), {
+        hash: r.h == null ? null : String(r.h),
+        size: Number(r.s),
+      });
+    }
     await store.exec([
       // Clear the materialized derived caches FIRST, while the rows they key
       // off still exist. task_scores / task_field_analysis are served verbatim
@@ -941,6 +1055,7 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   //    Open and floater "Task 1" share a date but are distinct rows, named by
   //    class so the app's task list disambiguates them.
   let totalTracks = 0;
+  let totalUnchanged = 0;
   let reusedTasks = 0;
   /** Everything a `--remote` seed needs to purge this comp's now-stable public
    *  URLs from the edge (see purgeCompCache). */
@@ -948,6 +1063,42 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
   for (const t of tasks) {
     const taskName = taskSeedName(t.name, t.pilotClass);
     const gapParamsJson = t.gapParams ? JSON.stringify(t.gapParams) : null;
+
+    // Officially published results (issue #603): resolve each published row
+    // to its comp_pilot by the same name matching the track-less rows use —
+    // import-time matching, stored by id, so nothing matches names at read
+    // time. A row that resolves to no registration (e.g. an ambiguous name)
+    // is dropped and counted below rather than guessed.
+    const officialResolved = t.official
+      .map((row) => ({
+        row,
+        compPilotId: cpByKey.get(trackLessKey(t.pilotClass, row.name)),
+      }))
+      .filter((x): x is { row: OfficialResultRow; compPilotId: number } =>
+        x.compPilotId !== undefined,
+      );
+    const officialTaskUrl =
+      manifest.source_host && t.comPk !== undefined && t.tasPk !== undefined
+        ? airscoreTaskUrl(manifest.source_host, t.comPk, t.tasPk)
+        : null;
+    const officialCompUrl =
+      manifest.source_host && t.comPk !== undefined
+        ? airscoreCompUrl(manifest.source_host, t.comPk)
+        : null;
+    const officialJson =
+      officialResolved.length > 0
+        ? JSON.stringify({
+            source: 'AirScore',
+            comp_url: officialCompUrl,
+            task_url: officialTaskUrl,
+            results: officialResolved.map((x) => ({
+              comp_pilot_id: x.compPilotId,
+              rank: x.row.rank,
+              total: x.row.total,
+            })),
+          })
+        : null;
+
     const reusedTaskId = reusedTaskIds.get(taskName);
     let taskId: number;
     if (reusedTaskId !== undefined) {
@@ -960,14 +1111,15 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       reusedTasks++;
       await store.exec(
         `UPDATE task SET task_date = ${q(t.date)}, xctsk = ${q(t.xctsk)},
-           gap_params = ${q(gapParamsJson)}, stop_announcement_time = NULL, weather_notes = ''
+           gap_params = ${q(gapParamsJson)}, official_results = ${q(officialJson)},
+           stop_announcement_time = NULL, weather_notes = ''
          WHERE task_id = ${taskId};`,
       );
     } else {
       await store.exec(
-        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params)
+        `INSERT INTO task (comp_id, name, task_date, creation_date, xctsk, gap_params, official_results)
          VALUES (${compId}, ${q(taskName)}, ${q(t.date)}, ${q(today)}, ${q(t.xctsk)},
-                 ${q(gapParamsJson)});`,
+                 ${q(gapParamsJson)}, ${q(officialJson)});`,
       );
       // Newest first: the row we just wrote, even if a manifest ever repeats a
       // task name within one comp.
@@ -982,6 +1134,22 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     }
     await store.exec(`INSERT INTO task_class (task_id, pilot_class) VALUES (${taskId}, ${q(t.pilotClass)});`);
 
+    // The official annotation is competition data an importer entered, so it
+    // is audited (the reseed wiped this comp's audit_log above, so reruns
+    // don't stack entries). It is NOT a scoring input — nothing derives from
+    // it — so it takes no score bump; same reasoning as comp_pilot.wprs_points.
+    if (officialJson) {
+      await store.exec(
+        `INSERT INTO audit_log (comp_id, timestamp, actor_user_id, actor_name, subject_type, subject_id, subject_name, description)
+         VALUES (${compId}, ${q(now)}, NULL, 'AirScore import', 'task', ${taskId}, ${q(taskName)},
+                 ${q(
+                   `Recorded the officially published AirScore results for ${taskName} — ` +
+                     `${officialResolved.length} pilot${officialResolved.length === 1 ? '' : 's'}` +
+                     (officialTaskUrl ? `, from ${officialTaskUrl}` : ''),
+                 )});`,
+      );
+    }
+
     // Resolve every pilot that has a comp_pilot row into its R2 object + its two
     // D1 rows, then upload the objects concurrently and insert the rows in one
     // batch. (A pilot with a track took off and landed, so we mark them "Landed"
@@ -991,6 +1159,8 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     const uploads: Array<{ key: string; gz: Buffer }> = [];
     const trackInserts: string[] = [];
     const scoredPilots: SeededTask['pilots'] = [];
+    /** Tracks whose content matched the object already in R2 — no upload. */
+    let unchanged = 0;
     /** comp_pilots with a real track in THIS task — see the track-less loop. */
     const withTrack = new Set<number>();
     for (const p of t.pilots) {
@@ -999,10 +1169,16 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
       withTrack.add(compPilotId);
       scoredPilots.push({ compPilotId, name: p.name });
       const key = `c/${compId}/t/${taskId}/${compPilotId}.igc`;
-      uploads.push({ key, gz: p.gz });
+      liveKeys.add(key);
+      // Skip the delete-and-put when the object already in R2 holds exactly
+      // this track (hash match, migration 0032); a kept row records the OLD
+      // gzip's byte size — the object that is actually there.
+      const sync = trackSyncDecision(oldTracks.get(key), p.sha256, p.fileSize);
+      if (sync.upload) uploads.push({ key, gz: p.gz });
+      else unchanged++;
       trackInserts.push(
-        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name)
-         VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${p.fileSize}, ${q(p.name)});`,
+        `INSERT INTO task_track (task_id, comp_pilot_id, igc_filename, uploaded_at, file_size, igc_pilot_name, igc_sha256)
+         VALUES (${taskId}, ${compPilotId}, ${q(key)}, ${q(now)}, ${sync.fileSize}, ${q(p.name)}, ${q(p.sha256)});`,
       );
       // A withheld track is not evidence the pilot flew this task, so it must
       // not claim "Landed" — the same rule the upload route follows.
@@ -1054,7 +1230,8 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
     await mapPool(uploads, R2_CONCURRENCY, (u) => store.r2Put(u.key, u.gz));
     await store.exec(trackInserts);
     seededTasks.push({ taskId, taskName, pilots: scoredPilots });
-    totalTracks += uploads.length;
+    totalTracks += uploads.length + unchanged;
+    totalUnchanged += unchanged;
     const seededTrackLess = t.trackless.length - duplicateRows;
     const extras = seededTrackLess > 0 ? `, ${seededTrackLess} track-less published pilot(s)` : '';
     const dupes =
@@ -1062,13 +1239,36 @@ async function seed(store: SeedStore, where: string, ref: CompRef): Promise<void
         ? `, ${duplicateRows} duplicate published row(s) skipped (pilot already has a track here)`
         : '';
     const how = reusedTaskId !== undefined ? 'rebuilt' : 'created';
-    console.log(`  ${how} ${taskName}: task_id=${taskId}, ${uploads.length} tracks${extras}${dupes}`);
+    // Name what the official annotation dropped — a published row that
+    // resolved to no registration is a finding, not something to hide.
+    const official =
+      t.official.length > 0
+        ? `, official results for ${officialResolved.length}/${t.official.length} published pilots`
+        : '';
+    const skipNote =
+      unchanged > 0 ? ` (${unchanged} unchanged, not re-uploaded)` : '';
+    console.log(
+      `  ${how} ${taskName}: task_id=${taskId}, ${uploads.length + unchanged} tracks${skipNote}${extras}${dupes}${official}`,
+    );
+  }
+
+  // The previous seed's objects nothing claimed this time — tracks of pilots
+  // or tasks the source no longer describes. Deleted last, after every upload
+  // landed (see lib/seed-track-sync.ts for the crash-safety reasoning).
+  const orphans = orphanedTrackKeys(oldTracks.keys(), liveKeys);
+  await mapPool(orphans, R2_CONCURRENCY, (k) => store.r2Delete(k));
+  if (orphans.length > 0) {
+    console.log(`  removed ${orphans.length} orphaned R2 object(s)`);
   }
 
   console.log(
     `  Done. comp_id=${compId} — ${tasks.length} tasks (${reusedTasks} kept their ids), ` +
-      `${totalTracks} tracks total`,
+      `${totalTracks} tracks total (${totalUnchanged} unchanged in R2, ${totalTracks - totalUnchanged} uploaded)`,
   );
+  // Leave the comp warm (see SeedStore.warmFieldAnalysis). AFTER the Done log:
+  // this is a bonus pass over a fully-seeded comp, and its per-task lines
+  // explain themselves.
+  await store.warmFieldAnalysis?.(seededTasks.map((t) => t.taskId));
   if (REMOTE) await purgeCompCache(compId, compName, seededTasks);
 }
 

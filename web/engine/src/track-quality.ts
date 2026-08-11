@@ -16,7 +16,7 @@
  * from ten days later. It scored the S7F §5.3 minimum distance, and its hour
  * buckets stretched the field-analysis day-profile axis from 5 hours to 262.
  *
- * What this module is NOT: it is not a scoring rule. S7F §5.3 and §8.6.1
+ * What this module is NOT: it is not a scoring rule. S7F §5.3 and §9.3
  * award minimum distance to EVERY pilot who takes off, with no start-validity
  * predicate — a pilot who launches and sinks out is correctly scored, and
  * this module must never turn that into a zero. S7A §4.4.6 (Rejection of
@@ -46,13 +46,18 @@
  * have a competition.
  */
 
-import { andoyerDistance, getBoundingBox, isInsideCylinder } from './geo';
+import { ellipsoidDistance, getBoundingBox, isInsideCylinder } from './geo';
 import { fixAltitude, type IGCFix, type IGCHeader } from './igc-parser';
-import { detectTakeoffLanding } from './takeoff-landing-detector';
+import { detectTakeoffLandingIndices } from './takeoff-landing-detector';
+import { km, type KmOptions } from './format-distance';
 import { DEFAULT_THRESHOLDS } from './thresholds';
 import type { XCTask } from './xctsk-parser';
+import { nextDayISO, zonedDayStartMs } from './zone-offset';
 
 const HOUR_MS = 3_600_000;
+
+/** How a finding prints a distance — see {@link KmOptions.wholeAbove100}. */
+const FINDING_KM: KmOptions = { wholeAbove100: true };
 
 export type TrackQualityCheckId =
   | 'wrong-day'
@@ -516,67 +521,6 @@ function checkWrongDay(
   };
 }
 
-/**
- * Epoch ms of local midnight starting `dateISO` ("YYYY-MM-DD") in `timeZone`,
- * or the UTC midnight when the zone is null or unknown to the runtime.
- *
- * Intl only, deliberately: the engine must not pull in a tz-lookup database
- * (see the note in field-analysis/format-time.ts). Guess the instant as if
- * the zone were UTC, read the zone's ACTUAL offset at that guess by
- * formatting back and differencing, correct, then re-probe once — the second
- * pass fixes the ±1 h error when the first guess lands on the far side of a
- * DST transition.
- */
-function zonedDayStartMs(dateISO: string, timeZone: string | null): number | null {
-  const utcGuess = Date.parse(`${dateISO}T00:00:00Z`);
-  if (Number.isNaN(utcGuess)) return null;
-  if (timeZone === null) return utcGuess;
-  try {
-    let ms = utcGuess;
-    for (let pass = 0; pass < 2; pass++) {
-      const offset = zoneOffsetMs(ms, timeZone);
-      const corrected = utcGuess - offset;
-      if (corrected === ms) return ms;
-      ms = corrected;
-    }
-    return ms;
-  } catch {
-    return utcGuess;
-  }
-}
-
-/** Offset of `timeZone` from UTC at `atMs`, in ms (positive east). */
-function zoneOffsetMs(atMs: number, timeZone: string): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  const parts: Record<string, number> = {};
-  for (const p of dtf.formatToParts(new Date(atMs))) {
-    if (p.type !== 'literal') parts[p.type] = Number(p.value);
-  }
-  const asUTC = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour === 24 ? 0 : parts.hour,
-    parts.minute,
-    parts.second
-  );
-  return asUTC - Math.floor(atMs / 1000) * 1000;
-}
-
-function nextDayISO(dateISO: string): string {
-  const ms = Date.parse(`${dateISO}T00:00:00Z`);
-  return new Date(ms + 24 * HOUR_MS).toISOString().slice(0, 10);
-}
-
 /** "9 days", "6 hours", "40 minutes" — the size of a time gap, for prose. */
 function describeGap(ms: number): string {
   const hours = ms / HOUR_MS;
@@ -621,11 +565,11 @@ function checkWrongPlace(
   const box = getBoundingBox(fixes);
   const centreLat = (box.minLat + box.maxLat) / 2;
   const centreLon = (box.minLon + box.maxLon) / 2;
-  const boxRadius = andoyerDistance(centreLat, centreLon, box.maxLat, box.maxLon);
+  const boxRadius = ellipsoidDistance(centreLat, centreLon, box.maxLat, box.maxLon);
 
   let dMin = Infinity;
   for (const tp of task.turnpoints) {
-    const d = andoyerDistance(centreLat, centreLon, tp.waypoint.lat, tp.waypoint.lon);
+    const d = ellipsoidDistance(centreLat, centreLon, tp.waypoint.lat, tp.waypoint.lon);
     if (d < dMin) dMin = d;
   }
 
@@ -638,7 +582,7 @@ function checkWrongPlace(
     for (const fix of fixes) {
       for (const tp of task.turnpoints) {
         if (
-          andoyerDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) <=
+          ellipsoidDistance(fix.latitude, fix.longitude, tp.waypoint.lat, tp.waypoint.lon) <=
           WRONG_PLACE_MAX_APPROACH_M
         ) {
           return null;
@@ -652,7 +596,7 @@ function checkWrongPlace(
   for (let i = 0; i < fixes.length; i++) {
     for (let t = 0; t < task.turnpoints.length; t++) {
       const tp = task.turnpoints[t];
-      const d = andoyerDistance(
+      const d = ellipsoidDistance(
         fixes[i].latitude,
         fixes[i].longitude,
         tp.waypoint.lat,
@@ -668,7 +612,7 @@ function checkWrongPlace(
     severity: 'hard',
     title: 'Track is not at the task location',
     detail:
-      `The closest this track comes to any task turnpoint is ${formatKm(best.meters)} ` +
+      `The closest this track comes to any task turnpoint is ${km(best.meters, 1, FINDING_KM)} ` +
       `(to ${tpName}). A track this far from the whole course cannot be a flight of ` +
       `this task.`,
     evidence: {
@@ -682,12 +626,6 @@ function checkWrongPlace(
   };
 }
 
-function formatKm(meters: number): string {
-  const km = meters / 1000;
-  if (km >= 100) return `${Math.round(km).toLocaleString('en-GB')} km`;
-  return `${km.toFixed(1)} km`;
-}
-
 // ---------------------------------------------------------------------------
 // never-left-takeoff (SOFT)
 // ---------------------------------------------------------------------------
@@ -697,7 +635,7 @@ function formatKm(meters: number): string {
  *
  * SOFT by design: at Corryong the bomb-out landing field is INSIDE the 1 km
  * take-off cylinder, so a pilot who launches, sinks and lands never leaves
- * it — and S7F §5.3 / §8.6.1 award that pilot minimum distance, correctly.
+ * it — and S7F §5.3 / §9.3 award that pilot minimum distance, correctly.
  * This is a prompt for a scorekeeper to check whether the pilot flew at all,
  * not a scoring input.
  *
@@ -727,7 +665,7 @@ function checkNeverLeftTakeoff(
   let maxDistance = 0;
   for (const fix of fixes) {
     if (!isInsideCylinder(fix.latitude, fix.longitude, lat, lon, takeoff.radius)) return null;
-    const d = andoyerDistance(fix.latitude, fix.longitude, lat, lon);
+    const d = ellipsoidDistance(fix.latitude, fix.longitude, lat, lon);
     if (d > maxDistance) maxDistance = d;
   }
 
@@ -738,8 +676,8 @@ function checkNeverLeftTakeoff(
     severity: 'soft',
     title: 'Track never left the take-off cylinder',
     detail:
-      `Every fix is inside the ${formatKm(takeoff.radius)} ${name} take-off cylinder ` +
-      `(furthest ${formatKm(maxDistance)} from the centre over ` +
+      `Every fix is inside the ${km(takeoff.radius, 1, FINDING_KM)} ${name} take-off cylinder ` +
+      `(furthest ${km(maxDistance, 1, FINDING_KM)} from the centre over ` +
       `${Math.round(durationSeconds / 60)} minutes). That is what a pilot who launched ` +
       `and landed straight back looks like — and it is also what a logger left running ` +
       `on launch looks like.`,
@@ -797,7 +735,7 @@ function checkNeverAirborne(fixes: IGCFix[], times: number[]): TrackQualityFindi
   for (let i = 1; i < n; i++) {
     pathLength[i] =
       pathLength[i - 1] +
-      andoyerDistance(
+      ellipsoidDistance(
         fixes[i - 1].latitude,
         fixes[i - 1].longitude,
         fixes[i].latitude,
@@ -856,7 +794,7 @@ function checkNeverAirborne(fixes: IGCFix[], times: number[]): TrackQualityFindi
     while (glideDeque[dequeHead] <= lo) dequeHead++; // the window is (lo, i]
     const minSpeed = speed[glideDeque[dequeHead]];
     const path = pathLength[i] - pathLength[lo];
-    const displacement = andoyerDistance(
+    const displacement = ellipsoidDistance(
       fixes[lo].latitude,
       fixes[lo].longitude,
       fixes[i].latitude,
@@ -883,9 +821,8 @@ function checkNeverAirborne(fixes: IGCFix[], times: number[]): TrackQualityFindi
 
   let maxGain = 0;
   for (const a of altitudes) if (a - altitudes[0] > maxGain) maxGain = a - altitudes[0];
-  const takeoffDetected = detectTakeoffLanding(fixes, DEFAULT_THRESHOLDS).some(
-    (e) => e.type === 'takeoff'
-  );
+  const takeoffDetected =
+    detectTakeoffLandingIndices(fixes, DEFAULT_THRESHOLDS).takeoff !== null;
 
   return {
     id: 'never-airborne',
@@ -962,7 +899,7 @@ function checkImplausibleSpeed(
     const seconds = (times[i] - times[lo]) / 1000;
     if (seconds < SPEED_MIN_WINDOW_SECONDS) continue;
     measured = true;
-    const displacement = andoyerDistance(
+    const displacement = ellipsoidDistance(
       fixes[lo].latitude,
       fixes[lo].longitude,
       fixes[i].latitude,

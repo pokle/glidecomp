@@ -11,17 +11,18 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@better-auth/api-key": "^1.6.25",
-    "better-auth": "^1.6.25",
-    "hono": "^4.12.32",
+    "@better-auth/api-key": "^1.6.26",
+    "@glidecomp/worker-kit": "workspace:*",
+    "better-auth": "^1.6.26",
+    "hono": "^4.13.1",
     "kysely": "^0.28.17",
     "kysely-d1": "^0.4.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/vitest-pool-workers": "^0.19.1",
     "@cloudflare/workers-types": "^4.20260702.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
-    "wrangler": "4.114.0"
+    "wrangler": "4.116.0"
   }
 }

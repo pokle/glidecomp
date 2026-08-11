@@ -12,7 +12,7 @@
  * profile mutations never touch state other specs depend on. Cookie plumbing
  * matches comp-waypoints.spec.ts.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures/test";
 
 const TEST_USER = { name: "Settings UX Fixture", email: "settings-ux@test.local" };
 

@@ -1,9 +1,12 @@
 /**
  * Centralized Geographic Math Module
  *
- * All distance and destination calculations use the WGS84 ellipsoid
- * (Andoyer-Lambert for inverse, Vincenty direct for forward).
- * Bearing and bounding box still use Turf.js (spherical, sufficient accuracy).
+ * All distance and destination calculations use the WGS84 ellipsoid:
+ * Vincenty inverse for distance (S7F 2026 §7.1.4/§7.1.5 — Vincenty 1975 is
+ * one of the spec's three sanctioned InverseGeodesic algorithms, and §7.1.5
+ * requires scoring software to measure distances with InverseGeodesic) and
+ * Vincenty direct for forward. Bearing and bounding box still use Turf.js
+ * (spherical, sufficient accuracy for display).
  *
  * Note: Turf.js uses [longitude, latitude] (GeoJSON standard) while this codebase
  * uses (latitude, longitude). These wrapper functions handle the coordinate swap.
@@ -25,19 +28,12 @@ interface LatLonPoint {
 }
 
 /**
- * Calculate distance between two coordinates using the Andoyer-Lambert formula.
- *
- * Uses the WGS84 ellipsoid for accurate geodesic distance. This is significantly
- * more accurate than Haversine (spherical), matching Vincenty to within ~2 ppm,
- * while being non-iterative and fast.
- *
- * @param lat1 - Latitude of first point (degrees)
- * @param lon1 - Longitude of first point (degrees)
- * @param lat2 - Latitude of second point (degrees)
- * @param lon2 - Longitude of second point (degrees)
- * @returns Distance in meters
+ * Andoyer-Lambert inverse distance — the pre-2026 engine formula, kept ONLY
+ * as the fallback for the vanishingly rare Vincenty non-convergence case
+ * (near-antipodal points, impossible at competition-task scale). Matches
+ * Vincenty to within ~2 ppm.
  */
-export function andoyerDistance(
+function andoyerFallback(
   lat1: number,
   lon1: number,
   lat2: number,
@@ -61,6 +57,176 @@ export function andoyerDistance(
   return D * (1 + WGS84_F * (H1 * sinF * sinF * cosG * cosG - H2 * cosF * cosF * sinG * sinG));
 }
 
+/**
+ * Distance between two coordinates on the WGS84 ellipsoid — the S7F 2026
+ * §7.1.5 EllipsoidDistance, implemented with the Vincenty (1975) inverse
+ * solution (§7.1.4 sanctions Karney, Thomas and Vincenty; all agree to
+ * ±1 mm). This is the engine's ONE inverse-distance function: §7.1.5
+ * requires scoring software to measure every distance with InverseGeodesic,
+ * so there is deliberately no cheaper alternative to reach for.
+ *
+ * Vincenty's inverse iteration can fail to converge for near-antipodal
+ * points; at task scale that cannot occur, but the guard falls back to
+ * Andoyer-Lambert (~2 ppm of Vincenty) rather than return garbage.
+ *
+ * KEEP IN SYNC: the iteration below is duplicated in {@link inverseGeodesic}
+ * (which additionally returns the azimuth); a change here must be mirrored
+ * there. The parity test in tests/geo-math.test.ts pins the two functions to
+ * exactly equal distances.
+ *
+ * @param lat1 - Latitude of first point (degrees)
+ * @param lon1 - Longitude of first point (degrees)
+ * @param lat2 - Latitude of second point (degrees)
+ * @param lon2 - Longitude of second point (degrees)
+ * @returns Distance in meters
+ */
+export function ellipsoidDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  if (lat1 === lat2 && lon1 === lon2) return 0;
+  const toRad = Math.PI / 180;
+  const L = (lon2 - lon1) * toRad;
+  const tanU1 = (1 - WGS84_F) * Math.tan(lat1 * toRad);
+  const cosU1 = 1 / Math.sqrt(1 + tanU1 * tanU1);
+  const sinU1 = tanU1 * cosU1;
+  const tanU2 = (1 - WGS84_F) * Math.tan(lat2 * toRad);
+  const cosU2 = 1 / Math.sqrt(1 + tanU2 * tanU2);
+  const sinU2 = tanU2 * cosU2;
+
+  let lambda = L;
+  let sinLambda: number, cosLambda: number;
+  let sinSigma = 0, cosSigma = 0, sigma = 0;
+  let cosSqAlpha = 0, cos2SigmaM = 0;
+  let lambdaP: number;
+  let iterLimit = 100;
+
+  do {
+    sinLambda = Math.sin(lambda);
+    cosLambda = Math.cos(lambda);
+    const a = cosU2 * sinLambda;
+    const b = cosU1 * sinU2 - sinU1 * cosU2 * cosLambda;
+    sinSigma = Math.sqrt(a * a + b * b);
+    if (sinSigma === 0) return 0; // coincident points
+    cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda;
+    sigma = Math.atan2(sinSigma, cosSigma);
+    const sinAlpha = (cosU1 * cosU2 * sinLambda) / sinSigma;
+    cosSqAlpha = 1 - sinAlpha * sinAlpha;
+    // Equatorial line: cosSqAlpha = 0 makes cos2SigmaM indeterminate; the
+    // standard treatment sets it to 0 (σm at the equator).
+    cos2SigmaM = cosSqAlpha !== 0 ? cosSigma - (2 * sinU1 * sinU2) / cosSqAlpha : 0;
+    const C = (WGS84_F / 16) * cosSqAlpha * (4 + WGS84_F * (4 - 3 * cosSqAlpha));
+    lambdaP = lambda;
+    lambda =
+      L +
+      (1 - C) * WGS84_F * sinAlpha *
+        (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
+  } while (Math.abs(lambda - lambdaP) > 1e-12 && --iterLimit > 0);
+
+  if (iterLimit === 0) return andoyerFallback(lat1, lon1, lat2, lon2);
+
+  const uSq = (cosSqAlpha * (WGS84_A * WGS84_A - WGS84_B * WGS84_B)) / (WGS84_B * WGS84_B);
+  const A = 1 + (uSq / 16384) * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
+  const B = (uSq / 1024) * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
+  const deltaSigma =
+    B * sinSigma *
+    (cos2SigmaM +
+      (B / 4) *
+        (cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM) -
+          (B / 6) * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)));
+  return WGS84_B * A * (sigma - deltaSigma);
+}
+
+
+/**
+ * The S7F 2026 §7.1.4 InverseGeodesic: distance AND initial azimuth between
+ * two points on the WGS84 ellipsoid, by the Vincenty (1975) inverse solution.
+ *
+ * This is {@link ellipsoidDistance}'s sibling for the callers that need the
+ * direction as well — §7.1.7 ProjectionCorrection places a corrected point by
+ * walking a control zone's radius along this azimuth, so the azimuth must be
+ * the geodesic one (a spherical bearing is off by the meridian convergence,
+ * metres of lateral drift at cylinder scale). The two functions deliberately
+ * share nothing at runtime: ellipsoidDistance is the engine's hottest loop
+ * and stays allocation-free, while this one returns a small object.
+ *
+ * Falls back to Andoyer-Lambert distance and the spherical bearing on the
+ * (near-antipodal, impossible at task scale) non-convergence case.
+ *
+ * KEEP IN SYNC: the iteration below duplicates {@link ellipsoidDistance}'s;
+ * a change here must be mirrored there. The parity test in
+ * tests/geo-math.test.ts pins the two functions to exactly equal distances.
+ *
+ * @returns `distance` in metres and `azimuth` in radians clockwise from
+ *   north, at the first point.
+ */
+export function inverseGeodesic(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): { distance: number; azimuth: number } {
+  if (lat1 === lat2 && lon1 === lon2) return { distance: 0, azimuth: 0 };
+  const toRad = Math.PI / 180;
+  const L = (lon2 - lon1) * toRad;
+  const tanU1 = (1 - WGS84_F) * Math.tan(lat1 * toRad);
+  const cosU1 = 1 / Math.sqrt(1 + tanU1 * tanU1);
+  const sinU1 = tanU1 * cosU1;
+  const tanU2 = (1 - WGS84_F) * Math.tan(lat2 * toRad);
+  const cosU2 = 1 / Math.sqrt(1 + tanU2 * tanU2);
+  const sinU2 = tanU2 * cosU2;
+
+  let lambda = L;
+  let sinLambda = 0, cosLambda = 0;
+  let sinSigma = 0, cosSigma = 0, sigma = 0;
+  let cosSqAlpha = 0, cos2SigmaM = 0;
+  let lambdaP: number;
+  let iterLimit = 100;
+
+  do {
+    sinLambda = Math.sin(lambda);
+    cosLambda = Math.cos(lambda);
+    const a = cosU2 * sinLambda;
+    const b = cosU1 * sinU2 - sinU1 * cosU2 * cosLambda;
+    sinSigma = Math.sqrt(a * a + b * b);
+    if (sinSigma === 0) return { distance: 0, azimuth: 0 }; // coincident
+    cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda;
+    sigma = Math.atan2(sinSigma, cosSigma);
+    const sinAlpha = (cosU1 * cosU2 * sinLambda) / sinSigma;
+    cosSqAlpha = 1 - sinAlpha * sinAlpha;
+    cos2SigmaM = cosSqAlpha !== 0 ? cosSigma - (2 * sinU1 * sinU2) / cosSqAlpha : 0;
+    const C = (WGS84_F / 16) * cosSqAlpha * (4 + WGS84_F * (4 - 3 * cosSqAlpha));
+    lambdaP = lambda;
+    lambda =
+      L +
+      (1 - C) * WGS84_F * sinAlpha *
+        (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
+  } while (Math.abs(lambda - lambdaP) > 1e-12 && --iterLimit > 0);
+
+  if (iterLimit === 0) {
+    return {
+      distance: andoyerFallback(lat1, lon1, lat2, lon2),
+      azimuth: calculateBearingRadians(lat1, lon1, lat2, lon2),
+    };
+  }
+
+  const uSq = (cosSqAlpha * (WGS84_A * WGS84_A - WGS84_B * WGS84_B)) / (WGS84_B * WGS84_B);
+  const A = 1 + (uSq / 16384) * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
+  const B = (uSq / 1024) * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
+  const deltaSigma =
+    B * sinSigma *
+    (cos2SigmaM +
+      (B / 4) *
+        (cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM) -
+          (B / 6) * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)));
+  const azimuth = Math.atan2(
+    cosU2 * sinLambda,
+    cosU1 * sinU2 - sinU1 * cosU2 * cosLambda
+  );
+  return { distance: WGS84_B * A * (sigma - deltaSigma), azimuth };
+}
 
 /**
  * Calculate bearing from point 1 to point 2 in degrees.
@@ -85,8 +251,24 @@ export function calculateBearing(
 }
 
 /**
+ * Compass bearing of a vector already expressed in local east/north metres.
+ *
+ * The sibling of {@link calculateBearing} for the components case: a drift, a
+ * slope or a wind vector projected into a tangent frame (see
+ * {@link localEastNorth}) rather than a pair of coordinates.
+ *
+ * @param east - East component (+E)
+ * @param north - North component (+N)
+ * @returns Bearing in degrees, in [0, 360) clockwise from north
+ */
+export function bearingFromComponents(east: number, north: number): number {
+  return ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+}
+
+/**
  * Calculate bearing from point 1 to point 2 in radians.
- * Used internally by xctsk-parser for task optimization.
+ * Used by goal-line.ts (line orientation) and by inverseGeodesic's
+ * non-convergence fallback.
  *
  * @param lat1 - Latitude of start point (degrees)
  * @param lon1 - Longitude of start point (degrees)
@@ -234,7 +416,7 @@ export function calculateTrackDistance(
 ): number {
   let total = 0;
   for (let i = startIndex; i < endIndex; i++) {
-    total += andoyerDistance(
+    total += ellipsoidDistance(
       fixes[i].latitude, fixes[i].longitude,
       fixes[i + 1].latitude, fixes[i + 1].longitude
     );
@@ -243,12 +425,33 @@ export function calculateTrackDistance(
 }
 
 /**
+ * Metres per degree of latitude and of longitude at a given latitude, from the
+ * WGS84 series expansion. Good to sub-metre over a competition-task area.
+ *
+ * This is the ONE spelling of the formula in the engine: {@link localEastNorth},
+ * the track packer's ENU projection and the thermal-shape inverse all read it
+ * from here.
+ *
+ * @param lat - Latitude in degrees
+ * @returns `mPerDegLat` and `mPerDegLon` at that latitude
+ */
+export function metresPerDegree(lat: number): { mPerDegLat: number; mPerDegLon: number } {
+  const latRad = (lat * Math.PI) / 180;
+  const mPerDegLat =
+    111132.92 - 559.82 * Math.cos(2 * latRad) + 1.175 * Math.cos(4 * latRad);
+  const mPerDegLon =
+    111412.84 * Math.cos(latRad) - 93.5 * Math.cos(3 * latRad) +
+    0.118 * Math.cos(5 * latRad);
+  return { mPerDegLat, mPerDegLon };
+}
+
+/**
  * Project a point into a local east/north tangent frame around a reference
- * point, in metres. Uses an equirectangular approximation with the WGS84
- * metres-per-degree series at the reference latitude — sub-metre accurate
+ * point, in metres. Uses an equirectangular approximation with
+ * {@link metresPerDegree} at the reference latitude — sub-metre accurate
  * within a few kilometres of the reference. Intended for local intersection
  * tests (e.g. a track segment against a goal line), NOT for long-range
- * distances — use {@link andoyerDistance} for those.
+ * distances — use {@link ellipsoidDistance} for those.
  *
  * @param refLat - Reference (origin) latitude in degrees
  * @param refLon - Reference (origin) longitude in degrees
@@ -262,15 +465,7 @@ export function localEastNorth(
   lat: number,
   lon: number
 ): { east: number; north: number } {
-  const refLatRad = (refLat * Math.PI) / 180;
-  // WGS84 series expansion for metres per degree at the reference latitude
-  // (same formula as the track packer's projection; good to sub-metre over
-  // a competition-task area).
-  const mPerDegLat =
-    111132.92 - 559.82 * Math.cos(2 * refLatRad) + 1.175 * Math.cos(4 * refLatRad);
-  const mPerDegLon =
-    111412.84 * Math.cos(refLatRad) - 93.5 * Math.cos(3 * refLatRad) +
-    0.118 * Math.cos(5 * refLatRad);
+  const { mPerDegLat, mPerDegLon } = metresPerDegree(refLat);
   return {
     east: (lon - refLon) * mPerDegLon,
     north: (lat - refLat) * mPerDegLat,
@@ -294,7 +489,7 @@ export function isInsideCylinder(
   centerLon: number,
   radius: number
 ): boolean {
-  const dist = andoyerDistance(lat, lon, centerLat, centerLon);
+  const dist = ellipsoidDistance(lat, lon, centerLat, centerLon);
   return dist <= radius;
 }
 

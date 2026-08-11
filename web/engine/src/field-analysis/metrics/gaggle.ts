@@ -16,6 +16,7 @@
  */
 
 import { median } from '../stats';
+import { na } from './util';
 import type { FieldContext, MetricComputer, MetricOutput, PilotMetricValue } from '../types';
 
 /** A marker must have entered the thermal at least this long before the pilot. */
@@ -72,7 +73,7 @@ const affinity: MetricComputer = {
     const stepMs = grid.stepSeconds * 1000;
     const perPilot = field.pilots.map((p): PilotMetricValue => {
       if (p.sssMs === null || p.track.endStep < 0) {
-        return { trackFile: p.trackFile, value: null };
+        return na(p);
       }
       // First grid step whose absolute time is at/after the pilot's start.
       const firstStep = Math.max(0, Math.ceil((p.sssMs - grid.t0Ms) / stepMs));
@@ -83,7 +84,7 @@ const affinity: MetricComputer = {
         sampled++;
         if (stepMembers[i]?.has(p.pilotIndex)) inGaggle++;
       }
-      if (sampled === 0) return { trackFile: p.trackFile, value: null };
+      if (sampled === 0) return na(p);
       return { trackFile: p.trackFile, value: (100 * inGaggle) / sampled };
     });
 
@@ -138,7 +139,7 @@ const markerUsage: MetricComputer = {
 
     const perPilot = field.pilots.map((p): PilotMetricValue => {
       const n = uses[p.pilotIndex];
-      if (n < MIN_MARKER_USES) return { trackFile: p.trackFile, value: null };
+      if (n < MIN_MARKER_USES) return na(p);
       const m = marked[p.pilotIndex];
       return {
         trackFile: p.trackFile,
@@ -240,7 +241,7 @@ const departureWinrate: MetricComputer = {
 
     const perPilot = field.pilots.map((p): PilotMetricValue => {
       const d = departures[p.pilotIndex];
-      if (d === 0) return { trackFile: p.trackFile, value: null };
+      if (d === 0) return na(p);
       const w = wins[p.pilotIndex];
       return {
         trackFile: p.trackFile,

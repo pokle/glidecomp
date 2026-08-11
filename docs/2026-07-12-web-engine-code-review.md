@@ -81,7 +81,7 @@ if (params.nominalDistance === undefined) { ... }   // never true
 `gapParams` from `JSON.parse(...)` or `{}` — JSON never yields `undefined` — so any comp
 without an explicit stored `nominalDistance` is scored here with 70 km, while the official
 scoring path (`web/workers/competition-api/src/scoring.ts:462-467`) derives it from the task.
-The replay legend's ranks/scores can contradict the published standings beside them. Mirror
+The replay legend's ranks/scores can contradict the published scores beside them. Mirror
 the `!gapParams.nominalDistance` check *before* merging defaults. (`cli/bench-task.ts` inherits
 the same divergence.)
 

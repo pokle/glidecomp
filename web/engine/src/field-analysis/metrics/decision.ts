@@ -19,6 +19,9 @@ import type {
   PilotMetricValue,
 } from '../types';
 import { mean, median, percentile } from '../stats';
+import { sharedClimbPercentiles } from '../shared-thermals';
+import { pushInto } from '../util';
+import { na } from './util';
 
 // --- Tunables (named constants so the explanations stay honest) -------------
 
@@ -33,31 +36,16 @@ const MIN_FLOWN_DISTANCE_METERS = 20_000;
 
 // --- Small shared helpers ---------------------------------------------------
 
-/** A null (not-applicable) per-pilot value. */
-function na(p: PilotAnalysisContext): PilotMetricValue {
-  return { trackFile: p.trackFile, value: null };
-}
-
 /**
- * Per-pilot climb percentiles within multi-pilot shared thermals, ranked as
- * the P1 spec does: within one shared thermal a use's percentile is
- * 100·(#uses with strictly lower avgClimbRate)/(n−1).
+ * Per-pilot climb percentiles within multi-pilot shared thermals — the P1
+ * ranking (shared-thermals' sharedClimbPercentiles), grouped by pilot. This
+ * consumer takes the percentiles UNWEIGHTED; climb.shared_percentile's
+ * duration weighting is deliberately that metric's own.
  */
-function sharedClimbPercentiles(field: FieldContext): Map<number, number[]> {
+function sharedClimbPctsByPilot(field: FieldContext): Map<number, number[]> {
   const byPilot = new Map<number, number[]>();
-  for (const st of field.sharedThermals) {
-    if (st.pilotCount < 2 || st.uses.length < 2) continue;
-    const n = st.uses.length;
-    for (const use of st.uses) {
-      let slower = 0;
-      for (const other of st.uses) {
-        if (other.avgClimbRate < use.avgClimbRate) slower++;
-      }
-      const pct = (100 * slower) / (n - 1);
-      let list = byPilot.get(use.pilotIndex);
-      if (!list) byPilot.set(use.pilotIndex, (list = []));
-      list.push(pct);
-    }
+  for (const { use, percentile: pct } of sharedClimbPercentiles(field.sharedThermals)) {
+    pushInto(byPilot, use.pilotIndex, pct);
   }
   return byPilot;
 }
@@ -197,7 +185,7 @@ const kmBetweenClimbs: MetricComputer = {
     'climb strength. Long legs between weak climbs is a different day from long legs between ' +
     'strong ones.',
   compute(field: FieldContext): MetricOutput {
-    const pctByPilot = sharedClimbPercentiles(field);
+    const pctByPilot = sharedClimbPctsByPilot(field);
     const perPilot = field.pilots.map((p): PilotMetricValue => {
       if (p.sssMs === null) return na(p);
       if (p.score.flownDistance < MIN_FLOWN_DISTANCE_METERS) return na(p);

@@ -1,7 +1,7 @@
 /**
- * Record a manual flight for a track-less pilot (issue #306, FAI S7F §8.4).
+ * Record a manual flight for a track-less pilot (issue #306, FAI S7F §9.2.2).
  *
- * RAC EXPLORATION (see pages/TaskDetail.tsx): RAC Modal/Form/TextField/
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Modal/Form/TextField/
  * NumberField/Select. The coordinates field uses RAC's `validate` so "must be
  * lat, lon" shows inline as the user types, not as a toast on save.
  *

@@ -1,8 +1,10 @@
 /**
- * GAP goal LINE scoring (S7F §6.3.1).
+ * GAP goal LINE scoring (S7F §6.2.3.1 geometry, §9.1.3 tolerance, §9.2.3
+ * reaching).
  *
  * Covers the goal-line geometry module, crossing detection and sequence
- * resolution against a line goal, the optimised route ending on the line,
+ * resolution against a line goal, the line's tolerance band and the
+ * direction requirement, the optimised route ending on the line,
  * manual-flight distance to the line, and the goal line in the 3D-replay
  * manifest.
  */
@@ -10,9 +12,12 @@ import { describe, it, expect } from 'bun:test';
 import {
   computeGoalLine,
   distanceToGoalLine,
+  goalLineCrossing,
   goalLineCrossingFraction,
   goalLinePointAt,
+  goalLineToleranceM,
   goalSemicirclePoints,
+  goalZoneRadius,
   isForwardGoalCrossing,
   isInGoalSemicircle,
 } from '../src/goal-line';
@@ -25,7 +30,7 @@ import { explainGapScore, type ScoreEntryInput, type ClassContextInput } from '.
 import { calculateOptimizedTaskDistance, calculateOptimizedTaskLine } from '../src/task-optimizer';
 import { manualFlightGeometry } from '../src/manual-flight';
 import { packTracks } from '../src/track-packer';
-import { andoyerDistance, destinationPoint } from '../src/geo';
+import { ellipsoidDistance, destinationPoint } from '../src/geo';
 import type { XCTask, GoalConfig } from '../src/xctsk-parser';
 import { createFix, type IGCFix } from './test-helpers';
 
@@ -93,8 +98,8 @@ describe('computeGoalLine', () => {
 
     // Final leg runs due east → the line runs north–south: end1 north of the
     // centre (left of course), end2 south, both 200 m away.
-    expect(andoyerDistance(line.end1.lat, line.end1.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
-    expect(andoyerDistance(line.end2.lat, line.end2.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
+    expect(ellipsoidDistance(line.end1.lat, line.end1.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
+    expect(ellipsoidDistance(line.end2.lat, line.end2.lon, GOAL.lat, GOAL.lon)).toBeCloseTo(200, 0);
     expect(line.end1.lat).toBeGreaterThan(GOAL.lat);
     expect(line.end2.lat).toBeLessThan(GOAL.lat);
     expect(line.end1.lon).toBeCloseTo(GOAL.lon, 5);
@@ -102,7 +107,7 @@ describe('computeGoalLine', () => {
 
     // The full line spans 2 × radius.
     expect(
-      andoyerDistance(line.end1.lat, line.end1.lon, line.end2.lat, line.end2.lon)
+      ellipsoidDistance(line.end1.lat, line.end1.lon, line.end2.lat, line.end2.lon)
     ).toBeCloseTo(400, 0);
   });
 
@@ -170,14 +175,14 @@ describe('goal line predicates', () => {
 
   it('parameterises the line from end1 to end2', () => {
     const mid = goalLinePointAt(line, 0.5);
-    expect(andoyerDistance(mid.lat, mid.lon, GOAL.lat, GOAL.lon)).toBeLessThan(1);
+    expect(ellipsoidDistance(mid.lat, mid.lon, GOAL.lat, GOAL.lon)).toBeLessThan(1);
   });
 
   it('semicircle outline lies behind the line at the goal radius', () => {
     const points = goalSemicirclePoints(line, 16);
     expect(points[0]).toEqual(points[points.length - 1]); // closed
     for (const p of points) {
-      expect(andoyerDistance(p.lat, p.lon, GOAL.lat, GOAL.lon)).toBeLessThanOrEqual(201);
+      expect(ellipsoidDistance(p.lat, p.lon, GOAL.lat, GOAL.lon)).toBeLessThanOrEqual(201);
       // Everything is on the far (east) side of the line, within ~0.5 m.
       expect(p.lon).toBeGreaterThanOrEqual(GOAL.lon - 5e-6);
     }
@@ -217,7 +222,12 @@ describe('optimised route with a LINE goal', () => {
     );
     const lineDistance = calculateOptimizedTaskDistance(task);
     const centerDistance = calculateOptimizedTaskDistance(centerTask);
-    expect(lineDistance).toBeLessThanOrEqual(centerDistance + 1);
+    // Under the 2026 §6.2.3.1 orientation the line is perpendicular to the
+    // OPTIMISED approach, so the line route meets it essentially at the
+    // centre: the two distances agree to within the optimiser's metre-scale
+    // convergence (they are no longer metres apart as under the old
+    // centre-based orientation).
+    expect(lineDistance).toBeLessThanOrEqual(centerDistance + 3);
   });
 });
 
@@ -318,6 +328,162 @@ describe('sequence resolution with a LINE goal', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Line tolerance (§9.1.2) and the direction requirement (§9.2.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * A point in the goal line's own frame, from the goal centre: `along` metres
+ * in the course direction (east, positive = behind the line) and `across`
+ * metres along the line (north positive).
+ */
+function atLine(along: number, across: number): { lat: number; lon: number } {
+  const onLine = destinationPoint(GOAL.lat, GOAL.lon, Math.abs(across), across >= 0 ? 0 : Math.PI);
+  return destinationPoint(
+    onLine.lat, onLine.lon, Math.abs(along), along >= 0 ? Math.PI / 2 : -Math.PI / 2,
+  );
+}
+
+/** The on-course prefix that gets a pilot legally as far as TP1. */
+function toTP1(): IGCFix[] {
+  return eastboundTrack(47.0, 10.95, 11.2);
+}
+
+describe('goal line tolerance (S7F §9.1.3, §9.2.3)', () => {
+  const line = computeGoalLine(lineGoalTask())!; // halfWidth 200 m
+
+  it('is the fixed 5 m band whatever the line length (S7F 2026 §9.1.1)', () => {
+    // The relative (percentage) term is fixed at 0%, so the band is the 5 m
+    // absolute minimum on a 400 m line…
+    expect(goalLineToleranceM(line)).toBeCloseTo(5, 6);
+    // …and still 5 m on a 10 km line.
+    const wide = computeGoalLine(lineGoalTask('LINE', 5000))!;
+    expect(goalLineToleranceM(wide)).toBeCloseTo(5, 6);
+  });
+
+  it('gives the control semicircle the §9.1.1 cylinder band, not the line band', () => {
+    // §9.2.3 sends the control zone to the cylinder calculation: the outer
+    // detection radius of the 200 m half-width — the fixed +5 m band.
+    expect(goalZoneRadius(line)).toBeCloseTo(205, 6);
+    const wide = computeGoalLine(lineGoalTask('LINE', 5000))!;
+    expect(goalZoneRadius(wide)).toBeCloseTo(5005, 6);
+  });
+
+  it('credits a crossing that clips just past the end of the line', () => {
+    // 203 m north of the centre: past the 200 m endpoint, inside the 5 m band.
+    const from = atLine(-500, 203);
+    const to = atLine(500, 203);
+    const hit = goalLineCrossing(line, from, to, goalLineToleranceM(line));
+    expect(hit).not.toBeNull();
+    expect(hit!.toleranceCredited).toBe(true);
+    // Without the band it is not a crossing at all.
+    expect(goalLineCrossing(line, from, to)).toBeNull();
+  });
+
+  it('does not credit a crossing beyond the band', () => {
+    const from = atLine(-500, 210);
+    const to = atLine(500, 210);
+    expect(goalLineCrossing(line, from, to, goalLineToleranceM(line))).toBeNull();
+  });
+
+  it('scores goal for a pilot who clipped the end of the line', () => {
+    const fixes: IGCFix[] = [
+      ...toTP1(),
+      createFix(30 * 60, atLine(-500, 203).lat, atLine(-500, 203).lon),
+      createFix(31 * 60, atLine(500, 203).lat, atLine(500, 203).lon),
+    ];
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    expect(result.madeGoal).toBe(true);
+    // The report card must be able to say the band is why.
+    const goalReaching = result.sequence.find((r) => r.taskIndex === 2)!;
+    expect(goalReaching.toleranceCredited).toBe(true);
+    expect(goalReaching.goalSemicircleCredited).toBeUndefined();
+  });
+
+  it('does not score goal for a pilot who missed the end by more than the band', () => {
+    const fixes: IGCFix[] = [
+      ...toTP1(),
+      createFix(30 * 60, atLine(-500, 210).lat, atLine(-500, 210).lon),
+      createFix(31 * 60, atLine(500, 210).lat, atLine(500, 210).lon),
+    ];
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    expect(result.madeGoal).toBe(false);
+    expect(result.lastTurnpointReached).toBe(1);
+  });
+
+  it('ignores a declared task tolerance — the S7F 2026 band is fixed at ±5 m', () => {
+    // A declared 5% would have reached 20 m past the end. Under the 2026
+    // fixed band a crossing 210 m out (10 m past the end) stays uncredited,
+    // whatever the task file declares.
+    const task = { ...lineGoalTask(), cylinderTolerance: 0.05 };
+    const fixes: IGCFix[] = [
+      ...toTP1(),
+      createFix(30 * 60, atLine(-500, 210).lat, atLine(-500, 210).lon),
+      createFix(31 * 60, atLine(500, 210).lat, atLine(500, 210).lon),
+    ];
+    expect(resolveTurnpointSequence(task, fixes).madeGoal).toBe(false);
+  });
+
+  it('leaves an ordinary crossing exactly where it was, uncredited', () => {
+    const fixes = eastboundTrack(47.0, 10.95, 11.31);
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    const goalReaching = result.sequence.find((r) => r.taskIndex === 2)!;
+    expect(goalReaching.toleranceCredited).toBe(false);
+    // Straight through the middle of the line: the crossing is at the centre.
+    expect(goalReaching.longitude).toBeCloseTo(GOAL.lon, 6);
+  });
+
+  it('credits a fix in the semicircle\'s tolerance band', () => {
+    // 203 m behind the centre: outside the nominal 200 m semicircle, inside
+    // the 205 m band §9.2.3 gives it. Approached from the north-east, so
+    // there is no line crossing to credit instead.
+    const landing = atLine(203, 0);
+    const fixes: IGCFix[] = [
+      ...toTP1(),
+      createFix(30 * 60, 47.02, 11.28),
+      createFix(32 * 60, landing.lat, landing.lon),
+    ];
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    expect(result.madeGoal).toBe(true);
+    expect(result.sequence.find((r) => r.taskIndex === 2)!.goalSemicircleCredited).toBe(true);
+  });
+});
+
+describe('goal line crossing direction (S7F §9.2.3)', () => {
+  /**
+   * Get behind the line without crossing it (around the north end, well
+   * outside the control semicircle), then cross it westwards — the wrong way
+   * down the course.
+   */
+  function wrongWayFixes(): IGCFix[] {
+    return [
+      ...toTP1(),
+      createFix(30 * 60, atLine(800, 1000).lat, atLine(800, 1000).lon), // around the end
+      createFix(31 * 60, atLine(800, 150).lat, atLine(800, 150).lon), // behind the line
+      createFix(32 * 60, atLine(-800, 150).lat, atLine(-800, 150).lon), // back across it
+    ];
+  }
+
+  it('does not credit goal for a pilot crossing the line the wrong way', () => {
+    const result = resolveTurnpointSequence(lineGoalTask(), wrongWayFixes());
+    expect(result.madeGoal).toBe(false);
+    // …and the wrong-way crossing is not recorded as a goal crossing at all.
+    expect(result.crossings.filter((c) => c.taskIndex === 2)).toEqual([]);
+  });
+
+  it('credits the same geometry flown in the course direction', () => {
+    const fixes: IGCFix[] = [
+      ...toTP1(),
+      createFix(30 * 60, atLine(-800, 150).lat, atLine(-800, 150).lon),
+      createFix(31 * 60, atLine(800, 150).lat, atLine(800, 150).lon),
+    ];
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    expect(result.madeGoal).toBe(true);
+    expect(result.crossings.filter((c) => c.taskIndex === 2).map((c) => c.direction))
+      .toEqual(['enter', 'exit']);
+  });
+});
+
 describe('detectCylinderCrossings with a LINE goal', () => {
   it('still detects cylinder crossings for non-goal turnpoints', () => {
     const fixes = eastboundTrack(47.0, 10.95, 11.31);
@@ -408,7 +574,21 @@ describe('score explanation with a LINE goal', () => {
     expect(goal!.detail).toContain('counts as goal');
   });
 
-  it('describes a land-out as closest to the goal line', () => {
+  it('explains a goal credited by the line tolerance band', () => {
+    const fixes: IGCFix[] = [
+      ...toTP1(),
+      createFix(30 * 60, atLine(-500, 203).lat, atLine(-500, 203).lon),
+      createFix(31 * 60, atLine(500, 203).lat, atLine(500, 203).lon),
+    ];
+    const result = resolveTurnpointSequence(lineGoalTask(), fixes);
+    const { goal } = goalItem(result);
+    expect(goal!.detail).toContain('§9.1.3');
+    expect(goal!.detail).toContain('just past the end of the goal line');
+    // The cylinder note must not be the one that shows up.
+    expect(goal!.detail).not.toContain('§9.1.1');
+  });
+
+  it('describes a land-out by its least remaining distance to the goal line', () => {
     const oneKmShort = destinationPoint(GOAL.lat, GOAL.lon, 1000, -Math.PI / 2);
     const fixes: IGCFix[] = [
       ...eastboundTrack(47.0, 10.95, 11.24),
@@ -418,7 +598,7 @@ describe('score explanation with a LINE goal', () => {
     const { flight } = goalItem(result);
     const bestProgress = flight.items.find((i) => i.id === 'best-progress');
     expect(bestProgress).toBeDefined();
-    expect(bestProgress!.detail).toContain('closest to the goal line');
+    expect(bestProgress!.detail).toContain('least distance still to fly to the goal line');
   });
 });
 

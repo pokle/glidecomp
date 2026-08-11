@@ -13,7 +13,8 @@
 
 import type { IGCFix } from '../igc-parser';
 import type { ThermalSegment } from '../event-types';
-import { andoyerDistance } from '../geo';
+import { ellipsoidDistance } from '../geo';
+import { pushInto } from './util';
 
 /** One pilot's use of one thermal (a flattened ThermalSegment). */
 export interface ThermalUse {
@@ -128,7 +129,7 @@ export function clusterSharedThermals(
       // Sorted by startMs, so once b starts after a's window no later b can link to a.
       if (b.startMs > a.endMs + gapMs) break;
       if (find(i) === find(j)) continue;
-      if (andoyerDistance(a.lat, a.lon, b.lat, b.lon) <= maxDistanceMeters) {
+      if (ellipsoidDistance(a.lat, a.lon, b.lat, b.lon) <= maxDistanceMeters) {
         parent[find(i)] = find(j);
       }
     }
@@ -136,37 +137,78 @@ export function clusterSharedThermals(
 
   const byRoot = new Map<number, ThermalUse[]>();
   for (let i = 0; i < uses.length; i++) {
-    const r = find(i);
-    let g = byRoot.get(r);
-    if (!g) byRoot.set(r, (g = []));
-    g.push(uses[i]);
+    pushInto(byRoot, find(i), uses[i]);
   }
 
   const shared: SharedThermal[] = [];
   for (const group of byRoot.values()) {
-    let lat = 0;
-    let lon = 0;
-    let startMs = Infinity;
-    let endMs = -Infinity;
-    const pilotSet = new Set<number>();
-    for (const u of group) {
-      lat += u.lat;
-      lon += u.lon;
-      startMs = Math.min(startMs, u.startMs);
-      endMs = Math.max(endMs, u.endMs);
-      pilotSet.add(u.pilotIndex);
-    }
-    shared.push({
-      id: 0, // assigned after the chronological sort below
-      uses: group,
-      lat: lat / group.length,
-      lon: lon / group.length,
-      startMs,
-      endMs,
-      pilotCount: pilotSet.size,
-    });
+    shared.push(assembleSharedThermal(0, group)); // ids assigned after the chronological sort below
   }
   shared.sort((a, b) => a.startMs - b.startMs);
   shared.forEach((s, i) => (s.id = i));
   return shared;
+}
+
+/**
+ * Assemble a SharedThermal from its uses: centroid of the use positions,
+ * union time extent, distinct pilot count, uses ascending by startMs. The id
+ * is the caller's to manage — {@link clusterSharedThermals} stamps
+ * chronological ids only after every group is assembled and sorted, and
+ * thermal-shape's oversized-cluster splitter re-stamps them the same way
+ * after splitting.
+ */
+export function assembleSharedThermal(id: number, uses: ThermalUse[]): SharedThermal {
+  let lat = 0;
+  let lon = 0;
+  let startMs = Infinity;
+  let endMs = -Infinity;
+  const pilotSet = new Set<number>();
+  for (const u of uses) {
+    lat += u.lat;
+    lon += u.lon;
+    startMs = Math.min(startMs, u.startMs);
+    endMs = Math.max(endMs, u.endMs);
+    pilotSet.add(u.pilotIndex);
+  }
+  return {
+    id,
+    uses: [...uses].sort((a, b) => a.startMs - b.startMs),
+    lat: lat / uses.length,
+    lon: lon / uses.length,
+    startMs,
+    endMs,
+    pilotCount: pilotSet.size,
+  };
+}
+
+/** One use's climb rank within its multi-pilot shared thermal. */
+export interface SharedClimbPercentile {
+  use: ThermalUse;
+  /** 100·(uses strictly slower)/(n − 1) among the thermal's uses. */
+  percentile: number;
+}
+
+/**
+ * Every use's climb percentile within its shared thermal, in sharedThermals /
+ * uses order. Only thermals with two or more pilots AND two or more uses
+ * rank — a singleton says nothing about centring, and one pilot's repeated
+ * uses of the same thermal are not a field to be ranked against alone.
+ *
+ * The shared thermal is what separates centring skill from thermal selection,
+ * so this ranking backs both climb.shared_percentile (duration-weighted mean
+ * per pilot) and decision.km_between_climbs' note (plain per-pilot mean).
+ */
+export function sharedClimbPercentiles(sharedThermals: SharedThermal[]): SharedClimbPercentile[] {
+  const out: SharedClimbPercentile[] = [];
+  for (const st of sharedThermals) {
+    if (st.pilotCount < 2 || st.uses.length < 2) continue;
+    for (const u of st.uses) {
+      let slower = 0;
+      for (const v of st.uses) {
+        if (v.avgClimbRate < u.avgClimbRate) slower++;
+      }
+      out.push({ use: u, percentile: (100 * slower) / (st.uses.length - 1) });
+    }
+  }
+  return out;
 }

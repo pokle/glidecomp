@@ -32,6 +32,11 @@ import { NotFound } from "./components/NotFound";
  * produce. See functions/comp/[[path]].ts ROUTES for the authoritative list.
  */
 import { Competitions } from "./pages/Competitions";
+// Eager, not lazy: this is the homepage's primary call to action, so a pilot
+// arriving on it must not pay a second round trip for the chunk. It is
+// SSR-safe (no module-scope browser globals) even though /submit is never
+// server-rendered.
+import { SubmitTrack } from "./pages/SubmitTrack";
 import { CompDetail } from "./pages/CompDetail";
 import { CompScoresPage } from "./pages/CompScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
@@ -126,11 +131,13 @@ export function AppRoutes() {
         <Route path="/signin" element={<SignIn />} />
         <Route element={<Shell />}>
           <Route path="/u/:username" element={<Dashboard />} />
+          {/* Inside Shell: /submit is a destination with somewhere to go
+              afterwards, not a dead end like /signin. */}
+          <Route path="/submit" element={<SubmitTrack />} />
           <Route path="/comp" element={<Competitions />} />
           <Route path="/comp/:compId" element={<CompDetail />} />
           <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
-          {/* Admin-only roster editor — noindex shell in the SSR Function, like
-              the field-analysis pages. */}
+          {/* Admin-only roster editor — noindex shell in the SSR Function. */}
           <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
           <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
           {/* Field analysis (behavioural metrics). One report per competition,

@@ -8,8 +8,8 @@
 
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, andoyerDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
-import type { MapProvider, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, ellipsoidDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
+import type { MapProvider, MapBounds, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
@@ -192,7 +192,7 @@ function findNearbyLabels(
         name,
         lat,
         lon,
-        distanceM: andoyerDistance(tap.lat, tap.lng, lat, lon),
+        distanceM: ellipsoidDistance(tap.lat, tap.lng, lat, lon),
         elevation: elevation ?? undefined,
         withinTapPx: d <= PEAK_AUTO_SNAP_RADIUS_PX,
       };
@@ -286,8 +286,12 @@ export function createMapBoxProvider(
       let bestProgressRouteData: BestProgressRoute | null = null;
       let multiTrackClickCallback: ((trackIndex: number, fixIndex: number) => void) | null = null;
       let isMultiTrackMode = false;
-      // 3D multi-track state
+      // 3D multi-track state. The track polylines live for as long as the
+      // multi-track view does; the scrubber's position markers are rebuilt on
+      // every scrub. They are kept apart so a scrub can clear its own markers
+      // without taking the tracks with them.
       let multiTrack3DObjects: unknown[] = [];
+      let multiTrackMarkerObjects: unknown[] = [];
       let speedOverlayMarkers: mapboxgl.Marker[] = [];
 
       // HUD crosshair marker (separate from activeMarkers so segment markers aren't cleared)
@@ -319,6 +323,14 @@ export function createMapBoxProvider(
 
       // Annotation layer (created after map loads)
       let annotationLayer: MapAnnotationLayer | null = null;
+
+      // The 'load' latch. The provider object cannot be handed back until the
+      // style is up AND the object itself exists, and those two happen at
+      // opposite ends of this function. Recording that 'load' fired — rather
+      // than reaching forward for a `const` that may not be initialised yet —
+      // makes the order between them irrelevant.
+      let mapLoaded = false;
+      let onMapLoaded: (() => void) | null = null;
 
       /** Hide glide speed labels when zoomed out and resolve screen-space collisions. */
       function updateGlideLabelVisibility(): void {
@@ -1081,7 +1093,7 @@ export function createMapBoxProvider(
           // the scrubbed view.
           const scrub = trackScrubIndex;
           renderer.setTrack(currentFixes);
-          if (scrub != null) renderer.setTrackScrub?.(scrub);
+          if (scrub != null) renderer.setTrackScrub(scrub);
         }
         if (currentTask) {
           renderer.setTask(currentTask);
@@ -1090,13 +1102,13 @@ export function createMapBoxProvider(
           renderer.setEvents(currentEvents);
         }
         if (openDistanceLineData.length > 0) {
-          renderer.setOpenDistanceLines?.(openDistanceLineData);
+          renderer.setOpenDistanceLines(openDistanceLineData);
         }
         if (bestProgressRouteData) {
-          renderer.setBestProgressRoute?.(bestProgressRouteData);
+          renderer.setBestProgressRoute(bestProgressRouteData);
         }
         if (waypointsData.length > 0) {
-          renderer.setWaypoints?.(waypointsData);
+          renderer.setWaypoints(waypointsData);
         }
         updateTrackRendering();
       }
@@ -1174,6 +1186,22 @@ export function createMapBoxProvider(
 
       // Navigation controls (top-right, below panel toggle)
       map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }));
+
+      // "Where am I" — the only landmark a first-time organiser has when the
+      // competition has no waypoints yet and the map opens on the whole globe.
+      // Not gated on appControls: the route and waypoint editors are exactly
+      // who needs it. It costs nothing (browser geolocation, no Mapbox request)
+      // and self-disables when the browser has no geolocation or the page isn't
+      // a secure context. maxZoom caps the fit at region scale — the default
+      // (15) lands on the user's street, which is no use for laying out a task.
+      map.addControl(
+        new mapboxgl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          fitBoundsOptions: { maxZoom: 11 },
+          trackUserLocation: false,
+          showUserLocation: true,
+        }),
+      );
       if (appControls) map.addControl(new mapboxgl.FullscreenControl());
       map.addControl(new mapboxgl.ScaleControl({ maxWidth: 200 }));
 
@@ -1587,7 +1615,16 @@ export function createMapBoxProvider(
         // Create annotation overlay
         annotationLayer = createMapAnnotationLayer(map, container);
 
-        resolve(renderer);
+        // The provider object is declared ~900 lines below this handler. Do
+        // NOT resolve with it here: this line used to read `resolve(renderer)`
+        // and only worked because Mapbox fires 'load' asynchronously, so the
+        // `const` had been reached by the time the handler ran. A synchronous
+        // 'load' — a cached style, a test double, a future Mapbox version —
+        // would have thrown a ReferenceError before the map ever appeared.
+        // Handing the resolve to the bottom of the function removes the
+        // ordering assumption entirely.
+        mapLoaded = true;
+        onMapLoaded?.();
       });
 
       map.on('error', (e) => {
@@ -2112,6 +2149,16 @@ export function createMapBoxProvider(
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
       }
 
+      /** Remove the scrubber's position markers. Runs on every scrub. */
+      function clearMultiTrackMarkers(): void {
+        if (tb) {
+          for (const obj of multiTrackMarkerObjects) {
+            tb.remove(obj);
+          }
+        }
+        multiTrackMarkerObjects = [];
+      }
+
       function clearMulti3DTracks(): void {
         if (tb) {
           for (const obj of multiTrack3DObjects) {
@@ -2119,6 +2166,10 @@ export function createMapBoxProvider(
           }
         }
         multiTrack3DObjects = [];
+        // The markers are the scrubber's, and the scrubber belongs to the view
+        // being torn down — so they go too. Without this they would outlive
+        // every track they were pointing at.
+        clearMultiTrackMarkers();
       }
 
       function renderMulti3DTracks(tracks: LoadedTrack[], pilotScores: PilotScore[]): void {
@@ -2278,8 +2329,11 @@ export function createMapBoxProvider(
         pilotScores: PilotScore[],
         labelsContainer: HTMLElement,
       ): void {
-        // Clear existing 3D labels
+        // Clear what the last scrub position drew — the screen-space labels and,
+        // in 3D, the position markers. Both are rebuilt below for the new
+        // position; neither may be left behind, or a drag leaves a trail.
         labelsContainer.innerHTML = '';
+        clearMultiTrackMarkers();
 
         // Get top 3 ranked pilots
         const top3 = pilotScores.slice(0, 3);
@@ -2326,8 +2380,7 @@ export function createMapBoxProvider(
               opacity: 1,
             });
             tb.add(marker);
-            // These are temporary; we'll clear on next scrub
-            multiTrack3DObjects.push(marker);
+            multiTrackMarkerObjects.push(marker);
           }
         }
       }
@@ -3177,6 +3230,16 @@ export function createMapBoxProvider(
           map.fitBounds(bounds, { padding: 40, duration: 800, maxZoom: 12 });
         },
 
+        fitToBounds(bounds: MapBounds, options: { maxZoom?: number } = {}) {
+          map.fitBounds(
+            [
+              [bounds.west, bounds.south],
+              [bounds.east, bounds.north],
+            ],
+            { padding: 40, duration: 1000, maxZoom: options.maxZoom ?? 12 },
+          );
+        },
+
         onWaypointClick(callback: (waypoint: MapWaypoint) => void) {
           waypointsClickCallback = callback;
         },
@@ -3382,6 +3445,12 @@ export function createMapBoxProvider(
         },
       };
 
+      // `renderer` exists now, so it is safe to hand back. If 'load' already
+      // fired while this function was still building — which nothing here
+      // guarantees it did not — resolve straight away rather than waiting for
+      // an event that has been and gone.
+      if (mapLoaded) resolve(renderer);
+      else onMapLoaded = () => resolve(renderer);
     } catch (err) {
       reject(err);
     }

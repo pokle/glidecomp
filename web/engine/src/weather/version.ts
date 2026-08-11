@@ -27,5 +27,11 @@
  *     actually a prediction, and future-dated tasks whose fetch failed hold
  *     an error row that would sit out a backoff of up to 24 hours. Both are
  *     wrong now, so every row re-fetches.
+ * 5 — empty-hour detection now derives from the per-variable DELIVERED
+ *     predicates instead of a hand-kept field list that had drifted from
+ *     `WeatherHour` (it omitted gust, mid and high cloud, and
+ *     precipitation). An hour carrying only those readings used to be
+ *     dropped as empty, so stored rows may be short of hours they are
+ *     entitled to; every row re-fetches.
  */
-export const WEATHER_SCHEMA_VERSION = 4;
+export const WEATHER_SCHEMA_VERSION = 5;

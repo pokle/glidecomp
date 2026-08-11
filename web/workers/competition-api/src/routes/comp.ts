@@ -1,22 +1,23 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin, isSuperAdmin } from "../super-admin";
 import { createCompSchema, updateCompSchema, validated } from "../validators";
-import { audit, describeChange } from "../audit";
+import {
+  boolFromDb,
+  boolToDb,
+  deepChanged,
+  planPatch,
+  type PatchFieldTable,
+} from "../lib/patch-fields";
+import type { z } from "zod";
+import { audit, auditAll, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal, taskRouteSummary } from "../xctsk-summary";
-import { DEFAULT_GAP_PARAMETERS, resolveTimePointsExponent, type GAPParameters } from "@glidecomp/engine";
+import { DEFAULT_GAP_PARAMETERS, defaultLeadingTimeRatio, type GAPParameters } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_COMPS_PER_ACCOUNT = 50;
 
@@ -59,12 +60,6 @@ function describeGapParamChanges(
   if (o.nominalTime !== n.nominalTime) {
     out.push(`Changed nominal time from ${min(o.nominalTime)} to ${min(n.nominalTime)}`);
   }
-  if (o.nominalGoal !== n.nominalGoal) {
-    out.push(`Changed nominal goal from ${pct(o.nominalGoal)} to ${pct(n.nominalGoal)}`);
-  }
-  if (o.nominalLaunch !== n.nominalLaunch) {
-    out.push(`Changed nominal launch from ${pct(o.nominalLaunch)} to ${pct(n.nominalLaunch)}`);
-  }
   if (o.minimumDistance !== n.minimumDistance) {
     out.push(`Changed minimum distance from ${km(o.minimumDistance)} to ${km(n.minimumDistance)}`);
   }
@@ -78,31 +73,13 @@ function describeGapParamChanges(
   if (o.useArrival !== n.useArrival) {
     out.push(n.useArrival ? "Enabled arrival points" : "Disabled arrival points");
   }
-  const oFormula = o.leadingFormula ?? "weighted";
-  const nFormula = n.leadingFormula ?? "weighted";
-  if (oFormula !== nFormula) {
-    out.push(describeChange("leading coefficient formula", oFormula, nFormula));
-  }
-  // Leading-weight generation (PG only; issue #257) — changes every PG
-  // pilot's leading↔time split, so both the generation and its ratio are
-  // individually audit-logged.
-  const oLwf = o.leadingWeightFormula ?? "gap2020";
-  const nLwf = n.leadingWeightFormula ?? "gap2020";
-  if (oLwf !== nLwf) {
-    out.push(describeChange("PG leading-weight formula", oLwf, nLwf));
-  }
-  const oLtr = o.leadingTimeRatio ?? 0.26;
-  const nLtr = n.leadingTimeRatio ?? 0.26;
+  // §11 Leading Time Ratio — changes every pilot's leading↔time split, so
+  // it is individually audit-logged. The unset default is per discipline.
+  const ltrDefault = defaultLeadingTimeRatio(n.scoring);
+  const oLtr = o.leadingTimeRatio ?? defaultLeadingTimeRatio(o.scoring);
+  const nLtr = n.leadingTimeRatio ?? ltrDefault;
   if (oLtr !== nLtr) {
-    out.push(describeChange("PG leading-time ratio", pct(oLtr), pct(nLtr)));
-  }
-  // Time-points exponent (S7F §11.2), decoupled from the leading formula
-  // (issue #258). Report the effective exponent so a change from the
-  // formula-implied default to an explicit override is still logged.
-  const oExp = resolveTimePointsExponent(o);
-  const nExp = resolveTimePointsExponent(n);
-  if (oExp !== nExp) {
-    out.push(describeChange("time points exponent", oExp, nExp));
+    out.push(describeChange("leading-time ratio", pct(oLtr), pct(nLtr)));
   }
   const oOrigin = o.distanceOrigin ?? "takeoff";
   const nOrigin = n.distanceOrigin ?? "takeoff";
@@ -118,7 +95,7 @@ function describeGapParamChanges(
         : "Disabled HG distance difficulty (pure linear distance points)",
     );
   }
-  // Jump-the-gun settings (S7F §12.2) directly change how HG early starts
+  // Jump-the-gun settings (S7F §13.3) directly change how HG early starts
   // are penalised, so both knobs are individually audit-logged.
   const oJtgX = o.jumpTheGunFactor ?? 2;
   const nJtgX = n.jumpTheGunFactor ?? 2;
@@ -134,22 +111,13 @@ function describeGapParamChanges(
       `Changed jump-the-gun limit from ${oJtgY} s to ${nJtgY} s early (beyond it, minimum distance)`
     );
   }
-  // ESS-but-not-goal (S7F §12.1): the share of time and arrival points an
+  // ESS-but-not-goal (S7F §13.2): the share of time and arrival points an
   // HG pilot keeps after reaching ESS but landing before goal.
   const oEng = o.essNotGoalFactor ?? 0.8;
   const nEng = n.essNotGoalFactor ?? 0.8;
   if (oEng !== nEng) {
     out.push(
-      `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §12.1)`
-    );
-  }
-  // PG score-back time (S7F §5.6, §12.3.1): shifts the stop time of every
-  // stopped task, so it is individually audit-logged.
-  const oSb = o.scoreBackTime ?? 300;
-  const nSb = n.scoreBackTime ?? 300;
-  if (oSb !== nSb) {
-    out.push(
-      `Changed the PG score-back time from ${min(oSb)} to ${min(nSb)} (stopped tasks, S7F §12.3.1)`
+      `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §13.2)`
     );
   }
   return out;
@@ -163,7 +131,162 @@ function encodeComp(alphabet: string, row: Record<string, unknown>) {
   };
 }
 
-export const compRoutes = new Hono<HonoEnv>()
+/**
+ * The comp row on the wire: ids encoded, SQLite's 0/1 booleans as booleans,
+ * JSON columns parsed, absent columns defaulted.
+ *
+ * One function because GET and PATCH must answer with the same shape — they
+ * used to carry two copies of this cast-by-cast, and a field added to one is
+ * a field the other silently stops returning.
+ */
+function serializeComp(alphabet: string, row: Record<string, unknown>) {
+  return {
+    ...encodeComp(alphabet, row),
+    test: !!(row.test as number),
+    pilot_classes: JSON.parse(row.pilot_classes as string) as string[],
+    default_pilot_class: row.default_pilot_class,
+    gap_params: row.gap_params
+      ? (JSON.parse(row.gap_params as string) as GAPParameters)
+      : null,
+    scoring_format: (row.scoring_format as string) ?? "gap",
+    series_scoring: (row.series_scoring as string) ?? "total",
+    ftv_factor: (row.ftv_factor as number | null) ?? null,
+    open_igc_upload: !!(row.open_igc_upload as number),
+    open_registration: !!(row.open_registration as number),
+  };
+}
+
+/**
+ * What each updatable comp field means: where it is stored, and what a change
+ * to it does to the audit log and to the published scores.
+ *
+ * Built per request because two entries need the request in scope — the
+ * timezone's audit sentence depends on whether the organiser asked for
+ * "automatic", and the resolved value is worked out before the table is used.
+ *
+ * The `bumpsScores` column is the important one to be able to read down.
+ * Series scoring (total ↔ FTV) and the FTV factor deliberately do NOT carry
+ * it: FTV is a pure aggregation over the stored task scores, computed live in
+ * GET /scores (which folds these two fields into its ETag), so they change
+ * published SCORES without changing any per-task score. Bumping every task
+ * would be wasted work that changes nothing.
+ */
+function compFieldTable(
+  body: z.infer<typeof updateCompSchema>,
+  resolvedTimezone: string | null | undefined
+): PatchFieldTable<z.infer<typeof updateCompSchema>> {
+  const fmtLabel = (f: string) => (f === "open_distance" ? "Open distance" : "GAP");
+  const seriesLabel = (s: string) => (s === "ftv" ? "FTV" : "Sum of task scores");
+  const ftvLabel = (f: number | null) =>
+    f === null ? "automatic" : `${Math.round(f * 100)}%`;
+
+  return {
+    name: {
+      column: "name",
+      describe: (was, now) => describeChange("name", was, now),
+    },
+    category: {
+      column: "category",
+      describe: (was, now) => describeChange("category", was, now),
+    },
+    close_date: {
+      column: "close_date",
+      describe: (was, now) => describeChange("close date", was, now),
+    },
+    test: {
+      column: "test",
+      toDb: boolToDb,
+      fromDb: boolFromDb,
+      describe: (was, now) => describeChange("test flag", was, now),
+    },
+    pilot_classes: {
+      column: "pilot_classes",
+      toDb: (v) => JSON.stringify(v),
+      fromDb: (v) => JSON.parse(v as string) as string[],
+      changed: deepChanged,
+      describe: (was, now) =>
+        `Changed pilot classes from [${(was as string[]).join(", ")}] to [${(now as string[]).join(", ")}]`,
+    },
+    default_pilot_class: {
+      column: "default_pilot_class",
+      describe: (was, now) => describeChange("default pilot class", was, now),
+    },
+    // The scoring formula itself. describeGapParamChanges emits one line per
+    // knob that moved and none at all when the object is equivalent, so an
+    // untouched save neither logs nor bumps.
+    gap_params: {
+      column: "gap_params",
+      toDb: (v) => (v ? JSON.stringify(v) : null),
+      fromDb: (v) => (v ? (JSON.parse(v as string) as GAPParameters) : null),
+      changed: deepChanged,
+      describe: (was, now) =>
+        describeGapParamChanges(was as GapParamInput | null, now as GapParamInput | null),
+      bumpsScores: true,
+    },
+    scoring_format: {
+      column: "scoring_format",
+      describe: (was, now) =>
+        `Changed scoring format from ${fmtLabel(was as string)} to ${fmtLabel(now as string)}`,
+      bumpsScores: true,
+    },
+    series_scoring: {
+      column: "series_scoring",
+      describe: (was, now) =>
+        `Changed series scoring from ${seriesLabel(was as string)} to ${seriesLabel(now as string)}`,
+    },
+    ftv_factor: {
+      column: "ftv_factor",
+      fromDb: (v) => (v as number | null) ?? null,
+      describe: (was, now) =>
+        describeChange(
+          "FTV discard factor",
+          ftvLabel(was as number | null),
+          ftvLabel(now as number | null)
+        ),
+    },
+    // The timezone stopped being presentational with track-quality.ts: the
+    // "wrong day" check builds the task's LOCAL calendar day in this zone to
+    // decide whether a tracklog belongs to the task at all (FAI S7A §4.4.2),
+    // so changing it can change which pilots are scored.
+    //
+    // The body's `null` means "back to automatic", so the value written is the
+    // one already derived from the task location — see the caller.
+    timezone: {
+      column: "timezone",
+      toDb: () => resolvedTimezone,
+      changed: (was) => was !== resolvedTimezone,
+      describe: (was) =>
+        body.timezone === null
+          ? resolvedTimezone
+            ? was
+              ? `Reset timezone to automatic — derived "${resolvedTimezone}" from the task location`
+              : `Set timezone to "${resolvedTimezone}" (derived from the task location)`
+            : "Cleared timezone (no task location to derive it from)"
+          : describeChange("timezone", was, resolvedTimezone),
+      bumpsScores: true,
+    },
+    open_igc_upload: {
+      column: "open_igc_upload",
+      toDb: boolToDb,
+      fromDb: boolFromDb,
+      describe: (_was, now) =>
+        now
+          ? "Enabled open IGC upload (any registered pilot can upload on behalf)"
+          : "Disabled open IGC upload (admins only)",
+    },
+    open_registration: {
+      column: "open_registration",
+      toDb: boolToDb,
+      fromDb: boolFromDb,
+      describe: (_was, now) =>
+        now
+          ? "Enabled open registration (a pilot joins by uploading a track)"
+          : "Disabled open registration (only an admin can add pilots)",
+    },
+  };
+}
+
+export const compRoutes = new Hono<AuthedEnv>()
   // ── POST /api/comp ── Create competition
   .post(
     "/api/comp",
@@ -212,7 +335,7 @@ export const compRoutes = new Hono<HonoEnv>()
       // New PG GAP comps default to FTV series scoring (the paragliding norm,
       // S7A §5.2.5.1); HG and open-distance comps default to sum-of-tasks. The
       // DB column default stays "total", so this only affects newly created
-      // comps — existing comps' published standings never change silently.
+      // comps — existing comps' published scores never change silently.
       const seriesScoring =
         body.series_scoring ??
         (body.category === "pg" && scoringFormat === "gap" ? "ftv" : "total");
@@ -272,6 +395,7 @@ export const compRoutes = new Hono<HonoEnv>()
           ftv_factor: ftvFactor,
           timezone: body.timezone ?? null,
           open_igc_upload: true,
+          open_registration: true,
         },
         201
       );
@@ -289,7 +413,7 @@ export const compRoutes = new Hono<HonoEnv>()
     const cutoffStr = cutoff.toISOString();
 
     const publicComps = await c.env.DB.prepare(
-      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload
+      `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, timezone, open_igc_upload, open_registration
        FROM comp
        WHERE test = 0 AND creation_date >= ?
        ORDER BY creation_date DESC`
@@ -306,12 +430,12 @@ export const compRoutes = new Hono<HonoEnv>()
       // `comp_admin` row for.
       adminComps = isSuperAdmin(user)
         ? await c.env.DB.prepare(
-            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
              FROM comp c
              ORDER BY c.creation_date DESC`
           ).all()
         : await c.env.DB.prepare(
-            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
              FROM comp c
              JOIN comp_admin ca ON c.comp_id = ca.comp_id
              WHERE ca.user_id = ?
@@ -352,6 +476,7 @@ export const compRoutes = new Hono<HonoEnv>()
         gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
         test: !!(r.test as number),
         open_igc_upload: !!(r.open_igc_upload as number),
+        open_registration: !!(r.open_registration as number),
         first_task_date: datesByComp.get(r.comp_id as number)?.first_task_date ?? null,
         last_task_date: datesByComp.get(r.comp_id as number)?.last_task_date ?? null,
       })),
@@ -364,6 +489,7 @@ export const compRoutes = new Hono<HonoEnv>()
           gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
           test: !!(r.test as number),
           open_igc_upload: !!(r.open_igc_upload as number),
+          open_registration: !!(r.open_registration as number),
           first_task_date: datesByComp.get(r.comp_id as number)?.first_task_date ?? null,
           last_task_date: datesByComp.get(r.comp_id as number)?.last_task_date ?? null,
         })),
@@ -396,7 +522,7 @@ export const compRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, settings_reviewed
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, settings_reviewed
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -485,17 +611,7 @@ export const compRoutes = new Hono<HonoEnv>()
       );
 
       return c.json({
-        ...encodeComp(alphabet, comp),
-        test: !!(comp.test as number),
-        pilot_classes: pilotClasses,
-        default_pilot_class: comp.default_pilot_class,
-        gap_params: comp.gap_params
-          ? JSON.parse(comp.gap_params as string)
-          : null,
-        scoring_format: (comp.scoring_format as string) ?? "gap",
-        series_scoring: (comp.series_scoring as string) ?? "total",
-        ftv_factor: (comp.ftv_factor as number | null) ?? null,
-        open_igc_upload: !!(comp.open_igc_upload as number),
+        ...serializeComp(alphabet, comp),
         admins: adminList,
         is_admin: isAdmin,
         tasks: tasks.results.map((t) => {
@@ -541,36 +657,24 @@ export const compRoutes = new Hono<HonoEnv>()
       const body = c.req.valid("json");
       const alphabet = c.env.SQIDS_ALPHABET;
 
-      // Fetch current state so we can compute audit diffs and validate consistency
+      // The pre-update row: what the audit diffs compare against, and what
+      // the consistency check below reads for the fields the body omits.
       const current = await c.env.DB.prepare(
-        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
-        .first<{
-          name: string;
-          category: string;
-          close_date: string | null;
-          test: number;
-          pilot_classes: string;
-          default_pilot_class: string;
-          gap_params: string | null;
-          scoring_format: string;
-          series_scoring: string;
-          ftv_factor: number | null;
-          timezone: string | null;
-          open_igc_upload: number;
-        }>();
+        .first<Record<string, unknown>>();
       if (!current) return c.json({ error: "Competition not found" }, 404);
 
       // Resolve the new timezone up front: an explicit name is stored as-is,
       // while null means "back to automatic" — re-derive it from the task
       // location right away so the change is visible immediately (and stays
       // null only when the comp has no located task yet).
-      let newTimezone: string | null | undefined;
+      let resolvedTimezone: string | null | undefined;
       if (body.timezone !== undefined) {
-        newTimezone = body.timezone;
-        if (newTimezone === null) {
+        resolvedTimezone = body.timezone;
+        if (resolvedTimezone === null) {
           const firstTask = await c.env.DB.prepare(
             `SELECT xctsk FROM task
              WHERE comp_id = ? AND xctsk IS NOT NULL
@@ -578,7 +682,7 @@ export const compRoutes = new Hono<HonoEnv>()
           )
             .bind(compId)
             .first<{ xctsk: string }>();
-          newTimezone = timezoneForXctsk(firstTask?.xctsk) ?? null;
+          resolvedTimezone = timezoneForXctsk(firstTask?.xctsk) ?? null;
         }
       }
 
@@ -586,9 +690,9 @@ export const compRoutes = new Hono<HonoEnv>()
       if (body.pilot_classes || body.default_pilot_class) {
         const newClasses =
           body.pilot_classes ??
-          (JSON.parse(current.pilot_classes) as string[]);
+          (JSON.parse(current.pilot_classes as string) as string[]);
         const newDefault =
-          body.default_pilot_class ?? current.default_pilot_class;
+          body.default_pilot_class ?? (current.default_pilot_class as string);
 
         if (!newClasses.includes(newDefault)) {
           return c.json(
@@ -598,215 +702,35 @@ export const compRoutes = new Hono<HonoEnv>()
         }
       }
 
-      // Build dynamic UPDATE. Any successful settings save counts as
-      // "settings reviewed" for the setup guide — including a Save that keeps
-      // every default — so the flag is set unconditionally. Presentational
-      // only: no audit entry, no score bump.
-      const updates: string[] = ["settings_reviewed = 1"];
-      const values: unknown[] = [];
+      const plan = planPatch(body, current, compFieldTable(body, resolvedTimezone));
 
-      if (body.name !== undefined) {
-        updates.push("name = ?");
-        values.push(body.name);
-      }
-      if (body.category !== undefined) {
-        updates.push("category = ?");
-        values.push(body.category);
-      }
-      if (body.close_date !== undefined) {
-        updates.push("close_date = ?");
-        values.push(body.close_date);
-      }
-      if (body.test !== undefined) {
-        updates.push("test = ?");
-        values.push(body.test ? 1 : 0);
-      }
-      if (body.pilot_classes !== undefined) {
-        updates.push("pilot_classes = ?");
-        values.push(JSON.stringify(body.pilot_classes));
-      }
-      if (body.default_pilot_class !== undefined) {
-        updates.push("default_pilot_class = ?");
-        values.push(body.default_pilot_class);
-      }
-      if (body.gap_params !== undefined) {
-        updates.push("gap_params = ?");
-        values.push(
-          body.gap_params ? JSON.stringify(body.gap_params) : null
-        );
-      }
-      if (body.scoring_format !== undefined) {
-        updates.push("scoring_format = ?");
-        values.push(body.scoring_format);
-      }
-      if (body.series_scoring !== undefined) {
-        updates.push("series_scoring = ?");
-        values.push(body.series_scoring);
-      }
-      if (body.ftv_factor !== undefined) {
-        updates.push("ftv_factor = ?");
-        values.push(body.ftv_factor);
-      }
-      if (newTimezone !== undefined) {
-        updates.push("timezone = ?");
-        values.push(newTimezone);
-      }
-      if (body.open_igc_upload !== undefined) {
-        updates.push("open_igc_upload = ?");
-        values.push(body.open_igc_upload ? 1 : 0);
+      // Any successful settings save counts as "settings reviewed" for the
+      // setup guide — including a Save that keeps every default — so the flag
+      // is set unconditionally. Presentational only: no audit entry, no score
+      // bump, and it is why the UPDATE always has something to write.
+      await c.env.DB.prepare(
+        `UPDATE comp SET ${["settings_reviewed = 1", ...plan.assignments].join(", ")} WHERE comp_id = ?`
+      )
+        .bind(...plan.values, compId)
+        .run();
+
+      // Scoring behaviour knobs apply to every task in the comp.
+      if (plan.bumpsScores) {
+        await bumpAndRevalidateScores(c, await taskIdsForComp(c.env.DB, compId));
       }
 
-      if (updates.length > 0) {
-        values.push(compId);
-        await c.env.DB.prepare(
-          `UPDATE comp SET ${updates.join(", ")} WHERE comp_id = ?`
-        )
-          .bind(...values)
-          .run();
-      }
-
-      // Emit one audit entry per changed field
-      const auditChanges: string[] = [];
-      if (body.name !== undefined && body.name !== current.name) {
-        auditChanges.push(describeChange("name", current.name, body.name));
-      }
-      if (body.category !== undefined && body.category !== current.category) {
-        auditChanges.push(describeChange("category", current.category, body.category));
-      }
-      if (
-        body.close_date !== undefined &&
-        body.close_date !== current.close_date
-      ) {
-        auditChanges.push(
-          describeChange("close date", current.close_date, body.close_date)
-        );
-      }
-      if (body.test !== undefined && (body.test ? 1 : 0) !== current.test) {
-        auditChanges.push(
-          describeChange("test flag", !!current.test, body.test)
-        );
-      }
-      if (body.pilot_classes !== undefined) {
-        const oldClasses = JSON.parse(current.pilot_classes) as string[];
-        if (JSON.stringify(oldClasses) !== JSON.stringify(body.pilot_classes)) {
-          auditChanges.push(
-            `Changed pilot classes from [${oldClasses.join(", ")}] to [${body.pilot_classes.join(", ")}]`
-          );
-        }
-      }
-      if (
-        body.default_pilot_class !== undefined &&
-        body.default_pilot_class !== current.default_pilot_class
-      ) {
-        auditChanges.push(
-          describeChange(
-            "default pilot class",
-            current.default_pilot_class,
-            body.default_pilot_class
-          )
-        );
-      }
-      // Scoring behaviour knobs apply to every task in the comp — a change
-      // marks all their materialized scores stale below.
-      let scoringInputsChanged = false;
-      if (body.gap_params !== undefined) {
-        const oldGap = current.gap_params
-          ? (JSON.parse(current.gap_params) as GAPParameters)
-          : null;
-        for (const line of describeGapParamChanges(
-          oldGap,
-          body.gap_params ?? null
-        )) {
-          auditChanges.push(line);
-          scoringInputsChanged = true;
-        }
-      }
-      if (
-        body.scoring_format !== undefined &&
-        body.scoring_format !== current.scoring_format
-      ) {
-        // Changing the scoring format re-scores every task in the comp.
-        const fmtLabel = (f: string) =>
-          f === "open_distance" ? "Open distance" : "GAP";
-        auditChanges.push(
-          `Changed scoring format from ${fmtLabel(current.scoring_format)} to ${fmtLabel(body.scoring_format)}`
-        );
-        scoringInputsChanged = true;
-      }
-      // Series scoring (total ↔ FTV) and the FTV factor change the competition
-      // STANDINGS but not any per-task score: FTV is a pure aggregation over the
-      // stored task scores, computed live in GET /scores (which folds these two
-      // fields into its ETag). So they are audit-logged — they change published
-      // results — but deliberately do NOT set scoringInputsChanged: bumping
-      // every task's materialized score would be wasted work that changes nothing.
-      if (
-        body.series_scoring !== undefined &&
-        body.series_scoring !== current.series_scoring
-      ) {
-        const label = (s: string) => (s === "ftv" ? "FTV" : "Sum of task scores");
-        auditChanges.push(
-          `Changed series scoring from ${label(current.series_scoring)} to ${label(body.series_scoring)}`
-        );
-      }
-      if (
-        body.ftv_factor !== undefined &&
-        (body.ftv_factor ?? null) !== (current.ftv_factor ?? null)
-      ) {
-        const fmt = (f: number | null) =>
-          f === null ? "automatic" : `${Math.round(f * 100)}%`;
-        auditChanges.push(
-          describeChange(
-            "FTV discard factor",
-            fmt(current.ftv_factor),
-            fmt(body.ftv_factor ?? null)
-          )
-        );
-      }
-      // The timezone stopped being presentational with track-quality.ts: the
-      // "wrong day" check builds the task's LOCAL calendar day in this zone
-      // to decide whether a tracklog belongs to the task at all (FAI S7A
-      // §4.4.2), so changing it can change which pilots are scored.
-      if (newTimezone !== undefined && newTimezone !== current.timezone) {
-        scoringInputsChanged = true;
-        if (body.timezone === null) {
-          auditChanges.push(
-            newTimezone
-              ? current.timezone
-                ? `Reset timezone to automatic — derived "${newTimezone}" from the task location`
-                : `Set timezone to "${newTimezone}" (derived from the task location)`
-              : "Cleared timezone (no task location to derive it from)"
-          );
-        } else {
-          auditChanges.push(
-            describeChange("timezone", current.timezone, newTimezone)
-          );
-        }
-      }
-      if (
-        body.open_igc_upload !== undefined &&
-        (body.open_igc_upload ? 1 : 0) !== current.open_igc_upload
-      ) {
-        auditChanges.push(
-          body.open_igc_upload
-            ? "Enabled open IGC upload (any registered pilot can upload on behalf)"
-            : "Disabled open IGC upload (admins only)"
-        );
-      }
-      if (scoringInputsChanged) {
-        await bumpAndRevalidateScores(
-          c,
-          await taskIdsForComp(c.env.DB, compId)
-        );
-      }
-
-      for (const description of auditChanges) {
-        await audit(c.env.DB, c.var.user, compId, {
-          subject_type: "comp",
+      const compName = body.name ?? (current.name as string);
+      await auditAll(
+        c.env.DB,
+        c.var.user,
+        compId,
+        plan.audits.map((description) => ({
+          subject_type: "comp" as const,
           subject_id: compId,
-          subject_name: body.name ?? current.name,
+          subject_name: compName,
           description,
-        });
-      }
+        }))
+      );
 
       // Handle admin management via email resolution
       if (body.admin_emails) {
@@ -814,14 +738,14 @@ export const compRoutes = new Hono<HonoEnv>()
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "comp",
           subject_id: compId,
-          subject_name: body.name ?? current.name,
+          subject_name: compName,
           description: `Updated admin list (${body.admin_emails.length} admin${body.admin_emails.length === 1 ? "" : "s"})`,
         });
       }
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -838,17 +762,7 @@ export const compRoutes = new Hono<HonoEnv>()
         .all<{ email: string; name: string }>();
 
       return c.json({
-        ...encodeComp(alphabet, updated),
-        test: !!(updated.test as number),
-        pilot_classes: JSON.parse(updated.pilot_classes as string),
-        default_pilot_class: updated.default_pilot_class,
-        gap_params: updated.gap_params
-          ? JSON.parse(updated.gap_params as string)
-          : null,
-        scoring_format: (updated.scoring_format as string) ?? "gap",
-        series_scoring: (updated.series_scoring as string) ?? "total",
-        ftv_factor: (updated.ftv_factor as number | null) ?? null,
-        open_igc_upload: !!(updated.open_igc_upload as number),
+        ...serializeComp(alphabet, updated),
         admins: admins.results,
       });
     }

@@ -2,11 +2,11 @@
  * Manual Flight Scoring
  *
  * Scores a pilot who took off (verified by launch marshals) but has no valid
- * tracklog — FAI S7F §8.4. Instead of a GPS track, the input is the last
+ * tracklog — FAI S7F §9.2.2. Instead of a GPS track, the input is the last
  * turnpoint the pilot legally reached plus where they landed. From those two
  * facts this module computes a made-good distance along the optimised course
  * and produces a synthetic {@link FlightScoringData} that feeds `scoreFlights`
- * exactly like a tracked pilot (counting toward `numFlying`, S7F §9.1).
+ * exactly like a tracked pilot (counting toward `numFlying`, S7F §10.1).
  *
  * The "last turnpoint reached" is essential, not optional: scored land-out
  * distance is a function of the trajectory (which cylinders were tagged, in
@@ -20,14 +20,13 @@
  * point and turnpoint would.
  *
  * @see /docs/... issue #306
- * @see FAI Sporting Code Section 7F (CIVL GAP) §8.4
+ * @see FAI Sporting Code Section 7F (CIVL GAP) §9.2.2
  */
 
 import type { XCTask } from './xctsk-parser';
-import { getGoalIndex, getEffectiveSSSIndex } from './xctsk-parser';
-import { calculateOptimizedTaskLine, computeTurnpointDirections } from './task-optimizer';
-import { computeGoalLine, distanceToGoalLine } from './goal-line';
-import { andoyerDistance, calculateBearingRadians, destinationPoint } from './geo';
+import { getGoalIndex } from './xctsk-parser';
+import { calculateOptimizedTaskLine, optimizeRemainingRoute } from './task-optimizer';
+import { ellipsoidDistance, calculateBearingRadians, destinationPoint } from './geo';
 import type { FlightScoringData } from './gap-scoring';
 
 /**
@@ -59,7 +58,7 @@ export interface ManualFlight {
    * Speed-section time in seconds, for a pilot in goal
    * (`lastReachedIndex` === goal). Enables time / speed points. Ignored for a
    * land-out. In a gated race this should already be the effective
-   * gate-based speed-section time (S7F §8.7), matching a tracked pilot.
+   * gate-based speed-section time (S7F §9.4), matching a tracked pilot.
    */
   durationSeconds?: number | null;
 }
@@ -96,18 +95,15 @@ export interface ManualFlightGeometry {
  *
  * The scored distance mirrors the CIVL GAP flown-distance rule for a single
  * point: `madeGood = taskDistance − remaining(point, from lastReachedIndex)`,
- * where `remaining` routes from the landing point to the next un-reached
- * turnpoint's optimal tag point, then along the optimised legs to goal — the
- * exact routing `computeBestProgress` uses per fix (an intermediate turnpoint
- * is measured to its tag point; the goal to its nearest cylinder edge, or to
- * the nearest point on the goal line for a LINE goal).
+ * where `remaining` is the §9.3 measurement — the shortest path of the
+ * route {landing point, un-reached control zones…, goal}, optimised with
+ * the §7.2 algorithm ({@link optimizeRemainingRoute}) — the exact
+ * measurement `computeBestProgress` applies per track fix.
  *
- * Turnpoint order is respected two ways:
- * - `madeGood` is floored at the optimised distance already banked by reaching
- *   `lastReachedIndex` — reaching a turnpoint can never score less than getting
- *   there, however far back the pilot then landed.
- * - A landing point beyond the next turnpoint is measured by closest approach
- *   to that turnpoint, never credited past it.
+ * Turnpoint order is respected via the floor: `madeGood` never drops below
+ * the optimised distance already banked by reaching `lastReachedIndex` —
+ * reaching a turnpoint can never score less than getting there, however far
+ * back the pilot then landed.
  *
  * @param task - The scoring task (already trimmed for the distance origin).
  * @param lastReachedIndex - Position in `task.turnpoints[]` of the last reached
@@ -135,7 +131,7 @@ export function manualFlightGeometry(
   // point. cum[i] is the along-course distance banked by reaching turnpoint i.
   const cum: number[] = new Array(optimizedLine.length).fill(0);
   for (let i = 1; i < optimizedLine.length; i++) {
-    cum[i] = cum[i - 1] + andoyerDistance(
+    cum[i] = cum[i - 1] + ellipsoidDistance(
       optimizedLine[i - 1].lat, optimizedLine[i - 1].lon,
       optimizedLine[i].lat, optimizedLine[i].lon,
     );
@@ -151,46 +147,28 @@ export function manualFlightGeometry(
   }
 
   const bankedToAnchor = cum[anchor]; // the floor
-  const nextIdx = anchor + 1;
-  const nextIsGoal = nextIdx >= goalIdx;
-  const nextTP = task.turnpoints[nextIdx];
-  // Same measurements as computeBestProgress (see NextTPMeasure there):
-  // nearest edge of the goal cylinder or nearest point on a LINE goal; the
-  // nearest boundary from inside for an un-reached EXIT cylinder; the
-  // nearest edge for the ENTER turnpoint right after a reached inferred
-  // EXIT cylinder (the tag bearing is arbitrary on a symmetric task — but
-  // not after the declared-EXIT start, where the tag point is the
-  // AirScore-parity measurement); the optimal tag point otherwise.
-  const directions = computeTurnpointDirections(task, optimizedLine);
-  const sssIdx = getEffectiveSSSIndex(task);
-  const goalLine = nextIsGoal ? computeGoalLine(task) : null;
-  const distToCenter = andoyerDistance(
-    point.lat, point.lon, nextTP.waypoint.lat, nextTP.waypoint.lon,
-  );
-  const distToNextTP = directions[nextIdx] === 'exit'
-    ? Math.max(0, nextTP.radius - distToCenter)
-    : nextIsGoal
-      ? goalLine
-        ? distanceToGoalLine(goalLine, point.lat, point.lon)
-        : Math.max(0, distToCenter - nextTP.radius)
-      : directions[anchor] === 'exit' && anchor !== sssIdx
-        ? Math.max(0, distToCenter - nextTP.radius)
-        : andoyerDistance(
-            point.lat, point.lon,
-            optimizedLine[nextIdx].lat, optimizedLine[nextIdx].lon,
-          );
-  const interTPDistance = taskDistance - cum[nextIdx];
-  const distanceToGoal = distToNextTP + interTPDistance;
+  // §9.3: the remaining route from the landing point, optimised as its
+  // own shortest path through the un-reached zones to goal.
+  const remaining = optimizeRemainingRoute(task, anchor, point);
+  if (!remaining) {
+    // optimizeRemainingRoute returns null only when the anchor is at or past
+    // the final turnpoint — and the clamps above keep it strictly below goal
+    // (the last turnpoint), so a null here means the invariant broke, not
+    // that the pilot finished. Never default to "in goal": that would score
+    // a landed-out pilot as a finisher.
+    throw new Error(
+      `manualFlightGeometry: no remaining route for anchor ${anchor} of ` +
+      `${task.turnpoints.length} turnpoints — refusing to score a land-out as in goal`,
+    );
+  }
+  const distanceToGoal = remaining.distance;
   const madeGoodFromPoint = taskDistance - distanceToGoal;
   const madeGood = Math.min(taskDistance, Math.max(bankedToAnchor, madeGoodFromPoint));
 
-  // The drawn line: from the landing point, through each un-reached turnpoint's
-  // optimal tag point, to the goal tag — same convention as the tracked
-  // best-progress route (calculateOptimizedTaskLine.slice(nextIdx)).
-  const routeToGoal = [
-    { lat: point.lat, lon: point.lon },
-    ...optimizedLine.slice(nextIdx).map((p) => ({ lat: p.lat, lon: p.lon })),
-  ];
+  // The drawn line IS the measured route: landing point through each
+  // un-reached zone's optimal crossing to goal — same convention as the
+  // tracked best-progress route.
+  const routeToGoal = remaining.line.map((p) => ({ lat: p.lat, lon: p.lon }));
 
   return {
     madeGood,
@@ -258,11 +236,12 @@ export function manualFlightScoringData(
     reachedESS: madeGoal,
     speedSectionTime,
     // No tracklog → no timestamps for leading / gate anchoring, and no
-    // leading scan is possible: mark it track-less so scoreFlights awards it
-    // no leading points instead of demanding a (nonexistent) aggregate.
+    // leading scan is possible: the flight declares it has nothing to lead
+    // with, so scoreFlights awards it no leading points instead of demanding
+    // a (nonexistent) aggregate.
     sssTimeMs: null,
     essTimeMs: null,
-    trackless: true,
+    leading: { kind: 'none' },
   };
 }
 
@@ -306,7 +285,7 @@ export function manualOpenDistanceGeometry(
   if (!takeoff) return { distance: 0, origin: landing, landing };
 
   const center = { lat: takeoff.waypoint.lat, lon: takeoff.waypoint.lon };
-  const toLanding = andoyerDistance(center.lat, center.lon, point.lat, point.lon);
+  const toLanding = ellipsoidDistance(center.lat, center.lon, point.lat, point.lon);
   const distance = Math.max(0, toLanding - takeoff.radius);
 
   // The exit that maximises the distance is on the cylinder edge, on the

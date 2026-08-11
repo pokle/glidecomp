@@ -1,9 +1,10 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthUser, AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
+import { hiddenFromCaller } from "../comp-visibility";
 import {
   upsertPilotStatusSchema,
   updatePilotStatusNoteSchema,
@@ -17,13 +18,6 @@ import {
   supersedeActiveManualFlights,
   markLandedFromEvidence,
 } from "../manual-flight-store";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 interface StatusRow {
   task_pilot_status_id: number;
@@ -114,7 +108,7 @@ export async function authorizeStatusMutation(
   return null;
 }
 
-export const pilotStatusRoutes = new Hono<HonoEnv>()
+export const pilotStatusRoutes = new Hono<AuthedEnv>()
   // ── GET /api/comp/:comp_id/task/:task_id/pilot-status ── List all statuses
   // Public (same visibility rules as scores): test comps require admin.
   // Only pilots marked away from the Present default (absent/dnf/landed) have
@@ -170,6 +164,10 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
   // ── PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id ──
   // Upsert a pilot's status for a task. Any valid status replaces the
   // previous one (mutually exclusive). To make a pilot Present again, DELETE.
+  //
+  // Deliberately NOT gated by task.submissions_closed. Marking the day's
+  // absentees and DNFs is exactly what an organiser does AFTER closing the
+  // task for submissions; gating it here would make the flag unusable.
   .put(
     "/api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id",
     requireAuth,
@@ -184,11 +182,19 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // A hidden test comp answers as a missing one, exactly as this file's
+      // own GET does. A status is a scoring input — absent/DNF/landed feed
+      // launch validity (S7F §10.1) — so writing one into somebody's
+      // unpublished rehearsal is not the harmless annotation it looks like.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       // Verify task belongs to this comp
       const task = await c.env.DB.prepare(
@@ -277,7 +283,7 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
       );
 
       // A pilot's status is a scoring input: non-absent pilots count toward
-      // launch validity's "pilots present" (FAI S7F §9.1). Bump right after
+      // launch validity's "pilots present" (FAI S7F §10.1). Bump right after
       // the write, beside audit().
       await bumpAndRevalidateScores(c, [taskId]);
 
@@ -348,11 +354,17 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the upsert above: a hidden test comp is missing to
+      // everyone but its admins.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const cp = await c.env.DB.prepare(
         "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
@@ -437,11 +449,17 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
       const user = c.var.user;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, open_igc_upload FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, open_igc_upload, test FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; open_igc_upload: number }>();
+        .first<{ comp_id: number; open_igc_upload: number; test: number }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      // Same gate as the upsert above: a hidden test comp is missing to
+      // everyone but its admins.
+      if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
 
       const cp = await c.env.DB.prepare(
         "SELECT comp_pilot_id, registered_pilot_name FROM comp_pilot WHERE comp_pilot_id = ? AND comp_id = ?"
@@ -516,10 +534,13 @@ export const pilotStatusRoutes = new Hono<HonoEnv>()
  * the reconciled state — no separate bump needed here.
  *
  * Exported so igc.ts can call it without re-implementing the logic.
+ *
+ * `user` is null for an anonymous submission; the status row and the audit
+ * line then name the source rather than a person (see markLandedFromEvidence).
  */
 export async function applyStatusOnTrackUpload(
   db: D1Database,
-  user: AuthUser,
+  user: AuthUser | null,
   compId: number,
   taskId: number,
   compPilotId: number,

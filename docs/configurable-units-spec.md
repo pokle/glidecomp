@@ -61,13 +61,26 @@ Clicking "Settings..." opens the `#settings-dialog` modal. Units are one collaps
 - **Distance**: kilometers (km), miles (mi), nautical miles (nmi)
 - **Climb Rate**: m/s, ft/min, knots
 
+The Units section header also carries a **"Reset to defaults"** button
+(`#units-reset-btn` in `analysis.html`). It repopulates the four selects with
+km/h, m, km and m/s — it does not save on its own, so the reset only takes effect
+when you press Save (and is abandoned if you close the dialog instead).
+
+Each threshold section has its own "Reset to defaults" button
+(`.threshold-reset-btn`, keyed by `data-group`), working the same way: it fills
+that group's inputs from `DEFAULT_THRESHOLDS` and Save commits them. Note this
+writes the default *values* back as explicit overrides. `config.ts` also carries
+`resetThresholdGroup(group)` and `resetAllThresholds()`, which instead **remove**
+the stored overrides so the defaults apply implicitly — neither is wired to a
+button today.
+
 The dialog has a "Save" button that applies all changes at once.
 
 ### Reactive Updates
 
 When units are changed:
 
-1. Flight events are **re-detected** to regenerate descriptions with the new units
+1. Flight events are **re-detected** (`redetectEvents()` from the `onUnitsChanged` handler). Note this does not restate the event descriptions in the new units — see "Event Descriptions" below
 2. Event panel is re-rendered with updated values
 3. Map event markers are re-rendered
 4. Task labels (leg distances, turnpoint radius/altitude) are re-rendered
@@ -131,6 +144,17 @@ Provides conversion and formatting functions:
 - `formatRadius(m)` - Format turnpoint radius with appropriate precision
 - `onUnitsChanged(callback)` - Subscribe to unit preference changes (browser-side, lives in `web/frontend/src/analysis/units-browser.ts`, not the engine's `units.ts`)
 
+**Spacing:** `formatUnit` joins the value and the label with a **non-breaking
+space** (`U+00A0`), so `withUnit` reads `"45 km/h"`, `"15.2 km"`, `"2767 m"` — the
+number and its unit never break across a line. Everything built on `formatUnit`
+(`formatSpeed`, `formatAltitude`, `formatDistance`, `formatClimbRate`,
+`formatAltitudeChange`) inherits that.
+
+`formatRadius` is the one exception: it builds `withUnit` itself and stays tight —
+`"400m"`, `"5km"`, `"2.5km"` — because a radius is quoted the way a task briefing
+states it. (It also has its own precision rule: whole metres under a kilometre in
+metric, otherwise one decimal, dropped when the value is whole.)
+
 **FormattedValue Interface:**
 ```typescript
 interface FormattedValue {
@@ -152,13 +176,18 @@ Units are applied in the following locations:
 - Climb/sink rates
 
 ### Map Labels
-- Task leg distances (e.g., "Leg 1: 15.2km")
-- Turnpoint radius (e.g., "R 5km")
-- Turnpoint altitude (e.g., "A 3067m")
-- Glide segment speed labels
-- Glide segment altitude change labels
+- Task leg distances (e.g., "Leg 1 (15.2 km)")
+- Turnpoint radius (e.g., "R 5km" — `formatRadius`, so no space)
+- Turnpoint altitude (e.g., "A 3067 m")
+- Glide segment speed and altitude labels (e.g., "45 km/h") — `formatGlideLabel` splits `formatted` from `unit` and joins them with the same non-breaking space, so it can render the unit at 0.7em
+- Glide segment altitude change labels, always signed (e.g., "-120 m")
 
 ### Event Descriptions
+
+These do **not** go through `formatUnit` — the engine's detectors write them as
+hardcoded SI with a tight unit, so they stay metric and unspaced whatever the
+display preference:
+
 - Max/min altitude (e.g., "Max altitude: 2767m")
 - Max climb/sink (e.g., "Max climb: +3.2m/s")
 - Thermal entry (e.g., "Thermal entry (+2.4m/s avg)")
@@ -170,16 +199,28 @@ Units are applied in the following locations:
 
 ## Migration Path to Backend
 
-The `ConfigStore` class is designed for future migration:
-
-1. **Phase 1 (current)**: localStorage only
-2. **Phase 2**: Add optional backend sync
-   - On load: fetch from API, fallback to localStorage
-   - On save: write to both API and localStorage
-   - Offline support via localStorage cache
-3. **Phase 3**: Full backend with user accounts
-   - Replace localStorage calls with API calls
-   - Keep localStorage as offline cache only
+1. **Phase 1**: localStorage only — done
+2. **Phase 2 (current)**: optional backend sync, layered on without changing the
+   `ConfigStore` interface. `config.ts`'s own header states it: localStorage is the
+   **synchronous read cache** (no startup flicker, works offline and signed out),
+   and the cloud is the source of truth across devices when signed in.
+   `web/frontend/src/auth/preferences-sync.ts` does the work:
+   - **On startup**: fetch the cloud copy and reconcile against local. Cloud wins
+     where it has data; fields missing from the cloud are uploaded from local (a
+     one-time migration for existing users). It then calls `config.clearCache()` so
+     the next `getPreferences()` re-reads the reconciled localStorage value
+   - **On save**: `setPreferences()` writes localStorage, dispatches
+     `glidecomp:preferences-changed`, and calls `preferencesSync.schedulePush()`.
+     Pushes are debounced 2 s and `PUT` the whole current value, with retries
+   - **Conflict resolution** is last-write-wins — no CAS, no version field
+   - **Device-local fields never sync**: `LOCAL_ONLY_PREF_KEYS` currently holds
+     `mapLocation`, because a viewport saved on a phone should not dictate what a
+     laptop opens to (and pan events would generate constant sync noise)
+   - `config.ts` imports `preferences-sync` statically; `preferences-sync` imports
+     `config` only through a dynamic `import()` inside async paths, so there is no
+     init-time module cycle
+3. **Phase 3**: full backend with user accounts — replace localStorage reads with
+   API calls, keeping localStorage as an offline cache only
 
 The interface remains unchanged for consuming code.
 

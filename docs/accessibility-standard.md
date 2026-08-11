@@ -80,9 +80,12 @@ differs. Know which surface you're touching:
 - Use relative units (`rem`, `em`, `%`, `ch`) for text and spacing that should
   scale. Do not disable pinch-zoom (no `maximum-scale`/`user-scalable=no` in
   any viewport meta).
-- The comp page's print sections (`#tasks #scores #pilots #activity #admins`,
-  each `break-before-page`) must remain legible when printed — briefings depend
-  on it.
+- The comp page's print sections must remain legible when printed — briefings
+  depend on it. Three of them start a fresh page: `#tasks` and `#activity`
+  (`CompDetail.tsx`) and `#scores` (`CompScoresSummary.tsx`), each carrying
+  `break-before-page`. `#admins` is the trailing `<p>` at the foot of
+  `CompDetail.tsx` and deliberately does **not** break — it belongs under
+  whatever precedes it. (There is no `#pilots` section.)
 
 ### 3.3 Images, icons & media (WCAG 1.1.1, 1.2.x)
 
@@ -171,8 +174,11 @@ differs. Know which surface you're touching:
   auto-play camera moves, and any autoplaying animation must reduce or stop.
   *(Shipped as a blanket `@media (prefers-reduced-motion: reduce)` rule that
   near-zeroes animation/transition durations and `scroll-behavior` in
-  `react/globals.css` (which the static Astro pages reuse) and in
-  `replay.css`. The blanket rule is a floor, not a licence to stop thinking:
+  `react/globals.css` — which the static Astro pages reuse **and** the analysis
+  map inherits, because `src/analysis.css` imports it, so one rule covers three
+  of the four surfaces — and in `replay.css`, which the standalone 3D replay
+  carries as its own copy. The blanket rule is a floor, not a licence to stop
+  thinking:
   a component whose meaning IS the motion needs a real reduced-motion state,
   the way `globals.css` swaps the indeterminate progress bar's travelling
   stripe for a static striped fill rather than a solid one that would read as
@@ -256,8 +262,8 @@ differs. Know which surface you're touching:
 - Do not put interactive ARIA roles on the wrong element (no `role="button"` on
   an `<a>` that navigates).
 - The analysis and replay surfaces are vanilla TS with no primitive library —
-  their controls (`.btn*`, `.input`, `.command` in `analysis.css`) must set the
-  ARIA attributes explicitly.
+  their controls (`.btn*`, `.input`, `.alert*`, `.tabs`, `.command` in
+  `analysis.css`) must set the ARIA attributes explicitly.
 
 ---
 
@@ -272,6 +278,35 @@ they get explicit rules:
   the task turnpoint list, a data table. The visual is an enhancement, never the
   sole source of truth. This aligns with the project rule that *decisions must be
   explainable*: an accessible text explanation is the same artifact.
+
+  Two chart families landed after this section was first written and are in
+  scope on exactly the same terms:
+  - **The report card's charts**, in `src/react/charts/` — `ScoreCurve.tsx`,
+    `ValiditySparkline.tsx`, `DistributionStrip.tsx` and
+    `TrackCleaningChart.tsx`.
+  - **The field-analysis charts**, in `src/react/field-analysis/charts/`
+    (including the day-profile set in `charts/day-profile/`), and the thermal
+    rose and altitude-band profile in
+    `field-analysis/thermals/ThermalsPanel.tsx`.
+- **A chart is a `role="img"` whose accessible name states its reading in a
+  sentence, with the exact values in an adjacent RAC `Table`.** This is what the
+  roughly twenty hand-rolled SVG charts already do, and it is the rule for the
+  next one. The `aria-label` is prose, not a title — it says what the picture
+  shows and where the numbers are ("Top-down lift rose. Exact numbers per band
+  are in the table below."; "Mean climb by altitude band, from … to …. Exact
+  numbers are in the band table."). The table is not a fallback: it is the exact
+  reading, and both are always rendered.
+  - **The axis furniture is `aria-hidden`** — the titles, the corner unit stamp
+    and the in-plot title in `charts/AxisTitle.tsx`, on the same grounds as the
+    tick labels. A screen reader already has the sentence; the axes are the
+    sighted reader's copy of it, and announcing both would read the chart twice.
+    That furniture is required, though, and not optional: a caption is read once
+    while an axis is consulted continuously, and a screenshot or a printed page
+    separates the two — so an axis must never leave its job to the figcaption.
+  - `AxisTitle.tsx` and `charts/scale.ts` are shared by both families
+    deliberately; two chart families spelling the same furniture two ways is the
+    drift a shared module prevents. Everything in them is presentation-only with
+    no DOM access, so they are safe in the SSR bundle.
 - Chart/track colours meet the 3:1 non-text-contrast bar and are
   distinguishable without colour (line style, direct labels, markers) — see the
   `dataviz` skill.
@@ -319,10 +354,13 @@ Automated checks catch ~30–40% of issues; the rest is manual. Do both.
 4. **Contrast**: browser devtools contrast checker (or the `dataviz` validator
    for palettes) on new token pairings, in both themes.
 5. **Automated**: run [axe DevTools](https://www.deque.com/axe/devtools/) /
-   Lighthouse accessibility audit on changed pages. Wire `axe-core` into the
-   Playwright e2e suite (`bun run test:e2e`) for changed routes where practical;
-   a zero-violations axe run is necessary but **not sufficient** — it does not
-   replace the manual passes above.
+   Lighthouse accessibility audit on changed pages **by hand, in the browser**.
+   There is no automated accessibility check in this repo yet: `axe-core` is not
+   a dependency of either package.json, and `e2e/` has no accessibility spec, so
+   `bun run test:e2e` proves nothing about this standard. Wiring axe into that
+   suite is a known gap (§10), not a step you can follow today. Note also that
+   when it does land, a zero-violations axe run is necessary but **not
+   sufficient** — it does not replace the manual passes above.
 
 ---
 
@@ -341,13 +379,21 @@ they're closed deliberately rather than rediscovered:
    announcing the auto-detected pilot ("Pilot named in the IGC file: … —
    matched to a registered pilot above") appears silently. Confirm `sonner`
    announces its toasts too, and add regions where missing.
+3. **No automated accessibility check runs anywhere** (§9) — `axe-core` is in
+   neither the root nor the `web/frontend` package.json, and `e2e/` holds no
+   accessibility spec, so every check in this standard is currently manual and
+   nothing catches a regression between reviews. Closing it means adding
+   `@axe-core/playwright` and an `e2e/accessibility.spec.ts` that sweeps a
+   representative route per surface — a comp page (SSR'd), a static content
+   page, and the analysis page — and fails on violations.
 
 Closed since this document was written, kept here as pointers rather than
 rediscovered as gaps:
 
 - **Skip link** (§4.3) — shipped on both shells, `Shell.tsx` and `Base.astro`.
 - **`prefers-reduced-motion`** (§4.4) — a blanket reduce rule in
-  `react/globals.css` and `replay.css`, plus `easeMs()` in
+  `react/globals.css` (reaching the SPA, the static pages and the analysis map,
+  which imports it via `analysis.css`) and in `replay.css`, plus `easeMs()` in
   `replay/terrain-backend.ts` for the JS-driven camera.
 - **`aria-current="page"` on the active nav tab** (§6) — the SPA gets it from
   React Router's `NavLink` (`Shell.tsx`) and `SiteHeader.astro` now emits

@@ -13,7 +13,7 @@
  * scores show the fix in action (a pilot who never flies out of the big ring
  * scores their outbound distance, NOT a near-goal result).
  *
- * Three tasks, one shared 44-pilot field (so the comp standings aggregate):
+ * Three tasks, one shared 44-pilot field (so the comp scores aggregate):
  *   Task 1 "Grand Loop"  — one 10 km exit ring. The classic #347 shape.
  *   Task 2 "Double Ring" — two concentric exit rings (5 km + 11 km) in sequence.
  *   Task 3 "Ridge Run"   — a point-to-point control: all ENTER turnpoints, no
@@ -36,7 +36,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   destinationPoint,
-  andoyerDistance,
+  ellipsoidDistance,
   calculateBearingRadians,
   parseXCTask,
   resolveTurnpointSequence,
@@ -239,7 +239,7 @@ function flyRoute(route: LatLon[], rangeM: number, startSec: number, rng: () => 
   for (let i = 0; i < route.length - 1 && !landed; i++) {
     const a = route[i];
     const b = route[i + 1];
-    const segLen = andoyerDistance(a.lat, a.lon, b.lat, b.lon);
+    const segLen = ellipsoidDistance(a.lat, a.lon, b.lat, b.lon);
     if (segLen < 1) continue;
     const bearing = calculateBearingRadians(a.lat, a.lon, b.lat, b.lon);
     const step = speed * dt;
@@ -394,7 +394,7 @@ const TASKS: TaskSpec[] = [
     route: (start, i, rng) => {
       const legs = [start, POINTS.TOWNSD, POINTS.BLULAK, POINTS.RAMSHD, POINTS.THREDB].map((p) => ({ lat: p.lat, lon: p.lon }));
       let total = 0;
-      for (let k = 1; k < legs.length; k++) total += andoyerDistance(legs[k - 1].lat, legs[k - 1].lon, legs[k].lat, legs[k].lon);
+      for (let k = 1; k < legs.length; k++) total += ellipsoidDistance(legs[k - 1].lat, legs[k - 1].lon, legs[k].lat, legs[k].lon);
       const maxRange = total + 2000;
       const p = (i + 0.5) / N_PILOTS;
       const rangeM = Math.max(1000, Math.min(maxRange, maxRange * 0.55 + probit(p) * maxRange * 0.28 + (rng() - 0.5) * 1500));

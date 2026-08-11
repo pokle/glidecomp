@@ -44,11 +44,14 @@ describe("POST /api/comp", () => {
     expect(data.default_pilot_class).toBe("sport");
   });
 
-  test("creates with GAP parameters", async () => {
+  test("creates with GAP parameters, stripping legacy pre-2026 keys", async () => {
     const gapParams = {
+      // Legacy keys from pre-2026 editions — accepted but stripped, since
+      // the S7F 2026 edition fixes their values.
       nominalLaunch: 0.96,
-      nominalDistance: 70000,
       nominalGoal: 0.2,
+      // Live 2026-surface keys.
+      nominalDistance: 70000,
       nominalTime: 5400,
       minimumDistance: 5000,
       scoring: "HG",
@@ -62,7 +65,8 @@ describe("POST /api/comp", () => {
     });
     expect(res.status).toBe(201);
     const data = (await res.json()) as Record<string, unknown>;
-    expect(data.gap_params).toEqual(gapParams);
+    const { nominalLaunch: _nl, nominalGoal: _ng, ...kept } = gapParams;
+    expect(data.gap_params).toEqual(kept);
   });
 
   test("caller becomes first admin", async () => {
@@ -510,9 +514,7 @@ describe("PATCH /api/comp/:comp_id", () => {
     const compId = await createComp({ category: "pg" });
 
     const gapParams = {
-      nominalLaunch: 1.0,
       // nominalDistance omitted → scorer auto-computes per task
-      nominalGoal: 0.25,
       nominalTime: 5400,
       minimumDistance: 4000,
       scoring: "PG",

@@ -15,7 +15,7 @@
  * needed: this asserts the component mounts (the placeholder goes away), not
  * that tiles paint.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/test";
 import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";
@@ -40,9 +40,9 @@ test.beforeAll(async ({ playwright }) => {
 
   const score = (await (
     await api.get(`/api/comp/${compId}/task/${taskId}/score`)
-  ).json()) as { classes: Array<{ pilots: Array<{ pilot_name: string }> }> };
+  ).json()) as { class_scores: Array<{ pilots: Array<{ pilot_name: string }> }> };
   // Rank 1, so the link is on the task page's public top-three.
-  pilotName = score.classes[0].pilots[0].pilot_name;
+  pilotName = score.class_scores[0].pilots[0].pilot_name;
   await api.dispose();
 });
 

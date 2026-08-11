@@ -81,6 +81,77 @@ describe("POST /api/auth/set-username — auth gate", () => {
   test.todo("allows re-setting own username to the same value (no 409 vs self)");
 });
 
+// ── POST /api/auth/set-username — the display name it also carries ──────────
+//
+// Onboarding submits both halves here. The account's name is written nowhere
+// else after sign-up, and an email-OTP sign-up arrives without one, so if this
+// endpoint didn't take it the gate would never clear.
+
+describe("POST /api/auth/set-username — display name", () => {
+  test("writes the name alongside the username", async () => {
+    const cookie = await loginAs("set-name-1@test.local", "Placeholder");
+    const res = await request("POST", "/api/auth/set-username", {
+      cookie,
+      body: { username: "amelia-earhart", name: "Amelia Earhart" },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      username: "amelia-earhart",
+      name: "Amelia Earhart",
+    });
+
+    // /api/auth/me is what the gate reads — it must see both.
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as {
+      user: { username: string; name: string };
+    };
+    expect(user.username).toBe("amelia-earhart");
+    expect(user.name).toBe("Amelia Earhart");
+  });
+
+  test("leaves the name alone when none is sent", async () => {
+    const cookie = await loginAs("set-name-2@test.local", "Bessie Coleman");
+    const res = await request("POST", "/api/auth/set-username", {
+      cookie,
+      body: { username: "bessie-c" },
+    });
+    expect(res.status).toBe(200);
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("Bessie Coleman");
+  });
+
+  test("rejects an empty name rather than clearing the account's", async () => {
+    // Clearing it would put the account straight back through the gate it is
+    // in the middle of leaving.
+    const cookie = await loginAs("set-name-3@test.local", "Nancy Bird");
+    const res = await request("POST", "/api/auth/set-username", {
+      cookie,
+      body: { username: "nancy-the-aviator", name: "   " },
+    });
+    expect(res.status).toBe(400);
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as {
+      user: { name: string; username: string | null };
+    };
+    expect(user.name).toBe("Nancy Bird");
+    // The username must not have landed either — one statement, both or
+    // neither. (It still reads "nancy-bird", the handle derived at sign-up.)
+    expect(user.username).toBe("nancy-bird");
+  });
+
+  test("rejects a name past the 128-char limit", async () => {
+    const cookie = await loginAs("set-name-4@test.local", "Long Name");
+    const res = await request("POST", "/api/auth/set-username", {
+      cookie,
+      body: { username: "long-name-x", name: "x".repeat(129) },
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 // ── POST /api/auth/dev-login — body validation ──────────────────────────────
 
 describe("POST /api/auth/dev-login — body validation", () => {

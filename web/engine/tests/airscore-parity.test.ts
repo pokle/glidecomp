@@ -120,7 +120,7 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
   it('time points match AirScore for every ESS pilot (start gates + gap2020+ 5/6)', () => {
     const r = scoreTask(task, pilots, { ...baseParams, useLeading: false });
     // This task is a gated race (8 gates every 15 min). With speed-section
-    // times running from each pilot's start gate (S7F §8.3.1/§8.7), every
+    // times running from each pilot's start gate (S7F §9.2.4.1/§9.4), every
     // ESS pilot's time points land within 0.2 of AirScore's published
     // numbers — before gate support this needed a 20-point tolerance.
     let checked = 0;
@@ -163,8 +163,9 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
     expect(durandKm(start)).toBeCloseTo(73.85, 1);
 
     // In take-off mode, flown distances track AirScore's published km very
-    // closely — best-progress measures to each cylinder's optimal tag point,
-    // so non-goal pilots match to within a fraction of a km.
+    // closely — best-progress measures the §9.3 remaining distance (a
+    // fresh shortest-path optimisation per fix), the same measurement
+    // AirScore publishes, so non-goal pilots match to tens of metres.
     const byName = new Map(takeoff.pilotScores.map((p) => [p.pilotName, p]));
     let sum = 0;
     let count = 0;
@@ -175,14 +176,14 @@ describe('AirScore parity — Corryong Cup 2026 T1', () => {
       count++;
     }
     expect(count).toBeGreaterThan(10);
-    expect(sum / count).toBeLessThan(0.15); // mean within ~150 m of AirScore
-    // A previously-divergent pilot now lands within a few hundred metres.
+    expect(sum / count).toBeLessThan(0.05); // mean within ~50 m of AirScore
+    // The worst divergence under the old tag-point approximation (−385 m).
     const horton = byName.get('horton')!.flownDistance / 1000;
-    expect(Math.abs(horton - refBySurname.get('horton')!.distKm)).toBeLessThan(0.5);
+    expect(Math.abs(horton - refBySurname.get('horton')!.distKm)).toBeLessThan(0.1);
   });
 
   it('weighted leadout rewards early course-leaders over the faster late starter', () => {
-    const r = scoreTask(task, pilots, { ...baseParams, useLeading: true, leadingFormula: 'weighted' });
+    const r = scoreTask(task, pilots, { ...baseParams, useLeading: true, scoring: 'PG' });
     const byName = new Map(r.pilotScores.map((p) => [p.pilotName, p]));
 
     expect(r.availablePoints.leading).toBeGreaterThan(0);
@@ -313,39 +314,38 @@ describe('AirScore parity — Corryong Cup 2021 T1 (gap-2018 generation)', () =>
     expect(checked).toBe(15);
   });
 
-  it('time points match AirScore for every ESS pilot under the classic 2/3 curve', () => {
-    // The generation's distinguishing curve: 1 − (Δt/√Tmin)^(2/3) in hours.
-    // Under the modern 5/6 curve the runner-up (Adriaans) would score ~518,
-    // not the published 492.8. Divito and Pokle are goal pilots whose slow
-    // times clamp the curve to 0 — also part of the reference.
-    let checked = 0;
+  it('KNOWN DIVERGENCE: time points differ from the published gap-2018 values — GlideComp scores under S7F 2026', () => {
+    // The comp was published under the classic 2/3 time-points curve
+    // (1 − (Δt/√Tmin)^(2/3), in hours). GlideComp scores everything under
+    // the S7F 2026 edition, whose §12.2 curve uses the 5/6 exponent — more
+    // generous to non-winning ESS pilots. The runner-up (Adriaans, published
+    // 492.8 time points) is the canary: under 5/6 he scores visibly higher.
+    // The winner is pinned exactly — full speed fraction under either curve.
+    const winner = r.pilotScores.find((p) => p.pilotName === 'wisewould')!;
+    const refWinner = ref2021BySurname.get('wisewould')!;
+    expect(Math.abs(winner.timePoints - refWinner.timePts * qualityRatio)).toBeLessThan(1);
+
+    const adriaans = r.pilotScores.find((p) => p.pilotName === 'adriaans')!;
+    const refAdriaans = ref2021BySurname.get('adriaans')!;
+    expect(adriaans.timePoints - refAdriaans.timePts * qualityRatio).toBeGreaterThan(10);
+
+    // Every ESS pilot's divergence stays bounded — a rewrite-sized gap here
+    // would mean something other than the exponent moved. The widest gap in
+    // this field is ~41 points (a mid-pack ESS time where the two curves are
+    // furthest apart).
     for (const p of r.pilotScores) {
       if (!p.reachedESS) continue;
       const ref = ref2021BySurname.get(p.pilotName);
       if (!ref) continue;
-      expect(Math.abs(p.timePoints - ref.timePts * qualityRatio)).toBeLessThan(1);
-      checked++;
+      expect(Math.abs(p.timePoints - ref.timePts * qualityRatio)).toBeLessThan(50);
     }
-    expect(checked).toBe(15);
-  });
-
-  it('goal-pilot totals match within a point (quality-scaled)', () => {
-    let checked = 0;
-    for (const p of r.pilotScores) {
-      if (!p.madeGoal) continue;
-      const ref = ref2021BySurname.get(p.pilotName);
-      if (!ref) continue;
-      expect(Math.abs(p.totalScore - ref.total * qualityRatio)).toBeLessThan(1.5);
-      checked++;
-    }
-    expect(checked).toBe(15);
   });
 
   it('landed-out totals track AirScore, with the legacy difficulty curve as the only gap', () => {
     // KNOWN DEVIATION: legacy Gap.pm's km-difficulty (calc_kmdiff) counts
     // each pilot a full look-ahead BEFORE their landing slot and normalises
     // by the landed-out count, which is systematically more generous low
-    // down than the S7F 2024 §11.1.1 construction this engine implements —
+    // down than the S7F 2024 §12.1.1 construction this engine implements —
     // e.g. the eight minimum-distance pilots publish 120.8 where the
     // spec-2024 curve gives ~92. The gap shrinks with distance (Halsall,
     // best landed-out, is within ~3 points scaled). Bounded here so a
@@ -365,12 +365,4 @@ describe('AirScore parity — Corryong Cup 2021 T1 (gap-2018 generation)', () =>
     expect(maxGap).toBeGreaterThan(5); // the deviation is real — see above
   });
 
-  it('under the modern 5/6 exponent the runner-up would score visibly differently (regression guard)', () => {
-    const modern = scoreTask(task2021, pilots, { ...params2021, timePointsExponent: '5/6' as const });
-    const adriaans = modern.pilotScores.find((p) => p.pilotName === 'adriaans')!;
-    const refAdriaans = ref2021BySurname.get('adriaans')!;
-    // 5/6 is ~25 points more generous here — proving the fixture really
-    // pins the 2/3 generation.
-    expect(adriaans.timePoints - refAdriaans.timePts * qualityRatio).toBeGreaterThan(10);
-  });
 });

@@ -51,17 +51,15 @@
  *     --use-leading / --no-use-leading                       `useLeading`
  *     --use-arrival / --no-use-arrival                       `useArrival`
  *     --use-distance-difficulty / --no-use-distance-difficulty  `useDistanceDifficulty`
- *   Formula & advanced:
- *     --leading-formula <weighted|classic>   `leadingFormula` (default: classic HG / weighted PG)
- *     --leading-weight-formula <gap2020|s7f2024>  `leadingWeightFormula`, PG (default: gap2020)
- *     --leading-time-ratio <ratio>           `leadingTimeRatio` 0-0.5, PG S7F-2024 (default: 0.26)
- *     --time-points-exponent <5/6|2/3>       `timePointsExponent` (default: 5/6)
+ *   Formula & advanced (S7F 2026 — the LC variant and 5/6 exponent are
+ *   fixed per sport by the specification and are not flags):
+ *     --leading-time-ratio <ratio>           `leadingTimeRatio` 0-0.26 (default: 0.26 PG / 0.175 HG)
  *     --distance-origin <takeoff|start>      `distanceOrigin` (default: takeoff)
  *     --jump-the-gun-factor <n>              `jumpTheGunFactor`, HG (default: 2)
  *     --jump-the-gun-max-seconds <s>         `jumpTheGunMaxSeconds`, HG (default: 300)
  *     --ess-not-goal-factor <ratio>          `essNotGoalFactor` 0-1, HG (default: 0.8)
  *     --score-back-time <s>                  `scoreBackTime`, PG stopped tasks (default: 300)
- *   Stopped task (S7F §12.3):
+ *   Stopped task (S7F §13.4):
  *     --stop-time <iso-datetime>             Task stop announcement time; scores the
  *                                            task as stopped
  *   Output:
@@ -73,7 +71,7 @@ import { resolve, basename, extname } from 'path';
 import { parseIGC } from '../src/igc-parser';
 import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
-import { scoreTask, resolveCompGapParams, resolveTimePointsExponent, type GAPParameters, type PilotFlight, type TaskScoreResult } from '../src/gap-scoring';
+import { scoreTask, resolveCompGapParams, resolveLeadingTimeRatio, leadingFormulaFor, type GAPParameters, type PilotFlight, type TaskScoreResult } from '../src/gap-scoring';
 import { scoreOpenDistance } from '../src/open-distance-scoring';
 import type { XCTask } from '../src/xctsk-parser';
 import {
@@ -123,18 +121,9 @@ function usage(): never {
     '                             `useArrival` (default: on for HG, off for PG)\n' +
     '  --use-distance-difficulty / --no-use-distance-difficulty\n' +
     '                             `useDistanceDifficulty`, HG (default: on)\n\n' +
-    'Formula & advanced:\n' +
-    '  --leading-formula <weighted|classic>\n' +
-    '                             `leadingFormula` leading-coefficient variant\n' +
-    '                             (default: classic for HG, weighted for PG — 2024 spec)\n' +
-    '  --leading-weight-formula <gap2020|s7f2024>\n' +
-    '                             `leadingWeightFormula`, PG only (default: gap2020;\n' +
-    '                             "s7f2024" uses the FAI S7F §10 LeadingTimeRatio split)\n' +
+    'Formula & advanced (S7F 2026 pins the LC variant and 5/6 exponent per sport):\n' +
     '  --leading-time-ratio <ratio>\n' +
-    '                             `leadingTimeRatio` 0-0.5, PG S7F-2024 only (default: 0.26)\n' +
-    '  --time-points-exponent <5/6|2/3>\n' +
-    '                             `timePointsExponent` speed-fraction exponent (default: 5/6;\n' +
-    '                             set independently of --leading-formula)\n' +
+    '                             `leadingTimeRatio` 0-0.26 (default: 0.26 PG, 0.175 HG)\n' +
     '  --distance-origin <takeoff|start>\n' +
     '                             `distanceOrigin` (default: takeoff; "start" excludes\n' +
     '                             the take-off→SSS leg)\n' +
@@ -143,10 +132,10 @@ function usage(): never {
     '                             `jumpTheGunMaxSeconds`, HG (default: 300)\n' +
     '  --ess-not-goal-factor <ratio>\n' +
     '                             `essNotGoalFactor` 0-1: share of time+arrival points\n' +
-    '                             kept on ESS without goal (S7F §12.1). HG default 0.8;\n' +
+    '                             kept on ESS without goal (S7F §13.2). HG default 0.8;\n' +
     '                             PG is fixed at 0 by the spec and ignores it.\n' +
     '  --score-back-time <s>      `scoreBackTime`, PG stopped tasks (default: 300)\n' +
-    '  --stop-time <iso-datetime> Task stop announcement time (S7F §12.3) — scores\n' +
+    '  --stop-time <iso-datetime> Task stop announcement time (S7F §13.4) — scores\n' +
     '                             the task as stopped (e.g. 2026-01-15T03:45:00Z)\n\n' +
     'Whole comp:\n' +
     '  --comp <slug-or-dir>       Score a bundled comp (web/samples/comps/<slug>/comp.json,\n' +
@@ -174,7 +163,7 @@ let openDistance = false;
 let fieldAnalysis = false;
 // Whole-comp mode: the --comp slug or directory (implies --field-analysis).
 let compArg: string | null = null;
-// Stopped task (S7F §12.3): the stop announcement time, when given.
+// Stopped task (S7F §13.4): the stop announcement time, when given.
 let stopAnnouncementMs: number | null = null;
 let nominalDistancePct: number | undefined;
 const positional: string[] = [];
@@ -212,17 +201,8 @@ for (let i = 0; i < args.length; i++) {
     case '--distance-origin':
       params.distanceOrigin = args[++i] as 'takeoff' | 'start';
       break;
-    case '--leading-formula':
-      params.leadingFormula = args[++i] as 'weighted' | 'classic';
-      break;
-    case '--leading-weight-formula':
-      params.leadingWeightFormula = args[++i] as 'gap2020' | 's7f2024';
-      break;
     case '--leading-time-ratio':
       params.leadingTimeRatio = Number(args[++i]);
-      break;
-    case '--time-points-exponent':
-      params.timePointsExponent = args[++i] as '5/6' | '2/3';
       break;
     case '--jump-the-gun-factor':
       params.jumpTheGunFactor = Number(args[++i]);
@@ -237,7 +217,7 @@ for (let i = 0; i < args.length; i++) {
       params.scoreBackTime = Number(args[++i]);
       break;
     case '--stop-time': {
-      // Stopped task (S7F §12.3): the stop announcement as an ISO datetime.
+      // Stopped task (S7F §13.4): the stop announcement as an ISO datetime.
       const parsed = Date.parse(args[++i]);
       if (Number.isNaN(parsed)) {
         process.stderr.write('Error: --stop-time must be an ISO 8601 datetime (e.g. 2026-01-15T03:45:00Z)\n');
@@ -513,7 +493,7 @@ function runSingleTask(): void {
     if (report) output.fieldAnalysis = report;
     console.log(JSON.stringify(output, null, 2));
   } else {
-    printResultTables(task, result, openDistance);
+    printResultTables(task, result);
     // Render report times in the task's local zone (derived from its first
     // turnpoint); the engine emitted them as UTC instants.
     if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
@@ -574,7 +554,7 @@ function runComp(arg: string): void {
       } else {
         console.log('');
         console.log(`${'='.repeat(20)} ${manifest.name} — ${pilotClass} — ${fullLabel} ${'='.repeat(20)}`);
-        printResultTables(task, result, openDist);
+        printResultTables(task, result);
         if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
       }
 
@@ -616,8 +596,10 @@ function runComp(arg: string): void {
 // Score-table printing
 // ---------------------------------------------------------------------------
 
-function printResultTables(task: XCTask, result: TaskScoreResult, openDist: boolean): void {
-if (openDist) {
+function printResultTables(task: XCTask, result: TaskScoreResult): void {
+// The result's own discriminant picks the table — an open-distance result
+// carries no GAP validity/weights/parameters to print.
+if (result.format === 'open-distance') {
   // Open-distance table — the score IS the metres flown from the take-off exit,
   // so the GAP validity/weight/points columns don't apply.
   const s = result.stats;
@@ -659,19 +641,16 @@ if (openDist) {
   console.log('Scoring config:');
   console.log(`  Sport:          ${p.scoring}`);
   console.log(`  Distance origin:${p.distanceOrigin === 'takeoff' ? ' take-off' : ' start cylinder'}`);
-  console.log(`  Leading:        ${p.useLeading ? `on (${p.leadingFormula})` : 'off'}`);
-  if (p.useLeading && p.scoring === 'PG') {
+  console.log(`  Leading:        ${p.useLeading ? `on (${leadingFormulaFor(p.scoring)})` : 'off'}`);
+  if (p.useLeading) {
     console.log(
-      `  Leading weight: ${p.leadingWeightFormula === 's7f2024'
-        ? `S7F 2024 (ratio ${(p.leadingTimeRatio * 100).toFixed(0)}%)`
-        : 'GAP2020 (AirScore parity)'}`
+      `  Leading ratio:  ${(resolveLeadingTimeRatio(p) * 100).toFixed(1)}% (S7F 2026 §11)`
     );
   }
-  console.log(`  Time exponent:  ${resolveTimePointsExponent(p)}`);
   if (p.scoring === 'HG') {
     console.log(`  Arrival:        ${p.useArrival ? 'on' : 'off'}`);
     console.log(`  Difficulty:     ${p.useDistanceDifficulty ? 'on' : 'off'}`);
-    console.log(`  ESS w/o goal:   keeps ${(p.essNotGoalFactor * 100).toFixed(0)}% of time+arrival (§12.1)`);
+    console.log(`  ESS w/o goal:   keeps ${(p.essNotGoalFactor * 100).toFixed(0)}% of time+arrival (§13.2)`);
   }
   console.log(`  Nominal:        dist ${formatDist(p.nominalDistance)} / time ${Math.round(p.nominalTime / 60)} min / goal ${(p.nominalGoal * 100).toFixed(0)}% / launch ${(p.nominalLaunch * 100).toFixed(0)}%`);
   console.log(`  Min distance:   ${formatDist(p.minimumDistance)}`);
@@ -683,20 +662,20 @@ if (openDist) {
   console.log(`Best distance:    ${formatDist(s.bestDistance)}`);
   console.log(`Best time:        ${s.bestTime !== null ? formatTime(s.bestTime) : 'none'}`);
   console.log('');
-  // Stopped task (S7F §12.3): the transparency block the UI also shows.
+  // Stopped task (S7F §13.4): the transparency block the UI also shows.
   if (result.stopped) {
     const st = result.stopped;
-    console.log(`STOPPED TASK (S7F §12.3):`);
-    console.log(`  Stop time:      ${new Date(st.stopTimeMs).toISOString()} (announcement scored back per §12.3.1)`);
+    console.log(`STOPPED TASK (S7F §13.4):`);
+    console.log(`  Stop time:      ${new Date(st.stopTimeMs).toISOString()} (announcement scored back per §13.4.1)`);
     console.log(
       `  Scored window:  ${st.scoredWindowSeconds !== null ? formatTime(st.scoredWindowSeconds) : 'none (nobody started)'} (minimum to score: ${formatTime(st.minimumRunSeconds)})`
     );
     if (!st.requirementMet) {
-      console.log('  NOT SCORED — the task was stopped before the §12.3.2 minimum run; every pilot scores 0.');
+      console.log('  NOT SCORED — the task was stopped before the §13.4.2 minimum run; every pilot scores 0.');
     } else {
-      console.log(`  Stopped validity: ${(st.stoppedValidity * 100).toFixed(1)}% (§12.3.3)`);
+      console.log(`  Stopped validity: ${(st.stoppedValidity * 100).toFixed(1)}% (§13.4.3)`);
       if (st.timePointsReduction > 0) {
-        console.log(`  Goal pilots' time points reduced by ${st.timePointsReduction.toFixed(1)} (§12.3.5)`);
+        console.log(`  Goal pilots' time points reduced by ${st.timePointsReduction.toFixed(1)} (§13.4.5)`);
       }
       console.log(`  Landed before the stop: ${st.numLandedBeforeStop} of ${s.numFlying}`);
     }

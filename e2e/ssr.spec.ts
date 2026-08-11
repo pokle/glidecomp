@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "./fixtures/test";
 import {
   compPath,
   compScoresPath,
@@ -71,11 +71,11 @@ async function discover(request: APIRequestContext): Promise<Discovered> {
       continue;
     }
     const scores = (await scoresRes.json()) as {
-      standings: Array<{
+      class_scores: Array<{
         pilots: Array<{ comp_pilot_id: string; pilot_name: string; tasks: Array<{ task_id: string }> }>;
       }>;
     };
-    const pilot = scores.standings.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
+    const pilot = scores.class_scores.flatMap((s) => s.pilots).find((p) => p.tasks.length > 0);
     if (!pilot) {
       skipped.push(`${comp.name} (no scored pilots)`);
       continue;
@@ -113,7 +113,7 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).not.toContain('rel="canonical"');
   });
 
-  test("/comp/:id shows the standings summary and links to the scores page", async ({ request }) => {
+  test("/comp/:id shows the scores summary and links to the scores page", async ({ request }) => {
     const { compId, compName, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}`);
     expect(res.ok()).toBeTruthy();
@@ -126,20 +126,20 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html).toContain(`<title>${compName} — GlideComp</title>`);
   });
 
-  test("/comp/:id/scores shows standings and links to pilot narrative pages", async ({ request }) => {
+  test("/comp/:id/scores shows scores and links to pilot narrative pages", async ({ request }) => {
     const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}/scores`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain(pilotName);
-    // The standings pilot links are canonical `${slug}-${id}` at every level.
+    // The scores pilot links are canonical `${slug}-${id}` at every level.
     expect(html).toMatch(
       new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
     );
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
   });
 
-  test("/comp/:id/scores.csv serves the standings as long-form CSV", async ({ request }) => {
+  test("/comp/:id/scores.csv serves the scores as long-form CSV", async ({ request }) => {
     const { compId, compName, taskId, pilotId, pilotName } = await discover(request);
     const res = await request.get(`/comp/${compId}/scores.csv`);
     expect(res.ok()).toBeTruthy();
@@ -210,6 +210,36 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     // The map is client-only — no rendered mapbox canvas in the server HTML.
     expect(html).not.toContain("mapboxgl-canvas");
   });
+
+  test("officially published results annotate the pilot page (issue #603)", async ({ request }) => {
+    const { compId, taskId, pilotId } = await discover(request);
+    // The annotation exists only for imported comps whose official record the
+    // seed stored — true of the corryong-cup-2026 fixture this suite seeds.
+    // A fallback comp without one should skip, not fail: absence of official
+    // data is a data condition, not an SSR defect.
+    const scoreRes = await request.get(`/api/comp/${compId}/task/${taskId}/score`);
+    expect(scoreRes.ok()).toBeTruthy();
+    const score = (await scoreRes.json()) as {
+      official_results?: { task_url: string | null; ranks: Record<string, unknown> };
+    };
+    test.skip(
+      !score.official_results?.ranks?.[pilotId],
+      "seeded comp carries no official result for this pilot"
+    );
+
+    const res = await request.get(`/comp/${compId}/task/${taskId}/pilot/${pilotId}`);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    // The header carries the published standing, linked to the source's own
+    // task scores page — in the server HTML, not hydrated in later. React
+    // escapes `&` in attributes, so compare against the escaped form.
+    expect(html).toContain("Officially:");
+    if (score.official_results?.task_url) {
+      expect(html).toContain(
+        `href="${score.official_results.task_url.replace(/&/g, "&amp;")}"`
+      );
+    }
+  });
 });
 
 test.describe("SSR — isolation and fallback", () => {
@@ -237,13 +267,20 @@ test.describe("SSR — isolation and fallback", () => {
     expect(await bare.text()).not.toContain('name="robots" content="noindex"');
   });
 
-  test("a non-SSR SPA route still serves the plain app shell", async ({ request }) => {
-    const res = await request.get("/u/me");
-    expect(res.ok()).toBeTruthy();
-    const html = await res.text();
-    expect(html).toContain('<div id="root"></div>');
-    expect(html).not.toContain("window.__SSR_DATA__");
-  });
+  // /submit is here rather than in the noindex list below: it is not under
+  // /comp, so _routes.json never hands it to the SSR Function at all — it is a
+  // _redirects rewrite to the plain shell, and that is the contract to pin.
+  for (const path of ["/u/me", "/submit"]) {
+    test(`a non-SSR SPA route (${path}) still serves the plain app shell`, async ({
+      request,
+    }) => {
+      const res = await request.get(path);
+      expect(res.ok()).toBeTruthy();
+      const html = await res.text();
+      expect(html).toContain('<div id="root"></div>');
+      expect(html).not.toContain("window.__SSR_DATA__");
+    });
+  }
 
   /**
    * A hard reload of an admin-only / redirect-only deep URL must still get a
@@ -353,7 +390,7 @@ test.describe("SSR — field analysis (public)", () => {
     expect(html).toContain("Field analysis —");
     // Branch on the actual server HTML (race-free): warm renders the ranking
     // heading and is indexable; cold renders the pending notice and is noindex.
-    if (html.includes("Which behaviours went with better results")) {
+    if (html.includes("Which behaviours went with better ranks")) {
       expect(html).not.toContain('name="robots" content="noindex"');
     } else {
       expect(html.toLowerCase()).toContain("pending");
@@ -497,6 +534,9 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     // was unexercised — and the next query-driven view will need it.
     ":scoresByTask",
     ":compAnalysisByClass",
+    // The submit page: not SSR'd, but it is in the Shell, so the nav and the
+    // account slot hydrate around it like anywhere else.
+    "/submit",
   ] as const) {
     test(`no hydration mismatch on ${path}`, async ({ page, request }) => {
       const d = await discover(request);
@@ -516,6 +556,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":compAnalysisByClass": `/comp/${d.compId}/analysis${
           cls ? `?class=${encodeURIComponent(cls)}` : ""
         }`,
+        "/submit": "/submit",
       };
       const url = urls[path];
 

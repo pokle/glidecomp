@@ -5,7 +5,7 @@
  * Separated from event-detector.ts as a pure UI/presentation concern.
  */
 
-import type { FlightEventType } from './event-detector';
+import type { FlightEventType } from './event-types';
 
 /**
  * Get event icon/color based on type

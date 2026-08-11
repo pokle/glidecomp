@@ -31,7 +31,7 @@ separate mechanism), password reset (there are no passwords).
 | OTP storage | `storeOTP: "hashed"` | The D1 row is useless if leaked; the code is only in the user's inbox |
 | OTP lifetime / attempts | 10 min (`expiresIn: 600`), `allowedAttempts: 3` | Long enough for slow airfield mail delivery, short enough that a leaked link goes stale fast |
 | Session length | `expiresIn` 60 days, `updateAge` 1 day (rolling) | User asked ≥1 month; rolling refresh means active users never get logged out, idle sessions die after 60 days. Applies to Google sessions too (session config is global — one consistent policy) |
-| Sign-up | allowed (`disableSignUp: false`) | OTP is a first-class registration path; onboarding (`/onboarding` username step) already catches new users regardless of provider |
+| Sign-up | allowed (`disableSignUp: false`) | OTP is a first-class registration path; onboarding (`/onboarding` username step) already catches new users regardless of provider *(not true as written — this was the assumption [#538](https://github.com/pokle/glidecomp/pull/538) had to fix: a username is auto-derived at sign-up, and that derivation fires for email-OTP sign-ups too, so a username-only gate passed them straight through with `name: ""` and the account stayed nameless. `needsOnboarding()` in `web/frontend/src/auth/client.ts` now checks the display name as well, and `Onboarding.tsx` asks for both)* |
 | Passwords | `emailAndPassword` stays **disabled in production** (unchanged) | Dev-only exception: `dev-login` keeps using it behind `isLocalDev()` exactly as today |
 
 ## 1. Sender: Cloudflare Email Service

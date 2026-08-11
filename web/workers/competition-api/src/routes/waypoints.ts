@@ -9,7 +9,7 @@ import {
   type WaypointFileRecord,
   type XCTask,
 } from "@glidecomp/engine";
-import type { Env, AuthUser } from "../env";
+import type { AuthUser, AuthedEnv, Env } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
@@ -75,13 +75,6 @@ function fileResponse(
   });
 }
 
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
-
 // Generous ceiling — a big regional database is a few hundred points; 5000
 // keeps a pathological upload from bloating the row while never binding a real
 // comp. Mirrors the engine's WaypointFileRecord shape so the frontend can
@@ -112,7 +105,7 @@ const waypointsBodySchema = z.object({
  * tasks pick from. Not a scoring input — tasks snapshot their turnpoints into
  * their own xctsk — so mutations audit but never bump scores.
  */
-export const waypointsRoutes = new Hono<HonoEnv>()
+export const waypointsRoutes = new Hono<AuthedEnv>()
   // ── GET — the comp's waypoints (public, minus hidden test comps) ──
   .get("/api/comp/:comp_id/waypoints", optionalAuth, sqidsMiddleware, async (c) => {
     const compId = c.var.ids.comp_id!;

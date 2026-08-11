@@ -82,7 +82,7 @@ describe("Live Scoring", () => {
       task_id: string;
       computed_at: string;
       stale: boolean;
-      classes: Array<{
+      class_scores: Array<{
         pilot_class: string;
         pilots: Array<{
           rank: number;
@@ -96,8 +96,8 @@ describe("Live Scoring", () => {
     expect(res.headers.get("ETag")).toBeTruthy();
     expect(new Date(data.computed_at).getTime()).not.toBeNaN();
 
-    expect(data.classes).toHaveLength(1);
-    const openClass = data.classes[0];
+    expect(data.class_scores).toHaveLength(1);
+    const openClass = data.class_scores[0];
     expect(openClass.pilot_class).toBe("open");
     expect(openClass.pilots.length).toBeGreaterThan(0);
 
@@ -186,9 +186,9 @@ describe("Live Scoring", () => {
     );
     const { data: data1 } = await getFreshScores<{
       stale: boolean;
-      classes: Array<{ pilots: unknown[] }>;
+      class_scores: Array<{ pilots: unknown[] }>;
     }>(`/api/comp/${compId}/task/${taskId}/score`);
-    expect(data1.classes[0].pilots).toHaveLength(1);
+    expect(data1.class_scores[0].pilots).toHaveLength(1);
 
     // Upload second pilot. Every read stays an instant row read (200) —
     // possibly the pre-upload body labelled stale — until the re-score
@@ -201,10 +201,10 @@ describe("Live Scoring", () => {
 
     const { data: data2 } = await getFreshScores<{
       stale: boolean;
-      classes: Array<{ pilots: unknown[] }>;
+      class_scores: Array<{ pilots: unknown[] }>;
     }>(`/api/comp/${compId}/task/${taskId}/score`);
-    expect(data2.classes[0].pilots.length).toBeGreaterThan(
-      data1.classes[0].pilots.length
+    expect(data2.class_scores[0].pilots.length).toBeGreaterThan(
+      data1.class_scores[0].pilots.length
     );
   });
 
@@ -234,11 +234,11 @@ describe("Live Scoring", () => {
     // Score without penalty
     const { data: data1 } = await getFreshScores<{
       stale: boolean;
-      classes: Array<{
+      class_scores: Array<{
         pilots: Array<{ rank: number; comp_pilot_id: string; total_score: number }>;
       }>;
     }>(`/api/comp/${compId}/task/${taskId}/score`);
-    const rank1Pilot = data1.classes[0].pilots.find((p) => p.rank === 1)!;
+    const rank1Pilot = data1.class_scores[0].pilots.find((p) => p.rank === 1)!;
 
     // Apply penalty large enough to guarantee a re-rank (pilot drops to 0)
     const penalty = rank1Pilot.total_score + 1;
@@ -251,7 +251,7 @@ describe("Live Scoring", () => {
     // The penalty edit re-scores in the background; wait for it to land.
     const { data: data2 } = await getFreshScores<{
       stale: boolean;
-      classes: Array<{
+      class_scores: Array<{
         pilots: Array<{
           rank: number;
           comp_pilot_id: string;
@@ -262,7 +262,7 @@ describe("Live Scoring", () => {
     }>(`/api/comp/${compId}/task/${taskId}/score`);
 
     // Penalised pilot's score is reduced
-    const penalisedPilot = data2.classes[0].pilots.find(
+    const penalisedPilot = data2.class_scores[0].pilots.find(
       (p) => p.comp_pilot_id === rank1Pilot.comp_pilot_id
     )!;
     expect(penalisedPilot.penalty_points).toBe(penalty);
@@ -309,13 +309,13 @@ describe("Live Scoring", () => {
 
     const { data } = await getFreshScores<{
       stale: boolean;
-      classes: Array<{
+      class_scores: Array<{
         pilot_class: string;
         available_points: { leading: number };
         pilots: Array<{ total_score: number; leading_points: number }>;
       }>;
     }>(`/api/comp/${compId}/task/${taskId}/score`);
-    const openClass = data.classes.find((c) => c.pilot_class === "open")!;
+    const openClass = data.class_scores.find((c) => c.pilot_class === "open")!;
 
     // Engine ground truth with the same leading params (worker auto-computes
     // nominalDistance as 70% of task distance when unset).
@@ -351,11 +351,13 @@ describe("Live Scoring", () => {
     expect(await res2.json()).toEqual(data);
   });
 
-  test("new PG comp with no pinned leading-weight formula defaults to S7F-2024 (issue #257)", async () => {
+  test("a PG comp's leading pool matches the engine under the S7F 2026 weights end to end", async () => {
     const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
-    // A PG comp created now (>= the 2026-07-15 cutoff) that never pins a
-    // leadingWeightFormula must score its leading weight under the S7F-2024
-    // formula, not the GAP2020 one — the date-based default (issue #257).
+    // GlideComp scores everything under the S7F 2026 edition; the API's
+    // leading pool must match the engine's own scoring of the same field.
+    // The legacy keys sent here (nominalLaunch/nominalGoal/leadingFormula)
+    // double as a regression check that pre-2026 clients are accepted and
+    // their removed knobs ignored.
     const gapParams = {
       nominalLaunch: 0.96,
       nominalGoal: 0.3,
@@ -384,12 +386,12 @@ describe("Live Scoring", () => {
     }
 
     const { data } = await getFreshScores<{
-      classes: Array<{
+      class_scores: Array<{
         pilot_class: string;
         available_points: { leading: number };
       }>;
     }>(`/api/comp/${compId}/task/${taskId}/score`);
-    const leading = data.classes.find((c) => c.pilot_class === "open")!
+    const leading = data.class_scores.find((c) => c.pilot_class === "open")!
       .available_points.leading;
 
     const xcTask = parseXCTask(env.SAMPLE_TASK_XCTSK);
@@ -402,20 +404,22 @@ describe("Live Scoring", () => {
         fixes: igc.fixes,
       };
     });
-    const commonParams = { ...gapParams, nominalDistance: taskDistance * 0.7 };
-    const s7f = scoreTask(xcTask, enginePilots, {
-      ...commonParams,
-      leadingWeightFormula: "s7f2024" as const,
-    });
-    const gap2020 = scoreTask(xcTask, enginePilots, {
-      ...commonParams,
-      leadingWeightFormula: "gap2020" as const,
+    // Strip the legacy keys before calling the engine directly — its type
+    // surface no longer carries them (the API accepts and strips them).
+    const {
+      nominalLaunch: _nl,
+      nominalGoal: _ng,
+      leadingFormula: _lf,
+      ...liveParams
+    } = gapParams;
+    const engineResult = scoreTask(xcTask, enginePilots, {
+      ...liveParams,
+      nominalDistance: taskDistance * 0.7,
     });
 
-    // The API's leading pool matches the S7F-2024 engine result and is smaller
-    // than GAP2020's — confirming the new default took effect end to end.
-    expect(leading).toBeCloseTo(s7f.availablePoints.leading, 5);
-    expect(s7f.availablePoints.leading).toBeLessThan(gap2020.availablePoints.leading);
+    // The API's leading pool matches the engine result — the 2026 weights
+    // took effect end to end.
+    expect(leading).toBeCloseTo(engineResult.availablePoints.leading, 5);
   });
 
   test("task without xctsk returns 422", async () => {
@@ -474,11 +478,11 @@ describe("Live Scoring", () => {
     expect(res.status).toBe(200);
 
     const data = (await res.json()) as {
-      classes: Array<{ pilot_class: string; pilots: unknown[] }>;
+      class_scores: Array<{ pilot_class: string; pilots: unknown[] }>;
     };
 
-    const openClass = data.classes.find((c) => c.pilot_class === "open");
-    const sportClass = data.classes.find((c) => c.pilot_class === "sport");
+    const openClass = data.class_scores.find((c) => c.pilot_class === "open");
+    const sportClass = data.class_scores.find((c) => c.pilot_class === "sport");
 
     expect(openClass).toBeDefined();
     expect(sportClass).toBeDefined();
@@ -527,7 +531,7 @@ describe("Open distance scoring", () => {
     const { data } = await getFreshScores<{
       stale: boolean;
       scoring_format: string;
-      classes: Array<{
+      class_scores: Array<{
         pilots: Array<{
           rank: number;
           total_score: number;
@@ -540,7 +544,7 @@ describe("Open distance scoring", () => {
     }>(`/api/comp/${compId}/task/${taskId}/score`);
 
     expect(data.scoring_format).toBe("open_distance");
-    const pilots = data.classes[0].pilots;
+    const pilots = data.class_scores[0].pilots;
     expect(pilots.length).toBe(3);
 
     // Ranked by open distance, furthest first.
@@ -619,9 +623,9 @@ describe("Open distance scoring", () => {
     );
     const { data: data1 } = await getFreshScores<{
       stale: boolean;
-      classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
+      class_scores: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
     }>(`/api/comp/${compId}/task/${taskId}/score`);
-    const first = data1.classes[0].pilots[0];
+    const first = data1.class_scores[0].pilots[0];
 
     // The compute persisted the field-independent analysis for the track.
     const analysesAfterFirst = await env.DB.prepare(
@@ -639,11 +643,11 @@ describe("Open distance scoring", () => {
     );
     const { data: data2 } = await getFreshScores<{
       stale: boolean;
-      classes: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
+      class_scores: Array<{ pilots: Array<{ pilot_name: string; flown_distance: number }> }>;
     }>(`/api/comp/${compId}/task/${taskId}/score`);
 
-    expect(data2.classes[0].pilots.length).toBe(2);
-    const firstAgain = data2.classes[0].pilots.find(
+    expect(data2.class_scores[0].pilots.length).toBe(2);
+    const firstAgain = data2.class_scores[0].pilots.find(
       (p) => p.pilot_name === first.pilot_name
     )!;
     expect(firstAgain.flown_distance).toBe(first.flown_distance);

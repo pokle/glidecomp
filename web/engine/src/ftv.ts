@@ -1,11 +1,11 @@
 /**
- * FTV — Fixed Total Validity (FAI S7F §15, S7A §5.2.5.1).
+ * FTV — Fixed Total Validity (FAI S7F §16, S7A §5.2.5.1).
  *
  * FTV scores a pilot's competition total on their *best* task performances
  * rather than all of them: a fixed fraction of the total available validity is
  * discarded, so every pilot's counted validity is capped at the same value.
  *
- * The procedure (S7F §15), matching the CIVL reference scorer AirScore:
+ * The procedure (S7F §16), matching the CIVL reference scorer AirScore:
  *   1. For each task, performance = pilot's day score ÷ the class day-winner's
  *      score. Each task's "validity" in FTV units is WinnerScore ÷ 1000
  *      (AirScore's `validity_ref = max_score`; a task's winning score is the
@@ -26,7 +26,7 @@
  * display and for tie comparison (S7A §5.2.5.4), as elsewhere in the engine.
  *
  * This module is pure data-in/data-out so it is unit-testable and can drive
- * both the competition API's standings and the CLI.
+ * both the competition API's scores and the CLI.
  */
 
 import type { ScoreExplanationItem } from './score-explanation-types';

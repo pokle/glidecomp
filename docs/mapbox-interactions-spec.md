@@ -7,9 +7,10 @@ Extracted from `web/frontend/src/analysis/mapbox-provider.ts` and `map-provider-
 - **Panel toggle** — custom control (top-right, topmost), bar-chart SVG icon plus the text label "Analysis" (label hidden on mobile via `.mapctl-label`), 36px high, fires `onPanelToggleClick` callback
 - **Navigation control** — zoom +/-, compass, pitch visualizer (top-right, below panel toggle)
 - **Fullscreen control** — toggle button (top-right)
+- **Geolocate control** — "fly to where I am" button (top-right, below the navigation control), on EVERY map including `appControls: false` embeds, because the editors are what need it: a brand-new competition has no waypoints, so the map opens on the whole globe. One-shot (`trackUserLocation: false`), high accuracy, and `fitBoundsOptions.maxZoom` 11 — the Mapbox default of 15 lands on the user's street, which is no use for laying out a task. Browser geolocation only: no Mapbox request, no billing, and the button self-disables ("Location not available") without a secure context or permission
 - **Scale bar** — max width 200px
 - **Compass overlay** (`createCompass()`) — a large 160×160 `/compass.svg` image anchored bottom-right, transformed to match the map view (`rotateZ(-bearing)` plus `rotateX(pitch × 0.8)` under a 300px perspective) and draggable anywhere inside the map container (clamped to it). Analysis-page chrome only: embedded maps (score details) get `appControls: false` and rely on `NavigationControl`'s small built-in compass. Re-created after a style reload.
-- **Menu button** — custom control (top-left, topmost), hamburger-icon SVG button `(⌘K)`, fires `onMenuButtonClick` callback
+- **Menu button** — custom control (top-left, topmost), hamburger-icon SVG plus the visible text label "Menu" and a `<kbd>` hint (both hidden on mobile via `.mapctl-label`). The hint is platform-aware: `⌘K` on Mac/iOS, `Ctrl+K` everywhere else. The `title`/`aria-label` is always "Menu (⌘K)". Fires `onMenuButtonClick` callback
 - **Style selector** — `<select>` dropdown (top-left, below menu button), font 12px, white background, text `#1e293b`. Options: Outdoors (default custom style), Satellite, Streets, Light, Dark
 - **Map location** — center, zoom, pitch, bearing persisted to localStorage (debounced 5s after moveend). Restored on next load. Default pitch 45, max pitch 85
 
@@ -43,7 +44,7 @@ Track is rendered as individual per-segment LineString features (one per consecu
   - Click/tap on track → fires `onTrackClick` callback with nearest fix index
   - Nearest-fix algorithm: when track crosses itself, prefers the latest fix (highest index) within a tolerance, since later segments are drawn on top
   - Hover → cursor changes to pointer
-  - Click targets: `track-line`, `track-line-outline`, `track-line-gradient` layers
+  - Click targets: the `trackLayers` array — `track-line` and `track-line-outline`
 
 - **Fit bounds** — on track load, map fits to track bounding box with 50px padding, 1s animation
 
@@ -104,7 +105,7 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
     task turnpoint table (Direction column) on the task page & route editor
   - 3D globe / Threebox providers: out of scope (not drawn)
 
-- **Goal line** (tasks with `goal.type === 'LINE'`, S7F §6.3.1)
+- **Goal line** (tasks with `goal.type === 'LINE'`, S7F §6.2.3.1)
   - The last turnpoint's circle is replaced by two features:
     - The goal line itself: `task-goal-line` layer, solid line in the type
       color (purple `#a855f7`), width 4, opacity 0.9, round caps — endpoints
@@ -112,6 +113,11 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
       the turnpoint radius to each side)
     - The control semicircle behind the line: a `task-cylinders` polygon
       (same fill/stroke as a cylinder) from `goalSemicirclePoints()`
+  - Both are the NOMINAL geometry. Reaching them applies a tolerance band a
+    few metres wide (§8.2 for the line, §8.1 for the semicircle), which is
+    not drawn — exactly as a cylinder's own band is not drawn. A goal
+    credited by the band therefore marks the crossing a few metres outside
+    the drawn shape, and the report card names the band as the reason
   - Cylinder goals are unaffected
 
 - **Turnpoint dots**
@@ -149,6 +155,7 @@ Loaded from a competition waypoint file (`.wpt` / `.cup` / `.csv`) so the route 
 - **Snap to peak (`add-waypoint` mode)**: when the nearest label in that same 56 px search is a **peak** (`natural-point`/`landform` — classic `natural_label` points with `class: 'landform'`, or Standard featuresets with `group: 'natural-point'`; towns/POIs contribute names but never snap), `details.peak` carries `{ name, lat, lon, distanceM, elevation?, withinTapPx }` — the summit's own Point geometry, the ground distance tap→summit (engine `andoyerDistance`), the surveyed `elevation_m` where the style has it else the terrain DEM re-read *at the summit*, and whether the label sat within the **44 px** auto-snap tolerance (`PEAK_AUTO_SNAP_RADIUS_PX`, the same finger width as picking). The dialog **auto-snaps** — adopts the summit coordinates + elevation, revertible via a "Use tapped point" link — only when *both* guards pass: `withinTapPx` **and** ground distance ≤ **300 m** (`AUTO_SNAP_MAX_DISTANCE_M`, route-editor's `peakSnapMode`); each covers the other's blind spot (the metre cap stops multi-km snaps 44 px allows when zoomed out; the pixel guard stops snapping a deliberate 200 m-off tap when zoomed in). A peak that clears the 56 px search but fails the auto rule becomes an opt-in **offer** ("Snap to <peak> summit (650 m away)") under the Coordinates field instead. The coordinates field stays a plain editable input — the snap only sets its initial value; typing, or a later table edit, always wins, and nothing commits until Add.
 - **Locate from the table**: each waypoint row in the editor has a map-pin button that flies the map to that waypoint's coordinates via `panTo(lat, lon, minZoom)` — it centres the point and zooms in to at least `minZoom` (13) so it's legible, but never zooms further out than the current level. Repeat clicks on the same row re-centre (a bumped key), and it's a no-op while the row's coordinates are invalid.
 - **Fit on load**: `fitToWaypoints()` fits the view to the whole set (40 px padding, `maxZoom` 12 so a single point doesn't zoom to the max). The editor calls it whenever a file is loaded, so all the waypoints come into view.
+- **Place search** (`RouteMap`'s `placeSearch` prop, `comp/PlaceSearchField.tsx`): a RAC ComboBox in a row **above** the map — not floating over it, because both top corners already carry controls and a popover in normal flow can't be clipped by the container's `overflow-hidden`. Typing a town or region and picking a result flies the view there: `fitToBounds(bounds)` when the geocoder gave the feature an extent (40 px padding, `maxZoom` 12), else `panTo(lat, lon, 10)`. It answers the case the two fits above can't — a competition with no waypoints yet, whose map therefore opens on the whole globe. Off by default and passed only on editing surfaces (the route editor; the waypoints page for admins), because each search is a billed Geocoding request; see `react/lib/geocode.ts` for the API choice, the 300 ms debounce, and the temporary-tier rule that keeps a result on the camera and out of any record.
 
 ## Open Distance Line
 
@@ -212,11 +219,12 @@ A landed-out pilot's routed remaining distance, drawn on the report card's map (
 - **Throb animation**: `@keyframes throb` — pulsing box-shadow, 0.5s ease-in-out, repeats 4 times
 
 - **Glide event extras** (glide_start / glide_end)
-  - Chevron markers along segment (~1km intervals)
+  - Chevron markers along segment, one per **display distance unit** — the spacing is `getSegmentLengthMeters(config.getUnits().distance)`, so 1000 m under `km`, 1609.344 m under `mi`, 1852 m under `nmi`. It is not a fixed 1 km
     - SVG 20x12: single `<path>` chevron, stroke `#3b82f6`, stroke-width 3, rounded caps/joins, rotated to bearing
   - Speed labels between chevrons
-    - Font: `'Atkinson Hyperlegible Next', sans-serif`, 20px, weight 600, color `#3b82f6`
-    - White text-shadow outline (4-direction 1px)
+    - Font: `'Atkinson Hyperlegible Next', sans-serif`, 20px, weight 600
+    - Colour `#333` — the **label** is dark grey, not blue. Only the chevrons are `#3b82f6`. (The speed overlay's fastest label is the one exception; see "Speed Overlay" below)
+    - White glow outline: `GLIDE_LABEL_TEXT_SHADOW` in `map-provider-shared.ts` — four *stacked blurred* shadows, not a 4-direction 1px offset outline: three at `0 0 4px rgba(255,255,255,0.9)` plus one at `0 0 6px rgba(255,255,255,0.9)`
     - Content: speed (formatted), glide ratio (`↘N:1`), altitude change, required glide ratio to next turnpoint (`↘N:1 to NAME`)
     - Line-height: 1.3, centered, no-wrap
     - Zoom-dependent visibility (`GLIDE_LABEL_*_MIN_ZOOM` in `map-provider-shared.ts`):
@@ -247,8 +255,13 @@ Displayed when user clicks on a non-glide track point. Combines a map marker wit
     2. **1 km avg** — speed + altitude change (e.g., `45km/h  −120m`), optional required glide ratio line (`↘28:1 to TP3`)
     3. **Last Thermal** — max altitude + time from most recent climbing circles, wind arrow + speed if wind data available
 
+  The averaging window is a **fixed 1000 m** whatever the display units — unlike
+  the glide chevrons, whose spacing follows the distance unit. Only the group's
+  heading converts: it reads `${formatRadius(1000).withUnit} avg`, so the same
+  1000 m window is titled "1km avg", "0.6mi avg" or "0.5NM avg".
+
 - **Data computation** (`buildTrackPointHUDData`)
-  - Uses `calculatePointMetrics()` with 1km averaging window
+  - Uses `calculatePointMetrics()` with a 1000 m averaging window
   - **Terrain elevation querying**: `map.queryTerrainElevation()` for target turnpoint altitude, falling back to waypoint `altSmoothed`
   - Resolves next turnpoint via `buildNextTurnpointContext()` using cached turnpoint sequence and optimized path
   - **Last thermal data** (`findLastThermalData`): finds up to 3 most recent climbing circles before the fix, averages wind (circular mean for direction), tracks max altitude
@@ -264,6 +277,8 @@ When enabled via the "Show Track Metrics" command palette option, displays glide
 
 - **Fastest segment** — highlighted with a red overlay line (`speed-fastest-segment` layer, `#ef4444`, width 6, opacity 0.9)
 - **All glide labels** — same chevron and speed label styling as event highlight glide extras, with screen-space collision detection to prevent overlap
+- **The fastest label is the odd one out.** For that one marker the chevron stroke AND the label colour are both `FASTEST_COLOR` `#ef4444`, its speed text gains a `" (fastest)"` suffix, and its marker element is given `z-index: 1` so it wins the stacking order against neighbouring labels. Every other marker uses `NORMAL_COLOR` `#3b82f6` for the chevron and `#333` for the label text — the same pair as the event-highlight glide labels
+- The fastest label also carries `data-fastest="true"`, which exempts it from the zoom 10–11 sparse-hiding rule and gives it top priority in the collision sort
 
 ## Visibility Toggles
 
@@ -319,6 +334,49 @@ Activated when 3D track mode is enabled. Provides a cinematic perspective that f
   - Re-targets camera with smooth momentum-based animation
   - Camera preset bearing stays aligned with flight direction
 
+## 3D Multi-Track Scrubber (competition view)
+
+`createMultiTrackScrubber()` replaces the single-track altitude scrubber when
+`setMultiTrack()` runs **while 3D mode is already on** (`is3DMode && tb`) — it is
+the field-wide equivalent of the drone-follow scrubber, and answers "who was where
+at the same point in their own race". Entering 3D later does not build it; the
+tracks must be (re-)set in 3D.
+
+- **Overlay** — full-width strip pinned to the bottom of the map container, height
+  **15%**, background `rgba(0,0,0,0.65)`, `z-index: 10`, crosshair cursor,
+  `touch-action: none`. A 40px y-axis gutter on the left and a 16px x-axis strip at
+  the bottom frame the chart area. The track-point HUD is pushed up to
+  `calc(15% + 40px)` so the two don't overlap
+- **Every pilot on one chart** — a single SVG (`viewBox="0 0 1000 100"`,
+  `preserveAspectRatio="none"`) carries one `<path>` per loaded track: the pilot's
+  whole altitude profile, stroke-width 1.5 with `vector-effect: non-scaling-stroke`,
+  opacity 0.85, coloured by position in the *visible* set via `getRankColor()` (the
+  same ramp as the 2D multi-track lines). Altitudes are normalised against the
+  **global** min/max across all tracks, so the profiles are directly comparable
+- **Aligned by the start, not by the clock** — each track's x origin is that pilot's
+  **SSS crossing time** (`turnpointResult.sssReaching`, matched to the track by
+  pilot name), falling back to the pilot's first fix when there is no SSS crossing.
+  The x extent is the longest of those elapsed durations, so a pilot who started
+  late is not pushed off to the right — everyone's race begins at x = 0
+- **Position indicator** — a 2px full-height bar, `#ff8c00` (the same orange as the
+  leader's rank colour), `pointer-events: none`
+- **Scrubbing** — `pointerdown` on the chart area captures the pointer and scrubs;
+  `pointermove` while held keeps scrubbing; `pointerup` releases. The x position is
+  clamped to 0–1 of the chart width and read as a fraction of the maximum duration
+- **Top-3 rank labels** — a `pointer-events: none` container (`#multi-scrubber-labels`,
+  80px tall, sitting immediately above the strip, `z-index: 11`) redrawn on every
+  scrub. For each of the first three `PilotScore` entries it finds that pilot's fix
+  nearest to `startTime + fraction × maxDuration` and places `"1. Name"` at the fix's
+  **projected screen x**, centred, 11px, white, with a `0 1px 3px rgba(0,0,0,0.8)`
+  text-shadow
+- **Per-pilot 3D position markers** — for those same top three, a short Threebox
+  vertical line is added at the fix (from the fix altitude to +50 m, both scaled by
+  `TERRAIN_EXAGGERATION`), width 8, opacity 1, coloured by rank via `getRankColor()`.
+  They are pushed onto `multiTrack3DObjects` beside the track polylines, so they go
+  away with `clearMulti3DTracks()` — on the next `renderMulti3DTracks()` or
+  `clearMultiTrack()`. (The label container is emptied on every scrub; the 3D markers
+  are not, despite the code comment saying they are)
+
 ## Annotation Overlay
 
 Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (persist through pan/zoom/pitch/bearing) and stored server-side in D1. Rendered as native Mapbox GeoJSON line layers so they sit flat on the map surface (including terrain).
@@ -341,7 +399,7 @@ Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (per
   - **Erase**: pointer cursor, strokes within 12px of eraser path are removed
 
 - **Toolbar** — floating bar (bottom-left, above scale bar, `z-index: 11`), white semi-transparent background, 8px border-radius
-  - Buttons: Draw (D), Erase (E), Undo, Redo, Clear All (red trash icon)
+  - Buttons: Draw (D), Erase (E), Undo, Redo, Clear All (red trash icon), Close (✕ with a small "esc" hint, `title="Close (Esc)"`) — thin separators between the groups
   - Active tool highlighted with `#e8e8e8` background
   - Appears/disappears with annotation mode toggle
 

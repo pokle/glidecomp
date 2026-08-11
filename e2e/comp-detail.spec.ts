@@ -1,7 +1,7 @@
 /**
  * Comp detail page (/comp/:id) — interaction coverage for its RAC surfaces
  * (converted 2026-07-21, see docs/2026-07-18-rac-adoption-guide.md):
- * scores view tabs + sortable standings tables + the results-by-task Select,
+ * scores view tabs + sortable scores tables + the scores-by-task Select,
  * the pilots section (read-only RAC grid + the kept-by-policy Tabulator edit
  * grid inside a RAC dialog shell), the activity filter tabs, and the settings
  * dialog (Advanced GAP NumberFields, timezone combobox).
@@ -29,7 +29,7 @@
  */
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 import { compScoresCsvPath } from "../web/frontend/src/react/lib/slug";
 
@@ -134,16 +134,23 @@ test.beforeEach(async ({ page }) => {
 function trackMutations(page: Page): () => boolean {
   let mutated = false;
   page.on("request", (r) => {
-    if (r.method() !== "GET" && r.url().includes("/api/comp")) mutated = true;
+    if (r.method() === "GET" || !r.url().includes("/api/comp")) return;
+    // One exception, and it has to be an exception: the CIVL ranking lookup
+    // is a READ that takes a body, because what it reads about is the roster
+    // sitting unsaved in the editor's grid (routes/pilot.ts). Method alone
+    // cannot tell it apart from a write, so it is named here rather than the
+    // rule being loosened to "POST is fine".
+    if (r.url().includes("/pilot/civl-rankings")) return;
+    mutated = true;
   });
   return () => mutated;
 }
 
-test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
+test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   page,
 }) => {
   // The full score views live on the dedicated scores page now; the comp page
-  // keeps a compact standings summary linking there.
+  // keeps a compact scores summary linking there.
   await page.goto(`/comp/${compId}/scores`);
   await expect(page.getByRole("heading", { level: 1, name: "Scores" })).toBeVisible();
   const scores = page.locator("main");
@@ -151,41 +158,41 @@ test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
   await expect(tablist).toBeVisible({ timeout: 15_000 });
 
   // ── Class tab switching. Only the selected TabPanel renders its content,
-  // so the other class's standings grid must leave the tree entirely.
+  // so the other class's scores grid must leave the tree entirely.
   const [classA, classB] = comp.pilot_classes;
   expect(classB).toBeTruthy();
   await tablist.getByRole("tab", { name: classB, exact: true }).click();
   await expect(
-    scores.getByRole("grid", { name: `Standings — ${classB}` })
+    scores.getByRole("grid", { name: `Scores — ${classB}` })
   ).toBeVisible();
   await expect(
-    scores.getByRole("grid", { name: `Standings — ${classA}` })
+    scores.getByRole("grid", { name: `Scores — ${classA}` })
   ).toHaveCount(0);
   await tablist.getByRole("tab", { name: classA, exact: true }).click();
-  const standings = scores.getByRole("grid", { name: `Standings — ${classA}` });
-  await expect(standings).toBeVisible();
+  const classScores = scores.getByRole("grid", { name: `Scores — ${classA}` });
+  await expect(scores).toBeVisible();
   await expect(
-    scores.getByRole("grid", { name: `Standings — ${classB}` })
+    scores.getByRole("grid", { name: `Scores — ${classB}` })
   ).toHaveCount(0);
 
   // ── SortableTable per-column first-click directions (RAC gotcha #15: RAC
   // itself always starts ascending; the app overrides per column).
   // "Pilot" first click sorts ASCENDING…
-  const pilotHeader = standings.getByRole("columnheader", { name: /^Pilot/ });
+  const pilotHeader = scores.getByRole("columnheader", { name: /^Pilot/ });
   await pilotHeader.click();
   await expect(pilotHeader).toHaveAttribute("aria-sort", "ascending");
-  const names = await standings.getByRole("rowheader").allTextContents();
+  const names = await scores.getByRole("rowheader").allTextContents();
   expect(names.length).toBeGreaterThan(1);
   expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
 
   // …while "Total" first click sorts DESCENDING (scores read best-first).
-  const totalHeader = standings.getByRole("columnheader", { name: /^Total/ });
+  const totalHeader = scores.getByRole("columnheader", { name: /^Total/ });
   await totalHeader.click();
   await expect(totalHeader).toHaveAttribute("aria-sort", "descending");
   await expect(pilotHeader).not.toHaveAttribute("aria-sort", "ascending");
   // The Pilot column renders as rowheader <th>, so the last <td> is Total.
   const totals = (
-    await standings.locator("tbody tr td:last-child").allTextContents()
+    await scores.locator("tbody tr td:last-child").allTextContents()
   ).map((t) => Number(t.replace(/,/g, "")));
   expect(totals.length).toBeGreaterThan(1);
   for (let i = 1; i < totals.length; i++) {
@@ -200,10 +207,10 @@ test("scores page: class tabs, top 3, results-by-task select, sorting", async ({
   await expect(overall.getByRole("rowheader", { name: "Total", exact: true })).toBeVisible();
   await expect(scores.getByRole("grid", { name: `Top 3 — ${classA}` })).toBeVisible();
 
-  // ── Results by task: the Select defaults to the first scorable task;
+  // ── Scores by task: the Select defaults to the first scorable task;
   // picking a task flown by the other class swaps the embedded grid
   // (aria-label + rows).
-  await tablist.getByRole("tab", { name: "Results by task" }).click();
+  await tablist.getByRole("tab", { name: "Scores by task" }).click();
   const panel = scores.getByRole("tabpanel");
   const scorable = comp.tasks.filter((t) => t.has_xctsk);
   const defaultClass = scorable[0].pilot_classes[0];
@@ -391,6 +398,70 @@ test("activity: collapsed digest expands, filter tabs switch and re-fetch", asyn
   await expect(panel.getByText("Could not load activity")).toHaveCount(0);
 });
 
+/**
+ * RAC gotcha #22, and the reason `popoverClass` carries `fixed!`.
+ *
+ * RAC portals a popover to <body> and positions it with viewport-relative
+ * offsets under `position: absolute`; our body is `position: relative` (iOS
+ * Safari backdrops), so the containing block is the body BOX. A popover that
+ * flips UPWARDS — which any select low in a tall dialog does — was displaced
+ * by exactly `scrollHeight - innerHeight`: open, focusable, every option in
+ * the DOM, and far below the fold.
+ *
+ * This lived on the pilots editor's CIVL list picker until that picker was
+ * removed (one number per pilot, no list to choose). The settings dialog's
+ * advanced scoring selects are the same geometry — deep inside a tall modal —
+ * so the kit fix keeps its coverage here.
+ */
+test("a select low in a tall dialog opens ON SCREEN, not below the fold", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  // A short window is what makes the page taller than the viewport, which is
+  // the only condition under which the displacement happens.
+  await page.setViewportSize({ width: 1280, height: 600 });
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("Advanced scoring settings").click();
+
+  // The trigger has to sit LOW in the window, because that is what makes RAC
+  // flip the popover upwards and emit the `bottom:` placement the bug
+  // displaces — opened higher up it opens downward and lands correctly even
+  // when broken. Verified: at ~70px from the bottom RAC emits `bottom: 78px`,
+  // which without the fix put the list 735px below the fold.
+  // The S7F 2026 migration removed the Advanced section's selects (the
+  // formula generations are no longer settings), so the low-in-a-tall-dialog
+  // geometry is built from the Series scoring select instead — the manual
+  // overlay scroll below positions it near the bottom either way.
+  const select = dialog.getByRole("button", { name: "Series scoring" });
+  await select.scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const trigger = document.querySelector<HTMLElement>(
+      'button[aria-label="Series scoring"]'
+    );
+    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+      ?.parentElement;
+    if (!trigger || !overlay) throw new Error("settings dialog not laid out as expected");
+    overlay.scrollTop += trigger.getBoundingClientRect().y - (window.innerHeight - 70);
+  });
+  await select.click();
+
+  const listbox = page.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+  const box = await listbox.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(box).not.toBeNull();
+  // toBeVisible() alone would NOT catch this: an off-screen popover is still
+  // "visible" to Playwright. The rect is the assertion.
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeLessThan(viewport.height);
+
+  await page.keyboard.press("Escape");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  expect(mutated()).toBe(false);
+});
+
 test("settings dialog: stored GAP values, timezone combobox filter, cancel", async ({
   page,
 }) => {
@@ -412,11 +483,13 @@ test("settings dialog: stored GAP values, timezone combobox filter, cancel", asy
     dialog.getByRole("textbox", { name: "Nominal time (min)" })
   ).toHaveValue("90");
   await expect(
-    dialog.getByRole("textbox", { name: "Nominal goal (%)" })
-  ).toHaveValue("30");
-  await expect(
     dialog.getByRole("textbox", { name: "Minimum distance (km)" })
   ).toHaveValue("5");
+  // The §11 Leading Time Ratio resolves to the HG discipline default when
+  // the stored params never pinned one.
+  await expect(
+    dialog.getByRole("textbox", { name: "Leading-time ratio (%)" })
+  ).toHaveValue("17.5");
   await expect(
     dialog.getByRole("textbox", { name: "ESS but not goal: points kept (%, HG)" })
   ).toHaveValue("0");

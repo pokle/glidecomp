@@ -1,21 +1,22 @@
 import { Hono } from "hono";
-import type { Env, AuthUser } from "../env";
+import type { AuthUser, AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { createTaskSchema, updateTaskSchema, validated } from "../validators";
-import { audit, describeChange } from "../audit";
+import { audit, auditAll, describeChange } from "../audit";
+import {
+  boolFromDb,
+  boolToDb,
+  deepChanged,
+  planPatch,
+  type PatchFieldTable,
+} from "../lib/patch-fields";
+import type { z } from "zod";
 import { bumpAndRevalidateScores } from "../score-store";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
-
-type Variables = {
-  user: AuthUser;
-  ids: { comp_id?: number; task_id?: number; comp_pilot_id?: number };
-};
-
-type HonoEnv = { Bindings: Env; Variables: Variables };
 
 const MAX_TASKS_PER_COMP = 50;
 
@@ -78,7 +79,106 @@ async function deriveCompTimezone(
   });
 }
 
-export const taskRoutes = new Hono<HonoEnv>()
+/**
+ * What each updatable task field means: where it is stored, and what a change
+ * to it does to the audit log and to the published scores.
+ *
+ * Read the `bumpsScores` column down: the task's date, its scored classes and
+ * its route feed the scored output; weather notes and the submissions-closed
+ * flag deliberately do not. Weather notes are prose about the day and change
+ * no score. Closing the task is not a scoring input either — nothing the
+ * scorer reads depends on whether further evidence may arrive, and closing the
+ * day does not retroactively change a single points figure. Both are still
+ * audit-logged: the notes are published text attributed to the organisers, and
+ * the close is the record that makes a later organiser upload legible rather
+ * than mysterious.
+ *
+ * `pilot_classes` is absent from the table on purpose — it lives in
+ * `task_class`, not on the task row, so its write and its diff are handled by
+ * the caller.
+ */
+function taskFieldTable(
+  normalisedStopTime: string | null | undefined
+): PatchFieldTable<z.infer<typeof updateTaskSchema>> {
+  return {
+    name: {
+      column: "name",
+      describe: (was, now) => describeChange("task name", was, now),
+    },
+    task_date: {
+      column: "task_date",
+      describe: (was, now) => describeChange("task date", was, now),
+      bumpsScores: true,
+    },
+    // Compared as PARSED routes, not as the stored strings: two encodings of
+    // the same route are the same route, and only the summariser wants the
+    // JSON back.
+    xctsk: {
+      column: "xctsk",
+      toDb: (v) => (v ? JSON.stringify(v) : null),
+      fromDb: (v) => (v ? JSON.parse(v as string) : null),
+      changed: deepChanged,
+      describe: (was, now) => {
+        if (!was && now) return `Set task route: ${describeTaskSummary(now)}`;
+        if (was && !now) return "Cleared task route";
+        if (!was || !now) return [];
+        const summary = summarizeXctskChange(JSON.stringify(was), now);
+        return summary ? `Updated task route: ${summary}` : "Updated task route";
+      },
+      bumpsScores: true,
+    },
+    // Stopped tasks (issue #264, S7F §13.4): stored as a normalised ISO UTC
+    // instant so the scorer and the UI agree on it. Stopping (or un-stopping)
+    // a task rescores every pilot in it — the §13.4 machinery turns on and off
+    // with this field.
+    stop_announcement_time: {
+      column: "stop_announcement_time",
+      toDb: () => normalisedStopTime,
+      changed: (was) => was !== normalisedStopTime,
+      describe: (was) => {
+        if (was === null && normalisedStopTime !== null) {
+          return `Stopped the task — stop announcement time ${normalisedStopTime} (scored per FAI S7F §13.4)`;
+        }
+        if (normalisedStopTime === null) {
+          return "Cleared the task stop — task scored as run to completion";
+        }
+        return describeChange(
+          "task stop announcement time",
+          was,
+          normalisedStopTime
+        );
+      },
+      bumpsScores: true,
+    },
+    // The audit line quotes an EXCERPT rather than the field: a
+    // 4000-character debrief pasted verbatim into the public audit log would
+    // bury every other entry around it.
+    weather_notes: {
+      column: "weather_notes",
+      fromDb: (v) => (v as string | null) ?? "",
+      describe: (was, now) => {
+        const text = (now as string).trim();
+        if (text.length === 0) return "Cleared the weather notes";
+        const had = (was as string).trim().length > 0;
+        return `${had ? "Updated" : "Added"} the weather notes: "${excerpt(text)}"`;
+      },
+    },
+    // Says who may still submit, because that is the part an organiser gets
+    // wrong: they close the task and are then surprised to find they can
+    // still upload.
+    submissions_closed: {
+      column: "submissions_closed",
+      toDb: boolToDb,
+      fromDb: boolFromDb,
+      describe: (_was, now) =>
+        now
+          ? "Closed the task for track submissions — organisers can still upload"
+          : "Reopened the task for track submissions",
+    },
+  };
+}
+
+export const taskRoutes = new Hono<AuthedEnv>()
   // ── POST /api/comp/:comp_id/task ── Create task
   .post(
     "/api/comp/:comp_id/task",
@@ -229,7 +329,7 @@ export const taskRoutes = new Hono<HonoEnv>()
 
       const task = await c.env.DB.prepare(
         `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
-                stop_announcement_time, weather_notes
+                stop_announcement_time, weather_notes, submissions_closed
          FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
@@ -265,6 +365,9 @@ export const taskRoutes = new Hono<HonoEnv>()
         // ground truth pilots read the modelled weather and the field
         // analysis against, so everyone who can see the task can see it.
         weather_notes: (task.weather_notes as string | null) ?? "",
+        // Public too: a pilot has to be able to see that the task stopped
+        // taking files without first trying to send one.
+        submissions_closed: !!task.submissions_closed,
         pilot_classes: tc.results.map((r) => r.pilot_class),
         track_count: trackCount?.cnt ?? 0,
       });
@@ -287,7 +390,7 @@ export const taskRoutes = new Hono<HonoEnv>()
       // Verify task exists and belongs to comp; capture current state for audit
       const task = await c.env.DB.prepare(
         `SELECT task_id, name, task_date, xctsk, stop_announcement_time,
-                weather_notes
+                weather_notes, submissions_closed
          FROM task WHERE task_id = ? AND comp_id = ?`
       )
         .bind(taskId, compId)
@@ -298,6 +401,7 @@ export const taskRoutes = new Hono<HonoEnv>()
           xctsk: string | null;
           stop_announcement_time: string | null;
           weather_notes: string | null;
+          submissions_closed: number;
         }>();
 
       if (!task) {
@@ -354,82 +458,44 @@ export const taskRoutes = new Hono<HonoEnv>()
         }
       }
 
-      // Build dynamic UPDATE
-      const updates: string[] = [];
-      const values: unknown[] = [];
-
-      if (body.name !== undefined) {
-        updates.push("name = ?");
-        values.push(body.name);
-      }
-      if (body.task_date !== undefined) {
-        updates.push("task_date = ?");
-        values.push(body.task_date);
-      }
-      if (body.xctsk !== undefined) {
-        updates.push("xctsk = ?");
-        values.push(body.xctsk ? JSON.stringify(body.xctsk) : null);
-      }
-      // Stopped tasks (issue #264, S7F §12.3): store the announcement as a
-      // normalized ISO UTC instant so the scorer and the UI agree on it.
-      const newStopTime = body.stop_announcement_time !== undefined
-        ? (body.stop_announcement_time === null
+      // Stopped tasks: normalise the announcement to an ISO UTC instant
+      // before it is compared or stored.
+      const normalisedStopTime =
+        body.stop_announcement_time !== undefined
+          ? body.stop_announcement_time === null
             ? null
-            : new Date(Date.parse(body.stop_announcement_time)).toISOString())
-        : undefined;
-      if (newStopTime !== undefined) {
-        updates.push("stop_announcement_time = ?");
-        values.push(newStopTime);
-      }
-      // Weather notes. NOT a scoring input — prose about the day changes no
-      // score, so this deliberately does not set scoreInputsChanged below.
-      // It IS audit-logged, because it is published text attributed to the
-      // organizers and readers deserve to see when it changed.
-      if (body.weather_notes !== undefined) {
-        updates.push("weather_notes = ?");
-        values.push(body.weather_notes);
-      }
+            : new Date(Date.parse(body.stop_announcement_time)).toISOString()
+          : undefined;
 
-      if (updates.length > 0) {
-        values.push(taskId);
+      const plan = planPatch(
+        body,
+        task as unknown as Record<string, unknown>,
+        taskFieldTable(normalisedStopTime)
+      );
+
+      if (plan.assignments.length > 0) {
         await c.env.DB.prepare(
-          `UPDATE task SET ${updates.join(", ")} WHERE task_id = ?`
+          `UPDATE task SET ${plan.assignments.join(", ")} WHERE task_id = ?`
         )
-          .bind(...values)
+          .bind(...plan.values, taskId)
           .run();
       }
 
-      // Update task_class if provided
+      // The scored classes live in their own table, so their write and their
+      // diff sit outside the field table.
+      let scoreInputsChanged = plan.bumpsScores;
+      const auditChanges = [...plan.audits];
       if (body.pilot_classes) {
-        await c.env.DB.prepare(
-          "DELETE FROM task_class WHERE task_id = ?"
-        )
-          .bind(taskId)
-          .run();
-
-        if (body.pilot_classes.length > 0) {
-          const batch = body.pilot_classes.map((cls) =>
+        const statements: D1PreparedStatement[] = [
+          c.env.DB.prepare("DELETE FROM task_class WHERE task_id = ?").bind(taskId),
+          ...body.pilot_classes.map((cls) =>
             c.env.DB.prepare(
               "INSERT INTO task_class (task_id, pilot_class) VALUES (?, ?)"
             ).bind(taskId, cls)
-          );
-          await c.env.DB.batch(batch);
-        }
-      }
+          ),
+        ];
+        await c.env.DB.batch(statements);
 
-      // Emit audit entries per changed field. Changes to the task date, the
-      // scored classes, or the route feed the scored output — those also mark
-      // the task's materialized scores stale below.
-      const auditChanges: string[] = [];
-      let scoreInputsChanged = false;
-      if (body.name !== undefined && body.name !== task.name) {
-        auditChanges.push(describeChange("task name", task.name, body.name));
-      }
-      if (body.task_date !== undefined && body.task_date !== task.task_date) {
-        auditChanges.push(describeChange("task date", task.task_date, body.task_date));
-        scoreInputsChanged = true;
-      }
-      if (body.pilot_classes !== undefined) {
         const newClasses = [...body.pilot_classes].sort();
         if (JSON.stringify(newClasses) !== JSON.stringify(currentClasses)) {
           auditChanges.push(
@@ -438,83 +504,23 @@ export const taskRoutes = new Hono<HonoEnv>()
           scoreInputsChanged = true;
         }
       }
-      // Stopping (or un-stopping) a task rescores every pilot in it — the
-      // spec's stopped-task machinery (§12.3) turns on/off with this field.
-      if (newStopTime !== undefined && newStopTime !== task.stop_announcement_time) {
-        if (task.stop_announcement_time === null && newStopTime !== null) {
-          auditChanges.push(
-            `Stopped the task — stop announcement time ${newStopTime} (scored per FAI S7F §12.3)`
-          );
-        } else if (newStopTime === null) {
-          auditChanges.push(
-            "Cleared the task stop — task scored as run to completion"
-          );
-        } else {
-          auditChanges.push(
-            describeChange(
-              "task stop announcement time",
-              task.stop_announcement_time,
-              newStopTime
-            )
-          );
-        }
-        scoreInputsChanged = true;
-      }
-      if (body.xctsk !== undefined) {
-        const oldHasXctsk = task.xctsk !== null;
-        const newHasXctsk = body.xctsk !== null;
-        if (!oldHasXctsk && newHasXctsk) {
-          auditChanges.push(
-            `Set task route: ${describeTaskSummary(body.xctsk)}`
-          );
-          scoreInputsChanged = true;
-        } else if (oldHasXctsk && !newHasXctsk) {
-          auditChanges.push("Cleared task route");
-          scoreInputsChanged = true;
-        } else if (
-          oldHasXctsk &&
-          newHasXctsk &&
-          task.xctsk !== JSON.stringify(body.xctsk)
-        ) {
-          const summary = summarizeXctskChange(task.xctsk, body.xctsk);
-          auditChanges.push(
-            summary ? `Updated task route: ${summary}` : "Updated task route"
-          );
-          scoreInputsChanged = true;
-        }
-      }
-
-      // Weather notes are prose, so the audit line quotes an EXCERPT rather
-      // than the field: a 4000-character debrief pasted verbatim into the
-      // public audit log would bury every other entry around it.
-      if (
-        body.weather_notes !== undefined &&
-        body.weather_notes !== (task.weather_notes ?? "")
-      ) {
-        const had = (task.weather_notes ?? "").trim().length > 0;
-        const now = body.weather_notes.trim();
-        if (now.length === 0) {
-          auditChanges.push("Cleared the weather notes");
-        } else {
-          auditChanges.push(
-            `${had ? "Updated" : "Added"} the weather notes: "${excerpt(now)}"`
-          );
-        }
-      }
 
       if (scoreInputsChanged) {
         await bumpAndRevalidateScores(c, [taskId]);
       }
 
       const taskName = body.name ?? task.name;
-      for (const description of auditChanges) {
-        await audit(c.env.DB, c.var.user, compId, {
-          subject_type: "task",
+      await auditAll(
+        c.env.DB,
+        c.var.user,
+        compId,
+        auditChanges.map((description) => ({
+          subject_type: "task" as const,
           subject_id: taskId,
           subject_name: taskName,
           description,
-        });
-      }
+        }))
+      );
 
       if (body.xctsk) {
         await deriveCompTimezone(c.env.DB, c.var.user, compId, body.xctsk);
@@ -523,7 +529,7 @@ export const taskRoutes = new Hono<HonoEnv>()
       // Return updated task
       const updated = await c.env.DB.prepare(
         `SELECT task_id, comp_id, name, task_date, creation_date, xctsk,
-                stop_announcement_time, weather_notes
+                stop_announcement_time, weather_notes, submissions_closed
          FROM task WHERE task_id = ?`
       )
         .bind(taskId)
@@ -547,6 +553,7 @@ export const taskRoutes = new Hono<HonoEnv>()
         stop_announcement_time:
           (updated.stop_announcement_time as string | null) ?? null,
         weather_notes: (updated.weather_notes as string | null) ?? "",
+        submissions_closed: !!updated.submissions_closed,
         pilot_classes: tc.results.map((r) => r.pilot_class),
       });
     }

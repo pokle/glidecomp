@@ -15,7 +15,7 @@
  * assertion.
  */
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { authRequest, createComp, createTask, request, clearCompData } from "./helpers";
 import {
   backoffMsFor,
@@ -408,6 +408,52 @@ describe("refreshTaskWeather", () => {
       ],
     });
     expect(calls).toBe(0);
+  });
+
+  test("a task deleted mid-fetch is dropped silently, not logged as an error", async () => {
+    // The e2e reseed race: the fetch is one long HTTP round trip, and nothing
+    // stops the task being deleted while it is in flight. The CASCADE takes
+    // the weather row too, so the result write fails its foreign key — an
+    // expected outcome of the fetch outliving the task, not an error.
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await refreshTaskWeather(env, taskId, {
+        providers: [
+          fakeProvider(async () => {
+            await env.DB.prepare("DELETE FROM task WHERE task_id = ?").bind(taskId).run();
+            return weatherFixture();
+          }),
+        ],
+      });
+      expect(await readWeatherRow(env.DB, taskId)).toBeNull();
+      // Other stores' background work may log about the deleted task too;
+      // this file only pins down the weather store's silence.
+      const logged = errorLog.mock.calls.map((c) => String(c[0]));
+      expect(logged.filter((m) => /weather/i.test(m))).toEqual([]);
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  test("the same vanish during a FAILED fetch is silent too", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await refreshTaskWeather(env, taskId, {
+        providers: [
+          fakeProvider(async () => {
+            await env.DB.prepare("DELETE FROM task WHERE task_id = ?").bind(taskId).run();
+            throw new Error("provider down");
+          }),
+        ],
+      });
+      expect(await readWeatherRow(env.DB, taskId)).toBeNull();
+      // The provider failure itself is still logged; the failure-row write
+      // hitting the vanished task must not add a second line.
+      const logged = errorLog.mock.calls.map((c) => String(c[0]));
+      expect(logged.filter((m) => /weather/i.test(m))).toEqual(["weather fetch failed"]);
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 
   test("a task with no route is left alone entirely", async () => {

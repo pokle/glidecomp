@@ -79,7 +79,7 @@ const TERMS: Term[] = [
     term: "Validity",
     href: "/scoring/gap#task-validity",
     definition:
-      "How much of a full 1000-point day this task was worth. A day where few launched, nobody got far, or the winner was round very quickly counts for less in the overall standings.",
+      "How much of a full 1000-point day this task was worth. A day where few launched, nobody got far, or the winner was round very quickly counts for less in the competition total.",
   },
   {
     term: "Goal ratio",

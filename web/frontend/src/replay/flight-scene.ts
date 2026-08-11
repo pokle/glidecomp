@@ -420,7 +420,7 @@ export class FlightScene {
   }
 
   /**
-   * A LINE goal (S7F §6.3.1), drawn as a gate instead of a cylinder: the goal
+   * A LINE goal (S7F §6.2.3.1), drawn as a gate instead of a cylinder: the goal
    * line on the ground with a translucent vertical wall standing on it (the
    * surface pilots fly through), plus the control-semicircle outline behind
    * the line — the same geometry the scorer credits, so what the viewer sees

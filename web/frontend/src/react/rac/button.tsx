@@ -1,9 +1,8 @@
 /**
- * React Aria Components Button/Link, styled to match ui/button.tsx.
+ * React Aria Components Button/Link, styled to match the shadcn kit it replaced.
  *
- * Part of the RAC exploration kit (src/react/rac/): the task detail page is
- * built entirely from these primitives to evaluate react-aria-components as
- * the app-wide component foundation. Interaction states use RAC's data
+ * Part of the RAC kit (src/react/rac/) — see
+ * docs/2026-07-18-rac-adoption-guide.md. Interaction states use RAC's data
  * attributes (data-hovered / data-pressed / data-focus-visible) instead of CSS
  * pseudo-classes — RAC normalizes them across mouse/touch/keyboard.
  */
@@ -25,7 +24,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground data-hovered:bg-primary/80",
+        // The primary carries the extra weight, so it out-ranks an outline or
+        // ghost button sitting beside it on sizing AND colour rather than
+        // colour alone — at the old h-8/px-2.5 every button read the same size.
+        default:
+          "bg-primary font-semibold text-primary-foreground shadow-card data-hovered:bg-primary/80",
         outline:
           "border-border bg-background data-hovered:bg-muted data-hovered:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground data-selected:bg-primary data-selected:text-primary-foreground dark:border-input dark:bg-input/30 dark:data-hovered:bg-input/50",
         secondary:
@@ -36,11 +39,15 @@ const buttonVariants = cva(
           "bg-destructive/10 text-destructive data-hovered:bg-destructive/20 data-focus-visible:border-destructive/40 data-focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:data-hovered:bg-destructive/30 dark:data-focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 data-hovered:underline",
       },
+      // Horizontal padding was px-2.5 (10px) at EVERY size, which is what made
+      // buttons read cramped and same-sized. Heights step 28/36/40 so a phone
+      // gets a comfortable target on the sizes that matter (WCAG 2.5.8 wants
+      // 24px minimum; `sm` is for dense table rows and clears it).
       size: {
-        default: "h-8 gap-1.5 px-2.5",
+        default: "h-9 gap-1.5 px-4",
         sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5",
-        icon: "size-8",
+        lg: "h-10 gap-2 px-5 text-[0.9375rem]",
+        icon: "size-9",
         "icon-sm": "size-7 rounded-[min(var(--radius-md),12px)]",
       },
     },

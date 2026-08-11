@@ -3,7 +3,7 @@
  * cluster, or does everyone win differently?
  *
  * Pilots run down the side in published-rank order. Behaviours run across,
- * ordered by how strongly each one went with the placings (see
+ * ordered by how strongly each one went with the ranks (see
  * {@link heatmapColumns}) — NOT by metric family, which was the old order and
  * carried no information about the question this chart asks: a strong
  * separator and a pure-noise metric sat side by side and the picture was
@@ -26,6 +26,7 @@
  */
 import { useMemo, useState } from "react";
 import { cn } from "@/react/lib/utils";
+import { Explain } from "@/react/rac/explain";
 import {
   FAMILY_LABELS,
   formatMetricValue,
@@ -93,7 +94,7 @@ export interface HeatmapColumns {
  * out. Their values stay in the Race craft tables and the outcome-checks table.
  *
  * Ordered by {@link orientedRho} descending: the behaviours whose better end
- * went with better placings first, the ones that said nothing in the middle,
+ * went with better ranks first, the ones that said nothing in the middle,
  * the ones that ran the other way last. Ties break on id so the order is
  * deterministic — these pages are server-rendered, and an unstable sort is a
  * hydration mismatch.
@@ -220,14 +221,14 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
     <figure className="space-y-1">
       <div
         role="img"
-        aria-label={`Percentile heatmap: ${rows.length} pilots in rank order down the side against ${metricCount} behaviours across, ordered from the behaviours that most went with better placings on the left, through the ones that separated nobody, to the ones that ran the other way on the right. Darker means a better percentile in the field. The family tables below carry every value.`}
+        aria-label={`Percentile heatmap: ${rows.length} pilots in rank order down the side against ${metricCount} behaviours across, ordered from the behaviours that most went with better ranks on the left, through the ones that separated nobody, to the ones that ran the other way on the right. Darker means a better percentile in the field. The family tables below carry every value.`}
         onMouseLeave={() => {
           setReadout(null);
           setHighlight(null);
         }}
       >
-        {/* The two axes, named. Both are SORTED — pilots by placing, columns
-            by how much each behaviour went with the placings — and that
+        {/* The two axes, named. Both are SORTED — pilots by rank, columns
+            by how much each behaviour went with the ranks — and that
             ordering is the whole reading of the picture, but nothing on the
             chart said so: it lived six sentences into the caption. */}
         <div style={gridTemplate} aria-hidden>
@@ -317,23 +318,60 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
           : "Hover a cell for the pilot, value, and percentile behind it."}
       </p>
 
+      {/* Two sentences on screen: what a cell is, and what an empty one is.
+          The column ordering the caption used to spell out is now stated by
+          the chart's own axis title ("behaviours — most explanatory → least"),
+          and the rest is method, so it sits behind the ⓘ. */}
       <figcaption className="text-xs text-muted-foreground">
-        The pilots in rank order against every behaviour. A darker cell is a
-        better percentile in this field, and an empty cell is a behaviour that
-        does not apply. The columns start with the behaviours whose better end
-        went with better places, continue through the behaviours that separated
-        nobody, and end with the behaviours that ran the other way. A field
-        that one behaviour separated therefore shades dark in the top-left
-        corner, and a field where each pilot won differently does not. The band
-        above rates how much pattern each group of columns holds: a{" "}
-        <strong>clear</strong>,{" "}
-        <strong>some</strong> or <strong>faint</strong> pattern,{" "}
-        <strong>noise</strong> (could be chance), or <strong>too few</strong>{" "}
-        pilots to tell. The family sections below carry the exact values.
-        {hasNeutral
-          ? " † This behaviour has no good or bad direction. The shade is the position in the field, and not the quality."
-          : null}
+        <span className="inline-flex items-baseline gap-1">
+          <span>
+            The pilots in rank order against every behaviour. A darker cell is
+            a better percentile in this field, and an empty cell is a behaviour
+            that does not apply.
+          </span>
+          <Explain label="Reading the heatmap" className="self-center">
+            <HeatmapNote hasNeutral={hasNeutral} />
+          </Explain>
+        </span>
+        {/* A popover cannot exist on paper, so print gets the same prose in
+            place. Hidden on screen, where the ⓘ is the way in. */}
+        <span className="hidden print:block">
+          <HeatmapNote hasNeutral={hasNeutral} />
+        </span>
       </figcaption>
     </figure>
+  );
+}
+
+/**
+ * What the column order, the band above and the † marker mean. Rendered twice
+ * — in the caption's ⓘ on screen, and statically for print — so the two can
+ * never drift. See rac/explain.tsx on why anything behind a ⓘ needs a printed
+ * copy.
+ */
+function HeatmapNote({ hasNeutral }: { hasNeutral: boolean }) {
+  return (
+    <>
+      <p>
+        The columns start with the behaviours whose better end went with better
+        ranks, continue through the behaviours that separated nobody, and end
+        with the behaviours that ran the other way. A field that one behaviour
+        separated therefore shades dark in the top-left corner, and a field
+        where each pilot won differently does not.
+      </p>
+      <p>
+        The band above rates how much pattern each group of columns holds: a{" "}
+        <strong>clear</strong>, <strong>some</strong> or <strong>faint</strong>{" "}
+        pattern, <strong>noise</strong> (could be chance), or{" "}
+        <strong>too few</strong> pilots to tell. The family sections below carry
+        the exact values.
+      </p>
+      {hasNeutral ? (
+        <p>
+          † This behaviour has no good or bad direction. The shade is the
+          position in the field, and not the quality.
+        </p>
+      ) : null}
+    </>
   );
 }

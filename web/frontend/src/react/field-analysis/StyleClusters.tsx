@@ -25,7 +25,9 @@ import {
   MIN_CLUSTER_PILOTS,
   type FieldAnalysisReport,
   type StyleCluster,
+  type StyleClusterReport,
 } from "./types";
+import { Explain } from "@/react/rac/explain";
 
 /** Whole ranks stay whole; an even-count median shows its half. */
 function fmtRank(r: number): string {
@@ -129,13 +131,14 @@ export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
 
   return (
     <div className="space-y-3">
+      {/* The one sentence a reader needs before the cards make sense. The
+          card-reading instructions (signature name, ★) are self-evident from
+          the cards; the clustering method is behind the ⓘ below. */}
       <p className="text-sm text-muted-foreground">
-        The groups are flying <em>style</em>, and not score. The spread of
-        ranks in each group shows where that style paid and where it did not.
-        Each group carries the name of its strongest signature. A ★ marks the
-        pilot most typical of their group.
+        The groups are flying <em>style</em>, and not score. The spread of ranks
+        in each group shows where that style paid and where it did not.
       </p>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(22rem,100%),1fr))] gap-4">
         {sc.clusters.map((c) => (
           <ClusterCard key={c.id} cluster={c} />
         ))}
@@ -149,13 +152,38 @@ export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
           .
         </p>
       ) : null}
+      {/* The reading — how many groups formed, out of how many pilots — stays
+          visible. How they were formed, and what the silhouette number is
+          worth, is method: behind the ⓘ on screen, printed in place on paper. */}
       <p className="text-xs text-muted-foreground">
-        {sc.explanation} On this task, {sc.pilotCount} pilots on{" "}
-        {sc.metricCount} behavioural metrics formed {sc.k} groups, with k
-        searched from {sc.kMin} to {sc.kMax}. The mean silhouette is{" "}
-        {sc.meanSilhouette.toFixed(2)}. A value near 0 means soft group
-        boundaries, and a value near 1 means tight, well-separated groups.
+        <span className="inline-flex items-baseline gap-1">
+          <span>
+            {sc.pilotCount} pilots on {sc.metricCount} behavioural metrics
+            formed {sc.k} groups.
+          </span>
+          <Explain label="How the groups were found" className="self-center">
+            <ClusterMethodNote sc={sc} />
+          </Explain>
+        </span>
+        <span className="hidden print:block">
+          <ClusterMethodNote sc={sc} />
+        </span>
       </p>
     </div>
+  );
+}
+
+/** The clustering method and what the silhouette score means. Rendered in the
+ * ⓘ on screen and statically for print, from one definition. */
+function ClusterMethodNote({ sc }: { sc: StyleClusterReport }) {
+  return (
+    <>
+      <p>{sc.explanation}</p>
+      <p>
+        k was searched from {sc.kMin} to {sc.kMax}. The mean silhouette is{" "}
+        {sc.meanSilhouette.toFixed(2)} — a value near 0 means soft group
+        boundaries, and a value near 1 means tight, well-separated groups.
+      </p>
+    </>
   );
 }

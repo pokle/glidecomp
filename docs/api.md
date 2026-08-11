@@ -132,6 +132,16 @@ Scored results for a single task:
 curl https://glidecomp.com/api/comp/compa/task/taska/score
 ```
 
+Both score endpoints return their per-class results as **`class_scores`**, an
+array of `{ pilot_class, pilots }`. The shape is the same on both, so one
+reader handles either.
+
+> **Changed 2026-08.** This array used to be called `standings` on the
+> competition endpoint and `classes` on the task endpoint — the same data under
+> two names. Both are now `class_scores`, and the old names are gone. (The
+> competition response also has a `tasks[].classes`, which is unrelated: it is
+> the list of class *names* a task was scored for.)
+
 Both score endpoints return `computed_at` and a `stale` flag, and carry an
 `ETag`. Use it to poll cheaply while a re-score is in flight:
 
@@ -228,8 +238,11 @@ Every row is a copy of a public CIVL list.
 ## Writing: submitting a track
 
 Uploading a track requires a key. The request body is a **gzip-compressed IGC
-file** sent as raw bytes (max ~5 MB uncompressed). Uploads are rejected after a
-competition's close date.
+file** sent as raw bytes: at most 1 MiB compressed, and at most 2 MiB once
+decompressed. Uploads are rejected after a competition's close date.
+
+Pilots can also submit without a key at all, from the website's `/submit` page —
+see [track-submission.md](track-submission.md).
 
 Upload **your own** track for a task:
 

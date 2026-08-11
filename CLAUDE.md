@@ -24,7 +24,8 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
     in `src/react/globals.css`). Most SPA routes reach `/app.html` via
     `public/_redirects`.
   - The **content pages** (`/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`,
-    `/scoring/open-distance`) — prerendered static HTML from a small Astro app in
+    `/scoring/open-distance`, `/scoring/data-cleaning`, `/scoring/track-validity`,
+    and the `404`) — prerendered static HTML from a small Astro app in
     `web/frontend/static/`, reusing the SPA's `globals.css` tokens/fonts. KaTeX
     on the GAP page is prerendered at build via `katex.renderToString`.
   - The **eight public comp pages**, which are **server-rendered** — see
@@ -42,19 +43,56 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
 
 ## Build & Development
 
-If `node_modules/` is missing or a dependency can't be resolved, run
-`bun install`. Build commands are in `package.json`; the key ones are
-`bun run dev`, `bun run test`, `bun run typecheck:all`, `bun run test:all`.
+Build commands are in `package.json`; the key ones are `bun run dev`,
+`bun run test`, `bun run typecheck:all`, `bun run test:all`. These install
+dependencies for you — the `dev`/`preview`/`test`/`typecheck:all` entry points
+all run `bun install` first, and `.claude/hooks/session-start.sh` does it once
+per Claude Code session (the web containers clone fresh, so `node_modules/` is
+always absent).
+
+**If you invoke a tool directly — `bun test ./web/engine`, `bunx playwright`,
+`tsc` — you skip those guards.** On a fresh tree the unresolved imports surface
+as ordinary *test failures*, not as a missing install, so run `bun install`
+first or go through `bun run`. `bunx playwright test` skips a second guard:
+`test:e2e` and `test:e2e:ssr` also fetch the Chromium build the pinned
+Playwright wants, which no environment is guaranteed to pre-bake — see
+[docs/local-dev.md](docs/local-dev.md).
 
 For dev servers, the e2e suite and its failure modes, the isolated container
 preview, and the dev tunnel: **[docs/local-dev.md](docs/local-dev.md)**. Read its
 "Before you trust an e2e failure" section before debugging one.
+
+**Working in a git worktree? Give the e2e its own ports.** `reuseExistingServer`
+is on outside CI, so `bun run test:e2e` in one worktree silently REUSES another
+worktree's dev server on :3000 and asserts every expectation against the wrong
+code — green, and meaningless. Nothing warns you.
+
+```bash
+DEV_FRONTEND_PORT=3100 DEV_API_PORT=8890 DEV_API_ORIGIN=http://localhost:8890 \
+  DEV_INSPECTOR_PORT=9330 bun run test:e2e
+```
+
+Also set `BETTER_AUTH_URL` in `web/workers/auth-api/.dev.vars` to the same
+frontend port, or every signed-in test fails with `INVALID_ORIGIN` (the file is
+gitignored; put it back afterwards). `test:e2e:ssr` serves on :3100 by default
+(`SSR_PORT` overrides) and honours `DEV_API_PORT` too. To check a port is
+yours, hit a route only your branch has — a 404 means you are about to test
+somebody else's tree. Full details, including why the inspector port needs its
+own knob, are in
+[docs/local-dev.md](docs/local-dev.md#two-worktrees-at-once-the-green-but-meaningless-run).
 
 **Backlog:** open and planned work is tracked in
 [GitHub issues](https://github.com/pokle/glidecomp/issues) — **not** in a
 checked-in TODO file (`docs/TODO.md` was deleted as stale; don't recreate it).
 `docs/` holds specs, plans, and reference. Treat the dated ones (`docs/2026-*.md`)
 as point-in-time snapshots rather than current status.
+
+**Python runs with uv.** The stack is TypeScript/bun, but where a Python
+script earns its keep (e.g. the S7F PDF extraction pipeline in
+`docs/reference/fai-s7f-xc-scoring-2024/`), it declares its dependencies
+inline in a PEP 723 `# /// script` block and is invoked with
+`uv run <script.py>` — never `pip install` into the environment, and no
+`requirements.txt`.
 
 **Branch previews:** every branch gets a Cloudflare Pages branch-alias URL.
 **When you open or push to a PR, always include it in the PR body and show it in
@@ -85,6 +123,17 @@ These are the standing imperatives. Each links to the reference that explains it
     such a name, respell the label, not the name.
   - Quoted external text — FAI/CIVL spec wording, error strings from other
     tools — is reproduced verbatim, whatever it spells.
+- **Propose UI wording before you change it.** Asked to reword something a
+  user reads — a label, a button, a dialog's explanation, a status message —
+  write the proposed text out and get it confirmed FIRST, then edit. Wording
+  is the owner's call and it is cheap to settle in a message and expensive to
+  settle in a diff: a paragraph rewritten in the code drags its tests, its
+  e2e assertions and its screenshots with it.
+  - Show the whole affected block, not the changed clause, and include the
+    neighbouring copy the change has to sit beside — a rewrite that reads well
+    alone can repeat or contradict the line above it.
+  - **Trivial fixes are exempt**: typos, grammar, punctuation, and the
+    Australian English spellings above. Just make those.
 
 ### Correctness and transparency
 
@@ -93,6 +142,20 @@ These are the standing imperatives. Each links to the reference that explains it
   `web/engine/src/score-explanation*.ts` and surface on the **report card**
   (`/comp/:id/task/:id/pilot/:id`, `src/react/pages/PilotScoreDetail.tsx`). See
   the report-card rules below.
+- **A pilot's registration is never guessed.** If a competition holds any
+  UNCLAIMED `comp_pilot` row, a signed-in upload asks which one the pilot is
+  (`ensureCompPilot` in `routes/igc.ts` → `409 identity_ambiguous`; the form
+  settles it beforehand via `POST /api/comp/:comp_id/registration/resolve`).
+  Guessing used to mean a silent SECOND roster row whenever the organiser
+  mistyped an email — the pilot registered twice, one entry empty, and the
+  pilot count feeding launch validity (S7F §9.1) counting a phantom.
+  - **Names may propose, never dispose.** `nameAffinity()` orders the picker so
+    the pilot's own entry is first. Nothing branches on it, and the decision to
+    ask involves no names at all. `pilot-linker.ts` and `pilot-resolver.ts`
+    still refuse to auto-link on a name, and must keep refusing.
+  - **Every submission emails the registered pilot** (`track-notice-email.ts`),
+    and the submit form promises that upfront. A route that skipped it would
+    make the copy a lie. See [docs/track-submission.md](docs/track-submission.md).
 - **Every mutation that could affect a competition's scores MUST be
   audit-logged.** Use `audit()` in `web/workers/competition-api/src/audit.ts`
   from every mutating route handler (comp / task / pilot / track / penalty /
@@ -119,6 +182,10 @@ These are the standing imperatives. Each links to the reference that explains it
     competition data: `task_weather` ([docs/weather.md](docs/weather.md)) and
     `pilot_ranking` ([docs/civl-rankings.md](docs/civl-rankings.md)). Neither
     takes an `audit()` call either.
+    - The roster's own copy of a world ranking (`comp_pilot.wprs_points` and
+      its source columns, migrations 0029/0030) is the other way round: it IS
+      competition data an organiser entered, so it is audited — but it feeds
+      launch order, never a task score, so it takes no bump.
 - **A failure to ask is not an answer** (issue #481). Identity and page data are
   each fetched once per page load, and every downstream decision keys off the
   result — so a *transient* failure must never be recorded as a *fact*. A dropped
@@ -227,7 +294,8 @@ These are the standing imperatives. Each links to the reference that explains it
     shared theme in `comp/tabulator-grid.css`.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
-    `.command`, …) — extend those there rather than adding a UI library. The 3D
+    `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
+    library. The 3D
     replay styles itself (`replay.css` + inline theme).
 - **Use Tailwind utilities** — avoid custom CSS where Tailwind has an equivalent.
 - **UI conventions** (see the design-language section of
@@ -237,8 +305,11 @@ These are the standing imperatives. Each links to the reference that explains it
   `Breadcrumbs`, ARIA-native (parent links + the current page as a final
   `aria-current="page"` crumb), with the ancestor array built by the helpers in
   `src/react/lib/crumbs.ts` rather than inline (the parent crumb is where a page
-  *belongs* in the IA, not where the user came from); every Submit-track button
-  opens the shared `SubmitTrackDialog`; **anything waiting on an API response says
+  *belongs* in the IA, not where the user came from); every Submit-track entry
+  point goes through the one `SubmitTrackForm`
+  ([docs/track-submission.md](docs/track-submission.md)) — as the `/submit`
+  page, or wrapped in `SubmitTrackDialog` where comp and task are already known;
+  **anything waiting on an API response says
   so** via `src/react/rac/progress.tsx` — `<Loading>` for a fetching section (a
   `role="status"` live region), `<Button isPending pendingLabel="Saving">` for an
   action in flight (never `isDisabled={saving}` + a label swap — that drops focus
@@ -273,6 +344,31 @@ These are the standing imperatives. Each links to the reference that explains it
 
 ### Engine
 
+- **A scoring change writes a note; it never bumps a number**
+  ([docs/scoring-version.md](docs/scoring-version.md)). The engine generation
+  every scoring cache is keyed by is **derived** — a content hash over the
+  import closure of `SCORING_ROOTS`, generated into
+  `src/scoring-fingerprint.generated.ts` (gitignored) by
+  `bun run engine:fingerprint`, which `postinstall`, `deps`, `dev`, `build` and
+  every `deploy:*` already call. There is no `SCORING_ENGINE_VERSION` to bump
+  and no fingerprint to paste; both were deleted because two parallel engine
+  branches conflicted over them, and a hash over the merged tree matches
+  neither parent, so the conflict had no correct side to keep.
+  - What a behaviour change DOES owe is a note in
+    `web/engine/scoring-changes/` — one file per change, `NNN-slug.md`, so two
+    branches can never collide. Say whether points move, and if they do, by how
+    much and for whom (measure over the 211-comp archive where you can); if
+    nothing observable changes, say that, because the generation still rolls
+    and every competition still recomputes. CI enforces it
+    (`web/scripts/check-scoring-change-note.ts`, a merge-base diff — deliberately
+    no baseline in the tree).
+  - The directory is **published**, linked from `/scoring` and `/scoring/gap`:
+    a pilot whose points moved without their organiser touching anything is
+    entitled to read why.
+  - Code that must never drag the report card or a file format into the closure
+    stays outside it on purpose — see `format-distance.ts`, `waypoint-files.ts`.
+    New code that CAN affect a score but no root imports goes in `SCORING_ROOTS`
+    (that is why `track-quality.ts` and `manual-flight.ts` are there).
 - **Never implement inline geo math** (distance, bearing, etc.) — always use
   `web/engine/src/geo.ts`, which provides WGS84 ellipsoid formulas
   (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for
@@ -282,7 +378,7 @@ These are the standing imperatives. Each links to the reference that explains it
   provider must match this spec.
 - **Track quality** ([docs/track-quality.md](docs/track-quality.md)): two HARD
   checks withhold a track from scoring and field analysis; three SOFT checks only
-  annotate. A withheld pilot is **never** deleted from the standings — they are
+  annotate. A withheld pilot is **never** deleted from the scores — they are
   seated last at 0 with reasons. Every verdict is organiser-overridable (FAI S7A
   §4.4.6). Re-tune thresholds only via `audit-track-quality.ts` over both the
   bundled comps and the archive.
@@ -321,6 +417,7 @@ These are the standing imperatives. Each links to the reference that explains it
 |---|---|
 | Local dev, e2e, container preview, tunnel | [docs/local-dev.md](docs/local-dev.md) |
 | SSR'd public comp pages + `scores.csv` | [docs/ssr.md](docs/ssr.md) |
+| Track submission (incl. anonymous) | [docs/track-submission.md](docs/track-submission.md) |
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
 | Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |
@@ -331,6 +428,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Accessibility standard | [docs/accessibility-standard.md](docs/accessibility-standard.md) |
 | Map interaction spec | [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) |
 | Score caching (stale-first) | [docs/score-caching-stale-first-plan.md](docs/score-caching-stale-first-plan.md) |
+| Engine generation + scoring changelog | [docs/scoring-version.md](docs/scoring-version.md) |
 | Field analysis internals | [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md) |
 | Information architecture + design language | [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) |
 | 3D replay | [docs/3d-flight-replay-notes.md](docs/3d-flight-replay-notes.md) |

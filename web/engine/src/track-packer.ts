@@ -25,6 +25,7 @@
 import { getEffectiveSSSIndex, type XCTask } from './xctsk-parser';
 import { calculateOptimizedTaskLine } from './task-optimizer';
 import { computeGoalLine } from './goal-line';
+import { metresPerDegree } from './geo';
 
 /** Floats stored per vertex in `tracks.bin`: [x, y, z, tRel]. */
 export const FLOATS_PER_VERTEX = 4;
@@ -150,7 +151,7 @@ export interface TrackManifest {
      */
     optimizedPath?: { x: number; z: number }[];
     /**
-     * Present when the task ends at a goal LINE (S7F §6.3.1) instead of a
+     * Present when the task ends at a goal LINE (S7F §6.2.3.1) instead of a
      * cylinder: the line's endpoints in ENU metres, perpendicular to the
      * final leg and centred on the last turnpoint. The viewer draws the
      * goal as this line (with its control semicircle behind it) rather
@@ -167,39 +168,10 @@ export interface PackedTracks {
 }
 
 /**
- * Metres per degree of latitude/longitude at a given latitude (WGS84 series).
- * Same formula the brief specifies; good to sub-metre over a competition area.
- */
-export function metresPerDegree(lat0: number): { mPerDegLat: number; mPerDegLon: number } {
-  const lat0r = (lat0 * Math.PI) / 180;
-  const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * lat0r) + 1.175 * Math.cos(4 * lat0r);
-  const mPerDegLon =
-    111412.84 * Math.cos(lat0r) - 93.5 * Math.cos(3 * lat0r) + 0.118 * Math.cos(5 * lat0r);
-  return { mPerDegLat, mPerDegLon };
-}
-
-/**
- * Build a categorical palette of `n` visually distinct RGB triples (0..1) by
- * walking the hue circle with the golden-angle increment and alternating
- * lightness/saturation so neighbours stay distinguishable.
- */
-export function buildPalette(n: number): [number, number, number][] {
-  const colors: [number, number, number][] = [];
-  const golden = 137.508; // golden angle in degrees
-  for (let i = 0; i < n; i++) {
-    const h = (i * golden) % 360;
-    const s = 0.62 + 0.18 * (i % 2); // 0.62 / 0.80
-    const l = 0.55 - 0.08 * (i % 3); // 0.55 / 0.47 / 0.39
-    colors.push(hslToRgb(h / 360, s, l));
-  }
-  return colors;
-}
-
-/**
  * Deterministic RGB triple (0..1) for a pilot name, so each pilot keeps the same
  * colour across builds regardless of roster order. The name is hashed (FNV-1a)
- * and the bits drive hue plus the same saturation/lightness bands as
- * `buildPalette`, so colours look consistent with the categorical palette.
+ * and the bits drive hue plus two alternating saturation/lightness bands, so
+ * neighbouring colours stay distinguishable across the roster.
  */
 export function colorForName(name: string): [number, number, number] {
   let h = 0x811c9dc5; // FNV-1a 32-bit offset basis

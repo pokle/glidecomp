@@ -11,13 +11,18 @@ import { Link as AriaLink } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Badge } from "@/react/rac/badge";
 import { api } from "../../comp/api";
-import { formatDuration } from "../lib/format";
+import { formatDuration, ordinal } from "../lib/format";
 import { formatTimeInZone } from "../lib/time";
 import { formatDistance, useUnits } from "../lib/units";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { pilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
-import type { ClassScore, ScoringFormat, TaskScoreData } from "./types";
+import type {
+  ClassScore,
+  OfficialResultsData,
+  ScoringFormat,
+  TaskScoreData,
+} from "./types";
 
 type ScoresState =
   | { kind: "loading" }
@@ -59,7 +64,7 @@ export function ScoresSection({
     // Seeded from SSR — surface the replay link from the seed, skip the fetch.
     if (seededRef.current) {
       seededRef.current = false;
-      onReplayAvailable(initialScore!.classes.some((cls) => cls.pilots.length > 0));
+      onReplayAvailable(initialScore!.class_scores.some((cls) => cls.pilots.length > 0));
       return;
     }
     let cancelled = false;
@@ -83,7 +88,7 @@ export function ScoresSection({
         // Reveal the 3D replay link once the task has tracks to show (the
         // bundle endpoint needs an xctsk + at least one track, both implied
         // by a scored pilot).
-        onReplayAvailable(data.classes.some((cls) => cls.pilots.length > 0));
+        onReplayAvailable(data.class_scores.some((cls) => cls.pilots.length > 0));
       } catch {
         if (!cancelled) setState({ kind: "unavailable" });
       }
@@ -132,7 +137,7 @@ export function ScoresSection({
         />
       ) : null}
       {state.kind === "loaded"
-        ? state.data.classes.map((cls) => (
+        ? state.data.class_scores.map((cls) => (
             <ScoreClassTable
               key={cls.pilot_class}
               compId={compId}
@@ -140,16 +145,16 @@ export function ScoresSection({
               taskName={taskName}
               cls={cls}
               timezone={timezone}
-              showClassName={state.data.classes.length > 1}
+              showClassName={state.data.class_scores.length > 1}
               format={state.data.scoring_format === "open_distance" ? "open_distance" : "gap"}
+              official={state.data.official_results ?? null}
             />
           ))
         : null}
       {state.kind === "loaded" &&
-      state.data.classes.some((cls) => cls.pilots.length > 0) ? (
+      state.data.class_scores.some((cls) => cls.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          Click a pilot's row for the full score breakdown — every start,
-          turnpoint and point calculation, shown on the map.
+          Click a row for the full breakdown.
         </p>
       ) : null}
     </section>
@@ -164,6 +169,7 @@ function ScoreClassTable({
   timezone,
   showClassName,
   format,
+  official = null,
 }: {
   compId: string;
   taskId: string;
@@ -175,6 +181,9 @@ function ScoreClassTable({
   timezone: string | null;
   showClassName: boolean;
   format: ScoringFormat;
+  /** The officially published record (issue #603) — an extra muted column
+   * beside the rescored totals when the import recorded one, else nothing. */
+  official?: OfficialResultsData | null;
 }) {
   const navigate = useNavigate();
   const compName = useCompName();
@@ -197,9 +206,23 @@ function ScoreClassTable({
     cls.validity_inputs?.num_reached_ess ??
     cls.pilots.filter((p) => p.reached_ess).length;
   const hasPenalties = cls.pilots.some((p) => p.penalty_points !== 0);
+  // The officially published record (issue #603): shown only when at least
+  // one pilot in THIS class carries an official entry — most comps are
+  // GlideComp-native and identical, and render no column at all.
+  const hasOfficial =
+    official != null && cls.pilots.some((p) => official.ranks[p.comp_pilot_id]);
 
   const v = cls.task_validity;
   const ap = cls.available_points;
+  // FAI S7F §11 (HG): nobody reached ESS, so the task carried no time and no
+  // arrival points. Gated on the published zero as well as the field count, so
+  // a pre-rule cached body keeps its old caption rather than being described
+  // as something it is not; a whole-day zero is a different finding.
+  const noEssOffer =
+    cls.gap_params?.scoring === "HG" &&
+    ap.total > 0 &&
+    ap.time === 0 &&
+    essFieldSize === 0;
 
   const detailHref = (compPilotId: string, pilotName?: string | null) =>
     pilotPath(compId, compName, taskId, taskName, compPilotId, pilotName);
@@ -236,6 +259,7 @@ function ScoreClassTable({
           {hasArrivalPoints ? <Column className="text-right">Arr Pts</Column> : null}
           {hasPenalties ? <Column>Penalty</Column> : null}
           <Column className="text-right">Total</Column>
+          {hasOfficial ? <Column className="text-right">Official</Column> : null}
         </TableHeader>
         <TableBody>
           {cls.pilots.map((p) => {
@@ -352,6 +376,20 @@ function ScoreClassTable({
                 <Cell className="text-right tabular-nums">
                   {Math.round(p.total_score)}
                 </Cell>
+                {hasOfficial ? (
+                  <Cell className="text-right tabular-nums">
+                    {(() => {
+                      const o = official?.ranks[p.comp_pilot_id];
+                      return o ? (
+                        <span className="text-muted-foreground">
+                          {ordinal(o.rank)} · {Math.round(o.total)}
+                        </span>
+                      ) : (
+                        "—"
+                      );
+                    })()}
+                  </Cell>
+                ) : null}
               </Row>
             );
           })}
@@ -367,15 +405,45 @@ function ScoreClassTable({
           {/* Two decimals (trimmed) so a 99.93% day doesn't read as a
               contradictory "100% · 999 pts". */}
           Task validity: {Number((v.task * 100).toFixed(2))}%
-          {/* Stopped tasks (S7F §12.3.3): surface the fourth factor. */}
+          {/* Stopped tasks (S7F §13.4.3): surface the fourth factor. */}
           {v.stopped !== undefined
             ? ` (task stopped — stopped validity ${Number((v.stopped * 100).toFixed(2))}%)`
             : ""}{" "}
           · Available: {Number(ap.total.toFixed(1))} pts
           (dist {Math.round(ap.distance)}, time {Math.round(ap.time)}, lead{" "}
           {Math.round(ap.leading)})
+          {/* FAI S7F §11: nobody reached ESS on an HG task, so the time and
+              arrival offers are zero and nothing replaces them — without this
+              the split visibly fails to add up to the total. */}
+          {noEssOffer ? (
+            <>
+              {" "}
+              — nobody reached the end of the speed section, so no time or arrival
+              points were available (FAI S7F §11) and only{" "}
+              {Number((ap.distance + ap.leading).toFixed(1))} pts could be won.
+            </>
+          ) : null}
         </p>
       )}
+      {hasOfficial ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Official: each pilot&rsquo;s rank and points as published on{" "}
+          {official?.task_url ? (
+            <a
+              href={official.task_url}
+              target="_blank"
+              rel="noopener"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              {official.source}
+            </a>
+          ) : (
+            official?.source
+          )}
+          . GlideComp rescores every task under the current rules, so the two can
+          differ.
+        </p>
+      ) : null}
     </div>
   );
 }

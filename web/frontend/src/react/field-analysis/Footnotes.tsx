@@ -13,6 +13,8 @@
  * a link from the body can land on one, and print (where the ⓘ popovers do
  * not exist) still carries the reference.
  */
+import { Card } from "@/react/rac/card";
+
 export const EXCLUDED_PILOTS_ID = "excluded-pilots";
 export const METHOD_NOTE_ID = "method-note";
 
@@ -37,15 +39,15 @@ export function FootnoteHeading({
 export function Footnotes({ children }: { children: React.ReactNode }) {
   return (
     // A reference chapter, so print starts it on a fresh page.
-    <section
+    <Card
       aria-labelledby="footnotes-heading"
-      className="space-y-6 print:break-before-page"
+      className="gap-6 print:break-before-page"
     >
       <h2 id="footnotes-heading" className="scroll-mt-20 text-lg font-semibold">
         Footnotes
       </h2>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -68,7 +70,7 @@ export function Footnote({
 }
 
 /**
- * Which pilots the standings include but the analysis could not measure.
+ * Which pilots the scores include but the analysis could not measure.
  *
  * The closing note is the point of the whole footnote: their absence does not
  * make the correlations wrong, because the ranks those correlations are
@@ -82,7 +84,7 @@ export function ExcludedPilots({
   return (
     <Footnote
       id={EXCLUDED_PILOTS_ID}
-      title={`${excluded.length} pilot${excluded.length === 1 ? "" : "s"} in the standings but not in this analysis`}
+      title={`${excluded.length} pilot${excluded.length === 1 ? "" : "s"} in the scores but not in this analysis`}
     >
       <ul className="space-y-0.5">
         {excluded.map((e, i) => (

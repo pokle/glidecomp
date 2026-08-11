@@ -1,0 +1,811 @@
+/**
+ * Admin task management grid — "Manage pilots & tracks" (issues #306, then
+ * split from the public scores surface). One row per pilot with their
+ * outcome on the task: ranked scorers first, then a per-class "did not
+ * score" tail (present-not-flown / DNF / absent). Columns: rank · pilot ·
+ * outcome (badge + evidence) · distance · points · Manage.
+ *
+ * This is the management tool, admin-only by design: opening a pilot's score
+ * card, statuses, uploads on behalf, manual flights and restores. The PUBLIC
+ * scores live in
+ * TaskScoresPublic (top 3 + link to the comp scores page) — this grid is never
+ * server-rendered and mounts only after the admin check resolves.
+ *
+ * Built on the RAC kit (src/react/rac/) — see
+ * docs/2026-07-18-rac-adoption-guide.md. The rows are an ARIA grid
+ * (keyboard-navigable, onAction opens the pilot detail page), and the per-row
+ * admin controls use RAC Select / FileTrigger / Tooltip.
+ *
+ * Staleness: a status/track/manual change is a whole-task rescore (launch
+ * validity ripples to everyone). Score columns grey out while stale; the fresh
+ * outcome overrides the stale blob for ranked-vs-tail placement (a just-DNF'd
+ * pilot leaves the ranked section immediately); ScoreFreshness surfaces a
+ * Reload when the rescore lands — no silent resettle.
+ */
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { FileTrigger, Link as AriaLink } from "react-aria-components";
+import type { XCTask } from "@glidecomp/engine";
+import { Button, LinkButton } from "@/react/rac/button";
+import { Card } from "@/react/rac/card";
+import { SimpleSelect } from "@/react/rac/select";
+import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
+import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
+import { api } from "../../comp/api";
+import { formatDistance, useUnits } from "../lib/units";
+import { toast } from "../lib/toast";
+import { pilotPath } from "../lib/slug";
+import { useCompName } from "./comp-name-context";
+import { ScoreFreshness } from "./ScoreFreshness";
+import { ManualFlightDialog } from "./ManualFlightDialog";
+import { compressIgc } from "./types";
+import {
+  NOT_AN_IGC_MESSAGE,
+  describeUploadOutcome,
+  tooLargeReason,
+  type TrackQualityWire,
+} from "./submit-track";
+import type {
+  ClassScore,
+  DistanceOriginValue,
+  ManualFlightEntry,
+  PilotListEntry,
+  PilotScoreEntry,
+  PilotStatusEntry,
+  TaskScoreData,
+  TrackInfo,
+} from "./types";
+
+type Outcome = "present" | "absent" | "dnf" | "landed";
+
+const OUTCOME_LABEL: Record<Outcome, string> = {
+  present: "Present",
+  absent: "Absent",
+  dnf: "Did Not Fly",
+  landed: "Landed",
+};
+
+/** Tail ordering: present-not-flown first, then DNF, then absent. */
+const TAIL_ORDER: Record<Exclude<Outcome, "landed">, number> = {
+  present: 0,
+  dnf: 1,
+  absent: 2,
+};
+
+interface RowPilot {
+  compPilotId: string;
+  name: string;
+  pilotClass: string;
+  outcome: Outcome;
+  evidence: "track" | "manual" | null;
+  score: PilotScoreEntry | null;
+  supersededTrack: boolean;
+  supersededManual: boolean;
+  /** The pilot's active manual flight, for prefilling an edit. */
+  activeManual: ManualFlightEntry | null;
+}
+
+export function TaskScoresAdmin({
+  compId,
+  taskId,
+  taskName = null,
+  isAdmin,
+  isClosed,
+  scoringFormat,
+  distanceOrigin,
+  timezone,
+  taskXctsk,
+  submissionsClosed = false,
+  refresh,
+  onMutated,
+}: {
+  compId: string;
+  taskId: string;
+  /** Task name, for canonical pilot links. */
+  taskName?: string | null;
+  isAdmin: boolean;
+  isClosed: boolean;
+  scoringFormat: "gap" | "open_distance";
+  distanceOrigin: DistanceOriginValue;
+  timezone: string | null;
+  /** Task route — drives the ManualFlightDialog. Null when no route yet. */
+  taskXctsk: XCTask | null;
+  /** The organiser closed this task for submissions (migration 0028). Shown,
+   * not enforced: these are the organiser tools that deliberately still work. */
+  submissionsClosed?: boolean;
+  /** Parent bump to refetch scores (route edits). */
+  refresh: number;
+  /** Notify the parent a mutation happened, so the public scores refetch too. */
+  onMutated?: () => void;
+}) {
+  // Client-data gate (this grid is never server-rendered, but the roster /
+  // status / track fetches still wait for mount like they always did).
+  const [mounted, setMounted] = useState(false);
+
+  const [score, setScore] = useState<TaskScoreData | null>(null);
+  const [scoreState, setScoreState] = useState<"loading" | "no-route" | "unavailable" | "ok">(
+    "loading"
+  );
+  const [etag, setEtag] = useState<string | null>(null);
+
+  const [roster, setRoster] = useState<PilotListEntry[]>([]);
+  const [statuses, setStatuses] = useState<Map<string, PilotStatusEntry>>(new Map());
+  const [tracks, setTracks] = useState<TrackInfo[]>([]);
+  const [manualFlights, setManualFlights] = useState<ManualFlightEntry[]>([]);
+  // Optimistic "scores are stale" the instant an admin mutates, before the
+  // refetched score row reports stale itself.
+  const [localDirty, setLocalDirty] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const fetchScore = useCallback(async () => {
+    try {
+      const res = await api.api.comp[":comp_id"].task[":task_id"].score.$get({
+        param: { comp_id: compId, task_id: taskId },
+      });
+      if (res.status === 422) {
+        setScoreState("no-route");
+        return;
+      }
+      if (!res.ok) {
+        setScoreState("unavailable");
+        return;
+      }
+      const data = (await res.json()) as unknown as TaskScoreData;
+      setScore(data);
+      setEtag(res.headers.get("ETag"));
+      setScoreState("ok");
+      // A fresh (non-stale) score means the rescore we were waiting on landed.
+      if (!data.stale) setLocalDirty(false);
+    } catch {
+      setScoreState("unavailable");
+    }
+  }, [compId, taskId]);
+
+  const fetchAux = useCallback(async () => {
+    try {
+      const [rosterRes, statusRes, trackRes, manualRes] = await Promise.all([
+        api.api.comp[":comp_id"].pilot.$get({ param: { comp_id: compId } }),
+        api.api.comp[":comp_id"].task[":task_id"]["pilot-status"].$get({
+          param: { comp_id: compId, task_id: taskId },
+        }),
+        api.api.comp[":comp_id"].task[":task_id"].igc.$get({
+          param: { comp_id: compId, task_id: taskId },
+        }),
+        api.api.comp[":comp_id"].task[":task_id"]["manual-flight"].$get({
+          param: { comp_id: compId, task_id: taskId },
+        }),
+      ]);
+      if (rosterRes.ok) {
+        setRoster((((await rosterRes.json()) as { pilots: PilotListEntry[] }).pilots) ?? []);
+      }
+      if (statusRes.ok) {
+        const s = (await statusRes.json()) as { statuses: PilotStatusEntry[] };
+        setStatuses(new Map(s.statuses.map((e) => [e.comp_pilot_id, e])));
+      }
+      if (trackRes.ok) {
+        setTracks((((await trackRes.json()) as { tracks: TrackInfo[] }).tracks) ?? []);
+      }
+      if (manualRes.ok) {
+        setManualFlights(
+          (((await manualRes.json()) as { manual_flights: ManualFlightEntry[] }).manual_flights) ?? []
+        );
+      }
+    } catch {
+      // Non-critical — the scored table still renders from `score`.
+    }
+  }, [compId, taskId]);
+
+  // Refetch on parent `refresh` (route edits).
+  useEffect(() => {
+    void fetchScore();
+  }, [fetchScore, refresh]);
+
+  // Roster / status / track / manual — client-only, after hydration.
+  useEffect(() => {
+    if (mounted) void fetchAux();
+  }, [mounted, fetchAux, refresh]);
+
+  /** After a mutation: mark scores stale locally (grey the columns), then
+   * reconcile outcomes (aux) and pick up the stale flag (score). No silent
+   * resettle — ScoreFreshness surfaces the Reload when the rescore lands. */
+  const afterMutation = useCallback(() => {
+    setLocalDirty(true);
+    void fetchAux();
+    void fetchScore();
+    onMutated?.();
+    // onMutated is a stable parent callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchAux, fetchScore]);
+
+  if (scoreState === "loading") {
+    return <p className="mt-8 text-muted-foreground">Loading pilots…</p>;
+  }
+  if (scoreState === "no-route") {
+    return (
+      <Card>
+        <h2 className="text-lg font-bold">Manage pilots &amp; tracks</h2>
+        <p className="mt-2 text-muted-foreground">
+          Set the task route first — pilot statuses and tracks can be managed once
+          the task can be scored.
+        </p>
+      </Card>
+    );
+  }
+  if (scoreState === "unavailable" || !score) {
+    return <p className="mt-8 text-muted-foreground">Pilot management not available</p>;
+  }
+
+  const greyed = score.stale || localDirty;
+  const isOpenDistance = scoringFormat === "open_distance";
+
+  // Fresh evidence sets, from the client-fetched aux data.
+  const activeTrackIds = new Set(tracks.filter((t) => t.active).map((t) => t.comp_pilot_id));
+  const activeManualIds = new Set(
+    manualFlights.filter((m) => m.active).map((m) => m.comp_pilot_id)
+  );
+  const supersededTrackIds = new Set(
+    tracks.filter((t) => !t.active).map((t) => t.comp_pilot_id)
+  );
+  const supersededManualIds = new Set(
+    manualFlights.filter((m) => !m.active).map((m) => m.comp_pilot_id)
+  );
+
+  const outcomeFor = (compPilotId: string, scored: boolean): Outcome => {
+    const key = statuses.get(compPilotId)?.status_key;
+    if (key === "absent") return "absent";
+    if (key === "dnf") return "dnf";
+    if (scored || activeTrackIds.has(compPilotId) || activeManualIds.has(compPilotId)) {
+      return "landed";
+    }
+    return "present";
+  };
+  const evidenceFor = (compPilotId: string): RowPilot["evidence"] =>
+    activeManualIds.has(compPilotId) ? "manual" : activeTrackIds.has(compPilotId) ? "track" : null;
+  const activeManualByPilot = new Map(
+    manualFlights.filter((m) => m.active).map((m) => [m.comp_pilot_id, m])
+  );
+  const manualEntryFor = (compPilotId: string): ManualFlightEntry | null =>
+    activeManualByPilot.get(compPilotId) ?? null;
+
+  return (
+    <Card>
+      <h2 className="text-lg font-bold">Manage pilots &amp; tracks</h2>
+      {/* The list of what the tools are went: they are the buttons directly
+          beneath. The consequence stays — it is the one thing the controls
+          themselves do not say. */}
+      <p className="mt-1 text-sm text-muted-foreground">
+        Every change here recomputes the task&rsquo;s scores.
+      </p>
+      {submissionsClosed ? (
+        // Otherwise an organiser who has just closed the task is left
+        // wondering why their own upload buttons still work.
+        <p className="mt-1 text-sm text-muted-foreground">
+          This task is closed for submissions. Pilots can no longer send
+          tracks; these organiser tools still work.
+        </p>
+      ) : null}
+
+      <ScoreFreshness
+        computedAt={score.computed_at}
+        stale={score.stale || localDirty}
+        timezone={timezone}
+        etag={etag}
+        pollUrl={`/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/score`}
+      />
+
+      {score.class_scores.map((cls) => (
+        <ClassScoresRows
+          key={cls.pilot_class}
+          compId={compId}
+          taskId={taskId}
+          taskName={taskName}
+          cls={cls}
+          showClassName={score.class_scores.length > 1}
+          isOpenDistance={isOpenDistance}
+          greyed={greyed}
+          mounted={mounted}
+          isAdmin={isAdmin}
+          isClosed={isClosed}
+          distanceOrigin={distanceOrigin}
+          taskXctsk={taskXctsk}
+          roster={roster}
+          statuses={statuses}
+          supersededTrackIds={supersededTrackIds}
+          supersededManualIds={supersededManualIds}
+          outcomeFor={outcomeFor}
+          evidenceFor={evidenceFor}
+          manualEntryFor={manualEntryFor}
+          onMutated={afterMutation}
+        />
+      ))}
+
+      {score.class_scores.some((c) => c.pilots.length > 0) ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Click a row for the full breakdown.
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+function ClassScoresRows({
+  compId,
+  taskId,
+  taskName,
+  cls,
+  showClassName,
+  isOpenDistance,
+  greyed,
+  mounted,
+  isAdmin,
+  isClosed,
+  distanceOrigin,
+  taskXctsk,
+  roster,
+  statuses,
+  supersededTrackIds,
+  supersededManualIds,
+  outcomeFor,
+  evidenceFor,
+  manualEntryFor,
+  onMutated,
+}: {
+  compId: string;
+  taskId: string;
+  taskName: string | null;
+  cls: ClassScore;
+  showClassName: boolean;
+  isOpenDistance: boolean;
+  greyed: boolean;
+  mounted: boolean;
+  isAdmin: boolean;
+  isClosed: boolean;
+  distanceOrigin: DistanceOriginValue;
+  taskXctsk: XCTask | null;
+  roster: PilotListEntry[];
+  statuses: Map<string, PilotStatusEntry>;
+  supersededTrackIds: Set<string>;
+  supersededManualIds: Set<string>;
+  outcomeFor: (id: string, scored: boolean) => Outcome;
+  evidenceFor: (id: string) => RowPilot["evidence"];
+  manualEntryFor: (id: string) => ManualFlightEntry | null;
+  onMutated: () => void;
+}) {
+  const navigate = useNavigate();
+  const compName = useCompName();
+
+  const scoredIds = new Set(cls.pilots.map((p) => p.comp_pilot_id));
+
+  // Ranked = scored pilots whose FRESH outcome is still Landed (a just-DNF'd
+  // pilot's fresh outcome overrides the stale blob and drops them to the tail).
+  const ranked: RowPilot[] = [];
+  const tail: RowPilot[] = [];
+
+  for (const p of cls.pilots) {
+    const outcome = outcomeFor(p.comp_pilot_id, true);
+    const row: RowPilot = {
+      compPilotId: p.comp_pilot_id,
+      name: p.pilot_name,
+      pilotClass: cls.pilot_class,
+      outcome,
+      evidence: evidenceFor(p.comp_pilot_id),
+      score: p,
+      supersededTrack: supersededTrackIds.has(p.comp_pilot_id),
+      supersededManual: supersededManualIds.has(p.comp_pilot_id),
+      activeManual: manualEntryFor(p.comp_pilot_id),
+    };
+    if (outcome === "landed") ranked.push(row);
+    else tail.push(row);
+  }
+
+  // Tail also gathers roster pilots in this class who never scored. Only after
+  // hydration (roster is client-fetched), keeping SSR control-less.
+  if (mounted) {
+    for (const rp of roster) {
+      if (rp.pilot_class !== cls.pilot_class) continue;
+      if (scoredIds.has(rp.comp_pilot_id)) continue; // already ranked or tailed above
+      tail.push({
+        compPilotId: rp.comp_pilot_id,
+        name: rp.name,
+        pilotClass: cls.pilot_class,
+        outcome: outcomeFor(rp.comp_pilot_id, false),
+        evidence: evidenceFor(rp.comp_pilot_id),
+        score: null,
+        supersededTrack: supersededTrackIds.has(rp.comp_pilot_id),
+        supersededManual: supersededManualIds.has(rp.comp_pilot_id),
+        activeManual: manualEntryFor(rp.comp_pilot_id),
+      });
+    }
+  }
+
+  tail.sort((a, b) => {
+    const ao = TAIL_ORDER[a.outcome as Exclude<Outcome, "landed">] ?? 0;
+    const bo = TAIL_ORDER[b.outcome as Exclude<Outcome, "landed">] ?? 0;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name);
+  });
+
+  const showManage = mounted && isAdmin;
+  const rows = [...ranked, ...tail];
+
+  const detailHref = (row: RowPilot) =>
+    pilotPath(compId, compName, taskId, taskName, row.compPilotId, row.name);
+
+  return (
+    <div className="mt-4">
+      {showClassName ? <h3 className="mt-4 font-semibold">{cls.pilot_class}</h3> : null}
+      <Table
+        // NOT `Scores — ${class}`: ScoresSection's public grid already owns
+        // that name, and on the task page an admin has BOTH mounted at once —
+        // two grids with one accessible name is unusable with a screen reader
+        // (and ambiguous to a Playwright locator). This one is the management
+        // surface, and the card heading above it says so.
+        aria-label={`Manage pilots & tracks — ${cls.pilot_class}`}
+        className="mt-2"
+        // Whole-row activation for ranked pilots: keyboard (Enter) and click
+        // both open the score breakdown. RAC keeps presses on the inner
+        // controls (Select, buttons) from bubbling into the row action.
+        onRowAction={(key) => {
+          const row = rows.find((r) => r.compPilotId === key);
+          if (row && row.outcome === "landed" && row.score) {
+            void navigate(detailHref(row));
+          }
+        }}
+      >
+        <TableHeader>
+          <Column className="text-right">#</Column>
+          <Column isRowHeader>Pilot</Column>
+          <Column>Outcome</Column>
+          <Column className="text-right">Distance</Column>
+          {!isOpenDistance ? <Column className="text-right">Points</Column> : null}
+          {showManage ? <Column className="text-right">Manage</Column> : null}
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <ScoresRow
+              key={row.compPilotId}
+              row={row}
+              compId={compId}
+              taskId={taskId}
+              isOpenDistance={isOpenDistance}
+              greyed={greyed}
+              showManage={showManage}
+              isClosed={isClosed}
+              distanceOrigin={distanceOrigin}
+              taskXctsk={taskXctsk}
+              statuses={statuses}
+              detailHref={row.outcome === "landed" && row.score ? detailHref(row) : null}
+              onMutated={onMutated}
+            />
+          ))}
+        </TableBody>
+      </Table>
+
+      {rows.length === 0 ? (
+        <p className="mt-2 text-muted-foreground">No pilots yet</p>
+      ) : null}
+    </div>
+  );
+}
+
+function OutcomeBadge({ outcome, evidence }: { outcome: Outcome; evidence: RowPilot["evidence"] }) {
+  const tone: Record<Outcome, string> = {
+    landed: "bg-primary/10 text-primary",
+    present: "bg-muted text-muted-foreground",
+    dnf: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    absent: "bg-destructive/10 text-destructive",
+  };
+  return (
+    <span className="inline-flex flex-col gap-0.5">
+      <span
+        className={`inline-block w-fit rounded px-1.5 py-0.5 text-xs font-medium ${tone[outcome]}`}
+      >
+        {OUTCOME_LABEL[outcome]}
+      </span>
+      {outcome === "landed" && evidence ? (
+        <span className="text-xs text-muted-foreground">
+          {evidence === "manual" ? "Manual flight" : "Track"}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function ScoresRow({
+  row,
+  compId,
+  taskId,
+  isOpenDistance,
+  greyed,
+  showManage,
+  isClosed,
+  distanceOrigin,
+  taskXctsk,
+  statuses,
+  detailHref,
+  onMutated,
+}: {
+  row: RowPilot;
+  compId: string;
+  taskId: string;
+  isOpenDistance: boolean;
+  greyed: boolean;
+  showManage: boolean;
+  isClosed: boolean;
+  distanceOrigin: DistanceOriginValue;
+  taskXctsk: XCTask | null;
+  statuses: Map<string, PilotStatusEntry>;
+  detailHref: string | null;
+  onMutated: () => void;
+}) {
+  const units = useUnits();
+  // Every column that goes through scoreCell (rank, distance, points) is a
+  // quantity, so they all get the same right-aligned tabular treatment — the
+  // "—" placeholder included, so blanks sit under the digits they stand in for.
+  const scoreCell = (content: React.ReactNode) => (
+    <Cell
+      className={`text-right tabular-nums${greyed ? " opacity-40" : ""}`}
+      aria-busy={greyed || undefined}
+    >
+      {content}
+    </Cell>
+  );
+
+  return (
+    <Row id={row.compPilotId} className={detailHref ? "cursor-pointer" : undefined}>
+      {scoreCell(row.score ? row.score.rank : "—")}
+      <Cell>
+        {detailHref ? (
+          // A real anchor (crawlable, middle-clickable) inside the row; the
+          // row-level onAction covers plain clicks anywhere else in the row.
+          <AriaLink
+            href={detailHref}
+            className="underline decoration-muted-foreground/40 underline-offset-4 outline-none data-hovered:decoration-current data-focus-visible:ring-2 data-focus-visible:ring-ring/50"
+          >
+            {row.name}
+          </AriaLink>
+        ) : (
+          row.name
+        )}
+      </Cell>
+      <Cell>
+        <OutcomeBadge outcome={row.outcome} evidence={row.evidence} />
+      </Cell>
+      {scoreCell(
+        row.score
+          ? formatDistance(row.score.flown_distance, { decimals: 1, prefs: units }).withUnit
+          : "—"
+      )}
+      {!isOpenDistance ? scoreCell(row.score ? Math.round(row.score.total_score) : "—") : null}
+      {showManage ? (
+        <Cell className="text-right">
+          <RowManage
+            row={row}
+            compId={compId}
+            taskId={taskId}
+            isClosed={isClosed}
+            isOpenDistance={isOpenDistance}
+            distanceOrigin={distanceOrigin}
+            taskXctsk={taskXctsk}
+            statuses={statuses}
+            detailHref={detailHref}
+            onMutated={onMutated}
+          />
+        </Cell>
+      ) : null}
+    </Row>
+  );
+}
+
+/** Admin per-row actions: open the score card, set status, upload a track,
+ * record a manual flight, and restore superseded evidence. */
+function RowManage({
+  row,
+  compId,
+  taskId,
+  isClosed,
+  isOpenDistance,
+  distanceOrigin,
+  taskXctsk,
+  statuses,
+  detailHref,
+  onMutated,
+}: {
+  row: RowPilot;
+  compId: string;
+  taskId: string;
+  isClosed: boolean;
+  isOpenDistance: boolean;
+  distanceOrigin: DistanceOriginValue;
+  taskXctsk: XCTask | null;
+  statuses: Map<string, PilotStatusEntry>;
+  /** The pilot's score card, when the row has one. Null for the tail. */
+  detailHref: string | null;
+  onMutated: () => void;
+}) {
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // The pilot is already known from the row, so the Track button skips the
+  // pilot-picker dialog and uploads straight to this pilot's IGC endpoint.
+  // RAC FileTrigger replaces the old hidden-<input> + ref dance.
+  async function uploadTrackFile(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".igc")) {
+      toast.error(NOT_AN_IGC_MESSAGE);
+      return;
+    }
+    setBusy(true);
+    try {
+      const compressed = await compressIgc(file);
+      // The size rule is the server's, both halves of it. This used to be an
+      // invented 5 MB check on the raw file, which matched neither.
+      const tooLarge = tooLargeReason(file.size, compressed.byteLength);
+      if (tooLarge) {
+        toast.error(tooLarge);
+        return;
+      }
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}`,
+        { method: "POST", credentials: "include", body: compressed }
+      );
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(err.error || "Upload failed");
+        return;
+      }
+      const data = (await res.json()) as {
+        replaced?: boolean;
+        track_quality?: TrackQualityWire | null;
+      };
+      // A withheld track must not be announced as a plain success — the pilot
+      // it belongs to is not here to notice, so the admin is the only one who
+      // can act on it.
+      const outcome = describeUploadOutcome(row.name, !!data.replaced, data.track_quality);
+      toast[outcome.tone](outcome.message);
+      onMutated();
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The status the admin controls directly: Present (clear) / Absent / DNF.
+  // Landed is derived from evidence and never hand-set.
+  const statusKey = statuses.get(row.compPilotId)?.status_key ?? "";
+  const statusValue = statusKey === "absent" || statusKey === "dnf" ? statusKey : "";
+
+  async function setStatus(next: string) {
+    setBusy(true);
+    try {
+      if (next === "") {
+        const res = await api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][
+          ":comp_pilot_id"
+        ].$delete({
+          param: { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId },
+        });
+        if (!res.ok) throw new Error();
+      } else {
+        const res = await api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][
+          ":comp_pilot_id"
+        ].$put({
+          param: { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId },
+          json: { status_key: next as "absent" | "dnf", note: null },
+        });
+        if (!res.ok) throw new Error();
+      }
+      onMutated();
+    } catch {
+      toast.error("Failed to update status");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreTrack() {
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}/restore`,
+        { method: "POST", credentials: "include" }
+      );
+      if (!res.ok) throw new Error();
+      onMutated();
+    } catch {
+      toast.error("Failed to restore track");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // A manual flight needs a route to measure against (GAP course or take-off
+  // cylinder). Both formats define at least one turnpoint.
+  const hasRoute = taskXctsk && taskXctsk.turnpoints.length > 0;
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      {detailHref ? (
+        // The row is already clickable, but nothing says so — this names the
+        // destination. A real anchor, so middle-click and "open in new tab"
+        // work; RAC keeps the press off the row's own action.
+        <TooltipTrigger>
+          <LinkButton variant="outline" size="sm" href={detailHref}>
+            View score card
+          </LinkButton>
+          <Tooltip>
+            Open {row.name}'s score card — every start, turnpoint and point
+            calculation, shown on the map
+          </Tooltip>
+        </TooltipTrigger>
+      ) : null}
+      <SimpleSelect
+        value={statusValue}
+        onChange={(v) => void setStatus(v)}
+        options={[
+          { value: "", label: "Present" },
+          { value: "absent", label: "Absent" },
+          { value: "dnf", label: "Did Not Fly" },
+        ]}
+        disabled={busy || isClosed}
+        ariaLabel={`Status for ${row.name}`}
+      />
+      {!isClosed ? (
+        <TooltipTrigger>
+          <FileTrigger
+            acceptedFileTypes={[".igc"]}
+            onSelect={(files) => void uploadTrackFile(files)}
+          >
+            <Button variant="outline" size="sm" isDisabled={busy}>
+              {row.evidence === "track" ? "Replace track" : "Upload track"}
+            </Button>
+          </FileTrigger>
+          <Tooltip>Upload {row.name}'s GPS track (IGC file)</Tooltip>
+        </TooltipTrigger>
+      ) : null}
+      {!isClosed && hasRoute ? (
+        <TooltipTrigger>
+          <Button variant="outline" size="sm" onPress={() => setRecordOpen(true)}>
+            {row.evidence === "manual" ? "Edit manual flight" : "Add manual flight"}
+          </Button>
+          <Tooltip>
+            Record a manual flight for {row.name} — for a pilot with no tracklog
+          </Tooltip>
+        </TooltipTrigger>
+      ) : null}
+      {row.supersededTrack && row.evidence !== "track" && !isClosed ? (
+        <TooltipTrigger>
+          <Button
+            variant="outline"
+            size="sm"
+            isDisabled={busy}
+            onPress={() => void restoreTrack()}
+          >
+            Restore track
+          </Button>
+          <Tooltip>Restore this pilot's superseded track</Tooltip>
+        </TooltipTrigger>
+      ) : null}
+
+      {recordOpen && taskXctsk ? (
+        <ManualFlightDialog
+          compId={compId}
+          taskId={taskId}
+          compPilotId={row.compPilotId}
+          pilotName={row.name}
+          task={taskXctsk}
+          distanceOrigin={distanceOrigin}
+          openDistance={isOpenDistance}
+          existing={row.activeManual}
+          onClose={() => setRecordOpen(false)}
+          onSaved={() => {
+            setRecordOpen(false);
+            onMutated();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}

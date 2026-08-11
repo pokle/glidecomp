@@ -57,6 +57,42 @@ describe('XCTSK Parser', () => {
       expect(task.turnpoints[1].radius).toBe(400);
     });
 
+    it('should parse cylinderTolerance (a scoring input — issue #577)', () => {
+      // The AirScore importer writes the comp's error_margin into the task
+      // file; dropping it here runs crossing detection with a band up to 10×
+      // wider than the comp scored with. On bright-open-2025-open-t3 that
+      // swallowed every pilot's exit beyond the 33.5 km ENTER start ring.
+      const taskJson = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { type: 'SSS', radius: 400, waypoint: { name: 'Start', lat: 47.0, lon: 11.0 } },
+          { radius: 400, waypoint: { name: 'Goal', lat: 48.0, lon: 12.0 } },
+        ],
+        cylinderTolerance: 0.0005,
+      });
+
+      expect(parseXCTask(taskJson).cylinderTolerance).toBe(0.0005);
+    });
+
+    it('should leave cylinderTolerance undefined when absent or invalid', () => {
+      const base = {
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { radius: 400, waypoint: { name: 'A', lat: 47.0, lon: 11.0 } },
+        ],
+      };
+      expect(parseXCTask(JSON.stringify(base)).cylinderTolerance).toBeUndefined();
+      // Same bounds as the API validator: a fraction in [0, 0.1].
+      for (const bad of ['0.0005', -0.001, 0.2, NaN, null]) {
+        const task = parseXCTask(JSON.stringify({ ...base, cylinderTolerance: bad }));
+        expect(task.cylinderTolerance).toBeUndefined();
+      }
+      // An explicit 0 is a real declaration (only the ±5 m minimum applies).
+      expect(parseXCTask(JSON.stringify({ ...base, cylinderTolerance: 0 })).cylinderTolerance).toBe(0);
+    });
+
     it('should parse task with SSS and goal configuration', () => {
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',
@@ -584,20 +620,49 @@ describe('XCTSK Parser', () => {
     });
   });
 
-  describe('parseXCTask fallback branch', () => {
-    it('should fall back to v1 when neither turnpoints nor t array present', () => {
-      // JSON with no 'turnpoints' and no 't' — triggers fallback
+  describe('parseXCTask validation', () => {
+    it('throws a clean Error when neither format yields a valid task', () => {
+      // JSON with no 'turnpoints' and no 't' — the fallback tries v1 then
+      // v2, neither yields a turnpoint, and the parse must fail loudly
+      // rather than hand an empty task to the distance maths.
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',
         version: 1,
         earthModel: 'WGS84',
       });
 
-      const task = parseXCTask(taskJson);
+      expect(() => parseXCTask(taskJson)).toThrow(/no turnpoints with valid coordinates/);
+    });
 
-      // v1 parse with no turnpoints produces empty array, isValidTask returns false,
-      // so it falls through to v2 which also has no turnpoints
-      expect(task.turnpoints).toHaveLength(0);
+    it('throws on a v1 task whose coordinates are missing or out of range', () => {
+      // Direct v1 path (a 'turnpoints' array is present) — validation must
+      // run here too, not only on the fallback path: these used to flow as
+      // undefined/strings into the Vincenty maths and score NaN geometry.
+      const missing = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP' } }],
+      });
+      expect(() => parseXCTask(missing)).toThrow(/Invalid XCTSK/);
+
+      const strings = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: '47.0', lon: '11.0' } }],
+      });
+      expect(() => parseXCTask(strings)).toThrow(/Invalid XCTSK/);
+
+      const outOfRange = JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 91, lon: 11.0 } }],
+      });
+      expect(() => parseXCTask(outOfRange)).toThrow(/Invalid XCTSK/);
+    });
+
+    it('throws on a v2 task with no turnpoints', () => {
+      expect(() => parseXCTask(JSON.stringify({ taskType: 'CLASSIC', t: [] })))
+        .toThrow(/Invalid XCTSK/);
     });
   });
 
@@ -769,18 +834,30 @@ describe('XCTSK Parser', () => {
       expect(goal.finishAltitude).toBe(200);
     });
 
-    it('should omit cylinderTolerance from output', () => {
+    it('should round-trip cylinderTolerance when the task carries one', () => {
+      // The declared tolerance is inert for scoring (S7F 2026 §9.1.1 fixes
+      // the band) but is part of the file: serializing must not drop it.
       const task = parseXCTask(JSON.stringify({
         taskType: 'CLASSIC',
         version: 1,
         turnpoints: [
           { radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }
-        ]
+        ],
+        cylinderTolerance: 0.005,
       }));
-      task.cylinderTolerance = 0.005;
-
+      expect(task.cylinderTolerance).toBe(0.005);
       const json = toXctskJSON(task);
-      expect((json as Record<string, unknown>).cylinderTolerance).toBeUndefined();
+      expect((json as Record<string, unknown>).cylinderTolerance).toBe(0.005);
+
+      // …and a task without one stays without one.
+      const bare = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        version: 1,
+        turnpoints: [
+          { radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }
+        ],
+      }));
+      expect((toXctskJSON(bare) as Record<string, unknown>).cylinderTolerance).toBeUndefined();
     });
 
     it('should round-trip xcontest task with minimal diff', () => {

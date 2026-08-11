@@ -75,7 +75,7 @@ function scoresCsvDev(): Plugin {
             const comp = (await compRes.json()) as { name: string };
             const scores = scoresRes.ok
               ? ((await scoresRes.json()) as ScoresCsvInput)
-              : { comp_id: compId, tasks: [], standings: [] };
+              : { comp_id: compId, tasks: [], scores: [] };
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader(
               'Content-Disposition',
@@ -296,7 +296,7 @@ export default defineConfig({
               path === '/comp' ||
               path.startsWith('/comp/') ||
               path === '/scores' ||
-              /^\/(profile|settings|onboarding|signin)\/?$/.test(path) ||
+              /^\/(submit|profile|settings|onboarding|signin)\/?$/.test(path) ||
               /^\/admin\/(users|cache)\/?$/.test(path));
           // Old static-page URLs 301 to their clean SPA/Astro routes.
           const movedTo: Record<string, string> = {
@@ -357,7 +357,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    // Overridable so two git worktrees can run side by side. Without it the
+    // second one silently reuses the first's dev server and every e2e
+    // assertion is made against the wrong code. Matches DEV_API_PORT, which
+    // the API origin above already honours.
+    port: Number(process.env.DEV_FRONTEND_PORT) || 3000,
     // Set TUNNEL=1 when exposing the dev server via `cloudflared tunnel`:
     //  - allowedHosts: let the random *.trycloudflare.com hostname through
     //    (leading dot matches the domain and all subdomains).

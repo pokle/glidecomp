@@ -31,7 +31,8 @@
     "web/frontend/src/**/*",
     "web/workers/**/*",
     "web/engine/tests/**/*",
-    "web/scripts/**/*"
+    "web/scripts/**/*",
+    "functions/**/*"
   ],
   "exclude": [
     "node_modules",
