@@ -3,10 +3,12 @@
  * field-analysis page.
  *
  * Everything renders from the stored ThermalShapeSummary list (no point
- * clouds): a census table of the day's shared thermals, then one selected
- * thermal in detail — a top-down lift rose around the measured core, the
- * headline readouts (lean vs wind, strongest side, feeders), the climb
- * profile by altitude band, and the exact numbers in a band table. The
+ * clouds): a census table of the day's shared thermals, paired with one
+ * selected thermal in detail — a top-down lift rose around the measured core,
+ * the headline readouts (lean vs wind, strongest side, feeders), the climb
+ * profile by altitude band, and the exact numbers in a band table. Census and
+ * detail are laid out by the shared {@link MasterDetail} (select a row, the
+ * pinned pane follows), exactly like the separation ranking above it. The
  * summaries are MEASUREMENTS pooled from the field's own tracks, never a
  * fitted model, and the captions say so.
  *
@@ -16,7 +18,8 @@
  * a model run beside the track-measured wind — a reader must never mistake
  * the prediction for the measurement (docs/weather.md).
  */
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import type { Selection } from "react-aria-components";
 import { InfoIcon } from "lucide-react";
 import { windAtHeight } from "@glidecomp/engine";
 import type {
@@ -26,6 +29,8 @@ import type {
   WeatherHour,
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
+import { MasterDetail } from "@/react/components/MasterDetail";
+import { cn } from "@/react/lib/utils";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Explain } from "@/react/rac/explain";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
@@ -437,6 +442,8 @@ export function ThermalsPanel({
   );
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const selected = shapes.find((s) => s.id === (selectedId ?? defaultId)) ?? shapes[0];
+  // Labels the detail region (it is read before the census it belongs to).
+  const headingId = useId();
 
   const model = useMemo(() => modelWindFor(selected, weather), [selected, weather]);
 
@@ -450,6 +457,55 @@ export function ThermalsPanel({
   const multiCoreBands = selected.bands.filter((b) => b.subCores.length >= 2);
   const replayHref = replayHrefFor(selected.id);
 
+  const census = (
+    <Table
+      aria-label="Reconstructed thermals"
+      scrollLabel="Reconstructed thermals"
+      // The same edge-to-edge bleed as the separation ranking's master: the
+      // card's side padding is a tenth of a phone's width, and paying it here
+      // squeezes the columns into a sideways scroll they don't need.
+      viewportClassName={cn(
+        "-mx-5 w-auto border-y",
+        "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
+      )}
+      selectionMode="single"
+      selectionBehavior="replace"
+      disallowEmptySelection
+      selectedKeys={[selected.id]}
+      onSelectionChange={(keys: Selection) => {
+        if (keys !== "all") {
+          const key = [...keys][0];
+          if (key !== undefined) setSelectedId(Number(key));
+        }
+      }}
+    >
+      <TableHeader>
+        <Column isRowHeader>Start</Column>
+        <Column>Pilots</Column>
+        <Column>Height band</Column>
+        <Column>Mean climb</Column>
+        <Column>Strongest side</Column>
+      </TableHeader>
+      <TableBody>
+        {shapes.map((s) => (
+          <Row key={s.id} id={s.id}>
+            <Cell>
+              <time dateTime={new Date(s.startMs).toISOString()}>
+                {formatTimeOfDay(new Date(s.startMs).toISOString(), tz)}
+              </time>
+            </Cell>
+            <Cell>{s.pilotCount}</Cell>
+            <Cell>
+              {altLabel(s.bands[0].altMin)}–{altWithUnit(s.bands[s.bands.length - 1].altMax)}
+            </Cell>
+            <Cell>+{climbText(meanClimb(s))}</Cell>
+            <Cell>{s.strongestSide ? degToCompass(s.strongestSide.bearing) : "—"}</Cell>
+          </Row>
+        ))}
+      </TableBody>
+    </Table>
+  );
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
@@ -457,61 +513,26 @@ export function ThermalsPanel({
           ? `The ${shapes.length} most-shared of ${thermals.totalShapeCount} multi-pilot thermals, reconstructed by pooling every pilot's track through the same climb.`
           : `${shapes.length} multi-pilot thermal${shapes.length === 1 ? "" : "s"}, reconstructed by pooling every pilot's track through the same climb.`}{" "}
         Everything shown is measured from the tracks — no fitted lift model.
+        {/* An instruction to interact — meaningless on paper. */}
+        <span className="print:hidden"> Select a thermal to see it in detail.</span>
       </p>
 
-      <div className="overflow-x-auto">
-        <Table aria-label="Reconstructed thermals" className="min-w-[40rem]">
-          <TableHeader>
-            <Column isRowHeader>Start</Column>
-            <Column>Pilots</Column>
-            <Column>Height band</Column>
-            <Column>Mean climb</Column>
-            <Column>Strongest side</Column>
-            <Column>
-              <span className="sr-only">Detail</span>
-            </Column>
-          </TableHeader>
-          <TableBody>
-            {shapes.map((s) => {
-              const isSelected = s.id === selected.id;
-              return (
-                <Row key={s.id} className={isSelected ? "bg-muted/50" : undefined}>
-                  <Cell>
-                    <time dateTime={new Date(s.startMs).toISOString()}>
-                      {formatTimeOfDay(new Date(s.startMs).toISOString(), tz)}
-                    </time>
-                  </Cell>
-                  <Cell>{s.pilotCount}</Cell>
-                  <Cell>
-                    {altLabel(s.bands[0].altMin)}–{altWithUnit(s.bands[s.bands.length - 1].altMax)}
-                  </Cell>
-                  <Cell>+{climbText(meanClimb(s))}</Cell>
-                  <Cell>{s.strongestSide ? degToCompass(s.strongestSide.bearing) : "—"}</Cell>
-                  <Cell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-pressed={isSelected}
-                      onPress={() => setSelectedId(s.id)}
-                    >
-                      {isSelected ? "Shown" : "Show"}
-                    </Button>
-                  </Cell>
-                </Row>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="rounded-lg border p-4">
-        <h3 className="text-sm font-semibold">
+      <MasterDetail
+        stackedTop="toc-bar"
+        detailLabel="detail"
+        detailHeadingId={headingId}
+        master={census}
+        detail={<div className="p-4">
+        <h3 id={headingId} className="text-sm font-semibold">
           Thermal at{" "}
           {formatTimeOfDay(new Date(selected.startMs).toISOString(), tz)} —{" "}
           {selected.pilotCount} pilots, {selected.useCount} climbs
         </h3>
-        <div className="mt-3 grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-          <div className="relative w-full max-w-80 self-start">
+        {/* One column always: the pane is never wider than its 35rem cap
+            (stacked) or the grid's right column (side by side), so the old
+            rose-beside-readouts split has no width to spend. */}
+        <div className="mt-3 space-y-4">
+          <div className="relative mx-auto w-full max-w-80">
             <ThermalRose shape={selected} model={model} climbFactor={climb.factor} climbUnit={climb.unit} />
             <div className="absolute right-0 top-0">
               <RoseLegend />
@@ -691,7 +712,8 @@ export function ThermalsPanel({
             </Table>
           </div>
         </details>
-      </div>
+      </div>}
+      />
 
       {/* The reconstruction method is behind the ⓘ. The model ATTRIBUTION is
           not: it is a licence obligation, so it stays on the page in both
