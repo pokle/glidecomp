@@ -334,10 +334,11 @@ export function PercentileHeatmap({ report }: { report: FieldAnalysisReport }) {
           </Explain>
         </span>
         {/* A popover cannot exist on paper, so print gets the same prose in
-            place. Hidden on screen, where the ⓘ is the way in. */}
-        <span className="hidden print:block">
+            place. Hidden on screen, where the ⓘ is the way in. A div, not a
+            span — the note renders <p>s, which are not phrasing content. */}
+        <div className="hidden print:block">
           <HeatmapNote hasNeutral={hasNeutral} />
-        </span>
+        </div>
       </figcaption>
     </figure>
   );

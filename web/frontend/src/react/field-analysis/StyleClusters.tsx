@@ -165,10 +165,12 @@ export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
             <ClusterMethodNote sc={sc} />
           </Explain>
         </span>
-        <span className="hidden print:block">
-          <ClusterMethodNote sc={sc} />
-        </span>
       </p>
+      {/* The note renders <p>s, so its print copy sits beside the paragraph,
+          not inside it — a <p> cannot hold another <p>. */}
+      <div className="hidden text-xs text-muted-foreground print:block">
+        <ClusterMethodNote sc={sc} />
+      </div>
     </div>
   );
 }

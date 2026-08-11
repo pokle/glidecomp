@@ -710,10 +710,12 @@ export function ThermalsPanel({
             <ThermalsNote />
           </Explain>
         </span>
-        <span className="hidden print:block">
-          <ThermalsNote />
-        </span>
       </p>
+      {/* The note renders <p>s, so its print copy sits beside the paragraph,
+          not inside it — a <p> cannot hold another <p>. */}
+      <div className="hidden text-xs text-muted-foreground print:block">
+        <ThermalsNote />
+      </div>
     </div>
   );
 }
