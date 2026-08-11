@@ -348,12 +348,17 @@ async function main(): Promise<void> {
     if (e.metaKey || e.ctrlKey || e.altKey) return; // browser/system chords stay theirs
     const t = e.target as HTMLElement;
     // Inputs/selects own their keys (arrows move sliders and selects); on a
-    // focused button only Space is theirs (it re-clicks the button).
+    // focused button only Space is theirs (it re-clicks the button). Range
+    // inputs are the exception for Space: a range ignores Space natively, and
+    // clicking the scrubber focuses it — swallowing Space there would leave
+    // play/pause dead until the user clicked elsewhere.
+    const spaceOnRange = e.key === ' ' && t instanceof HTMLInputElement && t.type === 'range';
     if (
-      t instanceof HTMLInputElement ||
-      t instanceof HTMLSelectElement ||
-      t instanceof HTMLTextAreaElement ||
-      (e.key === ' ' && t instanceof HTMLButtonElement)
+      !spaceOnRange &&
+      (t instanceof HTMLInputElement ||
+        t instanceof HTMLSelectElement ||
+        t instanceof HTMLTextAreaElement ||
+        (e.key === ' ' && t instanceof HTMLButtonElement))
     )
       return;
     switch (e.key) {
