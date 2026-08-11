@@ -32,7 +32,7 @@ import {
   resolveCompGapParams,
   DEFAULT_GAP_PARAMETERS,
   type GAPParameters,
-  type TaskScoreResult,
+  type GapTaskScoreResult,
 } from '../engine/src/gap-scoring';
 import { calculateOptimizedTaskDistance } from '../engine/src/task-optimizer';
 import {
@@ -72,7 +72,7 @@ let tasksSkipped = 0;
 
 /** The class context the competition API publishes, from an engine result. */
 function toClassContext(
-  result: TaskScoreResult,
+  result: GapTaskScoreResult,
   params: GAPParameters,
   taskDistance: number,
 ): ClassContextInput {
@@ -160,7 +160,7 @@ function auditTask(label: string, compsRoot: string, dir: string, category: 'hg'
   };
   params.nominalDistance = calculateOptimizedTaskDistance(task) * 0.7;
 
-  let result: TaskScoreResult;
+  let result: GapTaskScoreResult;
   try {
     result = scoreTask(task, pilots, params);
   } catch (err) {
