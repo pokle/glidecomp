@@ -18,7 +18,7 @@
  * a model run beside the track-measured wind — a reader must never mistake
  * the prediction for the measurement (docs/weather.md).
  */
-import { useId, useMemo, useState } from "react";
+import { lazy, Suspense, useId, useMemo, useState } from "react";
 import type { Selection } from "react-aria-components";
 import { InfoIcon } from "lucide-react";
 import { windAtHeight } from "@glidecomp/engine";
@@ -28,7 +28,7 @@ import type {
   FieldThermalsSummary,
   WeatherHour,
 } from "@glidecomp/engine";
-import { Button } from "@/react/rac/button";
+import { Button, ToggleButton } from "@/react/rac/button";
 import { MasterDetail } from "@/react/components/MasterDetail";
 import { cn } from "@/react/lib/utils";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
@@ -150,28 +150,22 @@ function aggregateSectors(shape: ThermalShapeSummary): { bearing: number; mean: 
 const ROSE_SIZE = 320;
 const ROSE_R = 132;
 
-/**
- * Top-down view of the thermal about its own core. Wedge length is RELATIVE
- * climb by sector (the shape of the lift), the dashed ring is the measured
- * working radius and the dotted ring the flown extent (both in metres, to the
- * same scale as the feeder diamonds). Solid arrow: track-measured wind.
- * Dashed arrow: the model's wind — a model run, not an observation.
- */
-function ThermalRose({
-  shape,
-  model,
-  climbFactor,
-  climbUnit,
-}: {
-  shape: ThermalShapeSummary;
-  model: ModelWindProfile | null;
-  climbFactor: number;
-  climbUnit: string;
-}) {
-  const c = ROSE_SIZE / 2;
-  const sectors = aggregateSectors(shape);
-  const maxAbs = Math.max(...sectors.map((s) => Math.abs(s.mean ?? 0)), 0.5);
+// The map backdrop stays a separate lazy chunk: mapbox-gl (and its CSS) load
+// only when someone flips the toggle, and never in the SSR entry.
+const ThermalRoseMap = lazy(() => import("./ThermalRoseMap"));
+const HAS_MAP_TOKEN = Boolean(import.meta.env.VITE_MAPBOX_TOKEN);
 
+/**
+ * The rose's ground geometry: the sample-weighted working radius, the widest
+ * flown extent, and the metres one SVG viewBox unit represents. One function
+ * shared by the rose and the map backdrop, so the overlay can never disagree
+ * with the chart about scale.
+ */
+function roseGeometry(shape: ThermalShapeSummary): {
+  coreRadius: number;
+  extent: number;
+  metresPerPx: number;
+} {
   let radiusW = 0;
   let radiusN = 0;
   let extent = 0;
@@ -181,7 +175,54 @@ function ThermalRose({
     extent = Math.max(extent, b.extentRadius);
   }
   const coreRadius = radiusN > 0 ? radiusW / radiusN : 0;
-  const metresPerPx = Math.max(extent, coreRadius * 1.4, 100) / ROSE_R;
+  return {
+    coreRadius,
+    extent,
+    metresPerPx: Math.max(extent, coreRadius * 1.4, 100) / ROSE_R,
+  };
+}
+
+/** Sample-weighted mean of the band cores — where the column stood on the
+ * ground, for the map backdrop. */
+function shapeLocation(shape: ThermalShapeSummary): { lat: number; lon: number } {
+  let lat = 0;
+  let lon = 0;
+  let n = 0;
+  for (const b of shape.bands) {
+    lat += b.core.lat * b.sampleCount;
+    lon += b.core.lon * b.sampleCount;
+    n += b.sampleCount;
+  }
+  return n > 0 ? { lat: lat / n, lon: lon / n } : shape.origin;
+}
+
+/**
+ * Top-down view of the thermal about its own core. Wedge length is RELATIVE
+ * climb by sector (the shape of the lift), each labelled with its mean
+ * climb/sink rate; the dashed ring is the measured working circle and the
+ * dotted ring the flown extent, each labelled with its diameter in the
+ * viewer's units (drawn to the same scale as the feeder diamonds). Solid
+ * arrow, labelled "actual": track-measured wind. Dashed arrow, labelled
+ * "forecast": the model's wind — a model run, not an observation.
+ */
+function ThermalRose({
+  shape,
+  model,
+  climbFactor,
+  climbUnit,
+  distanceText,
+}: {
+  shape: ThermalShapeSummary;
+  model: ModelWindProfile | null;
+  climbFactor: number;
+  climbUnit: string;
+  /** Formats a ground distance in metres for display (viewer's units). */
+  distanceText: (m: number) => string;
+}) {
+  const c = ROSE_SIZE / 2;
+  const sectors = aggregateSectors(shape);
+  const maxAbs = Math.max(...sectors.map((s) => Math.abs(s.mean ?? 0)), 0.5);
+  const { coreRadius, extent, metresPerPx } = roseGeometry(shape);
 
   const sectorWidth = 360 / Math.max(sectors.length, 1);
   const wedgePath = (bearing: number, r: number): string => {
@@ -193,8 +234,15 @@ function ThermalRose({
     );
   };
 
-  /** Arrow entering from the compass edge the wind blows FROM. */
-  const windArrow = (directionFromDeg: number, dashed: boolean, key: string) => {
+  // Every on-chart label carries a background-coloured halo (paint-order) so
+  // it stays readable where it crosses a wedge, a ring — or the map backdrop.
+  const HALO = "stroke-background [paint-order:stroke] [stroke-width:3px]";
+
+  /** Arrow entering from the compass edge the wind blows FROM, named so the
+   * two arrows never need the legend to tell apart. The two label radii
+   * differ so the names stack instead of colliding when the forecast agrees
+   * with the measurement. */
+  const windArrow = (directionFromDeg: number, dashed: boolean, key: string, name: string) => {
     const a = ((directionFromDeg - 90) * Math.PI) / 180;
     const r0 = c - 10;
     const r1 = c - 34;
@@ -203,6 +251,7 @@ function ThermalRose({
     const x1 = c + r1 * Math.cos(a);
     const y1 = c + r1 * Math.sin(a);
     const ah = Math.atan2(y1 - y0, x1 - x0);
+    const lr = dashed ? r1 - 26 : r1 - 12;
     return (
       <g key={key} className={dashed ? "stroke-muted-foreground" : "stroke-foreground/80"} fill="none">
         <path d={`M${x0},${y0} L${x1},${y1}`} strokeWidth={1.6} strokeDasharray={dashed ? "4 3" : undefined} />
@@ -210,15 +259,29 @@ function ThermalRose({
           d={`M${x1},${y1} L${x1 - 7 * Math.cos(ah - 0.5)},${y1 - 7 * Math.sin(ah - 0.5)} M${x1},${y1} L${x1 - 7 * Math.cos(ah + 0.5)},${y1 - 7 * Math.sin(ah + 0.5)}`}
           strokeWidth={1.6}
         />
+        <text
+          x={c + lr * Math.cos(a)}
+          y={c + lr * Math.sin(a) + 3}
+          textAnchor="middle"
+          className={cn(
+            "fill-current text-[9px]",
+            HALO,
+            dashed ? "text-muted-foreground" : "text-foreground/80"
+          )}
+        >
+          {name}
+        </text>
       </g>
     );
   };
 
   const strongest = shape.strongestSide;
+  const diameters =
+    `Working diameter ${distanceText(coreRadius * 2)}; the field ranged across ${distanceText(extent * 2)}.`;
   const label = strongest
     ? `Top-down lift rose: strongest on the ${degToCompass(strongest.bearing)} side of the core at ` +
-      `${formatMetricValue(climbUnit, strongest.meanVario * climbFactor)} ${climbUnit}. Exact numbers per band are in the table below.`
-    : "Top-down lift rose. Exact numbers per band are in the table below.";
+      `${formatMetricValue(climbUnit, strongest.meanVario * climbFactor)} ${climbUnit}. ${diameters} Exact numbers per band are in the table below.`
+    : `Top-down lift rose. ${diameters} Exact numbers per band are in the table below.`;
 
   return (
     <svg viewBox={`0 0 ${ROSE_SIZE} ${ROSE_SIZE}`} className="h-auto w-full max-w-80" role="img" aria-label={label}>
@@ -234,11 +297,50 @@ function ThermalRose({
           )
         )}
       </g>
-      {/* Working radius + flown extent, in metres. */}
+      {/* Each wedge's mean climb (sink keeps its minus sign), near the tip. */}
+      <g aria-hidden>
+        {sectors.map((s) => {
+          if (s.mean === null) return null;
+          const r = (Math.abs(s.mean) / maxAbs) * ROSE_R;
+          const lr = r >= 46 ? r - 14 : r + 14;
+          const a = ((s.bearing - 90) * Math.PI) / 180;
+          return (
+            <text
+              key={s.bearing}
+              x={c + lr * Math.cos(a)}
+              y={c + lr * Math.sin(a) + 3}
+              textAnchor="middle"
+              className={cn("fill-current text-[9px] text-foreground/80", HALO)}
+            >
+              {s.mean >= 0 ? "+" : ""}
+              {formatMetricValue(climbUnit, s.mean * climbFactor)}
+            </text>
+          );
+        })}
+      </g>
+      {/* Working circle + flown extent, each labelled with its diameter. */}
       <g aria-hidden fill="none">
         <circle cx={c} cy={c} r={extent / metresPerPx} className="stroke-muted-foreground/50" strokeDasharray="2 4" />
         <circle cx={c} cy={c} r={coreRadius / metresPerPx} className="stroke-muted-foreground/70" strokeDasharray="5 3" />
         <circle cx={c} cy={c} r={2.5} className="fill-muted-foreground" />
+      </g>
+      <g aria-hidden>
+        <text
+          x={c}
+          y={c - coreRadius / metresPerPx - 5}
+          textAnchor="middle"
+          className={cn("fill-current text-[9px] text-muted-foreground", HALO)}
+        >
+          {`⌀ ${distanceText(coreRadius * 2)}`}
+        </text>
+        <text
+          x={c}
+          y={c + extent / metresPerPx - 7}
+          textAnchor="middle"
+          className={cn("fill-current text-[9px] text-muted-foreground", HALO)}
+        >
+          {`⌀ ${distanceText(extent * 2)}`}
+        </text>
       </g>
       {/* Feeder sub-cores, offset from their own band's core. */}
       <g aria-hidden>
@@ -263,11 +365,14 @@ function ThermalRose({
         )}
       </g>
       <g aria-hidden>
-        <text x={c} y={12} textAnchor="middle" className="fill-current text-[10px] text-muted-foreground">
+        <text x={c} y={12} textAnchor="middle" className={cn("fill-current text-[10px] text-muted-foreground", HALO)}>
           N
         </text>
-        {shape.wind ? windArrow(shape.wind.direction, false, "measured") : null}
-        {model ? windArrow(model.mean.directionDeg, true, "model") : null}
+        <text x={4} y={ROSE_SIZE - 5} className={cn("fill-current text-[9px] text-muted-foreground", HALO)}>
+          mean climb ({climbUnit}) by sector
+        </text>
+        {shape.wind ? windArrow(shape.wind.direction, false, "measured", "actual") : null}
+        {model ? windArrow(model.mean.directionDeg, true, "model", "forecast") : null}
       </g>
     </svg>
   );
@@ -288,19 +393,19 @@ function RoseLegend() {
   const rows: { glyph: React.ReactNode; text: string }[] = [
     {
       glyph: glyph(<path d="M3,12 L17,12 A14,14 0 0 0 12.9,2.1 Z" className="fill-chart-3/40" />),
-      text: "Wedges: relative climb by side of the core — longer means stronger lift on that side (blue marks sink).",
+      text: "Wedges: relative climb by side of the core — longer means stronger lift on that side (blue marks sink). Each is labelled with its mean climb or sink rate.",
     },
     {
       glyph: glyph(
         <circle cx={10} cy={7} r={5.5} fill="none" strokeDasharray="5 3" className="stroke-muted-foreground/70" />
       ),
-      text: "Dashed ring: the measured working radius, in metres.",
+      text: "Dashed ring: the measured working circle, labelled with its diameter.",
     },
     {
       glyph: glyph(
         <circle cx={10} cy={7} r={5.5} fill="none" strokeDasharray="2 4" className="stroke-muted-foreground/50" />
       ),
-      text: "Dotted ring: the widest the field ranged in this thermal.",
+      text: "Dotted ring: the widest the field ranged in this thermal, labelled with its diameter.",
     },
     {
       glyph: glyph(<circle cx={10} cy={7} r={2.5} className="fill-muted-foreground" />),
@@ -313,7 +418,7 @@ function RoseLegend() {
           <path d="M15,7 L11,4 M15,7 L11,10" />
         </g>
       ),
-      text: "Solid arrow: wind measured from the pilots' circles, entering from the side it blows from.",
+      text: "Solid arrow (“actual”): wind measured from the pilots' circles, entering from the side it blows from.",
     },
     {
       glyph: glyph(
@@ -322,7 +427,7 @@ function RoseLegend() {
           <path d="M15,7 L11,4 M15,7 L11,10" />
         </g>
       ),
-      text: "Dashed arrow: the weather model's wind — a model run, not an observation.",
+      text: "Dashed arrow (“forecast”): the weather model's wind — a model run, not an observation.",
     },
     {
       glyph: glyph(<rect x={7} y={4} width={6} height={6} transform="rotate(45 10 7)" className="fill-chart-4" />),
@@ -441,6 +546,9 @@ export function ThermalsPanel({
     [shapes]
   );
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Satellite backdrop under the rose — off by default (and in the SSR
+  // snapshot), so mapbox-gl only ever loads on an explicit flip.
+  const [showMap, setShowMap] = useState(false);
   const selected = shapes.find((s) => s.id === (selectedId ?? defaultId)) ?? shapes[0];
   // Labels the detail region (it is read before the census it belongs to).
   const headingId = useId();
@@ -533,7 +641,42 @@ export function ThermalsPanel({
             rose-beside-readouts split has no width to spend. */}
         <div className="mt-3 space-y-4">
           <div className="relative mx-auto w-full max-w-80">
-            <ThermalRose shape={selected} model={model} climbFactor={climb.factor} climbUnit={climb.unit} />
+            {showMap ? (
+              <Suspense fallback={null}>
+                {/* Decorative backdrop: the rose above it is the reading. */}
+                <div aria-hidden className="absolute inset-0 overflow-hidden rounded-lg">
+                  {(() => {
+                    const loc = shapeLocation(selected);
+                    return (
+                      <ThermalRoseMap
+                        lat={loc.lat}
+                        lon={loc.lon}
+                        metresPerSvgUnit={roseGeometry(selected).metresPerPx}
+                        svgSize={ROSE_SIZE}
+                      />
+                    );
+                  })()}
+                  {/* Scrim so the rose's ink stays legible over imagery. */}
+                  <div className="pointer-events-none absolute inset-0 bg-background/30" />
+                </div>
+              </Suspense>
+            ) : null}
+            <div className="relative">
+              <ThermalRose
+                shape={selected}
+                model={model}
+                climbFactor={climb.factor}
+                climbUnit={climb.unit}
+                distanceText={(m) => altWithUnit(m)}
+              />
+            </div>
+            {HAS_MAP_TOKEN ? (
+              <div className="absolute left-0 top-0 print:hidden">
+                <ToggleButton size="sm" isSelected={showMap} onChange={setShowMap}>
+                  Map
+                </ToggleButton>
+              </div>
+            ) : null}
             <div className="absolute right-0 top-0">
               <RoseLegend />
             </div>
@@ -722,8 +865,8 @@ export function ThermalsPanel({
       <p className="text-xs text-muted-foreground">
         <span className="inline-flex items-baseline gap-1">
           <span>
-            The dashed arrow is the weather model&rsquo;s wind — a model run,
-            not an observation.
+            The dashed &ldquo;forecast&rdquo; arrow is the weather
+            model&rsquo;s wind — a model run, not an observation.
             {weather?.source
               ? ` Model: ${weather.source.attribution} (${weather.source.model}).`
               : ""}
@@ -752,10 +895,12 @@ function ThermalsNote() {
         for the thermal&rsquo;s lean and drift.
       </p>
       <p>
-        Wedge length is relative climb by side of the core; the dashed ring is
-        the measured working radius and the dotted ring the widest the field
-        ranged. The solid arrow is the wind measured from the pilots&rsquo;
-        circles.
+        Wedge length is relative climb by side of the core, each wedge labelled
+        with its mean climb or sink rate; the dashed ring is the measured
+        working circle and the dotted ring the widest the field ranged, each
+        labelled with its diameter. The solid &ldquo;actual&rdquo; arrow is the
+        wind measured from the pilots&rsquo; circles; the dashed
+        &ldquo;forecast&rdquo; arrow is the weather model&rsquo;s wind.
       </p>
     </>
   );
