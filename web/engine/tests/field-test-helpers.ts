@@ -133,6 +133,7 @@ export function makeTestField(
   }));
   const pilotScores = specs.map((s, i) => makePilotScore(`${s.name}.igc`, s.name, i + 1, s));
   const scoreResult: TaskScoreResult = {
+    format: 'gap',
     parameters: { ...DEFAULT_GAP_PARAMETERS },
     taskValidity: { launch: 1, distance: 1, time: 1, task: 1 },
     weights: { distance: 0.5, time: 0.5, leading: 0, arrival: 0 },

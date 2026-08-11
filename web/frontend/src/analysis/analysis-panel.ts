@@ -7,7 +7,7 @@
  * restore rule.
  */
 
-import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, sinksFromGlides, resolveLeadingTimeRatio, type FlightEvent, type FlightEventType, type FlightSegments, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, sinksFromGlides, resolveLeadingTimeRatio, type FlightEvent, type FlightEventType, type FlightSegments, type XCTask, type TurnpointType, type Turnpoint, type TurnpointSequenceResult, type FixIndexDetails, type GlideEventDetails, type WaypointRecord, type TaskScoreResult, type GapTaskScoreResult, type OpenDistanceTaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
@@ -394,8 +394,6 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   let isPanelHidden = true;
   let isMultiTrackMode = false;
   let currentCompScore: TaskScoreResult | null = null;
-  /** Scoring format the comp-score tab presents (GAP vs open distance) */
-  let compScoringFormat: CompScoringFormat = 'gap';
   /** Per-pilot flown/airtime stats for the open-distance table (by pilot name) */
   let openDistanceStats: Map<string, OpenDistancePilotStats> | null = null;
   /** Selected pilot names in competition score tab (null = all selected) */
@@ -1380,7 +1378,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       return;
     }
 
-    if (compScoringFormat === 'open_distance') {
+    // Branch on the result's own discriminant, not the comp record — a GAP
+    // renderer pointed at an open-distance result would print validity and
+    // parameters the result does not have.
+    if (currentCompScore.format === 'open-distance') {
       renderOpenDistanceScore(currentCompScore);
     } else {
       renderGapCompetitionScore(currentCompScore);
@@ -1434,7 +1435,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    * Render the open-distance score table: every pilot's straight-line scored
    * distance next to what they actually flew (track distance and airtime).
    */
-  function renderOpenDistanceScore(result: TaskScoreResult): void {
+  function renderOpenDistanceScore(result: OpenDistanceTaskScoreResult): void {
     const stats = result.stats;
     const allSelected = selectedPilots === null;
     const neverLeft = result.pilotScores.filter(
@@ -1501,7 +1502,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   /**
    * Render the GAP competition score table (multi-track mode)
    */
-  function renderGapCompetitionScore(result: TaskScoreResult): void {
+  function renderGapCompetitionScore(result: GapTaskScoreResult): void {
     const params = result.parameters;
     const stats = result.stats;
 
@@ -1863,8 +1864,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       }
     },
 
+    // Names the comp-score tab; which table renders is decided by the score
+    // result's own `format` discriminant, not this.
     setCompetitionScoringFormat(format: CompScoringFormat) {
-      compScoringFormat = format;
       tabCompScore.textContent = format === 'open_distance' ? 'Open Distance' : 'Competition Score';
     },
 

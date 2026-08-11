@@ -33,7 +33,7 @@ import {
   scoreTask,
   resolveCompGapParams,
   type GAPParameters,
-  type TaskScoreResult,
+  type GapTaskScoreResult,
 } from '../engine/src/gap-scoring';
 import { calculateOptimizedTaskDistance } from '../engine/src/task-optimizer';
 import { loadCompManifest, readTaskDir } from '../engine/cli/comp-manifest';
@@ -57,8 +57,8 @@ interface TaskRow {
   numReachedESS: number;
   goalRatio: number;
   useLeading: boolean;
-  weights: TaskScoreResult['weights'];
-  availablePoints: TaskScoreResult['availablePoints'];
+  weights: GapTaskScoreResult['weights'];
+  availablePoints: GapTaskScoreResult['availablePoints'];
   pilots: Array<{
     name: string;
     distance: number;

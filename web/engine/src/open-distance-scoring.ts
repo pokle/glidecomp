@@ -16,10 +16,13 @@
  * same measurement {@link manualOpenDistanceGeometry} applies to a track-less
  * pilot's landing point.
  *
- * The result reuses the GAP {@link TaskScoreResult} shape so the competition
- * API can map pilots to scores identically for both formats. GAP-only fields
- * (time / leading / arrival points, validity, speed section) carry neutral
- * placeholder values here — they do not apply to open distance.
+ * The result is the open-distance arm of {@link TaskScoreResult}
+ * ({@link OpenDistanceTaskScoreResult}): it shares the per-pilot score shape
+ * with GAP so the competition API can map pilots to scores identically for
+ * both formats, declares itself with `format: 'open-distance'`, and carries
+ * null for the GAP-only concepts (parameters, validity, weights, the
+ * 1000-point pool) — they do not apply to open distance, and a typed null
+ * cannot be mistaken for the task's own figures by an explainer or chart.
  */
 
 import type { XCTask } from './xctsk-parser';
@@ -27,10 +30,9 @@ import type { TurnpointSequenceResult } from './turnpoint-sequence';
 import { ellipsoidDistance, calculateBearingRadians, destinationPoint } from './geo';
 import {
   assignRanks,
-  DEFAULT_GAP_PARAMETERS,
+  type OpenDistanceTaskScoreResult,
   type PilotFlight,
   type PilotScore,
-  type TaskScoreResult,
   type TaskStats,
 } from './gap-scoring';
 
@@ -161,11 +163,12 @@ export interface OpenDistanceFlightData {
 
 /**
  * Aggregate pre-computed per-pilot open distances into a task result: rank the
- * field furthest-first and build the (neutral) {@link TaskScoreResult}
- * scaffolding. Each pilot's total score equals their open distance in metres
- * (rounded). Open distance has no GAP validity, weighting, time/leading/arrival
- * points, or 1000-point pool — those fields exist only to satisfy the shared
- * result shape and are not surfaced in the open-distance UI.
+ * field furthest-first and build the {@link OpenDistanceTaskScoreResult}. Each
+ * pilot's total score equals their open distance in metres (rounded). Open
+ * distance has no GAP validity, weighting, time/leading/arrival points, or
+ * 1000-point pool — the result declares `format: 'open-distance'` and carries
+ * null for those concepts, so a consumer must branch on the format before it
+ * can read any of them.
  *
  * This is the field-aggregation half of open-distance scoring (mirrors
  * {@link scoreFlights} for GAP); the competition backend feeds it cached
@@ -174,7 +177,7 @@ export interface OpenDistanceFlightData {
 export function scoreOpenDistanceFlights(
   flights: OpenDistanceFlightData[],
   numPresent?: number,
-): TaskScoreResult {
+): OpenDistanceTaskScoreResult {
   const pilotScores: PilotScore[] = flights.map((flight) => {
     const distance = flight.distance;
     const score = Math.round(distance);
@@ -217,10 +220,11 @@ export function scoreOpenDistanceFlights(
   };
 
   return {
-    parameters: DEFAULT_GAP_PARAMETERS,
-    taskValidity: { launch: 1, distance: 1, time: 1, task: 1 },
-    weights: { distance: 1, time: 0, leading: 0, arrival: 0 },
-    availablePoints: { distance: 0, time: 0, leading: 0, arrival: 0, total: 0 },
+    format: 'open-distance',
+    parameters: null,
+    taskValidity: null,
+    weights: null,
+    availablePoints: null,
     pilotScores,
     stats,
   };
@@ -242,7 +246,7 @@ export function scoreOpenDistance(
   task: XCTask,
   pilots: PilotFlight[],
   numPresent?: number,
-): TaskScoreResult {
+): OpenDistanceTaskScoreResult {
   const flights: OpenDistanceFlightData[] = pilots.map((pilot) => ({
     pilotName: pilot.pilotName,
     trackFile: pilot.trackFile,

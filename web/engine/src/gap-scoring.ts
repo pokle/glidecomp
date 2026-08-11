@@ -62,14 +62,14 @@ import type {
   AvailablePoints,
   BestTimeCandidate,
   FlightScoringData,
+  GapTaskScoreCore,
+  GapTaskScoreResult,
   LeadingTimes,
   PilotFlight,
   PilotScore,
   PilotScoreCore,
   ScoreTaskOptions,
   StoppedTaskScore,
-  TaskScoreCore,
-  TaskScoreResult,
   TaskStats,
 } from './gap-types';
 
@@ -542,7 +542,7 @@ export function scoreFlights(
   params: Partial<GAPParameters> = {},
   numPresent?: number,
   stop?: { stopTimeMs: number },
-): TaskScoreCore {
+): GapTaskScoreCore {
   const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
   const actualNumPresent = numPresent ?? flights.length;
 
@@ -758,6 +758,7 @@ export function scoreFlights(
   assignRanks(pilotScores, p => p.totalScore);
 
   return {
+    format: 'gap',
     parameters: fullParams,
     taskValidity,
     weights,
@@ -793,7 +794,7 @@ export function scoreTask(
   params: Partial<GAPParameters> = {},
   numPresent?: number,
   options: ScoreTaskOptions = {},
-): TaskScoreResult {
+): GapTaskScoreResult {
   const fullParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...params };
 
   // Apply the distance-origin convention (take-off vs start cylinder) once,

@@ -202,15 +202,21 @@ export interface LeadingTimes extends LeadingFieldTimes {
   maxTimeSource: LeadingMaxTimeSource;
 }
 
-/** Complete task scoring result. */
-export interface TaskScoreResult {
+/** The fields both scoring formats genuinely share. */
+interface TaskScoreResultBase {
+  pilotScores: PilotScore[];
+  /** Aggregate stats used in scoring */
+  stats: TaskStats;
+}
+
+/** Complete CIVL GAP (race / elapsed-time) task scoring result. */
+export interface GapTaskScoreResult extends TaskScoreResultBase {
+  /** Discriminant — see {@link TaskScoreResult}. */
+  format: 'gap';
   parameters: GAPParameters;
   taskValidity: TaskValidity;
   weights: WeightFractions;
   availablePoints: AvailablePoints;
-  pilotScores: PilotScore[];
-  /** Aggregate stats used in scoring */
-  stats: TaskStats;
   /** Present when the task was scored as stopped (FAI S7F §13.4). */
   stopped?: StoppedTaskScore;
   /**
@@ -219,6 +225,34 @@ export interface TaskScoreResult {
    */
   leadingTimes?: LeadingTimes;
 }
+
+/**
+ * Complete open-distance task scoring result. The GAP concepts — parameters,
+ * validity, weights, the 1000-point pool — play no part in open distance, so
+ * they are typed null rather than carrying plausible-looking placeholder
+ * values an explainer could mistake for the task's own.
+ */
+export interface OpenDistanceTaskScoreResult extends TaskScoreResultBase {
+  /** Discriminant — see {@link TaskScoreResult}. */
+  format: 'open-distance';
+  parameters: null;
+  taskValidity: null;
+  weights: null;
+  availablePoints: null;
+}
+
+/**
+ * Complete task scoring result — discriminate on `format` before reading any
+ * GAP field, so an open-distance result can never feed a validity or a
+ * parameter set it does not have into an explanation.
+ *
+ * Degrade rule for stored bodies: payloads persisted before this discriminant
+ * existed carry no `format`. Every such persisted result is a GAP result (the
+ * competition API refuses field analysis — the one store embedding whole
+ * results — for open-distance tasks), so a consumer reading a stored body
+ * must treat an absent `format` as 'gap', never fail.
+ */
+export type TaskScoreResult = GapTaskScoreResult | OpenDistanceTaskScoreResult;
 
 /** Aggregate statistics from all pilots in the task. */
 export interface TaskStats {
@@ -235,10 +269,23 @@ export interface TaskStats {
 /** A scored pilot without the (heavy) transparency turnpoint result. */
 export type PilotScoreCore = Omit<PilotScore, 'turnpointResult'>;
 
-/** {@link TaskScoreResult} without the per-pilot turnpoint results. */
-export type TaskScoreCore = Omit<TaskScoreResult, 'pilotScores'> & {
+/** One result arm with its per-pilot turnpoint results dropped. */
+type CoreOf<T extends TaskScoreResultBase> = Omit<T, 'pilotScores'> & {
   pilotScores: PilotScoreCore[];
 };
+
+/** {@link GapTaskScoreResult} without the per-pilot turnpoint results. */
+export type GapTaskScoreCore = CoreOf<GapTaskScoreResult>;
+
+/** {@link OpenDistanceTaskScoreResult} without the per-pilot turnpoint results. */
+export type OpenDistanceTaskScoreCore = CoreOf<OpenDistanceTaskScoreResult>;
+
+/**
+ * {@link TaskScoreResult} without the per-pilot turnpoint results. Built
+ * per-arm (not `Omit` over the union, which would collapse the
+ * discriminant and drop the GAP-only optional fields).
+ */
+export type TaskScoreCore = GapTaskScoreCore | OpenDistanceTaskScoreCore;
 
 // ---------------------------------------------------------------------------
 // Input types
