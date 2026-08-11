@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UnitPreferences } from "@glidecomp/engine";
+import { TO_SI, type UnitPreferences } from "@glidecomp/engine";
 import type { FieldAnalysisReport } from "./types";
 import { displayReport, unitDisplay, unitWords, verdictWords } from "./units";
 
@@ -23,15 +23,25 @@ describe("unitDisplay", () => {
     }
   });
   it("maps km/h by the speed preference", () => {
-    expect(unitDisplay("km/h", IMPERIAL)).toEqual({ unit: "mph", factor: 0.621371 });
+    // Factors derive from the engine's exact TO_SI table, not hand-typed
+    // truncations, so this display can never drift from the engine's own
+    // formatting. The closeTo pins catch a wrong derivation (inverted,
+    // wrong unit) without re-pinning truncated constants.
+    const mph = unitDisplay("km/h", IMPERIAL);
+    expect(mph).toEqual({ unit: "mph", factor: TO_SI["km/h"] / TO_SI.mph });
+    expect(mph.factor).toBeCloseTo(0.621371, 6);
     expect(unitDisplay("km/h", { ...METRIC, speed: "knots" }).unit).toBe("kts");
   });
   it("maps m/s by the climb preference", () => {
-    expect(unitDisplay("m/s", IMPERIAL)).toEqual({ unit: "fpm", factor: 196.85 });
+    const fpm = unitDisplay("m/s", IMPERIAL);
+    expect(fpm).toEqual({ unit: "fpm", factor: 1 / TO_SI["ft/min"] });
+    expect(fpm.factor).toBeCloseTo(196.8504, 4);
     expect(unitDisplay("m/s", { ...METRIC, climbRate: "knots" }).unit).toBe("kts");
   });
   it("maps m by the altitude preference", () => {
-    expect(unitDisplay("m", IMPERIAL)).toEqual({ unit: "ft", factor: 3.281 });
+    const ft = unitDisplay("m", IMPERIAL);
+    expect(ft).toEqual({ unit: "ft", factor: 1 / TO_SI.ft });
+    expect(ft.factor).toBeCloseTo(3.28084, 5);
   });
   it("passes dimensionless and time units through untouched", () => {
     for (const u of ["pct", "s", "min", "count", "ratio"]) {

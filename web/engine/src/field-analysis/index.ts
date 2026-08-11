@@ -55,7 +55,7 @@ export {
   type ThermalWindEstimate,
 } from './thermal-shape';
 export { estimateWorkingBand, type WorkingBand, type WorkingBandHour } from './working-band';
-export { percentile, median, mean, rankWithTies, spearman, circularMeanWind, type WindSample, type MeanWind } from './stats';
+export { percentile, median, mean, rankWithTies, spearman, circularMeanWind, combineWindEstimates, type WindSample, type MeanWind } from './stats';
 export { evaluateField, MIN_CORRELATION_N, MAX_THERMAL_SHAPES } from './evaluate';
 export {
   clusterPilotStyles,
