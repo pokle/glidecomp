@@ -69,6 +69,8 @@ export function useScrollRestoration(): void {
     return () => window.removeEventListener("scroll", save);
   }, []);
 
+  const prevPathname = useRef(location.pathname);
+
   useLayoutEffect(() => {
     // Runs synchronously after the DOM swap, before the browser dispatches
     // any clamp-induced scroll event — so re-keying here keeps the old
@@ -76,9 +78,27 @@ export function useScrollRestoration(): void {
     currentKey.current = location.key;
 
     if (navigationType === "POP") {
+      prevPathname.current = location.pathname;
       const target = savedPositions.get(location.key) ?? 0;
       if (target > 0) return restoreScrollWhenTallEnough(target);
+      window.scrollTo(0, 0);
+      return;
     }
+    // A REPLACE that only corrects the address of the page the reader is
+    // already on must not move them: the canonical `${slug}-${id}` settling
+    // over a bare-id URL (marked with preserveScroll, and able to arrive
+    // SECONDS late on a slow connection — yanking a reader who has scrolled
+    // back to the top), or a filter rewriting the query string (same
+    // pathname, e.g. the field-analysis class select). A replace that lands
+    // on a DIFFERENT page (the /profile → /settings kind) still starts at
+    // the top.
+    const samePage =
+      navigationType === "REPLACE" &&
+      (((location.state as { preserveScroll?: boolean } | null)?.preserveScroll ??
+        false) ||
+        location.pathname === prevPathname.current);
+    prevPathname.current = location.pathname;
+    if (samePage) return;
     window.scrollTo(0, 0);
-  }, [location.key, navigationType]);
+  }, [location, navigationType]);
 }

@@ -126,6 +126,16 @@ function ranking() {
   return page.getByRole("grid", { name: "Behaviour ranking" });
 }
 
+/** The ranking pane's Expand button. Scoped to the ranking's card: the
+ * thermals figure above carries its own full-screen Expand now, so a bare
+ * `.first()` would land there. */
+function rankingExpand() {
+  return page
+    .locator("section", { has: page.getByRole("heading", { name: RANKING_HEADING }) })
+    .getByRole("button", { name: /full screen$/ })
+    .first();
+}
+
 /** The selected-metric pane. Scoped to the ranking's own card — the thermals
  * section above it is a MasterDetail too now, with a pane of the same shape. */
 function detailPane() {
@@ -219,7 +229,7 @@ test("narrow: the chart pins to the top while the table scrolls under it", async
   // hit-testing failure that sank the previous pinned design (#553) was
   // Expand silently ignoring clicks once an ancestor had horizontal padding,
   // and the pane now lives inside the section's padded panel.
-  await page.getByRole("button", { name: /full screen$/ }).first().click();
+  await rankingExpand().click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();
   await page.keyboard.press("Escape");
@@ -308,7 +318,7 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
     await setViewport(width, height);
 
     const inline = (await page.locator('svg[role="group"]').first().boundingBox())!;
-    await page.getByRole("button", { name: /full screen$/ }).first().click();
+    await rankingExpand().click();
 
     const dialog = page.getByRole("dialog");
     await dialog.waitFor();
@@ -331,7 +341,7 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
 test("the expanded chart stays open when you tap a dot, and returns focus on close", async () => {
   await setViewport(390, 780);
 
-  const trigger = page.getByRole("button", { name: /full screen$/ }).first();
+  const trigger = rankingExpand();
   await trigger.click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();
@@ -369,6 +379,27 @@ test("narrow: the thermals census drives its own pinned pane", async () => {
   const box = (await pane.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(781);
+});
+
+test("the thermal figure expands to a full-screen sheet", async () => {
+  await setViewport(390, 780);
+  const thermalsCard = page.locator("section", {
+    has: page.getByRole("heading", { name: /The day's thermals/ }),
+  });
+  await thermalsCard.scrollIntoViewIfNeeded();
+  await thermalsCard
+    .getByRole("button", { name: "Show this thermal full screen" })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  // The rose itself is in the sheet, and Close has focus so Escape is not
+  // the only way out (accessibility standard §4.1).
+  await expect(dialog.getByRole("img", { name: /Top-down lift rose/ })).toBeVisible();
+  await expect(page.locator(":focus")).toHaveText("Close");
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
 });
 
 test("narrow: the chart can be folded away to read the table", async () => {

@@ -188,8 +188,10 @@ function FullScreenChart({
   );
 }
 
-/** Four corners pushing out — the usual "fill the screen" glyph. */
-function ExpandIcon() {
+/** Four corners pushing out — the usual "fill the screen" glyph. Exported
+ * for the other Expand buttons that open a FullScreenSheet (the thermal
+ * rose), so the affordance looks the same everywhere. */
+export function ExpandIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path

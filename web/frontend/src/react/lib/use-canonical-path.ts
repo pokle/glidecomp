@@ -23,6 +23,12 @@ export function useCanonicalPath(canonicalPath: string | null): void {
   useEffect(() => {
     if (!canonicalPath) return;
     if (location.pathname === canonicalPath) return;
-    navigate(canonicalPath + location.search + location.hash, { replace: true });
+    navigate(canonicalPath + location.search + location.hash, {
+      replace: true,
+      // Same page, corrected address: scroll restoration must not treat this
+      // as arriving somewhere new. The names this waits on can land seconds
+      // after the reader has started scrolling.
+      state: { preserveScroll: true },
+    });
   }, [canonicalPath, location.pathname, location.search, location.hash, navigate]);
 }
