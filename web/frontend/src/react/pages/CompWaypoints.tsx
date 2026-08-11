@@ -20,6 +20,10 @@
  * via loadCompWaypoints so the page has real content for crawlers; the map
  * (mapbox) and the admin grid (tabulator) stay client-only — the server
  * streams the map's "Loading map…" fallback and an empty grid container.
+ *
+ * Table and map are laid out by the shared {@link MasterDetail}: the map is
+ * the pinned pane on a phone (so a row's locate pin flies a map that is on
+ * screen) and the sticky right-hand column on a wide screen.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
@@ -36,6 +40,7 @@ import {
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
+import { MasterDetail } from "@/react/components/MasterDetail";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
@@ -559,55 +564,61 @@ export function CompWaypoints() {
       {loading ? (
         <Loading className="text-sm">Loading waypoints…</Loading>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* Map */}
-          <div className="order-1 lg:order-2 lg:sticky lg:top-4 lg:self-start">
-            <div
-              ref={mapRef}
-              className="h-64 overflow-hidden rounded border border-border sm:h-80 lg:h-[520px]"
-            >
-              {!mapInView ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Loading map…
-                </div>
-              ) : (
-              <Suspense
-                fallback={
+        <MasterDetail
+          detailLabel="map"
+          detailAriaLabel="Waypoint map"
+          bleed="page"
+          wideCols="@5xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+          // A map wants the whole line, not the chart pane's 35rem cap.
+          paneWidthClassName="w-full"
+          detail={
+            <div>
+              {/* Explicit heights: Mapbox renders nothing into an unsized
+                  container. Stacked they fit under the pane's caps with the
+                  control row; side by side the taller map is the point. */}
+              <div ref={mapRef} className="h-56 sm:h-72 @5xl:h-[520px]">
+                {!mapInView ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                     Loading map…
                   </div>
-                }
-              >
-                <RouteMap
-                  task={null}
-                  waypoints={mapWaypoints}
-                  addMode={addMode}
-                  fitNonce={fitNonce}
-                  focus={focus}
-                  placeSearch={isAdmin}
-                  onWaypointPick={() => {}}
-                  onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
-                />
-              </Suspense>
+                ) : (
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      Loading map…
+                    </div>
+                  }
+                >
+                  <RouteMap
+                    task={null}
+                    waypoints={mapWaypoints}
+                    addMode={addMode}
+                    fitNonce={fitNonce}
+                    focus={focus}
+                    placeSearch={isAdmin}
+                    onWaypointPick={() => {}}
+                    onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
+                  />
+                </Suspense>
+                )}
+              </div>
+              {isAdmin ? (
+                <div className="flex items-center gap-2 p-2">
+                  <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
+                    {addMode ? "Tap the map to place…" : "Add from map"}
+                  </ToggleButton>
+                  <span className="text-xs text-muted-foreground">
+                    {rows.length} waypoint{rows.length === 1 ? "" : "s"}
+                    {invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""}
+                  </span>
+                </div>
+              ) : (
+                <p className="p-2 text-xs text-muted-foreground">{rows.length} waypoints</p>
               )}
             </div>
-            {isAdmin ? (
-              <div className="mt-2 flex items-center gap-2">
-                <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
-                  {addMode ? "Tap the map to place…" : "Add from map"}
-                </ToggleButton>
-                <span className="text-xs text-muted-foreground">
-                  {rows.length} waypoint{rows.length === 1 ? "" : "s"}
-                  {invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""}
-                </span>
-              </div>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">{rows.length} waypoints</p>
-            )}
-          </div>
-
-          {/* Grid (admins: editable Tabulator) / table (everyone else: RAC read-only) */}
-          <div className="order-2 min-w-0 lg:order-1">
+          }
+          master={
+          <div>
             {/* Filter box — narrows a long set. Drives the Tabulator grid
                 (admins) and the read-only table alike; the admin grid also
                 sorts on header clicks, the read-only table via its columns. */}
@@ -730,7 +741,8 @@ export function CompWaypoints() {
               </Table>
             )}
           </div>
-        </div>
+          }
+        />
       )}
 
       {/* New-waypoint dialog (shared with the task route editor). */}

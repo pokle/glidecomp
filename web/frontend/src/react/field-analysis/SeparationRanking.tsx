@@ -13,20 +13,20 @@
  * trend, two clusters, or one outlier. The top-ranked metric starts
  * selected, so the strongest finding is visualized on first paint.
  *
- * Table and chart are a MASTER/DETAIL PAIR (issue #455) and are laid out as
- * one, following the pilot score explainer (pages/PilotScoreDetail.tsx): the
- * chart pins to the top of the viewport on a narrow screen and sits beside
- * the table on a wide one. Everything that used to sit between them — the
- * verdict legend, the caveat paragraphs — is below the pair now, because a
- * row and the chart it selects have to be readable without scrolling between
- * them. See {@link MasterDetail} for why the split is a container query.
+ * Table and chart are a MASTER/DETAIL PAIR (issue #455), laid out by the
+ * shared {@link MasterDetail}: the chart pins to the top of the viewport on a
+ * narrow screen and sits beside the table on a wide one. Everything that used
+ * to sit between them — the verdict legend, the caveat paragraphs — is below
+ * the pair now, because a row and the chart it selects have to be readable
+ * without scrolling between them. The component's doc carries the whys (the
+ * container query, the pinning, the WCAG 2.4.11 debts).
  */
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState } from "react";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
-import { Button } from "@/react/rac/button";
+import { MasterDetail } from "@/react/components/MasterDetail";
 import { cn } from "@/react/lib/utils";
 import { Explain } from "@/react/rac/explain";
 import { MetricExplanation } from "./MetricExplanation";
@@ -123,12 +123,7 @@ export function SeparationRanking({
   // Owned here, not in the scatter, so ticking "label every pilot" survives
   // switching metrics (per-session only; a refresh resets it).
   const [showAllLabels, setShowAllLabels] = useState(false);
-  // Only meaningful stacked (narrow): the pinned chart costs screen, so a
-  // reader scanning the ranking can fold it away. Side by side there is
-  // nothing to reclaim, so the control — and this state — do not apply.
-  const [detailCollapsed, setDetailCollapsed] = useState(false);
-  const detailId = useId();
-  const detailHeadingId = `${detailId}-heading`;
+  const detailHeadingId = `${useId()}-heading`;
   const effectiveId =
     report && ranked.length > 0
       ? ranked.some((r) => r.metric.id === selectedId)
@@ -176,27 +171,26 @@ export function SeparationRanking({
         </p>
       ) : (
         <MasterDetail
-          table={
+          stackedTop="toc-bar"
+          detailLabel="chart"
+          master={
             <RankingTable
               ranked={ranked}
               ariaLabel="Behaviour ranking"
               subjectLabel="Behaviour"
-              // Stacked, the table is the only thing that scrolls — capped so
-              // the chart above stays on screen while you work down the rows.
-              // Side by side the cap comes off and the page scrolls normally.
               // Stacked, the table spans the panel edge to edge: the card's
               // 20px of side padding is a tenth of a phone's width, and paying
               // it here pushed the Strength column into a sideways scroll the
               // old full-width layout never had. Horizontal rules only, since
               // the box now meets the card's own sides.
               //
-              // Side by side the cap and the bleed both come off — the page
-              // scrolls normally and the column is already inside the grid.
-              // w-auto is load-bearing: the viewport is `w-full`, so negative
-              // margins alone would slide it left rather than widen it.
+              // Side by side the bleed comes off — the column is already
+              // inside the grid. w-auto is load-bearing: the viewport is
+              // `w-full`, so negative margins alone would slide it left
+              // rather than widen it.
               viewportClassName={cn(
-                "max-h-[60dvh] -mx-5 w-auto border-y",
-                "@5xl:mx-0 @5xl:w-full @5xl:max-h-none @5xl:border-y-0"
+                "-mx-5 w-auto border-y",
+                "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
               )}
               fieldSize={fieldSize}
               pilots={report?.pilots}
@@ -236,10 +230,7 @@ export function SeparationRanking({
               />
             ) : null
           }
-          detailId={detailId}
           detailHeadingId={detailHeadingId}
-          collapsed={detailCollapsed}
-          onCollapsedChange={setDetailCollapsed}
           // On paper the print-only strong-metric panels below replace the
           // interactive one — printing both would duplicate a chart. When no
           // metric earned "strong", this pane is all print gets, so it stays.
@@ -285,130 +276,6 @@ export function SeparationRanking({
           />
         </div>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * The ranking table and the chart of the row you picked, laid out as the one
- * thing they are (issue #455). Before this they were a flat stack with three
- * paragraphs of legend between them, so choosing a row updated a chart that
- * was off screen — read it, scroll back up, pick the next row, repeat.
- *
- * One grid, `items-start` (without it the grid item stretches to full height
- * and `position: sticky` never engages side by side), with the source order
- * flipped at the wide breakpoint. The pane is FIRST in the DOM so that stacked
- * it reads, and appears, above the table it details — which is why it carries
- * its own heading and `role="region"`.
- *
- * STACKED, NOTHING IS PINNED. The chart sits in normal flow and the TABLE is
- * the capped, scrollable box; that is what keeps the chart on screen while you
- * work down the rows. It used to be the other way round — the chart stuck to
- * the viewport, full-bleed, covering rows as they passed under it — and that
- * cost more than it paid: the pane could not live inside a panel (Chromium
- * stopped hit-testing its buttons once an ancestor had horizontal padding, so
- * Expand silently took no clicks), and it needed a stack of scroll-margin
- * constants to keep focused rows out from behind itself (WCAG 2.4.11). With
- * nothing overlapping, both problems simply do not arise.
- *
- * The split is a CONTAINER query, not `lg:`, because the width this section
- * gets is not a function of the viewport alone: at `xl` the page gives 12rem
- * to the PageToc rail, and only a page carrying `data-wide-page` is allowed
- * past Shell's 6xl measure at all (TaskFieldAnalysis.tsx). 64rem (`@5xl`) is
- * the smallest container that still leaves the ranking table its ~675px of
- * min-content at the 5fr share below — under that the table would go back to
- * scrolling sideways, which is the complaint issue #453 was closed on.
- *
- * The one remaining sticky offset is the wide layout's, dictated by the
- * Shell's 60px glass header.
- */
-function MasterDetail({
-  table,
-  detail,
-  detailId,
-  detailHeadingId,
-  collapsed,
-  onCollapsedChange,
-  hideDetailInPrint,
-}: {
-  table: ReactNode;
-  /** null when the caller has no report (the non-interactive table). */
-  detail: ReactNode;
-  detailId: string;
-  detailHeadingId: string;
-  collapsed: boolean;
-  onCollapsedChange: (value: boolean) => void;
-  hideDetailInPrint: boolean;
-}) {
-  if (detail === null) return <>{table}</>;
-
-  return (
-    <div className="@container">
-      <div className="grid items-start gap-4 @5xl:grid-cols-[minmax(0,5fr)_minmax(0,3fr)] @5xl:gap-6 print:block">
-        <div
-          className={cn(
-            // Stacked, the chart simply sits above the table, in normal flow.
-            // Nothing is pinned to the viewport, so nothing can cover the
-            // table, its rows or its controls — what keeps the chart in view
-            // while you work down the ranking is that the TABLE scrolls
-            // inside its own box, not that the chart is stuck to the glass.
-            "pb-3 @5xl:pb-0",
-            // Side by side it becomes the sticky right-hand column, where it
-            // pins against the Shell's 60px glass header and covers nothing.
-            "@5xl:sticky @5xl:top-20 @5xl:order-2",
-            hideDetailInPrint && "print:hidden"
-          )}
-        >
-          <div className="mx-auto flex max-w-[35rem] justify-end pb-1 @5xl:hidden print:hidden">
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-expanded={!collapsed}
-              aria-controls={detailId}
-              onPress={() => onCollapsedChange(!collapsed)}
-            >
-              {collapsed ? "Show chart" : "Hide chart"}
-            </Button>
-          </div>
-          <div
-            id={detailId}
-            // A region, not a bare div: it is read before the table it
-            // belongs to, so it has to say what it is. tabIndex makes the
-            // capped, scrollable box reachable without a mouse (WCAG 2.1.1).
-            role="region"
-            aria-labelledby={detailHeadingId}
-            tabIndex={0}
-            className={cn(
-              "overflow-y-auto rounded-lg border bg-card outline-none",
-              // Stacked, the pane is as wide as the page — and the scatter
-              // is drawn on a 560-unit viewBox, so past that width it is
-              // only magnified. Cap and centre it; side by side the column
-              // is already narrower than the cap.
-              "mx-auto max-w-[35rem] @5xl:max-w-none",
-              "max-h-[19rem] sm:max-h-[23rem] @5xl:max-h-[calc(100vh-7rem)]",
-              "focus-visible:ring-2 focus-visible:ring-ring/50",
-              "print:max-h-none print:overflow-visible",
-              // Folded away only while stacked — side by side there is no
-              // screen to reclaim, and the control that unfolds it is hidden.
-              collapsed && "hidden @5xl:block"
-            )}
-          >
-            {detail}
-          </div>
-        </div>
-        <div
-          className={cn(
-            "min-w-0 @5xl:order-1",
-            // Side by side the pane IS sticky, so a row focused by keyboard
-            // still has to clear the Shell's header. Stacked, nothing
-            // overlaps the table at all, which is the point of the change:
-            // the WCAG 2.4.11 offsets the old pinned pane needed are gone.
-            "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24"
-          )}
-        >
-          {table}
-        </div>
-      </div>
     </div>
   );
 }

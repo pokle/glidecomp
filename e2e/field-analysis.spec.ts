@@ -13,8 +13,10 @@
  *   1. picking a row swaps the pane's heading,
  *   2. wide → the pane is to the RIGHT of the table and vertically level with
  *      it, and the table has NOT gone back to scrolling sideways,
- *   3. narrow → the pane stays on screen while the table scrolls under it,
- *      and keyboard focus never lands behind it (WCAG 2.4.11).
+ *   3. narrow → the pane pins to the top of the viewport while the table
+ *      pages under it (releasing with the last row), lower rows still chart
+ *      on screen, its buttons still take clicks while stuck, and keyboard
+ *      focus never lands behind it (WCAG 2.4.11).
  *
  * A second group covers the full-screen overlay (MetricChartOverlay): the
  * pinned chart is only a few hundred pixels on a phone, so "Expand" is what
@@ -114,16 +116,9 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-  // Tests that scroll leave the page scrolled — and, now that the ranking has
-  // its own capped scroll box while stacked, leave THAT scrolled too. Reset
-  // both; every other reset (viewport, selection, the fold toggle) is done by
-  // the test that needs it.
-  await page.evaluate(() => {
-    window.scrollTo(0, 0);
-    document
-      .querySelectorAll('[role="region"]')
-      .forEach((el) => el.scrollTo({ top: 0 }));
-  });
+  // Tests that scroll leave the page scrolled. Reset it; every other reset
+  // (viewport, selection, the fold toggle) is done by the test that needs it.
+  await page.evaluate(() => window.scrollTo(0, 0));
 });
 
 /** The ranking table. */
@@ -131,9 +126,14 @@ function ranking() {
   return page.getByRole("grid", { name: "Behaviour ranking" });
 }
 
-/** The selected-metric pane: the only labelled region holding the scatter. */
+/** The selected-metric pane. Scoped to the ranking's own card — the thermals
+ * section above it is a MasterDetail too now, with a pane of the same shape. */
 function detailPane() {
-  return page.locator('[role="region"][aria-labelledby]').filter({ has: page.locator("svg") }).first();
+  return page
+    .locator("section", { has: page.getByRole("heading", { name: RANKING_HEADING }) })
+    .locator('[role="region"][aria-labelledby]')
+    .filter({ has: page.locator("svg") })
+    .first();
 }
 
 /**
@@ -194,38 +194,77 @@ test("wide: the chart sits beside the table, and the table still fits", async ()
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test("narrow: the table scrolls in its own box, and the chart above it stays put", async () => {
+test("narrow: the chart pins to the top while the table scrolls under it", async () => {
   await setViewport(390, 780);
+  const table = ranking();
   const pane = detailPane();
-  // The ranking's scroll viewport — capped while stacked, so working down the
-  // rows never moves the page (and so never moves the chart).
-  const viewport = page.getByRole("region", { name: "Behaviour ranking" });
 
-  await pane.scrollIntoViewIfNeeded();
-  const before = (await pane.boundingBox())!;
-  const pageBefore = await page.evaluate(() => window.scrollY);
+  // Scroll the WINDOW well into the ranking — the natural gesture, and the
+  // one the previous layout (a capped table box, chart in normal flow)
+  // answered by letting the chart leave with the page.
+  await table.evaluate((el) => {
+    window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY);
+  });
+  const stuck = (await pane.boundingBox())!;
 
-  // Scroll the ROWS, not the window. A long way — further than the box is tall.
-  await viewport.evaluate((el) => el.scrollBy(0, 2000));
-  expect(await viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+  await page.evaluate(() => window.scrollBy(0, 250));
+  const stillStuck = (await pane.boundingBox())!;
+  // Pinned: 250px of page scroll did not move the pane…
+  expect(Math.abs(stillStuck.y - stuck.y)).toBeLessThanOrEqual(1);
+  // …and it sits fully on screen, below PageToc's fixed 60px bar.
+  expect(stillStuck.y).toBeGreaterThanOrEqual(59);
+  expect(stillStuck.y + stillStuck.height).toBeLessThanOrEqual(781);
 
-  const after = (await pane.boundingBox())!;
-  // The chart has not moved a pixel, because nothing outside the box scrolled.
-  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
-  expect(await page.evaluate(() => window.scrollY)).toBe(pageBefore);
-  // And it is still on screen, which is the whole point of capping the box.
-  expect(after.y).toBeLessThan(780);
-  expect(after.y + after.height).toBeGreaterThan(0);
+  // While stuck, its buttons must still take clicks — the Chromium
+  // hit-testing failure that sank the previous pinned design (#553) was
+  // Expand silently ignoring clicks once an ancestor had horizontal padding,
+  // and the pane now lives inside the section's padded panel.
+  await page.getByRole("button", { name: /full screen$/ }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  // Past the last row, the pane releases and scrolls away with its section.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const released = (await pane.boundingBox())!;
+  expect(released.y + released.height).toBeLessThan(0);
 });
 
-test("narrow: a keyboard-focused row is never hidden by the chart or its own box", async () => {
+test("narrow: picking a bottom row swaps a chart that is on screen", async () => {
+  await setViewport(390, 780);
+  const table = ranking();
+  const pane = detailPane();
+  const rows = table.locator("tbody tr");
+  const last = rows.nth((await rows.count()) - 1);
+  const lastName = (await last.locator("th, td").first().innerText())
+    .split("\n")[0]
+    .trim();
+
+  // The FIRST cell, not the row: a row's middle holds the ⓘ that opens the
+  // method popover. Playwright scrolls the row into view first, which the
+  // table's scroll-margin places below the pinned pane.
+  await last.locator("th, td").first().click();
+
+  // The complaint that repinned the pane: a low row used to swap a chart
+  // that had long scrolled off the top. Now the chart is right there…
+  await expect(pane.locator("h3").first()).toHaveText(lastName);
+  const paneBox = (await pane.boundingBox())!;
+  expect(paneBox.y).toBeGreaterThanOrEqual(0);
+  expect(paneBox.y + paneBox.height).toBeLessThanOrEqual(781);
+  // …and the row it charts is itself visible below it, not behind it.
+  const rowBox = (await last.boundingBox())!;
+  expect(rowBox.y).toBeGreaterThanOrEqual(paneBox.y + paneBox.height - 1);
+});
+
+test("narrow: a keyboard-focused row is never hidden by the pinned chart", async () => {
   await setViewport(390, 780);
   const rows = ranking().locator("tbody tr");
 
-  // Start low and walk UP — the direction that used to drive a focused row
-  // under a chart pinned to the top of the viewport. Nothing is pinned now, so
-  // the check is the general one: the focused row must be inside the scroll
-  // box it lives in, and must not intersect the chart.
+  // Start low and walk UP — the direction that drives a focused row toward
+  // the pane pinned at the top of the viewport. The table's scroll-margin
+  // constants exist exactly so each step stops the row BELOW the pane
+  // (WCAG 2.4.11): assert it never lands behind the chart or off screen.
   // The FIRST cell, not the row: a row's middle holds the ⓘ that opens the
   // method popover, and clicking that focuses a dialog instead of the row.
   await rows
@@ -243,19 +282,18 @@ test("narrow: a keyboard-focused row is never hidden by the chart or its own box
       const row = (document.activeElement as HTMLElement).closest("tr");
       if (!row) return null;
       const r = row.getBoundingClientRect();
-      const box = document
-        .querySelector('[role="region"][aria-label="Behaviour ranking"]')!
-        .getBoundingClientRect();
+      // Scoped to the ranking's card: the thermals pane above matches the
+      // bare selector too.
       const chart = document
-        .querySelector('[role="region"][aria-labelledby]')!
+        .querySelector('[aria-labelledby="separation-heading"] [role="region"][aria-labelledby]')!
         .getBoundingClientRect();
       return {
-        clippedByBox: r.bottom > box.bottom + 1 || r.top < box.top - 1,
+        offViewport: r.bottom < 0 || r.top > window.innerHeight,
         behindChart: r.top < chart.bottom && r.bottom > chart.top,
       };
     });
     expect(hidden).not.toBeNull();
-    expect(hidden!.clippedByBox, "focused row scrolled out of its own box").toBe(false);
+    expect(hidden!.offViewport, "focused row scrolled off the viewport").toBe(false);
     expect(hidden!.behindChart, "focused row overlaps the chart").toBe(false);
   }
 });
@@ -310,6 +348,27 @@ test("the expanded chart stays open when you tap a dot, and returns focus on clo
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
+});
+
+test("narrow: the thermals census drives its own pinned pane", async () => {
+  await setViewport(390, 780);
+  const census = page.getByRole("grid", { name: "Reconstructed thermals" });
+  await census.scrollIntoViewIfNeeded();
+  const pane = page
+    .locator("section", { has: page.getByRole("heading", { name: /The day's thermals/ }) })
+    .locator('[role="region"][aria-labelledby]')
+    .first();
+
+  // Selecting the LAST thermal must swap a pane that is on screen — the same
+  // contract as the ranking's chart, via the same shared MasterDetail.
+  const rows = census.locator("tbody tr");
+  const last = rows.nth((await rows.count()) - 1);
+  const start = (await last.locator("th, td").first().innerText()).trim();
+  await last.locator("th, td").first().click();
+  await expect(pane.locator("h3").first()).toContainText(start);
+  const box = (await pane.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(781);
 });
 
 test("narrow: the chart can be folded away to read the table", async () => {
