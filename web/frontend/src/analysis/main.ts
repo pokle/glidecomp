@@ -10,7 +10,7 @@
  * - Event detection and display
  */
 
-import { parseIGC, parseXCTask, detectFlightEvents, calculateOptimizedTaskDistance, calculateTrackDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, scoreOpenDistance, openDistanceGeometryForFlight, isOpenDistanceTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
+import { parseIGC, parseXCTask, detectFlight, calculateOptimizedTaskDistance, calculateTrackDistance, igcTaskToXCTask, resolveTurnpointSequence, scoreTask, scoreOpenDistance, openDistanceGeometryForFlight, isOpenDistanceTask, maxBy, parseThresholdInput, formatThresholdForDisplay, DEFAULT_THRESHOLDS, type IGCFile, type IGCFix, type XCTask, type FlightEvent, type FlightSegments, type WaypointRecord, type DetectionThresholds, type PartialThresholds, type ThresholdDimension, type PilotFlight, type TaskScoreResult, type GAPParameters } from '@glidecomp/engine';
 import { SAMPLE_COMPS } from '@glidecomp/samples';
 import { getCurrentUserOnce, needsOnboarding } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
@@ -35,6 +35,8 @@ interface AppState {
   task: XCTask | null;
   fixes: IGCFix[];
   events: FlightEvent[];
+  /** Typed glide/climb data built by detectFlight alongside the events */
+  segments: FlightSegments;
   /** All loaded tracks (for multi-track mode) */
   tracks: LoadedTrack[];
   /** Currently selected track index, or 'all' for multi-track view */
@@ -50,6 +52,7 @@ const state: AppState = {
   task: null,
   fixes: [],
   events: [],
+  segments: { glides: [], climbs: [] },
   tracks: [],
   selectedTrack: 0,
   compScore: null,
@@ -590,6 +593,7 @@ async function init(): Promise<void> {
     state.task = null;
     state.fixes = [];
     state.events = [];
+    state.segments = { glides: [], climbs: [] };
     state.tracks = [];
     state.selectedTrack = 0;
     state.compScore = null;
@@ -614,7 +618,7 @@ async function init(): Promise<void> {
 
     // Clear analysis panel
     analysisPanel?.setMultiTrackMode(false);
-    analysisPanel?.setEvents([]);
+    analysisPanel?.setEvents([], { glides: [], climbs: [] });
     analysisPanel?.setAltitudes([]);
     analysisPanel?.setFlightInfo({});
     analysisPanel?.setTask(null);
@@ -1271,8 +1275,10 @@ async function init(): Promise<void> {
 
   function redetectEvents(): void {
     if (state.fixes.length > 0) {
-      state.events = detectFlightEvents(state.fixes, state.task || undefined, config.getPartialThresholds());
-      analysisPanel?.setEvents(state.events);
+      const flight = detectFlight(state.fixes, state.task || undefined, config.getPartialThresholds());
+      state.events = flight.events;
+      state.segments = flight.segments;
+      analysisPanel?.setEvents(state.events, state.segments);
       mapRenderer?.setEvents(state.events);
     }
     updateFlightInfo();
@@ -1290,7 +1296,9 @@ async function init(): Promise<void> {
     if (state.selectedTrack === 'all' && state.tracks.length > 1) {
       // Re-detect events for all tracks with the new task
       for (const track of state.tracks) {
-        track.events = detectFlightEvents(track.fixes, task, config.getPartialThresholds());
+        const flight = detectFlight(track.fixes, task, config.getPartialThresholds());
+        track.events = flight.events;
+        track.segments = flight.segments;
       }
       computeCompetitionScore();
       pushCompetitionScoreToPanel();
@@ -1328,13 +1336,14 @@ async function init(): Promise<void> {
     state.fixes = igcFile.fixes;
 
     // Also update multi-track state for single-track legacy flow
-    const events = detectFlightEvents(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
+    const flight = detectFlight(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
     state.tracks = [{
       pilotName: igcFile.header.pilot || 'Unknown',
       date: igcFile.header.date || null,
       filename: '',
       fixes: igcFile.fixes,
-      events,
+      events: flight.events,
+      segments: flight.segments,
     }];
     state.selectedTrack = 0;
     state.compScore = null;
@@ -1451,14 +1460,15 @@ async function init(): Promise<void> {
           applyTask(xcTask);
         }
 
-        const events = detectFlightEvents(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
+        const flight = detectFlight(igcFile.fixes, state.task || undefined, config.getPartialThresholds());
 
         tracks.push({
           pilotName: pilotNames?.get(file.name) || igcFile.header.pilot || file.name.replace(/\.igc$/i, ''),
           date: igcFile.header.date || null,
           filename: file.name,
           fixes: igcFile.fixes,
-          events,
+          events: flight.events,
+          segments: flight.segments,
         });
 
         // Store in browser storage (skip for sample data or anonymous users)
@@ -1505,6 +1515,7 @@ async function init(): Promise<void> {
     // Set up single-track state
     state.fixes = track.fixes;
     state.events = track.events;
+    state.segments = track.segments;
 
     // Clear multi-track rendering
     mapRenderer?.clearMultiTrack();
@@ -1516,7 +1527,7 @@ async function init(): Promise<void> {
 
     // Update analysis panel for single-track mode
     analysisPanel?.setMultiTrackMode(false);
-    analysisPanel?.setEvents(track.events);
+    analysisPanel?.setEvents(track.events, track.segments);
     analysisPanel?.setAltitudes(track.fixes.map(f => f.gnssAltitude), track.fixes.map(f => f.time));
 
     // Update flight info
