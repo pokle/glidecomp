@@ -493,7 +493,7 @@ function runSingleTask(): void {
     if (report) output.fieldAnalysis = report;
     console.log(JSON.stringify(output, null, 2));
   } else {
-    printResultTables(task, result, openDistance);
+    printResultTables(task, result);
     // Render report times in the task's local zone (derived from its first
     // turnpoint); the engine emitted them as UTC instants.
     if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
@@ -554,7 +554,7 @@ function runComp(arg: string): void {
       } else {
         console.log('');
         console.log(`${'='.repeat(20)} ${manifest.name} — ${pilotClass} — ${fullLabel} ${'='.repeat(20)}`);
-        printResultTables(task, result, openDist);
+        printResultTables(task, result);
         if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
       }
 
@@ -596,8 +596,10 @@ function runComp(arg: string): void {
 // Score-table printing
 // ---------------------------------------------------------------------------
 
-function printResultTables(task: XCTask, result: TaskScoreResult, openDist: boolean): void {
-if (openDist) {
+function printResultTables(task: XCTask, result: TaskScoreResult): void {
+// The result's own discriminant picks the table — an open-distance result
+// carries no GAP validity/weights/parameters to print.
+if (result.format === 'open-distance') {
   // Open-distance table — the score IS the metres flown from the take-off exit,
   // so the GAP validity/weight/points columns don't apply.
   const s = result.stats;

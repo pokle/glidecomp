@@ -4,6 +4,7 @@
  */
 
 import type {
+  GapTaskScoreCore,
   GAPParameters,
   LeadingTimes,
   StoppedTaskScore,
@@ -71,10 +72,25 @@ export function emptyClassScore(
 ): ClassScore {
   return {
     pilot_class: pilotClass,
-    task_validity: { launch: 0, distance: 0, time: 0, task: 0 },
-    available_points: { distance: 0, time: 0, leading: 0, arrival: 0, total: 0 },
+    task_validity: noValidity(),
+    available_points: noPoints(),
     pilots: excluded.map((e, i) => excludedPilotEntry(e, i + 1, alphabet)),
   };
+}
+
+/**
+ * The neutral "no GAP points were on offer" wire values, published where the
+ * engine result has none: an empty class, and an open-distance class (whose
+ * engine result types them null — the wire fields stay required so cached
+ * pre-change bodies and new ones share a shape, and zeros are the one reading
+ * that cannot inflate anything).
+ */
+function noValidity(): ClassScore["task_validity"] {
+  return { launch: 0, distance: 0, time: 0, task: 0 };
+}
+
+function noPoints(): ClassScore["available_points"] {
+  return { distance: 0, time: 0, leading: 0, arrival: 0, total: 0 };
 }
 
 /**
@@ -145,8 +161,9 @@ export function pilotMetaByTrackFile(
 
 /**
  * Apply penalties, re-rank, and shape one class's engine result into the API
- * response. Shared by the GAP and open-distance paths — both produce a result
- * with the same taskValidity / availablePoints / pilotScores shape.
+ * response. Shared by the GAP and open-distance paths — they share the
+ * per-pilot score shape, while the open-distance arm types its non-existent
+ * GAP validity/point pool as null (published as the neutral zeros below).
  */
 export function buildClassScore(
   pilotClass: string,
@@ -224,8 +241,10 @@ export function buildClassScore(
 
   return {
     pilot_class: pilotClass,
-    task_validity: result.taskValidity,
-    available_points: result.availablePoints,
+    // Null on the open-distance arm of TaskScoreCore — no GAP validity or
+    // point pool exists to publish, so the wire carries the neutral zeros.
+    task_validity: result.taskValidity ?? noValidity(),
+    available_points: result.availablePoints ?? noPoints(),
     pilots,
     ...(transparency
       ? {
@@ -267,7 +286,7 @@ export function buildClassScore(
  * floor already applied, which is exactly what the validity ran on.
  */
 export function validityInputs(
-  result: Pick<TaskScoreCore, "stats" | "weights" | "pilotScores">,
+  result: Pick<GapTaskScoreCore, "stats" | "weights" | "pilotScores">,
   params: GAPParameters
 ): ClassValidityInputs {
   const s = result.stats;

@@ -137,6 +137,19 @@ describe('scoreOpenDistance', () => {
     expect(result.pilotScores).toEqual([]);
     expect(result.stats.bestDistance).toBe(0);
   });
+
+  it('declares its format and carries no fabricated GAP scaffolding', () => {
+    // The result must say what it is, and the GAP-only concepts must be null —
+    // never placeholder values (a 1.0 validity, default parameters) that an
+    // explainer or chart could print as if they were the task's own.
+    const pilot = flight('far', [fixEast(0, 0), fixEast(60, 2000), fixEast(120, 50000)]);
+    const result = scoreOpenDistance(TASK, [pilot]);
+    expect(result.format).toBe('open-distance');
+    expect(result.parameters).toBeNull();
+    expect(result.taskValidity).toBeNull();
+    expect(result.weights).toBeNull();
+    expect(result.availablePoints).toBeNull();
+  });
 });
 
 describe('openDistanceGeometryForFlight', () => {
