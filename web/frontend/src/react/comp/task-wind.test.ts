@@ -56,7 +56,7 @@ describe("taskWindFromWeather", () => {
     expect(taskWindFromWeather(weather([hour(), hour()]))).toBeNull();
   });
 
-  it("averages the flying-height level when the dataset has one", () => {
+  it("combines the flying-height level when the dataset has one", () => {
     const wind = taskWindFromWeather(
       weather([
         hour({ level: { dir: 270, kmh: 20 }, surface: { dir: 90, kmh: 5 } }),
@@ -82,12 +82,24 @@ describe("taskWindFromWeather", () => {
     expect(wind.speedKmh).toBeCloseTo(12, 5);
   });
 
-  it("takes the circular mean, not the arithmetic one", () => {
+  it("takes the circular mean direction, not the arithmetic one", () => {
     // 350° and 10° average to 0°, not to 180°.
     const wind = taskWindFromWeather(
       weather([hour({ level: { dir: 350, kmh: 20 } }), hour({ level: { dir: 10, kmh: 20 } })])
     )!;
     expect(wind.fromDeg).toBeCloseTo(0, 4);
+  });
+
+  it("keeps the median speed when directions scatter", () => {
+    // The engine's combineWindEstimates policy: a vector mean's LENGTH
+    // collapses as directions scatter (here 300° and 60° at 20 km/h would
+    // vector-average to 10 km/h), which answers "how consistent", not "how
+    // strong". The median of the magnitudes stays 20.
+    const wind = taskWindFromWeather(
+      weather([hour({ level: { dir: 300, kmh: 20 } }), hour({ level: { dir: 60, kmh: 20 } })])
+    )!;
+    expect(wind.fromDeg).toBeCloseTo(0, 4);
+    expect(wind.speedKmh).toBeCloseTo(20, 5);
   });
 });
 
