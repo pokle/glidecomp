@@ -126,9 +126,14 @@ function ranking() {
   return page.getByRole("grid", { name: "Behaviour ranking" });
 }
 
-/** The selected-metric pane: the only labelled region holding the scatter. */
+/** The selected-metric pane. Scoped to the ranking's own card — the thermals
+ * section above it is a MasterDetail too now, with a pane of the same shape. */
 function detailPane() {
-  return page.locator('[role="region"][aria-labelledby]').filter({ has: page.locator("svg") }).first();
+  return page
+    .locator("section", { has: page.getByRole("heading", { name: RANKING_HEADING }) })
+    .locator('[role="region"][aria-labelledby]')
+    .filter({ has: page.locator("svg") })
+    .first();
 }
 
 /**
@@ -277,8 +282,10 @@ test("narrow: a keyboard-focused row is never hidden by the pinned chart", async
       const row = (document.activeElement as HTMLElement).closest("tr");
       if (!row) return null;
       const r = row.getBoundingClientRect();
+      // Scoped to the ranking's card: the thermals pane above matches the
+      // bare selector too.
       const chart = document
-        .querySelector('[role="region"][aria-labelledby]')!
+        .querySelector('[aria-labelledby="separation-heading"] [role="region"][aria-labelledby]')!
         .getBoundingClientRect();
       return {
         offViewport: r.bottom < 0 || r.top > window.innerHeight,
@@ -341,6 +348,27 @@ test("the expanded chart stays open when you tap a dot, and returns focus on clo
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
+});
+
+test("narrow: the thermals census drives its own pinned pane", async () => {
+  await setViewport(390, 780);
+  const census = page.getByRole("grid", { name: "Reconstructed thermals" });
+  await census.scrollIntoViewIfNeeded();
+  const pane = page
+    .locator("section", { has: page.getByRole("heading", { name: /The day's thermals/ }) })
+    .locator('[role="region"][aria-labelledby]')
+    .first();
+
+  // Selecting the LAST thermal must swap a pane that is on screen — the same
+  // contract as the ranking's chart, via the same shared MasterDetail.
+  const rows = census.locator("tbody tr");
+  const last = rows.nth((await rows.count()) - 1);
+  const start = (await last.locator("th, td").first().innerText()).trim();
+  await last.locator("th, td").first().click();
+  await expect(pane.locator("h3").first()).toContainText(start);
+  const box = (await pane.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(781);
 });
 
 test("narrow: the chart can be folded away to read the table", async () => {

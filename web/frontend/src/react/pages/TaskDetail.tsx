@@ -47,6 +47,7 @@ import { useConfirm } from "../lib/confirm";
 import { useAdminView, useUser } from "../lib/user";
 import { formatTaskDate } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
+import { MasterDetail } from "../components/MasterDetail";
 import { WeatherSection } from "../weather/WeatherSection";
 import { useTaskWeather } from "../weather/use-task-weather";
 import { taskWindFromWeather, type TaskWind } from "../comp/task-wind";
@@ -680,40 +681,45 @@ function TurnpointsSection({
             taskDate={taskDate}
             timezone={timezone}
           />
-          {/* Two views of one route, paired: the diagram is the shape on the
-              ground (drawn from the same optimised line the table measures and
-              the scorer uses — not a map, "View on map" above is for that),
-              the table is the numbers and the accessible reading of it.
-
-              The diagram leads in the DOM because it is the at-a-glance read,
-              which is also the stacked order on a phone. Wide enough for two
-              columns, the row reverses so the numbers sit left and the shape
-              right, beside them rather than a scroll above them. */}
-          <div className="mt-3 flex flex-col gap-4 lg:flex-row-reverse lg:items-start">
-            <div className="flex justify-center rounded-lg border bg-muted/20 p-2 lg:shrink-0">
-              <TaskDiagram
-                task={xctsk}
-                size="md"
-                // Scales down rather than scrolling sideways: on a phone the
-                // diagram now leads the section, and the `md` preset is a few
-                // pixels wider than the content column. The viewBox keeps the
-                // drawing intact at any width.
-                className="h-auto max-w-full"
-                onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
-                onTurnpointSelect={(tp) => setFocused(tp.index)}
-                highlightIndex={focused}
-                wind={wind}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <TurnpointsTable
-                xctsk={xctsk}
-                wind={wind}
-                highlightIndex={focused}
-                onTurnpointHover={setFocused}
-                onTurnpointSelect={setFocused}
-              />
-            </div>
+          {/* Two views of one route, paired by the shared MasterDetail: the
+              diagram is the shape on the ground (drawn from the same optimised
+              line the table measures and the scorer uses — not a map, "View on
+              map" above is for that), the table is the numbers and the
+              accessible reading of it. On a phone the diagram pins to the top
+              while the turnpoint list scrolls under it, so a row you point at
+              highlights a shape that is on screen; side by side it is the
+              sticky right-hand column. */}
+          <div className="mt-3">
+            <MasterDetail
+              detailLabel="diagram"
+              detailAriaLabel="Route diagram"
+              wideCols="@5xl:grid-cols-[minmax(0,1fr)_auto]"
+              detail={
+                <div className="flex justify-center bg-muted/20 p-2">
+                  <TaskDiagram
+                    task={xctsk}
+                    size="md"
+                    // Scales down rather than scrolling sideways: the `md`
+                    // preset can be wider than a phone's pane. The viewBox
+                    // keeps the drawing intact at any width.
+                    className="h-auto max-w-full"
+                    onTurnpointHover={(tp) => setFocused(tp?.index ?? null)}
+                    onTurnpointSelect={(tp) => setFocused(tp.index)}
+                    highlightIndex={focused}
+                    wind={wind}
+                  />
+                </div>
+              }
+              master={
+                <TurnpointsTable
+                  xctsk={xctsk}
+                  wind={wind}
+                  highlightIndex={focused}
+                  onTurnpointHover={setFocused}
+                  onTurnpointSelect={setFocused}
+                />
+              }
+            />
           </div>
         </>
       ) : (
