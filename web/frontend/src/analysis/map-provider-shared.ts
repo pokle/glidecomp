@@ -15,6 +15,7 @@ import {
 } from '@glidecomp/engine';
 import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
+import { escapeHtml } from '../escape-html';
 
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -892,7 +893,7 @@ export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
 
   let reqText = '';
   if (marker.requiredGlideRatio !== undefined && marker.targetName) {
-    reqText = `${marker.requiredGlideRatio.toFixed(0)}:1 to ${marker.targetName}`;
+    reqText = `${marker.requiredGlideRatio.toFixed(0)}:1 to ${escapeHtml(marker.targetName)}`;
   }
 
   return { speed, altitude, detailText, reqText };

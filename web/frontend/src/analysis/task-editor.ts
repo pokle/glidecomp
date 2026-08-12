@@ -9,6 +9,7 @@ import type { XCTask, Turnpoint, TurnpointType, WaypointRecord } from '@glidecom
 import { getOptimizedSegmentDistances, toXctskJSON, parseXCTask } from '@glidecomp/engine';
 import { formatDistance, formatAltitude, formatRadius } from './units-browser';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
+import { escapeHtml } from '../escape-html';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -421,7 +422,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-1.5">
-          <span class="font-medium text-sm truncate">${tp.waypoint.name}</span>
+          <span class="font-medium text-sm truncate">${escapeHtml(tp.waypoint.name)}</span>
           <span class="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] ${typeClass}">${typeLabel}</span>
         </div>
         <div class="flex gap-3 text-xs text-muted-foreground mt-0.5">
@@ -520,7 +521,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Name</label>
-            <input type="text" class="te-field-name w-full rounded border border-border bg-background px-2 py-1 text-sm" value="${tp.waypoint.name}">
+            <input type="text" class="te-field-name w-full rounded border border-border bg-background px-2 py-1 text-sm" value="${escapeHtml(tp.waypoint.name)}">
           </div>
           <div>
             <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Type</label>
@@ -689,8 +690,8 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         item.className = 'flex items-center justify-between w-full rounded px-2 py-1 text-sm hover:bg-muted transition-colors text-left';
         item.innerHTML = `
           <div class="min-w-0">
-            <div class="font-medium truncate">${wp.description || wp.name}</div>
-            <div class="text-[10px] text-muted-foreground">${wp.name} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${formatRadius(wp.radius || 400).withUnit}</div>
+            <div class="font-medium truncate">${escapeHtml(wp.description || wp.name)}</div>
+            <div class="text-[10px] text-muted-foreground">${escapeHtml(wp.name)} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${formatRadius(wp.radius || 400).withUnit}</div>
           </div>
         `;
         item.addEventListener('click', () => {

@@ -156,6 +156,38 @@ describe("audit log write-through", () => {
     );
   });
 
+  test("CIVL ranking source and first-start-order changes are audited", async () => {
+    const compId = await createComp({ pilot_classes: ["open"] });
+    const create = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bob",
+      pilot_class: "open",
+    });
+    const { comp_pilot_id } = (await create.json()) as {
+      comp_pilot_id: string;
+    };
+
+    await authRequest("PATCH", `/api/comp/${compId}/pilot/${comp_pilot_id}`, {
+      civl_ranking_slug: "hang-gliding-class-1-xc",
+      civl_ranking_date: "2026-07-01",
+      first_start_order: 3,
+    });
+
+    const { entries } = await getAudit(compId);
+    const pilotDescs = entries
+      .filter((e) => e.subject_type === "pilot")
+      .map((e) => e.description as string);
+
+    expect(
+      pilotDescs.some((d) => d.toLowerCase().includes("civl ranking list"))
+    ).toBe(true);
+    expect(
+      pilotDescs.some((d) => d.toLowerCase().includes("civl ranking date"))
+    ).toBe(true);
+    expect(
+      pilotDescs.some((d) => d.toLowerCase().includes("first-start order"))
+    ).toBe(true);
+  });
+
   test("bulk pilot update rolls up when > 5 changes", async () => {
     const compId = await createComp();
     const pilots = Array.from({ length: 8 }, (_, i) => ({

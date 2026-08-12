@@ -921,6 +921,9 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         ["team_name", "team"],
         ["driver_contact", "driver"],
         ["wprs_points", "WPRS points"],
+        ["civl_ranking_slug", "CIVL ranking list"],
+        ["civl_ranking_date", "CIVL ranking date"],
+        ["first_start_order", "first-start order"],
       ];
       const subjectName = merged.registered_pilot_name;
       for (const [key, label] of auditFields) {
