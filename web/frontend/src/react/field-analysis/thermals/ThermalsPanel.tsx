@@ -18,7 +18,7 @@
  * a model run beside the track-measured wind — a reader must never mistake
  * the prediction for the measurement (docs/weather.md).
  */
-import { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Selection } from "react-aria-components";
 import { InfoIcon } from "lucide-react";
 import { windAtHeight } from "@glidecomp/engine";
@@ -485,6 +485,12 @@ function RoseLegend() {
  * ground scale for that framing only, and over a moved camera they would be
  * a lie. The map's core marker keeps saying where the thermal is, and
  * Re-centre restores the locked view (and the rose with it).
+ *
+ * Two layouts. Inline the figure IS the rose's square. `fill` (the sheet)
+ * spends the whole box on the MAP — that is what maximising is for — with
+ * the rose a centred square over it; the scale lock then keys off the
+ * rose's own width (`scaleRef`), not the map's, so the rings stay at true
+ * ground size while the map shows more terrain around them.
  */
 function RoseFigure({
   shape,
@@ -497,6 +503,7 @@ function RoseFigure({
   expanded = false,
   onToggleExpand,
   cooperativeGestures = true,
+  fill = false,
   className,
 }: {
   shape: ThermalShapeSummary;
@@ -514,22 +521,41 @@ function RoseFigure({
   onToggleExpand?: () => void;
   /** Two-finger touch pan — on inline maps embedded in the scrolling page. */
   cooperativeGestures?: boolean;
+  /** Fill the parent box with the map, rose centred over it (the sheet). */
+  fill?: boolean;
   className?: string;
 }) {
   const [away, setAway] = useState(false);
   const [recentreToken, setRecentreToken] = useState(0);
+  // The rose's own square, when it is smaller than the map (fill mode).
+  const roseBoxRef = useRef<HTMLDivElement>(null);
   // Hiding the map hands the figure straight back to the rose.
   useEffect(() => {
     if (!showMap) setAway(false);
   }, [showMap]);
   const loc = shapeLocation(shape);
+  const rose = (
+    <ThermalRose
+      shape={shape}
+      model={model}
+      climbFactor={climbFactor}
+      climbUnit={climbUnit}
+      distanceText={distanceText}
+    />
+  );
   return (
-    <div className={cn("relative mx-auto w-full max-w-80", className)}>
+    <div
+      className={cn(
+        "relative",
+        fill ? "h-full w-full" : "mx-auto w-full max-w-80",
+        className
+      )}
+    >
       {showMap ? (
         <Suspense fallback={null}>
           {/* Interactive, so no aria-hidden: the map canvas is focusable and
               carries mapbox's own "Map" label. */}
-          <div className="absolute inset-0 overflow-hidden rounded-lg">
+          <div className={cn("absolute inset-0 overflow-hidden", !fill && "rounded-lg")}>
             <ThermalRoseMap
               lat={loc.lat}
               lon={loc.lon}
@@ -538,6 +564,7 @@ function RoseFigure({
               cooperativeGestures={cooperativeGestures}
               onAwayChange={setAway}
               recentreToken={recentreToken}
+              scaleRef={fill ? roseBoxRef : undefined}
             />
             {/* Scrim so the rose's ink stays legible over imagery — gone with
                 the rose while exploring, so the terrain reads clean. */}
@@ -553,19 +580,27 @@ function RoseFigure({
       <div
         aria-hidden={showMap && away ? true : undefined}
         className={cn(
-          "relative transition-opacity",
+          "transition-opacity",
+          // Inline the rose is the box; filling, it floats centred over the
+          // map, a square no bigger than the shorter viewport edge.
+          fill
+            ? "absolute inset-0 flex items-center justify-center"
+            : "relative",
           // Gestures over the figure belong to the map while it is shown.
           showMap && "pointer-events-none",
           showMap && away && "opacity-0"
         )}
       >
-        <ThermalRose
-          shape={shape}
-          model={model}
-          climbFactor={climbFactor}
-          climbUnit={climbUnit}
-          distanceText={distanceText}
-        />
+        {fill ? (
+          <div
+            ref={roseBoxRef}
+            className="w-full max-w-[min(100%,calc(100dvh-9rem))]"
+          >
+            {rose}
+          </div>
+        ) : (
+          rose
+        )}
       </div>
       <div className="absolute top-0 left-0 flex items-center gap-1 print:hidden">
         {HAS_MAP_TOKEN ? (
@@ -1022,10 +1057,10 @@ export function ThermalsPanel({
               Close
             </Button>
           </div>
-          <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-            {/* The square figure spends whichever viewport edge is shorter:
-                full width, capped so its height still fits above the header
-                row. */}
+          <div className="min-h-0 w-full flex-1">
+            {/* `fill`: the MAP spends the whole box — that is what
+                maximising is for — and the rose floats over it as a centred
+                square no bigger than the shorter viewport edge. */}
             <RoseFigure
               shape={selected}
               model={model}
@@ -1037,7 +1072,7 @@ export function ThermalsPanel({
               expanded
               onToggleExpand={() => setExpanded(false)}
               cooperativeGestures={false}
-              className="max-w-[min(100%,calc(100dvh-8rem))]"
+              fill
             />
           </div>
         </FullScreenSheet>

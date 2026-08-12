@@ -41,6 +41,7 @@ export default function ThermalRoseMap({
   cooperativeGestures = true,
   onAwayChange,
   recentreToken = 0,
+  scaleRef,
 }: {
   /** Thermal core location (sample-weighted over the bands). */
   lat: number;
@@ -55,6 +56,11 @@ export default function ThermalRoseMap({
   onAwayChange?: (away: boolean) => void;
   /** Bump to snap the camera back to the locked framing. */
   recentreToken?: number;
+  /** The element whose width IS the rose's rendered width, when the map's
+   * own box is bigger than the rose (the full-screen sheet, where the map
+   * fills the viewport and the rose is a centred square over it). The
+   * scale lock must equal metres-per-pixel over THAT box, not the map's. */
+  scaleRef?: React.RefObject<HTMLElement | null>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -126,7 +132,8 @@ export default function ThermalRoseMap({
     }
     markerRef.current?.setLngLat([lon, lat]).addTo(map);
     const apply = () => {
-      const widthPx = container.clientWidth || svgSize;
+      const widthPx =
+        scaleRef?.current?.clientWidth || container.clientWidth || svgSize;
       const metresPerCssPx = (metresPerSvgUnit * svgSize) / widthPx;
       const zoom = Math.log2(
         (EARTH_CIRCUMFERENCE * Math.cos((lat * Math.PI) / 180)) /
@@ -142,7 +149,10 @@ export default function ThermalRoseMap({
       if (!awayRef.current) apply();
     });
     observer.observe(container);
+    if (scaleRef?.current) observer.observe(scaleRef.current);
     return () => observer.disconnect();
+    // scaleRef is a stable ref object; its element mounts with this figure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lat, lon, metresPerSvgUnit, svgSize, recentreToken]);
 
   return <div ref={containerRef} className="h-full w-full" />;
