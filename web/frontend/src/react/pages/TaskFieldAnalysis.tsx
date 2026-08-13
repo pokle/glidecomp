@@ -504,6 +504,20 @@ export function TaskFieldAnalysis() {
         </div>
       </div>
 
+      {/* The headline first, ahead even of the route: the finding is what the
+          reader came for, and each entry jumps to — and selects — its row in
+          the ranking below, caveat chips attached. The analysis order itself
+          is unchanged. Deliberately absent from the TOC, which lists the
+          destination, not the signpost. */}
+      {active && report ? (
+        <div className="mt-4">
+          <FindingsDigest
+            metrics={report.metrics}
+            onPickMetric={setSelectedBehaviour}
+          />
+        </div>
+      ) : null}
+
       {/* What the field was asked to fly. Everything below is about how they
           flew it, and none of it means much without the shape in front of
           you — a long final glide into a headwind reads differently from a
@@ -579,18 +593,6 @@ export function TaskFieldAnalysis() {
                 thermalsHref={hasThermalsSection ? "#thermals-heading" : undefined}
               />
             </div>
-
-            {/* The headline before the grounding: the digest repeats the
-                ranking's strongest rows (chips, caveats and all) so the
-                finding is on screen without a scroll, and each tile jumps to
-                — and selects — its row in the ranking below. The analysis
-                order itself is unchanged; deliberately absent from the TOC,
-                which lists the destination, not the signpost. */}
-            <FindingsDigest
-              metrics={report.metrics}
-              fieldSize={report.pilots.length}
-              onPickMetric={setSelectedBehaviour}
-            />
 
             {compId && taskId ? (
               <TaskDebrief
