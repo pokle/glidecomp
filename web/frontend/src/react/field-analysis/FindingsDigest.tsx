@@ -55,7 +55,7 @@ export function FindingsDigest({
     return (
       <Card aria-labelledby="findings-digest-heading" className="gap-2">
         <h2 id="findings-digest-heading" className="text-lg font-semibold">
-          What separated the field
+          What separated the field?
         </h2>
         <p className="text-base text-muted-foreground">
           Can't say — no clear pattern
@@ -68,12 +68,8 @@ export function FindingsDigest({
     <Card aria-labelledby="findings-digest-heading" className="gap-3">
       <div>
         <h2 id="findings-digest-heading" className="text-lg font-semibold">
-          What separated the field
+          What separated the field?
         </h2>
-        <p className="text-sm text-muted-foreground">
-          The behaviours that went most strongly with better ranks on this
-          task. Each links to the full ranking below.
-        </p>
       </div>
       <ul className="flex list-none flex-wrap gap-2 p-0">
         {top.map(({ metric, correlation }) => (
@@ -81,7 +77,6 @@ export function FindingsDigest({
             key={metric.id}
             className="relative flex items-center gap-2.5 rounded-lg border py-2.5 pl-3 pr-4"
           >
-            <VerdictBadge correlation={correlation} />
             {/* Headline-sized on purpose: these three lines are the page's
                 finding, and the card exists to shout them. */}
             <a
@@ -91,6 +86,7 @@ export function FindingsDigest({
             >
               {metric.label}
             </a>
+            <VerdictBadge correlation={correlation} />
           </li>
         ))}
       </ul>
