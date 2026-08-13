@@ -49,6 +49,12 @@ const affinity: MetricComputer = {
   unit: 'pct',
   family: 'gaggle',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Flying with the gaggle',
+    less: 'Flying away from the gaggle',
+  },
   explanation:
     'Whether the pilot raced with other pilots or alone. The value is the share of their flying ' +
     'time after the start inside a detected gaggle, that is, clustered with one other racing ' +
@@ -111,6 +117,12 @@ const markerUsage: MetricComputer = {
   unit: 'pct',
   family: 'gaggle',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Joining established thermals',
+    less: 'Finding your own thermals',
+  },
   explanation:
     'How much of the lift of the pilot another pilot found first. The value is the share of ' +
     'their climbs after the start where another pilot was already established in the same ' +
@@ -163,6 +175,13 @@ const departureWinrate: MetricComputer = {
   unit: 'pct',
   family: 'gaggle',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Leaving the gaggle at the right moment',
+    // less: omitted — no honest phrasing reads as a behaviour worth
+    //   naming; falls back to the label. Rejected: 'Leaving the gaggle at the wrong moment'
+  },
   // First two sentences verbatim per the plan — this metric must be
   // self-explanatory; the third states who counts as a stayer.
   explanation:

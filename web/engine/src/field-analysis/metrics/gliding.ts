@@ -143,6 +143,12 @@ const glideSpeed: MetricComputer = {
   unit: 'km/h',
   family: 'gliding',
   direction: 'higher',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Fast glides',
+    less: 'Slow glides',
+  },
   explanation:
     'How fast the pilot moves down the course when they are on a glide. The value is the '
     + 'duration-weighted mean ground speed over every glide after the start, which is the glide '
@@ -188,6 +194,12 @@ const glideLdVsField: MetricComputer = {
   unit: 'ratio',
   family: 'gliding',
   direction: 'higher',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Higher glide ratio than the field',
+    less: 'Lower glide ratio than the field',
+  },
   explanation:
     'Whether the pilot found better air on glide than the other pilots on the same leg. For '
     + "each completed speed-section leg, we take the pilot's glide-phase L/D. That is the path "
@@ -236,6 +248,12 @@ const glideStfProxy: MetricComputer = {
   unit: 'km/h',
   family: 'gliding',
   direction: 'higher',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Gliding faster to stronger thermals',
+    less: 'Gliding slower towards the stronger thermals',
+  },
   explanation:
     'Speed to fly: the pilot flies faster when a good climb is in front of them, and slower '
     + 'when it is not. We pair each glide after the start with the climb rate of the next '
@@ -287,6 +305,12 @@ const glideExtraDistance: MetricComputer = {
   unit: 'pct',
   family: 'gliding',
   direction: 'lower',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Flying wide of the optimised route',
+    less: 'Flying close to the optimised route',
+  },
   explanation:
     'How much further the pilot flew on glide than the optimised course line needed. 0% is a '
     + 'flight exactly along the line, and 12% is a glide 12% further than necessary. On each '
@@ -368,6 +392,12 @@ const glideDolphinFraction: MetricComputer = {
   unit: 'pct',
   family: 'gliding',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Using lifty air outside thermals',
+    less: 'Climbing mostly in thermals',
+  },
   explanation:
     'Dolphin flying: how much of the height that the pilot gained came outside of circling. '
     + 'The value is the share of the altitude gain after the start, '

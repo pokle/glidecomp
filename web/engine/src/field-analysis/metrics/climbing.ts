@@ -34,6 +34,13 @@ const sharedPercentile: MetricComputer = {
   unit: 'pct',
   family: 'climbing',
   direction: 'higher',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Climbing faster than others in the same thermal',
+    // less: omitted — no honest phrasing reads as a behaviour worth
+    //   naming; falls back to the label. Rejected: 'Climbing slower than others in the same thermal'
+  },
   explanation:
     'When this pilot and other pilots were in the SAME thermal, who climbed faster? In every ' +
     'thermal that two pilots or more used, we rank each use by its average climb rate. The ' +
@@ -120,6 +127,12 @@ const timeToCore: MetricComputer = {
   unit: 's',
   family: 'climbing',
   direction: 'lower',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Taking time to centre thermals',
+    less: 'Centring thermals fast',
+  },
   explanation:
     'How long the pilot takes to get into the best lift after they arrive in a thermal. For ' +
     'each thermal of 60 s or more, we measure the seconds from the entry until the 30 s rolling ' +
@@ -174,6 +187,12 @@ const exitDecay: MetricComputer = {
   unit: 'm/s',
   family: 'climbing',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Leaving thermals while lift was strong',
+    less: 'Leaving thermals while lift was weak',
+  },
   explanation:
     'The median climb rate that the pilot left thermals at. For each thermal of 90 s or more, we take the climb ' +
     'rate over its final 30 s. A high value means they leave lift that still works. ' +
@@ -216,6 +235,12 @@ const selectivity: MetricComputer = {
   unit: 'pct',
   family: 'climbing',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Sticking with almost every climb you try',
+    less: 'Being picky about which lift to keep',
+  },
   explanation:
     'How selective the pilot is about the lift they stop for. Each period of circling of 30 s ' +
     'or more after the start counts as lift that the pilot sampled. If the period overlaps a ' +
@@ -310,6 +335,12 @@ const departureBand: MetricComputer = {
   unit: 'pct',
   family: 'climbing',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Leaving thermals near the top',
+    less: 'Leaving thermals low in the band',
+  },
   explanation:
     'Does the pilot climb to the top of every thermal, or leave with lift still above them? We ' +
     'take the altitude where they left each thermal after the start, as a percentage of the ' +
@@ -371,6 +402,12 @@ const circleSmoothness: MetricComputer = {
   unit: 'ratio',
   family: 'climbing',
   direction: 'lower',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Thermalling imperfect circles',
+    less: 'Thermalling perfect circles',
+  },
   explanation:
     'Whether the pilot flies clean, repeatable circles, or moves around the thermal. We fit ' +
     'each detected circle by least squares. The RMS fit error divided by the fitted radius ' +

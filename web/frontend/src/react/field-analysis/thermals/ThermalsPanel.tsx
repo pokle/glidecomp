@@ -38,6 +38,7 @@ import { formatTimeOfDay } from "../../lib/time";
 import { formatAltitude, useUnits } from "../../lib/units";
 import { formatMetricValue } from "../types";
 import { unitDisplay } from "../units";
+import { ValueBar } from "../ValueBar";
 import { degToCompass } from "../charts/day-profile/shared";
 
 /** One band's model wind, interpolated from the task's weather column. */
@@ -565,6 +566,16 @@ export function ThermalsPanel({
   const multiCoreBands = selected.bands.filter((b) => b.subCores.length >= 2);
   const replayHref = replayHrefFor(selected.id);
 
+  // The census's mean-climb bars, scaled from zero (climb is a magnitude —
+  // a bar starting at the day's weakest thermal would exaggerate the spread)
+  // to the day's strongest. Cached per shape id so the max and forty cells
+  // don't each re-walk every band.
+  const climbByShape = useMemo(
+    () => new Map(shapes.map((s) => [s.id, meanClimb(s)])),
+    [shapes]
+  );
+  const maxMeanClimb = Math.max(0, ...climbByShape.values());
+
   const census = (
     <Table
       aria-label="Reconstructed thermals"
@@ -606,7 +617,21 @@ export function ThermalsPanel({
             <Cell>
               {altLabel(s.bands[0].altMin)}–{altWithUnit(s.bands[s.bands.length - 1].altMax)}
             </Cell>
-            <Cell>+{climbText(meanClimb(s))}</Cell>
+            <Cell>
+              <span className="flex items-center gap-2 tabular-nums">
+                {/* Bar first so every row's bar shares a left edge — aligned
+                    lengths are what make forty rows scannable. Hidden narrow
+                    for the same reason as PerPilotMetricTable's bars: on a
+                    phone the census already scrolls sideways. */}
+                {maxMeanClimb > 0 ? (
+                  <ValueBar
+                    className="hidden w-10 sm:inline-block"
+                    fraction={(climbByShape.get(s.id) ?? 0) / maxMeanClimb}
+                  />
+                ) : null}
+                <span>+{climbText(climbByShape.get(s.id) ?? 0)}</span>
+              </span>
+            </Cell>
             <Cell>{s.strongestSide ? degToCompass(s.strongestSide.bearing) : "—"}</Cell>
           </Row>
         ))}

@@ -98,6 +98,41 @@ export type MetricFamily = 'climbing' | 'gliding' | 'decision' | 'gaggle' | 'rac
  */
 export type MetricDirection = 'higher' | 'lower' | 'neutral';
 
+/**
+ * The metric's name written as the behaviour that WON, one phrasing per sign
+ * of the correlation.
+ *
+ * A metric's own label is deliberately neutral, because which direction wins
+ * is not a property of the metric — it is the sign of ρ on that task, and for
+ * the twelve metrics whose {@link MetricDirection} is 'neutral' the engine
+ * holds no prior at all. "Gliding wide of the optimal course line" separated
+ * the field on Corryong 2026 open T2 at ρ = +0.80, meaning the pilots who
+ * held the line won; a surface that presents that row as a winning behaviour
+ * without flipping the words says the opposite of the finding.
+ *
+ * So a surface that CLAIMS a direction picks by sign:
+ *
+ *     ρ < 0  →  larger values went with better ranks  →  `more`
+ *     ρ > 0  →  smaller values went with better ranks →  `less`
+ *
+ * Only the findings digest does that today. Every other surface — the
+ * ranking tables, the family tables, the glossary, the CLI report — keeps the
+ * neutral label, because each shows ρ and a diverging meter whose bar already
+ * carries the sign.
+ *
+ * A side is OMITTED where no honest phrasing of it reads as a behaviour worth
+ * naming (being out-climbed, departures that did not pay). Consumers fall back
+ * to the neutral label there, and must do the same for a whole metric with no
+ * `winning` at all — reports stored before this field existed are served while
+ * they revalidate.
+ */
+export interface MetricWinningPhrasings {
+  /** Use when ρ < 0: more of this metric went with better ranks. */
+  more?: string;
+  /** Use when ρ > 0: less of this metric went with better ranks. */
+  less?: string;
+}
+
 export interface PilotMetricValue {
   /** Pairing key back to FieldContext.pilots. */
   trackFile: string;
@@ -299,6 +334,12 @@ export interface MetricComputer {
    * a family's headline |ρ| or get auto-selected. Absent = behavioural.
    */
   outcome?: true;
+  /**
+   * The label rewritten as the winning behaviour, per sign of ρ. Absent on a
+   * metric no surface ever claims a direction for (the outcome checks, and
+   * the two day metrics with no per-pilot value).
+   */
+  winning?: MetricWinningPhrasings;
   /** Pure function of the field context. Must not mutate it. */
   compute(field: FieldContext): MetricOutput;
 }
@@ -349,6 +390,13 @@ export interface MetricReport {
    * Optional so reports stored before the flag existed still parse (absent =
    * behavioural). */
   outcome?: true;
+  /**
+   * The label rewritten as the winning behaviour, per sign of ρ — see
+   * {@link MetricWinningPhrasings}. Optional twice over: a metric may have no
+   * directional phrasing at all, and reports stored before this field existed
+   * are served while they revalidate. Consumers fall back to `label`.
+   */
+  winning?: MetricWinningPhrasings;
   /** Aligned to FieldAnalysisReport.pilots order. */
   perPilot: PilotMetricValue[];
   fieldSummary?: string[];

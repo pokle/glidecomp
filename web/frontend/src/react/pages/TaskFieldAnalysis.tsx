@@ -25,6 +25,7 @@
  */
 import { Card } from "@/react/rac/card";
 import { useEffect, useMemo, useState } from "react";
+import type { Key } from "react-aria-components";
 import { useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
@@ -59,6 +60,7 @@ import {
 import { PageToc, type PageTocItem } from "../components/PageToc";
 import { cn } from "../lib/utils";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
+import { FindingsDigest } from "../field-analysis/FindingsDigest";
 import { TaskDebrief } from "../field-analysis/TaskDebrief";
 import { MetricGlossary } from "../field-analysis/MetricGlossary";
 import {
@@ -307,6 +309,13 @@ export function TaskFieldAnalysis() {
   // one, expansion follows the top-3 default; a class switch resets to it.
   const [expandedOverride, setExpandedOverride] = useState<Set<string> | null>(null);
   useEffect(() => setExpandedOverride(null), [selectedClass]);
+
+  // The separation ranking's selection lives here (not inside the ranking)
+  // so the findings digest at the top of the page can pick a behaviour too.
+  // Null = no pick yet, which the ranking resolves to its top row; a class
+  // switch resets rather than carrying a stale metric id across metric sets.
+  const [selectedBehaviour, setSelectedBehaviour] = useState<Key | null>(null);
+  useEffect(() => setSelectedBehaviour(null), [selectedClass]);
   const expandedFamilies = expandedOverride ?? topFamilies;
   const expandFamily = (family: string, expanded: boolean) =>
     setExpandedOverride((prev) => {
@@ -495,6 +504,20 @@ export function TaskFieldAnalysis() {
         </div>
       </div>
 
+      {/* The headline first, ahead even of the route: the finding is what the
+          reader came for, and each entry jumps to — and selects — its row in
+          the ranking below, caveat chips attached. The analysis order itself
+          is unchanged. Deliberately absent from the TOC, which lists the
+          destination, not the signpost. */}
+      {active && report ? (
+        <div className="mt-4">
+          <FindingsDigest
+            metrics={report.metrics}
+            onPickMetric={setSelectedBehaviour}
+          />
+        </div>
+      ) : null}
+
       {/* What the field was asked to fly. Everything below is about how they
           flew it, and none of it means much without the shape in front of
           you — a long final glide into a headwind reads differently from a
@@ -564,6 +587,10 @@ export function TaskFieldAnalysis() {
                 basis={report.basis}
                 excluded={active.excluded}
                 timeZone={comp?.timezone ?? undefined}
+                // Doors, only where the section actually rendered — an anchor
+                // to a missing id would scroll nowhere.
+                weatherHref={hasWeatherSection ? "#weather-heading" : undefined}
+                thermalsHref={hasThermalsSection ? "#thermals-heading" : undefined}
               />
             </div>
 
@@ -642,7 +669,12 @@ export function TaskFieldAnalysis() {
                   />
                 </Explain>
               </h2>
-              <SeparationRanking metrics={report.metrics} report={report} />
+              <SeparationRanking
+                metrics={report.metrics}
+                report={report}
+                selectedMetricId={selectedBehaviour}
+                onSelectedMetricIdChange={setSelectedBehaviour}
+              />
             </Card>
 
             <Card aria-labelledby="heatmap-heading" className="gap-3">
