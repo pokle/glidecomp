@@ -56,13 +56,15 @@ export function FindingsDigest({
         {top.map(({ metric, correlation }) => (
           <li
             key={metric.id}
-            className="relative flex items-center gap-2 rounded-lg border py-2 pl-2 pr-3"
+            className="relative flex items-center gap-2.5 rounded-lg border py-2.5 pl-3 pr-4"
           >
             <VerdictBadge correlation={correlation} />
+            {/* Headline-sized on purpose: these three lines are the page's
+                finding, and the card exists to shout them. */}
             <a
               href="#separation-heading"
               onClick={() => onPickMetric?.(metric.id)}
-              className="text-sm font-medium outline-none after:absolute after:inset-0 after:rounded-lg after:transition-colors hover:underline hover:after:bg-foreground/5 focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
+              className="text-lg font-semibold outline-none after:absolute after:inset-0 after:rounded-lg after:transition-colors hover:underline hover:after:bg-foreground/5 focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
             >
               {metric.label}
             </a>
