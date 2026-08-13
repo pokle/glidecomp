@@ -222,7 +222,7 @@ export function CompFieldAnalysis() {
   // seeded report.
   if (status === "loading") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
+      <div className="font-hyperlegible">
         <Loading className="text-sm">Loading field analysis…</Loading>
       </div>
     );
@@ -234,7 +234,7 @@ export function CompFieldAnalysis() {
 
   if (status === "forbidden" || status === "error") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
+      <div className="font-hyperlegible">
         <Breadcrumbs items={crumbs} current="Field analysis" />
         <h1 className="mt-3 text-2xl font-bold">Field analysis</h1>
         <Alert className="mt-4">
@@ -252,7 +252,9 @@ export function CompFieldAnalysis() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
+    // No gutter of its own — Shell's <main> already pays px-4 pt-6, same as
+    // every other page under it (see TaskFieldAnalysis).
+    <div className="font-hyperlegible">
       <Breadcrumbs items={crumbs} current="Field analysis" />
 
       <div className="mt-3 min-w-0">

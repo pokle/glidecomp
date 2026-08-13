@@ -18,7 +18,7 @@
  * a model run beside the track-measured wind — a reader must never mistake
  * the prediction for the measurement (docs/weather.md).
  */
-import { lazy, Suspense, useId, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Selection } from "react-aria-components";
 import { InfoIcon } from "lucide-react";
 import { windAtHeight } from "@glidecomp/engine";
@@ -29,7 +29,9 @@ import type {
   WeatherHour,
 } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
+import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { MasterDetail } from "@/react/components/MasterDetail";
+import { ExpandIcon } from "../charts/MetricChartOverlay";
 import { cn } from "@/react/lib/utils";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Explain } from "@/react/rac/explain";
@@ -285,7 +287,9 @@ function ThermalRose({
     : `Top-down lift rose. ${diameters} Exact numbers per band are in the table below.`;
 
   return (
-    <svg viewBox={`0 0 ${ROSE_SIZE} ${ROSE_SIZE}`} className="h-auto w-full max-w-80" role="img" aria-label={label}>
+    // No width cap of its own: the figure wrapper decides how big the rose
+    // draws (max-w-80 inline; the full-screen sheet spends the viewport).
+    <svg viewBox={`0 0 ${ROSE_SIZE} ${ROSE_SIZE}`} className="h-auto w-full" role="img" aria-label={label}>
       {/* Sector wedges: relative climb by side of the core. */}
       <g aria-hidden>
         {sectors.map((s) =>
@@ -447,7 +451,10 @@ function RoseLegend() {
       >
         <InfoIcon aria-hidden className="size-3.5" />
       </Button>
-      <Popover>
+      {/* Above the FullScreenSheet's z-[100]: the legend renders inside the
+          expanded figure too, and the default popover z-50 would put it
+          behind the sheet's own backdrop. */}
+      <Popover className="z-[110]">
         <p className="font-medium">Reading the rose</p>
         <ul className="mt-2 space-y-1.5">
           {rows.map((r, i) => (
@@ -459,6 +466,197 @@ function RoseLegend() {
         </ul>
       </Popover>
     </PopoverTrigger>
+  );
+}
+
+/**
+ * The rose over its optional satellite backdrop, with the figure's own
+ * controls: the Map toggle, the maximise/restore control on the map's own
+ * corner (one button, one place — press to fill the screen, press again to
+ * come back; the browser Fullscreen API mapbox's own control rides on does
+ * not exist on iPhones, so the "full screen" is the app's FullScreenSheet),
+ * the legend, and — once the camera has been panned or zoomed away —
+ * Re-centre. One component for the inline detail pane AND the full-screen
+ * sheet, so the two can never disagree about behaviour.
+ *
+ * While the map is shown the rose stops taking pointer events: drags and
+ * pinches belong to the map (inline, touch panning takes two fingers so one
+ * finger still scrolls the page). And once the camera leaves the locked
+ * framing the rose fades out entirely — its rings and wedges are drawn at
+ * ground scale for that framing only, and over a moved camera they would be
+ * a lie. The map's core marker keeps saying where the thermal is, and
+ * Re-centre restores the locked view (and the rose with it).
+ *
+ * Two layouts. Inline the figure IS the rose's square. `fill` (the sheet)
+ * spends the whole box on the MAP — that is what maximising is for — with
+ * the rose a centred square over it; the scale lock then keys off the
+ * rose's own width (`scaleRef`), not the map's, so the rings stay at true
+ * ground size while the map shows more terrain around them.
+ */
+function RoseFigure({
+  shape,
+  model,
+  climbFactor,
+  climbUnit,
+  distanceText,
+  showMap,
+  onShowMapChange,
+  expanded = false,
+  onToggleExpand,
+  cooperativeGestures = true,
+  fill = false,
+  className,
+}: {
+  shape: ThermalShapeSummary;
+  model: ModelWindProfile | null;
+  climbFactor: number;
+  climbUnit: string;
+  distanceText: (m: number) => string;
+  /** Lifted to the panel so the inline figure and the sheet stay in step. */
+  showMap: boolean;
+  onShowMapChange: (on: boolean) => void;
+  /** Whether this instance IS the full-screen one (flips the control's
+   * glyph from maximise to restore). */
+  expanded?: boolean;
+  /** The maximise/restore control's action. */
+  onToggleExpand?: () => void;
+  /** Two-finger touch pan — on inline maps embedded in the scrolling page. */
+  cooperativeGestures?: boolean;
+  /** Fill the parent box with the map, rose centred over it (the sheet). */
+  fill?: boolean;
+  className?: string;
+}) {
+  const [away, setAway] = useState(false);
+  const [recentreToken, setRecentreToken] = useState(0);
+  // The rose's own square, when it is smaller than the map (fill mode).
+  const roseBoxRef = useRef<HTMLDivElement>(null);
+  // Hiding the map hands the figure straight back to the rose.
+  useEffect(() => {
+    if (!showMap) setAway(false);
+  }, [showMap]);
+  const loc = shapeLocation(shape);
+  const rose = (
+    <ThermalRose
+      shape={shape}
+      model={model}
+      climbFactor={climbFactor}
+      climbUnit={climbUnit}
+      distanceText={distanceText}
+    />
+  );
+  return (
+    <div
+      className={cn(
+        "relative",
+        fill ? "h-full w-full" : "mx-auto w-full max-w-80",
+        className
+      )}
+    >
+      {showMap ? (
+        <Suspense fallback={null}>
+          {/* Interactive, so no aria-hidden: the map canvas is focusable and
+              carries mapbox's own "Map" label. */}
+          <div className={cn("absolute inset-0 overflow-hidden", !fill && "rounded-lg")}>
+            <ThermalRoseMap
+              lat={loc.lat}
+              lon={loc.lon}
+              metresPerSvgUnit={roseGeometry(shape).metresPerPx}
+              svgSize={ROSE_SIZE}
+              cooperativeGestures={cooperativeGestures}
+              onAwayChange={setAway}
+              recentreToken={recentreToken}
+              scaleRef={fill ? roseBoxRef : undefined}
+            />
+            {/* Scrim so the rose's ink stays legible over imagery — gone with
+                the rose while exploring, so the terrain reads clean. */}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0 bg-background/30 transition-opacity",
+                away && "opacity-0"
+              )}
+            />
+          </div>
+        </Suspense>
+      ) : null}
+      <div
+        aria-hidden={showMap && away ? true : undefined}
+        className={cn(
+          "transition-opacity",
+          // Inline the rose is the box; filling, it floats centred over the
+          // map, a square no bigger than the shorter viewport edge.
+          fill
+            ? "absolute inset-0 flex items-center justify-center"
+            : "relative",
+          // Gestures over the figure belong to the map while it is shown.
+          showMap && "pointer-events-none",
+          showMap && away && "opacity-0"
+        )}
+      >
+        {fill ? (
+          <div
+            ref={roseBoxRef}
+            className="w-full max-w-[min(100%,calc(100dvh-9rem))]"
+          >
+            {rose}
+          </div>
+        ) : (
+          rose
+        )}
+      </div>
+      <div className="absolute top-0 left-0 flex items-center gap-1 print:hidden">
+        {HAS_MAP_TOKEN ? (
+          <ToggleButton size="sm" isSelected={showMap} onChange={onShowMapChange}>
+            Map
+          </ToggleButton>
+        ) : null}
+        {/* In the toolbar, not floated at the figure's foot: stacked, the
+            pinned pane clips the figure's bottom edge off screen, and an
+            affordance to find your way back must not need finding itself. */}
+        {showMap && away ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => setRecentreToken((t) => t + 1)}
+          >
+            Re-centre
+          </Button>
+        ) : null}
+      </div>
+      {/* The map's own maximise/restore control, mapbox-style on the map's
+          corner: ONE button in ONE place, whose glyph flips — press to take
+          the whole screen, press the same button to come back. Shown while
+          the map is (or full screen, so the way back never disappears if the
+          map is toggled off in there). */}
+      {onToggleExpand && (showMap || expanded) ? (
+        <div className="absolute top-8 right-0 print:hidden">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label={expanded ? "Restore map size" : "Maximise map"}
+            onPress={onToggleExpand}
+          >
+            {expanded ? <CollapseIcon /> : <ExpandIcon />}
+          </Button>
+        </div>
+      ) : null}
+      <div className="absolute top-0 right-0">
+        <RoseLegend />
+      </div>
+    </div>
+  );
+}
+
+/** Four corners pulling in — ExpandIcon's inverse, for the restore state of
+ * the map's maximise control. */
+function CollapseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path
+        d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -548,8 +746,12 @@ export function ThermalsPanel({
   );
   const [selectedId, setSelectedId] = useState<number | null>(null);
   // Satellite backdrop under the rose — off by default (and in the SSR
-  // snapshot), so mapbox-gl only ever loads on an explicit flip.
+  // snapshot), so mapbox-gl only ever loads on an explicit flip. Shared by
+  // the inline figure and the full-screen sheet.
   const [showMap, setShowMap] = useState(false);
+  // The figure filling the screen (rac/full-screen-sheet.tsx), for actually
+  // exploring the terrain around the thermal.
+  const [expanded, setExpanded] = useState(false);
   const selected = shapes.find((s) => s.id === (selectedId ?? defaultId)) ?? shapes[0];
   // Labels the detail region (it is read before the census it belongs to).
   const headingId = useId();
@@ -665,47 +867,16 @@ export function ThermalsPanel({
             (stacked) or the grid's right column (side by side), so the old
             rose-beside-readouts split has no width to spend. */}
         <div className="mt-3 space-y-4">
-          <div className="relative mx-auto w-full max-w-80">
-            {showMap ? (
-              <Suspense fallback={null}>
-                {/* Decorative backdrop: the rose above it is the reading. */}
-                <div aria-hidden className="absolute inset-0 overflow-hidden rounded-lg">
-                  {(() => {
-                    const loc = shapeLocation(selected);
-                    return (
-                      <ThermalRoseMap
-                        lat={loc.lat}
-                        lon={loc.lon}
-                        metresPerSvgUnit={roseGeometry(selected).metresPerPx}
-                        svgSize={ROSE_SIZE}
-                      />
-                    );
-                  })()}
-                  {/* Scrim so the rose's ink stays legible over imagery. */}
-                  <div className="pointer-events-none absolute inset-0 bg-background/30" />
-                </div>
-              </Suspense>
-            ) : null}
-            <div className="relative">
-              <ThermalRose
-                shape={selected}
-                model={model}
-                climbFactor={climb.factor}
-                climbUnit={climb.unit}
-                distanceText={(m) => altWithUnit(m)}
-              />
-            </div>
-            {HAS_MAP_TOKEN ? (
-              <div className="absolute left-0 top-0 print:hidden">
-                <ToggleButton size="sm" isSelected={showMap} onChange={setShowMap}>
-                  Map
-                </ToggleButton>
-              </div>
-            ) : null}
-            <div className="absolute right-0 top-0">
-              <RoseLegend />
-            </div>
-          </div>
+          <RoseFigure
+            shape={selected}
+            model={model}
+            climbFactor={climb.factor}
+            climbUnit={climb.unit}
+            distanceText={(m) => altWithUnit(m)}
+            showMap={showMap}
+            onShowMapChange={setShowMap}
+            onToggleExpand={() => setExpanded(true)}
+          />
           <div className="space-y-3 text-sm">
             <ul className="space-y-2">
               {selected.wind ? (
@@ -882,6 +1053,55 @@ export function ThermalsPanel({
         </details>
       </div>}
       />
+
+      {/* The figure at full size. Mounted only while open (the sheet's
+          contract), so the SSR snapshot and the un-expanded page carry none
+          of it. Cooperative gestures come OFF in here: there is no page
+          underneath to scroll, so one finger may pan the map. */}
+      {expanded ? (
+        <FullScreenSheet
+          label={`Thermal at ${formatTimeOfDay(new Date(selected.startMs).toISOString(), tz)}, rose and map`}
+          onClose={() => setExpanded(false)}
+          className="flex flex-col gap-2 p-3 sm:p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="min-w-0 truncate text-base font-semibold">
+              Thermal at{" "}
+              {formatTimeOfDay(new Date(selected.startMs).toISOString(), tz)} —{" "}
+              {selected.pilotCount} pilots
+            </h2>
+            {/* autoFocus so a keyboard user lands on the way out rather than
+                on the dialog container (same reasoning as the metric chart's
+                sheet — Escape alone is not discoverable, §4.1). */}
+            <Button
+              autoFocus
+              variant="outline"
+              size="sm"
+              onPress={() => setExpanded(false)}
+            >
+              Close
+            </Button>
+          </div>
+          <div className="min-h-0 w-full flex-1">
+            {/* `fill`: the MAP spends the whole box — that is what
+                maximising is for — and the rose floats over it as a centred
+                square no bigger than the shorter viewport edge. */}
+            <RoseFigure
+              shape={selected}
+              model={model}
+              climbFactor={climb.factor}
+              climbUnit={climb.unit}
+              distanceText={(m) => altWithUnit(m)}
+              showMap={showMap}
+              onShowMapChange={setShowMap}
+              expanded
+              onToggleExpand={() => setExpanded(false)}
+              cooperativeGestures={false}
+              fill
+            />
+          </div>
+        </FullScreenSheet>
+      ) : null}
 
       {/* The reconstruction method is behind the ⓘ. The model ATTRIBUTION is
           not: it is a licence obligation, so it stays on the page in both

@@ -415,7 +415,7 @@ export function TaskFieldAnalysis() {
   // seeded report.
   if (status === "loading") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
+      <div className="font-hyperlegible">
         <Loading className="text-sm">Loading field analysis…</Loading>
       </div>
     );
@@ -427,7 +427,7 @@ export function TaskFieldAnalysis() {
 
   if (status === "forbidden") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
+      <div className="font-hyperlegible">
         <Breadcrumbs items={crumbs} current={heading} />
         <h1 className="mt-3 text-2xl font-bold">{heading}</h1>
         <Alert className="mt-4">
@@ -443,7 +443,7 @@ export function TaskFieldAnalysis() {
 
   if (status === "error") {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 font-hyperlegible">
+      <div className="font-hyperlegible">
         <Breadcrumbs items={crumbs} current={heading} />
         <h1 className="mt-3 text-2xl font-bold">{heading}</h1>
         <Alert className="mt-4">
@@ -462,8 +462,12 @@ export function TaskFieldAnalysis() {
     // <main> is 6xl otherwise, which the rail would eat a fifth of.
     <div
       {...(tocItems.length > 0 ? { "data-wide-page": "" } : {})}
+      // No gutter of its own: Shell's <main> already pays px-4 pt-6, and
+      // doubling it cost a phone 32px of card width per side. The max-w
+      // stays: with data-wide-page the main widens to 89rem at EVERY
+      // viewport, and below xl (no rail grid) the content must hold to 6xl.
       className={cn(
-        "mx-auto max-w-6xl px-4 py-6 font-hyperlegible",
+        "mx-auto max-w-6xl font-hyperlegible",
         tocItems.length > 0 &&
           "xl:grid xl:max-w-[87rem] xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-10"
       )}
