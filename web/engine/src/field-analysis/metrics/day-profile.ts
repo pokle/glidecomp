@@ -552,6 +552,12 @@ const dayAirtimeQuality: MetricComputer = {
   unit: 'pct',
   family: 'day',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Keeping out of sinking air',
+    less: 'Spending more of the flight in sinking air',
+  },
   explanation:
     'How much of the flight was in air worth being in. The value is the share of the airborne ' +
     'time of a pilot, on the shared grid, with a 30 s-smoothed vario at or above −0.5 m/s. The ' +

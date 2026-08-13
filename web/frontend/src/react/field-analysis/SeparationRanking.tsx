@@ -51,7 +51,16 @@ import {
 interface RankedMetric {
   metric: Pick<
     MetricReport,
-    "id" | "label" | "unit" | "family" | "direction" | "explanation" | "perPilot"
+    | "id"
+    | "label"
+    | "unit"
+    | "family"
+    | "direction"
+    | "explanation"
+    | "perPilot"
+    // Carried so the findings digest, which ranks off this same function, can
+    // name each entry in the direction that actually won.
+    | "winning"
   >;
   correlation: MetricCorrelation;
 }

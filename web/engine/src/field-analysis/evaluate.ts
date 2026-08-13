@@ -75,6 +75,7 @@ export function evaluateField(
       direction: m.direction,
       explanation: m.explanation,
       ...(m.outcome ? { outcome: true as const } : {}),
+      ...(m.winning ? { winning: m.winning } : {}),
       perPilot,
       fieldSummary: output?.fieldSummary,
       extraTables: output?.extraTables,

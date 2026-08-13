@@ -38,6 +38,26 @@ const DIGEST_COUNT = 3;
  * chip would be doing all the work of un-saying the claim beside it. */
 const DIGEST_VERDICTS = new Set(["strong", "moderate", "weak"]);
 
+/**
+ * The entry's name, written as the behaviour that won.
+ *
+ * The heading claims a winner, but the ranking that feeds this card orders by
+ * |ρ| and the verdict is computed from |ρ| and n — so neither says which WAY
+ * a metric won, and a neutral label under this heading can assert the exact
+ * opposite of the finding. ρ < 0 means larger values went with better ranks.
+ *
+ * Falls back to the neutral label whenever the phrasing is missing: a metric
+ * with no honest wording for that side, and any report stored before the
+ * field existed (served while it revalidates).
+ */
+function winningLabel(
+  metric: Pick<MetricReport, "label" | "winning">,
+  rho: number
+): string {
+  const phrasing = rho < 0 ? metric.winning?.more : metric.winning?.less;
+  return phrasing ?? metric.label;
+}
+
 export function FindingsDigest({
   metrics,
   onPickMetric,
@@ -67,8 +87,11 @@ export function FindingsDigest({
   return (
     <Card aria-labelledby="findings-digest-heading" className="gap-3">
       <div>
+        {/* Counted, not hardcoded: the verdict filter above can leave one or
+            two entries, and "Top 3" over a list of one is a miscount the
+            reader can see. */}
         <h2 id="findings-digest-heading" className="text-lg font-semibold">
-          What separated the field?
+          Top {top.length} winning behaviour{top.length === 1 ? "" : "s"}
         </h2>
       </div>
       <ul className="flex list-none flex-wrap gap-2 p-0">
@@ -84,7 +107,7 @@ export function FindingsDigest({
               onClick={() => onPickMetric?.(metric.id)}
               className="text-lg font-semibold outline-none after:absolute after:inset-0 after:rounded-lg after:transition-colors hover:underline hover:after:bg-foreground/5 focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
             >
-              {metric.label}
+              {winningLabel(metric, correlation.rho)}
             </a>
             <VerdictBadge correlation={correlation} />
           </li>

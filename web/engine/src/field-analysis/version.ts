@@ -244,4 +244,26 @@
 //     are bit-identical; only the day.wind tables/series change. The bump
 //     rolls stored reports onto the new speeds on their next lazy
 //     revalidation.
-export const FIELD_ANALYSIS_VERSION = 22;
+// v23: each behavioural metric gains an optional `winning` pair — its label
+//     rewritten as the behaviour that WON, one phrasing for ρ < 0 and one for
+//     ρ > 0. A surface that claims a direction (today only the task page's
+//     findings digest, which is headed "Top N winning behaviours") picks by
+//     sign; every other surface keeps the neutral label, because each shows ρ
+//     and a diverging meter whose bar already carries the sign.
+//     The digest ranks by |ρ|, and the verdict is computed from |ρ| and n, so
+//     neither the ordering nor the confidence filter distinguishes a metric
+//     that won by MORE from one that won by LESS: on Corryong 2026 open T2 it
+//     headlined "Gliding wide of the optimal course line" (ρ = +0.80) and
+//     "Share of race time spent hunting for the next climb" (ρ = +0.73), both
+//     'strong', when holding the line and not hunting are what won — two of
+//     its three entries told the reader to do the opposite of the finding.
+//     Four of that comp's six tasks had at least one such entry.
+//     A side is omitted where no honest phrasing of it reads as a behaviour
+//     worth naming (climb.shared_percentile's low side is "being out-climbed",
+//     gaggle.departure_winrate's is "departures that did not pay"); consumers
+//     fall back to the label there, as they must for any stored report with no
+//     `winning` at all. Purely additive: no metric value moves and no
+//     correlation changes. The bump rolls stored reports so they gain the
+//     field on their next lazy revalidation instead of showing neutral labels
+//     under a heading that promises winners forever.
+export const FIELD_ANALYSIS_VERSION = 23;

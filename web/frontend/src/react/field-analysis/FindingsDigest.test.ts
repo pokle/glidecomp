@@ -89,4 +89,76 @@ describe("FindingsDigest", () => {
     const out = html([metric("dead", 0, "weak", { correlation: null })]);
     expect(out).toContain("no clear pattern");
   });
+
+  /**
+   * The heading claims a winner, but the ranking orders by |ρ| and the
+   * verdict is computed from |ρ| and n — so nothing upstream distinguishes a
+   * metric that won by MORE from one that won by LESS. Without the flip, the
+   * real Corryong 2026 open T2 report headlined "Gliding wide of the optimal
+   * course line" at ρ = +0.80 when holding the line is what won.
+   */
+  describe("directional naming", () => {
+    const WIDE: Partial<MetricReport> = {
+      label: "Gliding wide of the optimal course line",
+      winning: {
+        more: "Flying wide of the optimised route",
+        less: "Flying close to the optimised route",
+      },
+    };
+
+    it("names the low side when less of the metric won", () => {
+      const out = html([metric("wide", 0.8, "strong", { ...WIDE, correlation: {
+        metricId: "wide", rho: +0.8, absRho: 0.8, n: 30, verdict: "strong",
+      } })]);
+      expect(out).toContain("Flying close to the optimised route");
+      expect(out).not.toContain("Flying wide of the optimised route");
+      expect(out).not.toContain("Gliding wide of the optimal course line");
+    });
+
+    it("names the high side when more of the metric won", () => {
+      const out = html([metric("wide", 0.8, "strong", WIDE)]);
+      expect(out).toContain("Flying wide of the optimised route");
+      expect(out).not.toContain("Flying close to the optimised route");
+    });
+
+    /** A side with no honest phrasing, and any report stored before the field
+     * existed, both fall back to the neutral label rather than vanishing. */
+    it("falls back to the label for a missing side", () => {
+      const out = html([metric("outclimb", 0.8, "strong", {
+        label: "Climbing faster than the pilots sharing the thermal",
+        winning: { more: "Climbing faster than others in the same thermal" },
+        correlation: {
+          metricId: "outclimb", rho: +0.8, absRho: 0.8, n: 30, verdict: "strong",
+        },
+      })]);
+      expect(out).toContain("Climbing faster than the pilots sharing the thermal");
+    });
+
+    it("falls back to the label for a stored report with no winning at all", () => {
+      const out = html([metric("old", 0.8, "strong", { label: "An older metric" })]);
+      expect(out).toContain("An older metric");
+    });
+  });
+
+  /**
+   * The heading counts what actually made the cut. The verdict filter can
+   * leave fewer than DIGEST_COUNT entries, and a hardcoded "Top 3" over a
+   * list of one is a miscount sitting right above the evidence.
+   */
+  it("counts the entries it actually shows, singular included", () => {
+    const three = html([
+      metric("a", 0.7, "strong"),
+      metric("b", 0.6, "strong"),
+      metric("c", 0.5, "moderate"),
+      metric("d", 0.4, "weak"),
+    ]);
+    expect(three).toContain("Top 3 winning behaviours");
+
+    const one = html([
+      metric("a", 0.7, "strong"),
+      metric("noise", 0.9, "within noise"),
+    ]);
+    expect(one).toContain("Top 1 winning behaviour");
+    expect(one).not.toContain("behaviours");
+  });
 });

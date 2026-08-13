@@ -123,6 +123,12 @@ const startDelay: MetricComputer = {
   unit: 's',
   family: 'racecraft',
   direction: 'lower',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Starting well after the gate opened',
+    less: 'Timing the start gate well',
+  },
   explanation:
     'Every second between the opening of the gate and the crossing of the start line is a ' +
     'second lost for nothing. The value is the seconds from the start gate taken to the scored ' +
@@ -456,6 +462,12 @@ const essMargin: MetricComputer = {
   unit: 'm',
   family: 'racecraft',
   direction: 'lower',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Arriving at ESS with height to spare',
+    less: 'Arriving at ESS with nothing left over',
+  },
   explanation:
     'Height still available at ESS that the pilot no longer needed. That altitude was available ' +
     'for more speed, and the pilot did not use it. The value is the altitude at ESS minus the altitude ' +
@@ -515,6 +527,12 @@ const finalGlideInit: MetricComputer = {
   unit: 'ratio',
   family: 'racecraft',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'High required glide ratio on final glide',
+    less: 'Low required glide ratio on final glide',
+  },
   explanation:
     'How optimistic the pilot was about their final glide. A pilot wins or loses a task by the ' +
     'height at which they leave the last climb. At the last climb of the pilot before ESS, or ' +

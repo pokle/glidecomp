@@ -95,6 +95,12 @@ const altitudeFloor: MetricComputer = {
   unit: 'pct',
   family: 'decision',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Staying high between thermals',
+    less: 'Using up all the altitude between thermals',
+  },
   explanation:
     'How low the pilot goes before the next climb. A high value is a race with height in ' +
     'reserve, and a low value is a flight that goes down near the ground. We take each pair of ' +
@@ -137,6 +143,12 @@ const lowSaves: MetricComputer = {
   unit: 'count',
   family: 'decision',
   direction: 'neutral',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Lots of low saves',
+    less: 'Never getting low enough to need a save',
+  },
   explanation:
     'How many times the pilot got low and climbed out again. We count the climbs after the ' +
     'start that the pilot entered below 15% of the working band, and that then gained 300 m or ' +
@@ -176,6 +188,12 @@ const kmBetweenClimbs: MetricComputer = {
   unit: 'km',
   family: 'decision',
   direction: 'higher',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Covering more ground between climbs',
+    less: 'Climbing more often, gliding shorter distances',
+  },
   explanation:
     'How far the pilot gets down the course before they must stop and circle again. This is the ' +
     'direct reading of how often they stop. The value is the scored flown distance divided by ' +
@@ -219,6 +237,12 @@ const searchFraction: MetricComputer = {
   unit: 'pct',
   family: 'decision',
   direction: 'lower',
+  /** Directional names for a surface that claims a winner — see
+   * MetricWinningPhrasings. */
+  winning: {
+    more: 'Spending the race hunting for climbs',
+    less: 'Finding the next climb without hunting',
+  },
   explanation:
     'Time that goes into neither a climb nor progress down the course. This is the time spent ' +
     'to find lift, to stay up, and to decide what to do next. The value is the share of the ' +
