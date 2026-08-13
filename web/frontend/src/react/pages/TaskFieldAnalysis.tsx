@@ -58,6 +58,7 @@ import {
   metricsByFamily,
 } from "../field-analysis/MetricFamilySection";
 import { PageToc, type PageTocItem } from "../components/PageToc";
+import { metricTocLabel } from "../field-analysis/toc-labels";
 import { cn } from "../lib/utils";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
 import { FindingsDigest } from "../field-analysis/FindingsDigest";
@@ -344,8 +345,11 @@ export function TaskFieldAnalysis() {
       ...(hasThermalsSection
         ? [{ id: "thermals-heading", label: "The day's thermals" }]
         : []),
-      { id: "separation-heading", label: "Which behaviours went with better ranks" },
-      { id: "heatmap-heading", label: "The whole field at a glance" },
+      // Rail labels are an index, not a copy of the headings — the two long
+      // section names shorten to one fixation each; the headings themselves
+      // are unchanged.
+      { id: "separation-heading", label: "Behaviour ranking" },
+      { id: "heatmap-heading", label: "Field at a glance" },
       { id: "clusters-heading", label: "Pilot style clusters" },
       { id: "families-heading", label: "The metrics in detail" },
       ...FAMILY_ORDER.filter((family) => (grouped.get(family) ?? []).length > 0).flatMap(
@@ -362,7 +366,9 @@ export function TaskFieldAnalysis() {
           ...(grouped.get(family) ?? []).filter(hasMetricBlock).map(
             (m: MetricReport): PageTocItem => ({
               id: metricBlockId(m.id),
-              label: m.label,
+              // The index register of the metric's name — the heading the
+              // entry scrolls to keeps the full label.
+              label: metricTocLabel(m),
               depth: 2,
               onBeforeScroll: () => expandFamily(family, true),
             })
