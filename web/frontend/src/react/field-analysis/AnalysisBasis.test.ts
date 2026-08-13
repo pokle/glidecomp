@@ -20,10 +20,16 @@ const SPLIT = { climbPct: 37.6, glidePct: 23.4, searchPct: 39.0, airborneSeconds
 
 function html(
   basis: FieldAnalysisBasis,
-  excluded: { pilot_name: string; reason: string }[] = []
+  excluded: { pilot_name: string; reason: string }[] = [],
+  extra: { weatherHref?: string; thermalsHref?: string } = {}
 ): string {
   return renderToStaticMarkup(
-    createElement(AnalysisBasis, { basis, excluded, timeZone: "Australia/Sydney" })
+    createElement(AnalysisBasis, {
+      basis,
+      excluded,
+      timeZone: "Australia/Sydney",
+      ...extra,
+    })
   );
 }
 
@@ -99,6 +105,31 @@ describe("AnalysisBasis", () => {
     expect(out.indexOf("climbing")).toBeLessThan(out.indexOf("gliding"));
     // Each row is a label at the bar's start and the percentage at its end.
     expect(out.indexOf("climbing")).toBeLessThan(out.indexOf("38%"));
+  });
+});
+
+describe("AnalysisBasis fact links", () => {
+  /**
+   * The facts become doors into the sections that explain them — but only
+   * when the caller says the section rendered. An anchor to a missing id
+   * would scroll nowhere, so no href means a plain reading.
+   */
+  it("links thermals, airtime and working band to their sections when given targets", () => {
+    const out = html({ ...OLD_BASIS, airtimeSplit: SPLIT, analysisWindow: WINDOW }, [], {
+      weatherHref: "#weather-heading",
+      thermalsHref: "#thermals-heading",
+    });
+    expect(out).toContain('href="#thermals-heading"');
+    expect(out).toContain('href="#weather-heading"');
+  });
+
+  it("renders no anchors at all without targets", () => {
+    const out = html({ ...OLD_BASIS, airtimeSplit: SPLIT, analysisWindow: WINDOW });
+    expect(out).not.toContain("#thermals-heading");
+    expect(out).not.toContain("#weather-heading");
+    // The readings themselves are unchanged.
+    expect(out).toContain("182");
+    expect(out).toContain("82h (13:05–18:40 AEDT)");
   });
 });
 

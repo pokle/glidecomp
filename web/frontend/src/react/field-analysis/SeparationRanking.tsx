@@ -101,11 +101,19 @@ export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }
 export function SeparationRanking({
   metrics,
   report,
+  selectedMetricId,
+  onSelectedMetricIdChange,
 }: {
   metrics: MetricReport[];
   /** When provided, rows are selectable and the selected metric is plotted
    * against rank below the table. */
   report?: FieldAnalysisReport;
+  /** Lifted selection: pass (with the callback) when something OUTSIDE the
+   * ranking also picks a metric — the task page's findings digest selects a
+   * row from the top of the page. `undefined` keeps the selection internal;
+   * `null` means "no pick yet" (the top-ranked metric, as ever). */
+  selectedMetricId?: Key | null;
+  onSelectedMetricIdChange?: (id: Key | null) => void;
 }) {
   const ranked = rankMetrics(metrics);
   // The outcome checks, ranked the same way but shown apart (below the
@@ -118,8 +126,15 @@ export function SeparationRanking({
 
   // The user's pick, if it still exists in this class's ranking (class
   // switches swap the metric set out from under it); the top-ranked metric
-  // otherwise.
-  const [selectedId, setSelectedId] = useState<Key | null>(null);
+  // otherwise. Controlled by the caller when selectedMetricId is passed
+  // (undefined means uncontrolled — never conflate it with null, a real
+  // "no pick yet").
+  const [internalId, setInternalId] = useState<Key | null>(null);
+  const selectedId = selectedMetricId !== undefined ? selectedMetricId : internalId;
+  const setSelectedId = (id: Key | null) => {
+    if (selectedMetricId === undefined) setInternalId(id);
+    onSelectedMetricIdChange?.(id);
+  };
   // Owned here, not in the scatter, so ticking "label every pilot" survives
   // switching metrics (per-session only; a refresh resets it).
   const [showAllLabels, setShowAllLabels] = useState(false);

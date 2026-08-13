@@ -39,6 +39,33 @@ function Fact({
 }
 
 /**
+ * A fact's value as a door into the section that explains it — "182
+ * thermals" should take the reader to the day's thermals, the way the
+ * excluded-pilots count below already links to its footnote. A quiet
+ * underline rather than link colour: the value is still primarily a reading,
+ * and four blue figures in a row would make the box shout. Renders plain
+ * content when there is no target (the section didn't render, or the caller
+ * predates the prop).
+ */
+function FactLink({
+  href,
+  children,
+}: {
+  href?: string;
+  children: React.ReactNode;
+}) {
+  if (!href) return <>{children}</>;
+  return (
+    <a
+      href={href}
+      className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-current"
+    >
+      {children}
+    </a>
+  );
+}
+
+/**
  * "82h (13:05–18:40 AEDT)" — how much flying the report rests on, and when it
  * happened.
  *
@@ -64,11 +91,18 @@ export function AnalysisBasis({
   basis,
   excluded,
   timeZone,
+  weatherHref,
+  thermalsHref,
 }: {
   basis: FieldAnalysisBasis;
   excluded: { pilot_name: string; reason: string }[];
   /** Competition zone for the analysis window. Viewer-local when undefined. */
   timeZone?: string;
+  /** Anchor of the weather/day-profile section, when it rendered — makes the
+   * airtime and working-band facts doors into the charts behind them. */
+  weatherHref?: string;
+  /** Anchor of the day's-thermals section, when it rendered. */
+  thermalsHref?: string;
 }) {
   const units = useUnits();
   return (
@@ -84,31 +118,35 @@ export function AnalysisBasis({
             half a stale report carries rather than dropping the fact. */}
         {basis.airtimeSplit || basis.analysisWindow ? (
           <Fact term="Airtime">
-            {basis.airtimeSplit
-              ? airtimeText(
-                  basis.airtimeSplit.airborneSeconds,
-                  basis.analysisWindow,
-                  timeZone
-                )
-              : formatTimeRange(
-                  basis.analysisWindow!.from,
-                  basis.analysisWindow!.to,
-                  timeZone
-                )}
+            <FactLink href={weatherHref}>
+              {basis.airtimeSplit
+                ? airtimeText(
+                    basis.airtimeSplit.airborneSeconds,
+                    basis.analysisWindow,
+                    timeZone
+                  )
+                : formatTimeRange(
+                    basis.analysisWindow!.from,
+                    basis.analysisWindow!.to,
+                    timeZone
+                  )}
+            </FactLink>
           </Fact>
         ) : null}
         {/* "82 of 308 multi-pilot" read as though 82 pilots were meant. The
             count of thermals is the fact; how many had company in them is the
             qualifier, and "shared by 2+ pilots" says which. */}
         <Fact term="Thermals">
-          {basis.sharedThermalCount}
+          <FactLink href={thermalsHref}>{basis.sharedThermalCount}</FactLink>
           <span className="ml-1 text-xs text-muted-foreground">
             {basis.multiPilotThermalCount} shared by 2+ pilots
           </span>
         </Fact>
         <Fact term="Working band">
-          {formatAltitude(basis.workingBandFloor, { prefs: units }).formatted}–
-          {formatAltitude(basis.workingBandCeiling, { prefs: units }).withUnit}
+          <FactLink href={weatherHref}>
+            {formatAltitude(basis.workingBandFloor, { prefs: units }).formatted}–
+            {formatAltitude(basis.workingBandCeiling, { prefs: units }).withUnit}
+          </FactLink>
           {basis.workingBandFallback ? (
             <span className="ml-1 text-xs text-muted-foreground">(estimated)</span>
           ) : null}

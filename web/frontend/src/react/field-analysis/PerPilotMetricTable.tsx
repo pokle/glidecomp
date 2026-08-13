@@ -17,6 +17,7 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { MetricExplanation, directionWords } from "./MetricExplanation";
 import { unitWords } from "./units";
 import { usePilotHighlight } from "./PilotHighlightContext";
+import { ValueBar } from "./ValueBar";
 import { formatMetricValue, type MetricReport, type FieldAnalysisReport } from "./types";
 
 /**
@@ -58,6 +59,25 @@ export function PerPilotMetricTable({
         m.id,
         new Map(m.perPilot.map((p) => [p.trackFile, { value: p.value, note: p.note }]))
       );
+    }
+    return map;
+  }, [metrics]);
+
+  // Each column's own min–max, the scale its ValueBars are drawn against. A
+  // column of bare numbers has to be read digit by digit; a bar beside each
+  // value lets 37 rows be scanned as lengths. Degenerate ranges (every pilot
+  // identical, or fewer than two measured) carry no information, so those
+  // columns render numbers alone.
+  const rangeByMetric = useMemo(() => {
+    const map = new Map<string, { min: number; max: number }>();
+    for (const m of metrics) {
+      const values = m.perPilot
+        .map((p) => p.value)
+        .filter((v): v is number => v !== null);
+      if (values.length < 2) continue;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      if (max > min) map.set(m.id, { min, max });
     }
     return map;
   }, [metrics]);
@@ -141,6 +161,7 @@ export function PerPilotMetricTable({
             {metrics.map((m) => {
               const entry = pilot.values.get(m.id);
               const value = entry?.value ?? null;
+              const range = value !== null ? rangeByMetric.get(m.id) : undefined;
               return (
                 <Cell key={m.id} className="text-right tabular-nums">
                   {value === null ? (
@@ -153,9 +174,22 @@ export function PerPilotMetricTable({
                       —
                     </span>
                   ) : (
-                    // The engine's formatter, so the page and the CLI report
-                    // never disagree about decimal places.
-                    formatMetricValue(m.unit, value)
+                    <span className="flex items-center justify-end gap-2">
+                      {/* Bar length is the value's place in the column's own
+                          min–max — magnitude, never "which end is better".
+                          Hidden narrow: on a phone the table already scrolls
+                          sideways, and 3rem per column buys scroll, not
+                          scanning. */}
+                      {range ? (
+                        <ValueBar
+                          className="hidden sm:inline-block"
+                          fraction={(value - range.min) / (range.max - range.min)}
+                        />
+                      ) : null}
+                      {/* The engine's formatter, so the page and the CLI
+                          report never disagree about decimal places. */}
+                      <span>{formatMetricValue(m.unit, value)}</span>
+                    </span>
                   )}
                   {entry?.note ? (
                     <span className="sr-only"> ({entry.note})</span>
