@@ -124,6 +124,31 @@ describe("official results on the task score endpoint", () => {
     expect(body.official_results.ranks[sqid].total).toBe(900);
   });
 
+  test("a javascript: URL in either link field is nulled out, not passed through", async () => {
+    const { compId, taskId, taskIdNum, compPilotId } = await setup();
+    const malicious = JSON.stringify({
+      source: "AirScore",
+      comp_url: "javascript:alert(document.cookie)",
+      task_url: "javascript:alert(document.cookie)",
+      results: [{ comp_pilot_id: compPilotId, rank: 3, total: 812 }],
+    });
+    await env.DB.prepare("UPDATE task SET official_results = ? WHERE task_id = ?")
+      .bind(malicious, taskIdNum)
+      .run();
+
+    const res = await request(
+      "GET",
+      `/api/comp/${compId}/task/${taskId}/score`
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { official_results: OfficialWire };
+    expect(body.official_results.comp_url).toBeNull();
+    expect(body.official_results.task_url).toBeNull();
+    // The rest of the annotation still serves — a bad link doesn't sink the row.
+    const sqid = encodeId(env.SQIDS_ALPHABET, compPilotId);
+    expect(body.official_results.ranks[sqid]).toEqual({ rank: 3, total: 812 });
+  });
+
   test("an unreadable column degrades to no annotation, not a failure", async () => {
     const { compId, taskId, taskIdNum } = await setup();
     await env.DB.prepare("UPDATE task SET official_results = ? WHERE task_id = ?")

@@ -2872,7 +2872,7 @@ export function createMapBoxProvider(
               .setLngLat([event.longitude, event.latitude])
               .setPopup(
                 new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                  <strong>${event.description}</strong><br>
+                  <strong>${escapeHtml(event.description)}</strong><br>
                   ${event.time.toLocaleTimeString()}
                 `)
               )

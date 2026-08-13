@@ -742,7 +742,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           </span>
           <div class="event-content">
             <span class="event-type">${getEventTypeLabel(event.type)}</span>
-            <span class="event-desc">${event.description}</span>
+            <span class="event-desc">${escapeHtml(event.description)}</span>
             <span class="event-meta">
               ${formatTime(event.time)} | ${formatAltitude(event.altitude).withUnit}
             </span>
@@ -1007,7 +1007,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       html += `<div class="rounded-lg bg-green-500/15 px-3 py-2 text-sm font-medium text-green-700">Goal</div>`;
     } else if (result.sequence.length > 0) {
       const lastTP = result.sequence[result.sequence.length - 1];
-      const tpName = currentTask.turnpoints[lastTP.taskIndex]?.waypoint.name || getTurnpointLabel(lastTP.taskIndex);
+      const tpName = escapeHtml(currentTask.turnpoints[lastTP.taskIndex]?.waypoint.name || getTurnpointLabel(lastTP.taskIndex));
       html += `<div class="rounded-lg bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-700">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`;
     } else {
       html += `<div class="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground">Not started</div>`;
@@ -1071,8 +1071,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const toTp = currentTask.turnpoints[leg.toTaskIndex];
       const fromLabel = getTurnpointLabel(leg.fromTaskIndex);
       const toLabel = getTurnpointLabel(leg.toTaskIndex);
-      const fromName = fromTp?.waypoint.name ? `${fromTp.waypoint.name} <span class="text-xs text-muted-foreground">(${fromLabel})</span>` : fromLabel;
-      const toName = toTp?.waypoint.name ? `${toTp.waypoint.name} <span class="text-xs text-muted-foreground">(${toLabel})</span>` : toLabel;
+      const fromName = fromTp?.waypoint.name ? `${escapeHtml(fromTp.waypoint.name)} <span class="text-xs text-muted-foreground">(${fromLabel})</span>` : fromLabel;
+      const toName = toTp?.waypoint.name ? `${escapeHtml(toTp.waypoint.name)} <span class="text-xs text-muted-foreground">(${toLabel})</span>` : toLabel;
       const legDist = formatDistance(leg.distance).withUnit;
       const icon = leg.completed
         ? '<span class="text-green-600">&#10003;</span>'
@@ -1093,7 +1093,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       for (const reaching of result.sequence) {
         const tp = currentTask.turnpoints[reaching.taskIndex];
         const tpLabel = getTurnpointLabel(reaching.taskIndex);
-        const tpName = tp?.waypoint.name || tpLabel;
+        const tpName = tp?.waypoint.name ? escapeHtml(tp.waypoint.name) : tpLabel;
         const timeStr = formatTime(reaching.time);
         const altStr = formatAltitude(reaching.altitude).withUnit;
 
@@ -1636,7 +1636,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       if (!ps.madeGoal && tr.bestProgress) statusBits.push(`<span>${formatDistance(tr.bestProgress.distanceToGoal).withUnit} from goal</span>`);
 
       const seq = tr.sequence.map(r => {
-        const name = currentTask?.turnpoints[r.taskIndex]?.waypoint.name || '';
+        const rawName = currentTask?.turnpoints[r.taskIndex]?.waypoint.name || '';
+        const name = rawName ? escapeHtml(rawName) : '';
         const reason = r.candidateCount > 1 ? ` <span class="text-muted-foreground">(chosen from ${r.candidateCount})</span>` : '';
         return `<span class="mr-3 whitespace-nowrap"><span class="text-muted-foreground">${formatTime(r.time)}</span> <span class="font-medium">${getTurnpointLabel(r.taskIndex)}</span>${name ? ` <span class="text-muted-foreground">${name}</span>` : ''}${reason}</span>`;
       }).join('');
