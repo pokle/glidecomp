@@ -431,3 +431,36 @@ test("narrow: the chart can be folded away to read the table", async () => {
   await toggle.click();
   await expect(pane).toBeVisible();
 });
+
+test("the pilot picker pins a highlight page-wide, through the URL", async () => {
+  await setViewport(1600, 1000);
+
+  // A real pilot from this report: the heatmap's top row reads "1. Name".
+  const heatmap = page.locator('[role="img"][aria-label^="Percentile heatmap"]');
+  await heatmap.scrollIntoViewIfNeeded();
+  const firstRow = heatmap.locator("div.group").first();
+  const name = ((await firstRow.innerText()).match(/^\s*\d+\.\s*(.+)$/m) ?? [])[1]?.trim();
+  expect(name).toBeTruthy();
+
+  // Pick them. The pin lands in the URL (a shareable reading of the task)
+  // and their heatmap row tints without any hover.
+  const box = page.getByRole("combobox", { name: "Highlight a pilot" });
+  await box.click();
+  await box.fill(name!.slice(0, Math.min(6, name!.length)));
+  await page.getByRole("option", { name: name! }).click();
+  await expect(page).toHaveURL(/[?&]pilot=/);
+  await page.mouse.move(5, 5); // no hover in play — the tint below is the pin
+  await expect(firstRow).toHaveClass(/bg-accent/);
+
+  // A fresh load of the pinned URL restores pick and tint (the shared link).
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
+  await expect(page.getByRole("combobox", { name: "Highlight a pilot" })).toHaveValue(name!);
+  await heatmap.scrollIntoViewIfNeeded();
+  await expect(heatmap.locator("div.group").first()).toHaveClass(/bg-accent/);
+
+  // ✕ clears pin, URL and tint — leave the page as found (serial suite).
+  await page.getByRole("button", { name: `Stop highlighting ${name}` }).click();
+  await expect(page).not.toHaveURL(/[?&]pilot=/);
+  await expect(heatmap.locator("div.group").first()).not.toHaveClass(/bg-accent/);
+});
