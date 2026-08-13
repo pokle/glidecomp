@@ -508,6 +508,15 @@ const essMargin: MetricComputer = {
 // 23 — race.final_glide_init
 // ---------------------------------------------------------------------------
 
+/**
+ * Legs shorter than this are ignored when anchoring the final-glide distance
+ * gate. On the standard "ESS at goal" layout the last leg is the zero-length
+ * hop between the co-located ESS and goal cylinders, and 1.5 × 0 would reject
+ * every pilot (#626). The final glide runs from the last climb back up the
+ * course, so the gate belongs on the last leg of real length.
+ */
+const MIN_FINAL_LEG_METERS = 1000;
+
 const finalGlideInit: MetricComputer = {
   id: 'race.final_glide_init',
   label: 'Final glide committed to when leaving the last climb',
@@ -520,14 +529,16 @@ const finalGlideInit: MetricComputer = {
     'height at which they leave the last climb. At the last climb of the pilot before ESS, or ' +
     'before the landing, we divide the distance to goal by their height above goal. That is the ' +
     'glide ratio they committed to. 8 means they left and needed 8:1 to make goal. The value ' +
-    'counts only when that climb ended within 1.5 times the distance of the final leg from ' +
-    'goal. There is no expected direction: a marginal glide wins if it connects, and loses if ' +
-    'it does not.',
+    'counts only when that climb ended within 1.5 times the length of the last course leg ' +
+    'longer than 1 km from goal — when ESS and goal share a waypoint, the zero-length hop ' +
+    'between them is not that leg. There is no expected direction: a marginal glide wins if ' +
+    'it connects, and loses if it does not.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);
     const goalWp = goalIdx >= 0 ? field.task.turnpoints[goalIdx].waypoint : null;
     const goalAlt = resolveGoalAltitude(field.task);
-    const lastLeg = field.legs.length > 0 ? field.legs[field.legs.length - 1] : null;
+    const lastLeg =
+      [...field.legs].reverse().find((l) => l.optimizedMeters > MIN_FINAL_LEG_METERS) ?? null;
     const maxDistance = lastLeg ? 1.5 * lastLeg.optimizedMeters : null;
 
     const perPilot: PilotMetricValue[] = [];

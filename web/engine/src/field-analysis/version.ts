@@ -244,4 +244,16 @@
 //     are bit-identical; only the day.wind tables/series change. The bump
 //     rolls stored reports onto the new speeds on their next lazy
 //     revalidation.
-export const FIELD_ANALYSIS_VERSION = 22;
+// v23: race.final_glide_init anchors its distance gate to the last course leg
+//     LONGER THAN 1 KM instead of unconditionally the final leg (#626). On the
+//     standard "ESS at goal" layout — a goal cylinder on the same waypoint as
+//     ESS — the final leg is the zero-length ESS→goal hop, so the gate was
+//     1.5 × ≈0 m and the metric returned not-applicable for every pilot (five
+//     of the six Corryong 2026 tasks measured 0 of the field). The gate's
+//     intent is unchanged: a last climb must have ended within 1.5× the real
+//     final leg's length of goal to count as a final-glide decision. Tasks
+//     whose ESS is itself the last turnpoint already anchored to a real leg
+//     and are bit-identical; a task with NO leg over 1 km stays all-n/a as
+//     before. Values appear where there were none, so the bump rolls stored
+//     reports onto the wider coverage on their next lazy revalidation.
+export const FIELD_ANALYSIS_VERSION = 23;

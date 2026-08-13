@@ -44,22 +44,23 @@ import {
  * ESS (15 km), GOALWP (22 km east). The long final leg keeps the
  * final-glide-init distance gate (1.5× last-leg distance) satisfiable.
  */
+const tp = (
+  eastMeters: number,
+  radius: number,
+  name: string,
+  type?: 'TAKEOFF' | 'SSS' | 'ESS',
+) => ({
+  ...(type ? { type } : {}),
+  radius,
+  waypoint: {
+    name,
+    lat: TEST_ORIGIN.lat,
+    lon: TEST_ORIGIN.lon + eastMeters * DEG_LON_PER_M,
+    altSmoothed: 300,
+  },
+});
+
 function makeRaceTask(): XCTask {
-  const tp = (
-    eastMeters: number,
-    radius: number,
-    name: string,
-    type?: 'TAKEOFF' | 'SSS' | 'ESS',
-  ) => ({
-    ...(type ? { type } : {}),
-    radius,
-    waypoint: {
-      name,
-      lat: TEST_ORIGIN.lat,
-      lon: TEST_ORIGIN.lon + eastMeters * DEG_LON_PER_M,
-      altSmoothed: 300,
-    },
-  });
   return {
     taskType: 'CLASSIC',
     version: 1,
@@ -347,6 +348,101 @@ describe('race.final_glide_init', () => {
   it('is null without a qualifying post-SSS climb or without a start', () => {
     expect(valueOf(out, 'bravo.igc')).toBeNull(); // started, but never climbed
     expect(valueOf(out, 'delta.igc')).toBeNull(); // never started
+  });
+});
+
+describe('race.final_glide_init distance-gate anchoring (#626)', () => {
+  // Alpha's shape from the synthetic field: climb to ~1800 m at 14 km east,
+  // then glide. The task variants below move goal to 15 km east, so the
+  // climb exits ~1 km short of goal.
+  const alphaFixes = [
+    ...straightFixes(0, 700, 0, 1200, 20, 0),
+    ...circlingFixes(710, 300, 14_000, 1200, 2),
+    ...straightFixes(1020, 400, 14_000, 1800, 15, -2.5),
+  ];
+  const preEssSeq = [
+    reach(1, 610, 5_000, 1450),
+    reach(2, 1210, 10_000, 1300),
+    reach(3, 1810, 15_000, 1500),
+  ];
+
+  function expectedRatio(field: FieldContext, goalIdx: number): number {
+    const alpha = field.pilots.find((p) => p.trackFile === 'alpha.igc')!;
+    expect(alpha.thermals.length).toBeGreaterThan(0);
+    const lastThermal = alpha.thermals[alpha.thermals.length - 1];
+    const exitFix = alpha.fixes[lastThermal.endIndex];
+    const goalWp = field.task.turnpoints[goalIdx].waypoint;
+    const dist = ellipsoidDistance(exitFix.latitude, exitFix.longitude, goalWp.lat, goalWp.lon);
+    return dist / (lastThermal.endAltitude - 300);
+  }
+
+  it('computes when ESS and goal are co-located (zero-length final leg)', () => {
+    // The standard "ESS at goal" layout: the goal cylinder sits on the same
+    // waypoint as ESS, so the final ESS→goal leg is zero-length. The gate
+    // must anchor to the MIDTP→ESS leg, not to 1.5 × 0.
+    const task: XCTask = {
+      taskType: 'CLASSIC',
+      version: 1,
+      turnpoints: [
+        tp(0, 400, 'LAUNCH', 'TAKEOFF'),
+        tp(5_000, 2_000, 'START', 'SSS'),
+        tp(10_000, 400, 'MIDTP'),
+        tp(15_000, 1_000, 'END', 'ESS'),
+        tp(15_000, 1_000, 'GOALWP'),
+      ],
+      sss: { type: 'RACE', direction: 'ENTER' },
+      goal: { type: 'CYLINDER' },
+    };
+    const seq = [...preEssSeq, reach(4, 1900, 15_000, 400)];
+    const field = makeTestField(
+      [{ name: 'alpha', fixes: alphaFixes, turnpointResult: seqResult(seq, 3) }],
+      { task },
+    );
+    const out = metric('race.final_glide_init').compute(field);
+    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expectedRatio(field, 4), 6);
+  });
+
+  it('computes when ESS is itself the final turnpoint', () => {
+    const task: XCTask = {
+      taskType: 'CLASSIC',
+      version: 1,
+      turnpoints: [
+        tp(0, 400, 'LAUNCH', 'TAKEOFF'),
+        tp(5_000, 2_000, 'START', 'SSS'),
+        tp(10_000, 400, 'MIDTP'),
+        tp(15_000, 1_000, 'END', 'ESS'),
+      ],
+      sss: { type: 'RACE', direction: 'ENTER' },
+      goal: { type: 'CYLINDER' },
+    };
+    const field = makeTestField(
+      [{ name: 'alpha', fixes: alphaFixes, turnpointResult: seqResult(preEssSeq, 3) }],
+      { task },
+    );
+    const out = metric('race.final_glide_init').compute(field);
+    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expectedRatio(field, 3), 6);
+  });
+
+  it('stays not-applicable for everyone when no leg clears 1 km', () => {
+    const task: XCTask = {
+      taskType: 'CLASSIC',
+      version: 1,
+      turnpoints: [
+        tp(0, 400, 'LAUNCH', 'TAKEOFF'),
+        tp(500, 200, 'START', 'SSS'),
+        tp(800, 100, 'END', 'ESS'),
+        tp(800, 100, 'GOALWP'),
+      ],
+      sss: { type: 'RACE', direction: 'ENTER' },
+      goal: { type: 'CYLINDER' },
+    };
+    const seq = [reach(1, 610, 500, 1450), reach(2, 1810, 800, 1500)];
+    const field = makeTestField(
+      [{ name: 'alpha', fixes: alphaFixes, turnpointResult: seqResult(seq, 2) }],
+      { task },
+    );
+    const out = metric('race.final_glide_init').compute(field);
+    for (const v of out.perPilot) expect(v.value).toBeNull();
   });
 });
 
