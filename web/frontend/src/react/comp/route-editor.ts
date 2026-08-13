@@ -7,6 +7,7 @@
 import type { SSSConfig, Turnpoint, TurnpointType, UnitPreferences, XCTask } from "@glidecomp/engine";
 import { formatDistance, toXctskJSON } from "@glidecomp/engine";
 import { utcToZonedHHMM, zoneNameWithOffset } from "../lib/time";
+import { csvEscape } from "./csv";
 
 // ---------------------------------------------------------------------------
 // Grid rows
@@ -63,11 +64,6 @@ export function parseCoords(text: string): { lat: number; lon: number } | null {
   const lon = Number(parts[1]);
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
   return { lat, lon };
-}
-
-/** Quote a CSV field only when it needs it (comma, quote or newline). */
-function csvField(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 /** Feature-kind words that don't identify the place ("Mount Bogong" → BOGONG). */
@@ -163,10 +159,10 @@ export function turnpointsToCSV(turnpoints: Turnpoint[]): string {
   const header = "Name,Latitude,Longitude,Description,Proximity Distance,Altitude";
   const rows = turnpoints.map((tp) =>
     [
-      csvField(tp.waypoint.name),
+      csvEscape(tp.waypoint.name),
       tp.waypoint.lat.toFixed(6),
       tp.waypoint.lon.toFixed(6),
-      csvField(tp.waypoint.description ?? ""),
+      csvEscape(tp.waypoint.description ?? ""),
       String(tp.radius),
       String(Math.round(tp.waypoint.altSmoothed ?? 0)),
     ].join(",")

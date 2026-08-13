@@ -86,6 +86,23 @@ function toTaskScoreWire(
  * common case (no official record) and for an unreadable column, which is
  * an annotation not worth failing a scores page over.
  */
+/**
+ * Only ever hand an `http(s):` URL to the client — `task.official_results`
+ * is populated by an offline importer, not a live route, but the wire
+ * response is rendered straight into an anchor's `href` on public score
+ * pages, so a `javascript:`-scheme (or any other non-web-scheme) value must
+ * never reach it.
+ */
+function safeExternalUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 function officialResultsWire(
   raw: string | null,
   alphabet: string
@@ -100,8 +117,8 @@ function officialResultsWire(
     }
     return {
       source: stored.source ?? "AirScore",
-      comp_url: stored.comp_url ?? null,
-      task_url: stored.task_url ?? null,
+      comp_url: safeExternalUrl(stored.comp_url),
+      task_url: safeExternalUrl(stored.task_url),
       ranks,
     };
   } catch (err) {
