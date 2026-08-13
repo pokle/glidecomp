@@ -11,10 +11,15 @@
  * live.
  *
  * Deliberately just the behaviour and its verdict chip: the numbers are one
- * click below, and a digest that repeats them stops being a digest. The chip
- * matters — including "could be chance", which is exactly the honesty a
- * headline must not shed. Same ordering as the ranking (rankMetrics), so the
- * two can never disagree about what mattered.
+ * click below, and a digest that repeats them stops being a digest. Same
+ * ordering as the ranking (rankMetrics), so the two can never disagree about
+ * what mattered.
+ *
+ * Only verdicts of weak or better make the cut — a headline must not shout
+ * a "could be chance" reading, however large its ρ. When nothing clears
+ * that bar the card says so instead of vanishing: "no clear pattern" is
+ * itself the day's finding (a lottery day), and a digest that only appears
+ * on tidy days would quietly overclaim on the rest.
  *
  * Entries use a stretched link (the anchor's ::after covers the tile) so the
  * whole chip-and-label is clickable while the link's accessible name stays
@@ -29,6 +34,10 @@ import type { MetricReport } from "./types";
  * already treats as "the ones worth opening". */
 const DIGEST_COUNT = 3;
 
+/** Verdicts loud enough for the headline: weak and above. Below that the
+ * chip would be doing all the work of un-saying the claim beside it. */
+const DIGEST_VERDICTS = new Set(["strong", "moderate", "weak"]);
+
 export function FindingsDigest({
   metrics,
   onPickMetric,
@@ -38,8 +47,22 @@ export function FindingsDigest({
    * the scrolling; this makes the chart follow). */
   onPickMetric?: (id: Key) => void;
 }) {
-  const top = rankMetrics(metrics).slice(0, DIGEST_COUNT);
-  if (top.length === 0) return null;
+  const top = rankMetrics(metrics)
+    .filter((r) => DIGEST_VERDICTS.has(r.correlation.verdict))
+    .slice(0, DIGEST_COUNT);
+
+  if (top.length === 0) {
+    return (
+      <Card aria-labelledby="findings-digest-heading" className="gap-2">
+        <h2 id="findings-digest-heading" className="text-lg font-semibold">
+          What separated the field
+        </h2>
+        <p className="text-base text-muted-foreground">
+          Can't say — no clear pattern
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <Card aria-labelledby="findings-digest-heading" className="gap-3">
