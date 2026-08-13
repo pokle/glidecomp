@@ -153,6 +153,10 @@ function aggregateSectors(shape: ThermalShapeSummary): { bearing: number; mean: 
 const ROSE_SIZE = 320;
 const ROSE_R = 132;
 
+/** Census rows shown before "Show all …": the most-shared thermals — enough
+ * to read the day's pattern, few enough that the rose leads the section. */
+const TOP_THERMALS = 10;
+
 // The map backdrop stays a separate lazy chunk: mapbox-gl (and its CSS) load
 // only when someone flips the toggle, and never in the SSR entry.
 const ThermalRoseMap = lazy(() => import("./ThermalRoseMap"));
@@ -778,7 +782,36 @@ export function ThermalsPanel({
   );
   const maxMeanClimb = Math.max(0, ...climbByShape.values());
 
-  const census = (
+  // The census opens on the most-shared thermals so the rose — the actual
+  // reading — leads the section instead of competing with forty rows. Order
+  // stays chronological (the stored list's order); "top" only decides which
+  // rows show. The selected thermal always stays visible: collapsing the
+  // list must never take the detail pane's subject out of the census.
+  const [showAll, setShowAll] = useState(false);
+  const topIds = useMemo(() => {
+    const ranked = [...shapes].sort(
+      (a, b) => b.pilotCount - a.pilotCount || a.startMs - b.startMs
+    );
+    return new Set(ranked.slice(0, TOP_THERMALS).map((s) => s.id));
+  }, [shapes]);
+  const truncatable = shapes.length > TOP_THERMALS;
+  const collapsed = truncatable && !showAll;
+  const visibleShapes = collapsed
+    ? shapes.filter((s) => topIds.has(s.id) || s.id === selected.id)
+    : shapes;
+
+  /** The intro's first sentence, for a given shown-count. */
+  const censusIntro = (count: number) =>
+    count < thermals.totalShapeCount
+      ? `The ${count} most-shared of ${thermals.totalShapeCount} multi-pilot thermals, reconstructed by pooling every pilot's track through the same climb.`
+      : `${count} multi-pilot thermal${count === 1 ? "" : "s"}, reconstructed by pooling every pilot's track through the same climb.`;
+
+  // One table for both renders: the interactive census on screen, and — only
+  // while the census is truncated — a non-interactive print copy of every
+  // row, because this report prints whole (the family Disclosures force
+  // their panels open in print for the same reason) and paper has no
+  // "Show all" to press.
+  const censusTable = (rows: ThermalShapeSummary[], interactive: boolean) => (
     <Table
       aria-label="Reconstructed thermals"
       scrollLabel="Reconstructed thermals"
@@ -789,16 +822,20 @@ export function ThermalsPanel({
         "-mx-5 w-auto border-y",
         "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
       )}
-      selectionMode="single"
-      selectionBehavior="replace"
-      disallowEmptySelection
-      selectedKeys={[selected.id]}
-      onSelectionChange={(keys: Selection) => {
-        if (keys !== "all") {
-          const key = [...keys][0];
-          if (key !== undefined) setSelectedId(Number(key));
-        }
-      }}
+      {...(interactive
+        ? {
+            selectionMode: "single" as const,
+            selectionBehavior: "replace" as const,
+            disallowEmptySelection: true,
+            selectedKeys: [selected.id],
+            onSelectionChange: (keys: Selection) => {
+              if (keys !== "all") {
+                const key = [...keys][0];
+                if (key !== undefined) setSelectedId(Number(key));
+              }
+            },
+          }
+        : {})}
     >
       <TableHeader>
         <Column isRowHeader>Start</Column>
@@ -808,7 +845,7 @@ export function ThermalsPanel({
         <Column>Strongest side</Column>
       </TableHeader>
       <TableBody>
-        {shapes.map((s) => (
+        {rows.map((s) => (
           <Row key={s.id} id={s.id}>
             <Cell>
               <time dateTime={new Date(s.startMs).toISOString()}>
@@ -841,12 +878,41 @@ export function ThermalsPanel({
     </Table>
   );
 
+  const census = (
+    <div>
+      <div className={collapsed ? "print:hidden" : undefined}>
+        {censusTable(visibleShapes, true)}
+      </div>
+      {collapsed ? (
+        <div aria-hidden className="hidden print:block">
+          {censusTable(shapes, false)}
+        </div>
+      ) : null}
+      {truncatable ? (
+        <div className="mt-2 print:hidden">
+          <Button variant="ghost" size="sm" onPress={() => setShowAll((v) => !v)}>
+            {showAll
+              ? `Show the ${TOP_THERMALS} most shared`
+              : `Show all ${shapes.length}`}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {shapes.length < thermals.totalShapeCount
-          ? `The ${shapes.length} most-shared of ${thermals.totalShapeCount} multi-pilot thermals, reconstructed by pooling every pilot's track through the same climb.`
-          : `${shapes.length} multi-pilot thermal${shapes.length === 1 ? "" : "s"}, reconstructed by pooling every pilot's track through the same climb.`}{" "}
+        {/* The count states what the census is SHOWING (top-10 collapsed,
+            the stored set expanded) against the day's true total, so the
+            sentence stays honest in every state — including print, where
+            the hidden rows come back and the screen count would be a lie. */}
+        <span className={collapsed ? "print:hidden" : undefined}>
+          {censusIntro(collapsed ? TOP_THERMALS : shapes.length)}
+        </span>
+        {collapsed ? (
+          <span className="hidden print:inline">{censusIntro(shapes.length)}</span>
+        ) : null}{" "}
         Everything shown is measured from the tracks — no fitted lift model.
         {/* An instruction to interact — meaningless on paper. */}
         <span className="print:hidden"> Select a thermal to see it in detail.</span>

@@ -369,6 +369,14 @@ test("narrow: the thermals census drives its own pinned pane", async () => {
     .locator('[role="region"][aria-labelledby]')
     .first();
 
+  // The census opens on the ten most-shared thermals; the last stored one is
+  // behind "Show all N". Expand first, so the test keeps meaning what it
+  // says: selecting the LAST thermal swaps a pane that is on screen.
+  const showAll = census
+    .locator("..")
+    .getByRole("button", { name: /^Show all \d+$/ });
+  if ((await showAll.count()) > 0) await showAll.click();
+
   // Selecting the LAST thermal must swap a pane that is on screen — the same
   // contract as the ranking's chart, via the same shared MasterDetail.
   const rows = census.locator("tbody tr");
