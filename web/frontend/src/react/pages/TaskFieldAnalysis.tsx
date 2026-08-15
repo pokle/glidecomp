@@ -72,6 +72,7 @@ import {
   METHOD_NOTE_ID,
 } from "../field-analysis/Footnotes";
 import { PilotHighlightProvider } from "../field-analysis/PilotHighlightContext";
+import { PilotPicker } from "../field-analysis/PilotPicker";
 import { PercentileHeatmap } from "../field-analysis/charts/PercentileHeatmap";
 import { StyleClusters } from "../field-analysis/StyleClusters";
 import { ThermalsPanel } from "../field-analysis/thermals/ThermalsPanel";
@@ -563,34 +564,46 @@ export function TaskFieldAnalysis() {
         />
       ) : null}
 
-      {classes.length > 1 ? (
+      {/* The provider starts here, not at the report body: the pilot picker
+          sits on the control row beside the class select and pins into the
+          same context every chart and table below reads. */}
+      <PilotHighlightProvider>
+      {classes.length > 1 || (active && report) ? (
         <div className="mt-4">
-          {/* The select is a control, so print swaps it for a plain
-              statement of which class this printout covers. */}
-          <div className="print:hidden">
-            <SimpleSelect
-              ariaLabel="Pilot class"
-              value={selectedClass}
-              onChange={(value) => {
-                // In the URL so a link to a specific class is shareable.
-                const next = new URLSearchParams(searchParams);
-                next.set("class", value);
-                setSearchParams(next, { replace: true });
-              }}
-              options={classes.map((c) => ({
-                value: c.pilot_class,
-                label: c.pilot_class,
-              }))}
-            />
+          {/* Controls, so print swaps them for a plain statement of which
+              class this printout covers. (A pinned pilot needs no printed
+              statement — the tint is on the rows either way.) */}
+          <div className="flex flex-wrap items-center gap-3 print:hidden">
+            {classes.length > 1 ? (
+              <SimpleSelect
+                ariaLabel="Pilot class"
+                value={selectedClass}
+                onChange={(value) => {
+                  // In the URL so a link to a specific class is shareable.
+                  const next = new URLSearchParams(searchParams);
+                  next.set("class", value);
+                  setSearchParams(next, { replace: true });
+                }}
+                options={classes.map((c) => ({
+                  value: c.pilot_class,
+                  label: c.pilot_class,
+                }))}
+              />
+            ) : null}
+            {/* Pin one pilot's highlight page-wide — the reader finding
+                themselves in the field. URL-backed (?pilot=), like the
+                class. */}
+            {active && report ? <PilotPicker pilots={report.pilots} /> : null}
           </div>
-          <p className="hidden text-sm print:block">
-            Pilot class: <strong>{selectedClass}</strong>
-          </p>
+          {classes.length > 1 ? (
+            <p className="hidden text-sm print:block">
+              Pilot class: <strong>{selectedClass}</strong>
+            </p>
+          ) : null}
         </div>
       ) : null}
 
       {active && report ? (
-        <PilotHighlightProvider>
           <div className="mt-6 space-y-8">
             <div id="analysis-basis" className="scroll-mt-20">
               <AnalysisBasis
@@ -747,8 +760,8 @@ export function TaskFieldAnalysis() {
               <MetricGlossary entries={report.metrics} nested />
             </Footnotes>
           </div>
-        </PilotHighlightProvider>
       ) : null}
+      </PilotHighlightProvider>
       </div>
     </div>
   );
