@@ -7,10 +7,11 @@ name: Deploy
 # branch-preview and production paths can never drift — the drift that let the
 # git-sha smoke check silently rot on master while it was green on branches.
 #
-# Job graph: `test` and `e2e` start together; `deploy` waits on `test`. E2E is
-# the long pole (~4 min against ~1.5 min for the unit job), so making it queue
-# behind `test` added the whole test job to every build's wall clock while
-# consuming nothing it produced — it builds its own stack from the checkout.
+# Job graph: `test`, `e2e` and `e2e-ssr` all start together; `deploy` waits on
+# `test`. E2E is the long pole (~4 min against ~1.5 min for the unit job), so
+# making it queue behind `test` added the whole test job to every build's wall
+# clock while consuming nothing it produced — each builds its own stack from
+# the checkout.
 # The trade is that a commit failing unit tests still burns E2E minutes; the
 # deploy is still gated, so nothing reaches Cloudflare on a red suite.
 on:
@@ -171,6 +172,118 @@ jobs:
           # test-results/ holds the per-failure trace.zip files referenced by
           # playwright.config.ts's `trace: "retain-on-failure"`. They're
           # separate from the HTML report, so include both paths.
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # The OTHER e2e suite: e2e/ssr.spec.ts against the BUILT output served by the
+  # real Pages runtime (wrangler pages dev + the SSR Function), which is the
+  # only place server rendering happens at all — the dev server the `e2e` job
+  # drives serves the SPA shell with no SSR, so nothing in that job can fail
+  # when a public comp page stops server-rendering.
+  #
+  # Its own job rather than a second step on `e2e`: it builds the frontend
+  # twice over (SPA + SSR bundle) before it can serve anything, so bolting it
+  # on would add that build to the long pole every run. Parallel it costs
+  # nothing extra in wall clock, and its report uploads under its own name.
+  e2e-ssr:
+    name: E2E Tests (SSR)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        id: setup-bun
+        uses: oven-sh/setup-bun@v2
+        continue-on-error: true
+
+      # See the note on the Test job — the release CDN 500s often enough to
+      # cost a run, and the retry is the whole fix.
+      - name: Setup Bun (retry)
+        if: steps.setup-bun.outcome == 'failure'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      # BETTER_AUTH_URL is :3100 here, not :3000 — this suite's frontend is
+      # `wrangler pages dev` on the SSR port. Nothing in ssr.spec.ts signs in
+      # today, but a mismatched origin is exactly how a signed-in assertion
+      # added later would fail with INVALID_ORIGIN and no clue why.
+      #
+      # No VITE_MAPBOX_TOKEN, deliberately. The SPA e2e job needs a fake one
+      # because e2e/fixtures/mapbox.ts serves every Mapbox response from
+      # recordings; this suite intercepts nothing, so a baked fake token would
+      # buy real 401s and a slower `networkidle` instead of mapbox-gl bailing
+      # out quietly.
+      - name: Create auth .dev.vars
+        run: |
+          cat > web/workers/auth-api/.dev.vars << 'EOF'
+          GOOGLE_CLIENT_ID=dummy-for-ci
+          GOOGLE_CLIENT_SECRET=dummy-for-ci
+          BETTER_AUTH_SECRET=ci-only-not-for-production-J7Oz93uJjYD6f2bkvkO220QquD7a1jUOaSDrrWsDUOvp
+          BETTER_AUTH_URL=http://localhost:3100
+          EOF
+
+      # Same reason as the E2E job: run wrangler directly so a crash shows its
+      # own stderr instead of bun's buffered, prefixed output.
+      - name: Probe auth-api startup
+        run: |
+          cd web/workers/auth-api
+          bunx wrangler --version
+          CI=true bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state
+
+      - name: Run SSR E2E tests
+        run: bun run test:e2e:ssr
+
+      - name: Dump wrangler logs on failure
+        if: failure()
+        run: |
+          echo "=== ~/.config/.wrangler/logs ==="
+          ls -la ~/.config/.wrangler/logs/ 2>/dev/null || echo "(no logs dir)"
+          for f in ~/.config/.wrangler/logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "--- $f ---"
+            cat "$f"
+          done
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # A distinct name: upload-artifact v4 refuses a duplicate, so sharing
+          # "playwright-report" with the E2E job would fail whichever finished
+          # second — on a green run.
+          name: playwright-report-ssr
           path: |
             playwright-report/
             test-results/
