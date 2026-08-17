@@ -34,6 +34,19 @@ one). A failing suite still fails the whole invocation, so the gate is unchanged
 Interleaved output is the cost; each line is prefixed with its package name, and
 `test:comp` / `test:auth` / `test:frontend` still run one suite on its own.
 
+There are **two** Playwright suites, and they need separate commands because
+they need different servers:
+
+| Command | Serves the frontend with | Covers |
+|---|---|---|
+| `bun run test:e2e` | the Vite dev server (+ `astro dev` for the content pages) | everything except `e2e/ssr.spec.ts` |
+| `bun run test:e2e:ssr` | `wrangler pages dev` over the BUILT output | `e2e/ssr.spec.ts` only — server-rendered HTML, canonical redirects, the sitemap, clean hydration |
+
+CI runs both, as the parallel `E2E Tests` and `E2E Tests (SSR)` jobs in
+`.github/workflows/deploy.yml`. Run both locally before a PR that touches
+anything the eight server-rendered comp pages import — the dev server never
+server-renders, so `test:e2e` alone cannot fail when SSR breaks.
+
 ## E2E on a fresh clone
 
 - Playwright's Chromium installs itself. `test:e2e` and `test:e2e:ssr` run
