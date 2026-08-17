@@ -37,8 +37,11 @@
  * The fixture — a private competition with one routed, scored task — is
  * e2e/fixtures/scored-comp.ts, which explains why it cannot be a seeded comp.
  */
+import { readFile } from "fs/promises";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
-import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
+import { FRONTEND_URL, SUPER_ADMIN, e2eCompName } from "./fixtures/stack";
 import {
   createScoredComp,
   openClass,
@@ -46,8 +49,16 @@ import {
   readFreshScore,
   readScore,
   FLYING_PILOTS,
+  TASK_DATE,
   type ScoredComp,
 } from "./fixtures/scored-comp";
+
+/** The bundled comp the fixtures build from — see fixtures/scored-comp.ts. */
+const SAMPLE_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "web/samples/comps/unungra-cup-2020-open-t4"
+);
 
 const BASE_URL = FRONTEND_URL;
 
@@ -316,5 +327,100 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     expect(scoreAfter!.penalty_reason).toBe(reason);
     // The deduction reaches the total, which is the only number a pilot reads.
     expect(scoreAfter!.total_score).toBeLessThan(scoreBefore!.total_score);
+  });
+});
+
+// ── The other format: an open-distance comp's settings (issue #633) ──────────
+
+/**
+ * Any sentence naming a GAP parameter. The audit log for an open-distance
+ * competition must contain none of them from a settings save: the dialog does
+ * not offer a single one of these knobs for this format, so an organiser who
+ * was never shown them cannot have moved them.
+ */
+const GAP_KNOB_SENTENCE =
+  /(leading \(departure\) points|arrival points|HG distance difficulty|nominal (distance|time)|minimum distance|leading-time ratio|distance origin|jump-the-gun|ESS-but-not-goal|scoring class|GAP scoring parameters)/;
+
+test.describe("an open-distance comp's settings save", () => {
+  let admin: APIRequestContext;
+  let compId: string;
+
+  test.beforeAll(async ({ playwright }) => {
+    admin = await playwright.request.newContext({ baseURL: BASE_URL });
+    const signIn = await admin.post("/api/auth/dev-login", { data: SUPER_ADMIN });
+    expect(signIn.ok(), "super admin dev-login").toBeTruthy();
+
+    const compRes = await admin.post("/api/comp", {
+      data: {
+        name: e2eCompName("open distance settings"),
+        category: "hg",
+        pilot_classes: ["open"],
+        scoring_format: "open_distance",
+      },
+    });
+    expect(compRes.ok(), await compRes.text()).toBeTruthy();
+    compId = ((await compRes.json()) as { comp_id: string }).comp_id;
+
+    // An open-distance task is a single TAKEOFF turnpoint — the format's own
+    // validation rejects a full route. Borrow the scored fixture's launch so
+    // the comp has a located task (and therefore a derivable timezone).
+    const route = JSON.parse(
+      await readFile(resolve(SAMPLE_DIR, "task.xctsk"), "utf8")
+    ) as { turnpoints: Array<{ waypoint: unknown }> };
+    const taskRes = await admin.post(`/api/comp/${compId}/task`, {
+      data: {
+        name: "Open distance day",
+        task_date: TASK_DATE,
+        pilot_classes: ["open"],
+        xctsk: {
+          taskType: "OPEN-DISTANCE",
+          version: 1,
+          earthModel: "WGS84",
+          turnpoints: [
+            { type: "TAKEOFF", radius: 400, waypoint: route.turnpoints[0].waypoint },
+          ],
+        },
+      },
+    });
+    expect(taskRes.ok(), await taskRes.text()).toBeTruthy();
+  });
+
+  test.afterAll(async () => {
+    if (compId) await admin.delete(`/api/comp/${compId}`);
+    await admin.dispose();
+  });
+
+  test("offers no GAP knobs, and logs no GAP changes when saved", async ({ page }) => {
+    await devLogin(page);
+    await page.goto(`${BASE_URL}/comp/${compId}`);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("heading", { name: "Competition Settings" })
+    ).toBeVisible();
+
+    // The premise: this format hides the Advanced disclosure entirely, so
+    // there is no way through this screen to change a GAP parameter…
+    await expect(dialog.getByText("Advanced scoring settings")).toHaveCount(0);
+    // The format picker (a RAC Select — its trigger is a button showing the
+    // chosen option) confirms this really is the open-distance branch, so the
+    // absence above is that branch's doing and not a dialog that failed to
+    // render.
+    await expect(
+      dialog.getByText("Open distance — fly as far as possible").first()
+    ).toBeVisible();
+
+    // …yet the dialog submits gap_params regardless, so this save used to
+    // announce the leading and arrival points of a formula this competition
+    // does not score with at all (issue #633).
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+
+    await page.goto(`${BASE_URL}/comp/${compId}`);
+    const activity = page.locator("#activity");
+    const expand = activity.getByRole("button", { name: "Show all activity" });
+    await expect(expand).toBeVisible({ timeout: 20_000 });
+    await expand.click();
+    await expect(activity.getByText(GAP_KNOB_SENTENCE)).toHaveCount(0);
   });
 });

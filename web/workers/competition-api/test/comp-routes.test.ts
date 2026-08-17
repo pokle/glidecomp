@@ -1,7 +1,13 @@
 import { env } from "cloudflare:test";
 import { describe, expect, test, beforeEach } from "vitest";
 import { defaultsFor } from "@glidecomp/engine";
-import { request, authRequest, createComp, createTask, clearCompData } from "./helpers";
+import {
+  request,
+  authRequest,
+  createComp,
+  createTask,
+  clearCompData,
+} from "./helpers";
 import { decodeId, encodeId } from "../src/sqids";
 
 const ALPHABET = env.SQIDS_ALPHABET;
@@ -647,6 +653,46 @@ describe("PATCH /api/comp/:comp_id", () => {
       expect(await inputsRev(taskId)).toBe(revBefore);
     });
   }
+
+  test("an open-distance comp's first save is silent too", async () => {
+    // The Settings dialog HIDES the Advanced section for an open-distance
+    // comp but still submits gap_params, so an organiser who never sees a
+    // GAP knob used to get the same phantom leading/arrival lines — on a
+    // competition whose scores those parameters do not touch at all.
+    const compId = await createComp({
+      category: "hg",
+      scoring_format: "open_distance",
+    });
+    // An open-distance task is one TAKEOFF turnpoint — the full sample route
+    // is rejected by the format's own validation.
+    const sample = JSON.parse(env.SAMPLE_TASK_XCTSK) as {
+      turnpoints: Array<{ radius: number; waypoint: unknown }>;
+    };
+    const taskId = decodeId(
+      ALPHABET,
+      await createTask(compId, {
+        xctsk: {
+          taskType: "OPEN-DISTANCE",
+          version: 1,
+          earthModel: "WGS84",
+          turnpoints: [
+            { type: "TAKEOFF", radius: 400, waypoint: sample.turnpoints[0].waypoint },
+          ],
+        },
+      })
+    )!;
+    const revBefore = await inputsRev(taskId);
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      scoring_format: "open_distance",
+      gap_params: untouchedSettings("hg"),
+    });
+    expect(res.status).toBe(200);
+
+    expect(await compAuditLines(before)).toEqual([]);
+    expect(await inputsRev(taskId)).toBe(revBefore);
+  });
 
   test("a save that changes only the nominal distance logs only that", async () => {
     const compId = await createComp({ category: "hg" });
