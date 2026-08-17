@@ -1,9 +1,49 @@
 import { env } from "cloudflare:test";
 import { describe, expect, test, beforeEach } from "vitest";
-import { request, authRequest, createComp, createTask, clearCompData } from "./helpers";
-import { encodeId } from "../src/sqids";
+import { defaultsFor } from "@glidecomp/engine";
+import {
+  request,
+  authRequest,
+  createComp,
+  createTask,
+  clearCompData,
+} from "./helpers";
+import { decodeId, encodeId } from "../src/sqids";
 
 const ALPHABET = env.SQIDS_ALPHABET;
+
+/**
+ * Comp-level audit sentences, oldest first. Pass the id from {@link lastAuditId}
+ * to read only what a particular request wrote — creating the comp and its
+ * first task both log lines of their own.
+ */
+async function compAuditLines(afterId = 0): Promise<string[]> {
+  const rows = await env.DB.prepare(
+    `SELECT description FROM audit_log
+     WHERE subject_type = 'comp' AND audit_id > ? ORDER BY audit_id`
+  )
+    .bind(afterId)
+    .all();
+  return rows.results.map((r) => r.description as string);
+}
+
+/** The high-water mark of the audit log — the "before" of an audit assertion. */
+async function lastAuditId(): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT MAX(audit_id) AS id FROM audit_log"
+  ).first<{ id: number | null }>();
+  return row?.id ?? 0;
+}
+
+/** A task's score-input revision — the counter a scoring mutation bumps. */
+async function inputsRev(taskId: number): Promise<number | null> {
+  const row = await env.DB.prepare(
+    "SELECT inputs_rev FROM task_scores WHERE task_id = ?"
+  )
+    .bind(taskId)
+    .first<{ inputs_rev: number }>();
+  return row?.inputs_rev ?? null;
+}
 
 beforeEach(async () => {
   await clearCompData();
@@ -532,6 +572,7 @@ describe("PATCH /api/comp/:comp_id", () => {
 
   test("writes specific audit lines for GAP parameter changes", async () => {
     const compId = await createComp({ category: "hg" });
+    const before = await lastAuditId();
 
     const res = await authRequest("PATCH", `/api/comp/${compId}`, {
       gap_params: {
@@ -548,17 +589,186 @@ describe("PATCH /api/comp/:comp_id", () => {
     });
     expect(res.status).toBe(200);
 
-    const rows = await env.DB.prepare(
-      "SELECT description FROM audit_log WHERE subject_type = 'comp' ORDER BY audit_id"
-    ).all();
-    const descriptions = rows.results.map((r) => r.description as string);
-    expect(descriptions).toContain("Enabled leading (departure) points");
-    expect(descriptions).toContain("Enabled arrival points");
+    const descriptions = await compAuditLines(before);
     expect(descriptions).toContain("Disabled HG distance difficulty (pure linear distance points)");
     expect(descriptions).toContain("Changed nominal time from 90 min to 100 min");
     expect(descriptions).toContain('Changed distance origin from "takeoff" to "start"');
+    // Leading and arrival were ALREADY on — they are the official HG defaults
+    // this comp was being scored with, even though its gap_params was null.
+    // Saying otherwise is issue #633.
+    expect(descriptions).not.toContain("Enabled leading (departure) points");
+    expect(descriptions).not.toContain("Enabled arrival points");
     // No generic catch-all line
     expect(descriptions).not.toContain("Updated GAP scoring parameters");
+  });
+
+  // ── The first settings save on an untouched comp (issue #633) ────────────
+  //
+  // Until somebody saves settings once, a comp's gap_params is null and the
+  // scorer resolves it through the official per-category defaults. The audit
+  // description used to resolve it through the raw engine baseline instead,
+  // where leading/arrival/difficulty are OFF — so the first save announced
+  // changes nobody made and rescored every task to identical numbers.
+
+  /**
+   * What the Settings dialog sends for a comp that has never saved: the
+   * effective values it displays, which are the defaults the scorer is
+   * already using. Nominal distance stays "auto" (null).
+   */
+  function untouchedSettings(category: "hg" | "pg") {
+    const d = defaultsFor(category);
+    return {
+      scoring: d.scoring,
+      nominalDistance: null,
+      nominalTime: d.nominalTime,
+      minimumDistance: d.minimumDistance,
+      useLeading: d.useLeading,
+      useArrival: d.useArrival,
+      leadingTimeRatio: d.leadingTimeRatio,
+      distanceOrigin: d.distanceOrigin,
+      useDistanceDifficulty: d.useDistanceDifficulty,
+      jumpTheGunFactor: d.jumpTheGunFactor,
+      jumpTheGunMaxSeconds: d.jumpTheGunMaxSeconds,
+      essNotGoalFactor: d.essNotGoalFactor,
+    };
+  }
+
+  for (const category of ["hg", "pg"] as const) {
+    test(`a first ${category.toUpperCase()} save that keeps the defaults writes no GAP audit lines and no score bump`, async () => {
+      const compId = await createComp({ category });
+      const taskId = decodeId(
+        ALPHABET,
+        await createTask(compId, { xctsk: JSON.parse(env.SAMPLE_TASK_XCTSK) })
+      )!;
+      const revBefore = await inputsRev(taskId);
+      const before = await lastAuditId();
+
+      const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+        gap_params: untouchedSettings(category),
+      });
+      expect(res.status).toBe(200);
+
+      // The row is written (Save stays idempotent) but nothing moved.
+      expect(await compAuditLines(before)).toEqual([]);
+      expect(await inputsRev(taskId)).toBe(revBefore);
+    });
+  }
+
+  test("an open-distance comp's first save is silent too", async () => {
+    // The Settings dialog HIDES the Advanced section for an open-distance
+    // comp but still submits gap_params, so an organiser who never sees a
+    // GAP knob used to get the same phantom leading/arrival lines — on a
+    // competition whose scores those parameters do not touch at all.
+    const compId = await createComp({
+      category: "hg",
+      scoring_format: "open_distance",
+    });
+    // An open-distance task is one TAKEOFF turnpoint — the full sample route
+    // is rejected by the format's own validation.
+    const sample = JSON.parse(env.SAMPLE_TASK_XCTSK) as {
+      turnpoints: Array<{ radius: number; waypoint: unknown }>;
+    };
+    const taskId = decodeId(
+      ALPHABET,
+      await createTask(compId, {
+        xctsk: {
+          taskType: "OPEN-DISTANCE",
+          version: 1,
+          earthModel: "WGS84",
+          turnpoints: [
+            { type: "TAKEOFF", radius: 400, waypoint: sample.turnpoints[0].waypoint },
+          ],
+        },
+      })
+    )!;
+    const revBefore = await inputsRev(taskId);
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      scoring_format: "open_distance",
+      gap_params: untouchedSettings("hg"),
+    });
+    expect(res.status).toBe(200);
+
+    expect(await compAuditLines(before)).toEqual([]);
+    expect(await inputsRev(taskId)).toBe(revBefore);
+  });
+
+  test("a save that changes only the nominal distance logs only that", async () => {
+    const compId = await createComp({ category: "hg" });
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: { ...untouchedSettings("hg"), nominalDistance: 60000 },
+    });
+    expect(res.status).toBe(200);
+
+    expect(await compAuditLines(before)).toEqual([
+      "Changed nominal distance from auto (per task) to 60 km",
+    ]);
+  });
+
+  test("switching category describes the parameters that really moved", async () => {
+    // A PG comp that never saved: leading on, arrival off, pure-linear
+    // distance, 26% leading-time ratio. Switching to HG turns arrival and
+    // difficulty on and moves the ratio — and says so, once each.
+    const compId = await createComp({ category: "pg" });
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      category: "hg",
+      gap_params: untouchedSettings("hg"),
+    });
+    expect(res.status).toBe(200);
+
+    const descriptions = await compAuditLines(before);
+    expect(descriptions).toContain('Changed category from "pg" to "hg"');
+    expect(descriptions).toContain('Changed scoring class from "PG" to "HG"');
+    expect(descriptions).toContain("Enabled arrival points");
+    expect(descriptions).toContain("Enabled HG distance difficulty");
+    expect(descriptions).toContain(
+      'Changed leading-time ratio from "26%" to "17.5%"'
+    );
+    // Leading is on for both disciplines, so the switch does not touch it.
+    expect(descriptions).not.toContain("Enabled leading (departure) points");
+  });
+
+  test("clearing gap_params that already held the defaults is a no-op", async () => {
+    const compId = await createComp({
+      category: "hg",
+      gap_params: untouchedSettings("hg"),
+    });
+    const taskId = decodeId(
+      ALPHABET,
+      await createTask(compId, { xctsk: JSON.parse(env.SAMPLE_TASK_XCTSK) })
+    )!;
+    const revBefore = await inputsRev(taskId);
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: null,
+    });
+    expect(res.status).toBe(200);
+
+    expect(await compAuditLines(before)).toEqual([]);
+    expect(await inputsRev(taskId)).toBe(revBefore);
+  });
+
+  test("clearing gap_params that held an override is one reset line", async () => {
+    const compId = await createComp({
+      category: "hg",
+      gap_params: { ...untouchedSettings("hg"), useArrival: false },
+    });
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: null,
+    });
+    expect(res.status).toBe(200);
+
+    expect(await compAuditLines(before)).toEqual([
+      "Reset GAP scoring parameters to defaults",
+    ]);
   });
 });
 

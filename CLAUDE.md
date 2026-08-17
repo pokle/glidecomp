@@ -171,7 +171,7 @@ These are the standing imperatives. Each links to the reference that explains it
   `web/workers/competition-api/src/score-store.ts` right AFTER the mutation's DB
   write (never before), beside `audit()`, under the same "part of done" rule.
   - Scoring inputs are: tracks/uploads, penalties, task xctsk/date/classes, comp
-    `scoring_format`/`gap_params`, pilot name/class, and pilot status
+    `category`/`scoring_format`/`gap_params`, pilot name/class, and pilot status
     (absent/DNF/landed feed launch validity, S7F §9.1). Roster metadata like team
     names is read live and needs no bump.
   - **One bump covers every derived table.** `bumpScoreInputs()` batches an upsert
