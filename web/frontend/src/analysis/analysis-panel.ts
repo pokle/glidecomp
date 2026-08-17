@@ -1718,7 +1718,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const parts: string[] = [];
 
       if (info.pilot) {
-        parts.push(`<strong class="text-foreground">${info.pilot}</strong>`);
+        // The pilot name comes from the comp roster or the IGC header —
+        // untrusted either way (SEC-47, the setFlightInfo sink SEC-41 missed).
+        parts.push(`<strong class="text-foreground">${escapeHtml(info.pilot)}</strong>`);
       }
       if (info.date) {
         parts.push(info.date);

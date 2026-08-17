@@ -6,7 +6,12 @@ Land a PR that (a) appends a new dated section to `docs/security-review.md`, (b)
 
 ## 1. Read the memory first
 
-Read `docs/security-review.md` end-to-end before touching anything else. In particular:
+Read `docs/security-review.md` before touching anything else. The file is now
+too large for a single read (>500 KB): map it first (`grep -n '^#\{1,3\} '`),
+then read the Review Log table at the top and the most recent round's section
+in full — that section's status table, scope gaps, and "Where to start" carry
+everything the next round needs. Only dig into older rounds when a prior
+finding's status table entry sends you there. In particular:
 
 - The **Review Log** table at the top — note the date of the last round and what was in scope.
 - Every prior `SEC-NN` finding and its current Status (`Open` / `Fixed` / `Accepted` / `Closed`).

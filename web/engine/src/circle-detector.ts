@@ -143,18 +143,53 @@ export function computeBearingRates(
 
   if (fixes.length < 3) return rates;
 
+  const lookbackMs = lookbackSeconds * 1000;
+  const times = fixes.map((f) => f.time.getTime());
+
+  // The lookback fix is max { j ∈ [1, i-1] : times[j] ≤ times[i] − lookback }.
+  // On non-decreasing timestamps that boundary only ever moves forward, so a
+  // persistent pointer finds it in O(N) total. The old per-fix walk-back from
+  // i−1 restarted from scratch every iteration — O(N²) when a run of
+  // duplicate timestamps made every walk retrace the whole run (SEC-46, the
+  // same shape as the fixed SEC-32/33 scans).
+  //
+  // Backwards-jumping timestamps (corrupt ordering — the parser's midnight
+  // heuristic only catches the 18:00→06:00 shape) move the target *back* past
+  // the pointer; those fall back to the old exact walk, and the pointer
+  // resyncs to its result so one glitch costs one walk, not one per later
+  // fix. All corrupt-ordering work — fallback walks and re-advancing over
+  // ground a resync gave back — draws on one shared budget, so garbage input
+  // degrades to skipped rates, never a quadratic scan. Within the budget the
+  // result matches the old loop exactly, except where a re-run clock repeats
+  // timestamps the track already carried: the old walk favoured the later
+  // duplicate, the pointer keeps the earlier — either is a defensible
+  // lookback on corrupt ordering (see circle-detector-adversarial.test.ts).
+  let p = 0;
+  let pHighWater = 0;
+  let fallbackBudget = 4 * fixes.length;
+
   for (let i = 2; i < fixes.length; i++) {
-    // Find the fix at least lookbackSeconds before fix i
-    const targetTime = fixes[i].time.getTime() - lookbackSeconds * 1000;
-    let j = i - 1;
-    while (j > 0 && fixes[j].time.getTime() > targetTime) {
-      j--;
+    const targetTime = times[i] - lookbackMs;
+    while (p + 1 < i && times[p + 1] <= targetTime) {
+      p++;
+      if (p > pHighWater) pHighWater = p;
+      else if (--fallbackBudget <= 0) break;
+    }
+    let j = p;
+    if (times[j] > targetTime) {
+      j = i - 1;
+      while (j > 0 && times[j] > targetTime && fallbackBudget > 0) {
+        j--;
+        fallbackBudget--;
+      }
+      if (times[j] > targetTime) continue; // unsatisfiable, or budget spent
+      if (j >= 1) p = j;
     }
 
     // We need at least one fix before j and one before i for bearings
-    if (j < 1 || i < 1) continue;
+    if (j < 1) continue;
 
-    const dt = (fixes[i].time.getTime() - fixes[j].time.getTime()) / 1000;
+    const dt = (times[i] - times[j]) / 1000;
     if (dt < 1) continue;
 
     // Bearing at fix j (using j-1 -> j)
