@@ -17,6 +17,7 @@ import { audit, auditAll, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal, taskRouteSummary } from "../xctsk-summary";
 import {
+  defaultsFor,
   resolveCompGapParams,
   resolveLeadingTimeRatio,
   type GAPParameters,
@@ -30,6 +31,50 @@ type GapParamInput = Partial<Omit<GAPParameters, "nominalDistance">> & {
 };
 
 type CompCategory = "hg" | "pg";
+
+/**
+ * The Wing, in the words the settings form's own radio group uses
+ * (`CategoryField` in the frontend's comp/fields.tsx). The column is called
+ * `category`, but no screen has ever shown a reader that word or the stored
+ * codes — the audit log was the one place they leaked out.
+ */
+const WING_LABEL: Record<CompCategory, string> = {
+  hg: "Hang Gliding",
+  pg: "Paragliding",
+};
+
+const wingLabel = (value: unknown): string =>
+  WING_LABEL[value as CompCategory] ?? String(value);
+
+/**
+ * The GAP scoring class a Wing implies.
+ *
+ * The Wing is a GLOBAL competition setting that happens to have a copy inside
+ * the formula: `gap_params.scoring` is derived from it and never picked
+ * independently — the Settings dialog says as much ("The scoring class (HG/PG)
+ * follows the Wing above") and has no control for it. `defaultsFor` is where
+ * that mapping lives, so read it rather than restating it here.
+ */
+const scoringForWing = (category: CompCategory): GAPParameters["scoring"] =>
+  defaultsFor(category).scoring;
+
+/**
+ * Force a gap_params payload's scoring class to follow the Wing.
+ *
+ * Applied on every write, because the read side lets the copy outrank the
+ * original: `resolveCompGapParams` starts from `defaultsFor(category)` and
+ * then lets a stored `scoring` overwrite it, so a gap_params that disagreed
+ * with the Wing would silently win. Deriving it as it is stored means the two
+ * can never disagree in the first place, and no scoring behaviour changes for
+ * anything already in the database — including the per-task overrides imported
+ * AirScore comps carry.
+ */
+function withWingScoring<T extends GapParamInput>(
+  gap: T,
+  category: CompCategory
+): T {
+  return { ...gap, scoring: scoringForWing(category) };
+}
 
 /**
  * Resolve one side of the audit diff the way the SCORER resolves it: the
@@ -98,7 +143,16 @@ function describeGapParamChanges(
   const pct = (f: number) => `${Math.round(f * 1000) / 10}%`;
 
   const out: string[] = [];
-  if (o.scoring !== n.scoring) {
+  // The scoring class is the Wing's copy inside the formula. When each side
+  // matches the wing it was scored under, the wing's own sentence already
+  // reports this and a second line would just repeat it in GAP's vocabulary —
+  // on an open-distance comp, about a formula that never scores it. A stored
+  // value that does NOT follow its wing is a setting somebody picked
+  // deliberately (only reachable through the API), so that still gets a line.
+  const followsWing =
+    o.scoring === scoringForWing(oldCategory) &&
+    n.scoring === scoringForWing(newCategory);
+  if (o.scoring !== n.scoring && !followsWing) {
     out.push(describeChange("scoring class", o.scoring, n.scoring));
   }
   if (oDist !== nDist) {
@@ -231,12 +285,15 @@ function compFieldTable(
       column: "name",
       describe: (was, now) => describeChange("name", was, now),
     },
-    // The category picks the per-category GAP profile every task is resolved
+    // The Wing. It picks the per-category GAP profile every task is resolved
     // through (resolveCompGapParams), so on a comp that has never pinned its
-    // own gap_params it IS the scoring formula — hence the bump.
+    // own gap_params it IS the scoring formula — hence the bump. Its sentence
+    // is the ONE record of the change: describeGapParamChanges suppresses the
+    // scoring class that merely follows it.
     category: {
       column: "category",
-      describe: (was, now) => describeChange("category", was, now),
+      describe: (was, now) =>
+        `Changed wing from ${wingLabel(was)} to ${wingLabel(now)}`,
       bumpsScores: true,
     },
     close_date: {
@@ -387,6 +444,11 @@ export const compRoutes = new Hono<AuthedEnv>()
 
       const scoringFormat = body.scoring_format ?? "gap";
 
+      // The formula's copy of the Wing follows the Wing — see withWingScoring.
+      const gapParams = body.gap_params
+        ? withWingScoring(body.gap_params, body.category)
+        : null;
+
       // New PG GAP comps default to FTV series scoring (the paragliding norm,
       // S7A §5.2.5.1); HG and open-distance comps default to sum-of-tasks. The
       // DB column default stays "total", so this only affects newly created
@@ -408,7 +470,7 @@ export const compRoutes = new Hono<AuthedEnv>()
           body.test ? 1 : 0,
           JSON.stringify(pilotClasses),
           defaultClass,
-          body.gap_params ? JSON.stringify(body.gap_params) : null,
+          gapParams ? JSON.stringify(gapParams) : null,
           scoringFormat,
           seriesScoring,
           ftvFactor,
@@ -444,7 +506,7 @@ export const compRoutes = new Hono<AuthedEnv>()
           test: body.test ?? false,
           pilot_classes: pilotClasses,
           default_pilot_class: defaultClass,
-          gap_params: body.gap_params ?? null,
+          gap_params: gapParams,
           scoring_format: scoringFormat,
           series_scoring: seriesScoring,
           ftv_factor: ftvFactor,
@@ -757,14 +819,38 @@ export const compRoutes = new Hono<AuthedEnv>()
         }
       }
 
+      // Keep the formula's copy of the Wing in step with the Wing itself.
+      //
+      // Two cases, and the second is the one that bites: a body carrying
+      // gap_params gets its scoring class derived, and a body that moves the
+      // Wing while carrying NO gap_params has to rewrite the stored copy too —
+      // otherwise it is left behind on the old wing, where the read side would
+      // let it outrank the new one (see withWingScoring). Done here rather
+      // than in the field table's toDb so the audit diff and the stored value
+      // are the same object: describing a scoring change the write then
+      // normalises away is exactly the class of lie issue #633 was about.
+      const currentCategory: CompCategory = current.category === "pg" ? "pg" : "hg";
+      const nextCategory: CompCategory = body.category ?? currentCategory;
+      const patch = { ...body };
+      if (patch.gap_params) {
+        patch.gap_params = withWingScoring(patch.gap_params, nextCategory);
+      } else if (
+        patch.gap_params === undefined &&
+        nextCategory !== currentCategory &&
+        current.gap_params
+      ) {
+        patch.gap_params = withWingScoring(
+          JSON.parse(current.gap_params as string) as NonNullable<
+            typeof patch.gap_params
+          >,
+          nextCategory
+        );
+      }
+
       const plan = planPatch(
-        body,
+        patch,
         current,
-        compFieldTable(
-          body,
-          resolvedTimezone,
-          current.category === "pg" ? "pg" : "hg"
-        )
+        compFieldTable(patch, resolvedTimezone, currentCategory)
       );
 
       // Any successful settings save counts as "settings reviewed" for the
