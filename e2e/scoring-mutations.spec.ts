@@ -92,12 +92,18 @@ async function devLogin(page: Page): Promise<void> {
  * one that depends on how many siblings the mutation happened to have.
  */
 async function expectAuditEntry(page: Page, compId: string, sentence: RegExp) {
+  await expandedActivity(page, compId, sentence);
+}
+
+/** The expanded activity log, with `sentence` already asserted present. */
+async function expandedActivity(page: Page, compId: string, sentence: RegExp) {
   await page.goto(`${BASE_URL}/comp/${compId}`);
   const activity = page.locator("#activity");
   const expand = activity.getByRole("button", { name: "Show all activity" });
   await expect(expand).toBeVisible({ timeout: 20_000 });
   await expand.click();
   await expect(activity.getByText(sentence).first()).toBeVisible({ timeout: 20_000 });
+  return activity;
 }
 
 // ── The spec ────────────────────────────────────────────────────────────────
@@ -162,11 +168,20 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
 
-    await expectAuditEntry(
+    const activity = await expandedActivity(
       page,
       fixture.compId,
       /Changed nominal distance from auto \(per task\) to 200 km/
     );
+
+    // …and ONLY that. This comp's gap_params was still null, so the save is
+    // also the first one — and the log used to announce the leading and
+    // arrival points it was already being scored with (issue #633). The
+    // audit log is the answer a pilot gets when their points move, so a knob
+    // nobody touched must not appear in it.
+    await expect(
+      activity.getByText(/(Enabled|Disabled) (leading \(departure\)|arrival) points/)
+    ).toHaveCount(0);
 
     // The published parameters are the scorer's own, so this changing is proof
     // the blob was recomputed FROM the new settings — not merely re-served.

@@ -16,39 +16,86 @@ import type { z } from "zod";
 import { audit, auditAll, describeChange } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal, taskRouteSummary } from "../xctsk-summary";
-import { DEFAULT_GAP_PARAMETERS, defaultLeadingTimeRatio, type GAPParameters } from "@glidecomp/engine";
+import {
+  resolveCompGapParams,
+  resolveLeadingTimeRatio,
+  type GAPParameters,
+} from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 
 const MAX_COMPS_PER_ACCOUNT = 50;
 
+type GapParamInput = Partial<Omit<GAPParameters, "nominalDistance">> & {
+  nominalDistance?: number | null;
+};
+
+type CompCategory = "hg" | "pg";
+
+/**
+ * Resolve one side of the audit diff the way the SCORER resolves it: the
+ * stored partial merged over the official per-category defaults
+ * (`resolveCompGapParams`), never over the raw engine baseline.
+ *
+ * The two are not the same set of values — `DEFAULT_GAP_PARAMETERS` keeps
+ * leading, arrival and (for PG) difficulty OFF so partial-param engine
+ * callers stay backwards-compatible, while a competition is scored from
+ * `defaultsFor(category)`, which turns on the terms the FAI formula uses.
+ * Diffing against the baseline made a comp whose gap_params was still null
+ * read as "everything off", so the first settings save announced knobs the
+ * organiser never touched and rescored every task to the same numbers
+ * (issue #633).
+ *
+ * nominalDistance is left out: null there means "auto (per task)", which a
+ * resolved GAPParameters cannot represent, so it is compared from the raw
+ * stored values by the caller.
+ */
+function resolveForAudit(
+  category: CompCategory,
+  gap: GapParamInput | null
+): GAPParameters {
+  if (!gap) return resolveCompGapParams(category, null);
+  const { nominalDistance: _auto, ...rest } = gap;
+  void _auto;
+  return resolveCompGapParams(category, rest);
+}
+
 /**
  * Describe GAP scoring parameter changes as human-readable audit lines.
+ *
+ * Both sides are resolved against the category they were (and will be)
+ * scored under — the pre-update category for the old values, the incoming one
+ * for the new — so a category switch is described as the parameter moves it
+ * really makes, not as a re-statement of every per-category default.
  *
  * Friendly units are used (km, min, %) rather than the stored
  * meters/seconds/fractions. A missing/null nominalDistance means the
  * scorer auto-computes it per task, so it reads as "auto (per task)".
  * When the whole object is reset to null, a single line is returned.
+ *
+ * An empty result is the "nothing moved" signal: `planPatch` neither logs nor
+ * bumps the materialized scores for it, so a save that keeps the effective
+ * parameters is silent and free.
  */
-type GapParamInput = Partial<Omit<GAPParameters, "nominalDistance">> & {
-  nominalDistance?: number | null;
-};
-
 function describeGapParamChanges(
   oldGap: GapParamInput | null,
-  newGap: GapParamInput | null
+  newGap: GapParamInput | null,
+  oldCategory: CompCategory,
+  newCategory: CompCategory
 ): string[] {
-  if (newGap === null) {
-    return oldGap === null ? [] : ["Reset GAP scoring parameters to defaults"];
+  if (oldGap === null && newGap === null && oldCategory === newCategory) {
+    return [];
   }
-  // Merge over engine defaults so an unset old value reads as its default.
-  const o = { ...DEFAULT_GAP_PARAMETERS, ...(oldGap ?? {}) };
-  const n = { ...DEFAULT_GAP_PARAMETERS, ...newGap };
+  const o = resolveForAudit(oldCategory, oldGap);
+  const n = resolveForAudit(newCategory, newGap);
   const oDist = oldGap?.nominalDistance ?? null;
-  const nDist = newGap.nominalDistance ?? null;
+  const nDist = newGap?.nominalDistance ?? null;
   const km = (m: number | null) =>
     m == null ? "auto (per task)" : `${Math.round((m / 1000) * 10) / 10} km`;
   const min = (s: number) => `${Math.round(s / 60)} min`;
-  const pct = (f: number) => `${Math.round(f * 100)}%`;
+  // One decimal place, trimmed: the §11 HG default is 17.5%, and whole-percent
+  // rounding would report it as 18% — and a 17.5% → 17.6% edit as a line
+  // reading "from 18% to 18%".
+  const pct = (f: number) => `${Math.round(f * 1000) / 10}%`;
 
   const out: string[] = [];
   if (o.scoring !== n.scoring) {
@@ -74,51 +121,49 @@ function describeGapParamChanges(
     out.push(n.useArrival ? "Enabled arrival points" : "Disabled arrival points");
   }
   // §11 Leading Time Ratio — changes every pilot's leading↔time split, so
-  // it is individually audit-logged. The unset default is per discipline.
-  const ltrDefault = defaultLeadingTimeRatio(n.scoring);
-  const oLtr = o.leadingTimeRatio ?? defaultLeadingTimeRatio(o.scoring);
-  const nLtr = n.leadingTimeRatio ?? ltrDefault;
+  // it is individually audit-logged. Read through the same clamp-and-default
+  // the scorer reads it through, so an out-of-range stored value is described
+  // as the value that will actually be used.
+  const oLtr = resolveLeadingTimeRatio(o);
+  const nLtr = resolveLeadingTimeRatio(n);
   if (oLtr !== nLtr) {
     out.push(describeChange("leading-time ratio", pct(oLtr), pct(nLtr)));
   }
-  const oOrigin = o.distanceOrigin ?? "takeoff";
-  const nOrigin = n.distanceOrigin ?? "takeoff";
-  if (oOrigin !== nOrigin) {
-    out.push(describeChange("distance origin", oOrigin, nOrigin));
+  if (o.distanceOrigin !== n.distanceOrigin) {
+    out.push(describeChange("distance origin", o.distanceOrigin, n.distanceOrigin));
   }
-  const oDiff = o.useDistanceDifficulty ?? true;
-  const nDiff = n.useDistanceDifficulty ?? true;
-  if (oDiff !== nDiff) {
+  if (o.useDistanceDifficulty !== n.useDistanceDifficulty) {
     out.push(
-      nDiff
+      n.useDistanceDifficulty
         ? "Enabled HG distance difficulty"
         : "Disabled HG distance difficulty (pure linear distance points)",
     );
   }
   // Jump-the-gun settings (S7F §13.3) directly change how HG early starts
   // are penalised, so both knobs are individually audit-logged.
-  const oJtgX = o.jumpTheGunFactor ?? 2;
-  const nJtgX = n.jumpTheGunFactor ?? 2;
-  if (oJtgX !== nJtgX) {
+  if (o.jumpTheGunFactor !== n.jumpTheGunFactor) {
     out.push(
-      `Changed jump-the-gun penalty rate from 1 point per ${oJtgX} s early to 1 point per ${nJtgX} s early`
+      `Changed jump-the-gun penalty rate from 1 point per ${o.jumpTheGunFactor} s early to 1 point per ${n.jumpTheGunFactor} s early`
     );
   }
-  const oJtgY = o.jumpTheGunMaxSeconds ?? 300;
-  const nJtgY = n.jumpTheGunMaxSeconds ?? 300;
-  if (oJtgY !== nJtgY) {
+  if (o.jumpTheGunMaxSeconds !== n.jumpTheGunMaxSeconds) {
     out.push(
-      `Changed jump-the-gun limit from ${oJtgY} s to ${nJtgY} s early (beyond it, minimum distance)`
+      `Changed jump-the-gun limit from ${o.jumpTheGunMaxSeconds} s to ${n.jumpTheGunMaxSeconds} s early (beyond it, minimum distance)`
     );
   }
   // ESS-but-not-goal (S7F §13.2): the share of time and arrival points an
   // HG pilot keeps after reaching ESS but landing before goal.
-  const oEng = o.essNotGoalFactor ?? 0.8;
-  const nEng = n.essNotGoalFactor ?? 0.8;
-  if (oEng !== nEng) {
+  if (o.essNotGoalFactor !== n.essNotGoalFactor) {
     out.push(
-      `Changed the ESS-but-not-goal factor from ${pct(oEng)} to ${pct(nEng)} of time and arrival points kept (HG, S7F §13.2)`
+      `Changed the ESS-but-not-goal factor from ${pct(o.essNotGoalFactor)} to ${pct(n.essNotGoalFactor)} of time and arrival points kept (HG, S7F §13.2)`
     );
+  }
+
+  // Clearing the whole object is one line, not a dozen — but only when the
+  // clear actually moves something. Dropping a stored set that already held
+  // the per-category defaults changes no score and needs no record.
+  if (newGap === null) {
+    return out.length === 0 ? [] : ["Reset GAP scoring parameters to defaults"];
   }
   return out;
 }
@@ -173,7 +218,8 @@ function serializeComp(alphabet: string, row: Record<string, unknown>) {
  */
 function compFieldTable(
   body: z.infer<typeof updateCompSchema>,
-  resolvedTimezone: string | null | undefined
+  resolvedTimezone: string | null | undefined,
+  currentCategory: CompCategory
 ): PatchFieldTable<z.infer<typeof updateCompSchema>> {
   const fmtLabel = (f: string) => (f === "open_distance" ? "Open distance" : "GAP");
   const seriesLabel = (s: string) => (s === "ftv" ? "FTV" : "Sum of task scores");
@@ -185,9 +231,13 @@ function compFieldTable(
       column: "name",
       describe: (was, now) => describeChange("name", was, now),
     },
+    // The category picks the per-category GAP profile every task is resolved
+    // through (resolveCompGapParams), so on a comp that has never pinned its
+    // own gap_params it IS the scoring formula — hence the bump.
     category: {
       column: "category",
       describe: (was, now) => describeChange("category", was, now),
+      bumpsScores: true,
     },
     close_date: {
       column: "close_date",
@@ -220,7 +270,12 @@ function compFieldTable(
       fromDb: (v) => (v ? (JSON.parse(v as string) as GAPParameters) : null),
       changed: deepChanged,
       describe: (was, now) =>
-        describeGapParamChanges(was as GapParamInput | null, now as GapParamInput | null),
+        describeGapParamChanges(
+          was as GapParamInput | null,
+          now as GapParamInput | null,
+          currentCategory,
+          body.category ?? currentCategory
+        ),
       bumpsScores: true,
     },
     scoring_format: {
@@ -702,7 +757,15 @@ export const compRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      const plan = planPatch(body, current, compFieldTable(body, resolvedTimezone));
+      const plan = planPatch(
+        body,
+        current,
+        compFieldTable(
+          body,
+          resolvedTimezone,
+          current.category === "pg" ? "pg" : "hg"
+        )
+      );
 
       // Any successful settings save counts as "settings reviewed" for the
       // setup guide — including a Save that keeps every default — so the flag
