@@ -1,22 +1,21 @@
 # Whole-repo security review
 
-You are the periodic full-repository security review for GlideComp. The built-in `/security-review` skill only looks at pending changes on the current branch — this routine looks at the **whole repo** and is paired with `docs/security-review.md` as a living memory of findings across rounds.
+You are the periodic full-repository security review for GlideComp. The built-in `/security-review` skill only looks at pending changes on the current branch — this routine looks at the **whole repo** and is paired with a living memory of findings across rounds: `docs/security-review.md` (the index — findings register, standing scope gaps, review log) plus one archived file per round under `docs/security-review/rounds/`.
 
-Land a PR that (a) appends a new dated section to `docs/security-review.md`, (b) updates the status of prior findings, and (c) fixes any **Critical** issues inline so the round closes them.
+Land a PR that (a) adds a new round file under `docs/security-review/rounds/`, (b) updates the index's register, gap list, review log and "Where to start" section, and (c) fixes any **Critical** issues inline so the round closes them.
 
 ## 1. Read the memory first
 
-Read `docs/security-review.md` before touching anything else. The file is now
-too large for a single read (>500 KB): map it first (`grep -n '^#\{1,3\} '`),
-then read the Review Log table at the top and the most recent round's section
-in full — that section's status table, scope gaps, and "Where to start" carry
-everything the next round needs. Only dig into older rounds when a prior
-finding's status table entry sends you there. In particular:
+Read `docs/security-review.md` (the index) in full, then the most recent
+round file in `docs/security-review/rounds/` in full, before touching
+anything else. Both are deliberately small enough to read whole. Only open
+older round files when a register row or the latest round sends you there.
+From the index take:
 
-- The **Review Log** table at the top — note the date of the last round and what was in scope.
-- Every prior `SEC-NN` finding and its current Status (`Open` / `Fixed` / `Accepted` / `Closed`).
-- The **Scope gaps** section of the most recent round — these are the "we said we'd check this next time" items. Prioritise them.
-- The **Where to start the next review** section of the most recent round, if present.
+- The **Review Log** — the date of the last round and what was in scope.
+- The **findings register** — every `SEC-NN` and its current status (`Open` / `Fixed` / `Accepted` / `Closed`). This table, not any round file, is the source of truth for status.
+- The **standing scope gaps** (`G-NN`) — the "we said we'd check this next time" items. Prioritise them.
+- The **Where to start the next review** section.
 
 Do not re-derive what's already known. The point of the log is that each round builds on the last.
 
@@ -78,18 +77,22 @@ For **Medium / Low / Info**, document them and let the next round close them —
 
 If you do fix a finding inline, mark it in the doc as `~~Open~~ **Fixed (<date>, this PR)**` with a short resolution note pointing at the new file/lines, exactly as the prior rounds did for SEC-01, SEC-10, SEC-11, SEC-12, SEC-14.
 
-## 7. Append the new round to `docs/security-review.md`
+## 7. Write the round file and update the index
 
-Add a new dated section at the bottom (do not rewrite earlier rounds — they are history). The section must include:
+Create `docs/security-review/rounds/<YYYY-MM-DD>.md` (never rewrite an earlier round file — they are history). Start it with the same two-line archived-round preamble the existing files carry, then:
 
-- **A new row in the Review Log table** at the top of the file.
 - **Methodology** — what you read, what you ran (`bun audit`, diffs), and what you explicitly did *not* do.
 - **Executive summary** — one paragraph. Lead with the worst new finding. If `bun audit` was clean, say so. If you fixed Critical issues inline, say so.
-- **Status of prior findings** — table covering every prior `SEC-NN`. Columns: ID, Title, Status @ <date>, Notes (with file:line if the finding moved).
-- **New findings** — one section per `SEC-NN`, severity-tagged, with Files / Evidence / Impact / Remediation. Number continuing from the last round's highest.
+- **New findings** — one section per `SEC-NN`, severity-tagged, with Files / Evidence / Impact / Remediation. Number continuing from the register's highest.
+- **Status changes** — only the prior findings whose status this round moved (with file:line if the finding's code moved). Do NOT restate the full register.
 - **Re-checked but no change** — short list of categories you walked and found clean, so the next round knows you covered them.
-- **Scope gaps still not done** — carry forward unfinished items from prior rounds plus any new gaps.
-- **Where to start the next review** — concrete pointers: the commit you reviewed up to, the prioritised open items, anything that needs verification on a live deploy.
+
+Then update `docs/security-review.md` (the index) in the same PR:
+
+- Add one **Review Log** line (short headline + link to the round file).
+- Update the **findings register** rows whose status moved; add rows for new findings.
+- Update the **standing scope gaps**: strike closed gaps with the closing round (keep the `G-NN` id — never renumber or reuse), append new gaps at the next free id.
+- Replace the **Where to start the next review** section wholesale: the commit you reviewed up to, the prioritised open items, anything that needs verification on a live deploy.
 
 Convert any relative dates ("today", "last week") to absolute dates before writing.
 
@@ -107,7 +110,7 @@ If you wrote regression tests for an inline fix, run them too. Don't push with r
 
 Title: `Security review (<YYYY-MM-DD>): <one-line headline>` — the headline is the worst finding (e.g. `SEC-NN critical authn bypass + N new findings`).
 
-Body: short summary of the round, the new SEC-NN IDs introduced, which were fixed inline, and a link to the appended section in `docs/security-review.md`.
+Body: short summary of the round, the new SEC-NN IDs introduced, which were fixed inline, and a link to the new round file under `docs/security-review/rounds/`.
 
 If any Critical was fixed inline, the PR description must spell out (a) what the bypass was, (b) how the fix closes it, (c) the regression test that proves it stays closed.
 
