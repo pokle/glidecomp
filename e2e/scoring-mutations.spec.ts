@@ -423,4 +423,35 @@ test.describe("an open-distance comp's settings save", () => {
     await expand.click();
     await expect(activity.getByText(GAP_KNOB_SENTENCE)).toHaveCount(0);
   });
+
+  test("changing the Wing logs one sentence, in the words on the screen", async ({
+    page,
+  }) => {
+    // Wing IS on screen for every format — it is a global competition setting,
+    // not a GAP one — and it is the field that reaches gap_params.scoring. So
+    // it is the one way an organiser here can move a GAP parameter, and the
+    // log has to report it as what they did: the wing, named the way the radio
+    // group names it, once.
+    await devLogin(page);
+    await page.goto(`${BASE_URL}/comp/${compId}`);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("radio", { name: "Hang Gliding" })).toBeChecked();
+
+    // Click the visible name, not the radio's role — the kit hides the real
+    // input under a styled span and wraps each radio in a real <label>. See
+    // the same gotcha in track-submission.spec.ts.
+    await dialog.getByText("Paragliding", { exact: true }).click();
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+
+    const activity = await expandedActivity(
+      page,
+      compId,
+      /Changed wing from Hang Gliding to Paragliding/
+    );
+    // No "Changed scoring class from HG to PG" beside it, and no other GAP
+    // sentence: the wing's line is the whole record.
+    await expect(activity.getByText(GAP_KNOB_SENTENCE)).toHaveCount(0);
+  });
 });

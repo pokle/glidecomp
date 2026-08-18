@@ -708,7 +708,7 @@ describe("PATCH /api/comp/:comp_id", () => {
     ]);
   });
 
-  test("switching category describes the parameters that really moved", async () => {
+  test("switching wing describes the parameters that really moved", async () => {
     // A PG comp that never saved: leading on, arrival off, pure-linear
     // distance, 26% leading-time ratio. Switching to HG turns arrival and
     // difficulty on and moves the ratio — and says so, once each.
@@ -722,8 +722,10 @@ describe("PATCH /api/comp/:comp_id", () => {
     expect(res.status).toBe(200);
 
     const descriptions = await compAuditLines(before);
-    expect(descriptions).toContain('Changed category from "pg" to "hg"');
-    expect(descriptions).toContain('Changed scoring class from "PG" to "HG"');
+    expect(descriptions).toContain("Changed wing from Paragliding to Hang Gliding");
+    // The scoring class is the wing's copy inside the formula, so the line
+    // above is the whole record of it — no second sentence saying it again.
+    expect(descriptions).not.toContain('Changed scoring class from "PG" to "HG"');
     expect(descriptions).toContain("Enabled arrival points");
     expect(descriptions).toContain("Enabled HG distance difficulty");
     expect(descriptions).toContain(
@@ -731,6 +733,89 @@ describe("PATCH /api/comp/:comp_id", () => {
     );
     // Leading is on for both disciplines, so the switch does not touch it.
     expect(descriptions).not.toContain("Enabled leading (departure) points");
+  });
+
+  // ── The wing is the global setting; gap_params.scoring is its copy ────────
+  //
+  // The read side lets a stored `scoring` outrank the wing
+  // (resolveCompGapParams merges stored over defaultsFor), so the two must
+  // never be allowed to disagree. Every write derives the copy.
+
+  test("moving the wing alone is one sentence", async () => {
+    // No stored gap_params to move, so the wing's own line is the whole
+    // record — the per-wing profile it selects is what the sentence means.
+    const compId = await createComp({ category: "hg" });
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      category: "pg",
+    });
+    expect(res.status).toBe(200);
+
+    expect(await compAuditLines(before)).toEqual([
+      "Changed wing from Hang Gliding to Paragliding",
+    ]);
+  });
+
+  test("a gap_params write takes its scoring class from the wing", async () => {
+    // A PG comp told, over the API, that its formula is HG. The wing wins:
+    // what gets STORED follows it, so nothing downstream can be handed a
+    // scoring class the competition's own Wing contradicts.
+    const compId = await createComp({ category: "pg" });
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: { ...untouchedSettings("pg"), scoring: "HG" },
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { gap_params: { scoring: string } };
+    expect(data.gap_params.scoring).toBe("PG");
+
+    const row = await env.DB.prepare("SELECT gap_params FROM comp").first<{
+      gap_params: string;
+    }>();
+    expect(JSON.parse(row!.gap_params).scoring).toBe("PG");
+  });
+
+  test("creating a comp takes its scoring class from the wing too", async () => {
+    const res = await authRequest("POST", "/api/comp", {
+      name: "Mismatched",
+      category: "pg",
+      gap_params: { ...untouchedSettings("pg"), scoring: "HG" },
+    });
+    expect(res.status).toBe(201);
+    const data = (await res.json()) as { gap_params: { scoring: string } };
+    expect(data.gap_params.scoring).toBe("PG");
+
+    const row = await env.DB.prepare("SELECT gap_params FROM comp").first<{
+      gap_params: string;
+    }>();
+    expect(JSON.parse(row!.gap_params).scoring).toBe("PG");
+  });
+
+  test("moving the wing rewrites a stored scoring class the body never sent", async () => {
+    // The case that would otherwise strand the copy: PATCH the wing alone on
+    // a comp that HAS stored gap_params. Left behind on the old wing, the
+    // stored value would outrank the new one at scoring time.
+    const compId = await createComp({
+      category: "hg",
+      gap_params: untouchedSettings("hg"),
+    });
+    const before = await lastAuditId();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      category: "pg",
+    });
+    expect(res.status).toBe(200);
+
+    const row = await env.DB.prepare("SELECT gap_params FROM comp").first<{
+      gap_params: string;
+    }>();
+    expect(JSON.parse(row!.gap_params).scoring).toBe("PG");
+    // Still one sentence: the rewrite follows the wing, so it is not a
+    // separate change to report.
+    expect(await compAuditLines(before)).toEqual([
+      "Changed wing from Hang Gliding to Paragliding",
+    ]);
   });
 
   test("clearing gap_params that already held the defaults is a no-op", async () => {
