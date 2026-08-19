@@ -55,7 +55,6 @@ import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskScoresPublic } from "../comp/TaskScoresPublic";
 import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
-import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
@@ -77,6 +76,7 @@ import {
   taskPath,
   taskAnalysisPath,
   taskSettingsPath,
+  taskRoutePath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
@@ -123,7 +123,6 @@ export function TaskDetail() {
   // separate component with its own score fetch) pick up the change too.
   const [resultsRefresh, setResultsRefresh] = useState(0);
   const [replayAvailable, setReplayAvailable] = useState(false);
-  const [routeOpen, setRouteOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [forgeOpen, setForgeOpen] = useState(false);
 
@@ -159,19 +158,15 @@ export function TaskDetail() {
   );
 
   // `#edit-route` deep link (the comp page's featured-task card used to point
-  // here; a bookmarked or shared link still can): open the route editor once
-  // the task has loaded and the admin check has resolved.
+  // here; a bookmarked or shared link still can). The editor is its own route
+  // now, so the hash is a REDIRECT rather than a flag that opens a dialog —
+  // which is also what makes it disappear from the address bar on arrival.
   useEffect(() => {
-    if (location.hash === "#edit-route" && isAdmin && task) setRouteOpen(true);
-  }, [location.hash, isAdmin, task]);
-
-  // Closing the editor drops the #edit-route hash so a reload doesn't reopen it.
-  const closeRouteEditor = () => {
-    setRouteOpen(false);
-    if (location.hash === "#edit-route") {
-      navigate(location.pathname + location.search, { replace: true });
-    }
-  };
+    if (location.hash !== "#edit-route" || !isAdmin || !task || !comp) return;
+    navigate(taskRoutePath(compId, comp.name, taskId, task.name), {
+      replace: true,
+    });
+  }, [location.hash, isAdmin, task, comp, compId, taskId, navigate]);
 
   const canUploadOnBehalf = useCanUploadOnBehalf(
     compId ?? "",
@@ -407,7 +402,7 @@ export function TaskDetail() {
         timezone={comp?.timezone ?? null}
         wind={wind}
         isAdmin={isAdmin}
-        onEditRoute={() => setRouteOpen(true)}
+        routeHref={taskRoutePath(compId, comp?.name, taskId, task.name)}
       />
 
       {/* The day's weather — the organizer's notes plus the modelled
@@ -478,23 +473,6 @@ export function TaskDetail() {
       ) : null}
       </div>
 
-      {isAdmin && comp && routeOpen ? (
-        <RouteEditorDialog
-          compId={compId}
-          taskId={taskId}
-          taskName={task.name}
-          taskDate={task.task_date}
-          xctsk={task.xctsk}
-          openDistance={comp.scoring_format === "open_distance"}
-          timezone={comp.timezone ?? null}
-          onClose={closeRouteEditor}
-          onSaved={() => {
-            closeRouteEditor();
-            setRefresh((n) => n + 1);
-            setScoresRefresh((n) => n + 1);
-          }}
-        />
-      ) : null}
     </div>
   );
 }
@@ -638,7 +616,7 @@ function TurnpointsSection({
   timezone,
   wind,
   isAdmin,
-  onEditRoute,
+  routeHref,
 }: {
   xctsk: XCTask | null;
   taskDate: string;
@@ -647,7 +625,8 @@ function TurnpointsSection({
   /** The day's modelled wind, once the weather lands. Null until then. */
   wind: TaskWind | null;
   isAdmin: boolean;
-  onEditRoute: () => void;
+  /** The route editor's URL — a page since #637, so this is a link. */
+  routeHref: string;
 }) {
   // Which turnpoint the reader is pointing at, shared by the diagram and the
   // table so the shape and the numbers stay tied together — either one can
@@ -662,9 +641,9 @@ function TurnpointsSection({
         title="Route"
         action={
           isAdmin ? (
-            <Button variant="outline" size="sm" onPress={onEditRoute}>
+            <LinkButton variant="outline" size="sm" href={routeHref}>
               {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
-            </Button>
+            </LinkButton>
           ) : null
         }
       />

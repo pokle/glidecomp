@@ -1,6 +1,14 @@
 /**
- * Task route editor dialog — the React replacement for the vanilla
- * analysis/task-editor on the task detail page (#270).
+ * Task route editor — the React replacement for the vanilla
+ * analysis/task-editor on the task detail page (#270), and since #637 a
+ * ROUTED PAGE (/comp/:c/task/:t/route) rather than a dialog over the task.
+ *
+ * It was the tallest modal in the app: a map, a turnpoint grid, start gates
+ * and a goal panel inside a 100dvh panel that scrolled internally, which on a
+ * phone means a scrolling region inside a scrolling region and a sticky title
+ * bar spending height that the map wanted. As a page all of that is just the
+ * page — one scroll, the browser's own back button, and a URL an organiser can
+ * send to a co-admin.
  *
  * RAC (see docs/2026-07-18-rac-adoption-guide.md): the Tabulator grid is
  * replaced by a react-aria-components Table whose rows live in React state.
@@ -15,6 +23,12 @@
  * from a .xctsk file or an XContest task code, and exported to a .xctsk file.
  * Saving PATCHes the task's xctsk (the server validates strictly and
  * audit-logs the change).
+ *
+ * Two editors stay dialogs OVER this page — TurnpointDetailsDialog and
+ * AddWaypointDialog. Both are short single-purpose forms rather than the
+ * tall-scrolling-form shape the conversion exists to remove, and
+ * AddWaypointDialog is shared with the competition waypoints page, so routing
+ * it would fork it. Their own pickers are list-in-flow all the same.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileTrigger } from "react-aria-components";
@@ -36,17 +50,20 @@ import {
   DialogTitle,
   Modal,
 } from "@/react/rac/dialog";
+import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
 import { NumberField, TextField } from "@/react/rac/field";
-import { SimpleSelect } from "@/react/rac/select";
+import { ChoiceList } from "@/react/rac/choice-list";
 import { TimePicker } from "@/react/rac/date-picker";
 import { api } from "../../comp/api";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
+import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { downloadFile } from "../lib/format";
 import { utcToZonedHHMM, zonedToUtcHHMM, zoneNameWithOffset } from "../lib/time";
 import { slugify } from "./csv";
+import { underTask } from "../lib/crumbs";
 import {
   addMinutes,
   buildRoute,
@@ -85,18 +102,21 @@ import {
 } from "./turnpoint-draft";
 import { TurnpointDetailsDialog } from "./TurnpointDetailsDialog";
 
-export function RouteEditorDialog({
+export function RouteEditor({
   compId,
+  compName,
   taskId,
   taskName,
   taskDate,
   xctsk,
   openDistance,
   timezone,
-  onClose,
+  onCancel,
   onSaved,
 }: {
   compId: string;
+  /** For the breadcrumb trail's canonical links. */
+  compName: string;
   taskId: string;
   taskName: string;
   taskDate: string;
@@ -109,7 +129,8 @@ export function RouteEditorDialog({
    * when null the editor falls back to UTC, today's behaviour.
    */
   timezone: string | null;
-  onClose: () => void;
+  /** Leaving without saving; the caller decides where "back" is. */
+  onCancel: () => void;
   onSaved: () => void;
 }) {
   const confirm = useConfirm();
@@ -224,6 +245,38 @@ export function RouteEditorDialog({
   const [goalDeadline, setGoalDeadline] = useState<string>(() => {
     const hhmm = xctsk?.goal?.deadline ? gateToHHMM(xctsk.goal.deadline) : null;
     return hhmm ? toDisplayTime(hhmm) : "";
+  });
+
+  /**
+   * Has anything been edited? A snapshot comparison rather than a per-field
+   * diff, because the editable surface is six pieces of state and any of them
+   * moving means the same thing: there is work here to lose.
+   *
+   * It cannot go through `assembleTask()` — that toasts on an invalid gate,
+   * and a guard must not talk. A half-typed route is exactly the state worth
+   * guarding, so the snapshot has to tolerate one.
+   *
+   * As a dialog this had no guard at all: dismissing threw the route away
+   * silently. A page has more ways out (the breadcrumb, the back button, a
+   * stray tap), which is what makes the guard worth having now.
+   */
+  const snapshot = (): string =>
+    JSON.stringify([
+      rows,
+      gates,
+      sssType,
+      direction,
+      goalType,
+      goalDeadline,
+      pendingWaypoints,
+    ]);
+  const initialSnapshotRef = useRef<string | null>(null);
+  if (initialSnapshotRef.current === null) initialSnapshotRef.current = snapshot();
+  const dirty = snapshot() !== initialSnapshotRef.current;
+
+  useUnsavedChangesGuard(dirty && !saving, {
+    title: "Discard route changes?",
+    message: "This route has unsaved changes. Leaving will discard them.",
   });
 
   /**
@@ -721,28 +774,18 @@ export function RouteEditorDialog({
   const extraErrors = errors.length - shownErrors.length;
 
   return (
-    <Modal
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      // Height/width in dvh/dvw minus the overlay's p-4: `vh` on mobile Safari
-      // is the URL-bar-hidden height, so a 96vh panel is taller than the
-      // visible viewport — its top ends up above the scroll origin, and
-      // dragging it into view springs straight back. Capped on desktop so the
-      // dialog doesn't stretch across an ultrawide monitor.
-      className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-full max-w-none flex-col p-0 sm:max-w-5xl"
-    >
-      <Dialog className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {/* Sticky: this dialog's body is long and scrolls, so the title stays
-            put and the turnpoints slide under a solid bar instead of under a
-            floating ✕. The negative margins undo the body's p-4 so the bar
-            spans the full width, including behind the close button; `-top-4`
-            matches, because a sticky offset is measured from the content box
-            and content would otherwise show through that padding strip. */}
-        <DialogHeader className="sticky -top-4 z-10 -mx-4 -mt-4 bg-popover px-4 pt-4 pb-1">
-          <DialogTitle>Edit route</DialogTitle>
-        </DialogHeader>
+    // Wider than a settings form on purpose: the map and the turnpoint grid
+    // are the page, and `SettingsPage`'s max-w-2xl column would squeeze both.
+    // The breadcrumb + title are built here rather than reusing SettingsPage
+    // for the same reason.
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 pb-24">
+      <div>
+        <Breadcrumbs
+          items={underTask(compId, compName, taskId, taskName)}
+          current="Route"
+        />
+        <h1 className="mt-2 text-2xl font-bold">Route</h1>
+      </div>
         <p className="text-sm text-muted-foreground">
           Waypoint names in order, each with a radius (
           <span className="font-medium">400m</span>,{" "}
@@ -947,8 +990,14 @@ export function RouteEditorDialog({
                   above, otherwise gates have no cylinder to apply to.
                 </p>
               ) : null}
-              <div className="mt-2 flex flex-wrap gap-2">
-                <SimpleSelect
+              {/* Lists in flow, not popovers (#638). Both choices are
+                  two-way and each option carries an explanation, which a
+                  collapsed select shows one of and hides the other — here
+                  they are side by side, which is how you choose between
+                  them. */}
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <ChoiceList
+                  label="Start type"
                   value={sssType}
                   onChange={(v) => setSssType(v as SSSConfig["type"])}
                   options={[
@@ -958,16 +1007,15 @@ export function RouteEditorDialog({
                       label: "Elapsed time — timed from each pilot's crossing",
                     },
                   ]}
-                  ariaLabel="Start type"
                 />
-                <SimpleSelect
+                <ChoiceList
+                  label="Start direction"
                   value={direction}
                   onChange={(v) => setDirection(v as SSSConfig["direction"])}
                   options={[
                     { value: "EXIT", label: "Exit start — cross outward" },
                     { value: "ENTER", label: "Enter start — cross inward" },
                   ]}
-                  ariaLabel="Start direction"
                 />
               </div>
 
@@ -1046,16 +1094,17 @@ export function RouteEditorDialog({
             </Disclosure>
 
             <Disclosure title="Goal">
+              <ChoiceList
+                className="mt-2"
+                label="Goal type"
+                value={goalType}
+                onChange={(v) => setGoalType(v as GoalConfig["type"])}
+                options={[
+                  { value: "CYLINDER", label: "Cylinder — the last turnpoint's radius" },
+                  { value: "LINE", label: "Goal line — perpendicular to the last leg" },
+                ]}
+              />
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <SimpleSelect
-                  value={goalType}
-                  onChange={(v) => setGoalType(v as GoalConfig["type"])}
-                  options={[
-                    { value: "CYLINDER", label: "Cylinder — the last turnpoint's radius" },
-                    { value: "LINE", label: "Goal line — perpendicular to the last leg" },
-                  ]}
-                  ariaLabel="Goal type"
-                />
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   Deadline — {timeZoneLabel}
                   <TimePicker
@@ -1088,8 +1137,13 @@ export function RouteEditorDialog({
           </>
         ) : null}
 
-        <DialogFooter className="mx-0 mb-0 border-t border-border">
-          <Button slot="close" variant="outline">
+      {/* Sticky to the BOTTOM of the viewport, not the end of the document:
+          this page is long, and a Save an admin has to scroll past the whole
+          goal panel to reach is a Save they will not find on a phone. The
+          page's pb-24 reserves the space it covers. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-5xl justify-end gap-2 px-4 py-3">
+          <Button variant="outline" onPress={onCancel}>
             Cancel
           </Button>
           <Button
@@ -1100,7 +1154,8 @@ export function RouteEditorDialog({
           >
             Save
           </Button>
-        </DialogFooter>
+        </div>
+      </div>
 
         {/* Load a whole task from an XContest / XCTrack task code. */}
         <Modal
@@ -1169,7 +1224,6 @@ export function RouteEditorDialog({
           onAdd={addNewWaypoint}
           onCancel={() => setAdding(false)}
         />
-      </Dialog>
-    </Modal>
+    </div>
   );
 }

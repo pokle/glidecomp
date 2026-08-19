@@ -69,6 +69,9 @@ const CompSettingsPage = lazy(() =>
 const TaskSettingsPage = lazy(() =>
   import("./pages/TaskSettingsPage").then((m) => ({ default: m.TaskSettingsPage }))
 );
+const TaskRoutePage = lazy(() =>
+  import("./pages/TaskRoutePage").then((m) => ({ default: m.TaskRoutePage }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -177,6 +180,13 @@ export function AppRoutes() {
           <Route
             path="/comp/:compId/task/:taskId/settings/:sub"
             element={<TaskSettingsPage />}
+          />
+          {/* The route editor — a page since #637, and the surface a phone
+              needed it most: a map, a turnpoint grid and two config panels
+              used to share one 100dvh modal. */}
+          <Route
+            path="/comp/:compId/task/:taskId/route"
+            element={<TaskRoutePage />}
           />
           {/* Where the per-task analysis lived until the re-nesting above. */}
           <Route

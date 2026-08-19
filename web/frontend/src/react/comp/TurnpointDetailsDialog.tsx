@@ -9,7 +9,6 @@ import { useMemo, useState } from "react";
 import { useFilter } from "react-aria-components";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
-import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import {
   Dialog,
   DialogFooter,
@@ -17,8 +16,9 @@ import {
   DialogTitle,
   Modal,
 } from "@/react/rac/dialog";
-import { NumberField, TextField } from "@/react/rac/field";
-import { SimpleSelect } from "@/react/rac/select";
+import { NumberField, SearchField, TextField } from "@/react/rac/field";
+import { ChoiceList } from "@/react/rac/choice-list";
+import { ListBox, ListBoxItem } from "@/react/rac/list-box";
 import { formatCoords, parseCoords, type RouteRow } from "./route-editor";
 import {
   RADIUS_PRESETS,
@@ -130,57 +130,64 @@ export function TurnpointDetailsDialog({
             .
           </p>
         ) : (
-          // Type to filter, arrow-key/Enter to pick without leaving the field.
-          // Matches float in a popover, so they can't be clipped or squashed by
-          // this dialog's scroll container and they flip above the field when
-          // there's no room below (short window, phone with the keyboard up).
+          // Type to filter, arrow-key/Enter to pick — but IN FLOW, not in a
+          // popover (#638). It was a ComboBox, whose whole apparatus here was
+          // popover management: a pinned `selectedKey={null}`, a controlled
+          // `inputValue` to sync on the Esc revert, and `allowsEmptyCollection`
+          // toggled per keystroke, all so a floating list would open and close
+          // at the right moments. None of it survives the list being part of
+          // the dialog, and the failure it existed to avoid — a phone keyboard
+          // covering the matches — cannot happen to a list that scrolls with
+          // the form.
           //
-          // selectedKey is pinned to null: picking a waypoint copies its values
-          // into the draft below rather than leaving the combobox "holding" a
-          // selection, and re-picking the same one must fire again.
-          <ComboBox
-            label="Load from a waypoint"
-            placeholder={`Search ${waypointRecords.length} waypoints…`}
-            items={wpItems}
-            inputValue={wpQuery}
-            onInputChange={setWpQuery}
-            selectedKey={null}
-            onSelectionChange={(key) => {
-              // With BOTH selectedKey and inputValue controlled, react-stately
-              // hands us every commit and makes syncing inputValue our job
-              // (useComboBoxState: "it's the user's responsibility to update
-              // inputValue in onSelectionChange"). That includes key === null
-              // on the Esc/blur revert — clearing the query there is what
-              // actually lets the popover close, and what stops a stale query
-              // sitting in a field that looks like it's still filtering.
-              if (key == null) {
-                setWpQuery("");
-                return;
-              }
-              const item = wpItems.find((it) => it.id === key);
-              if (item) applyWaypoint(item.record);
-            }}
-            // Only while searching: an empty collection must close the popover
-            // when the query is empty, but stay open to say "No matches".
-            allowsEmptyCollection={wpQuery.trim() !== ""}
-            listClassName="max-h-48"
-            renderEmptyState={() => (
-              <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                No matches
-              </p>
-            )}
-          >
-            {(item: { id: string; record: WaypointFileRecord; text: string }) => (
-              <ComboBoxItem id={item.id} textValue={item.text}>
-                <span className="font-medium">{item.record.code}</span>
-                {item.record.name !== item.record.code ? (
-                  <span className="truncate text-muted-foreground">
-                    {item.record.name}
-                  </span>
-                ) : null}
-              </ComboBoxItem>
-            )}
-          </ComboBox>
+          // Deliberately NOT `SearchableChoiceList`: that binds a value and
+          // shows it on a collapsed row. This is an ACTION — picking a
+          // waypoint copies its details into the draft below and leaves
+          // nothing selected, so re-picking the same one must fire again.
+          <div className="flex flex-col gap-2">
+            <SearchField
+              label="Load from a waypoint"
+              placeholder={`Search ${waypointRecords.length} waypoints…`}
+              value={wpQuery}
+              onChange={setWpQuery}
+            />
+            {wpQuery.trim() !== "" ? (
+              <ListBox
+                aria-label="Matching waypoints"
+                selectionMode="single"
+                // Nothing stays selected; the pick is the whole event.
+                selectedKeys={[]}
+                onSelectionChange={(keys) => {
+                  const key = keys === "all" ? null : [...keys][0];
+                  if (key == null) return;
+                  const item = wpItems.find((it) => it.id === String(key));
+                  if (item) applyWaypoint(item.record);
+                }}
+                items={wpItems}
+                className="max-h-48"
+                renderEmptyState={() => (
+                  <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No matches
+                  </p>
+                )}
+              >
+                {(item: { id: string; record: WaypointFileRecord; text: string }) => (
+                  <ListBoxItem
+                    id={item.id}
+                    textValue={item.text}
+                    className="min-h-11 items-center gap-2"
+                  >
+                    <span className="font-medium">{item.record.code}</span>
+                    {item.record.name !== item.record.code ? (
+                      <span className="truncate text-muted-foreground">
+                        {item.record.name}
+                      </span>
+                    ) : null}
+                  </ListBoxItem>
+                )}
+              </ListBox>
+            ) : null}
+          </div>
         )}
 
         <TextField
@@ -196,16 +203,15 @@ export function TurnpointDetailsDialog({
           onChange={(v) => patch({ description: v })}
           placeholder="Bordano Landing"
         />
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Type</span>
-          <SimpleSelect
-            value={draft.type}
-            onChange={(v) => patch({ type: v as RouteRow["type"] })}
-            options={TYPE_OPTIONS}
-            ariaLabel={`Type of ${label}`}
-            className="w-full [&_button]:w-full"
-          />
-        </div>
+        {/* The visible label names it; `aria-labelledby` from that Label
+            would beat an aria-label anyway, and the dialog title plus the Code
+            field above already say which turnpoint. */}
+        <ChoiceList
+          label="Type"
+          value={draft.type}
+          onChange={(v) => patch({ type: v as RouteRow["type"] })}
+          options={TYPE_OPTIONS}
+        />
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Radius (m)</span>
           <div
