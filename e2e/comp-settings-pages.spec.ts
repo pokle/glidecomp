@@ -119,6 +119,15 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
   // Into a group, change one thing, save.
   await access.click();
   await expect(page.getByRole("heading", { name: "Access", exact: true })).toBeVisible();
+  // Close Date's calendar is ON THE PAGE, not behind a trigger: day cells are
+  // present without anything being opened, and there is no "Open calendar"
+  // button at all. (The lazy picker chunk has to arrive first, hence the
+  // generous timeout.)
+  await expect(main.getByRole("gridcell").first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("button", { name: "Open calendar" })).toHaveCount(0);
+
   const box = page.getByLabel("Let pilots register themselves by submitting a track");
   await expect(box).toBeChecked();
   // Click the visible label, not the input: the kit hides the real checkbox
@@ -140,6 +149,7 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
   const body = patch.postDataJSON() as Record<string, unknown>;
   expect(Object.keys(body).sort()).toEqual([
     "admin_emails",
+    "close_date",
     "open_igc_upload",
     "open_registration",
     "test",

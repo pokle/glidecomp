@@ -187,7 +187,17 @@ instance only exists a tick after mount, so gate anything that drives it on
   popover. `SearchableChoiceList` is the same row collapsed, expanding **in
   flow** to a search box over a filtered `ListBox`; use it past a dozen or so
   options — the ~400 IANA timezones are what it was built for. `radio-group`
-  stays as the compact form for dense dialogs).
+  stays as the compact form for dense dialogs),
+  `switch` (SwitchField/SwitchList — **an on/off setting as a phone-style row**:
+  label and hint on the left, the control on the RIGHT, the whole row tappable
+  at 44px. On RAC's Switch, so the control is a real focusable input with
+  `role="switch"` — semantically an on/off setting rather than a form checkbox,
+  which is what these are. `SwitchList` groups consecutive rows onto one card
+  with dividers, as a phone's settings app does. Used by the settings pages'
+  booleans (Access's three, the Scoring page's GAP toggles); **dialogs keep
+  `rac/checkbox`**, whose 16px leading box suits a dense panel — so a dialog
+  boolean still answers to `role="checkbox"` in tests while a settings-page one
+  answers to `role="switch"`).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskScores.tsx`, `comp/RouteEditorDialog.tsx`
   (Tabulator grid → RAC Table → GridList card list → **RAC Table again**, via

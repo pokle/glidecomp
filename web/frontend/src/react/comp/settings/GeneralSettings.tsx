@@ -1,13 +1,15 @@
 /**
- * General settings sub-page: Name, Wing, Close Date, Timezone. Fields and
- * their copy carried over verbatim from the old settings dialog; only this
- * group's fields go in the PATCH (the server diffs per field).
+ * General settings sub-page: Name, Wing, Timezone. Fields and their copy
+ * carried over verbatim from the old settings dialog; only this group's
+ * fields go in the PATCH (the server diffs per field).
+ *
+ * Close Date lives on the Access page: what it controls is when track
+ * submissions stop being accepted, which is the same question as who may
+ * submit at all.
  */
-import { useId, useState } from "react";
+import { useState } from "react";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
-import { Label } from "@/react/rac/field";
-import { DatePicker } from "@/react/rac/date-picker";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
@@ -33,13 +35,10 @@ function timezoneOptions(current: string | null) {
 }
 
 export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
-  const closeDateId = useId();
   const savedCategory = comp.category === "hg" ? "hg" : "pg";
-  const savedCloseDate = comp.close_date ? comp.close_date.split("T")[0] : "";
 
   const [name, setName] = useState(comp.name);
   const [category, setCategory] = useState<"hg" | "pg">(savedCategory);
-  const [closeDate, setCloseDate] = useState(savedCloseDate);
   // "auto" = no explicit zone: the server derives one from the task
   // location (and re-derives when saved as auto).
   const [timezone, setTimezone] = useState(comp.timezone ?? "auto");
@@ -48,7 +47,6 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const dirty =
     name !== comp.name ||
     category !== savedCategory ||
-    closeDate !== savedCloseDate ||
     timezone !== (comp.timezone ?? "auto");
 
   async function save() {
@@ -59,7 +57,6 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
         json: {
           name: name.trim(),
           category,
-          close_date: closeDate || null,
           timezone: timezone === "auto" ? null : timezone,
         },
       });
@@ -82,20 +79,6 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
         <NameField value={name} onChange={setName} />
 
         <CategoryField value={category} onChange={setCategory} />
-
-        <div className="flex flex-col gap-2">
-          <Label id={closeDateId}>Close Date</Label>
-          <DatePicker
-            inline
-            clearable
-            aria-labelledby={closeDateId}
-            value={closeDate}
-            onChange={setCloseDate}
-          />
-          <p className="text-xs text-muted-foreground">
-            After this date, track submissions are rejected. Leave empty for open-ended.
-          </p>
-        </div>
 
         <SearchableChoiceList
           label="Timezone"

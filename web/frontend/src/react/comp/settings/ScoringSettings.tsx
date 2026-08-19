@@ -23,7 +23,7 @@ import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { ChoiceList } from "@/react/rac/choice-list";
-import { CheckboxField } from "../fields";
+import { SwitchField, SwitchList } from "@/react/rac/switch";
 import type { ScoringFormat, SeriesScoring } from "../types";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
 
@@ -332,22 +332,24 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
                 description="FAI S7F §13.2: an HG pilot who reaches ESS but lands before goal keeps this share of their time and arrival points. Spec default 80. No effect on PG (the spec fixes it at 0 — no goal, no time points)."
               />
 
-              <CheckboxField
-                checked={useLeading}
-                onChange={setUseLeading}
-                label="Leading (departure) points"
-              />
-              <CheckboxField
-                checked={useArrival}
-                onChange={setUseArrival}
-                label="Arrival points (HG only)"
-              />
-              <CheckboxField
-                checked={useDifficulty}
-                onChange={setUseDifficulty}
-                label="Distance difficulty (HG only)"
-                hint="Splits HG distance points half linear, half difficulty (FAI S7F). No effect on PG."
-              />
+              <SwitchList>
+                <SwitchField
+                  checked={useLeading}
+                  onChange={setUseLeading}
+                  label="Leading (departure) points"
+                />
+                <SwitchField
+                  checked={useArrival}
+                  onChange={setUseArrival}
+                  label="Arrival points (HG only)"
+                />
+                <SwitchField
+                  checked={useDifficulty}
+                  onChange={setUseDifficulty}
+                  label="Distance difficulty (HG only)"
+                  hint="Splits HG distance points half linear, half difficulty (FAI S7F). No effect on PG."
+                />
+              </SwitchList>
 
               <NumberField
                 label="Leading-time ratio (%)"

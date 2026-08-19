@@ -18,8 +18,10 @@
  * playbook + gotchas #12/#13/#15):
  * - Never wait on "networkidle": ScoreFreshness deliberately keeps polling,
  *   so it never settles. Wait on role locators instead.
- * - RAC checkboxes can't be *clicked* by role (the real input is visually
- *   hidden) — this spec only reads checkbox state, which works fine.
+ * - RAC checkboxes/switches can't be *clicked* by role (the real input is
+ *   visually hidden) — this spec only reads their state, which works fine.
+ *   The settings pages' booleans are `rac/switch` rows, so they answer to
+ *   role=switch; dialogs keep role=checkbox.
  * - The settings pages carry no popover at all now (selects became
  *   `rac/choice-list` row lists, the calendar renders in flow), so the
  *   ariaHideOutside caveat that used to govern the timezone combobox no
@@ -445,10 +447,10 @@ test("scoring settings page shows stored GAP values; leaving saves nothing", asy
   ).toHaveValue("");
   // Reading (not clicking — gotcha #13) checkbox state is fine by role.
   await expect(
-    page.getByRole("checkbox", { name: "Leading (departure) points" })
+    page.getByRole("switch", { name: "Leading (departure) points" })
   ).not.toBeChecked();
   await expect(
-    page.getByRole("checkbox", { name: "Arrival points (HG only)" })
+    page.getByRole("switch", { name: "Arrival points (HG only)" })
   ).not.toBeChecked();
 
   // Leave without saving via the breadcrumb — untouched fields arm no guard,
@@ -473,15 +475,6 @@ test("general settings page: the timezone list filters in flow; leaving saves no
   await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
 
   const main = page.getByRole("main");
-
-  // Close Date's calendar is ON THE PAGE, not behind a trigger: day cells are
-  // present without anything being opened, and there is no "Open calendar"
-  // button at all. (The lazy picker chunk has to arrive first, hence the
-  // generous timeout on the first assertion.)
-  await expect(main.getByRole("gridcell").first()).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByRole("button", { name: "Open calendar" })).toHaveCount(0);
 
   // Timezone: a collapsed row showing the current zone, expanding to a search
   // box over the ~400 zones. Adelaide rather than the comp's own Melbourne,

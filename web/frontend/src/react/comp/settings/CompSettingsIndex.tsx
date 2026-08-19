@@ -24,9 +24,9 @@ import { AccessSettings } from "./AccessSettings";
 
 export const SETTINGS_GROUPS = [
   "general",
+  "access",
   "classes",
   "scoring",
-  "access",
 ] as const;
 export type SettingsGroup = (typeof SETTINGS_GROUPS)[number];
 
@@ -45,12 +45,12 @@ export function SettingsGroupPage({
   switch (group) {
     case "general":
       return <GeneralSettings {...props} />;
+    case "access":
+      return <AccessSettings {...props} />;
     case "classes":
       return <ClassesSettings {...props} />;
     case "scoring":
       return <ScoringSettings {...props} />;
-    case "access":
-      return <AccessSettings {...props} />;
   }
 }
 
@@ -107,6 +107,11 @@ export function CompSettingsIndex({
       <NavList>
         <NavRow to={groupPath("general")} label="General" value={comp.name} />
         <NavRow
+          to={groupPath("access")}
+          label="Access"
+          value={accessSummary(comp)}
+        />
+        <NavRow
           to={groupPath("classes")}
           label="Pilot classes"
           value={comp.pilot_classes.join(", ")}
@@ -115,11 +120,6 @@ export function CompSettingsIndex({
           to={groupPath("scoring")}
           label="Scoring"
           value={scoringSummary(comp)}
-        />
-        <NavRow
-          to={groupPath("access")}
-          label="Access"
-          value={accessSummary(comp)}
         />
       </NavList>
       <NavList label="Danger zone">
