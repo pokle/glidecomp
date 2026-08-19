@@ -419,4 +419,48 @@ components so future work stays consistent:
   outlived its first caller: the hero's "Edit route…" is gone with the hero,
   and the deep link is now issued by the admin setup checklist,
   `comp/CompSetupProgress.tsx` — which uses the same pattern for the roster
-  (`/comp/:id/pilots#edit-pilots`).
+  (`/comp/:id/pilots#edit-pilots`). *(2026-08-19, #637: the route editor is a
+  routed page, so `#edit-route` is now a REDIRECT to it rather than a flag
+  that opens a dialog — which also makes the hash leave the address bar on
+  arrival, instead of being cleared on close.)*
+
+## 11. Admin editors are routed pages (2026-08-19, #636/#637/#638)
+
+Every admin editor of a thing that already exists has a URL. What used to be a
+centred modal over the page it edited is now a page in the hierarchy:
+
+| Editor | URL |
+|---|---|
+| Competition settings | `/comp/:c/settings[/:group]` |
+| Task settings | `/comp/:c/task/:t/settings` |
+| Weather notes | `/comp/:c/task/:t/settings/weather` |
+| Task route | `/comp/:c/task/:t/route` |
+| Manual flight | `/comp/:c/task/:t/pilot/:p/manual-flight` |
+
+The reason is the same one throughout this document, applied to a viewport it
+had not been: the app is used on phones on the hill, and a form taller than the
+viewport inside a centred modal is the desktop-most thing an app can do. Real
+routes also hand back the browser's back button, a shareable URL, and scroll
+position, none of which a modal has.
+
+Two exceptions, and both are about what the surface IS rather than how tall it
+is:
+
+- **Create flows stay dialogs** (New Task, Start a new competition). There is
+  no entity yet, so there is nothing for a URL to name — a `/new` route would
+  be a page identified by the absence of its subject.
+- **Short single-purpose forms over an editor stay dialogs** (the turnpoint
+  editor and the add-waypoint form, over the route page). They are not the
+  tall-scrolling-form shape this removes, and the waypoint form is shared with
+  the competition waypoints page, so routing it would fork it.
+
+The competition's settings are an INDEX of grouped sub-pages because there are
+21 controls; the task's are one flat form because there are five. The shape
+follows the content, not the precedent — an index of two rows is a tap that
+buys nothing.
+
+Controls follow the same split. A value in a form the admin will Save is a list
+in flow (`rac/choice-list.tsx`); a control that chooses what to LOOK at stays a
+popover Select, because a filter rendered as a card of rows pushes the thing
+being filtered off the screen. The RAC adoption guide's Conventions section
+carries the rule.

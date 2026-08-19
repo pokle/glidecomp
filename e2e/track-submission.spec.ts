@@ -620,14 +620,21 @@ test.describe("submitting a track without an account", () => {
       await devLogin(page);
       await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
 
-      const settings = page.getByRole("button", { name: "Settings", exact: true });
+      // Task settings are a routed page since #637, so this is a link rather
+      // than a dialog trigger.
+      const settings = page.getByRole("link", { name: "Settings", exact: true });
       await expect(settings).toBeVisible({ timeout: 20_000 });
       await settings.click();
 
-      const box = page.getByLabel("Closed for track submissions");
+      // A switch on the settings page, where it was a checkbox in the dialog:
+      // it is an on/off setting rather than a form checkbox, and RAC gives it
+      // role="switch" accordingly.
+      const box = page.getByRole("switch", {
+        name: /^Closed for track submissions/,
+      });
       await expect(box).not.toBeChecked(); // default 0, as the migration sets
-      // The kit hides the real checkbox under a styled span, so the visible
-      // label is both what a person clicks and the only thing Playwright can.
+      // RAC hides the real input under the styled track, so the visible label
+      // is both what a person taps and the only thing Playwright can.
       await page.getByText("Closed for track submissions").click();
       await expect(box).toBeChecked();
       await page.getByRole("button", { name: /^Save/ }).click();
@@ -645,8 +652,12 @@ test.describe("submitting a track without an account", () => {
         )
         .toBe(true);
 
-      // Said above the fold, so a pilot learns before choosing a file.
-      await expect(page.getByText("Submissions closed")).toBeVisible();
+      // Saving returns to the task page, which is what the organiser was
+      // looking at — and where the notice belongs: said above the fold, so a
+      // pilot learns before choosing a file.
+      await expect(page.getByText("Submissions closed")).toBeVisible({
+        timeout: 20_000,
+      });
 
       // A signed-OUT visitor gets the sentence, not a button that would 403.
       const visitor = await page.context().browser()!.newContext();

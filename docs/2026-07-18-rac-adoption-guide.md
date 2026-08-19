@@ -114,7 +114,11 @@ instance only exists a tick after mount, so gate anything that drives it on
   alertdialog role opts out of both), `field` (TextField/NumberField/
   SearchField/Label/Description/FieldError/Input), `select` (Select/SelectItem/
   SimpleSelect — string-in/out drop-in for the old comp/fields SimpleSelect),
-  `checkbox` (Checkbox/CheckboxGroup), `table` (Table/TableHeader/Column/Row/
+  `checkbox` (Checkbox/CheckboxGroup), `choice-list`
+  (ChoiceList/CheckList/SearchableChoiceList — the settings-page field family:
+  full-width 44px rows in flow, replacing a Select or RadioGroup wherever the
+  value is part of a form that gets Saved; see the Conventions section for
+  which control to reach for), `table` (Table/TableHeader/Column/Row/
   Cell/CellEditZone), `grid-list` (GridList/GridListItem — vertical card list
   with `keyboardNavigationBehavior="tab"`, the editable-list alternative to
   Table. **No current consumer**: its one caller, the route editor, is a RAC
@@ -335,6 +339,29 @@ Points worth knowing before you reach for one:
   are exempt).
 - Keep page visuals identical to the shadcn kit unless intentionally changing
   design — the exploration compares behavior/DX, not looks.
+- **Picking a "choose one of these" control: is it a form field, or a view
+  control?** A **form field** — a value in a form the user will Save — belongs
+  in `rac/choice-list.tsx`: `ChoiceList` (one of N), `CheckList` (any of N),
+  `SearchableChoiceList` (one of N, collapsed to a row, with a search box past
+  `searchThreshold`), plus `SwitchList` in `rac/switch.tsx` for booleans. They
+  are lists **in flow**: no overlay to open over what you were reading, nothing
+  a phone keyboard can cover, and the whole 44px row is the target.
+  A **view or filter control** — choosing what to look at, sitting above the
+  content it acts on — stays a `Select`/`SimpleSelect`. Converting those makes
+  the app worse: a filter rendered as a card of rows pushes the thing you are
+  filtering off the screen. `rac/select.tsx` carries the rule and names the
+  surviving call sites. `rac/checkbox.tsx` and `rac/radio-group.tsx` remain the
+  compact forms for dense dialogs.
+- **Admin editors are routed pages, not centred modals** (#636, #637). Comp
+  settings, task settings, the weather notes, the route editor and the
+  manual-flight recorder each have a URL, built from `components/SettingsPage`
+  + `components/SettingsForm` + `rac/nav-list`, guarded by
+  `lib/use-unsaved-changes-guard`. A form taller than the viewport inside a
+  centred modal is the desktop-most thing an app can do, and this app is used
+  on phones on the hill. What stays a dialog: **create** flows (there is no
+  entity yet, so nothing for a URL to name), short single-purpose forms over an
+  editor (the turnpoint and waypoint editors), and dialogs that are an action
+  or a notice rather than an editor.
 - **44px on a coarse pointer.** A control below 44px on a phone gets there via
   a `pointer-coarse:` size utility, or — where growing it would re-flow its
   neighbours — the `touch-target` utility in `react/globals.css`, which widens
@@ -640,8 +667,22 @@ Points worth knowing before you reach for one:
     leave both ends alone: body stays static (globals.css says why) and
     `popoverClass` (rac/select.tsx, reused by ComboBox/Menu/Popover), the
     date picker's calendar and the Tooltip carry no `position` class.
-    Coverage: `e2e/popover-position.spec.ts` opens a select in a dialog on a
-    scrolled task page and asserts the listbox lands inside the viewport.
+
+    **Neither control that found this exists any more, and the rule is
+    unchanged by that.** The CIVL picker dissolved when `CivlFillDialog`
+    became a sentence and a button; the manual-flight form is a routed page
+    with a `ChoiceList` since #637/#638. What they were is history that
+    explains the rule — keep it — but do not read the rule as being about
+    dialogs. It is about where RAC puts a body-portalled popover on a
+    scrolled document, which is a property of the kit and the page, not of
+    whatever opened it. Every surviving popover is subject to it.
+
+    Coverage: `e2e/popover-position.spec.ts`, which drives the manage
+    table's per-row pilot-status select — same page and same scroll depth as
+    the manual-flight case, without a dialog in between — and asserts the
+    open listbox lands inside the viewport. Asserting visibility would pass
+    either bug; Playwright's visibility check does not require the element
+    to be on-screen.
 
 23. **A Menu is named by its TRIGGER, and a MenuItem cannot carry
     `aria-current`.** Two separate limits, both found building the

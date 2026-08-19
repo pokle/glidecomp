@@ -34,6 +34,10 @@ export const MOBILE_SPEC_FILES = [
   // Submitting a track — the flow whose whole premise is a pilot who has just
   // landed, standing on a hill, holding a phone.
   "track-submission.spec.ts",
+  // The routed task editors (#637) — settings, weather notes and the route
+  // editor. Same reason as the comp settings pages: built mobile-first, and
+  // the route editor is the surface that most needed it.
+  "task-settings-pages.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */

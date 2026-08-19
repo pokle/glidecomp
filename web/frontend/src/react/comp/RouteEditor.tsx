@@ -1140,9 +1140,14 @@ export function RouteEditor({
       {/* Sticky to the BOTTOM of the viewport, not the end of the document:
           this page is long, and a Save an admin has to scroll past the whole
           goal panel to reach is a Save they will not find on a phone. The
-          page's pb-24 reserves the space it covers. */}
+          page's pb-24 reserves the space it covers.
+
+          Bottom chrome touching the viewport edge, so the background is
+          full-bleed while the buttons clear the home indicator —
+          `pb-gutter-safe` is the app's vocabulary for exactly that (#642),
+          and `px-gutter-safe` does the same for a landscape notch. */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-5xl justify-end gap-2 px-4 py-3">
+        <div className="mx-auto flex max-w-5xl justify-end gap-2 px-gutter-safe pt-3 pb-gutter-safe">
           <Button variant="outline" onPress={onCancel}>
             Cancel
           </Button>
