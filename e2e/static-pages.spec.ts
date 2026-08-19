@@ -131,6 +131,19 @@ test.describe("with JavaScript off", () => {
     await expect(page.getByRole("tabpanel").first()).toBeVisible();
   });
 
+  test("every header link is still in the row on a phone", async ({ page }) => {
+    // The nav folds links away only once a script has run. Without one the row
+    // wraps, exactly as this header always behaved — a "More" button that
+    // cannot be opened would put My Flights and Submit track out of reach.
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.goto("/about");
+    const nav = page.getByRole("navigation", { name: "Main" });
+    for (const name of ["Competitions", "My Flights", "Submit track"]) {
+      await expect(nav.getByRole("link", { name })).toBeVisible();
+    }
+    await expect(nav.getByRole("button", { name: "More pages" })).toBeHidden();
+  });
+
   test("the GAP guide still shows its formulas", async ({ page }) => {
     await page.goto("/scoring/gap");
     await expect(
@@ -138,6 +151,42 @@ test.describe("with JavaScript off", () => {
     ).toBeVisible();
     await expect(page.locator(".katex").first()).toBeVisible();
   });
+});
+
+/**
+ * The header's priority+overflow nav (issue #639). The static pages carry
+ * their own vanilla twin of the SPA's PriorityNav, and the two halves of the
+ * rule for these pages pull in opposite directions here: with a script the bar
+ * must be one line at every width, and without one every link must still be
+ * reachable. So both are asserted.
+ */
+test.describe("the header's priority+overflow nav", () => {
+  test("folds the links that do not fit into More, on one line", async ({ page }) => {
+    await page.goto("/about");
+    const nav = page.getByRole("navigation", { name: "Main" });
+    const overflow = nav.locator("[data-priority-trigger]");
+    const wideHeight = (await nav.boundingBox())!.height;
+    await expect(overflow).toHaveAttribute("data-priority-overflow", "0");
+
+    // 320px is the narrowest viewport the accessibility standard supports
+    // (docs/accessibility-standard.md §3.2).
+    await page.setViewportSize({ width: 320, height: 812 });
+    await expect
+      .poll(async () => Number(await overflow.getAttribute("data-priority-overflow")))
+      .toBeGreaterThan(0);
+    expect(
+      (await nav.boundingBox())!.height,
+      "one line at 320px, exactly as at the default width"
+    ).toBeCloseTo(wideHeight, 0);
+
+    // Folded is not gone.
+    await nav.getByRole("button", { name: "More pages" }).click();
+    const menu = page.getByRole("menu", { name: "More pages" });
+    await expect(menu.getByRole("menuitem", { name: "Submit track" })).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Submit track" }).click();
+    await expect(page).toHaveURL(/\/submit/);
+  });
+
 });
 
 test.describe("the homepage's vanilla enhancements", () => {

@@ -7,7 +7,10 @@
  *
  * On phones (max-sm) and short landscape viewports the bar scrolls away
  * with the page instead of pinning — vertical space is too precious there.
- * Keep this in sync with the SPA header in react/components/Shell.tsx.
+ * The nav row is priority+overflow (issue #639): the links that fit stay in
+ * the row and the rest fold into a "More" menu, so the bar is one line at
+ * every width. Keep this in sync with the SPA header in
+ * react/components/Shell.tsx.
  *
  * The account slot is the one scripted part of the static chrome. These pages
  * are prerendered and edge-cached, so the build can't know who's visiting;
@@ -30,6 +33,15 @@ const tab = (isActive: boolean) =>
 /** Mirrors the SPA dropdown's item styling (react/rac/menu.tsx). */
 const menuItem =
   "flex w-full cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
+
+/**
+ * The same row, plus the marking a folded nav link takes with it: the reader
+ * loses the row's "you are here" when their page is the one that folded. The
+ * SPA's PriorityNav marks its entry with `data-current` because RAC filters
+ * `aria-current` off a MenuItem; here the attribute survives, so it does both
+ * jobs at once.
+ */
+const navMenuItem = `${menuItem} aria-[current=page]:font-semibold aria-[current=page]:text-foreground`;
 ---
 
 <!-- The glass stays full-bleed under `viewport-fit=cover`; `pt-safe` pushes
@@ -40,21 +52,105 @@ const menuItem =
     aria-label="Main"
     class="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-gutter-safe py-3"
   >
-    <a href="/" class="font-brand text-base font-semibold tracking-tight">GlideComp</a>
-    <a
-      href="/comp"
-      class={tab(active === "comp")}
-      aria-current={active === "comp" ? "page" : undefined}>Competitions</a>
-    <a
-      href="/u/me"
-      class={`${tab(active === "flights")} max-sm:hidden`}
-      aria-current={active === "flights" ? "page" : undefined}>My Flights</a>
-    <!-- The one thing a pilot who has just landed came here to do, so it is
-         reachable from every page rather than only the homepage. -->
-    <a
-      href="/submit"
-      class={tab(active === "submit")}
-      aria-current={active === "submit" ? "page" : undefined}>Submit track</a>
+    <a href="/" class="shrink-0 font-brand text-base font-semibold tracking-tight">GlideComp</a>
+    <!-- Priority+overflow row (issue #639), mirroring the SPA's PriorityNav
+         (react/rac/priority-nav.tsx): the links that fit stay in the row, the
+         rest fold into "More" instead of wrapping the bar onto a second line.
+         My Flights used to be `max-sm:hidden` here — folded is better than
+         gone, because folded is still one tap away.
+
+         Two differences from the SPA, both deliberate. The row only stops
+         WRAPPING once the script below runs, so a visitor with no JavaScript
+         keeps every link on the two lines this header has always used; and the
+         menu panel lives outside the clipping box, because there is no portal
+         to render it into. -->
+    <div class="relative flex min-w-0 flex-1 items-center">
+      <div
+        data-priority-nav
+        class="flex w-full flex-wrap items-center gap-x-6 gap-y-2"
+      >
+        <span data-priority-item="comp" class="shrink-0">
+          <a
+            href="/comp"
+            class={tab(active === "comp")}
+            aria-current={active === "comp" ? "page" : undefined}>Competitions</a>
+        </span>
+        <span data-priority-item="flights" class="shrink-0">
+          <a
+            href="/u/me"
+            class={tab(active === "flights")}
+            aria-current={active === "flights" ? "page" : undefined}>My Flights</a>
+        </span>
+        <!-- The one thing a pilot who has just landed came here to do, so it is
+             reachable from every page rather than only the homepage. -->
+        <span data-priority-item="submit" class="shrink-0">
+          <a
+            href="/submit"
+            class={tab(active === "submit")}
+            aria-current={active === "submit" ? "page" : undefined}>Submit track</a>
+        </span>
+      </div>
+      <!-- `hidden` until the script measures: with no JavaScript nothing is
+           folded, so a "More" holding nothing would be a dead control. -->
+      <div data-priority-trigger hidden class="absolute inset-y-0 right-0 flex items-center">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="more-nav-panel"
+          aria-label="More pages"
+          data-priority-nav-trigger
+          class="touch-target flex h-7 items-center gap-1 rounded-lg px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-[current]:text-foreground"
+        >
+          More
+          <!-- lucide chevron-down, inlined: these pages ship no icon runtime. -->
+          <svg
+            aria-hidden="true"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg
+          >
+        </button>
+        <div
+          id="more-nav-panel"
+          role="menu"
+          aria-label="More pages"
+          data-priority-nav-panel
+          hidden
+          class="absolute top-full right-0 z-50 mt-1 min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+        >
+          <a
+            href="/comp"
+            role="menuitem"
+            tabindex="-1"
+            hidden
+            data-priority-entry="comp"
+            aria-current={active === "comp" ? "page" : undefined}
+            class={navMenuItem}>Competitions</a>
+          <a
+            href="/u/me"
+            role="menuitem"
+            tabindex="-1"
+            hidden
+            data-priority-entry="flights"
+            aria-current={active === "flights" ? "page" : undefined}
+            class={navMenuItem}>My Flights</a>
+          <a
+            href="/submit"
+            role="menuitem"
+            tabindex="-1"
+            hidden
+            data-priority-entry="submit"
+            aria-current={active === "submit" ? "page" : undefined}
+            class={navMenuItem}>Submit track</a>
+        </div>
+      </div>
+    </div>
     <!-- Fixed h-8 either way, so swapping the pill for the avatar can't shift
          the bar. `relative` anchors the menu popover. -->
     <div class="relative ml-auto h-8" data-account>
@@ -104,69 +200,23 @@ const menuItem =
 </header>
 
 <script is:inline>
-  // Account slot: pick "Sign in" vs the account menu without a server render.
-  //
-  // The hint (localStorage `glidecomp:account`, written by the SPA in
-  // auth/client.ts) is what makes this flash-free in both directions: a
-  // signed-in visitor gets their avatar on first paint, a signed-out one keeps
-  // the prerendered pill and costs us no request. The hint is only ever a
-  // guess about a session — it authorises nothing — so we confirm it against
-  // /api/auth/me and correct the header if the session has since expired.
-  (function () {
-    var root = document.querySelector("[data-account]");
-    if (!root) return;
-    var signinLink = root.querySelector("[data-account-signin]");
-    var menu = root.querySelector("[data-account-menu]");
-    var trigger = root.querySelector("[data-account-trigger]");
-    var panel = root.querySelector("[data-account-panel]");
-    var nameEl = root.querySelector("[data-account-name]");
-    var items = panel ? panel.querySelectorAll('[role="menuitem"]') : [];
-
-    function read(storage, key) {
-      try {
-        return storage.getItem(key);
-      } catch (e) {
-        return null; // Storage blocked (Safari private mode).
-      }
+  /**
+   * WAI-ARIA menu-button behaviour for a trigger/panel pair: click and arrow
+   * keys to open, arrows to walk, Escape / click-away / tab-away to close.
+   * Two menus in this header need it — the account slot and the nav's "More"
+   * — so it is written once here rather than twice below.
+   *
+   * The items are re-read on every use rather than captured: "More" holds an
+   * entry per nav link and hides the ones still visible in the row, so which
+   * of them the arrow keys walk changes with the width of the window.
+   */
+  function menuButton(root, trigger, panel) {
+    function items() {
+      return Array.prototype.slice.call(
+        panel.querySelectorAll('[role="menuitem"]:not([hidden])')
+      );
     }
 
-    function initials(name) {
-      var parts = String(name).split(/\s+/).filter(Boolean).slice(0, 2);
-      var s = parts
-        .map(function (w) {
-          return w[0];
-        })
-        .join("")
-        .toUpperCase();
-      return s || "?";
-    }
-
-    /** null = signed out (show the pill); a name = show the account menu. */
-    function render(name) {
-      if (name) {
-        trigger.textContent = initials(name);
-        nameEl.textContent = name;
-      } else {
-        close();
-      }
-      signinLink.hidden = !!name;
-      menu.hidden = !name;
-    }
-
-    function hint() {
-      // The SPA's superadmin "Preview as: signed out" is presentation-only,
-      // but it should hold across the static pages too or the preview lies.
-      if (read(sessionStorage, "glidecomp:preview-role") === "out") return null;
-      var raw = read(localStorage, "glidecomp:account");
-      if (!raw) return null;
-      try {
-        return JSON.parse(raw).name || null;
-      } catch (e) {
-        return null;
-      }
-    }
-
-    /* ---- Menu open/close (WAI-ARIA menu button behaviour) ---- */
     function isOpen() {
       return !panel.hidden;
     }
@@ -175,8 +225,9 @@ const menuItem =
     function open(focus) {
       panel.hidden = false;
       trigger.setAttribute("aria-expanded", "true");
-      if (!focus || !items.length) return;
-      items[focus === "last" ? items.length - 1 : 0].focus();
+      var list = items();
+      if (!focus || !list.length) return;
+      list[focus === "last" ? list.length - 1 : 0].focus();
     }
 
     function close(refocus) {
@@ -211,7 +262,7 @@ const menuItem =
       }
       if (!isOpen() || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
       e.preventDefault();
-      var list = Array.prototype.slice.call(items);
+      var list = items();
       var i = list.indexOf(document.activeElement);
       var next = e.key === "ArrowDown" ? i + 1 : i - 1;
       list[(next + list.length) % list.length].focus();
@@ -227,6 +278,71 @@ const menuItem =
         if (isOpen() && !root.contains(document.activeElement)) close();
       }, 0);
     });
+
+    return { isOpen: isOpen, open: open, close: close };
+  }
+
+  // Account slot: pick "Sign in" vs the account menu without a server render.
+  //
+  // The hint (localStorage `glidecomp:account`, written by the SPA in
+  // auth/client.ts) is what makes this flash-free in both directions: a
+  // signed-in visitor gets their avatar on first paint, a signed-out one keeps
+  // the prerendered pill and costs us no request. The hint is only ever a
+  // guess about a session — it authorises nothing — so we confirm it against
+  // /api/auth/me and correct the header if the session has since expired.
+  (function () {
+    var root = document.querySelector("[data-account]");
+    if (!root) return;
+    var signinLink = root.querySelector("[data-account-signin]");
+    var menu = root.querySelector("[data-account-menu]");
+    var trigger = root.querySelector("[data-account-trigger]");
+    var panel = root.querySelector("[data-account-panel]");
+    var nameEl = root.querySelector("[data-account-name]");
+    var menuCtl = menuButton(root, trigger, panel);
+
+    function read(storage, key) {
+      try {
+        return storage.getItem(key);
+      } catch (e) {
+        return null; // Storage blocked (Safari private mode).
+      }
+    }
+
+    function initials(name) {
+      var parts = String(name).split(/\s+/).filter(Boolean).slice(0, 2);
+      var s = parts
+        .map(function (w) {
+          return w[0];
+        })
+        .join("")
+        .toUpperCase();
+      return s || "?";
+    }
+
+    /** null = signed out (show the pill); a name = show the account menu. */
+    function render(name) {
+      if (name) {
+        trigger.textContent = initials(name);
+        nameEl.textContent = name;
+      } else {
+        menuCtl.close();
+      }
+      signinLink.hidden = !!name;
+      menu.hidden = !name;
+    }
+
+    function hint() {
+      // The SPA's superadmin "Preview as: signed out" is presentation-only,
+      // but it should hold across the static pages too or the preview lies.
+      if (read(sessionStorage, "glidecomp:preview-role") === "out") return null;
+      var raw = read(localStorage, "glidecomp:account");
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw).name || null;
+      } catch (e) {
+        return null;
+      }
+    }
 
     root.querySelector("[data-account-signout]").addEventListener("click", function () {
       // Better Auth's own endpoint, the one the SPA's signOut() wraps. It
@@ -289,5 +405,100 @@ const menuItem =
         // Offline or the API is down: leave the optimistic render alone rather
         // than telling a signed-in pilot they're signed out.
       });
+  })();
+
+  /*
+   * Priority+overflow nav (issue #639) — the vanilla twin of the SPA's
+   * react/rac/priority-nav.tsx. Keep the two in step; the reasoning for the
+   * measurement lives in that file's header comment, and the short version is:
+   *
+   *  - a folded link is hidden with `visibility`, so it KEEPS its space and
+   *    the measurement can never depend on its own result;
+   *  - the trigger is absolutely positioned, so it is not in the row's layout
+   *    either, and its width is only reserved once something already overflows.
+   *
+   * Everything the script changes is an inline style or a `hidden` attribute,
+   * never a class: these pages are prerendered, and a class name that only
+   * exists inside a script string is a class name Tailwind may not have built.
+   */
+  (function () {
+    var row = document.querySelector("[data-priority-nav]");
+    var triggerWrap = document.querySelector("[data-priority-trigger]");
+    if (!row || !triggerWrap) return;
+    var items = Array.prototype.slice.call(
+      row.querySelectorAll("[data-priority-item]")
+    );
+    var trigger = triggerWrap.querySelector("[data-priority-nav-trigger]");
+    var panel = triggerWrap.querySelector("[data-priority-nav-panel]");
+    menuButton(triggerWrap, trigger, panel);
+
+    // Only now, with a script running, does the row stop wrapping: without one
+    // every link has to stay reachable, and wrapping is how it does that.
+    row.style.flexWrap = "nowrap";
+    row.style.overflow = "hidden";
+    triggerWrap.hidden = false;
+    triggerWrap.style.visibility = "hidden";
+
+    function entry(id) {
+      return panel.querySelector('[data-priority-entry="' + id + '"]');
+    }
+
+    function measure() {
+      var edge = row.getBoundingClientRect().right;
+      // Half a pixel of slack: sub-pixel layout reports a link that fits
+      // exactly as overflowing by a fraction, and the row would fold one away
+      // for nothing.
+      var pastEdge = function (el, limit) {
+        return el.getBoundingClientRect().right > limit + 0.5;
+      };
+      var limit = edge;
+      if (
+        items.some(function (el) {
+          return pastEdge(el, edge);
+        })
+      ) {
+        var gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+        limit = edge - (triggerWrap.offsetWidth + gap);
+      } else {
+        limit = Infinity;
+      }
+
+      var folded = 0;
+      var holdsCurrent = false;
+      items.forEach(function (el) {
+        var out = pastEdge(el, limit);
+        el.style.visibility = out ? "hidden" : "";
+        var link = entry(el.getAttribute("data-priority-item"));
+        if (link) {
+          link.hidden = !out;
+          if (out && link.getAttribute("aria-current") === "page") {
+            holdsCurrent = true;
+          }
+        }
+        if (out) folded++;
+      });
+      triggerWrap.style.visibility = folded ? "" : "hidden";
+      triggerWrap.setAttribute("data-priority-overflow", String(folded));
+      // The row's own marking of the current page goes with the link that
+      // folded, so the trigger picks it up.
+      if (holdsCurrent) trigger.setAttribute("data-current", "");
+      else trigger.removeAttribute("data-current");
+    }
+
+    measure();
+    window.addEventListener("resize", measure, { passive: true });
+    if (typeof ResizeObserver !== "undefined") {
+      var observer = new ResizeObserver(measure);
+      observer.observe(row);
+      // The links too: a web font arriving re-widths every label without
+      // resizing the row itself.
+      items.forEach(function (el) {
+        observer.observe(el);
+      });
+    }
+    // Belt and braces where ResizeObserver is not the one that notices.
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(measure).catch(function () {});
+    }
   })();
 </script>

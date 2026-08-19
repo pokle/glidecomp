@@ -36,6 +36,7 @@ import {
   todayInZone,
 } from "../lib/format";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { PriorityNav, type PriorityNavItem } from "@/react/rac/priority-nav";
 import { Disclosure } from "@/react/rac/disclosure";
 import { compCrumbs } from "../lib/crumbs";
 import {
@@ -62,6 +63,21 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { CompDetailLoaderData, CompScores } from "../loaders";
+
+const sectionLinkClass = "hover:text-foreground hover:underline underline-offset-4";
+
+/**
+ * The section bar's in-page entries, for when they have folded into the
+ * overflow menu. In the row they are plain `#id` anchors and the browser does
+ * this itself; from a menu item the jump has to be made by hand — and NOT as a
+ * routed href, because react-router would push a history entry and
+ * lib/scroll-restoration.ts would start it at the top, which is the one thing
+ * an in-page anchor must not do. `scroll-mt-24` on the section keeps the
+ * landing clear of the sticky bars.
+ */
+const scrollToSection = (id: string) => () => {
+  document.getElementById(id)?.scrollIntoView();
+};
 
 export function CompDetail() {
   const { compId: compParam } = useParams<{ compId: string }>();
@@ -204,6 +220,92 @@ function CompDetailView({
     />
   );
 
+  // The section bar's links. Each is written twice on purpose: once as the
+  // element the row renders (a Link, or a plain `#id` anchor), and once as the
+  // plain label and destination the overflow menu needs — a RAC MenuItem is
+  // the item, so it cannot wrap the row's own element.
+  const sectionLinks: PriorityNavItem[] = [
+    {
+      id: "tasks",
+      label: `Tasks (${comp.tasks.length})`,
+      onAction: scrollToSection("tasks"),
+      children: (
+        <a href="#tasks" className={sectionLinkClass}>
+          Tasks ({comp.tasks.length})
+        </a>
+      ),
+    },
+    {
+      id: "scores",
+      label: "Scores",
+      href: compScoresPath(compId, comp.name),
+      children: (
+        <Link to={compScoresPath(compId, comp.name)} className={sectionLinkClass}>
+          Scores
+        </Link>
+      ),
+    },
+    {
+      id: "waypoints",
+      label: `Waypoints (${comp.waypoint_count})`,
+      href: compWaypointsPath(compId, comp.name),
+      children: (
+        <Link to={compWaypointsPath(compId, comp.name)} className={sectionLinkClass}>
+          Waypoints ({comp.waypoint_count})
+        </Link>
+      ),
+    },
+    // Pilot management moved to its own admin page — visitors find every pilot
+    // in the scores, so the roster link is admin-only.
+    ...(isAdmin
+      ? [
+          {
+            id: "pilots",
+            label: `Pilots (${comp.pilot_count})`,
+            href: `${compPath(compId, comp.name)}/pilots`,
+            children: (
+              <Link
+                to={`${compPath(compId, comp.name)}/pilots`}
+                className={sectionLinkClass}
+              >
+                Pilots ({comp.pilot_count})
+              </Link>
+            ),
+          },
+        ]
+      : []),
+    // Field analysis has nothing to measure on an open-distance comp (no legs,
+    // no speed section), so it's hidden there. Its own page — it's a long
+    // exploratory read.
+    ...(comp.scoring_format !== "open_distance"
+      ? [
+          {
+            id: "analysis",
+            label: "Field analysis",
+            href: compAnalysisPath(compId, comp.name),
+            children: (
+              <Link
+                to={compAnalysisPath(compId, comp.name)}
+                className={sectionLinkClass}
+              >
+                Field analysis
+              </Link>
+            ),
+          },
+        ]
+      : []),
+    {
+      id: "activity",
+      label: "Activity",
+      onAction: scrollToSection("activity"),
+      children: (
+        <a href="#activity" className={sectionLinkClass}>
+          Activity
+        </a>
+      ),
+    },
+  ];
+
   return (
     <div>
       <Breadcrumbs items={compCrumbs()} current={comp.name} />
@@ -245,23 +347,16 @@ function CompDetailView({
           static (phones, short landscape). */}
       <nav
         aria-label="Sections"
-        className="sticky top-0 z-30 -mx-4 mt-3 flex flex-wrap gap-x-4 gap-y-1 border-b bg-background/90 px-4 py-2 text-sm text-muted-foreground backdrop-blur-sm sm:top-[61px] [@media(max-height:500px)]:static print:hidden"
+        className="sticky top-0 z-30 -mx-4 mt-3 border-b bg-background/90 px-4 py-2 text-sm text-muted-foreground backdrop-blur-sm sm:top-[61px] [@media(max-height:500px)]:static print:hidden"
       >
-        <a href="#tasks" className="hover:text-foreground hover:underline underline-offset-4">Tasks ({comp.tasks.length})</a>
-        <Link to={compScoresPath(compId, comp.name)} className="hover:text-foreground hover:underline underline-offset-4">Scores</Link>
-        <Link to={compWaypointsPath(compId, comp.name)} className="hover:text-foreground hover:underline underline-offset-4">Waypoints ({comp.waypoint_count})</Link>
-        {/* Pilot management moved to its own admin page — visitors find every
-            pilot in the scores, so the roster link is admin-only. */}
-        {isAdmin ? (
-          <Link to={`${compPath(compId, comp.name)}/pilots`} className="hover:text-foreground hover:underline underline-offset-4">Pilots ({comp.pilot_count})</Link>
-        ) : null}
-        {/* Field analysis has nothing to measure on an open-distance comp (no
-            legs, no speed section), so it's hidden there. Its own page — it's a
-            long exploratory read. */}
-        {comp.scoring_format !== "open_distance" ? (
-          <Link to={compAnalysisPath(compId, comp.name)} className="hover:text-foreground hover:underline underline-offset-4">Field analysis</Link>
-        ) : null}
-        <a href="#activity" className="hover:text-foreground hover:underline underline-offset-4">Activity</a>
+        {/* Six links wrapped onto three lines on a phone, which is most of a
+            sticky bar and none of the page. They stay on one line now and fold
+            into "More" from the right (issue #639). */}
+        <PriorityNav
+          items={sectionLinks}
+          className="gap-x-4"
+          menuLabel="More sections"
+        />
       </nav>
 
       {/* Admin-only, so absent from SSR markup and the first client paint —

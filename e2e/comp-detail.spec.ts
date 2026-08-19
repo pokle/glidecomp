@@ -357,6 +357,107 @@ test("scores page: the view tabs stay reachable on a narrow phone", async ({
   await expect(page.locator("main [data-tab-fade='end']")).toHaveCount(0);
 });
 
+/**
+ * Issue #639: the header nav and the comp page's section bar were `flex-wrap`
+ * rows, so a phone got them as two and three lines of sticky chrome before the
+ * page itself started. They are priority+overflow now — the links that fit stay
+ * in the row and the rest fold into a "More" menu.
+ *
+ * The assertion that matters is not "something is hidden" but "the bar is no
+ * taller narrow than it is wide": that is the defect the issue reported, and a
+ * row that quietly went back to wrapping would still hide nothing and still
+ * pass a count-only check.
+ */
+test("the section bar folds into More rather than wrapping on a phone", async ({
+  page,
+  isMobile,
+}) => {
+  phoneOnly(isMobile);
+  await page.goto(`/comp/${compId}`);
+  const bar = page.getByRole("navigation", { name: "Sections" });
+  await expect(bar).toBeVisible({ timeout: 15_000 });
+  const overflow = bar.locator("[data-priority-overflow]");
+
+  // Wide enough for every link: nothing folds, and there is no trigger to see.
+  await page.setViewportSize({ width: 1280, height: 812 });
+  await expect(overflow).toHaveAttribute("data-priority-overflow", "0");
+  await expect(bar.getByRole("button", { name: /More/ })).toBeHidden();
+  const wideHeight = (await bar.boundingBox())!.height;
+
+  // 320px is the narrowest viewport the accessibility standard supports
+  // (docs/accessibility-standard.md §3.2), and this bar carries six links.
+  await page.setViewportSize({ width: 320, height: 812 });
+  const folded = Number(await overflow.getAttribute("data-priority-overflow"));
+  expect(folded, "links this narrow have to fold somewhere").toBeGreaterThan(0);
+  expect(
+    (await bar.boundingBox())!.height,
+    "one line at 320px, exactly as at 1280px"
+  ).toBeCloseTo(wideHeight, 0);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    "and the page still never scrolls sideways (WCAG 1.4.10)"
+  ).toBeLessThanOrEqual(0);
+
+  // Folded is not gone: every link the bar dropped is in the menu, named the
+  // same way, and none of the ones still in the row is repeated there.
+  const inRow = await bar.getByRole("link").allInnerTexts();
+  await bar.getByRole("button", { name: "More sections" }).click();
+  const menu = page.getByRole("menu", { name: "More sections" });
+  const inMenu = await menu.getByRole("menuitem").allInnerTexts();
+  expect(inMenu).toHaveLength(folded);
+  expect(inMenu.filter((label) => inRow.includes(label))).toEqual([]);
+  expect(inMenu).toContain("Activity");
+
+  // An in-page entry still jumps down the page rather than routing away —
+  // a routed href would have started the reader at the top instead.
+  await menu.getByRole("menuitem", { name: "Activity" }).click();
+  await expect
+    .poll(() => page.evaluate(() => Math.round(window.scrollY)))
+    .toBeGreaterThan(100);
+  // Still on the comp page (settled onto its canonical `${slug}-${id}`), not
+  // routed to a new one.
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}$`));
+});
+
+test("the app header folds into More rather than wrapping on a phone", async ({
+  page,
+  isMobile,
+}) => {
+  phoneOnly(isMobile);
+  await page.goto(`/comp/${compId}`);
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(nav).toBeVisible({ timeout: 15_000 });
+  const overflow = nav.locator("[data-priority-overflow]");
+
+  await page.setViewportSize({ width: 1280, height: 812 });
+  await expect(overflow).toHaveAttribute("data-priority-overflow", "0");
+  const wideHeight = (await nav.boundingBox())!.height;
+
+  await page.setViewportSize({ width: 320, height: 812 });
+  expect(
+    Number(await overflow.getAttribute("data-priority-overflow"))
+  ).toBeGreaterThan(0);
+  expect((await nav.boundingBox())!.height).toBeCloseTo(wideHeight, 0);
+
+  // The page being read is "Competitions", and at this width it is one of the
+  // links that folded — so the marking the row would have carried goes with
+  // it, onto the trigger and onto its entry. Otherwise nothing on a phone says
+  // where the reader is.
+  const trigger = nav.getByRole("button", { name: "More pages" });
+  await expect(trigger).toHaveAttribute("data-current", "true");
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: "More pages" });
+  await expect(menu.getByRole("menuitem", { name: "Competitions" })).toHaveAttribute(
+    "data-current",
+    "true"
+  );
+
+  // "Submit track" is the one thing a pilot who has just landed came here to
+  // do, so folding it must not put it out of reach.
+  await menu.getByRole("menuitem", { name: "Submit track" }).click();
+  await expect(page).toHaveURL(/\/submit/);
+});
+
 test("scores page: Download menu saves a long-form CSV and offers the Sheets formula", async ({
   page,
 }) => {

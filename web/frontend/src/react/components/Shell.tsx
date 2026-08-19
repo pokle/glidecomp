@@ -5,7 +5,7 @@
  * sign-out. Site super admins also get the floating "Preview as" pill.
  */
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { EyeIcon, XIcon } from "lucide-react";
 import { Button, ToggleButton } from "@/react/rac/button";
 import {
@@ -16,6 +16,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@/react/rac/menu";
+import { PriorityNav, type PriorityNavItem } from "@/react/rac/priority-nav";
 import { Separator } from "@/react/rac/separator";
 import { cn } from "@/react/lib/utils";
 import { RacRouterProvider } from "@/react/rac/router";
@@ -41,8 +42,51 @@ export function Shell() {
   const { user, loading } = useUser();
   const goToSignIn = useGoToSignIn();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   useScrollRestoration();
   const flightsHref = user?.username ? `/u/${user.username}` : "/u/me";
+
+  // NavLink works out its own active state, but the overflow menu needs the
+  // same answer for a link that is no longer in the row — so the rule NavLink
+  // uses by default (this path, or anything under it) is spelt out once here.
+  const isCurrent = (to: string) => pathname === to || pathname.startsWith(`${to}/`);
+  const navItems: PriorityNavItem[] = [
+    {
+      id: "comp",
+      label: "Competitions",
+      href: "/comp",
+      isCurrent: isCurrent("/comp"),
+      children: (
+        <NavLink to="/comp" className={navLinkClass}>
+          Competitions
+        </NavLink>
+      ),
+    },
+    {
+      id: "flights",
+      label: "My Flights",
+      href: flightsHref,
+      isCurrent: isCurrent(flightsHref),
+      children: (
+        <NavLink to={flightsHref} className={navLinkClass}>
+          My Flights
+        </NavLink>
+      ),
+    },
+    // The one thing a pilot who has just landed came here to do, so it is
+    // reachable from every page. Mirrored in SiteHeader.astro.
+    {
+      id: "submit",
+      label: "Submit track",
+      href: "/submit",
+      isCurrent: isCurrent("/submit"),
+      children: (
+        <NavLink to="/submit" className={navLinkClass}>
+          Submit track
+        </NavLink>
+      ),
+    },
+  ];
 
   // A signed-in user missing a username or a display name hasn't finished
   // onboarding (needsOnboarding() carries the why). Onboarding is mandatory,
@@ -80,27 +124,32 @@ export function Shell() {
       <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 pt-safe max-sm:static [@media(max-height:500px)]:static print:hidden">
         {/* The glass itself stays full-bleed — `pt-safe` on the header pushes
             only its CONTENT below the status bar, and the gutter grows past a
-            landscape notch (issue #642). Keep in sync with SiteHeader.astro. */}
+            landscape notch (issue #642).
+
+            One row: the links that do not fit fold into PriorityNav's "More"
+            menu rather than wrapping the bar onto a second line (issue #639).
+            The bar keeps `flex-wrap` all the same — PriorityNav shrinks to
+            nothing before anything else can wrap, so the only case left is the
+            brand and the account slot ALONE outgrowing the viewport, and
+            wrapping is the right answer to that. Keep in sync with
+            SiteHeader.astro. */}
         <nav
           aria-label="Main"
           className="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-gutter-safe py-3"
         >
           {/* Home is a static (Astro) page, so use a full navigation. */}
-          <a href="/" className="font-brand text-base font-semibold tracking-tight">
+          <a
+            href="/"
+            className="shrink-0 font-brand text-base font-semibold tracking-tight"
+          >
             GlideComp
           </a>
-          <NavLink to="/comp" className={navLinkClass}>
-            Competitions
-          </NavLink>
-          <NavLink to={flightsHref} className={navLinkClass}>
-            My Flights
-          </NavLink>
-          {/* The one thing a pilot who has just landed came here to do, so it
-              is reachable from every page. Mirrored in SiteHeader.astro. */}
-          <NavLink to="/submit" className={navLinkClass}>
-            Submit track
-          </NavLink>
-          <div className="ml-auto">
+          <PriorityNav
+            items={navItems}
+            className="flex-1 gap-x-6"
+            menuLabel="More pages"
+          />
+          <div className="shrink-0">
             {user ? (
               <UserMenu name={user.name ?? user.email ?? "Account"} />
             ) : !loading ? (
