@@ -66,6 +66,9 @@ const CompPilotsPage = lazy(() =>
 const CompSettingsPage = lazy(() =>
   import("./pages/CompSettingsPage").then((m) => ({ default: m.CompSettingsPage }))
 );
+const TaskSettingsPage = lazy(() =>
+  import("./pages/TaskSettingsPage").then((m) => ({ default: m.TaskSettingsPage }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -164,6 +167,17 @@ export function AppRoutes() {
             element={<TaskFieldAnalysis />}
           />
           <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+          {/* Admin-only task settings — flat where the comp's is an index (a
+              task has five settings), with the weather notes as its one
+              sub-page. Noindex shell in the SSR Function, like /pilots. */}
+          <Route
+            path="/comp/:compId/task/:taskId/settings"
+            element={<TaskSettingsPage />}
+          />
+          <Route
+            path="/comp/:compId/task/:taskId/settings/:sub"
+            element={<TaskSettingsPage />}
+          />
           {/* Where the per-task analysis lived until the re-nesting above. */}
           <Route
             path="/comp/:compId/task/:taskId/analysis"

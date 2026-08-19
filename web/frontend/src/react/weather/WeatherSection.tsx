@@ -18,42 +18,26 @@
  * Notes are not a scoring input. Saving goes through the task PATCH like
  * every other task field, which audit-logs the change (with an excerpt,
  * since this is prose) and deliberately does NOT mark scores stale.
+ *
+ * Editing happens on a routed page, not here (issue #637): the section owns
+ * the READING of the notes and links to
+ * comp/settings/WeatherNotesSettings.tsx for the writing. An eight-row
+ * textarea in a centred modal was the shape that conversion exists to remove.
  */
-import { useState } from "react";
-import { Form } from "react-aria-components";
-import { Button } from "@/react/rac/button";
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Modal,
-} from "@/react/rac/dialog";
-import { Description, Label, TextArea } from "@/react/rac/field";
-import { TextField as AriaTextField } from "react-aria-components";
+import { LinkButton } from "@/react/rac/button";
 import { SectionHeader } from "@/react/components/SectionHeader";
-import { api } from "../../comp/api";
-import { toast } from "../lib/toast";
 import { WeatherNotesBlock } from "./WeatherNotesBlock";
 import { TaskWeatherPanel } from "./TaskWeatherPanel";
 import type { TaskWeatherState } from "./use-task-weather";
 import { Card } from "@/react/rac/card";
 
-/** Mirrors MAX_WEATHER_NOTES in the worker's validators — the server is the
- * authority; this stops a paste that would only be rejected on save. */
-const MAX_NOTES = 4000;
-
 export function WeatherSection({
-  compId,
-  taskId,
   weather,
   notes,
   isAdmin,
   compTimezone,
-  onSaved,
+  notesHref,
 }: {
-  compId: string;
-  taskId: string;
   /**
    * Fetched by the page and handed down, not fetched here. The task page's
    * route views want the same answer for their wind, and the endpoint can
@@ -64,9 +48,13 @@ export function WeatherSection({
   isAdmin: boolean;
   /** Competition IANA zone; the charts' axis ticks in it. */
   compTimezone: string | null;
-  onSaved: (notes: string) => void;
+  /**
+   * Where the notes are edited. Built by the caller, which holds the comp and
+   * task names the canonical slug needs — this section knows about weather,
+   * not about URL shapes.
+   */
+  notesHref: string;
 }) {
-  const [editing, setEditing] = useState(false);
   const hasNotes = notes.trim().length > 0;
 
   const weatherPending = weather.loading || weather.data?.pending === true;
@@ -85,9 +73,9 @@ export function WeatherSection({
         title="Weather"
         action={
           isAdmin ? (
-            <Button variant="outline" size="sm" onPress={() => setEditing(true)}>
+            <LinkButton variant="outline" size="sm" href={notesHref}>
               {hasNotes ? "Edit notes…" : "Add notes…"}
-            </Button>
+            </LinkButton>
           ) : null
         }
       />
@@ -109,111 +97,6 @@ export function WeatherSection({
           />
         </div>
       ) : null}
-      {editing ? (
-        <EditWeatherNotesDialog
-          compId={compId}
-          taskId={taskId}
-          notes={notes}
-          onClose={() => setEditing(false)}
-          onSaved={(saved) => {
-            setEditing(false);
-            onSaved(saved);
-          }}
-        />
-      ) : null}
     </Card>
-  );
-}
-
-function EditWeatherNotesDialog({
-  compId,
-  taskId,
-  notes,
-  onClose,
-  onSaved,
-}: {
-  compId: string;
-  taskId: string;
-  notes: string;
-  onClose: () => void;
-  onSaved: (notes: string) => void;
-}) {
-  const [draft, setDraft] = useState(notes);
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
-        param: { comp_id: compId, task_id: taskId },
-        // Trimmed on the way in so "cleared" is unambiguous — a field of
-        // whitespace would otherwise read as notes that render as nothing.
-        json: { weather_notes: draft.trim() },
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to save weather notes");
-        return;
-      }
-      toast.success("Weather notes saved");
-      onSaved(draft.trim());
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      className="sm:max-w-xl"
-    >
-      <Dialog>
-        <DialogHeader>
-          <DialogTitle>Weather notes</DialogTitle>
-        </DialogHeader>
-        <Form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-          className="flex flex-col gap-4"
-        >
-          <AriaTextField
-            value={draft}
-            onChange={setDraft}
-            maxLength={MAX_NOTES}
-            className="flex flex-col gap-2"
-          >
-            <Label>What did the day do?</Label>
-            <TextArea
-              rows={8}
-              placeholder={
-                "e.g. Slow start, inversion broke about 12:30.\n" +
-                "Overdeveloped by 2pm over the back range.\n" +
-                "Glass off at 3, most of the field landed short."
-              }
-            />
-            <Description>
-              Shown to everyone on this task and alongside the field analysis
-              charts. Plain text; line breaks are kept. {draft.length}/{MAX_NOTES}
-              characters.
-            </Description>
-          </AriaTextField>
-          <DialogFooter>
-            <Button variant="outline" onPress={onClose} isDisabled={saving}>
-              Cancel
-            </Button>
-            <Button type="submit" isDisabled={saving}>
-              {saving ? "Saving…" : "Save notes"}
-            </Button>
-          </DialogFooter>
-        </Form>
-      </Dialog>
-    </Modal>
   );
 }

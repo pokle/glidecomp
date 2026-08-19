@@ -11,7 +11,14 @@
  * non-critical and may never resolve), so every builder takes a nullable name
  * and falls back to a generic label — the link works either way.
  */
-import { compPath, taskPath, compAnalysisPath, compSettingsPath } from "./slug";
+import {
+  compPath,
+  taskPath,
+  compAnalysisPath,
+  compSettingsPath,
+  taskSettingsPath,
+  pilotPath,
+} from "./slug";
 
 export type Crumb = { label: string; to: string };
 
@@ -63,6 +70,54 @@ export function underTask(
     {
       label: taskName || "Task",
       to: compId && taskId ? taskPath(compId, compName, taskId, taskName) : "/comp",
+    },
+  ];
+}
+
+/**
+ * Ancestors of a task settings sub-page (today only the weather notes).
+ *
+ * The task settings page itself is flat, so this is the only trail that needs
+ * "Settings" as an ancestor rather than as the current crumb.
+ */
+export function underTaskSettings(
+  compId: string | undefined,
+  compName: string | null | undefined,
+  taskId: string | undefined,
+  taskName: string | null | undefined
+): Crumb[] {
+  return [
+    ...underTask(compId, compName, taskId, taskName),
+    {
+      label: "Settings",
+      to:
+        compId && taskId
+          ? taskSettingsPath(compId, compName, taskId, taskName)
+          : "/comp",
+    },
+  ];
+}
+
+/**
+ * Ancestors of a page under one pilot's report card (recording a manual
+ * flight). The pilot's own name is the last ancestor: the page is about them.
+ */
+export function underPilot(
+  compId: string | undefined,
+  compName: string | null | undefined,
+  taskId: string | undefined,
+  taskName: string | null | undefined,
+  pilotId: string | undefined,
+  pilotName: string | null | undefined
+): Crumb[] {
+  return [
+    ...underTask(compId, compName, taskId, taskName),
+    {
+      label: pilotName || "Pilot",
+      to:
+        compId && taskId && pilotId
+          ? pilotPath(compId, compName, taskId, taskName, pilotId, pilotName)
+          : "/comp",
     },
   ];
 }

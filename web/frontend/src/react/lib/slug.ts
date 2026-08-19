@@ -134,6 +134,33 @@ export function taskPath(
   return `${compPath(compId, compName)}/task/${slugSegment(taskId, taskName)}`;
 }
 
+/**
+ * The admin-only task settings page. Without `sub`, the settings form itself;
+ * with one (today only "weather"), that sub-page.
+ *
+ * Flat where the competition's is an index: a task has five settings, which is
+ * a form and not a hierarchy.
+ */
+export function taskSettingsPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  sub?: string
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/settings${sub ? `/${sub}` : ""}`;
+}
+
+/** The task's route editor — turnpoints, start gates and goal. Admin-only. */
+export function taskRoutePath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/route`;
+}
+
 export function taskAnalysisPath(
   compId: string,
   compName: string | null | undefined,
@@ -152,4 +179,20 @@ export function pilotPath(
   pilotName?: string | null
 ): string {
   return `${taskPath(compId, compName, taskId, taskName)}/pilot/${slugSegment(pilotId, pilotName)}`;
+}
+
+/**
+ * Recording a flight for a pilot who has no track (FAI S7F §9.2.2). A child of
+ * the pilot's report card because that is the page it is about — and the page
+ * the recorded flight then explains.
+ */
+export function manualFlightPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  pilotId: string,
+  pilotName?: string | null
+): string {
+  return `${pilotPath(compId, compName, taskId, taskName, pilotId, pilotName)}/manual-flight`;
 }
