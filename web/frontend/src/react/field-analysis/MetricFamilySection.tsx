@@ -13,6 +13,10 @@ import { Badge } from "@/react/rac/badge";
 import { MetricMethod } from "./MetricExplanation";
 import { PerPilotMetricTable } from "./PerPilotMetricTable";
 import { ReportTableView, ReportTableTitle } from "./ReportTableView";
+import { MetricLanes } from "./charts/MetricLanes";
+import { buildLanes } from "./charts/metric-lanes";
+import { MasterDetail } from "@/react/components/MasterDetail";
+import { cn } from "@/react/lib/utils";
 import { SeriesChart } from "./charts/SeriesChart";
 import { bestCorrelation } from "./SeparationRanking";
 import { verdictWords } from "./units";
@@ -73,6 +77,10 @@ export function MetricFamilySection({
     [metrics]
   );
 
+  // Built here rather than inside MetricLanes so the layout below can ask how
+  // many lanes there are before deciding whether there is a detail pane at all.
+  const lanes = useMemo(() => buildLanes(metrics, report.pilots), [metrics, report.pilots]);
+
   if (metrics.length === 0) return null;
 
   const best = bestCorrelation(metrics);
@@ -115,11 +123,50 @@ export function MetricFamilySection({
             DayProfilePanel) onto one axis with the modelled weather, which
             is also why SeriesChart skips those kinds. This family keeps the
             exact tables. */}
+
+        {/* Table and lanes are a master/detail pair, so they use the shared
+            layout the ranking and the thermal census use. The pairing is real:
+            hovering a row lights that pilot in every lane (PilotHighlightContext
+            already carries it), and before this the chart sat above the table
+            and scrolled away — so on a phone, pointing at a row updated
+            something off screen, the exact failure MasterDetail exists to fix.
+            Wide, the table keeps the left column and the lanes pin beside it. */}
         {perPilotMetrics.length > 0 ? (
-          <PerPilotMetricTable
-            report={report}
-            metrics={perPilotMetrics}
-            familyLabel={familyLabel}
+          <MasterDetail
+            stackedTop="toc-bar"
+            // Named for the family, not "chart". Every open family adds a fold
+            // toggle, and the separation ranking above has one too, so a page
+            // with four of them all reading "Hide chart" tells a screen-reader
+            // user nothing about WHICH chart — and made the e2e's own
+            // `/chart$/` locator ambiguous, which is how it was noticed.
+            detailLabel={`${familyLabel} lanes`}
+            detailAriaLabel={`${familyLabel}: behaviour lanes`}
+            master={
+              <PerPilotMetricTable
+                report={report}
+                metrics={perPilotMetrics}
+                familyLabel={familyLabel}
+                // Stacked, the table spans the card edge to edge: 20px of side
+                // padding is a tenth of a phone's width, and paying it here
+                // pushes columns into a sideways scroll. Side by side the bleed
+                // comes off — the column is already inside the grid. Same
+                // treatment, and same reasoning, as RankingTable.
+                viewportClassName={cn(
+                  "-mx-5 w-auto border-y",
+                  "@5xl:mx-0 @5xl:w-full @5xl:border-y-0"
+                )}
+              />
+            }
+            // Built here, not inside the chart: MasterDetail needs a literal
+            // null to render the table alone, which a component that returns
+            // null from within a JSX element cannot give it.
+            detail={
+              lanes.length >= 2 ? (
+                <div className="p-4">
+                  <MetricLanes lanes={lanes} pilots={report.pilots} subject={familyLabel} />
+                </div>
+              ) : null
+            }
           />
         ) : null}
 

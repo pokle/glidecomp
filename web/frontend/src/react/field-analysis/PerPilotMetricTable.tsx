@@ -36,10 +36,15 @@ export function PerPilotMetricTable({
   report,
   metrics,
   familyLabel,
+  viewportClassName,
 }: {
   report: FieldAnalysisReport;
   metrics: MetricReport[];
   familyLabel: string;
+  /** Passed through to the scroll viewport so a caller can bleed the table to
+   * its card's edges — see RankingTable, which does the same inside
+   * MasterDetail. */
+  viewportClassName?: string;
 }) {
   const [sort, setSort] = useState<SortDescriptor>({
     column: "rank",
@@ -110,6 +115,7 @@ export function PerPilotMetricTable({
     <Table
       aria-label={`${familyLabel} metrics by pilot`}
       scrollLabel={`${familyLabel} metrics by pilot`}
+      viewportClassName={viewportClassName}
       sortDescriptor={sort}
       onSortChange={setSort}
     >
