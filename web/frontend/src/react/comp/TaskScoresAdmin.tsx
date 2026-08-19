@@ -737,6 +737,9 @@ function RowManage({
           </Tooltip>
         </TooltipTrigger>
       ) : null}
+      {/* A row action, not a form field: a list in flow would blow the row
+          apart. Deliberately still a popover — see rac/select.tsx on #638,
+          and e2e/popover-position.spec.ts, which pins its geometry. */}
       <SimpleSelect
         value={statusValue}
         onChange={(v) => void setStatus(v)}

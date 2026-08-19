@@ -155,6 +155,8 @@ export function PageToc({ items }: { items: PageTocItem[] }) {
           min-height matches it so nothing peeks out underneath. */}
       {scrolled ? (
         <div className="fixed inset-x-0 top-0 z-50 flex min-h-[60px] items-center border-b bg-background/95 px-4 backdrop-blur-xl xl:hidden print:hidden">
+          {/* Jump-to, not a form field — a list in flow would push the
+              section you are jumping to off the screen. See rac/select.tsx. */}
           <SimpleSelect
             ariaLabel="On this page"
             value={activeId ?? items[0].id}

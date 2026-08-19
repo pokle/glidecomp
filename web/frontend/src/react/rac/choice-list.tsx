@@ -14,10 +14,13 @@
  * compact form for dense dialogs.
  *
  * `SearchableChoiceList` is the same row, collapsed: it shows the current
- * value and expands **in flow** to a search box over a filtered list. In
- * flow, not floating, for the reason `comp/QuickTaskField.tsx` gives — on a
- * phone the keyboard covers a floating list. Use it past a dozen or so
- * options (the ~400 IANA timezones are the case it was built for).
+ * value and expands **in flow** to a list, with a search box over it once the
+ * list is long enough to need one (`searchThreshold`). In flow, not floating,
+ * for the reason `comp/QuickTaskField.tsx` gives — on a phone the keyboard
+ * covers a floating list. Reach for it whenever an expanded `ChoiceList` would
+ * be taller than the form around it: the ~400 IANA timezones are the case it
+ * was built for, but a collapsed row is also the right answer for eight
+ * identifier kinds sitting beside the field they qualify.
  *
  * `CheckList` is the many-of-N member, backed by RAC CheckboxGroup: same rows,
  * same 44px target, a checkbox glyph instead of a checkmark. Together with
@@ -121,6 +124,7 @@ export function SearchableChoiceList({
   options,
   searchLabel,
   searchPlaceholder,
+  searchThreshold = 12,
   emptyLabel = "Not set",
   className,
 }: {
@@ -129,9 +133,15 @@ export function SearchableChoiceList({
   value: string;
   onChange: (value: string) => void;
   options: Choice[];
-  /** Accessible name for the search box (e.g. "Search timezones"). */
+  /** Accessible name for the search box, and for the list either way. */
   searchLabel: string;
   searchPlaceholder?: string;
+  /**
+   * Show the search box only once there are more options than this. A search
+   * field over eight rows is furniture — it costs a tap and a keyboard to do
+   * what scrolling already does. The list itself is unchanged either way.
+   */
+  searchThreshold?: number;
   /** Shown on the row when `value` matches no option. */
   emptyLabel?: string;
   className?: string;
@@ -141,6 +151,7 @@ export function SearchableChoiceList({
   const [query, setQuery] = useState("");
   const { contains } = useFilter({ sensitivity: "base" });
 
+  const showSearch = options.length > searchThreshold;
   const selected = options.find((o) => o.value === value) ?? null;
   const filtered = useMemo(
     () => (query ? options.filter((o) => contains(o.label, query)) : options),
@@ -182,13 +193,15 @@ export function SearchableChoiceList({
         </AriaButton>
         {open ? (
           <div className="flex flex-col gap-2 border-t border-border p-3">
-            <SearchField
-              aria-label={searchLabel}
-              placeholder={searchPlaceholder}
-              value={query}
-              onChange={setQuery}
-              autoFocus
-            />
+            {showSearch ? (
+              <SearchField
+                aria-label={searchLabel}
+                placeholder={searchPlaceholder}
+                value={query}
+                onChange={setQuery}
+                autoFocus
+              />
+            ) : null}
             <ListBox
               aria-label={searchLabel}
               selectionMode="single"

@@ -23,8 +23,8 @@ import {
   Modal,
 } from "@/react/rac/dialog";
 import { TextField, Label } from "@/react/rac/field";
-import { Checkbox, CheckboxGroup } from "@/react/rac/checkbox";
 import { DatePicker } from "@/react/rac/date-picker";
+import { CheckList } from "@/react/rac/choice-list";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useAdminView, useUser } from "../lib/user";
@@ -811,26 +811,26 @@ function CreateTaskDialog({
             onChange={setName}
             errorMessage="Enter a task name"
           />
+          {/* The same two controls the task's settings page uses (#638), so a
+              task looks the same the moment after it is created as it does
+              when it is next edited. This one stays a dialog: there is no task
+              yet, so there is nothing for a URL to name. */}
           <div className="flex flex-col gap-2">
             <Label id={dateId}>Date</Label>
             <DatePicker
+              inline
               required
               aria-labelledby={dateId}
               value={taskDate}
               onChange={setTaskDate}
             />
           </div>
-          <CheckboxGroup
+          <CheckList
             label="Pilot Classes"
             value={selectedClasses}
             onChange={setSelectedClasses}
-          >
-            {pilotClasses.map((cls) => (
-              <Checkbox key={cls} value={cls}>
-                {cls}
-              </Checkbox>
-            ))}
-          </CheckboxGroup>
+            options={pilotClasses.map((cls) => ({ value: cls, label: cls }))}
+          />
           <DialogFooter>
             <Button slot="close" variant="outline">
               Cancel
