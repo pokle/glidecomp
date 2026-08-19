@@ -47,6 +47,48 @@ CI runs both, as the parallel `E2E Tests` and `E2E Tests (SSR)` jobs in
 anything the eight server-rendered comp pages import — the dev server never
 server-renders, so `test:e2e` alone cannot fail when SSR breaks.
 
+## The `mobile` project — a phone, structurally
+
+`test:e2e` has **two Playwright projects**, and every spec runs in `chromium`
+at a desktop viewport. A short list of specs also runs in `mobile`, under a
+Pixel 7 device descriptor:
+
+```bash
+bunx playwright test --project=mobile
+```
+
+The list lives in `e2e/fixtures/mobile.ts` — competition settings, comp/scores,
+track submission — and `e2e/fixtures/mobile.test.ts` fails the unit run if a
+name in it stops matching a real spec. Playwright treats a `testMatch` glob
+that hits nothing as a project with fewer tests rather than an error, so
+without that guard a rename takes a page out of phone coverage in silence.
+
+**A device descriptor is not a resize.** `page.setViewportSize()` changes the
+width and nothing else — the browser keeps a desktop user agent, keeps no
+touch, and keeps resolving `(pointer: coarse)` to false, so none of the
+phone-only CSS the app ships (the `pointer-coarse:` touch targets,
+`env(safe-area-inset-*)`) is exercised, and `@media (hover: hover)` affordances
+stay on screen. The project sets all of it at once and cannot be forgotten by
+the next spec. That is the difference issue #643 was after, and it found a real
+one on the first run: react-aria omits `aria-sort` on Android (TalkBack does
+not support it) and puts the direction in `aria-describedby` instead, which no
+desktop-UA test could ever have seen.
+
+Two things to know when adding to it:
+
+- **It is a Pixel 7, not 320px.** 320 is the floor the accessibility standard
+  commits to (`docs/accessibility-standard.md` §3.2), not a device anyone
+  holds. Tests whose subject IS the floor set 320 themselves *inside* the
+  project, so they get the narrow viewport and the touch/UA emulation both.
+- **The descriptor must be chromium.** `web/scripts/ensure-playwright-browsers.sh`
+  installs chromium alone, so an iPhone descriptor (webkit) would send the run
+  looking for a browser nothing here has.
+
+A test that only means something on a phone calls `phoneOnly(isMobile)` from
+`e2e/fixtures/test.ts` as its first line. There is no `desktopOnly` counterpart
+on purpose: everything else in a listed spec runs in both projects, because the
+second pass is the whole point.
+
 ## E2E on a fresh clone
 
 - Playwright's Chromium installs itself. `test:e2e` and `test:e2e:ssr` run

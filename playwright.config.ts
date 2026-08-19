@@ -1,5 +1,6 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 import { FRONTEND_URL, API_READY_URL } from "./e2e/fixtures/stack";
+import { MOBILE_TEST_MATCH } from "./e2e/fixtures/mobile";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -56,6 +57,33 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+    },
+    // A phone, structurally (issue #643). Before this, the only mobile cover
+    // was a `setViewportSize` at the top of individual tests, which changes
+    // the WIDTH and nothing else: the browser still reports a desktop user
+    // agent, still has no touch, still resolves `(pointer: coarse)` to false —
+    // so none of the phone-only CSS the app ships (`pointer-coarse:` targets,
+    // `env(safe-area-inset-*)`) was ever exercised, and `@media (hover: hover)`
+    // kept desktop affordances on screen. A device descriptor sets all of it
+    // at once, for every test in the project, and cannot be forgotten by the
+    // next spec.
+    //
+    // Pixel 7 because issue #643 named it, and because it must be a CHROMIUM
+    // descriptor: `web/scripts/ensure-playwright-browsers.sh` installs
+    // chromium alone, so spreading an iPhone descriptor (webkit) would send
+    // the run looking for a browser no machine here has. 412×839, DPR 2.625,
+    // touch, `isMobile`.
+    //
+    // Note it is NOT 320px. That is the floor the accessibility standard
+    // commits to (docs/accessibility-standard.md §3.2), not a device anyone
+    // holds, and a suite pinned there would report every ordinary phone as
+    // passing something it never ran. The tests that are specifically ABOUT
+    // the floor still set 320 themselves, inside this project, so they get the
+    // narrow viewport AND the touch/UA emulation.
+    {
+      name: "mobile",
+      testMatch: MOBILE_TEST_MATCH,
+      use: { ...devices["Pixel 7"] },
     },
   ],
   // One entry, not three: every Worker lives in a single wrangler session

@@ -32,7 +32,13 @@
  */
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { test, expect, type Page } from "./fixtures/test";
+import {
+  test,
+  expect,
+  phoneOnly,
+  type Locator,
+  type Page,
+} from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 import { compScoresCsvPath } from "../web/frontend/src/react/lib/slug";
 
@@ -133,6 +139,49 @@ test.beforeEach(async ({ page }) => {
   ).toBeVisible();
 });
 
+/**
+ * "This column is sorted, this way — and a screen reader is told so."
+ *
+ * The sort STATE is `data-sort-direction`, which RAC writes on every platform.
+ * The ANNOUNCEMENT is not one attribute: react-aria uses `aria-sort` normally,
+ * but on Android it omits that attribute entirely — TalkBack does not support
+ * it — and appends the direction to the header's `aria-describedby` text
+ * instead (`useTableColumnHeader`, guarded by its `isAndroid()` check).
+ *
+ * Both are correct, and asserting only `aria-sort` is what let this test pass
+ * for a year on a desktop user agent and fail the moment the `mobile` project
+ * ran it under a Pixel 7. Which announcement to expect follows from the user
+ * agent, not from the viewport, so that is what this reads.
+ */
+async function expectSortedBy(
+  page: Page,
+  header: Locator,
+  direction: "ascending" | "descending"
+): Promise<void> {
+  await expect(header).toHaveAttribute("data-sort-direction", direction);
+
+  const onAndroid = await page.evaluate(() =>
+    /Android/.test(navigator.userAgent)
+  );
+  if (!onAndroid) {
+    await expect(header).toHaveAttribute("aria-sort", direction);
+    return;
+  }
+
+  await expect(header).not.toHaveAttribute("aria-sort", /./);
+  const description = await header.evaluate((el) =>
+    (el.getAttribute("aria-describedby") || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ")
+  );
+  expect(
+    description.toLowerCase(),
+    `the ${direction} sort must reach TalkBack through aria-describedby`
+  ).toContain(direction);
+}
+
 /** Watches for any mutating call to the competition API for the page's life. */
 function trackMutations(page: Page): () => boolean {
   let mutated = false;
@@ -183,7 +232,7 @@ test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   // "Pilot" first click sorts ASCENDING…
   const pilotHeader = scores.getByRole("columnheader", { name: /^Pilot/ });
   await pilotHeader.click();
-  await expect(pilotHeader).toHaveAttribute("aria-sort", "ascending");
+  await expectSortedBy(page, pilotHeader, "ascending");
   const names = await scores.getByRole("rowheader").allTextContents();
   expect(names.length).toBeGreaterThan(1);
   expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
@@ -191,8 +240,11 @@ test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   // …while "Total" first click sorts DESCENDING (scores read best-first).
   const totalHeader = scores.getByRole("columnheader", { name: /^Total/ });
   await totalHeader.click();
-  await expect(totalHeader).toHaveAttribute("aria-sort", "descending");
-  await expect(pilotHeader).not.toHaveAttribute("aria-sort", "ascending");
+  await expectSortedBy(page, totalHeader, "descending");
+  await expect(pilotHeader).not.toHaveAttribute(
+    "data-sort-direction",
+    "ascending"
+  );
   // The Pilot column renders as rowheader <th>, so the last <td> is Total.
   const totals = (
     await scores.locator("tbody tr td:last-child").allTextContents()
@@ -241,12 +293,20 @@ test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
 
 test("scores page: the view tabs stay reachable on a narrow phone", async ({
   page,
+  isMobile,
 }) => {
+  phoneOnly(isMobile);
   // 320px is the narrowest viewport the accessibility standard supports
   // (docs/accessibility-standard.md §3.2). The sample comp's four views —
   // two classes, "Top 3 per task & class", "Scores by task" — are wider than
   // that, which is the case issue #640 reported: the far tabs were simply
   // unreachable, because the strip neither wrapped nor scrolled.
+  //
+  // So this one keeps setting its own width, INSIDE the `mobile` project: the
+  // project emulates a Pixel 7 (412px), and the subject here is the floor, not
+  // a typical phone. Everything else the descriptor brings — touch, the mobile
+  // user agent, `isMobile` — still applies, which is what makes the keyboard
+  // and fade assertions below worth making at all.
   await page.setViewportSize({ width: 320, height: 812 });
   await page.goto(`/comp/${compId}/scores`);
   const tablist = page.getByRole("tablist", { name: "Score views" });
