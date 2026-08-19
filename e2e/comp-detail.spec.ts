@@ -239,6 +239,64 @@ test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   await expect(swapped.locator("tbody tr").first()).toBeVisible();
 });
 
+test("scores page: the view tabs stay reachable on a narrow phone", async ({
+  page,
+}) => {
+  // 320px is the narrowest viewport the accessibility standard supports
+  // (docs/accessibility-standard.md §3.2). The sample comp's four views —
+  // two classes, "Top 3 per task & class", "Scores by task" — are wider than
+  // that, which is the case issue #640 reported: the far tabs were simply
+  // unreachable, because the strip neither wrapped nor scrolled.
+  await page.setViewportSize({ width: 320, height: 812 });
+  await page.goto(`/comp/${compId}/scores`);
+  const tablist = page.getByRole("tablist", { name: "Score views" });
+  await expect(tablist).toBeVisible({ timeout: 15_000 });
+
+  const metrics = async () =>
+    tablist.evaluate((el) => ({
+      scrollLeft: el.scrollLeft,
+      hidden: el.scrollWidth - el.clientWidth,
+      pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    }));
+
+  // The strip scrolls INSIDE its own box; the page body never does (WCAG
+  // 1.4.10 reflow).
+  const initial = await metrics();
+  expect(initial.hidden).toBeGreaterThan(0);
+  expect(initial.pageOverflow).toBeLessThanOrEqual(0);
+
+  // Scrolled to the origin, only the far end is faded — the fades are the
+  // affordance that says there are tabs behind them.
+  await expect(page.locator("main [data-tab-fade='end']")).toHaveCount(1);
+  await expect(page.locator("main [data-tab-fade='start']")).toHaveCount(0);
+
+  // Keyboard: arrow keys walk to the last tab and the strip follows, which is
+  // why the scroll container takes no tab stop of its own. Automatic
+  // activation means arriving selects it, so the panel swaps too.
+  const tabs = tablist.getByRole("tab");
+  const count = await tabs.count();
+  await tabs.first().click();
+  for (let i = 1; i < count; i++) await page.keyboard.press("ArrowRight");
+  const last = tabs.nth(count - 1);
+  await expect(last).toBeFocused();
+  await expect(last).toHaveAttribute("aria-selected", "true");
+
+  // "Reachable" means fully on screen, not merely scrolled towards.
+  const stripBox = (await tablist.boundingBox())!;
+  const lastBox = (await last.boundingBox())!;
+  expect(lastBox.x).toBeGreaterThanOrEqual(stripBox.x - 0.5);
+  expect(lastBox.x + lastBox.width).toBeLessThanOrEqual(
+    stripBox.x + stripBox.width + 0.5
+  );
+
+  const scrolled = await metrics();
+  expect(scrolled.scrollLeft).toBeGreaterThan(0);
+  expect(scrolled.pageOverflow).toBeLessThanOrEqual(0);
+  // …and now it is the START of the strip that has tabs behind it.
+  await expect(page.locator("main [data-tab-fade='start']")).toHaveCount(1);
+  await expect(page.locator("main [data-tab-fade='end']")).toHaveCount(0);
+});
+
 test("scores page: Download menu saves a long-form CSV and offers the Sheets formula", async ({
   page,
 }) => {
