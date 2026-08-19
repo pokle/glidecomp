@@ -215,7 +215,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
             />
             {seriesScoring === "ftv" ? (
               <ChoiceList
-                ariaLabel="FTV discard fraction"
+                label="FTV discard fraction"
                 value={ftvFactorPct}
                 onChange={setFtvFactorPct}
                 options={[
