@@ -32,10 +32,13 @@ const menuItem =
   "flex w-full cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
 ---
 
-<header class="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 max-sm:static [@media(max-height:500px)]:static">
+<!-- The glass stays full-bleed under `viewport-fit=cover`; `pt-safe` pushes
+     only the bar's content below the status bar, and `px-gutter-safe` holds it
+     clear of a landscape notch (issue #642). Mirrors Shell.tsx. -->
+<header class="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 pt-safe max-sm:static [@media(max-height:500px)]:static">
   <nav
     aria-label="Main"
-    class="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
+    class="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-gutter-safe py-3"
   >
     <a href="/" class="font-brand text-base font-semibold tracking-tight">GlideComp</a>
     <a

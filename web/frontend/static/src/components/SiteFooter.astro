@@ -7,8 +7,10 @@
 const year = new Date().getFullYear();
 ---
 
-<footer class="border-t bg-secondary">
-  <div class="mx-auto w-full max-w-6xl px-4 py-14">
+<!-- `pb-safe` on the surface (so its fill still reaches the bottom edge) and
+     the gutter grown past a landscape notch — issue #642. -->
+<footer class="border-t bg-secondary pb-safe">
+  <div class="mx-auto w-full max-w-6xl px-gutter-safe py-14">
     <div class="flex flex-wrap justify-between gap-x-10 gap-y-10">
       <div class="max-w-xs">
         <a href="/" class="font-brand text-lg font-semibold tracking-tight">GlideComp</a>

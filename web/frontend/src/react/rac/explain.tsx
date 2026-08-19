@@ -53,8 +53,14 @@ export function Explain({
         size="icon"
         // size-6 (24px), the accessibility standard's §4.5 pointer-target
         // floor (WCAG 2.5.8) — these sit crowded inside sortable column
-        // headers, so they get no spacing exemption.
-        className={cn("size-6 text-muted-foreground print:hidden", className)}
+        // headers, so they get no spacing exemption. `touch-target` adds the
+        // 44px mobile hit area on a coarse pointer WITHOUT painting anything
+        // bigger (issue #641): growing the button instead would re-flow the
+        // header rows it sits inline in.
+        className={cn(
+          "touch-target size-6 text-muted-foreground print:hidden",
+          className
+        )}
         // A real accessible name, not a title attribute — the icon alone is
         // not a label, and title tooltips are unavailable to keyboard users.
         aria-label={ariaLabel ?? `About ${label}`}

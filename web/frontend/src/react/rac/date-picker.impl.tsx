@@ -85,14 +85,16 @@ const navButton =
   "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[disabled]:opacity-40";
 
 /**
- * Two cell scales. `compact` (32px) is the dropdown's, unchanged; `touch`
- * (44px) is the inline calendar's, meeting the mobile touch-target guideline
- * — the whole point of putting the calendar on the page instead of in a
- * popover. The header cells match the column WIDTH but stay short: they hold
- * day initials, not targets.
+ * Two cell scales. `touch` (44px) is the inline calendar's — the whole point
+ * of putting the calendar on the page instead of in a popover. `compact`
+ * (32px) is the dropdown's, and grows to the same 44px on a coarse pointer
+ * (issue #641): a mouse picks a 32px day cell precisely, a thumb does not,
+ * and 31 of them sit edge to edge with no spacing to fall back on. The header
+ * cells match the column WIDTH but stay short: they hold day initials, not
+ * targets.
  */
 const CELL_SCALE = {
-  compact: { cell: "size-8", head: "size-8" },
+  compact: { cell: "size-8 pointer-coarse:size-11", head: "size-8 pointer-coarse:w-11" },
   touch: { cell: "size-11", head: "h-8 w-11" },
 } as const;
 
@@ -198,7 +200,9 @@ function CalendarBody({ scale = "compact" }: { scale?: CellScale }) {
 function CalendarPopover() {
   return (
     <Popover className="z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md outline-none">
-      <Dialog className="outline-none">
+      {/* 7 × 44px + padding overflows a 320px viewport, so the grid scrolls
+          inside the panel rather than off the side of the screen. */}
+      <Dialog className="max-w-[calc(100vw-1.5rem)] overflow-x-auto outline-none">
         <CalendarBody />
       </Dialog>
     </Popover>

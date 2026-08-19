@@ -198,7 +198,10 @@ export function PilotClassesField({
             key={example}
             onPress={() => onChange(example)}
             aria-label={`Use example: ${example}`}
-            className="inline-flex min-h-6 items-center rounded border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground transition-colors outline-none data-hovered:bg-accent data-hovered:text-accent-foreground data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
+            // 44px on a phone (issue #641). These are chips meant to be
+            // tapped, and the row can simply grow — it is the last thing on
+            // the field, with nothing below it to push around.
+            className="inline-flex min-h-6 items-center rounded border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground transition-colors outline-none pointer-coarse:min-h-11 pointer-coarse:px-3 data-hovered:bg-accent data-hovered:text-accent-foreground data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
           >
             {example}
           </AriaButton>
