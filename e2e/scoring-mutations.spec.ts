@@ -156,7 +156,7 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
 
     await devLogin(page);
     await page.goto(`${BASE_URL}/comp/${fixture.compId}/settings/scoring`);
-    await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
 
     // Nominal distance (§5.1) is the knob to prove the loop with: it is one
     // number, the class score publishes the value the scorer actually used,
@@ -392,7 +392,7 @@ test.describe("an open-distance comp's settings save", () => {
   test("offers no GAP knobs, and logs no GAP changes when saved", async ({ page }) => {
     await devLogin(page);
     await page.goto(`${BASE_URL}/comp/${compId}/settings/scoring`);
-    await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
 
     // The premise: this format hides the Advanced disclosure entirely, so
     // there is no way through this screen to change a GAP parameter…

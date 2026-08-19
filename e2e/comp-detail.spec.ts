@@ -424,7 +424,7 @@ test("a select low on a scrolled settings page opens ON SCREEN, not below the fo
   await page.setViewportSize({ width: 1280, height: 600 });
 
   await page.goto(`/comp/${compId}/settings/scoring`);
-  await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
   // Opening the Advanced disclosure makes the page taller than the window.
   await page.getByText("Advanced scoring settings").click();
 
@@ -463,7 +463,7 @@ test("scoring settings page shows stored GAP values; leaving saves nothing", asy
   const mutated = trackMutations(page);
 
   await page.goto(`/comp/${compId}/settings/scoring`);
-  await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
 
   // Advanced GAP NumberFields show the comp's STORED values, not snapped
   // (RAC gotcha #1) and not the category defaults. The seeded comp's
@@ -514,7 +514,7 @@ test("general settings page: timezone combobox filters; leaving saves nothing", 
   const mutated = trackMutations(page);
 
   await page.goto(`/comp/${compId}/settings/general`);
-  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
 
   // Timezone combobox: typing filters hundreds of zones down; picking fills
   // the field. Adelaide rather than the comp's own Melbourne, so the pick is

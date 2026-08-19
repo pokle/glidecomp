@@ -97,7 +97,7 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
 }) => {
   await devLogin(page, ADMIN_USER);
   await page.goto(`/comp/${compId}/settings`);
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
 
   // The four group rows, each carrying a current-value summary.
   const general = page.getByRole("link", { name: /^General/ });
@@ -115,7 +115,7 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
 
   // Into a group, change one thing, save.
   await access.click();
-  await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Access", exact: true })).toBeVisible();
   const box = page.getByLabel("Let pilots register themselves by submitting a track");
   await expect(box).toBeChecked();
   // Click the visible label, not the input: the kit hides the real checkbox
@@ -145,7 +145,7 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
 
   // A successful save lands back on the index, and the row's summary reads
   // the new state.
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Access/ })).toContainText(
     "Admins add pilots"
   );
@@ -156,7 +156,7 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
 }) => {
   await devLogin(page, ADMIN_USER);
   await page.goto(`/comp/${compId}/settings/general`);
-  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
 
   const name = page.getByLabel("Name");
   await name.fill(`${COMP_NAME} (edited)`);
@@ -172,7 +172,7 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
   await expect(dialog.getByText("Discard changes?")).toBeVisible();
   await dialog.getByRole("button", { name: "Keep editing" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
   await expect(name).toHaveValue(`${COMP_NAME} (edited)`);
 
   // Discard: navigation proceeds, and nothing was saved.
@@ -181,7 +181,7 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
     .getByRole("alertdialog")
     .getByRole("button", { name: "Discard changes" })
     .click();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /^General/ })).toContainText(
     COMP_NAME
   );
@@ -205,7 +205,7 @@ test("the whole journey fits a phone: no horizontal overflow at 390×844", async
   const settingsLink = page.getByRole("link", { name: "Settings", exact: true });
   await expect(settingsLink).toBeVisible();
   await settingsLink.click();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await noHorizontalOverflow("the settings index");
 
   // Rows are comfortably tappable (44px minimum target).
@@ -216,9 +216,9 @@ test("the whole journey fits a phone: no horizontal overflow at 390×844", async
 
   // Index → sub-page → untouched Save → back on the index.
   await general.click();
-  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
   await noHorizontalOverflow("the General sub-page");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await noHorizontalOverflow("the settings index after saving");
 });

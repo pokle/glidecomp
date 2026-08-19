@@ -416,7 +416,7 @@ test.describe("submitting a track without an account", () => {
     // renders but is not wired to the save, which only a real click finds.
     await devLogin(page);
     await page.goto(`${BASE_URL}/comp/${fixture.compId}/settings/access`);
-    await expect(page.getByRole("heading", { name: "Access" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Access", exact: true })).toBeVisible({
       timeout: 15_000,
     });
 
