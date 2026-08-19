@@ -11,7 +11,8 @@ import { DatePicker } from "@/react/rac/date-picker";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
-import { CategoryField, NameField, SearchableSelect } from "../fields";
+import { SearchableChoiceList } from "@/react/rac/choice-list";
+import { CategoryField, NameField } from "../fields";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
 
 /**
@@ -85,6 +86,7 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
         <div className="flex flex-col gap-2">
           <Label id={closeDateId}>Close Date</Label>
           <DatePicker
+            inline
             clearable
             aria-labelledby={closeDateId}
             value={closeDate}
@@ -95,21 +97,15 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           </p>
         </div>
 
-        <div>
-          <h3 className="mb-1.5 text-sm font-medium">Timezone</h3>
-          <SearchableSelect
-            value={timezone}
-            onChange={setTimezone}
-            options={timezoneOptions(comp.timezone)}
-            ariaLabel="Competition timezone"
-            placeholder="Type to search, e.g. Melbourne"
-          />
-          <p className="mt-1 text-sm text-muted-foreground">
-            Comp-local zone for displaying times (start gates, replay clock, score
-            narratives). Auto derives it from the task location. Scoring runs on UTC
-            and is unaffected.
-          </p>
-        </div>
+        <SearchableChoiceList
+          label="Timezone"
+          value={timezone}
+          onChange={setTimezone}
+          options={timezoneOptions(comp.timezone)}
+          searchLabel="Search timezones"
+          searchPlaceholder="Type to search, e.g. Melbourne"
+          description="Comp-local zone for displaying times (start gates, replay clock, score narratives). Auto derives it from the task location. Scoring runs on UTC and is unaffected."
+        />
       </SettingsForm>
     </SettingsPage>
   );

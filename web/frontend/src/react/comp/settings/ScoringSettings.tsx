@@ -22,7 +22,8 @@ import { NumberField } from "@/react/rac/field";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
-import { CheckboxField, SimpleSelect } from "../fields";
+import { ChoiceList } from "@/react/rac/choice-list";
+import { CheckboxField } from "../fields";
 import type { ScoringFormat, SeriesScoring } from "../types";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
 
@@ -187,55 +188,42 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   return (
     <SettingsPage crumbs={underCompSettings(compId, comp.name)} title="Scoring">
       <SettingsForm onSave={save} saving={saving} dirty={dirty}>
-        <div>
-          <h3 className="mb-1.5 text-sm font-medium">Scoring format</h3>
-          <SimpleSelect
-            value={scoringFormat}
-            onChange={(v) => setScoringFormat(v as ScoringFormat)}
-            options={[
-              { value: "gap", label: "GAP — race to goal / elapsed time" },
-              { value: "open_distance", label: "Open distance — fly as far as possible" },
-            ]}
-            ariaLabel="Scoring format"
-          />
-          <p className="mt-1 text-sm text-muted-foreground">
-            Open distance scores metres flown from the take-off exit; each task has a
-            single Takeoff turnpoint and no goal.
-          </p>
-        </div>
+        <ChoiceList
+          label="Scoring format"
+          value={scoringFormat}
+          onChange={(v) => setScoringFormat(v as ScoringFormat)}
+          options={[
+            { value: "gap", label: "GAP — race to goal / elapsed time" },
+            { value: "open_distance", label: "Open distance — fly as far as possible" },
+          ]}
+          description="Open distance scores metres flown from the take-off exit; each task has a single Takeoff turnpoint and no goal."
+        />
 
         {/* Series (multi-task) scoring — how per-task scores combine into
             competition scores. FTV is a GAP-only aggregation (S7F §16). */}
         {scoringFormat === "gap" ? (
-          <div>
-            <h3 className="mb-1.5 text-sm font-medium">Series scoring</h3>
-            <SimpleSelect
+          <div className="flex flex-col gap-2">
+            <ChoiceList
+              label="Series scoring"
               value={seriesScoring}
               onChange={(v) => setSeriesScoring(v as SeriesScoring)}
               options={[
                 { value: "total", label: "Sum of task scores" },
                 { value: "ftv", label: "FTV — Fixed Total Validity" },
               ]}
-              ariaLabel="Series scoring"
+              description="FTV (S7F §16) scores each pilot on their best tasks, discarding a fixed fraction of the total validity — the paragliding norm. Sum of task scores is the simple total."
             />
-            <p className="mt-1 text-sm text-muted-foreground">
-              FTV (S7F §16) scores each pilot on their best tasks, discarding a
-              fixed fraction of the total validity — the paragliding norm. Sum of
-              task scores is the simple total.
-            </p>
             {seriesScoring === "ftv" ? (
-              <div className="mt-2">
-                <SimpleSelect
-                  value={ftvFactorPct}
-                  onChange={setFtvFactorPct}
-                  options={[
-                    { value: "", label: "Automatic (20% for ≤6 tasks, 25% for ≥7)" },
-                    { value: "20", label: "Discard 20%" },
-                    { value: "25", label: "Discard 25%" },
-                  ]}
-                  ariaLabel="FTV discard fraction"
-                />
-              </div>
+              <ChoiceList
+                ariaLabel="FTV discard fraction"
+                value={ftvFactorPct}
+                onChange={setFtvFactorPct}
+                options={[
+                  { value: "", label: "Automatic (20% for ≤6 tasks, 25% for ≥7)" },
+                  { value: "20", label: "Discard 20%" },
+                  { value: "25", label: "Discard 25%" },
+                ]}
+              />
             ) : null}
           </div>
         ) : null}
@@ -375,22 +363,16 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
                     : "FAI S7F §11: the % of the non-distance weight allocated to leading (0–26%, spec default 17.5%). The rest goes to time and arrival."
                 }
               />
-              <div>
-                <h4 className="mb-1.5 text-sm font-medium">Distance origin</h4>
-                <SimpleSelect
-                  value={distanceOrigin}
-                  onChange={(v) => setDistanceOrigin(v as "takeoff" | "start")}
-                  options={[
-                    { value: "takeoff", label: "Take-off — FAI CIVL GAP / PWCA (default)" },
-                    { value: "start", label: 'Start cylinder — HGFA / "Move Origin"' },
-                  ]}
-                  ariaLabel="Distance origin"
-                />
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Where scored distance begins for tasks with a take-off turnpoint. "Start"
-                  excludes the take-off→SSS leg.
-                </p>
-              </div>
+              <ChoiceList
+                label="Distance origin"
+                value={distanceOrigin}
+                onChange={(v) => setDistanceOrigin(v as "takeoff" | "start")}
+                options={[
+                  { value: "takeoff", label: "Take-off — FAI CIVL GAP / PWCA (default)" },
+                  { value: "start", label: 'Start cylinder — HGFA / "Move Origin"' },
+                ]}
+                description='Where scored distance begins for tasks with a take-off turnpoint. "Start" excludes the take-off→SSS leg.'
+              />
             </div>
           </details>
         ) : null}

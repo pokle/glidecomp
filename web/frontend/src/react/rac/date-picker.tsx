@@ -56,7 +56,16 @@ function FieldSkeleton({ className }: { className?: string }) {
 
 export function DatePicker(props: DatePickerProps) {
   return (
-    <Suspense fallback={<FieldSkeleton className={props.className} />}>
+    <Suspense
+      fallback={
+        // The inline variant lands a calendar under the field, so its
+        // skeleton reserves that height too — otherwise the page jumps when
+        // the chunk arrives.
+        <FieldSkeleton
+          className={cn(props.inline && "h-80", props.className)}
+        />
+      }
+    >
       <LazyDatePicker {...props} />
     </Suspense>
   );

@@ -13,7 +13,7 @@ import {
 import { Checkbox as RacCheckbox } from "@/react/rac/checkbox";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { Description, Input as RacInput, Label, TextField } from "@/react/rac/field";
-import { Radio, RadioGroup } from "@/react/rac/radio-group";
+import { ChoiceList } from "@/react/rac/choice-list";
 
 export { SimpleSelect } from "@/react/rac/select";
 
@@ -148,15 +148,16 @@ export function CategoryField({
   description?: React.ReactNode;
 }) {
   return (
-    <RadioGroup
+    <ChoiceList
       label="Wing"
       value={value}
       onChange={(v) => onChange(v as "hg" | "pg")}
       description={description}
-    >
-      <Radio value="hg">Hang Gliding</Radio>
-      <Radio value="pg">Paragliding</Radio>
-    </RadioGroup>
+      options={[
+        { value: "hg", label: "Hang Gliding" },
+        { value: "pg", label: "Paragliding" },
+      ]}
+    />
   );
 }
 

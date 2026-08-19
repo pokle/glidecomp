@@ -10,7 +10,8 @@ import { SettingsForm } from "@/react/components/SettingsForm";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
-import { PilotClassesField, SimpleSelect } from "../fields";
+import { ChoiceList } from "@/react/rac/choice-list";
+import { PilotClassesField } from "../fields";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
 
 export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
@@ -73,18 +74,13 @@ export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           wing={comp.category === "pg" ? "pg" : "hg"}
         />
 
-        <div>
-          <h3 className="mb-1.5 text-sm font-medium">Default Pilot Class</h3>
-          <SimpleSelect
-            value={effectiveDefault}
-            onChange={(v) => setDefaultClass(v)}
-            options={classes.map((cls) => ({ value: cls, label: cls }))}
-            ariaLabel="Default pilot class"
-          />
-          <p className="mt-1 text-sm text-muted-foreground">
-            Assigned to auto-registered pilots
-          </p>
-        </div>
+        <ChoiceList
+          label="Default Pilot Class"
+          value={effectiveDefault}
+          onChange={setDefaultClass}
+          options={classes.map((cls) => ({ value: cls, label: cls }))}
+          description="Assigned to auto-registered pilots"
+        />
       </SettingsForm>
     </SettingsPage>
   );

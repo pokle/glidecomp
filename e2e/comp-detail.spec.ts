@@ -3,8 +3,8 @@
  * (converted 2026-07-21, see docs/2026-07-18-rac-adoption-guide.md):
  * scores view tabs + sortable scores tables + the scores-by-task Select,
  * the pilots section (read-only RAC grid + the kept-by-policy Tabulator edit
- * grid inside a RAC dialog shell), the activity filter tabs, and the settings
- * dialog (Advanced GAP NumberFields, timezone combobox).
+ * grid inside a RAC dialog shell), the activity filter tabs, and the routed
+ * settings pages (Advanced GAP NumberFields, the in-flow timezone list).
  *
  * Drives the seeded "Corryong Cup 2026" sample comp READ-ONLY: every dialog
  * is cancelled and nothing is created or saved — e2e-created cruft comps
@@ -20,9 +20,10 @@
  *   so it never settles. Wait on role locators instead.
  * - RAC checkboxes can't be *clicked* by role (the real input is visually
  *   hidden) — this spec only reads checkbox state, which works fine.
- * - While a ComboBox popover is open, ariaHideOutside aria-hides the rest of
- *   the dialog (role locators fail there) — the timezone combobox is driven
- *   last, and only its own options are queried while it's open.
+ * - The settings pages carry no popover at all now (selects became
+ *   `rac/choice-list` row lists, the calendar renders in flow), so the
+ *   ariaHideOutside caveat that used to govern the timezone combobox no
+ *   longer applies — the list is queried in place, scoped to <main>.
  * - RAC Table sorting: first click on a new column follows the app's
  *   per-column defaultDir ("Pilot" asc, "Total" desc), not RAC's
  *   always-ascending.
@@ -398,64 +399,16 @@ test("activity: collapsed digest expands, filter tabs switch and re-fetch", asyn
   await expect(panel.getByText("Could not load activity")).toHaveCount(0);
 });
 
-/**
- * RAC gotcha #22, and the reason `popoverClass` carries `fixed!`.
- *
- * RAC portals a popover to <body> and positions it with viewport-relative
- * offsets under `position: absolute`; our body is `position: relative` (iOS
- * Safari backdrops), so the containing block is the body BOX. A popover that
- * flips UPWARDS — which any select low in a short window does — was displaced
- * by exactly `scrollHeight - innerHeight`: open, focusable, every option in
- * the DOM, and far below the fold.
- *
- * This lived on the pilots editor's CIVL list picker, then on the settings
- * dialog's Series scoring select, until each surface was removed (the
- * settings dialog became the routed settings pages). The same select now
- * sits low on a SCROLLED PAGE — the second production failure gotcha #22
- * documents — so the geometry keeps its coverage here, alongside the
- * manual-flight case in popover-position.spec.ts.
+/*
+ * RAC gotcha #22 (the popover displaced off-screen on a scrolled page) used
+ * to be covered here, on the settings dialog's Series scoring select and then
+ * on the settings PAGE's copy of it. The settings pages no longer contain a
+ * popover of any kind — every select became a `rac/choice-list` row list and
+ * the calendar is rendered in flow — so there is no geometry left to assert.
+ * The gotcha keeps its coverage in popover-position.spec.ts, which drives the
+ * manual-flight turnpoint select on a scrolled task page and asserts the open
+ * listbox lands fully inside the viewport.
  */
-test("a select low on a scrolled settings page opens ON SCREEN, not below the fold", async ({
-  page,
-}) => {
-  const mutated = trackMutations(page);
-  // A short window is what makes the page taller than the viewport, which is
-  // the only condition under which the displacement happens.
-  await page.setViewportSize({ width: 1280, height: 600 });
-
-  await page.goto(`/comp/${compId}/settings/scoring`);
-  await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
-  // Opening the Advanced disclosure makes the page taller than the window.
-  await page.getByText("Advanced scoring settings").click();
-
-  // The trigger has to sit LOW in the window, because that is what makes RAC
-  // flip the popover upwards and emit the `bottom:` placement the bug
-  // displaces — opened higher up it opens downward and lands correctly even
-  // when broken.
-  const select = page.getByRole("button", { name: "Series scoring" });
-  await select.scrollIntoViewIfNeeded();
-  await page.evaluate(() => {
-    const trigger = document.querySelector<HTMLElement>(
-      'button[aria-label="Series scoring"]'
-    );
-    if (!trigger) throw new Error("scoring page not laid out as expected");
-    window.scrollBy(0, trigger.getBoundingClientRect().y - (window.innerHeight - 70));
-  });
-  await select.click();
-
-  const listbox = page.getByRole("listbox");
-  await expect(listbox).toBeVisible();
-  const box = await listbox.boundingBox();
-  const viewport = page.viewportSize()!;
-  expect(box).not.toBeNull();
-  // toBeVisible() alone would NOT catch this: an off-screen popover is still
-  // "visible" to Playwright. The rect is the assertion.
-  expect(box!.y).toBeGreaterThanOrEqual(0);
-  expect(box!.y).toBeLessThan(viewport.height);
-
-  await page.keyboard.press("Escape");
-  expect(mutated()).toBe(false);
-});
 
 test("scoring settings page shows stored GAP values; leaving saves nothing", async ({
   page,
@@ -511,7 +464,7 @@ test("scoring settings page shows stored GAP values; leaving saves nothing", asy
   expect(mutated()).toBe(false);
 });
 
-test("general settings page: timezone combobox filters; leaving saves nothing", async ({
+test("general settings page: the timezone list filters in flow; leaving saves nothing", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
@@ -519,18 +472,38 @@ test("general settings page: timezone combobox filters; leaving saves nothing", 
   await page.goto(`/comp/${compId}/settings/general`);
   await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
 
-  // Timezone combobox: typing filters hundreds of zones down; picking fills
-  // the field. Adelaide rather than the comp's own Melbourne, so the pick is
-  // guaranteed to dirty the form for the guard assertion below.
-  const timezone = page.getByRole("combobox");
-  await timezone.click();
-  await expect(page.getByRole("listbox")).toBeVisible();
-  await timezone.fill("adelaide");
-  const options = page.getByRole("option");
+  const main = page.getByRole("main");
+
+  // Close Date's calendar is ON THE PAGE, not behind a trigger: day cells are
+  // present without anything being opened, and there is no "Open calendar"
+  // button at all. (The lazy picker chunk has to arrive first, hence the
+  // generous timeout on the first assertion.)
+  await expect(main.getByRole("gridcell").first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("button", { name: "Open calendar" })).toHaveCount(0);
+
+  // Timezone: a collapsed row showing the current zone, expanding to a search
+  // box over the ~400 zones. Adelaide rather than the comp's own Melbourne,
+  // so the pick is guaranteed to dirty the form for the guard assertion below.
+  await main.getByRole("button", { name: "Timezone" }).click();
+
+  // The list is IN FLOW, not a popover — scoping to main is the assertion
+  // (a portalled popover renders as a sibling of #root, outside main).
+  const listbox = main.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Search timezones" }).fill("adelaide");
+  const options = listbox.getByRole("option");
   await expect(options).toHaveCount(1);
   await expect(options.first()).toHaveText("Australia/Adelaide");
   await options.first().click();
-  await expect(timezone).toHaveValue("Australia/Adelaide");
+
+  // Picking collapses the list back to the row, which now reads the new zone.
+  await expect(listbox).toHaveCount(0);
+  await expect(main.getByRole("button", { name: "Timezone" })).toContainText(
+    "Australia/Adelaide"
+  );
 
   // The pick dirtied the form, so leaving prompts; Discard drops the edit
   // and navigates — and nothing was PATCHed.
