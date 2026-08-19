@@ -363,6 +363,13 @@ Automated checks catch ~30–40% of issues; the rest is manual. Do both.
    reach and operate everything? Is focus always visible and never lost?
 2. **Zoom/reflow**: browser zoom to 200%, then narrow to 320px. Nothing clipped,
    no horizontal scrollbar on the body.
+   - Some of this is now mechanical: `bunx playwright test --project=mobile`
+     re-runs the competition settings, comp/scores and track-submission specs
+     under a phone device descriptor — narrow, touch, coarse pointer, mobile
+     user agent (`e2e/fixtures/mobile.ts`, and the "mobile project" section of
+     `docs/local-dev.md`). It proves those journeys still *work* on a phone; it
+     does not check this standard, so the manual pass above still stands, and a
+     page outside that list has had neither.
 3. **Screen reader smoke test**: VoiceOver (macOS, ⌘F5) or NVDA (Windows). Walk
    the landmarks and headings; confirm names, roles, and that status changes are
    announced.

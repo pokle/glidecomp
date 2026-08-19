@@ -9,15 +9,19 @@
  *   PATCHes ONLY that group's fields (the server diffs per field, so a page
  *   sending another group's values would silently widen every save);
  * - the Discard/Keep navigation guard on a dirty sub-page;
- * - the whole journey at a phone viewport (390×844) with no horizontal
- *   overflow — the point of the restructure;
+ * - the whole journey with no horizontal overflow — the point of the
+ *   restructure;
  * - non-admin fallback and the unknown-group 404.
  *
  * Runs against its own comp (named through e2eCompName so the pre-run sweep
  * can catch strays) with a dedicated fixture admin, so nothing here touches
  * the seeded sample comp other specs read.
+ *
+ * In the `mobile` project too (e2e/fixtures/mobile.ts): these pages were built
+ * mobile-first, so a desktop-only pass would exercise them at the one width
+ * they were not designed for.
  */
-import { test, expect, type Page } from "./fixtures/test";
+import { test, expect, phoneOnly, type Page } from "./fixtures/test";
 import { e2eCompName } from "./fixtures/stack";
 
 const ADMIN_USER = {
@@ -202,10 +206,17 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
   ).toContainText(COMP_NAME);
 });
 
-test("the whole journey fits a phone: no horizontal overflow at 390×844", async ({
+test("the whole journey fits a phone: no horizontal overflow", async ({
   page,
+  isMobile,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  // The viewport used to be set here, by hand, at 390×844. It comes from the
+  // `mobile` project now (issue #643) — which also brings touch, a mobile user
+  // agent and `(pointer: coarse)`, none of which a resize gives you. The other
+  // three tests in this file run in BOTH projects, so the pages themselves are
+  // driven at a phone width regardless; what is left here is the assertion
+  // that only means something there.
+  phoneOnly(isMobile);
   await devLogin(page, ADMIN_USER);
 
   const noHorizontalOverflow = async (where: string) => {

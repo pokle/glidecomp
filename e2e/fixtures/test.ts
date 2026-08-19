@@ -87,6 +87,31 @@ export const test = base.extend<{ stackUp: void }>({
   ],
 });
 
+/**
+ * "This test only means something on a phone" — for the specs the `mobile`
+ * project re-runs (e2e/fixtures/mobile.ts).
+ *
+ * Call it as the FIRST line of a test body, passing the `isMobile` fixture:
+ *
+ *   test("…", async ({ page, isMobile }) => {
+ *     phoneOnly(isMobile);
+ *
+ * `test.skip`'s callback form would be tidier, but it only exists at file or
+ * `describe` scope — from inside a test body the condition form is the one
+ * that works, and this wraps it so the reason reads the same everywhere.
+ *
+ * There is deliberately no `desktopOnly` counterpart. Every other test in a
+ * listed spec runs in BOTH projects, because the second pass is the entire
+ * point: a journey that works at both widths is the thing worth pinning. If a
+ * test fails under `mobile`, that is a finding about the phone layout, not a
+ * reason to exempt it — the browserless `async ({ request })` tests were
+ * measured at well under a tenth of a second each, so not even they are worth
+ * an opt-out.
+ */
+export function phoneOnly(isMobile: boolean | undefined): void {
+  test.skip(!isMobile, "phone-only — runs in the `mobile` project");
+}
+
 export { expect };
 export type {
   APIRequestContext,
