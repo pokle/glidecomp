@@ -29,7 +29,13 @@ const metaDescription =
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Edge to edge on a notched phone, matching the SPA shell (src/app.html).
+         The chrome below holds its content clear of the insets via the
+         `*-safe` utilities in react/globals.css. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <link rel="icon" href="/icon.svg" />
     <link
       rel="preload"

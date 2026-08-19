@@ -4,7 +4,12 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- viewport-fit=cover pairs with the black-translucent status bar below:
+       together they let the app paint edge to edge on a notched phone instead
+       of being letterboxed. Everything that touches a viewport edge then has
+       to hold its content clear of the notch and the home indicator — the
+       `*-safe` utilities in react/globals.css. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>GlideComp</title>
 
   <!-- Default SEO/social tags. The SSR Function overrides title/description

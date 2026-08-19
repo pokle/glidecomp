@@ -137,14 +137,16 @@ export function NumberField({
       {label ? <Label>{label}</Label> : null}
       <Group
         className={cn(
-          "flex h-9 w-full min-w-0 items-stretch overflow-hidden rounded-lg border border-input bg-transparent transition-colors",
+          // 44px tall on a coarse pointer (issue #641), which is what makes
+          // the steppers beside it a full 44px target rather than a 28×36 sliver.
+          "flex h-9 w-full min-w-0 items-stretch overflow-hidden rounded-lg border border-input bg-transparent transition-colors pointer-coarse:h-11",
           "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50",
           "data-disabled:pointer-events-none data-disabled:opacity-50 data-invalid:border-destructive dark:bg-input/30"
         )}
       >
         <AriaButton
           slot="decrement"
-          className="flex w-7 shrink-0 cursor-default items-center justify-center border-r border-input text-muted-foreground outline-none data-hovered:bg-muted data-hovered:text-foreground data-pressed:bg-muted data-disabled:opacity-40"
+          className="flex w-7 shrink-0 cursor-default items-center justify-center border-r border-input pointer-coarse:w-11 text-muted-foreground outline-none data-hovered:bg-muted data-hovered:text-foreground data-pressed:bg-muted data-disabled:opacity-40"
         >
           <MinusIcon className="size-3.5" />
         </AriaButton>
@@ -161,7 +163,7 @@ export function NumberField({
         />
         <AriaButton
           slot="increment"
-          className="flex w-7 shrink-0 cursor-default items-center justify-center border-l border-input text-muted-foreground outline-none data-hovered:bg-muted data-hovered:text-foreground data-pressed:bg-muted data-disabled:opacity-40"
+          className="flex w-7 shrink-0 cursor-default items-center justify-center border-l border-input pointer-coarse:w-11 text-muted-foreground outline-none data-hovered:bg-muted data-hovered:text-foreground data-pressed:bg-muted data-disabled:opacity-40"
         >
           <PlusIcon className="size-3.5" />
         </AriaButton>

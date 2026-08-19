@@ -77,10 +77,13 @@ export function Shell() {
           page instead of pinning — vertical space is too precious there
           (the score-details map is sticky and was left peeking out from
           under the glass). Keep this in sync with SiteHeader.astro. */}
-      <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 max-sm:static [@media(max-height:500px)]:static print:hidden">
+      <header className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur-xl backdrop-saturate-150 pt-safe max-sm:static [@media(max-height:500px)]:static print:hidden">
+        {/* The glass itself stays full-bleed — `pt-safe` on the header pushes
+            only its CONTENT below the status bar, and the gutter grows past a
+            landscape notch (issue #642). Keep in sync with SiteHeader.astro. */}
         <nav
           aria-label="Main"
-          className="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
+          className="mx-auto flex min-h-[60px] w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-gutter-safe py-3"
         >
           {/* Home is a static (Astro) page, so use a full navigation. */}
           <a href="/" className="font-brand text-base font-semibold tracking-tight">
@@ -125,7 +128,7 @@ export function Shell() {
         // ranking table out beside a chart, which does not fit inside 6xl.
         // Without this its own `xl:max-w-[87rem]` was silently clamped here
         // and the docs layout came out NARROWER than the plain one.
-        className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-12 focus:outline-none [&:has([data-wide-page])]:max-w-[89rem]"
+        className="mx-auto w-full max-w-6xl flex-1 px-gutter-safe pt-6 pb-12 focus:outline-none [&:has([data-wide-page])]:max-w-[89rem]"
       >
         <Outlet />
       </main>
@@ -133,7 +136,7 @@ export function Shell() {
       <Separator className="print:hidden" />
 
       {/* Chrome, not content — a printed page keeps only the page itself. */}
-      <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-4 text-sm text-muted-foreground print:hidden">
+      <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-gutter-safe pt-4 pb-gutter-safe text-sm text-muted-foreground print:hidden">
         <span>
           GlideComp{" "}
           <a
@@ -255,7 +258,7 @@ function PreviewAsPill() {
         variant="ghost"
         onPress={() => setOpen(true)}
         className={cn(
-          "fixed right-3 bottom-3 z-50 h-auto gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-xs font-medium shadow-lg print:hidden",
+          "fixed right-safe-3 bottom-safe-3 z-50 h-auto gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-xs font-medium shadow-lg print:hidden",
           previewing
             ? "bg-primary text-primary-foreground data-hovered:bg-primary"
             : "bg-card text-muted-foreground data-hovered:bg-card data-hovered:text-foreground"
@@ -271,7 +274,7 @@ function PreviewAsPill() {
     <div
       role="group"
       aria-label="Preview as"
-      className="fixed right-3 bottom-3 z-50 flex items-center gap-1 rounded-full border bg-card py-1 pr-1.5 pl-3.5 text-xs shadow-lg print:hidden"
+      className="fixed right-safe-3 bottom-safe-3 z-50 flex items-center gap-1 rounded-full border bg-card py-1 pr-1.5 pl-3.5 text-xs shadow-lg print:hidden"
     >
       <span className="mr-1 whitespace-nowrap text-muted-foreground">Preview as</span>
       {PREVIEW_ROLES.map(({ role, label }) => (

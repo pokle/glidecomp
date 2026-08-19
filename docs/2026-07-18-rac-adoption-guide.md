@@ -330,6 +330,18 @@ Points worth knowing before you reach for one:
   are exempt).
 - Keep page visuals identical to the shadcn kit unless intentionally changing
   design — the exploration compares behavior/DX, not looks.
+- **44px on a coarse pointer.** A control below 44px on a phone gets there via
+  a `pointer-coarse:` size utility, or — where growing it would re-flow its
+  neighbours — the `touch-target` utility in `react/globals.css`, which widens
+  the hit area without painting anything. See the accessibility standard §4.5;
+  `rac/nav-list.tsx` rows are the precedent.
+- **The app runs edge to edge** (`viewport-fit=cover`, issue #642), so any kit
+  surface that touches a viewport edge holds its CONTENT clear of the notch and
+  the home indicator while its background stays full-bleed. The `pt-safe` /
+  `pb-safe` / `p-safe` / `px-gutter-safe` / `px-page-safe` / `pb-gutter-safe`
+  utilities in `react/globals.css` are the vocabulary; `rac/full-screen-sheet.tsx`
+  already applies `p-safe` for every sheet, so callers need nothing. `env()` is
+  0px everywhere else, so none of it costs the desktop anything.
 
 ## Hard-won gotchas (read before touching RAC code)
 

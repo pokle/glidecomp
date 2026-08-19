@@ -588,7 +588,12 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
   .container {
     max-width: 1120px;
     margin: 0 auto;
-    padding: 0 28px;
+    /* The gutter, or the device's safe-area inset where that is wider — this
+       page runs edge to edge under `viewport-fit=cover` (issue #642) and its
+       section backgrounds are full-bleed, so the inset belongs on the content
+       column rather than on the sections. */
+    padding: 0 max(28px, env(safe-area-inset-right, 0px)) 0
+      max(28px, env(safe-area-inset-left, 0px));
   }
 
   /* ---- Buttons (pill) ---- */
@@ -1195,7 +1200,8 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
   }
   @media (max-width: 560px) {
     .container {
-      padding: 0 20px;
+      padding: 0 max(20px, env(safe-area-inset-right, 0px)) 0
+        max(20px, env(safe-area-inset-left, 0px));
     }
     .hero {
       padding-top: 56px;

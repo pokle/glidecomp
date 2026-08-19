@@ -168,6 +168,107 @@
   --font-hyperlegible: "Atkinson Hyperlegible Next", var(--font-app);
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * Touch targets (issue #641)
+ * ---------------------------------------------------------------------------
+ *
+ * The accessibility standard's §4.5 floor is WCAG 2.5.8's 24px, which every
+ * control already clears. On a phone 24px is still fiddly, so a control gets
+ * 44px of POINTER target on a coarse pointer — the floor `rac/nav-list.tsx`
+ * rows have always had.
+ *
+ * Two techniques, and the choice between them is about the neighbours:
+ *   - Where the control can simply grow, grow it with a `pointer-coarse:`
+ *     size utility (the NumberField steppers, the calendar day cells, the
+ *     pilot-class chips). A real 44px box cannot overlap anything.
+ *   - Where growing would move the layout around it — the ⓘ trigger sitting
+ *     inline in a table header — use `touch-target` below, which paints
+ *     nothing and only widens what the finger may land on.
+ *
+ * Coarse pointers only: a mouse is already precise at 24px, and on the desktop
+ * an invisible 44px box would only steal clicks from its neighbours.
+ */
+@utility touch-target {
+  @media (pointer: coarse) {
+    position: relative;
+
+    /* Centred on the control, so it grows symmetrically and never shifts the
+       target off the glyph. `max()` keeps a control that is ALREADY bigger
+       than 44px from being shrunk by its own hit area. */
+    &::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Safe-area insets (issue #642)
+ * ---------------------------------------------------------------------------
+ *
+ * The app declares `viewport-fit=cover` (src/app.html, static Base.astro), so
+ * on a notched phone it paints edge to edge instead of being letterboxed.
+ * That is only correct if everything touching a viewport edge keeps its
+ * CONTENT out of the notch, the rounded corners and the home indicator —
+ * backgrounds stay full-bleed, only the padding moves.
+ *
+ * `env(safe-area-inset-*)` is 0px on every device without insets, so all of
+ * these are inert on the desktop and on older phones. The `max()` forms keep
+ * the surface's own gutter when the inset is smaller, rather than adding the
+ * two together and pushing content needlessly far in.
+ */
+
+/* Pure insets, for a box that has no padding of its own — or that nests
+   around children which supply their own gutter. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility p-safe {
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+/* The app chrome's 1rem gutter (`px-4`), held clear of a landscape notch. */
+@utility px-gutter-safe {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+/* The static content pages' 1.5rem gutter (`p-6` / `px-6`), likewise. */
+@utility px-page-safe {
+  padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+}
+
+/* Bottom-of-page chrome: its own 1rem, then the home indicator. Added rather
+   than max()'d — the indicator sits ON the content, so the gutter has to
+   start above it. */
+@utility pb-gutter-safe {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Floating bottom-right chrome (the Preview-as pill): its 0.75rem offset,
+   clear of the home indicator and the rounded corner. */
+@utility bottom-safe-3 {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@utility right-safe-3 {
+  right: calc(0.75rem + env(safe-area-inset-right, 0px));
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

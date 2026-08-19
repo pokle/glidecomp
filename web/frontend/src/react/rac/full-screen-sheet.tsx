@@ -78,7 +78,12 @@ export function FullScreenSheet({
       }}
       className={cn("fixed inset-0 z-[100]", BACKDROPS[backdrop])}
     >
-      <AriaModal className="h-full w-full outline-none">
+      {/* The backdrop above stays edge to edge (viewport-fit=cover, issue
+          #642); `p-safe` here keeps the sheet's CONTENT out of the notch, the
+          rounded corners and the home indicator, without the callers — or
+          their `className` padding, which composes on top of this — having to
+          know about any of it. */}
+      <AriaModal className="h-full w-full p-safe outline-none">
         <AriaDialog aria-label={label} className="h-full w-full outline-none">
           <div
             {...(dismissOnPress ? { onClick: onClose } : {})}

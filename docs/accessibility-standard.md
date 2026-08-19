@@ -197,6 +197,21 @@ differs. Know which surface you're touching:
   the bar with room to spare; nothing in `rac/button.tsx` goes below it and
   nothing new should. Avoid crowding several small targets together (e.g.
   per-row track actions in dense tables).
+- **On a coarse pointer the floor is 44px**, the mobile touch guideline
+  `rac/nav-list.tsx` rows have always met (issue #641). 24px is the standard's
+  conformance line, not a thumb's. Two ways to reach 44, and the neighbours
+  decide which:
+  - Where the control can simply grow, grow it with a `pointer-coarse:` size
+    utility — the NumberField steppers (`rac/field.tsx`), the calendar's
+    compact day cells (`rac/date-picker.impl.tsx`) and the pilot-class preset
+    chips (`comp/fields.tsx`). A real 44px box cannot overlap anything.
+  - Where growing would re-flow what sits beside it — the `Explain` ⓘ trigger,
+    inline in table headers and section titles — use the `touch-target`
+    utility in `react/globals.css`: a centred transparent pseudo-element that
+    paints nothing and only widens where a finger may land.
+  - Both are `(pointer: coarse)`-only. A mouse is already precise at 24px, and
+    on the desktop an invisible 44px box would just steal clicks from its
+    neighbours.
 
 ---
 
@@ -333,7 +348,7 @@ Accessibility (docs/accessibility-standard.md)
 - [ ] Errors announced + associated (aria-invalid + aria-describedby); status changes in a live region
 - [ ] Zoom/reflow: works at 200% and 320px wide, no page-body horizontal scroll
 - [ ] Reduced motion: honoured for any new animation
-- [ ] Targets ≥24px
+- [ ] Targets ≥24px (≥44px on a coarse pointer — grow it, or `touch-target`)
 - [ ] Alt text on images (empty for decorative)
 - [ ] Maps/charts: essential info also available as accessible text/table
 ```
