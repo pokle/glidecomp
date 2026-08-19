@@ -159,6 +159,7 @@ test.describe("submitting a track without an account", () => {
 
   test("submitting is reachable from the nav on every page", async ({ page }) => {
     await page.goto(BASE_URL);
+    const nav = page.locator('nav[aria-label="Main"]');
     // A plain anchor, not a scripted button: these pages are prerendered and
     // must stay useful with JS off.
     //
@@ -166,9 +167,19 @@ test.describe("submitting a track without an account", () => {
     // that page is compiled on demand by the Astro server — the default 5s is
     // the Astro cold start, not the assertion. It passes in 3s warm and has
     // failed at 5s cold.
-    await expect(page.locator('nav a[href="/submit"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    const inRow = nav.locator('[data-priority-item="submit"] a[href="/submit"]');
+    await expect(inRow).toBeAttached({ timeout: 20_000 });
+    // Where it SHOWS depends on the width: the header is priority+overflow
+    // (issue #639), so a phone folds this link into "More". Reachable is the
+    // claim, and it holds either way — the folded copy is an anchor too.
+    if (await inRow.isVisible()) {
+      await expect(nav.getByRole("button", { name: "More pages" })).toBeHidden();
+    } else {
+      await nav.getByRole("button", { name: "More pages" }).click();
+      await expect(
+        page.getByRole("menu", { name: "More pages" }).locator('a[href="/submit"]')
+      ).toBeVisible();
+    }
     // Deliberately NOT a third hero call to action — the nav carries it.
     await expect(page.locator('.hero-cta a[href="/submit"]')).toHaveCount(0);
   });

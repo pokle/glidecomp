@@ -127,7 +127,12 @@ instance only exists a tick after mount, so gate anything that drives it on
   renders the "Enter task" field's inline waypoint suggestions as a
   `ListBox`/`ListBoxItem`, deliberately *in flow* under the textarea rather
   than a ComboBox popover, because on a phone the keyboard would cover a
-  floating list), `menu`, `tooltip`, `tag-group`, `disclosure`,
+  floating list), `menu`,
+  `priority-nav` (PriorityNav — a navigation row that never wraps: the links
+  that fit stay in the row and the rest fold into a "More" menu. Used by the
+  app header and the comp page's section bar, issue #639. Its vanilla twin,
+  for the prerendered pages, is in `static/src/components/SiteHeader.astro`),
+  `tooltip`, `tag-group`, `disclosure`,
   `meter` (DivergingMeter/ProportionMeter — a **measurement**, `role="meter"`;
   NOT ProgressBar, which means task completion. RAC's own `Meter` is imported
   inside the file as `AriaMeter` and is not exported. `DivergingMeter` draws a
@@ -637,6 +642,22 @@ Points worth knowing before you reach for one:
     date picker's calendar and the Tooltip carry no `position` class.
     Coverage: `e2e/popover-position.spec.ts` opens a select in a dialog on a
     scrolled task page and asserts the listbox lands inside the viewport.
+
+23. **A Menu is named by its TRIGGER, and a MenuItem cannot carry
+    `aria-current`.** Two separate limits, both found building the
+    priority+overflow nav (`rac/priority-nav.tsx`, issue #639), and both quiet:
+    - `MenuTrigger` wires `aria-labelledby` from the button onto the menu, and
+      `aria-labelledby` beats `aria-label`. An `aria-label` on the Menu is
+      therefore inert — the comp page's two "More" menus were BOTH named
+      "More", which is exactly the ambiguity a label was meant to remove. Name
+      the **trigger** instead (`aria-label="More sections"`), keeping the
+      visible word inside it (WCAG 2.5.3, label in name); the menu inherits it.
+    - RAC runs an item's props through `filterDOMProps`, which passes `data-*`
+      and the four labelling `aria-*` and drops everything else —
+      `aria-current` included. Marking the current page in a menu therefore
+      takes `data-current` for the ink plus a visually hidden phrase for AT. A
+      hand-written `role="menuitem"` anchor (SiteHeader.astro) keeps the real
+      attribute, so the two implementations differ here on purpose.
 
 ## Verification playbook (all part of "done" for RAC work)
 
