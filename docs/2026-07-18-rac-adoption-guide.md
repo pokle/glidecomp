@@ -171,7 +171,33 @@ instance only exists a tick after mount, so gate anything that drives it on
   interactive inside would dismiss on the way to being pressed; without it,
   give the sheet an `autoFocus` Close button, since Escape alone isn't a
   discoverable affordance. Callers: the waypoint QR, the task route glyph, the
-  field-analysis metric chart).
+  field-analysis metric chart), `nav-list` (NavList/NavRow/NavActionRow — the
+  grouped tappable-row list for hierarchical settings screens: each row is a
+  RAC Link (or Button, for `NavActionRow` actions like "Delete competition")
+  showing a label, a muted current-value summary and a chevron, on a minimum
+  44px target. First consumer: the comp settings pages
+  (`comp/settings/CompSettingsIndex.tsx`), which replaced the old
+  Competition Settings dialog with routed pages —
+  `/comp/:id/settings[/:group]` — one pattern at every viewport size),
+  `choice-list` (ChoiceList/SearchableChoiceList — **"pick one of N" without an
+  overlay**: full-width rows with a checkmark on the chosen one, on RAC's
+  RadioGroup/Radio so the ARIA contract, roving focus and the real
+  `<input type="radio">` are unchanged. It replaces BOTH desktop controls on
+  the settings pages — the radio group's 16px dot and `SimpleSelect`'s floating
+  popover. `SearchableChoiceList` is the same row collapsed, expanding **in
+  flow** to a search box over a filtered `ListBox`; use it past a dozen or so
+  options — the ~400 IANA timezones are what it was built for. `radio-group`
+  stays as the compact form for dense dialogs),
+  `switch` (SwitchField/SwitchList — **an on/off setting as a phone-style row**:
+  label and hint on the left, the control on the RIGHT, the whole row tappable
+  at 44px. On RAC's Switch, so the control is a real focusable input with
+  `role="switch"` — semantically an on/off setting rather than a form checkbox,
+  which is what these are. `SwitchList` groups consecutive rows onto one card
+  with dividers, as a phone's settings app does. Used by the settings pages'
+  booleans (Access's three, the Scoring page's GAP toggles); **dialogs keep
+  `rac/checkbox`**, whose 16px leading box suits a dense panel — so a dialog
+  boolean still answers to `role="checkbox"` in tests while a settings-page one
+  answers to `role="switch"`).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskScores.tsx`, `comp/RouteEditorDialog.tsx`
   (Tabulator grid → RAC Table → GridList card list → **RAC Table again**, via
@@ -188,7 +214,8 @@ instance only exists a tick after mount, so gate anything that drives it on
   `pages/CompDetail.tsx` (hero LinkButtons, Create Task dialog on
   Form/TextField/CheckboxGroup),
   `comp/SettingsDialog.tsx` (kit Modal/Dialog; numeric GAP params became
-  NumberFields holding numbers with NaN-as-blank), `comp/CompScoresSection.tsx`
+  NumberFields holding numbers with NaN-as-blank — since replaced by the
+  routed settings pages in `comp/settings/`, 2026-08), `comp/CompScoresSection.tsx`
   (rac tabs + sortable RAC-grid tables), `comp/ScoresSection.tsx` (onRowAction
   + AriaLink rows), `comp/ActivitySection.tsx` (rac tabs),
   `comp/CompSetupProgress.tsx` (rac ProgressBar; the Card became a plain
@@ -228,6 +255,13 @@ instance only exists a tick after mount, so gate anything that drives it on
 - The date/time pickers were already RAC before the migration and moved across
   unchanged; they live at `rac/date-picker.tsx` (lazy-loaded via
   `date-picker.impl.tsx` so they stay out of the SSR bundle).
+  - `DatePicker` takes an **`inline`** prop (2026-08): the month grid renders
+    in the page under the segments, with 44px day cells, instead of behind an
+    "Open calendar" trigger. That is the settings-page form — nothing to open,
+    nothing a phone keyboard can cover. Dialogs keep the dropdown (32px
+    cells), where an always-open calendar would outgrow the panel. Both share
+    one `CalendarBody`; the overlay is presentation, not plumbing, since the
+    grid reads its state from the DatePicker's CalendarContext either way.
 
 ## Loading and in-flight states (2026-07-27)
 

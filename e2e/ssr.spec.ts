@@ -294,6 +294,9 @@ test.describe("SSR — isolation and fallback", () => {
     "/comp/anything/task/anything/analysis",
     // Admin-only roster editor page.
     "/comp/anything/pilots",
+    // Admin-only settings pages (index + a group sub-page).
+    "/comp/anything/settings",
+    "/comp/anything/settings/scoring",
   ]) {
     test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {
       const res = await request.get(path, { failOnStatusCode: false });

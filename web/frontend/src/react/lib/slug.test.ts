@@ -7,6 +7,7 @@ import {
   compPath,
   compScoresPath,
   compAnalysisPath,
+  compSettingsPath,
   taskPath,
   taskAnalysisPath,
   pilotPath,
@@ -85,6 +86,12 @@ describe("path builders", () => {
     );
     expect(compAnalysisPath("voqc", "Corryong Cup 2026")).toBe(
       "/comp/corryong-cup-2026-voqc/analysis"
+    );
+    expect(compSettingsPath("voqc", "Corryong Cup 2026")).toBe(
+      "/comp/corryong-cup-2026-voqc/settings"
+    );
+    expect(compSettingsPath("voqc", "Corryong Cup 2026", "scoring")).toBe(
+      "/comp/corryong-cup-2026-voqc/settings/scoring"
     );
   });
 

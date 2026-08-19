@@ -63,6 +63,9 @@ const SignIn = lazy(() =>
 const CompPilotsPage = lazy(() =>
   import("./pages/CompPilotsPage").then((m) => ({ default: m.CompPilotsPage }))
 );
+const CompSettingsPage = lazy(() =>
+  import("./pages/CompSettingsPage").then((m) => ({ default: m.CompSettingsPage }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -139,6 +142,13 @@ export function AppRoutes() {
           <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
           {/* Admin-only roster editor — noindex shell in the SSR Function. */}
           <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
+          {/* Admin-only settings pages (index + one sub-page per group) —
+              noindex shell in the SSR Function, like /pilots. */}
+          <Route path="/comp/:compId/settings" element={<CompSettingsPage />} />
+          <Route
+            path="/comp/:compId/settings/:group"
+            element={<CompSettingsPage />}
+          />
           <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
           {/* Field analysis (behavioural metrics). One report per competition,
               with a chapter per task NESTED UNDER IT — the per-task page is a

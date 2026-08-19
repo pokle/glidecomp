@@ -101,11 +101,17 @@ test("dev login, create competition and task", async ({ page }) => {
 
   // Saving settings (defaults untouched) counts as reviewing them, ticking the
   // optional "Review settings" step over. Being optional, it doesn't move the
-  // required-step counter — the count stays "1 of 4".
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  // required-step counter — the count stays "1 of 4". Settings is a hierarchy
+  // of pages now: index → a group page → Save → back to the index → back to
+  // the comp.
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await page.getByRole("main").getByRole("link", { name: /^General/ }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // The save lands back on the settings index; return to the comp page.
+  await expect(page.getByRole("main").getByRole("link", { name: /^General/ })).toBeVisible();
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Save", exact: true })
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: COMP_NAME })
     .click();
   await expect(guide).toContainText("Completed: Review settings");
   await expect(guide).toContainText("1 of 4 steps");

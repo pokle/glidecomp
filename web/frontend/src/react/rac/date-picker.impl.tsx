@@ -84,29 +84,46 @@ const trailingButton =
 const navButton =
   "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[disabled]:opacity-40";
 
-const cellClass = ({
-  isSelected,
-  isDisabled,
-  isOutsideMonth,
-  isFocusVisible,
-  isUnavailable,
-}: {
-  isSelected: boolean;
-  isDisabled: boolean;
-  isOutsideMonth: boolean;
-  isFocusVisible: boolean;
-  isUnavailable: boolean;
-}) =>
-  cn(
-    "flex size-8 cursor-default items-center justify-center rounded-md text-sm outline-none",
-    !isSelected &&
-      !isDisabled &&
-      "hover:bg-accent hover:text-accent-foreground",
-    isSelected && "bg-primary text-primary-foreground",
-    (isDisabled || isUnavailable) && "text-muted-foreground opacity-50",
-    isOutsideMonth && "text-muted-foreground/40",
-    isFocusVisible && "ring-2 ring-ring/50"
-  );
+/**
+ * Two cell scales. `compact` (32px) is the dropdown's, unchanged; `touch`
+ * (44px) is the inline calendar's, meeting the mobile touch-target guideline
+ * — the whole point of putting the calendar on the page instead of in a
+ * popover. The header cells match the column WIDTH but stay short: they hold
+ * day initials, not targets.
+ */
+const CELL_SCALE = {
+  compact: { cell: "size-8", head: "size-8" },
+  touch: { cell: "size-11", head: "h-8 w-11" },
+} as const;
+
+type CellScale = keyof typeof CELL_SCALE;
+
+const makeCellClass =
+  (scale: CellScale) =>
+  ({
+    isSelected,
+    isDisabled,
+    isOutsideMonth,
+    isFocusVisible,
+    isUnavailable,
+  }: {
+    isSelected: boolean;
+    isDisabled: boolean;
+    isOutsideMonth: boolean;
+    isFocusVisible: boolean;
+    isUnavailable: boolean;
+  }) =>
+    cn(
+      "flex cursor-default items-center justify-center rounded-md text-sm outline-none",
+      CELL_SCALE[scale].cell,
+      !isSelected &&
+        !isDisabled &&
+        "hover:bg-accent hover:text-accent-foreground",
+      isSelected && "bg-primary text-primary-foreground",
+      (isDisabled || isUnavailable) && "text-muted-foreground opacity-50",
+      isOutsideMonth && "text-muted-foreground/40",
+      isFocusVisible && "ring-2 ring-ring/50"
+    );
 
 function parseSafe<T>(raw: string, parse: (s: string) => T): T | null {
   if (!raw) return null;
@@ -133,6 +150,46 @@ function ClearButton({ onClear }: { onClear: () => void }) {
 }
 
 /**
+ * The month grid itself. Rendered either inside the dropdown or straight into
+ * the page — it reads its state from the DatePicker's CalendarContext either
+ * way, so the overlay is presentation, not plumbing.
+ */
+function CalendarBody({ scale = "compact" }: { scale?: CellScale }) {
+  return (
+    <Calendar className="w-fit">
+      <header className="flex items-center justify-between pb-2">
+        <AriaButton slot="previous" className={navButton}>
+          <ChevronLeft className="size-4" />
+        </AriaButton>
+        <Heading className="text-sm font-medium" />
+        <AriaButton slot="next" className={navButton}>
+          <ChevronRight className="size-4" />
+        </AriaButton>
+      </header>
+      <CalendarGrid className="border-collapse">
+        <CalendarGridHeader>
+          {(day) => (
+            <CalendarHeaderCell
+              className={cn(
+                CELL_SCALE[scale].head,
+                "text-xs font-normal text-muted-foreground"
+              )}
+            >
+              {day}
+            </CalendarHeaderCell>
+          )}
+        </CalendarGridHeader>
+        <CalendarGridBody>
+          {(date) => (
+            <CalendarCell date={date} className={makeCellClass(scale)} />
+          )}
+        </CalendarGridBody>
+      </CalendarGrid>
+    </Calendar>
+  );
+}
+
+/**
  * The calendar dropdown shared by DatePicker and DateTimePicker.
  *
  * No `position` override — RAC's own absolute positioning is only correct
@@ -142,29 +199,7 @@ function CalendarPopover() {
   return (
     <Popover className="z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md outline-none">
       <Dialog className="outline-none">
-        <Calendar className="w-fit">
-          <header className="flex items-center justify-between pb-2">
-            <AriaButton slot="previous" className={navButton}>
-              <ChevronLeft className="size-4" />
-            </AriaButton>
-            <Heading className="text-sm font-medium" />
-            <AriaButton slot="next" className={navButton}>
-              <ChevronRight className="size-4" />
-            </AriaButton>
-          </header>
-          <CalendarGrid className="border-collapse">
-            <CalendarGridHeader>
-              {(day) => (
-                <CalendarHeaderCell className="size-8 text-xs font-normal text-muted-foreground">
-                  {day}
-                </CalendarHeaderCell>
-              )}
-            </CalendarGridHeader>
-            <CalendarGridBody>
-              {(date) => <CalendarCell date={date} className={cellClass} />}
-            </CalendarGridBody>
-          </CalendarGrid>
-        </Calendar>
+        <CalendarBody />
       </Dialog>
     </Popover>
   );
@@ -185,6 +220,13 @@ export interface DatePickerProps extends PickerBaseProps {
   /** "YYYY-MM-DD", or "" when unset. */
   value: string;
   onChange: (value: string) => void;
+  /**
+   * Render the calendar **in the page**, under the segments, instead of in a
+   * dropdown — the settings-page form: no overlay to open, nothing for a
+   * phone keyboard to cover, and 44px day cells. Dialogs keep the dropdown,
+   * where an always-open calendar would outgrow the panel.
+   */
+  inline?: boolean;
 }
 
 /** Date-only picker. Value is a bare calendar date ("YYYY-MM-DD"). */
@@ -193,6 +235,7 @@ export function DatePicker({
   onChange,
   clearable,
   className,
+  inline,
   ...rest
 }: DatePickerProps) {
   const dateValue = parseSafe(value, parseDate) as CalendarDate | null;
@@ -214,11 +257,20 @@ export function DatePicker({
           {clearable && dateValue ? (
             <ClearButton onClear={() => onChange("")} />
           ) : null}
-          <AriaButton className={trailingButton} aria-label="Open calendar">
-            <CalendarIcon className="size-4" />
-          </AriaButton>
+          {/* No trigger when the calendar is already on the page. */}
+          {inline ? null : (
+            <AriaButton className={trailingButton} aria-label="Open calendar">
+              <CalendarIcon className="size-4" />
+            </AriaButton>
+          )}
         </Group>
-        <CalendarPopover />
+        {inline ? (
+          <div className="mt-2 w-fit max-w-full overflow-x-auto rounded-lg border border-border p-3">
+            <CalendarBody scale="touch" />
+          </div>
+        ) : (
+          <CalendarPopover />
+        )}
       </AriaDatePicker>
     </I18nProvider>
   );

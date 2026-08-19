@@ -42,6 +42,7 @@ import {
   idFromSegment,
   compPath,
   compScoresPath,
+  compSettingsPath,
   compWaypointsPath,
   compAnalysisPath,
   taskPath,
@@ -52,7 +53,6 @@ import { SectionHeader } from "../components/SectionHeader";
 import { ActivitySection } from "../comp/ActivitySection";
 import { CompScoresSummary } from "../comp/CompScoresSummary";
 import { CompSetupProgress } from "../comp/CompSetupProgress";
-import { SettingsDialog } from "../comp/SettingsDialog";
 import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
 import {
   isPastCloseDate,
@@ -81,7 +81,6 @@ export function CompDetail() {
     refresh,
   });
   const [createOpen, setCreateOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
   useCanonicalPath(comp ? compPath(compId, comp.name) : null);
@@ -114,8 +113,6 @@ export function CompDetail() {
       user={user}
       createOpen={createOpen}
       setCreateOpen={setCreateOpen}
-      settingsOpen={settingsOpen}
-      setSettingsOpen={setSettingsOpen}
       setRefresh={setRefresh}
       today={seeded?.today}
       initialScores={seeded?.scores ?? undefined}
@@ -130,8 +127,6 @@ function CompDetailView({
   user,
   createOpen,
   setCreateOpen,
-  settingsOpen,
-  setSettingsOpen,
   setRefresh,
   today,
   initialScores,
@@ -142,8 +137,6 @@ function CompDetailView({
   user: ReturnType<typeof useUser>["user"];
   createOpen: boolean;
   setCreateOpen: (open: boolean) => void;
-  settingsOpen: boolean;
-  setSettingsOpen: (open: boolean) => void;
   setRefresh: React.Dispatch<React.SetStateAction<number>>;
   /** SSR-computed "today" (comp tz) so the section order matches across
    *  hydration. Omitted on client navigations. */
@@ -235,9 +228,13 @@ function CompDetailView({
           </LinkButton>
         ) : null}
         {isAdmin ? (
-          <Button variant="outline" size="sm" onPress={() => setSettingsOpen(true)}>
+          <LinkButton
+            variant="outline"
+            size="sm"
+            href={compSettingsPath(compId, comp.name)}
+          >
             Settings
-          </Button>
+          </LinkButton>
         ) : null}
       </div>
 
@@ -273,7 +270,6 @@ function CompDetailView({
         <CompSetupProgress
           compId={compId}
           comp={comp}
-          onOpenSettings={() => setSettingsOpen(true)}
           onCreateTask={() => setCreateOpen(true)}
         />
       ) : null}
@@ -328,17 +324,6 @@ function CompDetailView({
         />
       ) : null}
 
-      {isAdmin && settingsOpen ? (
-        <SettingsDialog
-          compId={compId}
-          comp={comp}
-          onClose={() => setSettingsOpen(false)}
-          onSaved={() => {
-            setSettingsOpen(false);
-            setRefresh((n) => n + 1);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

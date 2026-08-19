@@ -81,12 +81,10 @@ function readHidden(compId: string): boolean {
 export function CompSetupProgress({
   compId,
   comp,
-  onOpenSettings,
   onCreateTask,
 }: {
   compId: string;
   comp: CompDetailData;
-  onOpenSettings: () => void;
   onCreateTask: () => void;
 }) {
   const headingId = useId();
@@ -126,9 +124,9 @@ export function CompSetupProgress({
         return <span>{step.label}</span>;
       case "settings":
         return (
-          <button type="button" className={linkClass} onClick={onOpenSettings}>
+          <Link className={linkClass} to={`/comp/${compId}/settings`}>
             {step.label}
-          </button>
+          </Link>
         );
       case "waypoints":
         return (

@@ -3,8 +3,8 @@
  * (converted 2026-07-21, see docs/2026-07-18-rac-adoption-guide.md):
  * scores view tabs + sortable scores tables + the scores-by-task Select,
  * the pilots section (read-only RAC grid + the kept-by-policy Tabulator edit
- * grid inside a RAC dialog shell), the activity filter tabs, and the settings
- * dialog (Advanced GAP NumberFields, timezone combobox).
+ * grid inside a RAC dialog shell), the activity filter tabs, and the routed
+ * settings pages (Advanced GAP NumberFields, the in-flow timezone list).
  *
  * Drives the seeded "Corryong Cup 2026" sample comp READ-ONLY: every dialog
  * is cancelled and nothing is created or saved — e2e-created cruft comps
@@ -18,11 +18,14 @@
  * playbook + gotchas #12/#13/#15):
  * - Never wait on "networkidle": ScoreFreshness deliberately keeps polling,
  *   so it never settles. Wait on role locators instead.
- * - RAC checkboxes can't be *clicked* by role (the real input is visually
- *   hidden) — this spec only reads checkbox state, which works fine.
- * - While a ComboBox popover is open, ariaHideOutside aria-hides the rest of
- *   the dialog (role locators fail there) — the timezone combobox is driven
- *   last, and only its own options are queried while it's open.
+ * - RAC checkboxes/switches can't be *clicked* by role (the real input is
+ *   visually hidden) — this spec only reads their state, which works fine.
+ *   The settings pages' booleans are `rac/switch` rows, so they answer to
+ *   role=switch; dialogs keep role=checkbox.
+ * - The settings pages carry no popover at all now (selects became
+ *   `rac/choice-list` row lists, the calendar renders in flow), so the
+ *   ariaHideOutside caveat that used to govern the timezone combobox no
+ *   longer applies — the list is queried in place, scoped to <main>.
  * - RAC Table sorting: first click on a new column follows the app's
  *   per-column defaultDir ("Pilot" asc, "Total" desc), not RAC's
  *   always-ascending.
@@ -123,10 +126,10 @@ test.beforeEach(async ({ page }) => {
 
   await page.goto(`/comp/${compId}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(COMP_NAME);
-  // Admin affordances pop in once /api/auth/me resolves — the Settings button
+  // Admin affordances pop in once /api/auth/me resolves — the Settings link
   // is the sync point that the super-admin view is active.
   await expect(
-    page.getByRole("button", { name: "Settings", exact: true })
+    page.getByRole("link", { name: "Settings", exact: true })
   ).toBeVisible();
 });
 
@@ -398,129 +401,114 @@ test("activity: collapsed digest expands, filter tabs switch and re-fetch", asyn
   await expect(panel.getByText("Could not load activity")).toHaveCount(0);
 });
 
-/**
- * RAC gotcha #22, and the reason `popoverClass` carries `fixed!`.
- *
- * RAC portals a popover to <body> and positions it with viewport-relative
- * offsets under `position: absolute`; our body is `position: relative` (iOS
- * Safari backdrops), so the containing block is the body BOX. A popover that
- * flips UPWARDS — which any select low in a tall dialog does — was displaced
- * by exactly `scrollHeight - innerHeight`: open, focusable, every option in
- * the DOM, and far below the fold.
- *
- * This lived on the pilots editor's CIVL list picker until that picker was
- * removed (one number per pilot, no list to choose). The settings dialog's
- * advanced scoring selects are the same geometry — deep inside a tall modal —
- * so the kit fix keeps its coverage here.
+/*
+ * RAC gotcha #22 (the popover displaced off-screen on a scrolled page) used
+ * to be covered here, on the settings dialog's Series scoring select and then
+ * on the settings PAGE's copy of it. The settings pages no longer contain a
+ * popover of any kind — every select became a `rac/choice-list` row list and
+ * the calendar is rendered in flow — so there is no geometry left to assert.
+ * The gotcha keeps its coverage in popover-position.spec.ts, which drives the
+ * manual-flight turnpoint select on a scrolled task page and asserts the open
+ * listbox lands fully inside the viewport.
  */
-test("a select low in a tall dialog opens ON SCREEN, not below the fold", async ({
-  page,
-}) => {
-  const mutated = trackMutations(page);
-  // A short window is what makes the page taller than the viewport, which is
-  // the only condition under which the displacement happens.
-  await page.setViewportSize({ width: 1280, height: 600 });
 
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByText("Advanced scoring settings").click();
-
-  // The trigger has to sit LOW in the window, because that is what makes RAC
-  // flip the popover upwards and emit the `bottom:` placement the bug
-  // displaces — opened higher up it opens downward and lands correctly even
-  // when broken. Verified: at ~70px from the bottom RAC emits `bottom: 78px`,
-  // which without the fix put the list 735px below the fold.
-  // The S7F 2026 migration removed the Advanced section's selects (the
-  // formula generations are no longer settings), so the low-in-a-tall-dialog
-  // geometry is built from the Series scoring select instead — the manual
-  // overlay scroll below positions it near the bottom either way.
-  const select = dialog.getByRole("button", { name: "Series scoring" });
-  await select.scrollIntoViewIfNeeded();
-  await page.evaluate(() => {
-    const trigger = document.querySelector<HTMLElement>(
-      'button[aria-label="Series scoring"]'
-    );
-    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
-      ?.parentElement;
-    if (!trigger || !overlay) throw new Error("settings dialog not laid out as expected");
-    overlay.scrollTop += trigger.getBoundingClientRect().y - (window.innerHeight - 70);
-  });
-  await select.click();
-
-  const listbox = page.getByRole("listbox");
-  await expect(listbox).toBeVisible();
-  const box = await listbox.boundingBox();
-  const viewport = page.viewportSize()!;
-  expect(box).not.toBeNull();
-  // toBeVisible() alone would NOT catch this: an off-screen popover is still
-  // "visible" to Playwright. The rect is the assertion.
-  expect(box!.y).toBeGreaterThanOrEqual(0);
-  expect(box!.y).toBeLessThan(viewport.height);
-
-  await page.keyboard.press("Escape");
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  expect(mutated()).toBe(false);
-});
-
-test("settings dialog: stored GAP values, timezone combobox filter, cancel", async ({
+test("scoring settings page shows stored GAP values; leaving saves nothing", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
 
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: "Competition Settings" })
-  ).toBeVisible();
+  await page.goto(`/comp/${compId}/settings/scoring`);
+  await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
 
   // Advanced GAP NumberFields show the comp's STORED values, not snapped
   // (RAC gotcha #1) and not the category defaults. The seeded comp's
   // AirScore-captured params differ from the HG defaults exactly where it
   // matters: essNotGoalFactor 0 (HG default 80) and leading points off
   // (HG default on) prove these are the stored values.
-  await dialog.getByText("Advanced scoring settings").click();
+  await page.getByText("Advanced scoring settings").click();
   await expect(
-    dialog.getByRole("textbox", { name: "Nominal time (min)" })
+    page.getByRole("textbox", { name: "Nominal time (min)" })
   ).toHaveValue("90");
   await expect(
-    dialog.getByRole("textbox", { name: "Minimum distance (km)" })
+    page.getByRole("textbox", { name: "Minimum distance (km)" })
   ).toHaveValue("5");
   // The §11 Leading Time Ratio resolves to the HG discipline default when
   // the stored params never pinned one.
   await expect(
-    dialog.getByRole("textbox", { name: "Leading-time ratio (%)" })
+    page.getByRole("textbox", { name: "Leading-time ratio (%)" })
   ).toHaveValue("17.5");
   await expect(
-    dialog.getByRole("textbox", { name: "ESS but not goal: points kept (%, HG)" })
+    page.getByRole("textbox", { name: "ESS but not goal: points kept (%, HG)" })
   ).toHaveValue("0");
   // No comp-level nominal distance stored → blank means "auto", not a
   // min/step-snapped number.
   await expect(
-    dialog.getByRole("textbox", { name: "Nominal distance (km)" })
+    page.getByRole("textbox", { name: "Nominal distance (km)" })
   ).toHaveValue("");
   // Reading (not clicking — gotcha #13) checkbox state is fine by role.
   await expect(
-    dialog.getByRole("checkbox", { name: "Leading (departure) points" })
+    page.getByRole("switch", { name: "Leading (departure) points" })
   ).not.toBeChecked();
   await expect(
-    dialog.getByRole("checkbox", { name: "Arrival points (HG only)" })
+    page.getByRole("switch", { name: "Arrival points (HG only)" })
   ).not.toBeChecked();
 
-  // Timezone combobox: typing filters hundreds of zones down; picking fills
-  // the field. Driven last — while its popover is open, ariaHideOutside
-  // hides the rest of the dialog from role locators (gotcha #12).
-  const timezone = dialog.getByRole("combobox");
-  await timezone.click();
-  await expect(page.getByRole("listbox")).toBeVisible();
-  await timezone.fill("melbourne");
-  const options = page.getByRole("option");
-  await expect(options).toHaveCount(1);
-  await expect(options.first()).toHaveText("Australia/Melbourne");
-  await options.first().click();
-  await expect(timezone).toHaveValue("Australia/Melbourne");
+  // Leave without saving via the breadcrumb — untouched fields arm no guard,
+  // the index renders, and nothing was PATCHed. The Scoring row is scoped to
+  // main because the Shell footer also carries a "Scoring" link.
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
+  await expect(
+    page.getByRole("main").getByRole("link", { name: /^Scoring/ })
+  ).toBeVisible();
+  expect(mutated()).toBe(false);
+});
 
-  // Cancel discards — the dialog unmounts and nothing was PATCHed.
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+test("general settings page: the timezone list filters in flow; leaving saves nothing", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+
+  await page.goto(`/comp/${compId}/settings/general`);
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+
+  const main = page.getByRole("main");
+
+  // Timezone: a collapsed row showing the current zone, expanding to a search
+  // box over the ~400 zones. Adelaide rather than the comp's own Melbourne,
+  // so the pick is guaranteed to dirty the form for the guard assertion below.
+  await main.getByRole("button", { name: "Timezone" }).click();
+
+  // The list is IN FLOW, not a popover — scoping to main is the assertion
+  // (a portalled popover renders as a sibling of #root, outside main).
+  const listbox = main.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Search timezones" }).fill("adelaide");
+  const options = listbox.getByRole("option");
+  await expect(options).toHaveCount(1);
+  await expect(options.first()).toHaveText("Australia/Adelaide");
+  await options.first().click();
+
+  // Picking collapses the list back to the row, which now reads the new zone.
+  await expect(listbox).toHaveCount(0);
+  await expect(main.getByRole("button", { name: "Timezone" })).toContainText(
+    "Australia/Adelaide"
+  );
+
+  // The pick dirtied the form, so leaving prompts; Discard drops the edit
+  // and navigates — and nothing was PATCHed.
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
+  const guard = page.getByRole("alertdialog");
+  await expect(guard.getByText("Discard changes?")).toBeVisible();
+  await guard.getByRole("button", { name: "Discard changes" }).click();
+  await expect(
+    page.getByRole("main").getByRole("link", { name: /^General/ })
+  ).toBeVisible();
   expect(mutated()).toBe(false);
 });
