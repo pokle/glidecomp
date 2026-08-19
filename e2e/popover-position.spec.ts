@@ -14,11 +14,22 @@
  *   `scrollY` (the manual-flight dialog's turnpoint select, which lives far
  *   down the task page).
  *
- * This spec drives that second, scrolled case end to end: a routed task, the
- * manage table's Record-manual-flight dialog, and the turnpoint select. The
- * one assertion that matters is geometric — the open listbox must land inside
- * the viewport. Asserting mere visibility would pass either bug: Playwright's
- * visibility check does not require the element to be on-screen.
+ * This spec drives that second, scrolled case end to end. It used to go
+ * through the manual-flight DIALOG, which is a routed page since #637 and
+ * whose turnpoint select is a list in flow — so the control it drives is now
+ * the manage table's per-row pilot-status select, which sits at the same
+ * depth on the same page and is still a popover on purpose: it is a row
+ * action, not a form field, and a list in flow would blow the row apart.
+ *
+ * That swap costs the spec nothing. What is under test is where RAC puts a
+ * body-portalled popover on a scrolled page, which is a property of the kit
+ * and the document, not of the control that opened it — and dropping the
+ * dialog makes the precondition (scrollY > 0 at the moment of opening) more
+ * direct rather than less.
+ *
+ * The one assertion that matters is geometric — the open listbox must land
+ * inside the viewport. Asserting mere visibility would pass either bug:
+ * Playwright's visibility check does not require the element to be on-screen.
  */
 import { test, expect, type APIRequestContext } from "./fixtures/test";
 import { resolve, dirname } from "path";
@@ -53,8 +64,8 @@ test.describe("select popover on a scrolled task page", () => {
     expect(compRes.ok()).toBeTruthy();
     compId = ((await compRes.json()) as { comp_id: string }).comp_id;
 
-    // The manual-flight button needs a ROUTED task (turnpoints drive the
-    // dialog's select) and at least one pilot row in the manage table.
+    // The status select needs a pilot row in the manage table; the task is
+    // routed so the table renders its full set of row actions.
     const xctsk = JSON.parse(await readFile(SAMPLE_XCTSK, "utf8")) as unknown;
     const taskRes = await admin.post(`/api/comp/${compId}/task`, {
       data: {
@@ -78,7 +89,7 @@ test.describe("select popover on a scrolled task page", () => {
     await admin.dispose();
   });
 
-  test("the turnpoint select opens inside the viewport", async ({ page }) => {
+  test("a row select opens inside the viewport", async ({ page }) => {
     // Same cookie plumbing as settings-save-ux.spec.ts: dev-login through the
     // page's own request context so the browser holds the session.
     const login = await page.request.post("/api/auth/dev-login", { data: SUPER_ADMIN });
@@ -86,16 +97,12 @@ test.describe("select popover on a scrolled task page", () => {
 
     await page.goto(`${BASE_URL}/comp/${compId}/task/${taskId}`);
 
-    const addBtn = page.getByRole("button", { name: "Add manual flight" });
-    await addBtn.scrollIntoViewIfNeeded();
-    // The precondition that makes this test mean anything: the page behind
-    // the dialog is scrolled. At scrollY 0 both historical bugs are invisible.
+    const status = page.getByRole("button", { name: "Status for Popova E2E" });
+    await status.scrollIntoViewIfNeeded();
+    // The precondition that makes this test mean anything: the page is
+    // scrolled. At scrollY 0 both historical bugs are invisible.
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-    await addBtn.click();
-
-    const dialog = page.getByRole("dialog", { name: "Record manual flight" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /Last turnpoint reached/ }).click();
+    await status.click();
 
     const listbox = page.getByRole("listbox");
     await expect(listbox).toBeVisible();
@@ -110,9 +117,7 @@ test.describe("select popover on a scrolled task page", () => {
 
     // And it works as a control, not just as a rectangle: picking an option
     // updates the field.
-    await listbox.getByRole("option", { name: /Goal/ }).click();
-    await expect(
-      dialog.getByRole("button", { name: /Last turnpoint reached/ })
-    ).toContainText("Goal");
+    await listbox.getByRole("option", { name: "Absent" }).click();
+    await expect(status).toContainText("Absent");
   });
 });

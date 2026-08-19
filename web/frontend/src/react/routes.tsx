@@ -72,6 +72,9 @@ const TaskSettingsPage = lazy(() =>
 const TaskRoutePage = lazy(() =>
   import("./pages/TaskRoutePage").then((m) => ({ default: m.TaskRoutePage }))
 );
+const ManualFlightPage = lazy(() =>
+  import("./pages/ManualFlightPage").then((m) => ({ default: m.ManualFlightPage }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -196,6 +199,13 @@ export function AppRoutes() {
           <Route
             path="/comp/:compId/task/:taskId/pilot/:pilotId"
             element={<PilotScoreDetail />}
+          />
+          {/* Recording a flight for a pilot with no tracklog (S7F §9.2.2) —
+              admin-only, and a child of the report card because that is the
+              page it is about. */}
+          <Route
+            path="/comp/:compId/task/:taskId/pilot/:pilotId/manual-flight"
+            element={<ManualFlightPage />}
           />
           <Route path="/scores" element={<Scores />} />
           {/* "My Profile" merged into Settings; keep the old path working. */}

@@ -34,10 +34,9 @@ import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
 import { api } from "../../comp/api";
 import { formatDistance, useUnits } from "../lib/units";
 import { toast } from "../lib/toast";
-import { pilotPath } from "../lib/slug";
+import { manualFlightPath, pilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
 import { ScoreFreshness } from "./ScoreFreshness";
-import { ManualFlightDialog } from "./ManualFlightDialog";
 import { compressIgc } from "./types";
 import {
   NOT_AN_IGC_MESSAGE,
@@ -47,7 +46,6 @@ import {
 } from "./submit-track";
 import type {
   ClassScore,
-  DistanceOriginValue,
   ManualFlightEntry,
   PilotListEntry,
   PilotScoreEntry,
@@ -92,7 +90,6 @@ export function TaskScoresAdmin({
   isAdmin,
   isClosed,
   scoringFormat,
-  distanceOrigin,
   timezone,
   taskXctsk,
   submissionsClosed = false,
@@ -106,7 +103,6 @@ export function TaskScoresAdmin({
   isAdmin: boolean;
   isClosed: boolean;
   scoringFormat: "gap" | "open_distance";
-  distanceOrigin: DistanceOriginValue;
   timezone: string | null;
   /** Task route — drives the ManualFlightDialog. Null when no route yet. */
   taskXctsk: XCTask | null;
@@ -307,7 +303,6 @@ export function TaskScoresAdmin({
           mounted={mounted}
           isAdmin={isAdmin}
           isClosed={isClosed}
-          distanceOrigin={distanceOrigin}
           taskXctsk={taskXctsk}
           roster={roster}
           statuses={statuses}
@@ -340,7 +335,6 @@ function ClassScoresRows({
   mounted,
   isAdmin,
   isClosed,
-  distanceOrigin,
   taskXctsk,
   roster,
   statuses,
@@ -361,7 +355,6 @@ function ClassScoresRows({
   mounted: boolean;
   isAdmin: boolean;
   isClosed: boolean;
-  distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   roster: PilotListEntry[];
   statuses: Map<string, PilotStatusEntry>;
@@ -431,6 +424,8 @@ function ClassScoresRows({
 
   const detailHref = (row: RowPilot) =>
     pilotPath(compId, compName, taskId, taskName, row.compPilotId, row.name);
+  const manualHref = (row: RowPilot) =>
+    manualFlightPath(compId, compName, taskId, taskName, row.compPilotId, row.name);
 
   return (
     <div className="mt-4">
@@ -472,10 +467,10 @@ function ClassScoresRows({
               greyed={greyed}
               showManage={showManage}
               isClosed={isClosed}
-              distanceOrigin={distanceOrigin}
-              taskXctsk={taskXctsk}
+                  taskXctsk={taskXctsk}
               statuses={statuses}
               detailHref={row.outcome === "landed" && row.score ? detailHref(row) : null}
+              manualHref={manualHref(row)}
               onMutated={onMutated}
             />
           ))}
@@ -520,10 +515,10 @@ function ScoresRow({
   greyed,
   showManage,
   isClosed,
-  distanceOrigin,
   taskXctsk,
   statuses,
   detailHref,
+  manualHref,
   onMutated,
 }: {
   row: RowPilot;
@@ -533,10 +528,11 @@ function ScoresRow({
   greyed: boolean;
   showManage: boolean;
   isClosed: boolean;
-  distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   statuses: Map<string, PilotStatusEntry>;
   detailHref: string | null;
+  /** Where this pilot's manual flight is recorded — a routed page (#637). */
+  manualHref: string;
   onMutated: () => void;
 }) {
   const units = useUnits();
@@ -586,10 +582,10 @@ function ScoresRow({
             taskId={taskId}
             isClosed={isClosed}
             isOpenDistance={isOpenDistance}
-            distanceOrigin={distanceOrigin}
-            taskXctsk={taskXctsk}
+              taskXctsk={taskXctsk}
             statuses={statuses}
             detailHref={detailHref}
+            manualHref={manualHref}
             onMutated={onMutated}
           />
         </Cell>
@@ -606,10 +602,10 @@ function RowManage({
   taskId,
   isClosed,
   isOpenDistance,
-  distanceOrigin,
   taskXctsk,
   statuses,
   detailHref,
+  manualHref,
   onMutated,
 }: {
   row: RowPilot;
@@ -617,14 +613,14 @@ function RowManage({
   taskId: string;
   isClosed: boolean;
   isOpenDistance: boolean;
-  distanceOrigin: DistanceOriginValue;
   taskXctsk: XCTask | null;
   statuses: Map<string, PilotStatusEntry>;
   /** The pilot's score card, when the row has one. Null for the tail. */
   detailHref: string | null;
+  /** Where this pilot's manual flight is recorded — a routed page (#637). */
+  manualHref: string;
   onMutated: () => void;
 }) {
-  const [recordOpen, setRecordOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // The pilot is already known from the row, so the Track button skips the
@@ -767,9 +763,11 @@ function RowManage({
       ) : null}
       {!isClosed && hasRoute ? (
         <TooltipTrigger>
-          <Button variant="outline" size="sm" onPress={() => setRecordOpen(true)}>
+          {/* A link, not a dialog trigger: recording a manual flight is a
+              routed page since #637. */}
+          <LinkButton variant="outline" size="sm" href={manualHref}>
             {row.evidence === "manual" ? "Edit manual flight" : "Add manual flight"}
-          </Button>
+          </LinkButton>
           <Tooltip>
             Record a manual flight for {row.name} — for a pilot with no tracklog
           </Tooltip>
@@ -789,23 +787,6 @@ function RowManage({
         </TooltipTrigger>
       ) : null}
 
-      {recordOpen && taskXctsk ? (
-        <ManualFlightDialog
-          compId={compId}
-          taskId={taskId}
-          compPilotId={row.compPilotId}
-          pilotName={row.name}
-          task={taskXctsk}
-          distanceOrigin={distanceOrigin}
-          openDistance={isOpenDistance}
-          existing={row.activeManual}
-          onClose={() => setRecordOpen(false)}
-          onSaved={() => {
-            setRecordOpen(false);
-            onMutated();
-          }}
-        />
-      ) : null}
     </div>
   );
 }

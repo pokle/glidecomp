@@ -462,7 +462,6 @@ export function TaskDetail() {
           isAdmin={isAdmin}
           isClosed={isClosed}
           scoringFormat={comp.scoring_format === "open_distance" ? "open_distance" : "gap"}
-          distanceOrigin={comp.gap_params?.distanceOrigin ?? "takeoff"}
           timezone={comp.timezone ?? null}
           taskXctsk={task.xctsk}
           submissionsClosed={task.submissions_closed}
