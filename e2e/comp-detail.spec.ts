@@ -499,12 +499,15 @@ test("scoring settings page shows stored GAP values; leaving saves nothing", asy
   ).not.toBeChecked();
 
   // Leave without saving via the breadcrumb — untouched fields arm no guard,
-  // the index renders, and nothing was PATCHed.
+  // the index renders, and nothing was PATCHed. The Scoring row is scoped to
+  // main because the Shell footer also carries a "Scoring" link.
   await page
     .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings" })
+    .getByRole("link", { name: "Settings", exact: true })
     .click();
-  await expect(page.getByRole("link", { name: "Scoring" })).toBeVisible();
+  await expect(
+    page.getByRole("main").getByRole("link", { name: /^Scoring/ })
+  ).toBeVisible();
   expect(mutated()).toBe(false);
 });
 
@@ -533,11 +536,13 @@ test("general settings page: timezone combobox filters; leaving saves nothing", 
   // and navigates — and nothing was PATCHed.
   await page
     .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings" })
+    .getByRole("link", { name: "Settings", exact: true })
     .click();
   const guard = page.getByRole("alertdialog");
   await expect(guard.getByText("Discard changes?")).toBeVisible();
   await guard.getByRole("button", { name: "Discard changes" }).click();
-  await expect(page.getByRole("link", { name: "General" })).toBeVisible();
+  await expect(
+    page.getByRole("main").getByRole("link", { name: /^General/ })
+  ).toBeVisible();
   expect(mutated()).toBe(false);
 });

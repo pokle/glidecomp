@@ -99,14 +99,17 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
   await page.goto(`/comp/${compId}/settings`);
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
 
-  // The four group rows, each carrying a current-value summary.
-  const general = page.getByRole("link", { name: /^General/ });
+  // The four group rows, each carrying a current-value summary. Scoped to
+  // main: the Shell footer also carries a "Scoring" link, and substring name
+  // matching would resolve both (strict-mode violation).
+  const main = page.getByRole("main");
+  const general = main.getByRole("link", { name: /^General/ });
   await expect(general).toContainText(COMP_NAME);
-  await expect(page.getByRole("link", { name: /^Pilot classes/ })).toContainText(
+  await expect(main.getByRole("link", { name: /^Pilot classes/ })).toContainText(
     "open"
   );
-  await expect(page.getByRole("link", { name: /^Scoring/ })).toContainText("GAP");
-  const access = page.getByRole("link", { name: /^Access/ });
+  await expect(main.getByRole("link", { name: /^Scoring/ })).toContainText("GAP");
+  const access = main.getByRole("link", { name: /^Access/ });
   await expect(access).toContainText("Open registration");
   // The destructive action is a row on the index, not a hidden sub-page.
   await expect(
@@ -146,7 +149,7 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
   // A successful save lands back on the index, and the row's summary reads
   // the new state.
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Access/ })).toContainText(
+  await expect(main.getByRole("link", { name: /^Access/ })).toContainText(
     "Admins add pilots"
   );
 });
@@ -162,9 +165,11 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
   await name.fill(`${COMP_NAME} (edited)`);
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
+  // exact: the comp-name crumb ("E2E Comp Settings Pages") also contains the
+  // word Settings, and name matching is substring by default.
   const settingsCrumb = page
     .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Settings" });
+    .getByRole("link", { name: "Settings", exact: true });
 
   // Keep editing: navigation cancelled, edit retained.
   await settingsCrumb.click();
@@ -182,9 +187,9 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
     .getByRole("button", { name: "Discard changes" })
     .click();
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^General/ })).toContainText(
-    COMP_NAME
-  );
+  await expect(
+    page.getByRole("main").getByRole("link", { name: /^General/ })
+  ).toContainText(COMP_NAME);
 });
 
 test("the whole journey fits a phone: no horizontal overflow at 390×844", async ({
@@ -209,7 +214,7 @@ test("the whole journey fits a phone: no horizontal overflow at 390×844", async
   await noHorizontalOverflow("the settings index");
 
   // Rows are comfortably tappable (44px minimum target).
-  const general = page.getByRole("link", { name: /^General/ });
+  const general = page.getByRole("main").getByRole("link", { name: /^General/ });
   const rowBox = await general.boundingBox();
   expect(rowBox).not.toBeNull();
   expect(rowBox!.height).toBeGreaterThanOrEqual(44);

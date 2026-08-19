@@ -174,7 +174,7 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     await nominalDistance.press("Tab");
     await page.getByRole("button", { name: "Save" }).click();
     // A successful save navigates back up to the settings index.
-    await expect(page.getByRole("link", { name: "Scoring" })).toBeVisible({
+    await expect(page.getByRole("main").getByRole("link", { name: /^Scoring/ })).toBeVisible({
       timeout: 20_000,
     });
 
@@ -411,7 +411,7 @@ test.describe("an open-distance comp's settings save", () => {
     // not score with at all.
     await page.getByRole("button", { name: "Save" }).click();
     // A successful save navigates back up to the settings index.
-    await expect(page.getByRole("link", { name: "Scoring" })).toBeVisible({
+    await expect(page.getByRole("main").getByRole("link", { name: /^Scoring/ })).toBeVisible({
       timeout: 20_000,
     });
 
@@ -442,7 +442,7 @@ test.describe("an open-distance comp's settings save", () => {
     await page.getByText("Paragliding", { exact: true }).click();
     await page.getByRole("button", { name: "Save" }).click();
     // A successful save navigates back up to the settings index.
-    await expect(page.getByRole("link", { name: "General" })).toBeVisible({
+    await expect(page.getByRole("main").getByRole("link", { name: /^General/ })).toBeVisible({
       timeout: 20_000,
     });
 

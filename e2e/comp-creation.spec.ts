@@ -105,10 +105,10 @@ test("dev login, create competition and task", async ({ page }) => {
   // of pages now: index → a group page → Save → back to the index → back to
   // the comp.
   await page.getByRole("link", { name: "Settings", exact: true }).click();
-  await page.getByRole("link", { name: "General" }).click();
+  await page.getByRole("main").getByRole("link", { name: /^General/ }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   // The save lands back on the settings index; return to the comp page.
-  await expect(page.getByRole("link", { name: "General" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: /^General/ })).toBeVisible();
   await page
     .getByRole("navigation", { name: "Breadcrumb" })
     .getByRole("link", { name: COMP_NAME })
