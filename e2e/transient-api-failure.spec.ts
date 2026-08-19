@@ -142,10 +142,10 @@ test("a dropped /api/auth/me still resolves the signed-in admin view", async ({
   await page.goto(`/comp/${compId}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(COMP_NAME);
 
-  // The Settings button is the comp page's admin sync point: it renders only
+  // The Settings link is the comp page's admin sync point: it renders only
   // once /api/auth/me has resolved a user who administers this comp.
   await expect(
-    page.getByRole("button", { name: "Settings", exact: true })
+    page.getByRole("link", { name: "Settings", exact: true })
   ).toBeVisible({ timeout: 15_000 });
   expect(broken(), "the fault should actually have been injected").toBe(1);
 });
@@ -157,7 +157,7 @@ test("a 5xx from /api/auth/me still resolves the signed-in admin view", async ({
 
   await page.goto(`/comp/${compId}`);
   await expect(
-    page.getByRole("button", { name: "Settings", exact: true })
+    page.getByRole("link", { name: "Settings", exact: true })
   ).toBeVisible({ timeout: 15_000 });
   expect(broken()).toBe(1);
 });

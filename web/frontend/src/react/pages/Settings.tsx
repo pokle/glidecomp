@@ -4,8 +4,7 @@
  * (React port of profile.ts) with the account settings (React port of
  * settings.ts); each concern is its own separated card.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import { Form } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card, CardGrid, CardHeader } from "@/react/rac/card";
@@ -25,6 +24,7 @@ import { deleteAccount } from "../../auth/client";
 import { storage } from "../../analysis/storage";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
+import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
@@ -339,8 +339,6 @@ function ProfileSection() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
-  const confirm = useConfirm();
-  const navigate = useNavigate();
 
   useEffect(() => {
     (async () => {
@@ -367,67 +365,12 @@ function ProfileSection() {
     state === "ready" &&
     PROFILE_FIELDS.some((f) => values[f.key] !== savedValues[f.key]);
 
-  // Guard against silently losing edits. Two layers while dirty:
-  // beforeunload covers reloads / tab closes / external links; the
-  // capture-phase click listener covers in-app navigation (BrowserRouter has
-  // no useBlocker, so same-origin link clicks are intercepted before React's
-  // own handlers, confirmed with the app dialog, then re-navigated).
-  //
-  // confirm/navigate go through refs so the effect keys on `dirty` alone —
-  // the confirm context value changes identity on every provider render, and
-  // having it in the deps re-armed the listener mid-dispatch (double dialogs).
-  const guardRef = useRef({ confirm, navigate, prompting: false });
-  guardRef.current.confirm = confirm;
-  guardRef.current.navigate = navigate;
-  useEffect(() => {
-    if (!dirty) return;
-
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-
-    const onClickCapture = (e: MouseEvent) => {
-      if (e.defaultPrevented || e.button !== 0) return;
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const anchor = (e.target as Element | null)?.closest?.("a[href]");
-      if (!anchor || anchor.getAttribute("target") === "_blank") return;
-      const href = anchor.getAttribute("href") ?? "";
-      const url = new URL(href, window.location.href);
-      // External links fall through to beforeunload; same-page hashes are fine.
-      if (url.origin !== window.location.origin) return;
-      if (url.pathname === window.location.pathname && url.hash) return;
-
-      // Stop the navigation at document level — stopImmediatePropagation so
-      // React's root listeners (and any sibling duplicate) never see the
-      // click — then re-run it iff the user confirms.
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const guard = guardRef.current;
-      if (guard.prompting) return;
-      guard.prompting = true;
-      void guard
-        .confirm({
-          title: "Discard profile changes?",
-          message:
-            "Your profile has unsaved changes. Leaving this page will discard them.",
-          confirmLabel: "Discard changes",
-          cancelLabel: "Keep editing",
-          destructive: true,
-        })
-        .then((ok) => {
-          guard.prompting = false;
-          if (ok) guard.navigate(url.pathname + url.search + url.hash);
-        });
-    };
-    document.addEventListener("click", onClickCapture, true);
-
-    return () => {
-      window.removeEventListener("beforeunload", onBeforeUnload);
-      document.removeEventListener("click", onClickCapture, true);
-    };
-  }, [dirty]);
+  // Guard against silently losing edits — see lib/use-unsaved-changes-guard.
+  useUnsavedChangesGuard(dirty, {
+    title: "Discard profile changes?",
+    message:
+      "Your profile has unsaved changes. Leaving this page will discard them.",
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

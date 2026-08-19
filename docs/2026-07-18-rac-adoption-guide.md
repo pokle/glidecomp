@@ -171,7 +171,14 @@ instance only exists a tick after mount, so gate anything that drives it on
   interactive inside would dismiss on the way to being pressed; without it,
   give the sheet an `autoFocus` Close button, since Escape alone isn't a
   discoverable affordance. Callers: the waypoint QR, the task route glyph, the
-  field-analysis metric chart).
+  field-analysis metric chart), `nav-list` (NavList/NavRow/NavActionRow — the
+  grouped tappable-row list for hierarchical settings screens: each row is a
+  RAC Link (or Button, for `NavActionRow` actions like "Delete competition")
+  showing a label, a muted current-value summary and a chevron, on a minimum
+  44px target. First consumer: the comp settings pages
+  (`comp/settings/CompSettingsIndex.tsx`), which replaced the old
+  Competition Settings dialog with routed pages —
+  `/comp/:id/settings[/:group]` — one pattern at every viewport size).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
   turnpoints table), `comp/TaskScores.tsx`, `comp/RouteEditorDialog.tsx`
   (Tabulator grid → RAC Table → GridList card list → **RAC Table again**, via
@@ -188,7 +195,8 @@ instance only exists a tick after mount, so gate anything that drives it on
   `pages/CompDetail.tsx` (hero LinkButtons, Create Task dialog on
   Form/TextField/CheckboxGroup),
   `comp/SettingsDialog.tsx` (kit Modal/Dialog; numeric GAP params became
-  NumberFields holding numbers with NaN-as-blank), `comp/CompScoresSection.tsx`
+  NumberFields holding numbers with NaN-as-blank — since replaced by the
+  routed settings pages in `comp/settings/`, 2026-08), `comp/CompScoresSection.tsx`
   (rac tabs + sortable RAC-grid tables), `comp/ScoresSection.tsx` (onRowAction
   + AriaLink rows), `comp/ActivitySection.tsx` (rac tabs),
   `comp/CompSetupProgress.tsx` (rac ProgressBar; the Card became a plain

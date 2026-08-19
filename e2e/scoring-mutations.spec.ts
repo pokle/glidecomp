@@ -155,12 +155,8 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     expect(winnerBefore, "a scored winner to compare against").toBeTruthy();
 
     await devLogin(page);
-    await page.goto(`${BASE_URL}/comp/${fixture.compId}`);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(
-      dialog.getByRole("heading", { name: "Competition Settings" })
-    ).toBeVisible();
+    await page.goto(`${BASE_URL}/comp/${fixture.compId}/settings/scoring`);
+    await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
 
     // Nominal distance (§5.1) is the knob to prove the loop with: it is one
     // number, the class score publishes the value the scorer actually used,
@@ -168,16 +164,19 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     // scorer is visible twice over. (Nominal TIME is a worse subject than it
     // looks: for a long task flown slowly, time validity is already 1 and
     // stays 1 however the nominal moves, so the test would prove nothing.)
-    await dialog.getByText("Advanced scoring settings").click();
-    const nominalDistance = dialog.getByRole("textbox", { name: "Nominal distance (km)" });
+    await page.getByText("Advanced scoring settings").click();
+    const nominalDistance = page.getByRole("textbox", { name: "Nominal distance (km)" });
     // Blank = auto, resolved per task against the route.
     await expect(nominalDistance).toHaveValue("");
     await nominalDistance.fill("200");
     // Commit the NumberField before saving: RAC parses on blur, so a Save
     // clicked straight out of a focused field can send the old number.
     await nominalDistance.press("Tab");
-    await dialog.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+    await page.getByRole("button", { name: "Save" }).click();
+    // A successful save navigates back up to the settings index.
+    await expect(page.getByRole("link", { name: "Scoring" })).toBeVisible({
+      timeout: 20_000,
+    });
 
     const activity = await expandedActivity(
       page,
@@ -392,29 +391,29 @@ test.describe("an open-distance comp's settings save", () => {
 
   test("offers no GAP knobs, and logs no GAP changes when saved", async ({ page }) => {
     await devLogin(page);
-    await page.goto(`${BASE_URL}/comp/${compId}`);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(
-      dialog.getByRole("heading", { name: "Competition Settings" })
-    ).toBeVisible();
+    await page.goto(`${BASE_URL}/comp/${compId}/settings/scoring`);
+    await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
 
     // The premise: this format hides the Advanced disclosure entirely, so
     // there is no way through this screen to change a GAP parameter…
-    await expect(dialog.getByText("Advanced scoring settings")).toHaveCount(0);
+    await expect(page.getByText("Advanced scoring settings")).toHaveCount(0);
     // The format picker (a RAC Select — its trigger is a button showing the
     // chosen option) confirms this really is the open-distance branch, so the
-    // absence above is that branch's doing and not a dialog that failed to
+    // absence above is that branch's doing and not a page that failed to
     // render.
     await expect(
-      dialog.getByText("Open distance — fly as far as possible").first()
+      page.getByText("Open distance — fly as far as possible").first()
     ).toBeVisible();
 
-    // …yet the dialog submits gap_params regardless, so this save used to
-    // announce the leading and arrival points of a formula this competition
-    // does not score with at all (issue #633).
-    await dialog.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+    // …and (unlike the old dialog, which submitted gap_params regardless —
+    // issue #633) the page omits gap_params from its PATCH entirely, so the
+    // save must not announce parameters of a formula this competition does
+    // not score with at all.
+    await page.getByRole("button", { name: "Save" }).click();
+    // A successful save navigates back up to the settings index.
+    await expect(page.getByRole("link", { name: "Scoring" })).toBeVisible({
+      timeout: 20_000,
+    });
 
     await page.goto(`${BASE_URL}/comp/${compId}`);
     const activity = page.locator("#activity");
@@ -427,23 +426,25 @@ test.describe("an open-distance comp's settings save", () => {
   test("changing the Wing logs one sentence, in the words on the screen", async ({
     page,
   }) => {
-    // Wing IS on screen for every format — it is a global competition setting,
-    // not a GAP one — and it is the field that reaches gap_params.scoring. So
-    // it is the one way an organiser here can move a GAP parameter, and the
-    // log has to report it as what they did: the wing, named the way the radio
-    // group names it, once.
+    // Wing IS on screen whatever the scoring format — it is a global
+    // competition setting on the General page, not a GAP one — and it is the
+    // field that reaches gap_params.scoring. So it is the one way an
+    // organiser here can move a GAP parameter, and the log has to report it
+    // as what they did: the wing, named the way the radio group names it,
+    // once.
     await devLogin(page);
-    await page.goto(`${BASE_URL}/comp/${compId}`);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("radio", { name: "Hang Gliding" })).toBeChecked();
+    await page.goto(`${BASE_URL}/comp/${compId}/settings/general`);
+    await expect(page.getByRole("radio", { name: "Hang Gliding" })).toBeChecked();
 
     // Click the visible name, not the radio's role — the kit hides the real
     // input under a styled span and wraps each radio in a real <label>. See
     // the same gotcha in track-submission.spec.ts.
-    await dialog.getByText("Paragliding", { exact: true }).click();
-    await dialog.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+    await page.getByText("Paragliding", { exact: true }).click();
+    await page.getByRole("button", { name: "Save" }).click();
+    // A successful save navigates back up to the settings index.
+    await expect(page.getByRole("link", { name: "General" })).toBeVisible({
+      timeout: 20_000,
+    });
 
     const activity = await expandedActivity(
       page,

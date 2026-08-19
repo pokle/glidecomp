@@ -409,23 +409,16 @@ test.describe("submitting a track without an account", () => {
     expect(mine!.suggested_task_id).toBe(fixture.taskId);
   });
 
-  test("the organiser can close registration from the settings dialog", async ({
+  test("the organiser can close registration from the settings pages", async ({
     page,
   }) => {
     // Worth an e2e rather than a unit test: the risk is a checkbox that
     // renders but is not wired to the save, which only a real click finds.
     await devLogin(page);
-    await page.goto(`${BASE_URL}/comp/${fixture.compId}`);
-    // Wait for the comp itself before the admin-only chrome: Settings appears
-    // only once /api/auth/me AND the comp fetch have resolved and agreed this
-    // viewer is an admin, so asserting on it first hides which one was slow.
-    await expect(
-      page.getByRole("heading", { name: fixture.compName })
-    ).toBeVisible({ timeout: 15_000 });
-    // exact: the setup guide also renders a "Review settings" button.
-    const settings = page.getByRole("button", { name: "Settings", exact: true });
-    await expect(settings).toBeVisible({ timeout: 15_000 });
-    await settings.click();
+    await page.goto(`${BASE_URL}/comp/${fixture.compId}/settings/access`);
+    await expect(page.getByRole("heading", { name: "Access" })).toBeVisible({
+      timeout: 15_000,
+    });
 
     const box = page.getByLabel("Let pilots register themselves by submitting a track");
     await expect(box).toBeChecked(); // on by default, as the migration sets it

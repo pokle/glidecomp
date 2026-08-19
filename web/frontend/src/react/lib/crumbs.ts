@@ -11,7 +11,7 @@
  * non-critical and may never resolve), so every builder takes a nullable name
  * and falls back to a generic label — the link works either way.
  */
-import { compPath, taskPath, compAnalysisPath } from "./slug";
+import { compPath, taskPath, compAnalysisPath, compSettingsPath } from "./slug";
 
 export type Crumb = { label: string; to: string };
 
@@ -34,6 +34,20 @@ export function underComp(compId: string | undefined, compName: string | null | 
   return [
     COMPETITIONS,
     { label: compName || "Competition", to: compId ? compPath(compId, compName) : "/comp" },
+  ];
+}
+
+/** Ancestors of a competition settings sub-page (general, scoring, …). */
+export function underCompSettings(
+  compId: string | undefined,
+  compName: string | null | undefined
+): Crumb[] {
+  return [
+    ...underComp(compId, compName),
+    {
+      label: "Settings",
+      to: compId ? compSettingsPath(compId, compName) : "/comp",
+    },
   ];
 }
 

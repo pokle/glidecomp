@@ -113,6 +113,18 @@ export function compPilotsPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/pilots`;
 }
 
+/**
+ * The admin-only competition settings pages. Without `group`, the index of
+ * grouped rows; with one (e.g. "scoring"), that group's sub-page.
+ */
+export function compSettingsPath(
+  id: string,
+  name?: string | null,
+  group?: string
+): string {
+  return `${compPath(id, name)}/settings${group ? `/${group}` : ""}`;
+}
+
 export function taskPath(
   compId: string,
   compName: string | null | undefined,

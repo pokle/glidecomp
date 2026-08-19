@@ -123,10 +123,10 @@ test.beforeEach(async ({ page }) => {
 
   await page.goto(`/comp/${compId}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(COMP_NAME);
-  // Admin affordances pop in once /api/auth/me resolves — the Settings button
+  // Admin affordances pop in once /api/auth/me resolves — the Settings link
   // is the sync point that the super-admin view is active.
   await expect(
-    page.getByRole("button", { name: "Settings", exact: true })
+    page.getByRole("link", { name: "Settings", exact: true })
   ).toBeVisible();
 });
 
@@ -404,16 +404,18 @@ test("activity: collapsed digest expands, filter tabs switch and re-fetch", asyn
  * RAC portals a popover to <body> and positions it with viewport-relative
  * offsets under `position: absolute`; our body is `position: relative` (iOS
  * Safari backdrops), so the containing block is the body BOX. A popover that
- * flips UPWARDS — which any select low in a tall dialog does — was displaced
+ * flips UPWARDS — which any select low in a short window does — was displaced
  * by exactly `scrollHeight - innerHeight`: open, focusable, every option in
  * the DOM, and far below the fold.
  *
- * This lived on the pilots editor's CIVL list picker until that picker was
- * removed (one number per pilot, no list to choose). The settings dialog's
- * advanced scoring selects are the same geometry — deep inside a tall modal —
- * so the kit fix keeps its coverage here.
+ * This lived on the pilots editor's CIVL list picker, then on the settings
+ * dialog's Series scoring select, until each surface was removed (the
+ * settings dialog became the routed settings pages). The same select now
+ * sits low on a SCROLLED PAGE — the second production failure gotcha #22
+ * documents — so the geometry keeps its coverage here, alongside the
+ * manual-flight case in popover-position.spec.ts.
  */
-test("a select low in a tall dialog opens ON SCREEN, not below the fold", async ({
+test("a select low on a scrolled settings page opens ON SCREEN, not below the fold", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
@@ -421,29 +423,23 @@ test("a select low in a tall dialog opens ON SCREEN, not below the fold", async 
   // the only condition under which the displacement happens.
   await page.setViewportSize({ width: 1280, height: 600 });
 
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByText("Advanced scoring settings").click();
+  await page.goto(`/comp/${compId}/settings/scoring`);
+  await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
+  // Opening the Advanced disclosure makes the page taller than the window.
+  await page.getByText("Advanced scoring settings").click();
 
   // The trigger has to sit LOW in the window, because that is what makes RAC
   // flip the popover upwards and emit the `bottom:` placement the bug
   // displaces — opened higher up it opens downward and lands correctly even
-  // when broken. Verified: at ~70px from the bottom RAC emits `bottom: 78px`,
-  // which without the fix put the list 735px below the fold.
-  // The S7F 2026 migration removed the Advanced section's selects (the
-  // formula generations are no longer settings), so the low-in-a-tall-dialog
-  // geometry is built from the Series scoring select instead — the manual
-  // overlay scroll below positions it near the bottom either way.
-  const select = dialog.getByRole("button", { name: "Series scoring" });
+  // when broken.
+  const select = page.getByRole("button", { name: "Series scoring" });
   await select.scrollIntoViewIfNeeded();
   await page.evaluate(() => {
     const trigger = document.querySelector<HTMLElement>(
       'button[aria-label="Series scoring"]'
     );
-    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
-      ?.parentElement;
-    if (!trigger || !overlay) throw new Error("settings dialog not laid out as expected");
-    overlay.scrollTop += trigger.getBoundingClientRect().y - (window.innerHeight - 70);
+    if (!trigger) throw new Error("scoring page not laid out as expected");
+    window.scrollBy(0, trigger.getBoundingClientRect().y - (window.innerHeight - 70));
   });
   await select.click();
 
@@ -458,69 +454,90 @@ test("a select low in a tall dialog opens ON SCREEN, not below the fold", async 
   expect(box!.y).toBeLessThan(viewport.height);
 
   await page.keyboard.press("Escape");
-  await dialog.getByRole("button", { name: "Cancel" }).click();
   expect(mutated()).toBe(false);
 });
 
-test("settings dialog: stored GAP values, timezone combobox filter, cancel", async ({
+test("scoring settings page shows stored GAP values; leaving saves nothing", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
 
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: "Competition Settings" })
-  ).toBeVisible();
+  await page.goto(`/comp/${compId}/settings/scoring`);
+  await expect(page.getByRole("heading", { name: "Scoring" })).toBeVisible();
 
   // Advanced GAP NumberFields show the comp's STORED values, not snapped
   // (RAC gotcha #1) and not the category defaults. The seeded comp's
   // AirScore-captured params differ from the HG defaults exactly where it
   // matters: essNotGoalFactor 0 (HG default 80) and leading points off
   // (HG default on) prove these are the stored values.
-  await dialog.getByText("Advanced scoring settings").click();
+  await page.getByText("Advanced scoring settings").click();
   await expect(
-    dialog.getByRole("textbox", { name: "Nominal time (min)" })
+    page.getByRole("textbox", { name: "Nominal time (min)" })
   ).toHaveValue("90");
   await expect(
-    dialog.getByRole("textbox", { name: "Minimum distance (km)" })
+    page.getByRole("textbox", { name: "Minimum distance (km)" })
   ).toHaveValue("5");
   // The §11 Leading Time Ratio resolves to the HG discipline default when
   // the stored params never pinned one.
   await expect(
-    dialog.getByRole("textbox", { name: "Leading-time ratio (%)" })
+    page.getByRole("textbox", { name: "Leading-time ratio (%)" })
   ).toHaveValue("17.5");
   await expect(
-    dialog.getByRole("textbox", { name: "ESS but not goal: points kept (%, HG)" })
+    page.getByRole("textbox", { name: "ESS but not goal: points kept (%, HG)" })
   ).toHaveValue("0");
   // No comp-level nominal distance stored → blank means "auto", not a
   // min/step-snapped number.
   await expect(
-    dialog.getByRole("textbox", { name: "Nominal distance (km)" })
+    page.getByRole("textbox", { name: "Nominal distance (km)" })
   ).toHaveValue("");
   // Reading (not clicking — gotcha #13) checkbox state is fine by role.
   await expect(
-    dialog.getByRole("checkbox", { name: "Leading (departure) points" })
+    page.getByRole("checkbox", { name: "Leading (departure) points" })
   ).not.toBeChecked();
   await expect(
-    dialog.getByRole("checkbox", { name: "Arrival points (HG only)" })
+    page.getByRole("checkbox", { name: "Arrival points (HG only)" })
   ).not.toBeChecked();
 
+  // Leave without saving via the breadcrumb — untouched fields arm no guard,
+  // the index renders, and nothing was PATCHed.
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Settings" })
+    .click();
+  await expect(page.getByRole("link", { name: "Scoring" })).toBeVisible();
+  expect(mutated()).toBe(false);
+});
+
+test("general settings page: timezone combobox filters; leaving saves nothing", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+
+  await page.goto(`/comp/${compId}/settings/general`);
+  await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
+
   // Timezone combobox: typing filters hundreds of zones down; picking fills
-  // the field. Driven last — while its popover is open, ariaHideOutside
-  // hides the rest of the dialog from role locators (gotcha #12).
-  const timezone = dialog.getByRole("combobox");
+  // the field. Adelaide rather than the comp's own Melbourne, so the pick is
+  // guaranteed to dirty the form for the guard assertion below.
+  const timezone = page.getByRole("combobox");
   await timezone.click();
   await expect(page.getByRole("listbox")).toBeVisible();
-  await timezone.fill("melbourne");
+  await timezone.fill("adelaide");
   const options = page.getByRole("option");
   await expect(options).toHaveCount(1);
-  await expect(options.first()).toHaveText("Australia/Melbourne");
+  await expect(options.first()).toHaveText("Australia/Adelaide");
   await options.first().click();
-  await expect(timezone).toHaveValue("Australia/Melbourne");
+  await expect(timezone).toHaveValue("Australia/Adelaide");
 
-  // Cancel discards — the dialog unmounts and nothing was PATCHed.
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // The pick dirtied the form, so leaving prompts; Discard drops the edit
+  // and navigates — and nothing was PATCHed.
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Settings" })
+    .click();
+  const guard = page.getByRole("alertdialog");
+  await expect(guard.getByText("Discard changes?")).toBeVisible();
+  await guard.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByRole("link", { name: "General" })).toBeVisible();
   expect(mutated()).toBe(false);
 });
