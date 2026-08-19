@@ -148,7 +148,12 @@ instance only exists a tick after mount, so gate anything that drives it on
   grouping), `tabs` (Tabs/TabList/Tab/TabPanel — styled like ui/tabs' default
   pill variant; controlled via `selectedKey`/`onSelectionChange`, panels pair
   with tabs by `id`, and tab keys can't be `""` — map an "All" filter through
-  a sentinel key, see ActivitySection), `progress` (ProgressBar/Spinner/
+  a sentinel key, see ActivitySection. The strip **scrolls sideways** once it
+  outgrows its container, with a fade at whichever end still has tabs behind
+  it, and it keeps the selected tab in view; consumers do nothing. Unlike
+  `table`'s `scrollLabel` it takes **no** tab stop of its own — every item in
+  this scroller is already focusable and RAC drags the strip along with
+  arrow-key focus, so the off-screen tabs are keyboard-reachable without one), `progress` (ProgressBar/Spinner/
   Loading — **task completion**, role="progressbar"; the mirror of `meter`'s
   "measurement" distinction. Label row + thin track like ui/progress; pass a
   heading node as `label` and point `aria-labelledby` at it. Also the app's
