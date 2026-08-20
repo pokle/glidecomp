@@ -2,20 +2,22 @@
  * The routed task editors (issue #637) — the second half of the conversion
  * `comp-settings-pages.spec.ts` covers the first half of. What used to be the
  * Task Settings dialog, the weather-notes dialog and the route-editor dialog
- * are now `/comp/:c/task/:t/settings`, `…/settings/weather` and `…/route`.
+ * are now three SIBLING routes under the task: `/settings`, `/weather` and
+ * `/route`. Each is reached from the part of the task page it edits, which is
+ * why none nests under another.
  *
  * What this spec pins:
- * - the flat settings form and its NavList foot (Route, Weather notes, and
- *   Delete task as a destructive row) — the shape that deliberately differs
- *   from the competition's grouped index;
+ * - the flat settings form and its Danger-zone foot — the shape that
+ *   deliberately differs from the competition's grouped index, and which
+ *   carries no nav rows for the sibling editors;
  * - that a save PATCHes ONLY the task's own fields;
  * - the pickers that came in with it: an in-flow calendar with no "Open
  *   calendar" trigger, and pilot classes as full-width rows rather than a
  *   16px checkbox beside a label;
- * - the weather-notes sub-page round trip, and that the task page links to it
- *   rather than opening a dialog;
+ * - the weather-notes round trip, and that the task page links to it rather
+ *   than opening a dialog;
  * - the route editor as a real route, with its unsaved-changes guard;
- * - non-admin fallback and the unknown-sub-page 404;
+ * - non-admin fallback, and that a made-up editor segment is a dead URL;
  * - the whole journey with no horizontal overflow, which is the point of the
  *   restructure.
  *
@@ -104,7 +106,7 @@ test.afterAll(async ({ playwright }) => {
   await api.dispose();
 });
 
-test("a visitor gets the admin-only notice, and an unknown sub-page 404s", async ({
+test("a visitor gets the admin-only notice, and a made-up editor 404s", async ({
   page,
 }) => {
   // Before any admin test reshapes the task: a signed-in non-admin reaches the
@@ -115,7 +117,8 @@ test("a visitor gets the admin-only notice, and an unknown sub-page 404s", async
     page.getByText("Task settings are for competition admins.")
   ).toBeVisible();
 
-  // An unknown sub-page is a dead URL, not an empty page.
+  // Settings is flat — it has no sub-pages — so anything below it is a dead
+  // URL, not an empty page.
   await devLogin(page, ADMIN_USER);
   await page.goto(`/comp/${compId}/task/${taskId}/settings/nonsense`);
   await expect(
@@ -157,17 +160,15 @@ test("the settings page is one flat form, and saving PATCHes only the task", asy
   expect(sportBox, "the sport class row has a bounding box").not.toBeNull();
   expect(sportBox!.height).toBeGreaterThanOrEqual(44);
 
-  // The NavList foot: the two settings that are their own page, plus the
-  // destructive action kept out of the form.
-  await expect(main.getByRole("link", { name: /^Route/ })).toContainText(
-    "No route yet"
-  );
-  await expect(main.getByRole("link", { name: /^Weather notes/ })).toContainText(
-    "None yet"
-  );
-  await expect(
-    page.getByRole("button", { name: "Delete task" })
-  ).toBeVisible();
+  // The destructive action is a row at the foot, kept out of the form — it is
+  // an action, not a setting, and has no business beside a Save button.
+  await expect(page.getByRole("button", { name: "Delete task" })).toBeVisible();
+
+  // And NOTHING here links to the sibling editors. They are reached from the
+  // sections of the task page they edit; listing them again would duplicate
+  // those entry points and frame content as settings.
+  await expect(main.getByRole("link", { name: /^Route/ })).toHaveCount(0);
+  await expect(main.getByRole("link", { name: /^Weather notes/ })).toHaveCount(0);
 
   // Change one thing and save. Click the ROW, for the same reason.
   await sportRow.click();
@@ -197,19 +198,21 @@ test("the settings page is one flat form, and saving PATCHes only the task", asy
   await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
 });
 
-test("weather notes are a sub-page the task page links to", async ({ page }) => {
+test("weather notes are their own page, which the task page links to", async ({
+  page,
+}) => {
   await devLogin(page, ADMIN_USER);
   await page.goto(`/comp/${compId}/task/${taskId}`);
 
   // The Weather section's manage action is a LINK now, not a dialog trigger.
-  const addNotes = page.getByRole("link", { name: /notes…$/ });
+  const addNotes = page.getByRole("link", { name: /^(Add|Edit) notes$/ });
   await expect(addNotes).toBeVisible();
   await addNotes.click();
 
   await expect(
     page.getByRole("heading", { name: "Weather notes", exact: true })
   ).toBeVisible();
-  await expect(page).toHaveURL(/\/settings\/weather$/);
+  await expect(page).toHaveURL(/\/weather$/);
 
   const notes = "Inversion broke about 12:30.";
   await page.getByLabel("What did the day do?").fill(notes);
@@ -225,14 +228,9 @@ test("weather notes are a sub-page the task page links to", async ({ page }) => 
     "weather_notes",
   ]);
 
-  // Saving a sub-page returns to the settings form, whose row now summarises
-  // what was written.
-  await expect(
-    page.getByRole("heading", { name: "Settings", exact: true })
-  ).toBeVisible();
-  await expect(
-    page.getByRole("main").getByRole("link", { name: /^Weather notes/ })
-  ).toContainText(notes);
+  // Saving returns to the task page, where the notes are read.
+  await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
+  await expect(page.getByText(notes)).toBeVisible();
 });
 
 test("the route editor is a route, and guards unsaved work", async ({ page }) => {
@@ -240,7 +238,7 @@ test("the route editor is a route, and guards unsaved work", async ({ page }) =>
   await page.goto(`/comp/${compId}/task/${taskId}`);
 
   // The Route section's action is a link to the editor's own URL.
-  await page.getByRole("link", { name: /route…$/ }).click();
+  await page.getByRole("link", { name: /^(Create|Edit) route$/ }).click();
   await expect(page).toHaveURL(/\/route$/);
   await expect(
     page.getByRole("heading", { name: "Route", exact: true })
@@ -309,15 +307,16 @@ test("the whole journey fits a phone: no horizontal overflow", async ({
   });
   await noHorizontalOverflow("task settings");
 
-  // The NavList rows are comfortably tappable.
-  const routeRow = page.getByRole("main").getByRole("link", { name: /^Route/ });
-  const rowBox = await routeRow.boundingBox();
+  // The Danger-zone row is comfortably tappable.
+  const deleteRow = page.getByRole("button", { name: "Delete task" });
+  const rowBox = await deleteRow.boundingBox();
   expect(rowBox).not.toBeNull();
   expect(rowBox!.height).toBeGreaterThanOrEqual(44);
 
   // The route editor: the widest surface in the app, and the one that used to
-  // be a 100dvh modal.
-  await routeRow.click();
+  // be a 100dvh modal. Reached from the task page's Route section, which is
+  // the only way in.
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
   await expect(
     page.getByRole("heading", { name: "Route", exact: true })
   ).toBeVisible();

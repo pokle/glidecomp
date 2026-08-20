@@ -77,6 +77,7 @@ import {
   taskAnalysisPath,
   taskSettingsPath,
   taskRoutePath,
+  taskWeatherPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
@@ -414,13 +415,7 @@ export function TaskDetail() {
         notes={task.weather_notes}
         isAdmin={isAdmin}
         compTimezone={comp?.timezone ?? null}
-        notesHref={taskSettingsPath(
-          compId,
-          comp?.name,
-          taskId,
-          task.name,
-          "weather"
-        )}
+        notesHref={taskWeatherPath(compId, comp?.name, taskId, task.name)}
       />
 
       {/* Public results: top-3 podium per class + the link to the comp's
@@ -641,7 +636,7 @@ function TurnpointsSection({
         action={
           isAdmin ? (
             <LinkButton variant="outline" size="sm" href={routeHref}>
-              {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
+              {xctsk && xctsk.turnpoints.length > 0 ? "Edit route" : "Create route"}
             </LinkButton>
           ) : null
         }

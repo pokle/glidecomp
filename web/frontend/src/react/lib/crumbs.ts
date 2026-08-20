@@ -16,7 +16,6 @@ import {
   taskPath,
   compAnalysisPath,
   compSettingsPath,
-  taskSettingsPath,
   pilotPath,
 } from "./slug";
 
@@ -70,30 +69,6 @@ export function underTask(
     {
       label: taskName || "Task",
       to: compId && taskId ? taskPath(compId, compName, taskId, taskName) : "/comp",
-    },
-  ];
-}
-
-/**
- * Ancestors of a task settings sub-page (today only the weather notes).
- *
- * The task settings page itself is flat, so this is the only trail that needs
- * "Settings" as an ancestor rather than as the current crumb.
- */
-export function underTaskSettings(
-  compId: string | undefined,
-  compName: string | null | undefined,
-  taskId: string | undefined,
-  taskName: string | null | undefined
-): Crumb[] {
-  return [
-    ...underTask(compId, compName, taskId, taskName),
-    {
-      label: "Settings",
-      to:
-        compId && taskId
-          ? taskSettingsPath(compId, compName, taskId, taskName)
-          : "/comp",
     },
   ];
 }

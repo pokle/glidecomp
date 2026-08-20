@@ -249,7 +249,7 @@ differs. Know which surface you're touching:
 - `lang="en"` on the root; mark any inline foreign-language content with `lang`.
 - Link and button text describes its destination/action out of context (WCAG
   2.4.4/2.4.9). No bare "click here" / "read more"; "Download .xctsk" and
-  "Edit route…" are the model.
+  "Edit route" are the model.
 
 ---
 

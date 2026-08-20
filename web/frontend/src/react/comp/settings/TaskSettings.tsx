@@ -20,7 +20,7 @@ import { useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
-import { NavActionRow, NavList, NavRow } from "@/react/rac/nav-list";
+import { NavActionRow, NavList } from "@/react/rac/nav-list";
 import { CheckList } from "@/react/rac/choice-list";
 import { SwitchField, SwitchList } from "@/react/rac/switch";
 import { TextField, Description, Label } from "@/react/rac/field";
@@ -29,7 +29,7 @@ import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { useConfirm } from "@/react/lib/confirm";
 import { underTask } from "@/react/lib/crumbs";
-import { compPath, taskRoutePath, taskSettingsPath } from "@/react/lib/slug";
+import { compPath } from "@/react/lib/slug";
 import {
   utcISOToZonedDateTimeLocal,
   zonedDateTimeLocalToUtcISO,
@@ -37,31 +37,13 @@ import {
 } from "@/react/lib/time";
 import type { CompDetailData, TaskDetailData } from "../types";
 
-export interface TaskSettingsProps {
+interface TaskSettingsProps {
   compId: string;
   taskId: string;
   comp: CompDetailData;
   task: TaskDetailData;
   /** Called after a successful save; the caller refreshes and goes up. */
   onSaved: () => void;
-}
-
-/** First line of the notes, for the nav row's value summary. */
-function notesSummary(notes: string): string {
-  const first = notes.split("\n").find((line) => line.trim() !== "");
-  return first?.trim() || "None yet";
-}
-
-/**
- * Turnpoint count, not task distance: the optimised length is the optimiser's
- * answer and running it to fill a summary row would make a settings page do
- * the most expensive thing on the task page. The count is what tells an admin
- * whether there is a route to open.
- */
-function routeSummary(task: TaskDetailData): string {
-  const n = task.xctsk?.turnpoints.length ?? 0;
-  if (n === 0) return "No route yet";
-  return n === 1 ? "1 turnpoint" : `${n} turnpoints`;
 }
 
 export function TaskSettings({
@@ -243,22 +225,12 @@ export function TaskSettings({
         </SwitchList>
       </SettingsForm>
 
-      {/* Not a group index — the two settings that are big enough to be their
-          own page. Both save independently of the form above, which is why
-          they are links and not fields. */}
-      <NavList>
-        <NavRow
-          to={taskRoutePath(compId, comp.name, taskId, task.name)}
-          label="Route"
-          value={routeSummary(task)}
-        />
-        <NavRow
-          to={taskSettingsPath(compId, comp.name, taskId, task.name, "weather")}
-          label="Weather notes"
-          value={notesSummary(task.weather_notes)}
-        />
-      </NavList>
-
+      {/* No nav rows for the route or the weather notes, though both are
+          routed editors of this task. Each is reached from its own section on
+          the task page, beside the content it edits — which is where a
+          section-scoped manage action belongs (see the IA doc's design
+          language). Listing them here as well would duplicate those entry
+          points and, worse, frame content as settings. */}
       <NavList label="Danger zone">
         <NavActionRow
           destructive

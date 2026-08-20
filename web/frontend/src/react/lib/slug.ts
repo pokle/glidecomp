@@ -134,24 +134,23 @@ export function taskPath(
   return `${compPath(compId, compName)}/task/${slugSegment(taskId, taskName)}`;
 }
 
-/**
- * The admin-only task settings page. Without `sub`, the settings form itself;
- * with one (today only "weather"), that sub-page.
- *
- * Flat where the competition's is an index: a task has five settings, which is
- * a form and not a hierarchy.
+/*
+ * The task's three admin-only editors, all siblings under the task: each is
+ * reached from the part of the task page it edits, so none is nested under
+ * another. Flat where the competition's settings are an index — a task has
+ * five settings, which is a form and not a hierarchy.
  */
+
 export function taskSettingsPath(
   compId: string,
   compName: string | null | undefined,
   taskId: string,
-  taskName: string | null | undefined,
-  sub?: string
+  taskName: string | null | undefined
 ): string {
-  return `${taskPath(compId, compName, taskId, taskName)}/settings${sub ? `/${sub}` : ""}`;
+  return `${taskPath(compId, compName, taskId, taskName)}/settings`;
 }
 
-/** The task's route editor — turnpoints, start gates and goal. Admin-only. */
+/** Turnpoints, start gates and goal. */
 export function taskRoutePath(
   compId: string,
   compName: string | null | undefined,
@@ -159,6 +158,16 @@ export function taskRoutePath(
   taskName: string | null | undefined
 ): string {
   return `${taskPath(compId, compName, taskId, taskName)}/route`;
+}
+
+/** The organiser's account of what the day did. */
+export function taskWeatherPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/weather`;
 }
 
 export function taskAnalysisPath(

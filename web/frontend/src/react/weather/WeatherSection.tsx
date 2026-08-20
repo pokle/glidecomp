@@ -74,7 +74,7 @@ export function WeatherSection({
         action={
           isAdmin ? (
             <LinkButton variant="outline" size="sm" href={notesHref}>
-              {hasNotes ? "Edit notes…" : "Add notes…"}
+              {hasNotes ? "Edit notes" : "Add notes"}
             </LinkButton>
           ) : null
         }

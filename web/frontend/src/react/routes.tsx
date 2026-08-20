@@ -75,6 +75,9 @@ const TaskRoutePage = lazy(() =>
 const ManualFlightPage = lazy(() =>
   import("./pages/ManualFlightPage").then((m) => ({ default: m.ManualFlightPage }))
 );
+const TaskWeatherPage = lazy(() =>
+  import("./pages/TaskWeatherPage").then((m) => ({ default: m.TaskWeatherPage }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -173,23 +176,25 @@ export function AppRoutes() {
             element={<TaskFieldAnalysis />}
           />
           <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
-          {/* Admin-only task settings — flat where the comp's is an index (a
-              task has five settings), with the weather notes as its one
-              sub-page. Noindex shell in the SSR Function, like /pilots. */}
+          {/* The task's three admin-only editors, all SIBLINGS: each is
+              reached from the part of the task page it edits, so none nests
+              under another. Noindex shells in the SSR Function, like /pilots.
+
+              Settings is flat where the comp's is an index — a task has five
+              settings, which is a form and not a hierarchy. The route editor
+              is the surface a phone needed most: a map, a turnpoint grid and
+              two config panels used to share one 100dvh modal. */}
           <Route
             path="/comp/:compId/task/:taskId/settings"
             element={<TaskSettingsPage />}
           />
           <Route
-            path="/comp/:compId/task/:taskId/settings/:sub"
-            element={<TaskSettingsPage />}
-          />
-          {/* The route editor — a page since #637, and the surface a phone
-              needed it most: a map, a turnpoint grid and two config panels
-              used to share one 100dvh modal. */}
-          <Route
             path="/comp/:compId/task/:taskId/route"
             element={<TaskRoutePage />}
+          />
+          <Route
+            path="/comp/:compId/task/:taskId/weather"
+            element={<TaskWeatherPage />}
           />
           {/* Where the per-task analysis lived until the re-nesting above. */}
           <Route

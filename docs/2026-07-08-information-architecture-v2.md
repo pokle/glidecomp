@@ -368,7 +368,7 @@ components so future work stays consistent:
 - **Section actions sit right-aligned on the section header row** —
   `SectionHeader` (`src/react/components/SectionHeader.tsx`): title owns the
   left edge (scan column), the section's manage action sits top right.
-  Applied to comp/task Settings, Tasks → New Task, Turnpoints → Edit route…,
+  Applied to comp/task Settings, Tasks → New Task, Turnpoints → Edit route,
   Pilots → Edit, Tracks → Submit track, and My Flights' add-file buttons
   (which ride the tab-switcher row, as that page has no section headers).
   Inline CTA clusters (the hero's action row) are content, not section
@@ -416,7 +416,7 @@ components so future work stays consistent:
   jump crossing between them); the static footer clears the viewport-fixed
   hills background; `#edit-route` on a task page URL opens the route editor
   and clears the hash on close (`pages/TaskDetail.tsx`). The mechanism
-  outlived its first caller: the hero's "Edit route…" is gone with the hero,
+  outlived its first caller: the hero's "Edit route" is gone with the hero,
   and the deep link is now issued by the admin setup checklist,
   `comp/CompSetupProgress.tsx` — which uses the same pattern for the roster
   (`/comp/:id/pilots#edit-pilots`). *(2026-08-19, #637: the route editor is a
@@ -433,8 +433,8 @@ centred modal over the page it edited is now a page in the hierarchy:
 |---|---|
 | Competition settings | `/comp/:c/settings[/:group]` |
 | Task settings | `/comp/:c/task/:t/settings` |
-| Weather notes | `/comp/:c/task/:t/settings/weather` |
 | Task route | `/comp/:c/task/:t/route` |
+| Weather notes | `/comp/:c/task/:t/weather` |
 | Manual flight | `/comp/:c/task/:t/pilot/:p/manual-flight` |
 
 The reason is the same one throughout this document, applied to a viewport it
@@ -458,6 +458,16 @@ The competition's settings are an INDEX of grouped sub-pages because there are
 21 controls; the task's are one flat form because there are five. The shape
 follows the content, not the precedent — an index of two rows is a tap that
 buys nothing.
+
+**The task's three editors are siblings, and the settings page does not list
+them.** Each is reached from the part of the task page it edits — the Route
+section's button, the Weather section's button, the header's Settings — which
+is what §10's first rule already says about section-scoped manage actions.
+Listing route and weather on the settings page as well (which the first cut of
+this did) duplicates those entry points and, worse, frames content as
+configuration: the notes are prose the organiser publishes and the route is
+the task itself, neither of which is a setting. It also put nav rows below the
+Save button, where they read as leftovers.
 
 Controls follow the same split. A value in a form the admin will Save is a list
 in flow (`rac/choice-list.tsx`); a control that chooses what to LOOK at stays a

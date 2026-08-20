@@ -4,10 +4,10 @@
  * centred modal is exactly the shape the conversion exists to remove: on a
  * phone the keyboard takes half the screen and the panel takes the rest.
  *
- * A sub-page of the task's settings rather than of the Weather section itself,
- * because it is admin-only writing over a public-read field, and settings is
- * where the task's other admin-only writing lives. The Weather section still
- * links straight here, so the affordance stays beside the notes it edits.
+ * A SIBLING of the task's settings and route editor, not a child of either:
+ * you reach it from the Weather section on the task page, beside the notes it
+ * edits, and it is content rather than configuration. Nesting it under
+ * /settings gave it a parent segment nothing pointed at.
  *
  * Notes are NOT a scoring input. The save goes through the same task PATCH as
  * every other task field, which audit-logs the change with an excerpt (prose,
@@ -21,20 +21,27 @@ import { SettingsForm } from "@/react/components/SettingsForm";
 import { Description, Label, TextArea } from "@/react/rac/field";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
-import { underTaskSettings } from "@/react/lib/crumbs";
-import type { TaskSettingsProps } from "./TaskSettings";
+import { underTask } from "@/react/lib/crumbs";
+import type { CompDetailData, TaskDetailData } from "./types";
 
 /** Mirrors MAX_WEATHER_NOTES in the worker's validators — the server is the
  * authority; this stops a paste that would only be rejected on save. */
 const MAX_NOTES = 4000;
 
-export function WeatherNotesSettings({
+export function TaskWeatherNotes({
   compId,
   taskId,
   comp,
   task,
   onSaved,
-}: TaskSettingsProps) {
+}: {
+  compId: string;
+  taskId: string;
+  comp: CompDetailData;
+  task: TaskDetailData;
+  /** Called after a successful save; the caller decides where to go. */
+  onSaved: () => void;
+}) {
   const [draft, setDraft] = useState(task.weather_notes);
   const [saving, setSaving] = useState(false);
 
@@ -65,7 +72,7 @@ export function WeatherNotesSettings({
 
   return (
     <SettingsPage
-      crumbs={underTaskSettings(compId, comp.name, taskId, task.name)}
+      crumbs={underTask(compId, comp.name, taskId, task.name)}
       title="Weather notes"
     >
       <SettingsForm onSave={save} saving={saving} dirty={dirty}>

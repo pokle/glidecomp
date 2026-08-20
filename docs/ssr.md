@@ -34,8 +34,9 @@ shell rather than 404, and there is nothing here for a crawler:
 |---|---|
 | `/comp/:id/pilots` | the roster editor (admin-only) |
 | `/comp/:id/settings[/:group]` | competition settings, index + group sub-pages |
-| `/comp/:id/task/:id/settings[/:sub]` | task settings + the weather notes |
+| `/comp/:id/task/:id/settings` | task settings |
 | `/comp/:id/task/:id/route` | the route editor |
+| `/comp/:id/task/:id/weather` | the weather notes |
 | `/comp/:id/task/:id/pilot/:id/manual-flight` | recording a manual flight |
 | `/comp/:id/task/:id/analysis` | the superseded per-task analysis URL, which the SPA redirects |
 
