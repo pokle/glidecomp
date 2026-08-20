@@ -255,26 +255,35 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     await devLogin(page);
     await page.goto(`${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`);
 
-    // Every routed row offers the button, so scope to this pilot's row.
+    // Every routed row offers it, so scope to this pilot's row. A link since
+    // #637 — recording a manual flight is a page under the pilot's own score
+    // card, not a dialog over the grid.
     const row = page.getByRole("row").filter({ hasText: MANUAL_PILOT });
-    const addFlight = row.getByRole("button", { name: "Add manual flight" });
+    const addFlight = row.getByRole("link", { name: "Add manual flight" });
     await expect(addFlight).toBeVisible({ timeout: 30_000 });
     await addFlight.click();
 
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Record manual flight" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Record manual flight" })
+    ).toBeVisible({ timeout: 20_000 });
 
     // Pick a turnpoint short of goal and land at it: the made-good distance
-    // the dialog previews is computed by the same engine helpers the server
+    // the form previews is computed by the same engine helpers the server
     // scores with, so a pilot seated with SOME distance is the whole claim.
-    await dialog.getByRole("button", { name: /Last turnpoint reached/ }).click();
-    await page.getByRole("listbox").getByRole("option", { name: "4. mur041" }).click();
-    await dialog.getByRole("textbox", { name: "Landing point" }).fill(MANUAL_LANDING);
+    // The turnpoint list is in flow now, so the option is on the page rather
+    // than in a popover — click its text, since ChoiceList paints the row
+    // with spans over a hidden radio (rac gotcha #13).
+    await page.getByText("4. mur041", { exact: true }).click();
+    await page.getByRole("textbox", { name: "Landing point" }).fill(MANUAL_LANDING);
     // The live preview is the engine's own made-good number: seeing a distance
     // here is what says the coordinates parsed and the geometry ran.
-    await expect(dialog.getByText(/km made good/)).toBeVisible();
-    await dialog.getByRole("button", { name: "Record flight" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.getByText(/km made good/)).toBeVisible();
+    await page.getByRole("button", { name: "Record flight" }).click();
+
+    // Saving returns to the task page, where the grid reflects the flight.
+    await expect(
+      page.getByRole("heading", { name: "Record manual flight" })
+    ).toHaveCount(0, { timeout: 20_000 });
 
     await expectAuditEntry(
       page,
