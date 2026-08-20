@@ -9,7 +9,7 @@
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
 import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, ellipsoidDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
-import type { MapProvider, MapBounds, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
+import type { MapProvider, MapBounds, MapCamera, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
@@ -216,15 +216,19 @@ export function createMapBoxProvider(
       const savedStyle = savedStyleId ? MAPBOX_STYLES.find(s => s.id === savedStyleId) : null;
       const initialStyle = savedStyle ?? MAPBOX_STYLES[0];
 
+      // A camera handed over from another instance of this map (see
+      // MapCamera) beats the persisted location: that one is debounced by
+      // seconds and shared app-wide, so it cannot say "carry on from here".
       const savedLocation = config.getMapLocation();
+      const handover = options.camera;
       const map = new mapboxgl.Map({
         container,
         accessToken: MAPBOX_ACCESS_TOKEN,
         style: initialStyle.style,
-        center: savedLocation?.center,
-        zoom: savedLocation?.zoom ?? 2,
-        pitch: savedLocation?.pitch ?? 45,
-        bearing: savedLocation?.bearing ?? 0,
+        center: handover ? [handover.lon, handover.lat] : savedLocation?.center,
+        zoom: handover?.zoom ?? savedLocation?.zoom ?? 2,
+        pitch: handover?.pitch ?? savedLocation?.pitch ?? 45,
+        bearing: handover?.bearing ?? savedLocation?.bearing ?? 0,
         maxPitch: 85,
         localFontFamily: MAP_FONT_FAMILY,
       });
@@ -3085,6 +3089,17 @@ export function createMapBoxProvider(
             south: bounds.getSouth(),
             east: bounds.getEast(),
             west: bounds.getWest(),
+          };
+        },
+
+        getCamera(): MapCamera {
+          const center = map.getCenter();
+          return {
+            lat: center.lat,
+            lon: center.lng,
+            zoom: map.getZoom(),
+            pitch: map.getPitch(),
+            bearing: map.getBearing(),
           };
         },
 

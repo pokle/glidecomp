@@ -23,14 +23,23 @@
  *
  * Table and map are laid out by the shared {@link MasterDetail}: the map is
  * the pinned pane on a phone (so a row's locate pin flies a map that is on
- * screen) and the sticky right-hand column on a wide screen.
+ * screen) and the sticky right-hand column on a wide screen. The pane is a
+ * few centimetres tall there, so the map also MAXIMISES into a full-screen
+ * sheet, carrying its Add-from-map toggle with it — enough room to walk a
+ * valley dropping points one after another.
+ *
+ * Nothing here is saved until Save, which is why Save is the page's own
+ * fixed bottom bar (the end of the work, always in reach) and why leaving
+ * with edits outstanding asks first — the same guard the comp settings forms
+ * use. An admin lost a set of added waypoints to a tap on a link before it
+ * was here.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInView } from "../lib/use-in-view";
 import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { FileTrigger, type SortDescriptor } from "react-aria-components";
-import { MapPinIcon } from "lucide-react";
+import { MapPinIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
 import {
   cleanWaypointCodes,
   describeCodeChanges,
@@ -38,8 +47,9 @@ import {
   type WaypointFileRecord,
 } from "@glidecomp/engine";
 import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
-import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
+import type { MapCamera, MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
+import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { MasterDetail } from "@/react/components/MasterDetail";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
@@ -47,6 +57,7 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
+import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underComp } from "../lib/crumbs";
@@ -58,6 +69,7 @@ import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { TabulatorGrid } from "../comp/TabulatorGrid";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { useInitialData } from "../lib/initial-data";
+import { cn } from "@/react/lib/utils";
 import { formatAltitude, formatRadius, useUnits } from "../lib/units";
 import type { CompWaypointsLoaderData } from "../loaders";
 
@@ -199,6 +211,12 @@ export function CompWaypoints() {
   // Mapbox (764 KB) waits until the panel nears the viewport — see use-in-view.
   const [mapRef, mapInView] = useInView<HTMLDivElement>();
   const [addMode, setAddMode] = useState(false);
+  // The map at full screen (see the sheet at the foot of the render). Only
+  // ever ONE map instance: the inline pane unmounts while the sheet is up,
+  // and `cameraRef` carries the view across so neither hand-over drops the
+  // admin back on the globe.
+  const [maximised, setMaximised] = useState(false);
+  const cameraRef = useRef<MapCamera | null>(null);
   const [fitNonce, setFitNonce] = useState(0);
   // Fly-to-waypoint request from a grid row click (see `locate`).
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
@@ -322,6 +340,16 @@ export function CompWaypoints() {
   );
   const dirty = serialize(validRecords) !== savedJson;
 
+  // Everything on this page — a whole uploaded file, a filled column of
+  // altitudes, an afternoon of typed coordinates — lives in the browser until
+  // Save. Leaving used to throw it away without a word (the reported bug), so
+  // the page is guarded exactly like the comp settings forms are. `!saving`
+  // keeps the guard out of the way of the save's own re-render.
+  useUnsavedChangesGuard(dirty && !saving, {
+    title: "Discard changes?",
+    message: "This page has unsaved changes. Leaving will discard them.",
+  });
+
   // Rows for the read-only table: filter, then sort (a copy — `rows` stays the
   // canonical order). The admin grid handles its own filter/sort in Tabulator.
   const query = filter.trim().toLowerCase();
@@ -382,12 +410,19 @@ export function CompWaypoints() {
 
   // Open the shared add dialog, seeding it with the tap's coordinates and
   // whatever the map knows about the point (elevation, place name, nearby peak).
-  const openAdd = useCallback((coords = "", details?: MapPickDetails) => {
-    setSeedCoords(coords);
-    setSeedDetails(details);
-    setAdding(true);
-    setAddMode(false);
-  }, []);
+  const openAdd = useCallback(
+    (coords = "", details?: MapPickDetails) => {
+      setSeedCoords(coords);
+      setSeedDetails(details);
+      setAdding(true);
+      // Full screen, add mode STAYS armed: the point of maximising is to walk
+      // the map dropping several points in a row, and re-arming between each
+      // is the friction that makes it not worth doing. Inline it disarms, so
+      // the next tap on a small map scrolls rather than places.
+      setAddMode(maximised);
+    },
+    [maximised]
+  );
 
   // The dialog hands back a finished record; drop it in as a new row (state +
   // grid — nothing is saved until Save). The grid scrolls to the new row so
@@ -399,9 +434,15 @@ export function CompWaypoints() {
     setAdding(false);
   }
 
-  // Waypoints that would get an altitude from "Fill altitudes from map".
+  // Waypoints that would get an altitude from "Fill altitudes from map", and
+  // the ones it CANNOT reach because their coordinates don't parse — so a
+  // disabled button can say which of the two it is (an admin who had just
+  // filled every altitude read the dead button as the fill having failed).
   const fillableCount = rows.filter(
     (r) => missingAltitude(r) && parseCoords(r.coords) !== null
+  ).length;
+  const unfillableCount = rows.filter(
+    (r) => missingAltitude(r) && parseCoords(r.coords) === null
   ).length;
 
   /**
@@ -500,44 +541,56 @@ export function CompWaypoints() {
     );
   }
 
+  const mapFallback = (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      Loading map…
+    </div>
+  );
+
+  /**
+   * The map. Rendered EITHER in the pane or in the full-screen sheet, never
+   * both: one Mapbox instance is enough of a page weight, and two would each
+   * hold their own idea of where the admin is looking.
+   *
+   * Which is why the camera is handed over. Mapbox's own persisted location
+   * is debounced by five seconds, so a pan followed straight away by
+   * Maximise would open on wherever the map was before the pan; passing the
+   * live camera makes the hand-over exact in both directions.
+   */
+  const mapElement = (
+    <Suspense fallback={mapFallback}>
+      <RouteMap
+        task={null}
+        waypoints={mapWaypoints}
+        addMode={addMode}
+        fitNonce={fitNonce}
+        focus={focus}
+        placeSearch={isAdmin}
+        initialCamera={cameraRef.current}
+        onCameraChange={(camera) => {
+          cameraRef.current = camera;
+        }}
+        onWaypointPick={() => {}}
+        onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
+      />
+    </Suspense>
+  );
+
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+    <main
+      className={cn(
+        "mx-auto w-full max-w-6xl px-4 py-6 sm:px-6",
+        // Reserve the space the fixed save bar covers (see it at the foot).
+        isAdmin && "pb-24"
+      )}
+    >
       <Breadcrumbs items={underComp(compId, compName)} current="Waypoints" />
-      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h1 className="min-w-0 flex-1 text-2xl font-bold">Waypoints</h1>
-        {isAdmin ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <FileTrigger
-              acceptedFileTypes={[".wpt", ".cup", ".csv", ".txt", ".gpx", ".kml"]}
-              onSelect={(files) => void loadFile(files?.[0] ?? null)}
-            >
-              <Button variant="outline" size="sm">
-                Upload file
-              </Button>
-            </FileTrigger>
-            <Button variant="outline" size="sm" onPress={() => openAdd()}>
-              Add waypoint
-            </Button>
-            {/* Always visible so the capability is discoverable; disabled when
-                every waypoint already has an altitude. */}
-            <Button
-              variant="outline"
-              size="sm"
-              isDisabled={fillingAlts || fillableCount === 0}
-              onPress={() => void fillAltitudes()}
-            >
-              {fillingAlts
-                ? "Filling altitudes…"
-                : fillableCount > 0
-                  ? `Fill ${fillableCount} altitude${fillableCount === 1 ? "" : "s"} from map`
-                  : "Fill altitudes from map"}
-            </Button>
-            <Button size="sm" isDisabled={saving || !dirty} onPress={() => void save()}>
-              {saving ? "Saving…" : dirty ? "Save" : "Saved"}
-            </Button>
-          </div>
-        ) : null}
-      </div>
+      {/* The heading keeps the row to itself. Four buttons beside an h1 is the
+          app's convention for a section with ONE manage action; here they
+          wrapped under the title on a phone and read as page chrome, so the
+          editing toolbar sits with the grid it edits and Save sits at the
+          bottom of the page — where the work ends. */}
+      <h1 className="mt-1 text-2xl font-bold">Waypoints</h1>
 
       <p className="mb-4 text-sm text-muted-foreground">
         The shared waypoints for this competition. Tasks pick their turnpoints
@@ -577,36 +630,43 @@ export function CompWaypoints() {
                   container. Stacked they fit under the pane's caps with the
                   control row; side by side the taller map is the point. */}
               <div ref={mapRef} className="h-56 sm:h-72 @5xl:h-[520px]">
-                {!mapInView ? (
+                {maximised ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Loading map…
+                    The map is full screen.
                   </div>
+                ) : !mapInView ? (
+                  mapFallback
                 ) : (
-                <Suspense
-                  fallback={
-                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      Loading map…
-                    </div>
-                  }
-                >
-                  <RouteMap
-                    task={null}
-                    waypoints={mapWaypoints}
-                    addMode={addMode}
-                    fitNonce={fitNonce}
-                    focus={focus}
-                    placeSearch={isAdmin}
-                    onWaypointPick={() => {}}
-                    onMapPick={(lat, lon, details) => openAdd(formatCoords(lat, lon), details)}
-                  />
-                </Suspense>
+                  mapElement
                 )}
               </div>
-              {isAdmin ? (
-                <div className="flex items-center gap-2 p-2">
+              {isAdmin && maximised ? (
+                // The sheet has the map AND the controls that drive it; a
+                // second Add-from-map toggle behind the backdrop would be a
+                // duplicate of a control the reader can already see.
+                <p className="p-2 text-xs text-muted-foreground">
+                  {rows.length} waypoint{rows.length === 1 ? "" : "s"}
+                </p>
+              ) : isAdmin ? (
+                <div className="flex flex-wrap items-center gap-2 p-2">
                   <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
                     {addMode ? "Tap the map to place…" : "Add from map"}
                   </ToggleButton>
+                  {/* Stacked on a phone the pane is capped at ~19rem, which
+                      leaves the map a few centimetres to place a point in.
+                      Full screen it gets the whole device, and Add from map
+                      goes with it. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    // Contains the visible label (WCAG 2.5.3) while saying
+                    // WHAT is maximised for anyone reading the button alone.
+                    aria-label="Maximise map"
+                    onPress={() => setMaximised(true)}
+                  >
+                    <Maximize2Icon className="size-4" aria-hidden="true" />
+                    Maximise
+                  </Button>
                   <span className="text-xs text-muted-foreground">
                     {rows.length} waypoint{rows.length === 1 ? "" : "s"}
                     {invalidCount > 0 ? ` · ${invalidCount} need valid coordinates` : ""}
@@ -619,6 +679,49 @@ export function CompWaypoints() {
           }
           master={
           <div>
+            {/* The editing actions, at the head of the thing they edit: they
+                fill the grid (upload, add) or a column of it (altitudes), and
+                on a phone this is the row directly above it rather than four
+                buttons wrapped under the page title. */}
+            {isAdmin ? (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <FileTrigger
+                  acceptedFileTypes={[".wpt", ".cup", ".csv", ".txt", ".gpx", ".kml"]}
+                  onSelect={(files) => void loadFile(files?.[0] ?? null)}
+                >
+                  <Button variant="outline" size="sm">
+                    Upload file
+                  </Button>
+                </FileTrigger>
+                <Button variant="outline" size="sm" onPress={() => openAdd()}>
+                  Add waypoint
+                </Button>
+                {/* Always visible so the capability is discoverable; disabled
+                    when every waypoint already has an altitude. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  isDisabled={fillableCount === 0}
+                  isPending={fillingAlts}
+                  pendingLabel="Filling altitudes"
+                  onPress={() => void fillAltitudes()}
+                >
+                  {fillableCount > 0
+                    ? `Fill ${fillableCount} altitude${fillableCount === 1 ? "" : "s"} from map`
+                    : "Fill altitudes from map"}
+                </Button>
+                {/* Why the button is dead. Filling every altitude disables the
+                    button that just did it, which reads as the fill having
+                    failed — so the state that means "done" has to say so. */}
+                {rows.length > 0 && fillableCount === 0 && !fillingAlts ? (
+                  <span className="text-xs text-muted-foreground">
+                    {unfillableCount > 0
+                      ? `${unfillableCount} waypoint${unfillableCount === 1 ? "" : "s"} need valid coordinates before an altitude can be filled`
+                      : "Every waypoint has an altitude"}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             {/* Filter box — narrows a long set. Drives the Tabulator grid
                 (admins) and the read-only table alike; the admin grid also
                 sorts on header clicks, the read-only table via its columns. */}
@@ -745,15 +848,89 @@ export function CompWaypoints() {
         />
       )}
 
-      {/* New-waypoint dialog (shared with the task route editor). */}
+      {/* The map at full screen. Mounted only while open (the sheet's
+          contract), and it holds the page's only map while it is — see
+          `mapElement`. The browser Fullscreen API the Mapbox control rides on
+          does not exist on iPhones, which is what the app's sheet is for. */}
+      {maximised ? (
+        <FullScreenSheet
+          label="Waypoint map"
+          onClose={() => setMaximised(false)}
+          className="flex flex-col gap-2 p-2 sm:p-3"
+        >
+          {/* Controls on one line, the note under them: wrapped together on
+              a phone they cost the map two rows instead of one. */}
+          <div className="flex items-center gap-2">
+            <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
+              {addMode ? "Tap the map to place…" : "Add from map"}
+            </ToggleButton>
+            {/* autoFocus so a keyboard user lands on the way out rather than
+                on the dialog container — Escape alone is not a discoverable
+                affordance (accessibility standard §4.1). */}
+            <Button
+              autoFocus
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onPress={() => setMaximised(false)}
+            >
+              <Minimize2Icon className="size-4" aria-hidden="true" />
+              Done
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {rows.length} waypoint{rows.length === 1 ? "" : "s"} · nothing is
+            saved until you press Save
+          </p>
+          <div className="min-h-0 w-full flex-1">{mapElement}</div>
+        </FullScreenSheet>
+      ) : null}
+
+      {/* New-waypoint dialog (shared with the task route editor). `elevated`
+          while the map is full screen: the dialog is opened from inside the
+          sheet, and at the default z it would open behind it. */}
       <AddWaypointDialog
         open={adding}
         initialCoords={seedCoords}
         details={seedDetails}
         takenCodes={rows.map((r) => r.code)}
+        elevated={maximised}
         onAdd={addWaypoint}
         onCancel={() => setAdding(false)}
       />
+
+      {/* Save, at the end of the work rather than up beside the title — and
+          sticky to the BOTTOM OF THE VIEWPORT, not the end of the document:
+          the grid and the map are both taller than a phone, so a Save an
+          admin has to scroll past them to reach is a Save they will not find.
+          The main's pb-24 reserves the space it covers.
+
+          Bottom chrome touching the viewport edge, so the background is
+          full-bleed while the button clears the home indicator —
+          `pb-gutter-safe` is the app's vocabulary for exactly that (#642),
+          and `px-gutter-safe` does the same for a landscape notch. */}
+      {isAdmin ? (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 backdrop-blur-sm print:hidden">
+          {/* Save first, hint beside it — the /settings save-form order, and
+              it leaves the bottom-RIGHT corner to the floating Preview-as
+              pill, which would otherwise sit on top of the button. */}
+          <div className="mx-auto flex max-w-6xl items-center gap-3 px-gutter-safe pt-3 pb-gutter-safe">
+            <Button
+              isDisabled={!dirty}
+              isPending={saving}
+              pendingLabel="Saving"
+              onPress={() => void save()}
+            >
+              Save
+            </Button>
+            {/* The hint doubles as the explanation for what Save will do;
+                role=status so the state change is announced. */}
+            <span role="status" className="text-sm text-muted-foreground">
+              {dirty && !saving ? "Unsaved changes" : ""}
+            </span>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -6,6 +6,12 @@
  * - Admins get an inline **Tabulator** editable grid (the app's standard for
  *   editable tables — Tabulator policy). Cell edits mirror into React state
  *   (the "N waypoints" count, dirty Save button, coordinate validation).
+ * - Save lives in the page's fixed bottom bar beside an "Unsaved changes"
+ *   hint, and while dirty a navigation guard offers Discard/Keep editing —
+ *   the comp-settings behaviour (settings-save-ux.spec.ts), brought here
+ *   after an admin lost a set of added waypoints to a tap on a link.
+ * - The map maximises into a full-screen sheet carrying its own Add-from-map
+ *   toggle, so several points can be placed from a phone-sized map.
  * - Anonymous visitors get the read-only RAC table instead.
  * - The device-export panel (RAC Menu of download formats, QR toggle, swap
  *   checkbox) and the RAC Add-waypoint dialog.
@@ -150,15 +156,15 @@ test("admin grid: Tabulator builds, edits mirror to state, bad coords block save
   await expect(page.getByRole("grid", { name: "Waypoints" })).toHaveCount(0);
   // React state drives the count line and the pristine Save button.
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
-  const saveButton = page.getByRole("button", { name: /^(Save|Saved)$/ });
-  await expect(saveButton).toHaveText("Saved");
+  const saveButton = page.getByRole("button", { name: "Save", exact: true });
   await expect(saveButton).toBeDisabled();
+  await expect(page.getByText("Unsaved changes")).toBeHidden();
 
   // An in-grid edit mirrors into React state: the Save button turns dirty.
   await editCell(firstRow.locator('[tabulator-field="name"]'), "E2E Waypoint");
   await expect(firstRow.locator('[tabulator-field="name"]')).toHaveText("E2E Waypoint");
-  await expect(saveButton).toHaveText("Save");
   await expect(saveButton).toBeEnabled();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
 
   // Garbage coordinates flag the cell and the count line…
   const coordsCell = firstRow.locator('[tabulator-field="coords"]');
@@ -232,9 +238,9 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
     );
     await page.getByRole("button", { name: "Save", exact: true }).click();
     expect((await putDone).ok()).toBe(true);
-    const saveButton = page.getByRole("button", { name: /^(Save|Saved)$/ });
-    await expect(saveButton).toHaveText("Saved");
-    await expect(saveButton).toBeDisabled();
+    // The saved values are the new baseline: clean page, disabled button.
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    await expect(page.getByText("Unsaved changes")).toBeHidden();
 
     // A reload proves it persisted (the grid rebuilds from the API).
     await page.reload();
@@ -276,6 +282,58 @@ test("device export: download menu lists every format, QR + swap toggle", async 
   await expect(swap).not.toBeChecked();
   await page.getByText(/Swap code & name/).click();
   await expect(swap).toBeChecked();
+
+  expect(mutated()).toBe(false);
+});
+
+test("navigating away from unsaved waypoints is guarded", async ({ page }) => {
+  const mutated = trackMutations(page);
+  const firstRow = await firstGridRow(page);
+
+  await editCell(firstRow.locator('[tabulator-field="name"]'), "E2E Unsaved");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // Keep editing: the navigation is cancelled and the edit survives.
+  await page.getByRole("link", { name: "Competitions" }).first().click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByText("This page has unsaved changes. Leaving will discard them.")
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/waypoints$/);
+  await expect(firstRow.locator('[tabulator-field="name"]')).toHaveText("E2E Unsaved");
+
+  // Discard: the navigation proceeds and nothing was ever sent to the API.
+  await page.getByRole("link", { name: "Competitions" }).first().click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Discard changes" })
+    .click();
+  await expect(page).toHaveURL(/\/comp$/);
+
+  expect(mutated()).toBe(false);
+});
+
+test("the map maximises into a full-screen sheet with its own Add from map", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+
+  await page.getByRole("button", { name: "Maximise" }).click();
+  const sheet = page.getByRole("dialog", { name: "Waypoint map" });
+  await expect(sheet).toBeVisible();
+
+  // The pane's own copy of the control stands down while the sheet holds the
+  // map: exactly one Add-from-map toggle on the page, and it is in the sheet.
+  await expect(page.getByRole("button", { name: "Add from map" })).toHaveCount(1);
+  await sheet.getByRole("button", { name: "Add from map" }).click();
+  await expect(sheet.getByRole("button", { name: /Tap the map to place/ })).toBeVisible();
+
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Maximise" })).toBeVisible();
 
   expect(mutated()).toBe(false);
 });

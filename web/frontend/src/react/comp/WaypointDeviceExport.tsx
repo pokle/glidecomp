@@ -90,12 +90,16 @@ export function WaypointDeviceExport({
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
+      {/* Stacked until there is room for a second column. `flex-1` alone was
+          not enough: the buttons beside it have a min-content width of most
+          of a phone, so the heading and its sentence were squeezed into a
+          two-word-wide column running down the card. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="min-w-0 sm:flex-1">
           <h2 className="text-sm font-semibold">{title}</h2>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <MenuTrigger>
             <Button
               variant="outline"
