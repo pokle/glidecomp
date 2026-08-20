@@ -64,10 +64,27 @@
   color: var(--foreground);
 }
 
+/* The empty-grid message is centred inside the table's SCROLL width, which on
+   a phone is wider than the visible box — so the one instruction an empty
+   grid gives ran off the right-hand edge. Bound it to the scroll PORT and
+   stick it there, so it stays centred and whole however far the columns are
+   scrolled. */
+.gc-grid.tabulator .tabulator-placeholder {
+  position: sticky;
+  left: 0;
+  /* `!important` because Tabulator writes the table's full scroll width onto
+     this element as an inline style — the only declaration in this file that
+     needs it, and the reason is that inline rule. */
+  width: 100% !important;
+}
+
 .gc-grid.tabulator .tabulator-placeholder .tabulator-placeholder-contents {
   color: var(--muted-foreground);
   font-size: 0.85rem;
   white-space: normal;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding-inline: 1rem;
 }
 
 /* Machine-ish columns (coordinates, altitude, radius on the waypoints grid) */

@@ -338,6 +338,52 @@ test("the map maximises into a full-screen sheet with its own Add from map", asy
   expect(mutated()).toBe(false);
 });
 
+test("the device panel follows the SAVED set, not the editor's rows", async ({
+  page,
+}) => {
+  // A file parsed into the grid is not yet on the server, so the panel — whose
+  // links are hosted endpoints — must not offer it. Emptied and restored via
+  // the API, like the save round-trip above.
+  const origRes = await page.request.get(`/api/comp/${compId}/waypoints`);
+  expect(origRes.ok()).toBe(true);
+  const original = (await origRes.json()) as { waypoints: Waypoint[] };
+
+  try {
+    const emptied = await page.request.put(`/api/comp/${compId}/waypoints`, {
+      data: { waypoints: [] },
+    });
+    expect(emptied.ok()).toBe(true);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Nothing published: no panel, and the editor's own job is what's left.
+    await expect(page.getByRole("button", { name: "Download waypoints" })).toHaveCount(0);
+    await expect(page.getByText("Get these waypoints on your device")).toHaveCount(0);
+
+    // Adding a waypoint in the editor does NOT bring it back — only a save does.
+    await page.getByRole("button", { name: "Add waypoint" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "Code" }).fill("E2E2");
+    await dialog
+      .getByRole("textbox", { name: "Coordinates (lat, lon)" })
+      .fill("-36.5, 148.2");
+    await dialog.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByText("Unsaved changes")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download waypoints" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Download waypoints" })).toBeVisible();
+  } finally {
+    const restore = await page.request.put(`/api/comp/${compId}/waypoints`, {
+      data: { waypoints: original.waypoints },
+    });
+    expect(restore.ok()).toBe(true);
+  }
+});
+
 test("anonymous visitors get the read-only table, no admin controls", async ({
   page,
 }) => {

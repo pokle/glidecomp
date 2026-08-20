@@ -204,6 +204,13 @@ export function CompWaypoints() {
   const [savedJson, setSavedJson] = useState<string>(() =>
     initial ? baselineJson(initial.waypoints) : "[]"
   );
+  // What the SERVER holds, verbatim — the set a pilot's download, hosted file
+  // or QR would actually contain. Kept beside `savedJson` (the normalised
+  // dirty baseline) rather than derived from it, so the device panel offers
+  // exactly the bytes the hosted endpoint serialises.
+  const [savedRecords, setSavedRecords] = useState<WaypointFileRecord[]>(
+    () => initial?.waypoints ?? []
+  );
   const [loading, setLoading] = useState(!initial);
   const [saving, setSaving] = useState(false);
   const [fillingAlts, setFillingAlts] = useState(false);
@@ -290,6 +297,7 @@ export function CompWaypoints() {
           : { waypoints: [] };
         setRows(wpData.waypoints.map(toRow));
         setSavedJson(baselineJson(wpData.waypoints));
+        setSavedRecords(wpData.waypoints);
         setFitNonce((n) => n + 1);
       } catch {
         // Every retry was dropped. Say so, rather than rendering an empty
@@ -527,6 +535,7 @@ export function CompWaypoints() {
         return;
       }
       setSavedJson(serialize(waypoints));
+      setSavedRecords(waypoints);
       toast.success(`Saved ${waypoints.length} waypoint${waypoints.length === 1 ? "" : "s"}`);
     } catch {
       toast.error("Network error. Please try again.");
@@ -600,11 +609,16 @@ export function CompWaypoints() {
           : null}
       </p>
 
-      {/* Pilot download + QR (issue #312 stage 2) — visible to everyone. */}
-      {!loading && validRecords.length > 0 ? (
+      {/* Pilot download + QR (issue #312 stage 2) — visible to everyone, and
+          keyed off the SAVED set rather than the editor's rows. A comp with
+          nothing published yet has nothing to put on a device, and the
+          scorer setting one up for the first time has one job: upload a file
+          or add points from the map. It used to appear the moment a file was
+          parsed, offering hosted links to a set the server did not have. */}
+      {!loading && savedRecords.length > 0 ? (
         <div className="mb-6">
           <WaypointDeviceExport
-            records={validRecords}
+            records={savedRecords}
             baseName={compName}
             noun="waypoint"
             hostedUrl={(fmt, swap) =>
