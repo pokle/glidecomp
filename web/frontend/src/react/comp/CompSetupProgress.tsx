@@ -135,18 +135,23 @@ export function CompSetupProgress({
           </Link>
         );
       case "pilots":
-        // #edit-pilots opens the pilots page's edit dialog on arrival (same
-        // hash pattern as the task page's #edit-route deep link).
+        // #edit-pilots opens the pilots page's edit dialog on arrival. The
+        // roster editor is still a dialog, so this hash is still how it opens
+        // — unlike the route editor below, which has a URL of its own now.
         return (
           <Link className={linkClass} to={`/comp/${compId}/pilots#edit-pilots`}>
             {step.label}
           </Link>
         );
       case "task":
+        // Straight to the route editor's own URL (#637). This used to be
+        // `/task/:id#edit-route`, a hash the task page watched for; the task
+        // page still redirects that hash for anyone holding an old link, but
+        // there is no reason to send someone through it from here.
         return step.routeTaskId ? (
           <Link
             className={linkClass}
-            to={`/comp/${compId}/task/${step.routeTaskId}#edit-route`}
+            to={`/comp/${compId}/task/${step.routeTaskId}/route`}
           >
             {step.label}
           </Link>
