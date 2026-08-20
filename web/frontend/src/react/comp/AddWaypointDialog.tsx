@@ -43,6 +43,7 @@ export function AddWaypointDialog({
   initialCoords = "",
   details,
   takenCodes = [],
+  elevated = false,
   onAdd,
   onCancel,
 }: {
@@ -53,6 +54,9 @@ export function AddWaypointDialog({
   details?: MapPickDetails;
   /** Existing codes, so a name-derived code suggestion stays unique. */
   takenCodes?: string[];
+  /** Opened from inside a full-screen sheet (the waypoint editor's maximised
+   *  map), where the dialog has to be lifted over it — see rac/dialog. */
+  elevated?: boolean;
   /** Called with the assembled record when the admin confirms. */
   onAdd: (record: WaypointFileRecord) => void;
   onCancel: () => void;
@@ -168,6 +172,7 @@ export function AddWaypointDialog({
   return (
     <Modal
       isOpen={open}
+      elevated={elevated}
       onOpenChange={(o) => {
         if (!o) onCancel();
       }}

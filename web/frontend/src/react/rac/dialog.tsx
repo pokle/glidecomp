@@ -37,8 +37,18 @@ export function Modal({
   className,
   children,
   isDismissable = true,
+  elevated = false,
   ...props
-}: Omit<ModalOverlayProps, "className"> & { className?: string }) {
+}: Omit<ModalOverlayProps, "className"> & {
+  className?: string;
+  /**
+   * Lift the overlay over a {@link ../full-screen-sheet FullScreenSheet}
+   * (z-[100]) — for a dialog opened from inside one, which at the default
+   * z-50 would open behind the sheet it was asked for. The only stacking
+   * knob: everything else about the overlay stays this component's call.
+   */
+  elevated?: boolean;
+}) {
   return (
     <ModalOverlay
       isDismissable={isDismissable}
@@ -48,7 +58,8 @@ export function Modal({
       // auto margins collapse to 0 on overflow so the whole panel scrolls.
       className={cn(
         "fixed inset-0 isolate z-50 flex min-h-dvh justify-center overflow-y-auto bg-black/10 p-4 supports-backdrop-filter:backdrop-blur-xs",
-        "data-entering:animate-in data-entering:fade-in-0 data-exiting:animate-out data-exiting:fade-out-0 data-entering:duration-100 data-exiting:duration-100"
+        "data-entering:animate-in data-entering:fade-in-0 data-exiting:animate-out data-exiting:fade-out-0 data-entering:duration-100 data-exiting:duration-100",
+        elevated && "z-[110]"
       )}
       {...props}
     >

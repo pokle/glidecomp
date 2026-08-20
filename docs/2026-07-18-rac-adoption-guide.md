@@ -700,6 +700,17 @@ Points worth knowing before you reach for one:
       hand-written `role="menuitem"` anchor (SiteHeader.astro) keeps the real
       attribute, so the two implementations differ here on purpose.
 
+24. **A dialog opened from inside a `FullScreenSheet` opens BEHIND it unless
+    it is told not to.** The sheet's overlay is `z-[100]`; `Modal`
+    (`rac/dialog.tsx`) is `z-50`, and both are portalled to the body, so
+    z-index decides and the sheet wins — the dialog is mounted, focused and
+    invisible. `Modal` therefore takes one stacking knob, `elevated`, which
+    lifts its overlay to `z-[110]`; pass it through from whatever opened the
+    dialog (`AddWaypointDialog`'s `elevated` prop, set while the waypoints
+    editor's map is maximised). Nothing else about the overlay is
+    overridable, deliberately — the same reasoning as the thermal rose's
+    legend popover, which carries `z-[110]` for exactly this reason.
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash

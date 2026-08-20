@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import type { XCTask } from "@glidecomp/engine";
 import {
   createMapProvider,
+  type MapCamera,
   type MapPickDetails,
   type MapProvider,
   type MapWaypoint,
@@ -34,6 +35,8 @@ export default function RouteMap({
   fitNonce,
   focus,
   placeSearch = false,
+  initialCamera,
+  onCameraChange,
   onWaypointPick,
   onMapPick,
 }: {
@@ -67,6 +70,20 @@ export default function RouteMap({
    * request, so leave it off on read-only public views.
    */
   placeSearch?: boolean;
+  /**
+   * Open on this exact view instead of the globe (or wherever the last map
+   * anywhere in the app left off). For handing the camera between two
+   * instances of the same map — the waypoint editor's pane and its
+   * full-screen sheet. Read once, at mount; changing it later does nothing.
+   *
+   * Passing one also suppresses the mount-time fit to the waypoints: an
+   * explicit view beats a computed one, or maximising would throw the admin
+   * back out to the whole set every time.
+   */
+  initialCamera?: MapCamera | null;
+  /** Reports the camera whenever it settles, so the caller can hand it to
+   *  the next instance (see `initialCamera`). */
+  onCameraChange?: (camera: MapCamera) => void;
   onWaypointPick: (waypoint: MapWaypoint) => void;
   /** Ground pick. `details` carries best-effort extras from the Mapbox data
    *  (ground elevation, nearby place name), when available. */
@@ -82,8 +99,14 @@ export default function RouteMap({
   // once) always call the current closure without re-registering.
   const onWaypointPickRef = useRef(onWaypointPick);
   const onMapPickRef = useRef(onMapPick);
+  const onCameraChangeRef = useRef(onCameraChange);
   onWaypointPickRef.current = onWaypointPick;
   onMapPickRef.current = onMapPick;
+  onCameraChangeRef.current = onCameraChange;
+
+  // The hand-over camera as it was at mount — the map is created with it, so
+  // a later prop change would only fight whatever the user has done since.
+  const initialCameraRef = useRef(initialCamera);
 
   // Create the provider once per mount; destroy on unmount. Each mount gets
   // its own inner node (StrictMode double-mount guard over a shared container).
@@ -97,7 +120,10 @@ export default function RouteMap({
     let cancelled = false;
     let created: MapProvider | null = null;
     destroyedRef.current = false;
-    createMapProvider(inner, { appControls: false })
+    createMapProvider(inner, {
+      appControls: false,
+      camera: initialCameraRef.current ?? undefined,
+    })
       .then((p) => {
         if (cancelled) {
           p.destroy();
@@ -106,6 +132,7 @@ export default function RouteMap({
         created = p;
         p.onWaypointClick((wp) => onWaypointPickRef.current(wp));
         p.onMapClick((lat, lon, details) => onMapPickRef.current(lat, lon, details));
+        p.onBoundsChange(() => onCameraChangeRef.current?.(p.getCamera()));
         setProvider(p);
       })
       .catch((err) => {
@@ -150,7 +177,11 @@ export default function RouteMap({
 
   // Fit to the waypoints only when the caller bumps fitNonce (e.g. after a
   // load), so editing a coordinate doesn't re-zoom the map.
-  const lastFitNonce = useRef<number | undefined>(undefined);
+  // Seeded with the caller's nonce when the map opens on a handed-over
+  // camera, so the mount-time fit is skipped and only a LATER bump fits.
+  const lastFitNonce = useRef<number | undefined>(
+    initialCameraRef.current ? fitNonce : undefined
+  );
   useEffect(() => {
     if (!provider || waypoints.length === 0) return;
     if (fitNonce !== lastFitNonce.current) {

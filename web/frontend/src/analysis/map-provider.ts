@@ -112,6 +112,24 @@ export interface MapBounds {
 }
 
 /**
+ * Where the camera is, exactly — the view one provider instance can hand to
+ * the next when the same map is re-created somewhere else (the waypoint
+ * editor's inline pane and its full-screen sheet are two instances of one
+ * map, and an admin who has framed a valley must not be dropped back on the
+ * globe by maximising it).
+ *
+ * Bounds cannot do this job: fitting a box pads it and clamps the zoom, so
+ * every hand-over would drift a little further out.
+ */
+export interface MapCamera {
+    lat: number;
+    lon: number;
+    zoom: number;
+    pitch: number;
+    bearing: number;
+}
+
+/**
  * The map's full surface, as one contract.
  *
  * There was a second provider once (Leaflet, removed in #358), and while it
@@ -157,6 +175,10 @@ export interface MapProvider {
 
     /** Get current visible bounds */
     getBounds(): MapBounds;
+
+    /** Where the camera is now — to re-open another instance of this map on
+     *  the same view (see {@link MapCamera}). */
+    getCamera(): MapCamera;
 
     /** Register callback for when map bounds change */
     onBoundsChange(callback: () => void): void;
@@ -294,6 +316,14 @@ export interface MapProviderOptions {
      * map with only the standard navigation controls.
      */
     appControls?: boolean;
+
+    /**
+     * Open on this exact view instead of the one the last map left behind.
+     * For handing the camera from one instance to another (see
+     * {@link MapCamera}) — the persisted location is debounced by seconds and
+     * shared app-wide, so it cannot answer "carry on from where that map is".
+     */
+    camera?: MapCamera;
 }
 
 /**
