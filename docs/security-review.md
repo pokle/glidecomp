@@ -51,6 +51,7 @@
 | 2026-08-05 | [round](security-review/rounds/2026-08-05.md) | Anonymous submission + site search; SEC-37..40 documented; audit 16→10 |
 | 2026-08-12 | [round](security-review/rounds/2026-08-12.md) | S7F 2026 + PathFinder; SEC-41 (stored XSS ×8) + 42/43/44 fixed inline; SEC-45/46 documented |
 | 2026-08-17 | [round](security-review/rounds/2026-08-17.md) | SEC-47 (stored XSS) fixed inline; SEC-46 fixed with oracle tests; sink-pin guard test added |
+| 2026-08-20 | [round](security-review/rounds/2026-08-20.md) | Mobile settings hierarchy + Wing audit rewrite + mobile e2e; no new findings |
 
 ## Findings register
 
@@ -135,10 +136,10 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 
 ## Where to start the next review
 
-1. Commit reviewed up to: **HEAD = `b5a558f3`** (`b5a558f31a9322426fa28909f96bff8e6f83c226`; base `e94b491`). Unshallow before diffing if the clone is shallow (see the [2026-08-12 round](security-review/rounds/2026-08-12.md)'s process note).
-2. **SEC-45 (G-10) is the only open engine-DoS finding of its class and the top open item.** It needs its own PR: oracle tests over the S7F 2026 suite, a bound on `computeBestProgress`'s `exactAt()` evaluations (or a time-based Lipschitz prune), a ~60k-fix adversarial wandering track under a hard timeout, a `scoring-changes/` note, and archive parity measurement. The SEC-46 fix ([2026-08-17](security-review/rounds/2026-08-17.md)) is the template at smaller scale.
-3. Verify the SEC-46 and SEC-47 fixes held (`circle-detector-adversarial.test.ts` and `html-sinks.test.ts` are the tripwires).
-4. `bun audit`: check whether `upgrade-deps` has taken astro to 7 (G-16).
-5. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved in the 2026-08-17 round.
+1. Commit reviewed up to: **HEAD = `9bc5d1d`** (`9bc5d1d0ddce798df16035a4f3e3a6710cfdd8cc`; base `b5a558f3`). Unshallow before diffing if the clone is shallow (see the [2026-08-12 round](security-review/rounds/2026-08-12.md)'s process note). Note: the sandboxed review session used for the 2026-08-20 round had no `.github/workflows/` in its working tree (checked out repo excludes it) — diff that file with `diff <(git show <rev1>:path) <(git show <rev2>:path)`, not a `git diff` pathspec, which silently returns empty there.
+2. **SEC-45 (G-10) is the only open engine-DoS finding of its class and the top open item — now two rounds running with no fix PR started.** It needs its own PR: oracle tests over the S7F 2026 suite, a bound on `computeBestProgress`'s `exactAt()` evaluations (or a time-based Lipschitz prune), a ~60k-fix adversarial wandering track under a hard timeout, a `scoring-changes/` note, and archive parity measurement. The SEC-46 fix ([2026-08-17](security-review/rounds/2026-08-17.md)) is the template at smaller scale.
+3. Verify the SEC-46 and SEC-47 fixes held (`circle-detector-adversarial.test.ts` and `html-sinks.test.ts` are the tripwires) — both re-confirmed unchanged in the [2026-08-20 round](security-review/rounds/2026-08-20.md).
+4. `bun audit`: check whether `upgrade-deps` has taken astro to 7 (G-16) — still `6.4.8` / 3 dev-time advisories as of 2026-08-20.
+5. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved across the 2026-08-17 or 2026-08-20 rounds.
 6. The CSP flip (G-07) still needs the four-block inline-script inventory first.
 7. Do NOT re-open SEC-03 (accepted by design).

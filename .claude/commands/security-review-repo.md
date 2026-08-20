@@ -43,6 +43,8 @@ git diff <prev-sha>..HEAD -- '**/wrangler.toml' '**/src/**/*.ts' '**/functions/*
 
 Every new mutating endpoint added since the last round must be checked for: (a) authn middleware, (b) authz middleware, (c) `audit()` call per CLAUDE.md policy, (d) Zod validator with bounded fields. Any new `[[routes]]` block or binding is a new public surface.
 
+**`.github/workflows/` may not be in the working tree.** Some sandboxed review sessions check out the repo without `.github/workflows/` present on disk, so `git diff <rev1> <rev2> -- .github/workflows/deploy.yml` (or any pathspec under it) silently returns *empty* instead of erroring — it looks identical to "no CI change happened" even when one did. `git show <rev>:<path> | wc -l` still works (reads from the object database, not the working tree), so if `--stat` (no pathspec) shows a change under `.github/` but a pathspec'd `git diff` shows nothing, diff the two blobs directly: `diff <(git show <rev1>:.github/workflows/deploy.yml) <(git show <rev2>:.github/workflows/deploy.yml)`.
+
 ## 4. Re-walk every prior finding
 
 For each prior `SEC-NN`, open the file/lines cited and verify the current state. Three outcomes:
