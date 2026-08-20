@@ -24,7 +24,7 @@ import { FileTrigger } from "react-aria-components";
 import { Button } from "@/react/rac/button";
 import { Label } from "@/react/rac/field";
 import { Input } from "@/react/rac/field";
-import { SimpleSelect } from "@/react/rac/select";
+import { SearchableChoiceList } from "@/react/rac/choice-list";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
@@ -521,9 +521,13 @@ export function SubmitTrackForm({
       >
         {user ? (
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label>Submitting for</Label>
-              <SimpleSelect
+            {/* A collapsed list, not a popover (#638): a roster runs to
+                dozens of pilots, and on a phone a floating list of them opens
+                over the form and can be covered by the keyboard the search
+                box summons. Collapsed it is one row either way. */}
+            {canUploadOnBehalf ? (
+              <SearchableChoiceList
+                label="Submitting for"
                 value={onBehalfOf}
                 onChange={(v) => setOnBehalfOf(v || SELF)}
                 options={[
@@ -533,11 +537,19 @@ export function SubmitTrackForm({
                     label: `${p.name} (${p.pilot_class})`,
                   })),
                 ]}
-                disabled={!canUploadOnBehalf}
-                ariaLabel="Submitting for"
-                className="w-full"
+                searchLabel="Search pilots"
+                searchPlaceholder="Type a pilot's name"
               />
-            </div>
+            ) : (
+              // Nobody else to choose: a control with one option is a
+              // sentence pretending to be a choice.
+              <div className="flex flex-col gap-2">
+                <Label>Submitting for</Label>
+                <p className="text-sm text-muted-foreground">
+                  {user.name ? `Myself (${user.name})` : "Myself"}
+                </p>
+              </div>
+            )}
             {/* Only when submitting as themselves: the on-behalf picker above
                 already names an exact registration. */}
             {onBehalfOf === SELF && compId ? (
@@ -559,16 +571,15 @@ export function SubmitTrackForm({
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="flex flex-col gap-2 sm:w-56">
-                <Label id="ident-kind-label">Identify yourself by</Label>
-                <SimpleSelect
+                <SearchableChoiceList
+                  label="Identify yourself by"
                   value={identifierKind}
                   onChange={(v) => {
                     identityTouched.current = true;
                     setIdentifierKind(v as IdentifierKind);
                   }}
                   options={IDENTIFIER_KINDS}
-                  ariaLabel="Identify yourself by"
-                  className="w-full"
+                  searchLabel="Identify yourself by"
                 />
               </div>
               <div className="flex flex-1 flex-col gap-2">

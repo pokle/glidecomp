@@ -114,6 +114,12 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/[^/]+\/pilots\/?$/,
   // Competition settings pages (index + group sub-pages) — admin-only.
   /^\/comp\/[^/]+\/settings(\/[^/]+)?\/?$/,
+  // The task's three admin-only editors, the routed replacements for the Task
+  // Settings, route and weather-notes dialogs. The route editor has a second
+  // reason never to be server-rendered: it pulls Mapbox.
+  /^\/comp\/[^/]+\/task\/[^/]+\/(settings|route|weather)\/?$/,
+  // Recording a manual flight for one pilot (FAI S7F §9.2.2) — admin-only.
+  /^\/comp\/[^/]+\/task\/[^/]+\/pilot\/[^/]+\/manual-flight\/?$/,
   // Where the per-task report lived before it was re-nested under the comp
   // report; the SPA redirects it, so it must reach the shell rather than 404.
   /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/?$/,

@@ -5,6 +5,25 @@
  * <Select label="…"><SelectItem id="…">…</SelectItem></Select>. Items use RAC
  * ListBox semantics — typeahead, keyboard selection and form integration come
  * built in.
+ *
+ * ## When a Select is still the right control (issue #638)
+ *
+ * The mobile-first direction is "generally no popovers", and every **form
+ * field** on a settings-style surface has moved to `rac/choice-list.tsx`
+ * (`ChoiceList` / `CheckList` / `SearchableChoiceList`) — a list in flow,
+ * where a phone keyboard cannot cover it and the whole row is the target.
+ *
+ * What stays here is the other kind of control: a **view or filter control**,
+ * which sits above the content it acts on rather than in a form that gets
+ * saved. Converting those would be actively worse — a filter rendered as a
+ * card of rows pushes the thing you are filtering off the screen, which is the
+ * opposite of the problem the conversion set out to solve. The surviving call
+ * sites are the field-analysis class and metric pickers, `PageToc`'s jump-to,
+ * the scores-view picker and the manage table's per-row pilot status (a row
+ * action, where a list in flow would blow the row apart).
+ *
+ * So: **is this value part of a form the user will Save?** Then it belongs in
+ * `choice-list.tsx`. Is it choosing what to look at? Then it belongs here.
  */
 import {
   Select as AriaSelect,

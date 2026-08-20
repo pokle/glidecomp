@@ -26,10 +26,30 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 A cold field-analysis report server-renders its pending notice and is noindexed
 **per request**, not shell-noindexed.
 
-`NOINDEX_SHELL_ROUTES` (checked *before* `ROUTES`) covers only two paths: the
-admin-only `/comp/:id/pilots` roster editor, and the superseded
-`/comp/:id/task/:id/analysis` URL, which the SPA redirects and so must reach the
-shell rather than 404.
+`NOINDEX_SHELL_ROUTES` (checked *before* `ROUTES`) covers the `/comp` paths that
+are real SPA routes but have nothing to server-render — they must reach the
+shell rather than 404, and there is nothing here for a crawler:
+
+| Path | What it is |
+|---|---|
+| `/comp/:id/pilots` | the roster editor (admin-only) |
+| `/comp/:id/settings[/:group]` | competition settings, index + group sub-pages |
+| `/comp/:id/task/:id/settings` | task settings |
+| `/comp/:id/task/:id/route` | the route editor |
+| `/comp/:id/task/:id/weather` | the weather notes |
+| `/comp/:id/task/:id/pilot/:id/manual-flight` | recording a manual flight |
+| `/comp/:id/task/:id/analysis` | the superseded per-task analysis URL, which the SPA redirects |
+
+All but the last are admin-only editors, and every one of them was a dialog over
+a public page until #636/#637 — which is why the list grew: converting a dialog
+to a routed page creates a URL the SSR Function has to have an answer for, and
+without an entry here that answer is a genuine 404. The route editor has a
+second reason never to be server-rendered: it pulls Mapbox.
+
+**Adding a routed admin editor means adding it here.** The Function's fallback
+for an unmatched `/comp` path is a real 404 with `noindex` — deliberately, so
+junk URLs stop looking valid — so a new page that skips this list works in dev
+(where the SPA shell is served for everything) and 404s in production.
 
 One query string is checked alongside them: `/comp?q=…` — a search on the
 competitions page ([site search](2026-08-01-site-search.md)) — also gets the

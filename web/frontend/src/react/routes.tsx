@@ -66,6 +66,18 @@ const CompPilotsPage = lazy(() =>
 const CompSettingsPage = lazy(() =>
   import("./pages/CompSettingsPage").then((m) => ({ default: m.CompSettingsPage }))
 );
+const TaskSettingsPage = lazy(() =>
+  import("./pages/TaskSettingsPage").then((m) => ({ default: m.TaskSettingsPage }))
+);
+const TaskRoutePage = lazy(() =>
+  import("./pages/TaskRoutePage").then((m) => ({ default: m.TaskRoutePage }))
+);
+const ManualFlightPage = lazy(() =>
+  import("./pages/ManualFlightPage").then((m) => ({ default: m.ManualFlightPage }))
+);
+const TaskWeatherPage = lazy(() =>
+  import("./pages/TaskWeatherPage").then((m) => ({ default: m.TaskWeatherPage }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -164,6 +176,26 @@ export function AppRoutes() {
             element={<TaskFieldAnalysis />}
           />
           <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+          {/* The task's three admin-only editors, all SIBLINGS: each is
+              reached from the part of the task page it edits, so none nests
+              under another. Noindex shells in the SSR Function, like /pilots.
+
+              Settings is flat where the comp's is an index — a task has five
+              settings, which is a form and not a hierarchy. The route editor
+              is the surface a phone needed most: a map, a turnpoint grid and
+              two config panels used to share one 100dvh modal. */}
+          <Route
+            path="/comp/:compId/task/:taskId/settings"
+            element={<TaskSettingsPage />}
+          />
+          <Route
+            path="/comp/:compId/task/:taskId/route"
+            element={<TaskRoutePage />}
+          />
+          <Route
+            path="/comp/:compId/task/:taskId/weather"
+            element={<TaskWeatherPage />}
+          />
           {/* Where the per-task analysis lived until the re-nesting above. */}
           <Route
             path="/comp/:compId/task/:taskId/analysis"
@@ -172,6 +204,13 @@ export function AppRoutes() {
           <Route
             path="/comp/:compId/task/:taskId/pilot/:pilotId"
             element={<PilotScoreDetail />}
+          />
+          {/* Recording a flight for a pilot with no tracklog (S7F §9.2.2) —
+              admin-only, and a child of the report card because that is the
+              page it is about. */}
+          <Route
+            path="/comp/:compId/task/:taskId/pilot/:pilotId/manual-flight"
+            element={<ManualFlightPage />}
           />
           <Route path="/scores" element={<Scores />} />
           {/* "My Profile" merged into Settings; keep the old path working. */}

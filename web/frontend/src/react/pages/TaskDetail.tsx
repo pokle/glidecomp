@@ -55,7 +55,6 @@ import { TaskExportButtons } from "../comp/TaskExportButtons";
 import { TaskScoresPublic } from "../comp/TaskScoresPublic";
 import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
-import { RouteEditorDialog } from "../comp/RouteEditorDialog";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
@@ -71,7 +70,15 @@ import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp } from "../lib/crumbs";
-import { idFromSegment, compPath, taskPath, taskAnalysisPath } from "../lib/slug";
+import {
+  idFromSegment,
+  compPath,
+  taskPath,
+  taskAnalysisPath,
+  taskSettingsPath,
+  taskRoutePath,
+  taskWeatherPath,
+} from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
@@ -95,11 +102,7 @@ export function TaskDetail() {
   const [refresh, setRefresh] = useState(0);
   // The task is the page. A dead task id is a dead URL; the comp above is
   // supporting detail the page degrades without.
-  const {
-    data: task,
-    notFound,
-    setData: setTask,
-  } = useSeededResource<TaskDetailData>({
+  const { data: task, notFound } = useSeededResource<TaskDetailData>({
     ids: [compId, taskId],
     seed: initial?.task ?? null,
     load: ([comp_id, task_id]) =>
@@ -121,8 +124,6 @@ export function TaskDetail() {
   // separate component with its own score fetch) pick up the change too.
   const [resultsRefresh, setResultsRefresh] = useState(0);
   const [replayAvailable, setReplayAvailable] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [routeOpen, setRouteOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [forgeOpen, setForgeOpen] = useState(false);
 
@@ -158,19 +159,15 @@ export function TaskDetail() {
   );
 
   // `#edit-route` deep link (the comp page's featured-task card used to point
-  // here; a bookmarked or shared link still can): open the route editor once
-  // the task has loaded and the admin check has resolved.
+  // here; a bookmarked or shared link still can). The editor is its own route
+  // now, so the hash is a REDIRECT rather than a flag that opens a dialog —
+  // which is also what makes it disappear from the address bar on arrival.
   useEffect(() => {
-    if (location.hash === "#edit-route" && isAdmin && task) setRouteOpen(true);
-  }, [location.hash, isAdmin, task]);
-
-  // Closing the editor drops the #edit-route hash so a reload doesn't reopen it.
-  const closeRouteEditor = () => {
-    setRouteOpen(false);
-    if (location.hash === "#edit-route") {
-      navigate(location.pathname + location.search, { replace: true });
-    }
-  };
+    if (location.hash !== "#edit-route" || !isAdmin || !task || !comp) return;
+    navigate(taskRoutePath(compId, comp.name, taskId, task.name), {
+      replace: true,
+    });
+  }, [location.hash, isAdmin, task, comp, compId, taskId, navigate]);
 
   const canUploadOnBehalf = useCanUploadOnBehalf(
     compId ?? "",
@@ -257,10 +254,17 @@ export function TaskDetail() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {comp ? <TaskPrevNext comp={comp} compId={compId} task={task} taskId={taskId} /> : null}
+          {/* A link, not a dialog trigger: task settings are a routed page
+              (#637), so this is a real destination the back button walks out
+              of. */}
           {isAdmin && comp ? (
-            <Button variant="outline" size="sm" onPress={() => setEditOpen(true)}>
+            <LinkButton
+              variant="outline"
+              size="sm"
+              href={taskSettingsPath(compId, comp.name, taskId, task.name)}
+            >
               Settings
-            </Button>
+            </LinkButton>
           ) : null}
         </div>
       </div>
@@ -399,7 +403,7 @@ export function TaskDetail() {
         timezone={comp?.timezone ?? null}
         wind={wind}
         isAdmin={isAdmin}
-        onEditRoute={() => setRouteOpen(true)}
+        routeHref={taskRoutePath(compId, comp?.name, taskId, task.name)}
       />
 
       {/* The day's weather — the organizer's notes plus the modelled
@@ -407,15 +411,11 @@ export function TaskDetail() {
           Sits directly under the route, above the results: the conditions
           are context for reading everything below them. */}
       <WeatherSection
-        compId={compId}
-        taskId={taskId}
         weather={weather}
         notes={task.weather_notes}
         isAdmin={isAdmin}
         compTimezone={comp?.timezone ?? null}
-        onSaved={(weather_notes) =>
-          setTask((prev) => (prev ? { ...prev, weather_notes } : prev))
-        }
+        notesHref={taskWeatherPath(compId, comp?.name, taskId, task.name)}
       />
 
       {/* Public results: top-3 podium per class + the link to the comp's
@@ -457,7 +457,6 @@ export function TaskDetail() {
           isAdmin={isAdmin}
           isClosed={isClosed}
           scoringFormat={comp.scoring_format === "open_distance" ? "open_distance" : "gap"}
-          distanceOrigin={comp.gap_params?.distanceOrigin ?? "takeoff"}
           timezone={comp.timezone ?? null}
           taskXctsk={task.xctsk}
           submissionsClosed={task.submissions_closed}
@@ -468,39 +467,6 @@ export function TaskDetail() {
       ) : null}
       </div>
 
-      {isAdmin && comp && editOpen ? (
-        <EditTaskDialog
-          compId={compId}
-          taskId={taskId}
-          task={task}
-          compPilotClasses={comp.pilot_classes}
-          timezone={comp.timezone ?? null}
-          onClose={() => setEditOpen(false)}
-          onSaved={() => {
-            setEditOpen(false);
-            setRefresh((n) => n + 1);
-            setScoresRefresh((n) => n + 1);
-          }}
-        />
-      ) : null}
-
-      {isAdmin && comp && routeOpen ? (
-        <RouteEditorDialog
-          compId={compId}
-          taskId={taskId}
-          taskName={task.name}
-          taskDate={task.task_date}
-          xctsk={task.xctsk}
-          openDistance={comp.scoring_format === "open_distance"}
-          timezone={comp.timezone ?? null}
-          onClose={closeRouteEditor}
-          onSaved={() => {
-            closeRouteEditor();
-            setRefresh((n) => n + 1);
-            setScoresRefresh((n) => n + 1);
-          }}
-        />
-      ) : null}
     </div>
   );
 }
@@ -644,7 +610,7 @@ function TurnpointsSection({
   timezone,
   wind,
   isAdmin,
-  onEditRoute,
+  routeHref,
 }: {
   xctsk: XCTask | null;
   taskDate: string;
@@ -653,7 +619,8 @@ function TurnpointsSection({
   /** The day's modelled wind, once the weather lands. Null until then. */
   wind: TaskWind | null;
   isAdmin: boolean;
-  onEditRoute: () => void;
+  /** The route editor's URL — a page since #637, so this is a link. */
+  routeHref: string;
 }) {
   // Which turnpoint the reader is pointing at, shared by the diagram and the
   // table so the shape and the numbers stay tied together — either one can
@@ -668,9 +635,9 @@ function TurnpointsSection({
         title="Route"
         action={
           isAdmin ? (
-            <Button variant="outline" size="sm" onPress={onEditRoute}>
-              {xctsk && xctsk.turnpoints.length > 0 ? "Edit route…" : "Create route…"}
-            </Button>
+            <LinkButton variant="outline" size="sm" href={routeHref}>
+              {xctsk && xctsk.turnpoints.length > 0 ? "Edit route" : "Create route"}
+            </LinkButton>
           ) : null
         }
       />
@@ -726,213 +693,5 @@ function TurnpointsSection({
         <p className="mt-2 text-muted-foreground">No route defined yet</p>
       )}
     </Card>
-  );
-}
-
-function EditTaskDialog({
-  compId,
-  taskId,
-  task,
-  compPilotClasses,
-  timezone,
-  onClose,
-  onSaved,
-}: {
-  compId: string;
-  taskId: string;
-  task: TaskDetailData;
-  compPilotClasses: string[];
-  /** Comp-local IANA zone; the stop time is entered comp-local when set. */
-  timezone: string | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const navigate = useNavigate();
-  const confirm = useConfirm();
-  const dateId = useId();
-  const stopId = useId();
-  const [name, setName] = useState(task.name);
-  const [taskDate, setTaskDate] = useState(task.task_date);
-  const [selectedClasses, setSelectedClasses] = useState<string[]>(
-    compPilotClasses.filter((cls) => task.pilot_classes.includes(cls))
-  );
-  // Stopped task (S7F §13.4): the stop time, edited as a comp-local wall-clock
-  // time of day ("" = task not stopped) — the stop is always on the task date,
-  // so only the time is editable. Recombined with taskDate on save and stored/
-  // scored as a UTC instant.
-  const [stopTime, setStopTime] = useState(
-    task.stop_announcement_time
-      ? (utcISOToZonedDateTimeLocal(task.stop_announcement_time, timezone)?.slice(
-          11,
-          16
-        ) ?? "")
-      : ""
-  );
-  const [submissionsClosed, setSubmissionsClosed] = useState(
-    task.submissions_closed
-  );
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    if (selectedClasses.length === 0) {
-      toast.warning("Select at least one pilot class");
-      return;
-    }
-
-    // The stop is on the task date; combine it with the comp-local stop time.
-    const stopIso =
-      stopTime && taskDate
-        ? zonedDateTimeLocalToUtcISO(`${taskDate}T${stopTime}`, timezone)
-        : null;
-    if (stopTime && !stopIso) {
-      toast.warning("Enter a valid stop time");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
-        param: { comp_id: compId, task_id: taskId },
-        json: {
-          name: name.trim(),
-          task_date: taskDate,
-          pilot_classes: selectedClasses,
-          stop_announcement_time: stopIso,
-          submissions_closed: submissionsClosed,
-        },
-      });
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to update task");
-        return;
-      }
-
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deleteTask() {
-    const confirmed = await confirm({
-      title: "Delete this task?",
-      message: "This cannot be undone.",
-      confirmLabel: "Delete",
-      destructive: true,
-    });
-    if (!confirmed) return;
-
-    try {
-      const res = await api.api.comp[":comp_id"].task[":task_id"].$delete({
-        param: { comp_id: compId, task_id: taskId },
-      });
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to delete task");
-        return;
-      }
-
-      // No comp name in this sub-component's scope; the comp page canonicalises
-      // the URL on arrival.
-      navigate(compPath(compId));
-    } catch {
-      toast.error("Network error. Please try again.");
-    }
-  }
-
-  return (
-    <Modal
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      className="sm:max-w-lg"
-    >
-      <Dialog>
-        <DialogHeader>
-          <DialogTitle>Task Settings</DialogTitle>
-        </DialogHeader>
-        <Form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-          className="flex flex-col gap-4"
-        >
-          <TextField
-            label="Name"
-            isRequired
-            maxLength={128}
-            value={name}
-            onChange={setName}
-            errorMessage="Enter a task name"
-          />
-          <div className="flex flex-col gap-2">
-            <Label id={dateId}>Date</Label>
-            <DatePicker
-              required
-              aria-labelledby={dateId}
-              value={taskDate}
-              onChange={setTaskDate}
-            />
-          </div>
-          <CheckboxGroup
-            label="Pilot Classes"
-            value={selectedClasses}
-            onChange={setSelectedClasses}
-          >
-            {compPilotClasses.map((cls) => (
-              <Checkbox key={cls} value={cls}>
-                {cls}
-              </Checkbox>
-            ))}
-          </CheckboxGroup>
-          <div className="flex flex-col gap-2">
-            <Label id={stopId}>
-              Task stop (
-              {zoneLabel(new Date(`${taskDate}T12:00:00Z`), timezone ?? "UTC")})
-            </Label>
-            <TimePicker
-              clearable
-              aria-labelledby={stopId}
-              value={stopTime}
-              onChange={setStopTime}
-            />
-            <Description>
-              Set only when the task was stopped mid-flight (weather calldown).
-              Scores are recomputed under the stopped-task rules (FAI S7F
-              §13.4): a scored-back stop time, a clipped scoring window, and an
-              altitude bonus for pilots still flying. Leave empty for a task
-              that ran to completion.
-            </Description>
-          </div>
-          <CheckboxField
-            checked={submissionsClosed}
-            onChange={setSubmissionsClosed}
-            label="Closed for track submissions"
-            hint="Pilots can no longer send tracks or manual flights for this task. Organisers still can, so a late recovery does not need this turned off."
-          />
-          <DialogFooter>
-            <Button
-              variant="destructive"
-              className="sm:mr-auto"
-              onPress={() => void deleteTask()}
-            >
-              Delete task
-            </Button>
-            <Button slot="close" variant="outline">
-              Cancel
-            </Button>
-            <Button type="submit" isPending={saving} pendingLabel="Saving">
-              Save
-            </Button>
-          </DialogFooter>
-        </Form>
-      </Dialog>
-    </Modal>
   );
 }

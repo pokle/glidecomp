@@ -387,8 +387,17 @@ test("the section bar folds into More rather than wrapping on a phone", async ({
   // 320px is the narrowest viewport the accessibility standard supports
   // (docs/accessibility-standard.md §3.2), and this bar carries six links.
   await page.setViewportSize({ width: 320, height: 812 });
+  // Poll it settled BEFORE reading it: `data-priority-overflow` is React state
+  // driven by a ResizeObserver (rac/priority-nav.tsx), so a bare getAttribute
+  // straight after a resize can still read the wide row's 0. It matters twice
+  // here — `folded` is also the expected menu length further down, so reading
+  // it early would assert an empty menu against a menu that is about to fill.
+  await expect
+    .poll(async () =>
+      Number(await overflow.getAttribute("data-priority-overflow"))
+    , { message: "links this narrow have to fold somewhere" })
+    .toBeGreaterThan(0);
   const folded = Number(await overflow.getAttribute("data-priority-overflow"));
-  expect(folded, "links this narrow have to fold somewhere").toBeGreaterThan(0);
   expect(
     (await bar.boundingBox())!.height,
     "one line at 320px, exactly as at 1280px"
@@ -434,9 +443,16 @@ test("the app header folds into More rather than wrapping on a phone", async ({
   const wideHeight = (await nav.boundingBox())!.height;
 
   await page.setViewportSize({ width: 320, height: 812 });
-  expect(
-    Number(await overflow.getAttribute("data-priority-overflow"))
-  ).toBeGreaterThan(0);
+  // POLL, don't read once. `data-priority-overflow` is React state driven by a
+  // ResizeObserver (rac/priority-nav.tsx), so it lands a frame or more after
+  // the resize — a bare getAttribute races it and reads the wide row's 0. The
+  // wide assertion above never showed this because toHaveAttribute retries;
+  // this one did not, and lost under a loaded single-worker run.
+  await expect
+    .poll(async () =>
+      Number(await overflow.getAttribute("data-priority-overflow"))
+    )
+    .toBeGreaterThan(0);
   expect((await nav.boundingBox())!.height).toBeCloseTo(wideHeight, 0);
 
   // The page being read is "Competitions", and at this width it is one of the

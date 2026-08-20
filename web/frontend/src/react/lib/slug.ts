@@ -134,6 +134,42 @@ export function taskPath(
   return `${compPath(compId, compName)}/task/${slugSegment(taskId, taskName)}`;
 }
 
+/*
+ * The task's three admin-only editors, all siblings under the task: each is
+ * reached from the part of the task page it edits, so none is nested under
+ * another. Flat where the competition's settings are an index — a task has
+ * five settings, which is a form and not a hierarchy.
+ */
+
+export function taskSettingsPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/settings`;
+}
+
+/** Turnpoints, start gates and goal. */
+export function taskRoutePath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/route`;
+}
+
+/** The organiser's account of what the day did. */
+export function taskWeatherPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/weather`;
+}
+
 export function taskAnalysisPath(
   compId: string,
   compName: string | null | undefined,
@@ -152,4 +188,20 @@ export function pilotPath(
   pilotName?: string | null
 ): string {
   return `${taskPath(compId, compName, taskId, taskName)}/pilot/${slugSegment(pilotId, pilotName)}`;
+}
+
+/**
+ * Recording a flight for a pilot who has no track (FAI S7F §9.2.2). A child of
+ * the pilot's report card because that is the page it is about — and the page
+ * the recorded flight then explains.
+ */
+export function manualFlightPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  pilotId: string,
+  pilotName?: string | null
+): string {
+  return `${pilotPath(compId, compName, taskId, taskName, pilotId, pilotName)}/manual-flight`;
 }

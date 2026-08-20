@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Input, Label } from "@/react/rac/field";
 import { Loading } from "@/react/rac/progress";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
-import { SimpleSelect } from "@/react/rac/select";
+import { ChoiceList, SearchableChoiceList } from "@/react/rac/choice-list";
 import { useUnits } from "../lib/units";
 import { pilotPath } from "../lib/slug";
 import type { PilotListEntry } from "./types";
@@ -113,6 +113,10 @@ export function StepBox({
  *
  * Tasks are grouped under their competition, and the value carries both ids
  * because a task id alone does not say which comp it belongs to.
+ *
+ * Deliberately NOT converted to a ChoiceList in the #638 sweep: it is already
+ * a list in flow with no popover to remove, and its rows are grouped under
+ * per-competition headings that a flat card of rows would flatten away.
  */
 /**
  * "Which registration are you?" — asked of a signed-in pilot when the comp
@@ -180,57 +184,45 @@ export function RegistrationPicker({
           ? "That identifier is registered here. Confirm which entry is yours:"
           : "We could not tell which entry on this competition's roster is you. Pick yourself, so your track is not filed under a second entry:"}
       </p>
-      <RadioGroup
-        aria-label="Which registration are you?"
-        value={chosen}
+      {/* Full-width rows, not a radio dot beside a line of text (#638). This
+          is the picker that exists so a pilot's registration is never guessed
+          — the one place a mis-tap files a track under somebody else's entry —
+          so it is the picker that most wants a 44px target. The name leads and
+          the class and masked email become its secondary line, which is the
+          same three pieces of text with the identifying one given the weight.
+          RAC composes the accessible name from both. */}
+      <ChoiceList
+        ariaLabel="Which registration are you?"
+        value={chosen ?? ""}
         onChange={onChoose}
-        className="gap-1.5"
-      >
-        {candidates.map((cand) => (
-          <Radio
-            key={cand.comp_pilot_id}
-            value={cand.comp_pilot_id}
-            aria-label={[
-              cand.registered_pilot_name,
-              cand.pilot_class,
-              cand.notify_email_masked ?? undefined,
-            ]
+        options={[
+          ...candidates.map((cand) => ({
+            value: cand.comp_pilot_id,
+            label: cand.registered_pilot_name,
+            description: [cand.pilot_class, cand.notify_email_masked]
               .filter(Boolean)
-              .join(", ")}
-            className="w-full items-baseline gap-2.5 rounded-md px-1 py-1"
-          >
-            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span>{cand.registered_pilot_name}</span>
-              <span className="text-xs text-muted-foreground">{cand.pilot_class}</span>
-              {cand.notify_email_masked ? (
-                <span className="text-xs text-muted-foreground">
-                  {cand.notify_email_masked}
-                </span>
-              ) : null}
-            </span>
-          </Radio>
-        ))}
-        {registration.may_register ? (
-          <Radio
-            value={NEW_PILOT_SENTINEL}
-            aria-label="None of these — register me as a new pilot"
-            className="w-full items-baseline gap-2.5 rounded-md px-1 py-1"
-          >
-            <span>None of these — register me as a new pilot</span>
-          </Radio>
-        ) : null}
-      </RadioGroup>
+              .join(" · "),
+          })),
+          ...(registration.may_register
+            ? [
+                {
+                  value: NEW_PILOT_SENTINEL,
+                  label: "None of these — register me as a new pilot",
+                },
+              ]
+            : []),
+        ]}
+      />
 
       {showIdent ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <div className="flex flex-col gap-2 sm:w-56">
-            <Label id="reg-ident-kind">Find me by</Label>
-            <SimpleSelect
+            <SearchableChoiceList
+              label="Find me by"
               value={kind}
               onChange={(v) => setKind(v as IdentifierKind)}
               options={IDENTIFIER_KINDS}
-              ariaLabel="Find me by"
-              className="w-full"
+              searchLabel="Find me by"
             />
           </div>
           <div className="flex flex-1 flex-col gap-2">
