@@ -29,6 +29,16 @@ const TEST_USERS: Record<string, object> = {
     image: null,
     username: "pilot3",
   },
+  // Used ONLY by account-name-sync.test.ts, which renames the account it
+  // stands for. Every other test asserts its user's name is the one seeded
+  // here, so the renaming test needs a subject of its own.
+  "user-rename": {
+    id: "user-rename",
+    name: "Original Name",
+    email: "rename@test.com",
+    image: null,
+    username: "originalname",
+  },
   // Email is on the hardcoded super-admin allowlist (see src/super-admin.ts).
   "user-super": {
     id: "user-super",
@@ -54,6 +64,17 @@ const SAMPLE_IGC_FILES = JSON.stringify(
 /** Remaining forced auth-hop failures, per "test-auth-fail" key. */
 const authFailures = new Map<string, number>();
 
+/**
+ * Account names rewritten by POST /api/auth/set-name, keyed by user id.
+ *
+ * Opt-in via a `test-account-sync=1` cookie, and deliberately so: this Map
+ * lives on the Node host for the whole run, and most of the suite asserts
+ * that user-1 is "Test Pilot". A test that wants to watch a rename travel
+ * (issue #539 — the audit log's actor_name is the symptom that matters) says
+ * so; every other pilot-profile PATCH gets a 200 that changes nothing.
+ */
+const accountNames = new Map<string, string>();
+
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(path.join(__dirname, "../../db/migrations"));
 
@@ -77,7 +98,7 @@ export default defineConfig(async () => {
             // downgrading the request to anonymous (issue #481). The key
             // scopes the countdown to one test; this callback runs on the
             // Node host, so the Map survives across calls within a run.
-            AUTH_API(request: Request): Response {
+            async AUTH_API(request: Request): Promise<Response> {
               const cookie = request.headers.get("cookie") ?? "";
               const fail = cookie.match(/test-auth-fail=([^;:]+):(\d+)/);
               if (fail) {
@@ -90,10 +111,47 @@ export default defineConfig(async () => {
               }
               const match = cookie.match(/test-user=([^;]+)/);
               const userId = match?.[1];
-              const user =
+              const base =
                 userId && userId !== "none"
                   ? TEST_USERS[userId] ?? null
                   : null;
+              const renamed = userId ? accountNames.get(userId) : undefined;
+              const user =
+                base && renamed !== undefined ? { ...base, name: renamed } : base;
+
+              // POST /api/auth/set-name — the account-name write that keeps
+              // "user".name in step with a renamed pilot profile. Mirrors the
+              // real route's gate and its 1-128 character rule; a
+              // `test-setname-fail=1` cookie makes it 500 instead, so a test
+              // can prove the caller reports a failed hop rather than saving
+              // half of the rename.
+              if (new URL(request.url).pathname === "/api/auth/set-name") {
+                if (!base) {
+                  return Response.json(
+                    { error: "Not authenticated" },
+                    { status: 401 }
+                  );
+                }
+                if (/test-setname-fail=1/.test(cookie)) {
+                  return new Response("set-name blew up", { status: 500 });
+                }
+                const body = (await request.json().catch(() => ({}))) as {
+                  name?: unknown;
+                };
+                const name =
+                  typeof body.name === "string" ? body.name.trim() : "";
+                if (name.length === 0 || name.length > 128) {
+                  return Response.json(
+                    { error: "Name must be 1-128 characters" },
+                    { status: 400 }
+                  );
+                }
+                if (/test-account-sync=1/.test(cookie) && userId) {
+                  accountNames.set(userId, name);
+                }
+                return Response.json({ name });
+              }
+
               return Response.json({ user });
             },
             // Mock AIRSCORE_API: fixed stats, matching the real worker's

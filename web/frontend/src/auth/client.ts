@@ -146,6 +146,29 @@ export function seedCurrentUser(user: AuthUser | null): void {
   writeAccountHint(user);
 }
 
+/**
+ * Fold a change the client just made into the cached account, without asking
+ * /api/auth/me again.
+ *
+ * The account is resolved once per page load, so a Settings rename used to be
+ * invisible in the header — and in the static Astro chrome, which reads the
+ * localStorage hint — until the next full reload. Both are updated here, so
+ * every later reader of getCurrentUserOnce() sees the saved name too.
+ *
+ * Only ever call this with what the SERVER said it stored: this writes no
+ * account state, it just stops the page from showing a value it knows is out
+ * of date. A no-op when nobody is signed in.
+ */
+export function patchCurrentUser(patch: Partial<AuthUser>): void {
+  const pending = mePromise ?? Promise.resolve(null);
+  mePromise = pending.then((user) => {
+    if (!user) return user;
+    const next = { ...user, ...patch };
+    writeAccountHint(next);
+    return next;
+  });
+}
+
 // Seed at module load, before any consumer can ask — the preferences-sync
 // bootstrap runs during import and would otherwise race ahead of the entry.
 // `user` is absent on a classic SPA boot, which means "unknown, go and ask"
