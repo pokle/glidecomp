@@ -2,9 +2,20 @@ import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { summariseFlight } from '../src/flight-summary';
-import { parseIGC, type IGCFix } from '../src/igc-parser';
+import { parseIGC, type IGCFix, type TimeOrderReport } from '../src/igc-parser';
 import type { AltitudeCleaningReport } from '../src/altitude-cleaning';
 import { calculateTrackDistance, ellipsoidDistance } from '../src/geo';
+
+/** A synthetic file's timestamps were already in order. */
+const NO_TIME_ISSUES: TimeOrderReport = {
+  totalRecordCount: 0,
+  malformedRecordCount: 0,
+  droppedFixCount: 0,
+  duplicateTimeFixCount: 0,
+  maxBackwardsJumpMs: 0,
+  dayRollovers: 0,
+  suppressedDayRollovers: 0,
+};
 
 /** A synthetic file's altitudes were never repaired. */
 const NO_CLEANING: AltitudeCleaningReport = {
@@ -113,6 +124,7 @@ describe('summariseFlight — altitude', () => {
       fixes,
       events: [],
       altitudeCleaning: NO_CLEANING,
+      timeOrder: NO_TIME_ISSUES,
     });
     expect(summary.maxAltitudeMeters).toBe(1975);
   });
@@ -125,6 +137,7 @@ describe('summariseFlight — files that say little', () => {
       fixes: [],
       events: [],
       altitudeCleaning: NO_CLEANING,
+      timeOrder: NO_TIME_ISSUES,
     });
     expect(summary.fixCount).toBe(0);
     expect(summary.flightDate).toBeNull();
@@ -146,6 +159,7 @@ describe('summariseFlight — files that say little', () => {
       fixes,
       events: [],
       altitudeCleaning: NO_CLEANING,
+      timeOrder: NO_TIME_ISSUES,
     });
     expect(summary.fixCount).toBe(3);
     expect(summary.takeoffMs).toBeNull();
@@ -166,6 +180,7 @@ describe('summariseFlight — files that say little', () => {
       fixes: [fix(0, -36.2, 147.9, 500)],
       events: [],
       altitudeCleaning: NO_CLEANING,
+      timeOrder: NO_TIME_ISSUES,
     });
     expect(summary.flightDate).toBeNull();
   });
@@ -176,6 +191,7 @@ describe('summariseFlight — header strings', () => {
     fixes: [],
     events: [],
     altitudeCleaning: NO_CLEANING,
+    timeOrder: NO_TIME_ISSUES,
   };
 
   it('keeps a non-ASCII pilot name intact', () => {
