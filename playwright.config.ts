@@ -1,6 +1,21 @@
 import { defineConfig, devices } from "@playwright/test";
 import { FRONTEND_URL, API_READY_URL } from "./e2e/fixtures/stack";
-import { MOBILE_TEST_MATCH } from "./e2e/fixtures/mobile";
+import { MOBILE_SPEC_FILES, MOBILE_TEST_MATCH } from "./e2e/fixtures/mobile";
+import { shardFromEnv } from "./e2e/fixtures/shards";
+
+/**
+ * Which specs this run covers: one shard's worth when E2E_SHARD names one (the
+ * CI matrix in .github/workflows/deploy.yml sets it), the whole suite when it
+ * is unset — which is every local run, unchanged.
+ *
+ * An unrecognised value throws from shardFromEnv rather than falling back to
+ * the full suite; see the note there for why a silent fallback is the worse
+ * failure.
+ */
+const shard = shardFromEnv();
+
+/** `**\/name.spec.ts` for each spec in the shard, or undefined for all of them. */
+const shardGlobs = shard ? shard.map((f) => `**/${f}`) : undefined;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -26,9 +41,23 @@ export default defineConfig({
   // seeded "Corryong Cup 2026" comp (comp-waypoints saves and restores its
   // waypoints; comp-detail asserts against them) and the single super-admin
   // account. Running them concurrently would have one spec observing another's
-  // half-applied edit. The suite is startup-dominated, so sequential costs only
-  // a few seconds (~37s vs ~32s) — not worth buying flakiness back. Give the
-  // shared specs their own fixtures before raising this.
+  // half-applied edit.
+  //
+  // It used to say here that the suite was startup-dominated and sequential
+  // cost "only a few seconds (~37s vs ~32s)". That stopped being true a long
+  // time before anyone noticed, and the stale note is why: run 32355085390 was
+  // 553s of test execution, all of it serialised, which made this job the
+  // build's critical path (~10m of an 11m run — every other job was done by
+  // minute 5). Measure before trusting that line again.
+  //
+  // The answer for now is horizontal: E2E_SHARD splits the suite across CI
+  // jobs, each with its own stack and its own D1, so shards cannot interfere
+  // with each other and this stays 1 inside each. Raising it would be cheaper
+  // still — one stack instead of three — but it needs the shared fixtures
+  // untangled first. The list is short: comp-waypoints PUTs waypoints on the
+  // seeded comp while comp-detail asserts against them, and user-files-upload
+  // deletes the shared super-admin's tracks and tasks. Give those their own
+  // fixtures before raising this.
   workers: 1,
   // Sweeps comps left behind by a killed run before anything else — see the
   // file for why the local database needs sweeping at all.
@@ -54,9 +83,14 @@ export default defineConfig({
     // the Actions UI. Open one locally with `bunx playwright show-trace`.
     trace: "retain-on-failure",
   },
+  // Both projects are narrowed to the shard, and a project the shard leaves
+  // with nothing is dropped rather than left matching zero specs: Playwright
+  // reports an empty project as a smaller run, not as an error, so keeping one
+  // would turn "this shard has no phone specs" into a number nobody reads.
   projects: [
     {
       name: "chromium",
+      ...(shardGlobs ? { testMatch: shardGlobs } : {}),
     },
     // A phone, structurally (issue #643). Before this, the only mobile cover
     // was a `setViewportSize` at the top of individual tests, which changes
@@ -82,10 +116,12 @@ export default defineConfig({
     // narrow viewport AND the touch/UA emulation.
     {
       name: "mobile",
-      testMatch: MOBILE_TEST_MATCH,
+      testMatch: shard
+        ? MOBILE_SPEC_FILES.filter((f) => shard.includes(f)).map((f) => `**/${f}`)
+        : MOBILE_TEST_MATCH,
       use: { ...devices["Pixel 7"] },
     },
-  ],
+  ].filter((p) => p.testMatch === undefined || p.testMatch.length > 0),
   // One entry, not three: every Worker lives in a single wrangler session
   // behind the dev-router on :8790. The readiness URL is the router's /__ready,
   // which answers 200 only once EVERY Worker responds — with three ports we got

@@ -42,10 +42,53 @@ they need different servers:
 | `bun run test:e2e` | the Vite dev server (+ `astro dev` for the content pages) | everything except `e2e/ssr.spec.ts` |
 | `bun run test:e2e:ssr` | `wrangler pages dev` over the BUILT output | `e2e/ssr.spec.ts` only — server-rendered HTML, canonical redirects, the sitemap, clean hydration |
 
-CI runs both, as the parallel `E2E Tests` and `E2E Tests (SSR)` jobs in
+CI runs both, as the parallel `E2E Tests (…)` and `E2E Tests (SSR)` jobs in
 `.github/workflows/deploy.yml`. Run both locally before a PR that touches
 anything the eight server-rendered comp pages import — the dev server never
 server-renders, so `test:e2e` alone cannot fail when SSR breaks.
+
+## The e2e suite is sharded in CI
+
+`test:e2e` runs the whole suite locally, as it always has. In CI it is split
+across three runners, because the suite runs `workers: 1` (shared mutable
+fixtures — see the note in `playwright.config.ts`) and its wall clock is
+therefore the SUM of every test. That reached ~9m of test execution and made
+the E2E job the entire build's critical path: every other job, deploy included,
+was finished by minute five while E2E ran to eleven.
+
+The groups are in **`e2e/fixtures/shards.ts`**, balanced by measured duration
+and named by subject:
+
+| Shard | Roughly |
+|---|---|
+| `maps-and-analysis` | the map, the analysis page, the charts that explain a score |
+| `organiser` | comp/task settings, the pilots grid, waypoints, scoring mutations |
+| `public-and-pilot` | track submission, sign-in, content pages, search, the API doc |
+
+Run one locally the way CI does:
+
+```bash
+E2E_SHARD=organiser bun run test:e2e
+```
+
+An unrecognised name fails immediately rather than falling back to the full
+suite — a typo that quietly ran everything three times would stay green.
+
+**They are explicit lists, not `--shard=i/N`.** Playwright balances shards by
+test *count*, and this suite's durations are nowhere near uniform:
+`static-pages` is 19 tests in 13.4s, `analysis-map` is 7 tests in 72.8s. A naive
+4-way split put the three heaviest specs on one runner (292s) and left another
+finishing in 69s.
+
+**Adding a spec means adding it to a shard.** `e2e/fixtures/shards.test.ts`
+fails the build if a spec is in no shard or in two, and checks the CI matrix
+names the same shards this file defines — otherwise a new spec, or a new shard
+nobody wired into the matrix, silently stops running while CI stays green. It
+is a `bun test`, so it runs in the `test` job without the stack.
+
+Rebalance when a shard becomes the long pole on its own. There is little point
+below ~3 minutes: the `test` → `deploy` chain is ~4m49s and is the floor for
+the whole build.
 
 ## The `mobile` project — a phone, structurally
 
