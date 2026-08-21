@@ -76,14 +76,44 @@ export interface IGCTask {
   landing?: IGCTaskPoint;
 }
 
+/**
+ * What the parse-time timestamp pass found and did — the transparency record
+ * for the time axis, parallel to {@link AltitudeCleaningReport} for altitude.
+ *
+ * Every field is a count or a magnitude, so a caller can say exactly how much
+ * of a file was discarded without re-reading it. On a well-formed track every
+ * field is 0 except `totalRecordCount` and, above 1 Hz, `duplicateTimeFixCount`.
+ */
+export interface TimeOrderReport {
+  /** B records that passed field validation. */
+  totalRecordCount: number;
+  /** B records rejected by field validation — truncated, non-digit, binary. */
+  malformedRecordCount: number;
+  /** Fixes dropped to keep `fixes` non-decreasing in time (see parseIGC). */
+  droppedFixCount: number;
+  /** Kept fixes sharing the previous fix's second. Legitimate above 1 Hz — the
+   * B record's resolution is one second, so a 5 Hz logger writes five. */
+  duplicateTimeFixCount: number;
+  /** Largest backwards step seen before dropping, milliseconds. */
+  maxBackwardsJumpMs: number;
+  /** Midnight crossings the day-offset heuristic applied: 0 or 1. */
+  dayRollovers: number;
+  /** Later ≥18h→≤6h transitions refused because one crossing is the cap. */
+  suppressedDayRollovers: number;
+}
+
 export interface IGCFile {
   header: IGCHeader;
+  /** Non-decreasing in time — guaranteed by parseIGC, relied on by every
+   * time-window loop in the engine. */
   fixes: IGCFix[];
   events: IGCEvent[];
   task?: IGCTask;
   /** What the altitude plausibility pass repaired (transparency record —
    * surfaced on the score explainer). */
   altitudeCleaning: AltitudeCleaningReport;
+  /** What the timestamp pass discarded to make `fixes` non-decreasing. */
+  timeOrder: TimeOrderReport;
 }
 
 /**
@@ -180,10 +210,13 @@ function parseDate(dateStr: string): Date {
 const B_RECORD_RE =
   /^B(\d{6})(\d{7}[NS])(\d{8}[EW])([AV])(-\d{4}|\d{5})(-\d{4}|\d{5})/;
 
-function parseBRecord(line: string, baseMidnightMs: number, dayOffset: number = 0): IGCFix | null {
-  const m = B_RECORD_RE.exec(line);
-  if (!m) return null;
-
+/**
+ * Build a fix from an already-matched B record. Taking the match rather than
+ * the line is deliberate: the caller must validate BEFORE it advances the
+ * midnight-rollover state, or a corrupt line's garbage hour field steers the
+ * day offset for every fix after it (see parseIGC).
+ */
+function fixFromBRecord(m: RegExpExecArray, baseMidnightMs: number, dayOffset: number): IGCFix {
   return {
     time: parseTime(m[1], baseMidnightMs, dayOffset),
     latitude: parseLatitude(m[2]),
@@ -261,15 +294,19 @@ function parseCRecord(line: string): IGCTaskPoint | null {
  * Format: EHHMMSSTTT[text]
  *         HHMMSS - UTC time
  *         TTT - Event code (e.g., PEV for pilot event)
+ *
+ * The time field is digit-validated for the same reason B records are: an
+ * unvalidated HHMMSS yields an Invalid Date, and — before the record is
+ * dropped for it — steers the shared midnight-rollover state.
  */
-function parseERecord(line: string, baseMidnightMs: number, dayOffset: number = 0): IGCEvent | null {
-  if (line.length < 10) return null;
+const E_RECORD_RE = /^E(\d{6})(.{3})(.*)$/;
 
-  const time = parseTime(line.substring(1, 7), baseMidnightMs, dayOffset);
-  const code = line.substring(7, 10);
-  const description = sanitizeText(line.substring(10).trim());
-
-  return { time, code, description };
+function eventFromERecord(m: RegExpExecArray, baseMidnightMs: number, dayOffset: number): IGCEvent {
+  return {
+    time: parseTime(m[1], baseMidnightMs, dayOffset),
+    code: m[2],
+    description: sanitizeText(m[3].trim()),
+  };
 }
 
 /**
@@ -326,7 +363,50 @@ function parseHRecord(line: string, header: IGCHeader): void {
 }
 
 /**
+ * How many midnight crossings one file may contain.
+ *
+ * An IGC file is ONE flight, and no flight lasts 24 hours — so a second
+ * ≥18h→≤6h transition is not a second crossing, it is a corrupt clock. Left
+ * uncapped, an oscillating time field (23:xx, 05:xx, 23:xx, …) marches the day
+ * offset forward without bound, and the file ends up "spanning" days: the
+ * timestamps stay monotone, so nothing downstream objects, while track
+ * quality's wrong-day check sees a flight days from its task. Capping the
+ * offset instead makes the rewound fixes go backwards, where the ordering rule
+ * below drops them.
+ */
+const MAX_DAY_ROLLOVERS = 1;
+
+/**
  * Parse an IGC file content
+ *
+ * ## Timestamps
+ *
+ * The returned `fixes` are guaranteed **non-decreasing in time**. Every
+ * time-window loop in the engine — altitude cleaning, track quality, event
+ * detection, every dt-based rate — assumes that, and B records carry no date,
+ * so nothing but this function can establish it.
+ *
+ * Two kinds of non-monotonicity, treated differently:
+ *
+ * - **Duplicate timestamps are kept.** The B record's resolution is one
+ *   second, so a logger sampling above 1 Hz legitimately writes several fixes
+ *   per second. 24 of the 5,590 archived tracks do. Dropping them would throw
+ *   away real position data.
+ * - **Strictly backwards fixes are dropped**, never clamped or coalesced.
+ *   Clamping invents a timestamp the logger never wrote and turns a corrupt
+ *   jump into a dense cluster of zero-dt fixes; dropping keeps every retained
+ *   fix exactly as logged and records what went in `timeOrder`.
+ *
+ * Dropping naively would let ONE fix stamped far in the future truncate the
+ * whole rest of a flight, so an isolated forward spike is popped instead: when
+ * the fix that broke the order is itself back in order against the fix before
+ * the last kept one, the last kept one was the outlier and goes. A *sustained*
+ * rewind is not a spike, and there the first ordering wins — the rewound run
+ * is dropped.
+ *
+ * No file in the corpus needs any of this: across 5,590 real tracks there are
+ * zero backwards steps and zero malformed B records. It is a guarantee for
+ * corrupt and adversarial input, not a repair of anything observed.
  */
 export function parseIGC(content: string): IGCFile {
   const lines = content.split(/\r?\n/);
@@ -353,18 +433,72 @@ export function parseIGC(content: string): IGCFile {
   // every B/E record (see parseTime).
   const baseMidnightMs = midnightUTCms(baseDate);
 
+  const timeOrder: TimeOrderReport = {
+    totalRecordCount: 0,
+    malformedRecordCount: 0,
+    droppedFixCount: 0,
+    duplicateTimeFixCount: 0,
+    maxBackwardsJumpMs: 0,
+    dayRollovers: 0,
+    suppressedDayRollovers: 0,
+  };
+
   // Midnight rollover tracking: IGC B/E records only have HHMMSS with no date,
   // so flights crossing midnight UTC (common in Australia/Pacific) need day
   // adjustment. A time jumping from late evening to early morning between
   // consecutive timed records means the flight crossed midnight.
+  //
+  // Driven by VALIDATED time fields only. Reading the hour straight off the
+  // line advanced this state from records that were then thrown away: a
+  // corrupt line whose hour field reads 99 armed the heuristic, so the next
+  // honest morning fix shifted the entire rest of the track a day forward,
+  // and a line whose hour field is not numeric at all set `prevHours` to NaN,
+  // which compares false against everything and disarms a genuine crossing.
   let prevHours = -1;
   let dayOffset = 0;
-  const trackMidnightRollover = (line: string): void => {
-    const hours = parseInt(line.substring(1, 3), 10);
+  const dayOffsetFor = (hhmmss: string): number => {
+    const hours = parseInt(hhmmss.substring(0, 2), 10);
     if (prevHours >= 18 && hours <= 6) {
-      dayOffset++;
+      if (dayOffset < MAX_DAY_ROLLOVERS) {
+        dayOffset++;
+        timeOrder.dayRollovers++;
+      } else {
+        timeOrder.suppressedDayRollovers++;
+      }
     }
     prevHours = hours;
+    return dayOffset;
+  };
+
+  // Append a fix, keeping `fixes` non-decreasing in time. See the policy in
+  // this function's doc comment.
+  let lastKeptMs = -Infinity;
+  const appendFix = (fix: IGCFix): void => {
+    const t = fix.time.getTime();
+    if (t >= lastKeptMs) {
+      if (t === lastKeptMs) timeOrder.duplicateTimeFixCount++;
+      fixes.push(fix);
+      lastKeptMs = t;
+      return;
+    }
+
+    timeOrder.maxBackwardsJumpMs = Math.max(timeOrder.maxBackwardsJumpMs, lastKeptMs - t);
+
+    // Was the last fix kept an isolated forward spike? If dropping IT restores
+    // order, it is the one fix that disagrees with its neighbours on both
+    // sides, and costs one bogus fix rather than the rest of the flight.
+    const priorMs =
+      fixes.length >= 2 ? fixes[fixes.length - 2].time.getTime() : -Infinity;
+    if (t >= priorMs) {
+      fixes.pop();
+      timeOrder.droppedFixCount++;
+      if (t === priorMs) timeOrder.duplicateTimeFixCount++;
+      fixes.push(fix);
+      lastKeptMs = t;
+      return;
+    }
+
+    timeOrder.droppedFixCount++;
   };
 
   // Second pass: parse all records
@@ -379,16 +513,20 @@ export function parseIGC(content: string): IGCFile {
         break;
 
       case 'B': {
-        trackMidnightRollover(line);
-        const fix = parseBRecord(line, baseMidnightMs, dayOffset);
-        if (fix) fixes.push(fix);
+        const m = B_RECORD_RE.exec(line);
+        if (!m) {
+          timeOrder.malformedRecordCount++;
+          break;
+        }
+        timeOrder.totalRecordCount++;
+        appendFix(fixFromBRecord(m, baseMidnightMs, dayOffsetFor(m[1])));
         break;
       }
 
       case 'E': {
-        trackMidnightRollover(line);
-        const event = parseERecord(line, baseMidnightMs, dayOffset);
-        if (event) events.push(event);
+        const m = E_RECORD_RE.exec(line);
+        if (!m) break;
+        events.push(eventFromERecord(m, baseMidnightMs, dayOffsetFor(m[1])));
         break;
       }
 
@@ -423,6 +561,6 @@ export function parseIGC(content: string): IGCFile {
   // the cleaned series; the report is the transparency record.
   const altitudeCleaning = cleanAltitudes(fixes);
 
-  return { header, fixes, events, task, altitudeCleaning };
+  return { header, fixes, events, task, altitudeCleaning, timeOrder };
 }
 

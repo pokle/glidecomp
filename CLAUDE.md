@@ -369,6 +369,15 @@ These are the standing imperatives. Each links to the reference that explains it
     stays outside it on purpose — see `format-distance.ts`, `waypoint-files.ts`.
     New code that CAN affect a score but no root imports goes in `SCORING_ROOTS`
     (that is why `track-quality.ts` and `manual-flight.ts` are there).
+- **`parseIGC` fixes are non-decreasing in time — rely on it, don't re-derive
+  it.** Every time-window loop (altitude cleaning, track quality, event
+  detection, any dt-based rate) may assume it, and only the parser can
+  establish it: a B record carries HHMMSS and no date. Duplicate seconds are
+  KEPT (legitimate above 1 Hz); strictly backwards fixes are DROPPED — never
+  clamped or coalesced, which would invent a timestamp the logger never wrote —
+  and counted in `IGCFile.timeOrder`. One midnight crossing per file is the
+  cap, and only a VALIDATED time field may advance the day offset. See
+  `scoring-changes/050-monotonic-fix-timestamps.md`.
 - **Never implement inline geo math** (distance, bearing, etc.) — always use
   `web/engine/src/geo.ts`, which provides WGS84 ellipsoid formulas
   (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for

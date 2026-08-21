@@ -11,6 +11,7 @@ export {
   type IGCHeader,
   type IGCTask,
   type IGCTaskPoint,
+  type TimeOrderReport,
 } from './igc-parser';
 export {
   cleanAltitudes,
