@@ -97,6 +97,8 @@ describe("the e2e shard lists", () => {
   });
 });
 
+const WORKFLOW = join(dirname(E2E_DIR), ".github/workflows/deploy.yml");
+
 describe("the CI matrix", () => {
   /**
    * The workflow names the shards it runs, and that list has to be the same
@@ -106,14 +108,45 @@ describe("the CI matrix", () => {
    * forget the matrix, and those specs simply never run in CI while all three
    * jobs stay green.
    */
-  const WORKFLOW = join(dirname(E2E_DIR), ".github/workflows/deploy.yml");
-
   test("runs exactly the shards defined here", () => {
     const yaml = readFileSync(WORKFLOW, "utf8");
     const line = yaml.match(/^\s*shard:\s*\[([^\]]+)\]/m);
     expect(line, `no \`shard: [...]\` matrix found in ${WORKFLOW}`).toBeTruthy();
     const inWorkflow = line![1].split(",").map((s) => s.trim().replace(/^["']|["']$/g, ""));
     expect([...inWorkflow].sort()).toEqual([...SHARD_NAMES].sort());
+  });
+});
+
+describe("the Playwright container image", () => {
+  /**
+   * The E2E jobs run inside mcr.microsoft.com/playwright, which ships Chromium
+   * and its OS dependencies pre-installed — that is the whole reason the
+   * `install-deps` apt step could be deleted. But the image satisfies exactly
+   * ONE Playwright revision pin, so its tag has to track the pinned
+   * @playwright/test.
+   *
+   * Drift here fails late and reads as something else entirely: the run boots
+   * wrangler and vite first, then dies with "Executable doesn't exist at
+   * .../chromium_headless_shell-<rev>". ensure-playwright-browsers.sh rescues
+   * it by downloading the right build — correct, but it re-pays the ~300 MB
+   * the image existed to avoid, so CI gets quietly slower rather than red.
+   * A bumped dependency should fail here, on a one-line diff, instead.
+   */
+  test("its tag matches the pinned @playwright/test version", () => {
+    const version = (
+      JSON.parse(
+        readFileSync(
+          join(dirname(E2E_DIR), "node_modules/@playwright/test/package.json"),
+          "utf8"
+        )
+      ) as { version: string }
+    ).version;
+    const yaml = readFileSync(WORKFLOW, "utf8");
+    const tags = [...yaml.matchAll(/image:\s*mcr\.microsoft\.com\/playwright:v([\d.]+)-/g)].map(
+      (m) => m[1]
+    );
+    expect(tags.length, "no Playwright container image found in the workflow").toBeGreaterThan(0);
+    for (const tag of tags) expect(tag).toBe(version);
   });
 });
 
