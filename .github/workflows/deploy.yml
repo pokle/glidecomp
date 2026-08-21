@@ -7,11 +7,21 @@ name: Deploy
 # branch-preview and production paths can never drift — the drift that let the
 # git-sha smoke check silently rot on master while it was green on branches.
 #
-# Job graph: `test`, `e2e` and `e2e-ssr` all start together; `deploy` waits on
-# `test`. E2E is the long pole (~4 min against ~1.5 min for the unit job), so
-# making it queue behind `test` added the whole test job to every build's wall
-# clock while consuming nothing it produced — each builds its own stack from
-# the checkout.
+# Job graph: `test`, the three `e2e` shards and `e2e-ssr` all start together;
+# `deploy` waits on `test`. Making E2E queue behind `test` would add the whole
+# test job to every build's wall clock while consuming nothing it produced —
+# each builds its own stack from the checkout.
+#
+# E2E was the long pole by a wide margin until it was sharded: on run
+# 32355085390 the job ran 11m04s while every other job finished inside 5
+# minutes, so the build's wall clock WAS the E2E job. It is now split three
+# ways by measured duration (e2e/fixtures/shards.ts), which puts the worst
+# shard at roughly 5 minutes.
+#
+# That is about the floor worth chasing. The remaining critical path is
+# `test` (~2m23s) → `deploy` (~2m21s) ≈ 4m49s, so a fourth shard would buy
+# almost nothing while adding another runner's ~1m51s of setup to the bill.
+# Re-measure before adding one.
 # The trade is that a commit failing unit tests still burns E2E minutes; the
 # deploy is still gated, so nothing reaches Cloudflare on a red suite.
 on:
@@ -80,9 +90,26 @@ jobs:
           git fetch --no-tags --depth=100 origin master || true
           bun run check:scoring-note
 
+  # Sharded across three runners. See e2e/fixtures/shards.ts for the groups and
+  # why they are explicit lists rather than Playwright's `--shard=i/N` (that
+  # balances by test COUNT, and this suite's durations are far from uniform —
+  # a naive 4-way split put the three heaviest specs on one runner and left it
+  # at 292s while another finished in 69s).
+  #
+  # Each shard builds its own stack and its own local D1, so the shared mutable
+  # fixtures that force `workers: 1` inside a run cannot collide BETWEEN shards.
+  # That isolation is what makes this safe without touching the fixtures.
+  #
+  # fail-fast is off: one shard going red should not cancel the other two, or a
+  # single failure hides whatever else broke and every fix takes another full
+  # round trip.
   e2e:
-    name: E2E Tests
+    name: E2E Tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [maps-and-analysis, organiser, public-and-pilot]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -152,6 +179,12 @@ jobs:
 
       - name: Run E2E tests
         run: bun run test:e2e
+        env:
+          # playwright.config.ts narrows both projects to this shard's specs,
+          # and drops a project the shard leaves empty. An unrecognised name
+          # throws rather than running everything, so a typo here fails the job
+          # instead of quietly tripling the bill on a green run.
+          E2E_SHARD: ${{ matrix.shard }}
 
       - name: Dump wrangler logs on failure
         if: failure()
@@ -168,7 +201,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          # Per shard: upload-artifact v4 refuses a duplicate name, so three
+          # shards sharing "playwright-report" would fail whichever two
+          # finished last — on a green run. Same reason the SSR job has its own
+          # name below.
+          name: playwright-report-${{ matrix.shard }}
           # test-results/ holds the per-failure trace.zip files referenced by
           # playwright.config.ts's `trace: "retain-on-failure"`. They're
           # separate from the HTML report, so include both paths.

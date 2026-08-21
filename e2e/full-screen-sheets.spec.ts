@@ -124,6 +124,15 @@ test("a picture sheet dismisses on a tap anywhere, and on Escape", async ({ page
   await dialog.waitFor();
   await dialog.locator("p").first().click();
   await expect(dialog).toHaveCount(0);
+  // Wait for the close to finish settling before pressing again. `toHaveCount(0)`
+  // only says the sheet has left the DOM; react-aria restores focus and releases
+  // the scroll lock just after that, and a press that lands in the gap is
+  // swallowed by the overlay still tearing down — the sheet never reopens and the
+  // `waitFor` below times out instead. That is a real flake, seen once in CI on an
+  // otherwise green shard. Focus restore is the signal because it is the last step
+  // of the close AND a promise the shell makes for every exit path (WCAG 2.4.3,
+  // see the file header) — the Close-button test above waits on exactly this.
+  await expect(trigger).toBeFocused();
 
   await trigger.click();
   await dialog.waitFor();
