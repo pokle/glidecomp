@@ -1,7 +1,8 @@
 /**
  * Task settings — the routed replacement for the "Task Settings" dialog that
- * used to open over the task page (issue #637). Every field and every word of
- * copy is carried over verbatim; what changed is the shell.
+ * used to open over the task page (issue #637). Every field came across, and
+ * the copy with it — bar the submissions switch, since reworded and flipped to
+ * read positively (#649).
  *
  * FLAT, where the competition's settings are an index of grouped sub-pages
  * (comp/settings/CompSettingsIndex.tsx): a task has five settings, which is a
@@ -78,8 +79,14 @@ export function TaskSettings({
   const [taskDate, setTaskDate] = useState(task.task_date);
   const [selectedClasses, setSelectedClasses] = useState<string[]>(savedClasses);
   const [stopTime, setStopTime] = useState(savedStopTime);
-  const [submissionsClosed, setSubmissionsClosed] = useState(
-    task.submissions_closed
+  // Held POSITIVELY, against a column that is stored negatively
+  // (`submissions_closed`, migration 0028). A switch reads as "turn this on to
+  // get it" and a negative one inverts that: off-means-open had organisers
+  // reading the row as the opposite of what it did (#649). The column keeps
+  // its name — its default of 0 is what makes a new task open — and the
+  // inversion happens here, at the two edges of this component.
+  const [submissionsOpen, setSubmissionsOpen] = useState(
+    !task.submissions_closed
   );
   const [saving, setSaving] = useState(false);
 
@@ -87,7 +94,7 @@ export function TaskSettings({
     name !== task.name ||
     taskDate !== task.task_date ||
     stopTime !== savedStopTime ||
-    submissionsClosed !== task.submissions_closed ||
+    submissionsOpen !== !task.submissions_closed ||
     selectedClasses.length !== savedClasses.length ||
     selectedClasses.some((cls) => !savedClasses.includes(cls));
 
@@ -116,7 +123,7 @@ export function TaskSettings({
           task_date: taskDate,
           pilot_classes: selectedClasses,
           stop_announcement_time: stopIso,
-          submissions_closed: submissionsClosed,
+          submissions_closed: !submissionsOpen,
         },
       });
 
@@ -217,10 +224,10 @@ export function TaskSettings({
 
         <SwitchList>
           <SwitchField
-            checked={submissionsClosed}
-            onChange={setSubmissionsClosed}
-            label="Closed for track submissions"
-            hint="Pilots can no longer send tracks or manual flights for this task. Organisers still can, so a late recovery does not need this turned off."
+            checked={submissionsOpen}
+            onChange={setSubmissionsOpen}
+            label="Open for track submissions"
+            hint="Turn this off and pilots can no longer send tracks or manual flights for this task. Organisers still can, so a late recovery does not need it turned back on."
           />
         </SwitchList>
       </SettingsForm>

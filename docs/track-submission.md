@@ -364,6 +364,16 @@ says so, because it is then the only record.
 `close_date`, which closes everything; this closes one task, which is what an
 organiser actually wants at the end of a day while tomorrow is still flying.
 
+The **column is negative, the switch is not**. Task settings show it as "Open
+for track submissions", on by default, and invert at the two edges of
+`comp/settings/TaskSettings.tsx`. A switch reads as "turn this on to get it",
+so a negative one made organisers read the row as the opposite of what it did
+(#649). The column keeps its name: its default of 0 is what makes a new task
+open, and renaming it would rewrite four enforcement sites and an API field for
+a wording fix. Everywhere a *closed* task is announced — the task page badge,
+the sentence beside the missing Submit button, the organiser tools card, the
+worker's 403 — says "closed for track submissions" in those words.
+
 Enforced in **four** places, all before the body is read: the self upload, the
 on-behalf upload, the anonymous submit, and the **manual flight** — a manual
 flight is evidence for the task in exactly the way a tracklog is, and leaving
