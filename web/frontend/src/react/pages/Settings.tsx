@@ -332,6 +332,10 @@ const EMPTY_VALUES = Object.fromEntries(
 ) as ProfileValues;
 
 function ProfileSection() {
+  // The display name is saved to the pilot profile AND to the account (the
+  // server keeps the two in step — issue #539), so the header has to be told
+  // rather than left holding the name this page load started with.
+  const { patchUser } = useUser();
   const [values, setValues] = useState<ProfileValues>(EMPTY_VALUES);
   // The last-saved values, for dirty tracking: Save only enables (and the
   // navigation guards only arm) while the form differs from these.
@@ -395,6 +399,7 @@ function ProfileSection() {
         setStatus({ kind: "error", message: err.error || "Failed to save profile" });
         return;
       }
+      const saved = (await res.json()) as Record<string, string | null>;
       // What the server stored (trimmed) becomes the new baseline, so the
       // form is clean again and the Save button disables.
       const normalized = Object.fromEntries(
@@ -402,6 +407,9 @@ function ProfileSection() {
       ) as ProfileValues;
       setValues(normalized);
       setSavedValues(normalized);
+      // The name the SERVER stored, not the one typed: it is the account's
+      // now as well, and the account menu is showing the old one until told.
+      if (typeof saved.name === "string") patchUser({ name: saved.name });
       setStatus({
         kind: "success",
         message:

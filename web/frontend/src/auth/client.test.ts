@@ -8,7 +8,14 @@
  * recovery short of a reload.
  */
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
-import { getCurrentUser, needsOnboarding, ACCOUNT_HINT_KEY } from "./client";
+import {
+  getCurrentUser,
+  getCurrentUserOnce,
+  needsOnboarding,
+  patchCurrentUser,
+  seedCurrentUser,
+  ACCOUNT_HINT_KEY,
+} from "./client";
 
 const USER = {
   id: "u1",
@@ -109,6 +116,46 @@ describe("getCurrentUser", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ user: null }));
 
     await settle(getCurrentUser());
+    expect(localStorage.getItem(ACCOUNT_HINT_KEY)).toBeNull();
+  });
+});
+
+/**
+ * Issue #539 — a display name saved in Settings has to reach the chrome that
+ * is already on screen.
+ *
+ * The account is resolved once per page load, so without this the header and
+ * the static-page hint went on showing the pre-edit name until the next full
+ * reload — while the scores tables beside them showed the new one.
+ */
+describe("patchCurrentUser", () => {
+  test("later readers get the patched account", async () => {
+    seedCurrentUser(USER);
+    patchCurrentUser({ name: "Corrected Name" });
+
+    expect(await getCurrentUserOnce()).toEqual({
+      ...USER,
+      name: "Corrected Name",
+    });
+    // No round trip: this reports a write the server already made.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("the account hint the static chrome reads is updated too", async () => {
+    seedCurrentUser(USER);
+    patchCurrentUser({ name: "Corrected Name" });
+    await getCurrentUserOnce();
+
+    expect(JSON.parse(localStorage.getItem(ACCOUNT_HINT_KEY)!)).toEqual({
+      name: "Corrected Name",
+    });
+  });
+
+  test("is inert when nobody is signed in", async () => {
+    seedCurrentUser(null);
+    patchCurrentUser({ name: "Corrected Name" });
+
+    expect(await getCurrentUserOnce()).toBeNull();
     expect(localStorage.getItem(ACCOUNT_HINT_KEY)).toBeNull();
   });
 });

@@ -9,7 +9,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCurrentUserOnce, type AuthUser } from "../../auth/client";
+import { getCurrentUserOnce, patchCurrentUser, type AuthUser } from "../../auth/client";
 import { safeNext } from "./safe-next";
 
 /**
@@ -55,6 +55,13 @@ interface UserState {
   /** True for real site super admins — reveals the "Preview as" pill. */
   isSuperAdmin: boolean;
   setPreviewRole: (role: PreviewRole) => void;
+  /**
+   * Fold a just-saved account change into the shared user, so the header (and
+   * the static-page hint behind it) stop showing a value the server has
+   * already replaced. Settings' display name is the only caller today — see
+   * issue #539. Pass what the server said it stored, never what was typed.
+   */
+  patchUser: (patch: Partial<AuthUser>) => void;
 }
 
 const UserContext = createContext<UserState>({
@@ -64,6 +71,7 @@ const UserContext = createContext<UserState>({
   previewRole: "actual",
   isSuperAdmin: false,
   setPreviewRole: () => {},
+  patchUser: () => {},
 });
 
 /** One whoami round trip per page load, only made once a user is known. */
@@ -216,6 +224,14 @@ export function UserProvider({
     setPreviewRoleState(role);
   }
 
+  function patchUser(patch: Partial<AuthUser>) {
+    // Both halves matter: the module-level cache answers everyone who asks
+    // later in this page's life, and this state is what re-renders the header
+    // now.
+    patchCurrentUser(patch);
+    setMe((m) => (m.user ? { ...m, user: { ...m.user, ...patch } } : m));
+  }
+
   // The preview only ever *reduces* what a real superadmin sees; for
   // everyone else it is inert (and the pill that sets it never renders).
   const previewing = isSuperAdmin && previewRole !== "actual";
@@ -226,6 +242,7 @@ export function UserProvider({
     previewRole: previewing ? previewRole : "actual",
     isSuperAdmin,
     setPreviewRole,
+    patchUser,
   };
 
   return <UserContext.Provider value={state}>{children}</UserContext.Provider>;

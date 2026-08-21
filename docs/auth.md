@@ -59,9 +59,36 @@ and a display name:
 Onboarding prefills the derived username (re-submitting your own is a no-op, not
 a "taken" rejection) and sends username + name together to POST
 `/api/auth/set-username`, which writes both in one statement — half of the pair
-would bounce the user straight back in. The pilot profile's own copy of the name
-is a separate write to competition-api's PATCH `/api/comp/pilot`; `"user".name`
-is the ACCOUNT's name, which is what /api/auth/me and the header show.
+would bounce the user straight back in.
+
+### Two display names, one write path
+
+`"user".name` is the ACCOUNT's name — what /api/auth/me answers, and so what
+the account menu, the static Astro chrome (via the `glidecomp:account`
+localStorage hint) and the audit log's `actor_name` all show. `pilot.name` is
+the PILOT PROFILE's, seeded from the account at first sign-in and shown in
+scores tables, on the roster and on the report card.
+
+They are separate columns, and only competition-api's PATCH `/api/comp/pilot`
+writes the second. That handler therefore writes the FIRST as well, by calling
+POST `/api/auth/set-name` over the service binding before it touches its own
+rows — forwarding the caller's own credential, so auth-api resolves the session
+and renames that account and no other. The account write goes first because it
+is the hop that can fail on its own; a failure returns 503 with nothing saved,
+rather than a profile renamed and an account left behind.
+
+The hop is skipped when the submitted name already equals the account's, so
+Settings resubmitting every field on every save costs nothing — and a save by
+an account that drifted apart before this existed quietly puts the two back in
+step.
+
+Until this existed (issue #539), the account name was written only at sign-up
+and by onboarding: editing your display name in Settings moved the profile and
+left the account holding the sign-up name for good, so an organiser who
+corrected their name still signed every later entry of a competition's public
+transparency record with the old one. `audit_log.actor_name` is denormalised on
+purpose and is NOT backfilled — a rename changes what gets written next, not
+what was recorded then.
 
 ## Email OTP Flow
 
@@ -119,7 +146,7 @@ alike.
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, `/delete-account`, the dev-only endpoints, and the Better Auth catch-all |
+| `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, `/set-name`, `/delete-account`, the dev-only endpoints, and the Better Auth catch-all |
 | `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, `emailOTP` + `apiKey` plugins, rate limits, 60-day rolling sessions, username field, auto-derive-username create hook, pilot bootstrap on sign-in |
 | `src/otp-email.ts` | Builds the sign-in OTP email (subject/HTML/text) for the Cloudflare Email Sending binding |
 | `src/rate-limit.ts` | Single source of truth for the API-key and email-OTP limits; per-email send throttle over the `rateLimit` table |
@@ -148,6 +175,7 @@ alike.
 |--------|------|---------------|-------------|
 | GET | `/api/auth/me` | No | Returns `{ user }` or `{ user: null }`. Accepts a session cookie **or** an `x-api-key` |
 | POST | `/api/auth/set-username` | Yes | Sets username (3-20 chars, `[a-zA-Z0-9-]`) and, when `name` is sent, the account's display name (1-128 chars) — both in one write |
+| POST | `/api/auth/set-name` | Yes | Sets the account's display name (1-128 chars, trimmed; blank refused). Called by competition-api over the service binding whenever `PATCH /api/comp/pilot` renames a profile, so the two names cannot drift |
 | GET | `/api/auth/preferences` | Yes | Read the caller's UI preferences (`src/routes/preferences.ts`) |
 | PUT | `/api/auth/preferences` | Yes | Update them |
 | POST | `/api/auth/delete-account` | Yes | Purges every R2 object under `u/{userId}/`, then deletes the `user` row (cascades to sessions, accounts, preferences, user tracks/tasks/annotations — see [database.md](database.md)) |

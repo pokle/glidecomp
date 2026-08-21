@@ -152,6 +152,102 @@ describe("POST /api/auth/set-username — display name", () => {
   });
 });
 
+// ── POST /api/auth/set-name ─────────────────────────────────────────────────
+//
+// The account's display name, writable after onboarding for the first time
+// (issue #539). competition-api calls this over the service binding when a
+// pilot profile is renamed, so the account, the header, the static chrome and
+// the audit log's actor_name stop lagging behind the profile.
+
+describe("POST /api/auth/set-name", () => {
+  test("returns 401 with no session", async () => {
+    const res = await request("POST", "/api/auth/set-name", {
+      body: { name: "Nobody" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("renames the account, and /api/auth/me says so", async () => {
+    const cookie = await loginAs("set-name-route-1@test.local", "Old Name");
+    const res = await request("POST", "/api/auth/set-name", {
+      cookie,
+      body: { name: "New Name" },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ name: "New Name" });
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("New Name");
+  });
+
+  test("stores the trimmed name", async () => {
+    const cookie = await loginAs("set-name-route-2@test.local", "Before");
+    const res = await request("POST", "/api/auth/set-name", {
+      cookie,
+      body: { name: "  Padded Name  " },
+    });
+    expect(res.status).toBe(200);
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("Padded Name");
+  });
+
+  test("refuses a blank name rather than clearing the account's", async () => {
+    // `name` is half of the onboarding gate — clearing it would send the
+    // account back through onboarding on its next page load.
+    const cookie = await loginAs("set-name-route-3@test.local", "Keep Me");
+    for (const name of ["", "   "]) {
+      const res = await request("POST", "/api/auth/set-name", {
+        cookie,
+        body: { name },
+      });
+      expect(res.status).toBe(400);
+    }
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("Keep Me");
+  });
+
+  test("refuses a name past the 128-char limit", async () => {
+    const cookie = await loginAs("set-name-route-4@test.local", "Short");
+    const res = await request("POST", "/api/auth/set-name", {
+      cookie,
+      body: { name: "x".repeat(129) },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("refuses a missing or non-string name without throwing", async () => {
+    const cookie = await loginAs("set-name-route-5@test.local", "Intact");
+    for (const body of [{}, { name: 42 }, { name: null }]) {
+      const res = await request("POST", "/api/auth/set-name", { cookie, body });
+      expect(res.status).toBe(400);
+    }
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("Intact");
+  });
+
+  test("renames only the caller's own account", async () => {
+    const other = await loginAs("set-name-route-bystander@test.local", "Bystander");
+    const cookie = await loginAs("set-name-route-6@test.local", "Caller");
+
+    const res = await request("POST", "/api/auth/set-name", {
+      cookie,
+      body: { name: "Caller Renamed" },
+    });
+    expect(res.status).toBe(200);
+
+    const me = await request("GET", "/api/auth/me", { cookie: other });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("Bystander");
+  });
+});
+
 // ── POST /api/auth/dev-login — body validation ──────────────────────────────
 
 describe("POST /api/auth/dev-login — body validation", () => {

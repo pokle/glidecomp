@@ -6,6 +6,26 @@ const AUTH_ATTEMPTS = 3;
 const AUTH_RETRY_DELAY_MS = 50;
 
 /**
+ * The inbound credentials an auth hop may carry onward — and nothing else.
+ * Shared by resolveUser() and the account-name write in routes/pilot-profile,
+ * so both hops forward the caller's OWN credential and auth-api decides who
+ * they are, rather than either one asserting an identity of its own (SEC-10).
+ */
+export function forwardAuthHeaders(headers: Headers): Headers {
+  // Every credential resolveUser's doc comment promises to forward, actually
+  // forwarded. `authorization` used to be named there and dropped, so a caller
+  // sending `Authorization: Bearer <key>` resolved as anonymous with nothing
+  // to say why — the failure mode issue #481 is about, arriving by a different
+  // road.
+  const forward = new Headers();
+  for (const name of ["cookie", "x-api-key", "authorization"]) {
+    const value = headers.get(name);
+    if (value) forward.set(name, value);
+  }
+  return forward;
+}
+
+/**
  * Resolve the caller via auth-api. Forward whichever inbound credential
  * the client sent: a Better Auth session cookie (browser), or an API key
  * via `x-api-key` / `Authorization: Bearer` (programmatic / direct API
@@ -34,15 +54,7 @@ async function resolveUser(
   env: Env,
   headers: Headers
 ): Promise<AuthUser | null> {
-  // Every credential this doc comment promises to forward, actually forwarded.
-  // `authorization` used to be named here and dropped, so a caller sending
-  // `Authorization: Bearer <key>` resolved as anonymous with nothing to say
-  // why — the failure mode issue #481 is about, arriving by a different road.
-  const forward = new Headers();
-  for (const name of ["cookie", "x-api-key", "authorization"]) {
-    const value = headers.get(name);
-    if (value) forward.set(name, value);
-  }
+  const forward = forwardAuthHeaders(headers);
 
   if (![...forward.keys()].length) return null;
 

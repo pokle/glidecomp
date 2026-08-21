@@ -11,9 +11,9 @@
  */
 
 import { Hono } from "hono";
-import type { AuthedEnv } from "../env";
+import type { AuthedEnv, Env } from "../env";
 import { encodeId } from "../sqids";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, forwardAuthHeaders } from "../middleware/auth";
 import { updatePilotSchema, validated } from "../validators";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { audit } from "../audit";
@@ -112,6 +112,78 @@ function serializeProfile(row: ProfileRow | null, fallbackName: string) {
     emergency_contact_name: row.emergency_contact_name ?? null,
     emergency_contact_phone: row.emergency_contact_phone ?? null,
   };
+}
+
+// ── The account's display name ──
+
+/** Attempts at the account-name write before it is reported as a failure. */
+const SET_NAME_ATTEMPTS = 3;
+const SET_NAME_RETRY_DELAY_MS = 50;
+
+/**
+ * Push a renamed pilot profile through to the ACCOUNT's display name.
+ *
+ * There are two display names in play and they had only one writer between
+ * them (issue #539): `pilot.name` is the profile, written here; `"user".name`
+ * is the account, which /api/auth/me answers and which the account menu, the
+ * static Astro chrome and the audit log's `actor_name` all read. Only sign-up
+ * and onboarding ever wrote the second one, so a Settings rename moved the
+ * profile and left the account holding the sign-up name — an organiser who
+ * corrected their name still signed every later audit entry with the old one,
+ * on a competition's public transparency record.
+ *
+ * Doing it HERE rather than asking the browser for a second request is what
+ * makes it hold: `PATCH /api/comp/pilot` is the only writer of `pilot.name`,
+ * so a future caller cannot forget the other half the way Settings did.
+ *
+ * The caller's own credential is forwarded and auth-api resolves the session
+ * itself, so this renames the caller's account and no one else's.
+ *
+ * Throws once its retries are exhausted; a 4xx is a real answer and is
+ * returned rather than retried.
+ */
+async function setAccountName(
+  env: Env,
+  headers: Headers,
+  name: string
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const forward = forwardAuthHeaders(headers);
+  forward.set("Content-Type", "application/json");
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < SET_NAME_ATTEMPTS; attempt++) {
+    try {
+      const res = await env.AUTH_API.fetch(
+        new Request("https://auth/api/auth/set-name", {
+          method: "POST",
+          headers: forward,
+          body: JSON.stringify({ name }),
+        })
+      );
+      // 5xx: auth-api is up but couldn't write. Retryable — and the UPDATE it
+      // performs is idempotent, so a retry can only land the same row twice.
+      if (res.status >= 500) {
+        throw new Error(`auth-api /set-name responded ${res.status}`);
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        return {
+          ok: false,
+          status: res.status,
+          error: body.error ?? "Could not update your account name",
+        };
+      }
+      return { ok: true };
+    } catch (err) {
+      lastErr = err;
+      if (attempt < SET_NAME_ATTEMPTS - 1) {
+        await new Promise((r) =>
+          setTimeout(r, SET_NAME_RETRY_DELAY_MS * (attempt + 1))
+        );
+      }
+    }
+  }
+  throw lastErr;
 }
 
 export const pilotProfileRoutes = new Hono<AuthedEnv>()
@@ -242,6 +314,46 @@ export const pilotProfileRoutes = new Hono<AuthedEnv>()
       const user = c.var.user;
       const body = c.req.valid("json");
 
+      // Trimmed once, and the SAME string goes to both rows — writing " Bob "
+      // to the pilot and "Bob" to the account would be this very bug in
+      // miniature.
+      const newName = body.name === undefined ? undefined : body.name.trim();
+      if (newName !== undefined) {
+        // A name that is only whitespace passes `min(1)` and would clear the
+        // account's, putting it back through the onboarding gate — the one
+        // constraint issue #539 names for any fix.
+        if (newName === "") {
+          return c.json({ error: "Display name is required" }, 400);
+        }
+        // The account's copy goes FIRST, and only when the two actually
+        // differ. First, because it is the hop that can fail on its own:
+        // writing it before the local rows means a failure leaves nothing
+        // half-written, so the retry the user is told to make starts from a
+        // clean slate. Only-when-different, because Settings resubmits every
+        // field on every save — a phone-number edit must not be able to fail
+        // on an auth-api blip — and because comparing against the account name
+        // we were just handed also quietly repairs an account that drifted
+        // apart before this route kept the two in step.
+        if (newName !== user.name) {
+          let synced;
+          try {
+            synced = await setAccountName(c.env, c.req.raw.headers, newName);
+          } catch (err) {
+            console.error("[competition-api] auth-api set-name unreachable", err);
+            return c.json(
+              { error: "Could not save your name right now. Please try again." },
+              503
+            );
+          }
+          if (!synced.ok) {
+            // auth-api gave a real answer and refused. It validates the same
+            // 1-128 characters this route does, so in practice this is the
+            // session having gone away between requireAuth and now.
+            return c.json({ error: synced.error }, synced.status === 401 ? 401 : 400);
+          }
+        }
+      }
+
       const existing = await c.env.DB.prepare(
         "SELECT pilot_id FROM pilot WHERE user_id = ?"
       )
@@ -262,7 +374,9 @@ export const pilotProfileRoutes = new Hono<AuthedEnv>()
       for (const col of PROFILE_COLUMNS) {
         if (body[col as keyof typeof body] !== undefined) {
           updates.push(`${col} = ?`);
-          values.push(body[col as keyof typeof body] ?? null);
+          values.push(
+            col === "name" ? newName! : body[col as keyof typeof body] ?? null
+          );
         }
       }
 

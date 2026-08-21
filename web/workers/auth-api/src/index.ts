@@ -175,6 +175,53 @@ app.post("/api/auth/set-username", async (c) => {
   return c.json({ username, name: name ?? session.user.name });
 });
 
+// POST /api/auth/set-name — update the authenticated account's display name.
+//
+// `"user".name` is what /api/auth/me answers, so it is the name the account
+// menu, the static Astro chrome and — the one that matters — the audit log's
+// `actor_name` all show. Before this route existed the only writer after
+// sign-up was set-username, which onboarding calls once and nothing calls
+// again, so editing the display name in Settings moved the PILOT PROFILE's
+// name and left the account holding the sign-up one forever (issue #539).
+//
+// The caller is competition-api's PATCH /api/comp/pilot, over the service
+// binding, forwarding the browser's own credential — so the rename travels
+// with the pilot-profile write that provoked it and neither field can be
+// updated without the other. It authenticates the session here rather than
+// trusting a "this is user X" header, exactly as /api/auth/me does.
+//
+// Empty is refused, not stored: `name` is half of the onboarding gate (see
+// needsOnboarding() in src/auth/client.ts), so clearing it would bounce the
+// account back into onboarding on its next page load.
+app.post("/api/auth/set-name", async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  });
+  if (!session) {
+    return c.json({ error: "Not authenticated" }, 401);
+  }
+
+  const body = await c.req
+    .json<{ name?: unknown }>()
+    .catch(() => ({ name: undefined }));
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (name.length === 0 || name.length > MAX_NAME_LENGTH) {
+    return c.json(
+      { error: `Name must be 1-${MAX_NAME_LENGTH} characters` },
+      400
+    );
+  }
+
+  await c.env.glidecomp_auth.prepare(
+    'UPDATE "user" SET name = ?, "updatedAt" = ? WHERE id = ?'
+  )
+    .bind(name, new Date().toISOString(), session.user.id)
+    .run();
+
+  return c.json({ name });
+});
+
 // POST /api/auth/delete-account — delete user and all associated data
 app.post("/api/auth/delete-account", async (c) => {
   const auth = createAuth(c.env);
