@@ -221,7 +221,7 @@ export function TaskDetail() {
             // Above the fold, so a pilot learns the task stopped taking files
             // without first choosing one and being refused.
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-              <Badge>Submissions closed</Badge>
+              <Badge>Closed for track submissions</Badge>
               <span className="text-muted-foreground">
                 The organisers are no longer accepting tracks for this task.
               </span>
@@ -295,7 +295,7 @@ export function TaskDetail() {
             because the flag stops pilots, not the scorekeeper. */}
         {mounted && !isClosed && task.submissions_closed ? (
           <p className="self-center text-sm text-muted-foreground">
-            Submissions for this task are closed.
+            This task is closed for track submissions.
             {isAdmin ? " You can still upload as an organiser." : ""}
           </p>
         ) : null}

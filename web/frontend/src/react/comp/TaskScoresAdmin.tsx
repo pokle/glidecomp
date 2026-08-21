@@ -277,8 +277,8 @@ export function TaskScoresAdmin({
         // Otherwise an organiser who has just closed the task is left
         // wondering why their own upload buttons still work.
         <p className="mt-1 text-sm text-muted-foreground">
-          This task is closed for submissions. Pilots can no longer send
-          tracks; these organiser tools still work.
+          This task is closed for track submissions. Pilots can no longer
+          send tracks; these organiser tools still work.
         </p>
       ) : null}
 

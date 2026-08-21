@@ -628,15 +628,16 @@ test.describe("submitting a track without an account", () => {
 
       // A switch on the settings page, where it was a checkbox in the dialog:
       // it is an on/off setting rather than a form checkbox, and RAC gives it
-      // role="switch" accordingly.
+      // role="switch" accordingly. It reads positively (#649), so closing the
+      // task is turning it OFF.
       const box = page.getByRole("switch", {
-        name: /^Closed for track submissions/,
+        name: /^Open for track submissions/,
       });
-      await expect(box).not.toBeChecked(); // default 0, as the migration sets
+      await expect(box).toBeChecked(); // submissions_closed default 0 = open
       // RAC hides the real input under the styled track, so the visible label
       // is both what a person taps and the only thing Playwright can.
-      await page.getByText("Closed for track submissions").click();
-      await expect(box).toBeChecked();
+      await page.getByText("Open for track submissions").click();
+      await expect(box).not.toBeChecked();
       await page.getByRole("button", { name: /^Save/ }).click();
 
       await expect
@@ -655,9 +656,10 @@ test.describe("submitting a track without an account", () => {
       // Saving returns to the task page, which is what the organiser was
       // looking at — and where the notice belongs: said above the fold, so a
       // pilot learns before choosing a file.
-      await expect(page.getByText("Submissions closed")).toBeVisible({
-        timeout: 20_000,
-      });
+      // Exact: the same words appear inside the sentences below the badge.
+      await expect(
+        page.getByText("Closed for track submissions", { exact: true })
+      ).toBeVisible({ timeout: 20_000 });
 
       // A signed-OUT visitor gets the sentence, not a button that would 403.
       const visitor = await page.context().browser()!.newContext();
@@ -666,7 +668,7 @@ test.describe("submitting a track without an account", () => {
         `${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}`
       );
       await expect(
-        visitorPage.getByText("Submissions for this task are closed.")
+        visitorPage.getByText("This task is closed for track submissions.")
       ).toBeVisible({ timeout: 20_000 });
       await expect(
         visitorPage.getByRole("button", { name: "Submit track" })
