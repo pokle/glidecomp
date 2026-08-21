@@ -140,10 +140,30 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Two halves with different costs: the browser binaries (~9s of download)
-      # cache cleanly under ~/.cache/ms-playwright, the OS packages that
-      # `--with-deps` apt-installs (~11s, mostly fonts) do not. So cache the
-      # first and, on a hit, run `install-deps` for the second.
+      # The browser binaries cache cleanly under ~/.cache/ms-playwright (~9s of
+      # download on a miss, near-free on a hit). Its OS dependencies do NOT:
+      # `install-deps` apt-installs them into /usr/lib and /usr/share, which
+      # actions/cache cannot restore, so that step re-ran every job forever —
+      # 11s, 12s, 19s and 26s on the four jobs of run 32481474298, the variance
+      # as annoying as the cost.
+      #
+      # It is gone now, because ubuntu-latest already ships what headless
+      # Chromium needs. That is a claim about the RUNNER IMAGE, not about
+      # Playwright, so it can be falsified by a GitHub image update rather than
+      # by anything in this repo — but it fails loudly if it ever is: Chromium
+      # refuses to launch and every spec in the job errors on browser startup.
+      # There is no quiet-wrong version of this, which is what makes dropping
+      # it safe to try.
+      #
+      # `--with-deps` is off the install below for the same reason (that flag
+      # IS install-deps). The suite does no visual diffing, so a font the image
+      # lacks cannot silently shift a screenshot past a threshold; the only
+      # assertions near text are on its content, not its rasterisation.
+      #
+      # Running the whole matrix inside mcr.microsoft.com/playwright was the
+      # other way to skip apt, and it measured WORSE: the image pull cost a
+      # flat 36s against the ~23s of cache-plus-apt it replaced, because
+      # GitHub-hosted runners are fresh VMs with no layer cache. See #657.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
@@ -153,11 +173,7 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium
-
-      - name: Install Playwright system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium
+        run: bunx playwright install chromium
 
       - name: Create auth .dev.vars
         run: |
@@ -257,6 +273,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # No apt step here either — see the note on the E2E job above.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
@@ -266,11 +283,7 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium
-
-      - name: Install Playwright system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium
+        run: bunx playwright install chromium
 
       # BETTER_AUTH_URL is :3100 here, not :3000 — this suite's frontend is
       # `wrangler pages dev` on the SSR port. Nothing in ssr.spec.ts signs in
