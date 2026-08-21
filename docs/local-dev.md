@@ -137,8 +137,15 @@ second pass is the whole point.
 - Playwright's Chromium installs itself. `test:e2e` and `test:e2e:ssr` run
   `web/scripts/ensure-playwright-browsers.sh` first, which downloads the build
   the PINNED Playwright asks for if it is absent (~300 MB, about a minute) and
-  is otherwise a silent ~1s no-op. CI installs its own with `--with-deps` and
-  caches it, so the check costs nothing there.
+  is otherwise a silent ~1s no-op. CI installs and caches its own, so the check
+  costs nothing there.
+  - CI installs the browser **without** `--with-deps`: `ubuntu-latest` already
+    ships what headless Chromium needs, and the apt half could never be cached
+    (it writes to `/usr/lib` and `/usr/share`), so it re-ran every job — 11–26s
+    each, three shards a run. If a GitHub runner-image change ever removes a
+    library, this fails loudly, with Chromium refusing to launch, rather than
+    quietly: the suite does no visual diffing, so there is no screenshot a
+    missing font could shift past a threshold unnoticed.
   - Playwright ties the browser revision to the library version, so a machine
     that already has *a* Chromium usually still lacks *this* one — the web
     containers pre-bake revision 1194 (Chromium 141) while 1.62.1 wants 1234
