@@ -90,19 +90,40 @@ SEC-22 was still exploitable in comp mode: the display name there comes from the
 
 Validation rejects or normalises clearly-bad input without corrupting legitimate
 values. It is cheap defence-in-depth and complements — never replaces — output
-encoding:
+encoding. All of it is **implemented** (issue #232), in
+`web/workers/competition-api/src/validators.ts`, as three schema builders every
+user-entered comp text field is built from:
 
-- **Bound length** (already done: `z.string().min(1).max(128)`).
-- **Reject control characters** and normalise Unicode on user text fields.
-- Optionally **reject** (HTTP 400) — not silently strip — a literal `<` or `>` in
-  name-type fields. Real names never contain them, so this shrinks the attack
-  surface without mangling `O'Brien` or `Müller`. Note that `"`, `'`, and `&` are
-  legitimate in names and teams and must still pass through, so **output encoding
-  remains mandatory regardless.**
+| Builder | Used for | Rejects | Normalises |
+|---|---|---|---|
+| `nameText` | pilot / team / class / comp / task names, gliders, sporting-body IDs | control characters, `<`, `>` | NFC |
+| `plainText` | phones, driver contact, penalty reason, status notes, close date | control characters | NFC |
+| `proseText` | task weather notes | control characters except tab / LF / CR | NFC |
 
-If such rejection is added, it must be audit-logged like any other mutation
-outcome and surfaced to the user as a clear validation error, not a silent edit
-of their data.
+- **Bound length** (`z.string().min(1).max(128)`) — unchanged; the builders wrap
+  the existing bounded string rather than replacing it.
+- **Control characters** (Unicode category Cc — C0, DEL and C1, the same set
+  the waypoints route's `\p{Cc}` check uses) are rejected everywhere. They are never
+  legitimate in these fields, and a raw line break is how one CSV row or one
+  audit-log line becomes two.
+- A literal `<` or `>` in a **name-type** field is **rejected** (HTTP 400), never
+  silently stripped. Real names never contain them, so this shrinks the attack
+  surface without mangling `O'Brien` or `Müller`. `driver_contact` is
+  deliberately *not* a name field — `Jo <jo@example.com>` is a real way to write
+  a contact — which is a good illustration of why the rule cannot be applied
+  blindly to every string.
+- `"`, `'`, and `&` are legitimate in names and teams and still pass through, so
+  **output encoding remains mandatory regardless.**
+- **NFC normalisation** is the one transform, and it is canonical equivalence —
+  the same text in its canonical form — so `Müller` typed as U+00FC and as
+  U+0075 U+0308 sort, dedupe and link-match as one name.
+
+A rejection surfaces to the user as a clear validation error naming the field —
+`validated()` prefixes the zod path, so a bulk roster save answers
+`pilots.3.registered_pilot_name: must not contain < or >` and the grid can point
+at the row. It is not audit-logged, because nothing is written: a rejected
+request never reaches the handler that would have logged it. Coverage:
+`web/workers/competition-api/test/user-text-validation.test.ts`.
 
 ## The actual fix for the XSS class
 
