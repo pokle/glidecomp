@@ -25,11 +25,99 @@ export function validated<T extends z.ZodType, Target extends keyof ValidationTa
 
 const MAX_TEXT = 128;
 
+// ── User-entered text: validate on input, never sanitise (issue #232) ──
+//
+// Defence-in-depth for SEC-22. The value is still stored EXACTLY as typed and
+// every sink still encodes for its own grammar — see
+// docs/security-output-encoding.md, which is why nothing here HTML-encodes and
+// why the frontend's output encoding stays mandatory. What these rules add is a
+// door the obviously-hostile does not get through:
+//
+//  - **Control characters are rejected.** C0 and DEL are never legitimate in a
+//    name, a class or a phone number, and they are how a value smuggles a line
+//    break into a CSV cell, an audit-log line or a log file.
+//  - **Angle brackets are rejected in name-type fields.** No real pilot, team,
+//    class or glider carries "<" or ">", so refusing them shrinks the markup
+//    attack surface. Quotes, apostrophes and ampersands are legitimate
+//    (O'Brien, "Fly & Co") and pass through untouched — which is exactly why
+//    output encoding, not this, remains the real defence.
+//  - **Unicode is normalised to NFC** so "Müller" typed as U+00FC and as
+//    U+0075 U+0308 becomes the same bytes: names sort, dedupe and link-match on
+//    what is stored. Canonical equivalence — the same text in its canonical
+//    form — not an edit of what the user wrote.
+//
+// A violation is a 400 naming the field (see `validated()` above), never a
+// silent repair. Nothing is audited because nothing is written: a rejected
+// request never reaches the handler that would have logged it.
+
+/**
+ * Unicode category Cc — C0, DEL and C1 — matched by code point rather than by
+ * an escape sequence, so what the rule covers is legible in the source. Same
+ * set as the `\p{Cc}` check the waypoints route has carried since its own
+ * import-validation change; the two agree on purpose.
+ */
+function isControlChar(c: number): boolean {
+  return c < 0x20 || (c >= 0x7f && c <= 0x9f);
+}
+
+function hasControlChars(v: string): boolean {
+  for (let i = 0; i < v.length; i++) {
+    if (isControlChar(v.charCodeAt(i))) return true;
+  }
+  return false;
+}
+
+/** The same, but tab / LF / CR are prose, not smuggling. */
+function hasControlCharsBeyondBreaks(v: string): boolean {
+  for (let i = 0; i < v.length; i++) {
+    const c = v.charCodeAt(i);
+    if (c === 0x09 || c === 0x0a || c === 0x0d) continue;
+    if (isControlChar(c)) return true;
+  }
+  return false;
+}
+
+const ANGLE_BRACKETS = /[<>]/;
+
+const NO_CONTROL_CHARS = "must not contain control characters";
+const NO_ANGLE_BRACKETS = "must not contain < or >";
+
+const toNFC = (v: string) => v.normalize("NFC");
+
+/**
+ * Short free text a person typed that is not a name: phone numbers, sporting
+ * body IDs, a driver's contact details, a scorekeeper's one-line reason.
+ * Angle brackets survive here — "Jo <jo@example.com>" is a real way to write
+ * a contact.
+ */
+const plainText = (base: z.ZodString) =>
+  base.refine((v) => !hasControlChars(v), NO_CONTROL_CHARS).transform(toNFC);
+
+/** Text that names something: a pilot, a team, a class, a glider. */
+const nameText = (base: z.ZodString) =>
+  base
+    .refine((v) => !hasControlChars(v), NO_CONTROL_CHARS)
+    .refine((v) => !ANGLE_BRACKETS.test(v), NO_ANGLE_BRACKETS)
+    .transform(toNFC);
+
+/** Multi-line prose — the organiser's weather debrief. Line breaks survive. */
+const proseText = (base: z.ZodString) =>
+  base
+    .refine((v) => !hasControlCharsBeyondBreaks(v), NO_CONTROL_CHARS)
+    .transform(toNFC);
+
+/** A required name-type field, bounded at MAX_TEXT. */
+const requiredName = () => nameText(z.string().min(1).max(MAX_TEXT));
+/** An optional, nullable name-type field, bounded at MAX_TEXT. */
+const optionalName = () => nameText(z.string().max(MAX_TEXT)).nullable().optional();
+/** An optional, nullable non-name text field, bounded at MAX_TEXT. */
+const optionalPlain = () => plainText(z.string().max(MAX_TEXT)).nullable().optional();
+
 /** Character cap on a task's weather notes. Room for a few paragraphs of
  * debrief prose without letting the field become a document store. */
 export const MAX_WEATHER_NOTES = 4000;
 
-const pilotClassString = z.string().min(1).max(MAX_TEXT);
+const pilotClassString = requiredName();
 
 const pilotClassesArray = z
   .array(pilotClassString)
@@ -121,9 +209,9 @@ export const seriesScoringSchema = z.enum(["total", "ftv"]);
 export const ftvFactorSchema = z.number().gt(0).lt(1);
 
 export const createCompSchema = z.object({
-  name: z.string().min(1).max(MAX_TEXT),
+  name: requiredName(),
   category: z.enum(["hg", "pg"]),
-  close_date: z.string().max(MAX_TEXT).nullable().optional(),
+  close_date: optionalPlain(),
   test: z.boolean().optional(),
   pilot_classes: pilotClassesArray.optional(),
   default_pilot_class: pilotClassString.optional(),
@@ -135,9 +223,9 @@ export const createCompSchema = z.object({
 });
 
 export const updateCompSchema = z.object({
-  name: z.string().min(1).max(MAX_TEXT).optional(),
+  name: requiredName().optional(),
   category: z.enum(["hg", "pg"]).optional(),
-  close_date: z.string().max(MAX_TEXT).nullable().optional(),
+  close_date: optionalPlain(),
   test: z.boolean().optional(),
   pilot_classes: pilotClassesArray.optional(),
   default_pilot_class: pilotClassString.optional(),
@@ -161,7 +249,7 @@ export const updateCompSchema = z.object({
 // manual flights replace (issue #306).
 export const upsertPilotStatusSchema = z.object({
   status_key: z.enum(["absent", "dnf"]),
-  note: z.string().max(MAX_TEXT).nullable().optional(),
+  note: optionalPlain(),
 });
 
 // ── Manual flight (per-task, per-pilot) validators ──
@@ -181,15 +269,17 @@ export const upsertManualFlightSchema = z
   .strict();
 
 export const updatePilotStatusNoteSchema = z.object({
-  note: z.string().max(MAX_TEXT).nullable(),
+  note: plainText(z.string().max(MAX_TEXT)).nullable(),
 });
 
 // ── Pilot profile validators ──
 
-const idField = z.string().max(MAX_TEXT).nullable().optional();
+// A sporting-body membership number. Name-type: it is displayed beside the
+// pilot and no real licence number carries an angle bracket.
+const idField = optionalName();
 
 export const updatePilotSchema = z.object({
-  name: z.string().min(1).max(MAX_TEXT).optional(),
+  name: requiredName().optional(),
   civl_id: idField,
   safa_id: idField,
   ushpa_id: idField,
@@ -197,17 +287,17 @@ export const updatePilotSchema = z.object({
   dhv_id: idField,
   ffvl_id: idField,
   fai_id: idField,
-  phone: z.string().max(MAX_TEXT).nullable().optional(),
-  glider: z.string().max(MAX_TEXT).nullable().optional(),
-  emergency_contact_name: z.string().max(MAX_TEXT).nullable().optional(),
-  emergency_contact_phone: z.string().max(MAX_TEXT).nullable().optional(),
+  phone: optionalPlain(),
+  glider: optionalName(),
+  emergency_contact_name: optionalName(),
+  emergency_contact_phone: optionalPlain(),
 });
 
 // ── Track validators ──
 
 export const updatePenaltySchema = z.object({
   penalty_points: z.number().min(-10000).max(10000),
-  penalty_reason: z.string().max(MAX_TEXT).nullable().optional(),
+  penalty_reason: optionalPlain(),
 });
 
 /**
@@ -225,7 +315,7 @@ export const trackQualityOverrideSchema = z.object({
 /** Shared by the comp-pilot ranking date and the task validators below. */
 const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
-const optionalText = z.string().max(MAX_TEXT).nullable().optional();
+const optionalText = optionalName();
 
 /**
  * Fields that admins can set per-row for a comp_pilot. The registered_*
@@ -234,7 +324,7 @@ const optionalText = z.string().max(MAX_TEXT).nullable().optional();
  */
 export const compPilotFieldsSchema = z.object({
   // Identity (admin-entered; used both for display and for link resolution)
-  registered_pilot_name: z.string().min(1).max(MAX_TEXT),
+  registered_pilot_name: requiredName(),
   registered_pilot_email: z.string().email().max(MAX_TEXT).nullable().optional(),
   registered_pilot_civl_id: optionalText,
   registered_pilot_safa_id: optionalText,
@@ -246,8 +336,10 @@ export const compPilotFieldsSchema = z.object({
   registered_pilot_glider: optionalText,
   // Competition-specific
   pilot_class: pilotClassString,
-  team_name: optionalText,
-  driver_contact: optionalText,
+  team_name: optionalName(),
+  // Free text, so angle brackets stay legal: "Jo <jo@example.com>" is a real
+  // way to write a driver's contact details.
+  driver_contact: optionalPlain(),
   // The pilot's WPRS score, copied onto the roster (never looked up live —
   // see migrations 0029/0030) and overridable by the organiser. The two source
   // fields say which CIVL list and which monthly snapshot it came from; both
@@ -308,7 +400,7 @@ export const civlRankingLookupSchema = z.object({
   pilots: z
     .array(
       z.object({
-        name: z.string().max(MAX_TEXT),
+        name: nameText(z.string().max(MAX_TEXT)),
         civl_id: optionalText,
       })
     )
@@ -402,14 +494,14 @@ export const xctskSchema = z
   );
 
 export const createTaskSchema = z.object({
-  name: z.string().min(1).max(MAX_TEXT),
+  name: requiredName(),
   task_date: z.string().regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)"),
   pilot_classes: pilotClassesArray,
   xctsk: xctskSchema.nullable().optional(),
 });
 
 export const updateTaskSchema = z.object({
-  name: z.string().min(1).max(MAX_TEXT).optional(),
+  name: requiredName().optional(),
   task_date: z
     .string()
     .regex(isoDateRegex, "Must be ISO date (YYYY-MM-DD)")
@@ -427,7 +519,7 @@ export const updateTaskSchema = z.object({
   // The organizer's free-text account of the day's conditions — "overdeveloped
   // by 2pm, glass off at 3". Longer than MAX_TEXT because this is prose, not a
   // label; not a scoring input, so no format is imposed beyond a length cap.
-  weather_notes: z.string().max(MAX_WEATHER_NOTES).optional(),
+  weather_notes: proseText(z.string().max(MAX_WEATHER_NOTES)).optional(),
   // "This task is done — stop sending me files." Blocks tracks and manual
   // flights for THIS task only; organisers still upload, so a recovered SD
   // card does not need the switch flipped twice. Not a scoring input: whether

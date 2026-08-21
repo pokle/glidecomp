@@ -82,7 +82,7 @@ rounds linked here.
 | SEC-19 | Dirty `bun audit` — transitive advisories | Superseded by SEC-34 | [2026-06-20](security-review/rounds/2026-06-20.md) | [2026-07-26](security-review/rounds/2026-07-26.md) |
 | SEC-20 | `parseXCTask` `TypeError` on untrusted input | Fixed | [2026-06-21](security-review/rounds/2026-06-21.md) | Fixed same round |
 | SEC-21 | `parseXCTaskAsync` deflate-path `TypeError` | Fixed | [2026-06-21 (II)](security-review/rounds/2026-06-21-ii.md) | Fixed same round |
-| SEC-22 | Stored XSS via unescaped pilot name in score tables + map HUD | Fixed | [2026-07-03](security-review/rounds/2026-07-03.md) | Fixed same round |
+| SEC-22 | Stored XSS via unescaped pilot name in score tables + map HUD | Fixed | [2026-07-03](security-review/rounds/2026-07-03.md) | Fixed same round; server-side input validation added 2026-08-21 (issue #232) as defence-in-depth |
 | SEC-23 | Replay gaggle tooltip renders turnpoint name into `innerHTML` | Fixed | [2026-07-03](security-review/rounds/2026-07-03.md) | Fixed same round |
 | SEC-24 | Super-admin users page interpolates username into `href` | Fixed | [2026-07-03](security-review/rounds/2026-07-03.md) | Fixed same round |
 | SEC-25 | `comp-detail.ts` quote-unsafe `escapeHtml` | Closed / moot | [2026-07-03](security-review/rounds/2026-07-03.md) | [2026-07-06](security-review/rounds/2026-07-06.md) — file deleted |
