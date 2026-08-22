@@ -210,6 +210,37 @@ export interface BuildRouteResult {
 }
 
 /**
+ * The one thing wrong with a row, said in the fewest words a list can print
+ * beside it — or null when the row is fine.
+ *
+ * Deliberately here rather than in the list component: it reads the same
+ * bounds {@link buildRoute} does, so the note on the row and the error that
+ * blocks the save can never tell the reader different stories.
+ */
+export function rowProblem(row: RouteRow): string | null {
+  if (String(row.name).trim() === "") return "Needs a name";
+  if (String(row.name).trim().length > MAX_NAME) return "Name is too long";
+  if (parseCoords(String(row.coords)) === null) return "Needs coordinates";
+  const radius = Number(row.radius);
+  if (
+    String(row.radius).trim() === "" ||
+    !Number.isInteger(radius) ||
+    radius < MIN_RADIUS ||
+    radius > MAX_RADIUS
+  ) {
+    return "Needs a radius";
+  }
+  const altitude = String(row.altitude).trim();
+  if (altitude !== "") {
+    const alt = Number(altitude);
+    if (!Number.isFinite(alt) || alt < MIN_ALT || alt > MAX_ALT) {
+      return "Altitude is out of range";
+    }
+  }
+  return null;
+}
+
+/**
  * Convert grid rows to turnpoints, collecting blocking errors and
  * non-blocking warnings. Rows that are entirely empty (no name, no
  * coordinates) are skipped, mirroring the pilots grid's "blank rows are

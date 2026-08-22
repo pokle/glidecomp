@@ -1,21 +1,33 @@
 /**
- * The one-turnpoint editor behind the route grid's Add and Edit.
+ * The one-turnpoint editor — every field of a single turnpoint, at full
+ * screen.
  *
- * Split out of RouteEditorDialog, which held it below the dialog that opens
- * it. Draft-first: nothing here touches the route until Save, so cancelling
- * discards cleanly.
+ * It was a centred `Modal` (TurnpointDetailsDialog) whose panel scrolled
+ * internally inside a `max-h-[calc(100dvh-2rem)]` box: a scrolling form inside
+ * a scrolling page, on the surface most likely to be used one-handed on a
+ * hill. Now it is a `rac/full-screen-sheet.tsx`, which reads as a page on a
+ * phone while keeping the route editor MOUNTED behind it. That last part is
+ * the reason it is not a route of its own: the whole route is unsaved React
+ * state, a sibling route would unmount it, and — because
+ * `lib/use-unsaved-changes-guard.ts` intercepts every same-origin anchor click
+ * while the route is dirty — a row that linked anywhere would prompt
+ * "Discard route changes?" on the way in.
+ *
+ * There is NO Cancel. Nothing here is saved: the turnpoint joins a draft
+ * route, and the route editor's own Cancel is what throws the lot away. A
+ * draft inside a draft is the confusing part, so Done and the back gesture do
+ * the same thing — keep the edits — and Delete is the only way to lose a
+ * turnpoint.
+ *
+ * The draft is applied on the way OUT rather than per keystroke: the editor
+ * re-runs `buildRoute` and repaints the map preview on every change to `rows`,
+ * which is what draft-on-save exists to avoid.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useFilter } from "react-aria-components";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Modal,
-} from "@/react/rac/dialog";
+import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
 import { AltitudeField } from "./fields";
 import { ChoiceList } from "@/react/rac/choice-list";
@@ -28,21 +40,14 @@ import {
   type TurnpointDraft,
 } from "./turnpoint-draft";
 
-/**
- * Add / edit one turnpoint. A self-contained dialog over a local draft: it
- * loads from a competition waypoint via the search field at the top, or takes
- * every field by hand (code, name, type, radius chips + custom NumberField,
- * coordinates, altitude). Nothing touches the route until Save — so adding is
- * draft-first (Cancel adds nothing) and editing is atomic (Cancel keeps the
- * turnpoint as it was). The parent's onSave appends (add) or patches (edit).
- */
-export function TurnpointDetailsDialog({
+export function TurnpointSheet({
   mode,
   initial,
   waypointRecords,
   wpLoading,
   compId,
   onSave,
+  onDelete,
   onClose,
 }: {
   mode: "add" | "edit";
@@ -50,12 +55,15 @@ export function TurnpointDetailsDialog({
   waypointRecords: WaypointFileRecord[];
   wpLoading: boolean;
   compId: string;
+  /** Apply the draft to the route: append (add) or patch (edit). */
   onSave: (draft: TurnpointDraft) => void;
+  /** Remove this turnpoint from the route. Absent while adding. */
+  onDelete?: () => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<TurnpointDraft>(initial);
-  // The waypoint ComboBox's query. Controlled so picking a waypoint can clear
-  // it (see applyWaypoint) and so the filtering below can see it.
+  // The waypoint search query. Controlled so picking a waypoint can clear it
+  // (see applyWaypoint) and so the filtering below can see it.
   const [wpQuery, setWpQuery] = useState("");
   const { contains } = useFilter({ sensitivity: "base" });
   const radius = Number(draft.radius);
@@ -65,7 +73,28 @@ export function TurnpointDetailsDialog({
     String(draft.altitude ?? "").trim() === "" ? NaN : Number(draft.altitude);
   const label = draft.name || "turnpoint";
 
+  // Everything that leaves this sheet keeps the edits — except a delete, which
+  // must not then hand the deleted turnpoint back through onSave.
+  const deletedRef = useRef(false);
+
   const patch = (p: Partial<TurnpointDraft>) => setDraft((d) => ({ ...d, ...p }));
+
+  /**
+   * Leave, keeping whatever was typed.
+   *
+   * A draft with neither a name nor coordinates is nothing to keep: dismissing
+   * a freshly opened Add would otherwise leave a blank row in the list asking
+   * to be filled in. Anything else is applied even when it's incomplete — the
+   * list says what a turnpoint still needs, and the editor's Save stays blocked
+   * until it has it, so a half-finished turnpoint is visible rather than lost.
+   */
+  function leave() {
+    if (deletedRef.current) return onClose();
+    const empty =
+      String(draft.name).trim() === "" && String(draft.coords).trim() === "";
+    if (!empty) onSave(draft);
+    onClose();
+  }
 
   // Load a competition waypoint's details into the draft (keep the type — a
   // waypoint doesn't carry one), and clear the search so the list collapses.
@@ -81,9 +110,8 @@ export function TurnpointDetailsDialog({
     setWpQuery("");
   };
 
-  // All waypoints as keyed items, narrowed to the query. ComboBox does no
-  // filtering of its own for a controlled `items`, so match here — on code AND
-  // name, the same text each item exposes as its textValue.
+  // All waypoints as keyed items, narrowed to the query. Matching happens here
+  // — on code AND name, the same text each item exposes as its textValue.
   const wpItems = useMemo(() => {
     const all = waypointRecords.map((w, i) => ({
       id: `${w.code}-${i}`,
@@ -91,30 +119,28 @@ export function TurnpointDetailsDialog({
       text: w.name !== w.code ? `${w.code} ${w.name}` : w.code,
     }));
     const q = wpQuery.trim();
-    // Empty query → no items, so the popover stays shut until you actually
-    // search. It also makes Esc work: RAC's Esc reverts the query to empty,
-    // and an empty collection is what lets the popover close instead of
-    // immediately reopening on the resulting input change.
+    // Empty query → no items, so the list stays out of the way until you
+    // actually search.
     return q === "" ? [] : all.filter((it) => contains(it.text, q));
   }, [waypointRecords, wpQuery, contains]);
 
-  const canSave = draft.name.trim() !== "" && parseCoords(draft.coords) != null;
-
   return (
-    <Modal
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col p-0 sm:max-w-md"
+    <FullScreenSheet
+      label={mode === "add" ? "Add turnpoint" : `Edit ${label}`}
+      onClose={leave}
+      className="flex flex-col"
     >
-      <Dialog className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "add" ? "Add turnpoint" : "Edit turnpoint"}
-          </DialogTitle>
-        </DialogHeader>
+      {/* Title bar: the sheet's identity on the left, the way out on the
+          right, where a phone's thumb already expects it. It stays put while
+          the form scrolls, so Done is never something you scroll to find. */}
+      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
+          {mode === "add" ? "Add turnpoint" : "Edit turnpoint"}
+        </h2>
+        <Button onPress={leave}>Done</Button>
+      </div>
 
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 overflow-y-auto p-4 pb-gutter-safe">
         {/* Load from a preset competition waypoint. */}
         {wpLoading ? (
           <p className="text-xs text-muted-foreground">
@@ -136,14 +162,8 @@ export function TurnpointDetailsDialog({
           </p>
         ) : (
           // Type to filter, arrow-key/Enter to pick — but IN FLOW, not in a
-          // popover (#638). It was a ComboBox, whose whole apparatus here was
-          // popover management: a pinned `selectedKey={null}`, a controlled
-          // `inputValue` to sync on the Esc revert, and `allowsEmptyCollection`
-          // toggled per keystroke, all so a floating list would open and close
-          // at the right moments. None of it survives the list being part of
-          // the dialog, and the failure it existed to avoid — a phone keyboard
-          // covering the matches — cannot happen to a list that scrolls with
-          // the form.
+          // popover (#638): a list that scrolls with the form can't be covered
+          // by a phone keyboard.
           //
           // Deliberately NOT `SearchableChoiceList`: that binds a value and
           // shows it on a collapsed row. This is an ACTION — picking a
@@ -152,6 +172,7 @@ export function TurnpointDetailsDialog({
           <div className="flex flex-col gap-2">
             <SearchField
               label="Load from a waypoint"
+              autoFocus={mode === "add"}
               placeholder={`Search ${waypointRecords.length} waypoints…`}
               value={wpQuery}
               onChange={setWpQuery}
@@ -169,7 +190,7 @@ export function TurnpointDetailsDialog({
                   if (item) applyWaypoint(item.record);
                 }}
                 items={wpItems}
-                className="max-h-48"
+                className="max-h-64"
                 renderEmptyState={() => (
                   <p className="px-2 py-1.5 text-sm text-muted-foreground">
                     No matches
@@ -209,7 +230,7 @@ export function TurnpointDetailsDialog({
           placeholder="Bordano Landing"
         />
         {/* The visible label names it; `aria-labelledby` from that Label
-            would beat an aria-label anyway, and the dialog title plus the Code
+            would beat an aria-label anyway, and the sheet title plus the Code
             field above already say which turnpoint. */}
         <ChoiceList
           label="Type"
@@ -270,21 +291,23 @@ export function TurnpointDetailsDialog({
           onChange={(m) => patch({ altitude: Number.isFinite(m) ? m : "" })}
         />
 
-        <DialogFooter className="mt-1">
-          <Button slot="close" variant="outline">
-            Cancel
-          </Button>
+        {/* No confirmation: this removes a turnpoint from a route that is
+            still a draft, and the editor's Cancel puts the whole saved route
+            back. */}
+        {onDelete ? (
           <Button
-            isDisabled={!canSave}
+            variant="destructive"
+            className="mt-2 w-fit"
             onPress={() => {
-              onSave(draft);
+              deletedRef.current = true;
+              onDelete();
               onClose();
             }}
           >
-            {mode === "add" ? "Add turnpoint" : "Save"}
+            Delete turnpoint
           </Button>
-        </DialogFooter>
-      </Dialog>
-    </Modal>
+        ) : null}
+      </div>
+    </FullScreenSheet>
   );
 }

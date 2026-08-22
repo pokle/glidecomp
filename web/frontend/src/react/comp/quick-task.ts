@@ -235,7 +235,13 @@ export interface QuickTaskItem {
   end: number;
   /** Radius in metres: from a following distance token, else the default. */
   radius: number;
-  /** True when the radius came from the text rather than the default. */
+  /**
+   * True when the TEXT says what this radius is — written on the turnpoint
+   * ("ell 5k") or set for the line by a leading distance ("2k ell mitta").
+   * False means nobody said: the parser filled in `defaultRadius`, and a
+   * caller applying the line should leave an existing radius alone rather
+   * than overwrite it with a number the reader never typed.
+   */
   radiusExplicit: boolean;
   /** Type spelled out in the text ("ell 5k sss"); undefined = infer it. */
   explicitType?: QuickTypeWord;
@@ -284,6 +290,9 @@ export function parseQuickTask(
   const tokens = tokenizeQuickTask(text);
   const items: QuickTaskItem[] = [];
   let runningDefault = opts.defaultRadius;
+  // A leading distance is the line stating a radius for every turnpoint after
+  // it, so those radii are as explicit as one written on the name itself.
+  let defaultStated = false;
 
   for (const token of tokens) {
     const last = items[items.length - 1];
@@ -293,6 +302,7 @@ export function parseQuickTask(
         last.radiusExplicit = true;
       } else {
         runningDefault = token.metres!;
+        defaultStated = true;
       }
       continue;
     }
@@ -321,7 +331,7 @@ export function parseQuickTask(
       start: token.start,
       end: token.end,
       radius: runningDefault,
-      radiusExplicit: false,
+      radiusExplicit: defaultStated,
       candidates: matchWaypoints(token.raw, waypoints, opts.candidateLimit ?? 6),
     });
   }
@@ -616,7 +626,7 @@ export function radiusToken(metres: number): string {
  * `enter` from the line means "make it an exit start" and nothing is hiding.
  */
 export function quickTaskText(
-  turnpoints: { name: string; radius: number; type: QuickType }[],
+  turnpoints: { name: string; radius: number | null; type: QuickType }[],
   opts: { types?: "needed" | "all"; start?: QuickStartConfig | null } = {}
 ): string {
   const inferred = inferTypes(turnpoints.length);
@@ -624,7 +634,14 @@ export function quickTaskText(
   const all = opts.types === "all";
   return turnpoints
     .map((tp, i) => {
-      const parts = [tp.name.trim() || "?", radiusToken(tp.radius)];
+      // A null radius is a turnpoint whose size the line never stated, and
+      // rendering one would put a number in the reader's mouth: tidying
+      // "ELLIOT" into "ELLIOT 400m" turns the parser's fallback into a claim,
+      // and applying that claim would resize a cylinder somebody set by hand.
+      const parts = [
+        tp.name.trim() || "?",
+        ...(tp.radius === null ? [] : [radiusToken(tp.radius)]),
+      ];
       // "goal" only names the last turnpoint; elsewhere "tp" is how the text
       // says "plain turnpoint" without claiming a role it can't have.
       const word = tp.type ? TYPE_WORDS[tp.type] : i === last ? "goal" : "tp";
@@ -702,4 +719,122 @@ export function randomExampleRoute(
       type: types[i],
     }))
   );
+}
+
+// ---------------------------------------------------------------------------
+// Reading a whole line as something the editor can apply
+// ---------------------------------------------------------------------------
+
+/** One turnpoint the line describes, ready for the route to be rebuilt from. */
+export interface QuickTaskPick {
+  /** The name token as typed ("ell"), before any matching. */
+  query: string;
+  /**
+   * The competition waypoint this turnpoint resolves to — or null when the
+   * token exactly names a turnpoint the route ALREADY holds (see
+   * `knownNames`). Null means "keep the one you have": the reconcile reuses
+   * that row rather than replacing it, which is what stops an imported task
+   * whose names are no competition waypoint from being quietly rewritten into
+   * the nearest fuzzy matches.
+   */
+  record: WaypointFileRecord | null;
+  radius: number;
+  /**
+   * Whether the LINE said this radius (see QuickTaskItem.radiusExplicit).
+   * When it didn't, applying the line must not overwrite the radius a
+   * turnpoint already has: nobody asked for it to change.
+   */
+  radiusStated: boolean;
+  type: QuickType;
+}
+
+/** Everything the editor needs to act on one line of quick-task text. */
+export interface QuickTaskApply {
+  picks: QuickTaskPick[];
+  /**
+   * What the line says about the start, or null when the route it describes
+   * has no start turnpoint — the editor leaves its Start panel alone in that
+   * case rather than applying a configuration the route can't hold.
+   */
+  start: QuickStartConfig | null;
+  /** What the line says about the start that the route can't use. */
+  problems: string[];
+  /** Name tokens that matched neither a waypoint nor an existing turnpoint. */
+  unmatched: number;
+  /** Name tokens the line held at all, matched or not. */
+  itemCount: number;
+  /**
+   * The route with every role named and the start written out in full — what
+   * "tidy the line" (Enter) writes. Radii appear only where the line stated
+   * one, so tidying never invents a cylinder size.
+   */
+  spelledText: string;
+}
+
+/**
+ * Read a quick-task line as a route the editor can apply.
+ *
+ * `knownNames` are the names of the turnpoints the route already holds. A
+ * token that spells one of them exactly is taken at its word and NOT matched
+ * against the competition's waypoints: the line's job there is to say where
+ * that turnpoint sits in the order, not to re-pick it. Without the guard, a
+ * turnpoint the waypoint set doesn't contain (an imported XContest task, a
+ * point typed by hand) would come back as whatever fuzzy match ranked first,
+ * silently.
+ *
+ * DOM-free, so both the Quick entry sheet's action and the field's own status
+ * line read the same answer off the same text (quick-task.test.ts).
+ */
+export function quickTaskApply(
+  text: string,
+  waypoints: WaypointFileRecord[],
+  opts: { defaultRadius: number; knownNames?: Iterable<string> }
+): QuickTaskApply {
+  const items = parseQuickTask(text, waypoints, { defaultRadius: opts.defaultRadius });
+  const types = resolveTypes(items);
+  const known = new Set([...(opts.knownNames ?? [])].map((n) => norm(n.trim())));
+
+  const resolved = items.map((item, i) => {
+    // The guard first: an existing turnpoint's name beats a fuzzy match.
+    const keep = known.has(norm(item.query.trim()));
+    return {
+      item,
+      type: types[i] ?? ("" as QuickType),
+      record: keep ? null : (item.candidates[0] ?? null),
+      keep,
+    };
+  });
+
+  const matched = resolved.filter((r) => r.keep || r.record !== null);
+  const picks: QuickTaskPick[] = matched.map((r) => ({
+    query: r.item.query,
+    record: r.record,
+    radius: r.item.radius,
+    radiusStated: r.item.radiusExplicit,
+    type: r.type,
+  }));
+
+  // The start settings the line states, read over the MATCHED turnpoints only
+  // — the same set the route is built from, so the start it reports is the
+  // start the route actually has (a half-typed name takes its role with it).
+  const { start, problems } = startConfigFromItems(
+    matched.map((r) => r.item),
+    matched.map((r) => r.type)
+  );
+
+  const route = picks.map((p) => ({
+    name: p.record?.code ?? p.query,
+    // Only a radius the line stated is written back — see quickTaskText.
+    radius: p.radiusStated ? p.radius : null,
+    type: p.type,
+  }));
+
+  return {
+    picks,
+    start,
+    problems,
+    unmatched: resolved.length - matched.length,
+    itemCount: items.length,
+    spelledText: quickTaskText(route, { types: "all", start }),
+  };
 }

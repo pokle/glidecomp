@@ -19,10 +19,18 @@ import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/react/lib/utils";
 import { cardSurface, CardTitle } from "./card";
 
-const rowClass =
+/**
+ * The row treatment itself, exported so a list that ISN'T a NavList can still
+ * look like one — the route editor's turnpoint list is a RAC GridList (it
+ * needs a collection, and rows that hold buttons), but a reader should not be
+ * able to tell it apart from the settings rows it sits beside.
+ */
+export const navRowClass =
   "flex min-h-11 w-full items-center gap-3 px-4 py-2.5 text-left text-sm outline-none " +
   "data-hovered:bg-muted/50 data-pressed:bg-muted " +
   "data-focus-visible:ring-2 data-focus-visible:ring-ring/50 data-focus-visible:ring-inset";
+
+const rowClass = navRowClass;
 
 export function NavList({
   label,
