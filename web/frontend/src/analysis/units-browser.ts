@@ -14,6 +14,7 @@ import {
   formatClimbRate as _formatClimbRate,
   formatAltitudeChange as _formatAltitudeChange,
   formatRadius as _formatRadius,
+  formatCylinderRadius,
   type FormattedValue,
   type DetectionThresholds,
 } from '@glidecomp/engine';
@@ -37,6 +38,15 @@ export const formatAltitudeChange = (m: number) =>
 
 export const formatRadius = (meters: number): FormattedValue =>
   _formatRadius(meters, { prefs: config.getUnits() });
+
+/**
+ * A turnpoint cylinder's radius, always metric — re-exported unwrapped
+ * BECAUSE it takes no preferences: the FAI states a cylinder radius in metres
+ * and every editor sets it in metres, so it is not the reader's to convert.
+ * `formatRadius` above stays for a radius that is a measured length (the track
+ * HUD's 1000 m averaging window).
+ */
+export { formatCylinderRadius };
 
 /**
  * Subscribe to unit preference changes

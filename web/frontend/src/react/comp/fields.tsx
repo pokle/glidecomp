@@ -12,8 +12,20 @@ import {
 } from "react-aria-components";
 import { Checkbox as RacCheckbox } from "@/react/rac/checkbox";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
-import { Description, Input as RacInput, Label, TextField } from "@/react/rac/field";
+import {
+  Description,
+  Input as RacInput,
+  Label,
+  NumberField,
+  TextField,
+} from "@/react/rac/field";
 import { ChoiceList } from "@/react/rac/choice-list";
+import {
+  fromAltitudeInput,
+  getUnitLabel,
+  toAltitudeInput,
+  useUnits,
+} from "@/react/lib/units";
 
 export { SimpleSelect } from "@/react/rac/select";
 
@@ -105,6 +117,51 @@ export function CheckboxField({
     <RacCheckbox isSelected={checked} onChange={onChange} hint={hint}>
       {label}
     </RacCheckbox>
+  );
+}
+
+/**
+ * Altitude input in the reader's own unit.
+ *
+ * Altitudes are stored, exported and scored in metres, but every place the app
+ * PRINTS one (the turnpoint list, the waypoints table) honours the reader's
+ * unit preference — so an input that hard-labelled itself "(m)" made the two
+ * disagree in front of them: a value typed here reappeared multiplied in the
+ * list beside it (issue #662). The label names the unit it is showing, and the
+ * conversion happens at this edge only — `valueM` and `onChange` are metres.
+ *
+ * A blank altitude ("unknown", which is what "Fill altitudes from map" looks
+ * for) is NaN, the same spelling RAC's NumberField uses for an empty field.
+ */
+export function AltitudeField({
+  valueM,
+  onChange,
+  description,
+  hint,
+}: {
+  /** Metres, or NaN when blank. */
+  valueM: number;
+  /** Metres, or NaN when the field is cleared. */
+  onChange: (metres: number) => void;
+  description?: string;
+  hint?: React.ReactNode;
+}) {
+  const units = useUnits();
+  return (
+    <NumberField
+      label={
+        <>
+          Altitude ({getUnitLabel("altitude", units)}){hint ? <> {hint}</> : null}
+        </>
+      }
+      description={description}
+      value={toAltitudeInput(valueM, units)}
+      onChange={(v) => onChange(fromAltitudeInput(v, units))}
+      // Step stays 1 (RAC snaps to minValue + k·step), and thousands group so
+      // a cloudbase in feet reads "10,000".
+      step={1}
+      formatOptions={{ useGrouping: true, maximumFractionDigits: 0 }}
+    />
   );
 }
 

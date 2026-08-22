@@ -1,8 +1,8 @@
 /**
  * Shared "add a single waypoint" dialog.
  *
- * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Modal/TextField/
- * NumberField with inline coordinate validation.
+ * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Modal/TextField and the
+ * shared units-aware AltitudeField, with inline coordinate validation.
  *
  * One small, single-purpose form — code, name, coordinates, altitude, with
  * snap-to-peak (#341) — used both by the competition waypoints editor
@@ -24,9 +24,10 @@ import {
   DialogTitle,
   Modal,
 } from "@/react/rac/dialog";
-import { NumberField, TextField } from "@/react/rac/field";
+import { TextField } from "@/react/rac/field";
 import { toast } from "../lib/toast";
 import { useUnits } from "../lib/units";
+import { AltitudeField } from "./fields";
 import {
   formatCoords,
   formatSnapDistance,
@@ -254,16 +255,12 @@ export function AddWaypointDialog({
             )}
           </p>
         )}
-        <NumberField
-          label={
-            <>
-              Altitude (m){" "}
-              <span className="font-normal text-muted-foreground">— optional</span>
-            </>
+        <AltitudeField
+          hint={
+            <span className="font-normal text-muted-foreground">— optional</span>
           }
-          value={altitude}
+          valueM={altitude}
           onChange={setAltitude}
-          step={1}
         />
         <DialogFooter>
           <Button slot="close" variant="outline">

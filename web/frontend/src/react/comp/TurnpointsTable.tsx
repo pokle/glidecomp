@@ -29,8 +29,8 @@ import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/ta
 import { cn } from "@/react/lib/utils";
 import {
   formatAltitude,
+  formatCylinderRadius,
   formatDistance,
-  formatRadius,
   useUnits,
   type UnitPreferences,
 } from "../lib/units";
@@ -161,8 +161,10 @@ export function TurnpointsTable({
             const legM = i >= 1 ? legs[i - 1] : undefined;
             // Composed from the parts rather than `withUnit`: a radius prints
             // briefing-style ("400m") everywhere else, which reads as one word
-            // and would fight the "r." in front of it here.
-            const r = formatRadius(tp.radius, { prefs: units });
+            // and would fight the "r." in front of it here. Metric whatever the
+            // reader's distance unit — the FAI states cylinder radii in metres,
+            // and so does the editor that sets them.
+            const r = formatCylinderRadius(tp.radius);
             const radius = `${r.formatted} ${r.unit}`;
             const alt = tp.waypoint.altSmoothed
               ? formatAltitude(tp.waypoint.altSmoothed, { prefs: units }).withUnit

@@ -178,6 +178,24 @@ export function formatRadius(meters: number, opts?: { prefs?: UnitPreferences })
 }
 
 /**
+ * Format a TURNPOINT CYLINDER radius — always metric, whatever the reader's
+ * distance preference.
+ *
+ * A cylinder radius is not a measured length to be converted for the reader:
+ * it is a number the task DEFINES, and the FAI states it in metres — as does
+ * the .xctsk file, the task briefing, and the editor's own 400m / 5k presets.
+ * Printing "r. 1.9 mi" beside an editor that only accepts metres is the
+ * altitude bug of issue #662 in another costume, so the reading and the typing
+ * are the same unit here by construction.
+ *
+ * {@link formatRadius} keeps its preferences for radii that ARE a measured
+ * length — the track HUD's 1000 m averaging window, whose heading converts.
+ */
+export function formatCylinderRadius(meters: number): FormattedValue {
+  return formatRadius(meters);
+}
+
+/**
  * Get the segment length in meters for a given distance unit.
  * Returns the number of meters in one unit of the given distance type:
  * - km → 1000

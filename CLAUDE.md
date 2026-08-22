@@ -314,6 +314,23 @@ These are the standing imperatives. Each links to the reference that explains it
   `role="status"` live region), `<Button isPending pendingLabel="Saving">` for an
   action in flight (never `isDisabled={saving}` + a label swap — that drops focus
   mid-action), `<ProgressBar isIndeterminate>` for a known background job.
+- **An altitude a reader TYPES is in the reader's own unit, and the label says
+  which** (issue #662). Every place the app prints an altitude honours the unit
+  preference, so an input hard-labelled "(m)" made the two disagree in front of
+  the reader — what they typed reappeared multiplied in the list beside it.
+  Altitude inputs go through `AltitudeField` in `src/react/comp/fields.tsx`,
+  which converts at the field's edge (`toAltitudeInput` / `fromAltitudeInput` in
+  `lib/units.ts`); metres remain what is stored, exported and scored.
+  - Cylinder **radii** go the other way and are **always metric**, read and
+    typed: the FAI states a cylinder radius in metres, so does the `.xctsk`,
+    the briefing and the editor's `400m` / `5k` chips — it is the task's own
+    number, not a length to convert for the reader. Print one with
+    `formatCylinderRadius()`, which takes no preferences at all;
+    `formatRadius(m, { prefs })` is only for a radius that IS a measured length
+    (the track HUD's 1000 m averaging window).
+  - The waypoints grid on `/comp/:id/waypoints` stays metric throughout — it is
+    the waypoint FILE edited in place, cell by cell. Its headers say "Alt (m)" /
+    "Radius (m)" rather than leave anyone guessing.
 - **Content pages: the rule is SEO, not a JS ban.** Every word and image a
   visitor or crawler needs must be in the prerendered HTML, and the page must stay
   useful with JS off. Interaction that genuinely helps someone understand
