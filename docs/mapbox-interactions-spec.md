@@ -129,6 +129,10 @@ When multiple tracks are loaded (competition mode), single-track layers are hidd
   - Text size: 20, offset `[0, 1.5]`, anchor: top
   - Color: `#1e293b` (dark slate), halo: white, 2px width
   - Content: `"NAME, R Xkm, A Ym, ROLE"` (with non-breaking spaces)
+  - **R is always metric** (`formatCylinderRadius`) — the FAI states a cylinder
+    radius in metres, and every editor sets it in metres, so it is the task's
+    own number rather than a length to convert. **A follows the reader's
+    altitude unit**, like every other altitude the app prints.
   - Font: `'Atkinson Hyperlegible Next', sans-serif` (map-wide `localFontFamily`)
 
 - **Segment distance labels**

@@ -13,7 +13,7 @@ import {
   type IGCFix, type FlightEvent, type XCTask, type Turnpoint,
   type GlideContext, type GlideMarker, type TurnpointSequenceResult,
 } from '@glidecomp/engine';
-import { formatDistance, formatRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
+import { formatDistance, formatRadius, formatCylinderRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
 import { escapeHtml } from '../escape-html';
 
@@ -904,7 +904,9 @@ export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
 /** Build the display label for a turnpoint: "NAME, R Xkm, A Ym, ROLE" */
 export function formatTurnpointLabel(tp: Turnpoint, index: number): string {
   const name = tp.waypoint.name || `TP${index + 1}`;
-  const radiusStr = formatRadius(tp.radius).withUnit;
+  // Metric always — a cylinder radius is the task's own number (FAI), not a
+  // length to convert for the reader; the altitude beside it does convert.
+  const radiusStr = formatCylinderRadius(tp.radius).withUnit;
   const altitude = tp.waypoint.altSmoothed ? `A\u00A0${formatAltitude(tp.waypoint.altSmoothed).withUnit}` : '';
   const role = tp.type || '';
 

@@ -70,7 +70,7 @@ import { TabulatorGrid } from "../comp/TabulatorGrid";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { useInitialData } from "../lib/initial-data";
 import { cn } from "@/react/lib/utils";
-import { formatAltitude, formatRadius, useUnits } from "../lib/units";
+import { formatAltitude, formatCylinderRadius, useUnits } from "../lib/units";
 import type { CompWaypointsLoaderData } from "../loaders";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
@@ -848,8 +848,11 @@ export function CompWaypoints() {
                           : "—"}
                       </Cell>
                       <Cell className="text-right font-mono text-xs">
+                        {/* Metric whatever the reader's distance unit: the FAI
+                            states a cylinder radius in metres, and so does the
+                            grid that edits it. */}
                         {Number.isFinite(Number(r.radius))
-                          ? formatRadius(Number(r.radius), { prefs: units }).withUnit
+                          ? formatCylinderRadius(Number(r.radius)).withUnit
                           : r.radius}
                       </Cell>
                     </Row>

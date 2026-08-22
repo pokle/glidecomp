@@ -321,14 +321,15 @@ These are the standing imperatives. Each links to the reference that explains it
   Altitude inputs go through `AltitudeField` in `src/react/comp/fields.tsx`,
   which converts at the field's edge (`toAltitudeInput` / `fromAltitudeInput` in
   `lib/units.ts`); metres remain what is stored, exported and scored.
-  - Cylinder **radii** are the exception and stay metres on input: the task
-    format carries metres, every briefing states them that way, and the presets
-    are the `400m` / `5k` chips. (The turnpoint list still PRINTS a radius in
-    the reader's distance unit, so a mile reader reads "r. 1.9 mi" beside a
-    metric editor — the same shape of mismatch, left alone because settling it
-    is a decision about how radii should read, not a bug fix.)
-  - The waypoints grid on `/comp/:id/waypoints` stays metric too — it is the
-    waypoint FILE edited in place, cell by cell. Its headers say "Alt (m)" /
+  - Cylinder **radii** go the other way and are **always metric**, read and
+    typed: the FAI states a cylinder radius in metres, so does the `.xctsk`,
+    the briefing and the editor's `400m` / `5k` chips — it is the task's own
+    number, not a length to convert for the reader. Print one with
+    `formatCylinderRadius()`, which takes no preferences at all;
+    `formatRadius(m, { prefs })` is only for a radius that IS a measured length
+    (the track HUD's 1000 m averaging window).
+  - The waypoints grid on `/comp/:id/waypoints` stays metric throughout — it is
+    the waypoint FILE edited in place, cell by cell. Its headers say "Alt (m)" /
     "Radius (m)" rather than leave anyone guessing.
 - **Content pages: the rule is SEO, not a JS ban.** Every word and image a
   visitor or crawler needs must be in the prerendered HTML, and the page must stay

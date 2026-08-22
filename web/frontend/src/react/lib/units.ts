@@ -22,6 +22,7 @@ export {
   formatAltitudeChange,
   formatDistance,
   formatClimbRate,
+  formatCylinderRadius,
   formatRadius,
   getUnitLabel,
   DEFAULT_UNITS,

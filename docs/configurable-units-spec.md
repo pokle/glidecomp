@@ -141,7 +141,14 @@ Provides conversion and formatting functions:
 - `formatDistance(m)` - Format distance from meters
 - `formatClimbRate(mps)` - Format climb rate from m/s (shows + sign by default)
 - `formatAltitudeChange(m)` - Format altitude change (always shows sign)
-- `formatRadius(m)` - Format turnpoint radius with appropriate precision
+- `formatRadius(m)` - Format a radius with appropriate precision, in the
+  reader's distance unit — for a radius that is a measured length (the track
+  HUD's 1000 m averaging window)
+- `formatCylinderRadius(m)` - Format a TURNPOINT CYLINDER radius, always
+  metric and taking no preferences: the FAI states a cylinder radius in
+  metres, and so does the `.xctsk`, the briefing and every editor that sets
+  one, so it is the task's own number rather than a length to convert
+  (issue #662)
 - `onUnitsChanged(callback)` - Subscribe to unit preference changes (browser-side, lives in `web/frontend/src/analysis/units-browser.ts`, not the engine's `units.ts`)
 
 **Spacing:** `formatUnit` joins the value and the label with a **non-breaking
@@ -150,7 +157,8 @@ number and its unit never break across a line. Everything built on `formatUnit`
 (`formatSpeed`, `formatAltitude`, `formatDistance`, `formatClimbRate`,
 `formatAltitudeChange`) inherits that.
 
-`formatRadius` is the one exception: it builds `withUnit` itself and stays tight —
+`formatRadius` (and `formatCylinderRadius` on top of it) is the one exception:
+it builds `withUnit` itself and stays tight —
 `"400m"`, `"5km"`, `"2.5km"` — because a radius is quoted the way a task briefing
 states it. (It also has its own precision rule: whole metres under a kilometre in
 metric, otherwise one decimal, dropped when the value is whole.)
@@ -177,7 +185,8 @@ Units are applied in the following locations:
 
 ### Map Labels
 - Task leg distances (e.g., "Leg 1 (15.2 km)")
-- Turnpoint radius (e.g., "R 5km" — `formatRadius`, so no space)
+- Turnpoint radius (e.g., "R 5km" — `formatCylinderRadius`, so no space, and
+  metric whatever the reader's distance unit)
 - Turnpoint altitude (e.g., "A 3067 m")
 - Glide segment speed and altitude labels (e.g., "45 km/h") — `formatGlideLabel` splits `formatted` from `unit` and joins them with the same non-breaking space, so it can render the unit at 0.7em
 - Glide segment altitude change labels, always signed (e.g., "-120 m")

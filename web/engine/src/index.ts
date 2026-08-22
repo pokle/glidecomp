@@ -168,6 +168,7 @@ export {
   formatAltitude,
   formatAltitudeChange,
   formatClimbRate,
+  formatCylinderRadius,
   formatDistance,
   formatRadius,
   formatSpeed,
