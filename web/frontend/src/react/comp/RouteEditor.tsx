@@ -10,25 +10,33 @@
  * page — one scroll, the browser's own back button, and a URL an organiser can
  * send to a co-admin.
  *
- * RAC (see docs/2026-07-18-rac-adoption-guide.md): the Tabulator grid is
- * replaced by a react-aria-components Table whose rows live in React state.
- * There is no per-row reorder control at all — turnpoint order is word order
- * in the "Enter task" field above the grid (comp/QuickTaskField.tsx), so
- * reordering is editing text and works with keyboard, mouse and touch alike;
- * the task-specific fields (Type, Radius) are inline RAC widgets; every
- * derived column (leg distances, crossing direction, the map preview) is a
- * useMemo over the rows instead of an imperative write-back. Start (SSS)
- * gates and goal configuration are edited in collapsible sections below the
- * grid so a whole .xctsk is editable in one place. Routes can be imported
- * from a .xctsk file or an XContest task code, and exported to a .xctsk file.
- * Saving PATCHes the task's xctsk (the server validates strictly and
- * audit-logs the change).
+ * A whole route can be set here WITHOUT typing the quick-task syntax (#661).
+ * The turnpoint list (comp/TurnpointList.tsx) is the editing surface: a row
+ * opens comp/TurnpointSheet.tsx, "Add turnpoint" opens the same sheet empty,
+ * Delete lives in it, and "Reorder" turns the rows into Move up / Move down.
+ * The syntax is still here, and still the fast way in for someone who knows
+ * the waypoint codes — but behind a "Quick entry" button, in its own sheet
+ * (comp/QuickEntrySheet.tsx), applied by an explicit press that RECONCILES
+ * with the route rather than rebuilding it (comp/route-reconcile.ts).
  *
- * Two editors stay dialogs OVER this page — TurnpointDetailsDialog and
- * AddWaypointDialog. Both are short single-purpose forms rather than the
- * tall-scrolling-form shape the conversion exists to remove, and
- * AddWaypointDialog is shared with the competition waypoints page, so routing
- * it would fork it. Their own pickers are list-in-flow all the same.
+ * Everything on this page is a DRAFT until Save. That is what makes the two
+ * sheets sheets and not routes: the whole route is unsaved React state, a
+ * sibling route would unmount it, and lib/use-unsaved-changes-guard.ts
+ * intercepts every same-origin anchor click while the route is dirty, so a row
+ * that linked anywhere would ask "Discard route changes?" on the way IN to
+ * editing a turnpoint.
+ *
+ * The rest is unchanged: every derived value (leg distances, crossing
+ * direction, the map preview) is a useMemo over `rows` rather than an
+ * imperative write-back; Start (SSS) gates and goal configuration are edited
+ * in collapsible sections below the list so a whole .xctsk is editable in one
+ * place; routes can be imported from a .xctsk file or an XContest task code,
+ * and exported to a .xctsk file. Saving PATCHes the task's xctsk (the server
+ * validates strictly and audit-logs the change).
+ *
+ * AddWaypointDialog stays a plain dialog over this page: it is a short
+ * single-purpose form, and it is shared with the competition waypoints page,
+ * so reshaping it here would fork it.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileTrigger } from "react-aria-components";
@@ -75,32 +83,27 @@ import {
   turnpointsToCSV,
   turnpointToRow,
   xctskForPatch,
-  TYPE_LABELS,
   type RouteRow,
 } from "./route-editor";
 import { AddWaypointDialog } from "./AddWaypointDialog";
-import { QuickTaskField, type QuickTaskApply } from "./QuickTaskField";
-import { TurnpointsTable } from "./TurnpointsTable";
-import { parseTimeToken, quickTaskText } from "./quick-task";
+import { QuickEntrySheet } from "./QuickEntrySheet";
+import { TurnpointList } from "./TurnpointList";
+import { parseTimeToken, quickTaskText, type QuickTaskApply } from "./quick-task";
+import { reconcileRoute } from "./route-reconcile";
 
 // Lazy so the map library (mapbox) and its CSS load only when the editor
 // opens and never enter the SSR'd task-detail bundle.
 const RouteMap = lazy(() => import("./RouteMap"));
 
 
-// Common competition cylinder radii — one-tap presets on each turnpoint card,
-// so the hottest edit (set a radius) is a single click; the NumberField beside
-// them still takes any value.
 import {
   NEW_ROW_RADIUS,
-  RADIUS_PRESETS,
-  TYPE_OPTIONS,
   blankDraft,
+  draftFromRecord,
   missingAltitude,
-  radiusChipLabel,
   type TurnpointDraft,
 } from "./turnpoint-draft";
-import { TurnpointDetailsDialog } from "./TurnpointDetailsDialog";
+import { TurnpointSheet } from "./TurnpointSheet";
 
 export function RouteEditor({
   compId,
@@ -164,10 +167,28 @@ export function RouteEditor({
   rowsRef.current = rows;
   const [fillingAlts, setFillingAlts] = useState(false);
 
-  // The turnpoint details dialog, for adding one turnpoint by hand (the
-  // listing above is read-only now). Draft-first — nothing joins the route
-  // until Save.
+  // The turnpoint sheet: adding one by hand, or editing the row whose id this
+  // holds. Draft-first — the sheet applies its draft on the way out.
   const [addingTurnpoint, setAddingTurnpoint] = useState(false);
+  const [editingRowId, setEditingRowId] = useState<number | null>(null);
+
+  // Quick entry: the whole route as text, in its own sheet.
+  const [quickOpen, setQuickOpen] = useState(false);
+
+  /**
+   * Reorder mode. Rows stop opening the sheet and carry Move up / Move down
+   * instead — a mode rather than per-row chrome, so a list at rest is a name,
+   * a summary and a chevron.
+   */
+  const [reordering, setReordering] = useState(false);
+  /** The move just made: focus follows the turnpoint (see TurnpointList). */
+  const [moved, setMoved] = useState<{
+    rowId: number;
+    delta: -1 | 1;
+    nonce: number;
+  } | null>(null);
+  /** Said out loud for a screen reader, which sees no rows swap. */
+  const [moveNote, setMoveNote] = useState("");
 
   // The competition's shared waypoints (loaded once on open), shown on the map
   // and in a searchable list. Turnpoints are picked from this set only — the
@@ -328,21 +349,7 @@ export function RouteEditor({
     [waypointRecords]
   );
 
-  /** A competition waypoint's details as a turnpoint draft (copied in, so a
-   *  later edit to the competition waypoint never changes this task). */
-  const draftFromRecord = useCallback(
-    (rec: WaypointFileRecord): TurnpointDraft => ({
-      name: rec.code,
-      description: rec.name !== rec.code ? rec.name : "",
-      type: "",
-      coords: formatCoords(rec.latitude, rec.longitude),
-      radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
-      altitude: rec.altitude ? rec.altitude : "",
-    }),
-    []
-  );
-
-  /** Append a new turnpoint from a draft (the details dialog's Add). */
+  /** Append a new turnpoint from a draft (the turnpoint sheet's Add). */
   const appendTurnpoint = useCallback(
     (draft: TurnpointDraft) => {
       setRows((prev) => [
@@ -353,18 +360,58 @@ export function RouteEditor({
     [nextRowId]
   );
 
-  // Enter task needs waypoints to match names against; without any, the field
+  /** Patch one turnpoint in place (the turnpoint sheet's Done). */
+  const updateTurnpoint = useCallback((id: number, draft: TurnpointDraft) => {
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...draft, leg: null, dir: null } : r))
+    );
+  }, []);
+
+  /** Drop one turnpoint (the turnpoint sheet's Delete). */
+  const removeTurnpoint = useCallback((id: number) => {
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  /**
+   * Move a turnpoint one place: swap it with its neighbour.
+   *
+   * The whole of reordering, and deliberately so — see the issue and RAC
+   * gotcha #4. It also says what happened, because the only other evidence is
+   * two rows changing places, which a screen reader never sees.
+   */
+  const moveTurnpoint = useCallback((id: number, delta: -1 | 1) => {
+    // Read the rows off the ref rather than a setRows updater: the move also
+    // announces itself, and a state update inside another one's updater is not
+    // something to rely on.
+    const prev = rowsRef.current;
+    const at = prev.findIndex((r) => r.id === id);
+    const to = at + delta;
+    if (at < 0 || to < 0 || to >= prev.length) return;
+    const next = [...prev];
+    [next[at], next[to]] = [next[to], next[at]];
+    setRows(next);
+    const name = String(next[to].name).trim() || "Turnpoint";
+    setMoveNote(`${name} moved to ${to + 1} of ${next.length}`);
+    setMoved((m) => ({ rowId: id, delta, nonce: (m?.nonce ?? 0) + 1 }));
+  }, []);
+
+  // Quick entry needs waypoints to match names against; without any, the sheet
   // would be a dead end (and the empty state must not point at it).
   const showQuickTask = !wpLoading && waypointRecords.length > 0;
 
-  // The route as a quick-task line, so the field opens showing the task that's
-  // loaded and keeps mirroring it as rows change elsewhere in the editor. The
-  // start config is part of that mirror (#436) — otherwise the line would keep
-  // saying "sss" while the panel quietly held an enter start.
+  /** The turnpoint names the route holds — what Quick entry may keep. */
+  const knownNames = useMemo(() => rows.map((r) => String(r.name)), [rows]);
+
+  /** The row the turnpoint sheet is editing, or null. */
+  const editingRow = rows.find((r) => r.id === editingRowId) ?? null;
+
+  // The route as a quick-task line, so the Quick entry sheet opens showing the
+  // task that is loaded and edits it rather than starting from a blank box.
+  // The start config is part of it (#436) — otherwise the line would say "sss"
+  // while the panel quietly held an enter start.
   //
   // Only gates that read as times are offered: a gate mid-edit in the picker
-  // isn't something the line can say, and leaving it out of BOTH renderings is
-  // what stops the field from pushing a half-typed time back as a change.
+  // isn't something the line can say.
   const quickText = useMemo(
     () =>
       quickTaskText(
@@ -387,11 +434,14 @@ export function RouteEditor({
   );
 
   /**
-   * Enter task: replace the whole route with the turnpoints parsed from the
-   * one-line field. Each pick carries the waypoint, its radius and the guessed
-   * type; everything else comes from the waypoint record, exactly as picking it
-   * by hand would. Nothing is saved until Save, so this stays undoable by
-   * cancelling the dialog.
+   * Quick entry: make the route the line describes.
+   *
+   * RECONCILED against the route already loaded, not rebuilt from the matched
+   * waypoints (route-reconcile.ts): a turnpoint the line still names keeps its
+   * id, its coordinates, its elevation and its long name, none of which the
+   * grammar can say. Rebuilding used to throw all of that away on a keystroke.
+   *
+   * Nothing is saved until Save, so this stays undoable by cancelling the page.
    *
    * The line also carries the start config, so the Start panel below follows it
    * — but only when the route has a start to configure, and never for an
@@ -399,16 +449,7 @@ export function RouteEditor({
    */
   const applyQuickTask = useCallback(
     ({ picks, start }: QuickTaskApply) => {
-      setRows(
-        picks.map((p) => ({
-          id: nextRowId(),
-          ...draftFromRecord(p.record),
-          type: p.type,
-          radius: p.radius,
-          leg: null,
-          dir: null,
-        }))
-      );
+      setRows((prev) => reconcileRoute(prev, picks, nextRowId));
       if (openDistance || !start) return;
       setSssType(start.type);
       setDirection(start.direction);
@@ -420,7 +461,7 @@ export function RouteEditor({
         return sayable.join(",") === start.gates.join(",") ? prev : start.gates;
       });
     },
-    [nextRowId, draftFromRecord, openDistance]
+    [nextRowId, openDistance]
   );
 
   /** Pick from the map: the nearest marker, resolved to its record by id, and
@@ -430,7 +471,7 @@ export function RouteEditor({
       const rec = waypointRecords[Number(wp.id)];
       if (rec) appendTurnpoint(draftFromRecord(rec));
     },
-    [waypointRecords, appendTurnpoint, draftFromRecord]
+    [waypointRecords, appendTurnpoint]
   );
 
   // Open the shared add-waypoint dialog, seeded from a map tap (or blank when
@@ -786,28 +827,9 @@ export function RouteEditor({
         />
         <h1 className="mt-2 text-2xl font-bold">Route</h1>
       </div>
-        <p className="text-sm text-muted-foreground">
-          Waypoint names in order, each with a radius (
-          <span className="font-medium">400m</span>,{" "}
-          <span className="font-medium">5k</span>) and, where position
-          doesn&apos;t already say it, a type (
-          <span className="font-medium">to</span>,{" "}
-          <span className="font-medium">sss</span>,{" "}
-          <span className="font-medium">ess</span>,{" "}
-          <span className="font-medium">tp</span>,{" "}
-          <span className="font-medium">goal</span>).
-          {!openDistance ? (
-            <>
-              {" "}
-              The start takes its settings the same way —{" "}
-              <span className="font-medium">enter</span> or{" "}
-              <span className="font-medium">exit</span>,{" "}
-              <span className="font-medium">race</span> or{" "}
-              <span className="font-medium">elapsed</span>, and any start gates
-              as times: <span className="font-medium">sss enter 13:15 13:30</span>.
-            </>
-          ) : null}
-        </p>
+        {/* The quick-task grammar is no longer the first thing this page
+            says: it moved, verbatim, into the Quick entry sheet that uses it
+            (#661). A first-time scorer meets a list of turnpoints. */}
         {openDistance ? (
           <p className="text-sm text-muted-foreground">
             Open distance: define a single Takeoff turnpoint. Distance is scored
@@ -815,39 +837,34 @@ export function RouteEditor({
           </p>
         ) : null}
 
-        {/* Enter task (prototype) — build the whole route by typing the
-            waypoint codes in order. Shown once the competition's waypoints are
-            loaded; without them there'd be nothing to match a name against.
-            Open-distance tasks get it too: one name is one take-off cylinder,
-            which is exactly the route they're allowed. */}
-        {showQuickTask ? (
-          <QuickTaskField
-            waypoints={waypointRecords}
-            defaultRadius={NEW_ROW_RADIUS}
-            routeText={quickText}
-            placeholder={
-              openDistance ? "ell 5k" : "ell 400m ell 5k mitta cudg ncor 1k"
-            }
-            exampleSize={openDistance ? 1 : undefined}
-            timeZoneLabel={openDistance ? undefined : timeZoneLabel}
-            onApply={applyQuickTask}
-          />
-        ) : null}
-
-        {/* Turnpoint list — the exact listing the task page shows (shared
-            component), rendered over the route being edited so the editor is a
-            preview of the published task. Read-only: turnpoints are set with
-            Enter task above, or added through the details dialog below. */}
+        {/* The turnpoint list — the editor's own (comp/TurnpointList.tsx),
+            not the read-only listing the task page shows: rows here open the
+            turnpoint sheet, and in Reorder mode they carry Move up / Move
+            down. */}
         <div className="flex flex-col gap-2">
-          {derived.mapTask ? (
-            <TurnpointsTable xctsk={derived.mapTask} />
+          {rows.length > 0 ? (
+            <TurnpointList
+              rows={rows}
+              task={derived.mapTask}
+              rowIds={derived.result.rowIds}
+              reordering={reordering}
+              moved={moved}
+              onOpen={setEditingRowId}
+              onMove={moveTurnpoint}
+            />
           ) : (
             <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
               {showQuickTask
-                ? "No turnpoints yet — type them in Enter task, use Add turnpoint, or import a task"
+                ? "No turnpoints yet — add them one at a time, or use Quick entry to type the whole route."
                 : "No turnpoints yet — use Add turnpoint, or import a task"}
             </p>
           )}
+          {/* Reordering is the only thing said out loud: rows swapping places
+              is invisible to a screen reader, and to anyone whose focus is on
+              the button that did it. */}
+          <p role="status" aria-live="polite" className="sr-only">
+            {moveNote}
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
@@ -856,6 +873,28 @@ export function RouteEditor({
             >
               Add turnpoint
             </Button>
+            {/* Two turnpoints is the least that can be in the wrong order. */}
+            {rows.length > 1 ? (
+              <ToggleButton
+                size="sm"
+                isSelected={reordering}
+                onChange={(on) => {
+                  setReordering(on);
+                  if (!on) setMoved(null);
+                }}
+              >
+                {reordering ? "Done reordering" : "Reorder"}
+              </ToggleButton>
+            ) : null}
+            {showQuickTask ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={() => setQuickOpen(true)}
+              >
+                Quick entry
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" onPress={() => void clearTurnpoints()}>
               Clear turnpoints
             </Button>
@@ -1205,10 +1244,10 @@ export function RouteEditor({
           </Dialog>
         </Modal>
 
-        {/* Add a single turnpoint by hand. Draft-first: it joins the route
-            only on Save. */}
+        {/* Add a single turnpoint by hand. The sheet applies its draft on the
+            way out; the route is still unsaved until this page's Save. */}
         {addingTurnpoint ? (
-          <TurnpointDetailsDialog
+          <TurnpointSheet
             mode="add"
             initial={blankDraft()}
             waypointRecords={waypointRecords}
@@ -1216,6 +1255,44 @@ export function RouteEditor({
             compId={compId}
             onSave={appendTurnpoint}
             onClose={() => setAddingTurnpoint(false)}
+          />
+        ) : null}
+
+        {/* Edit the turnpoint a row opened. Keyed on the row so re-opening a
+            different one starts from that turnpoint's own draft. */}
+        {editingRow ? (
+          <TurnpointSheet
+            key={editingRow.id}
+            mode="edit"
+            initial={{
+              name: editingRow.name,
+              description: editingRow.description,
+              type: editingRow.type,
+              coords: editingRow.coords,
+              radius: editingRow.radius,
+              altitude: editingRow.altitude,
+            }}
+            waypointRecords={waypointRecords}
+            wpLoading={wpLoading}
+            compId={compId}
+            onSave={(draft) => updateTurnpoint(editingRow.id, draft)}
+            onDelete={() => removeTurnpoint(editingRow.id)}
+            onClose={() => setEditingRowId(null)}
+          />
+        ) : null}
+
+        {/* The whole route as text. Opens showing the route that's loaded, and
+            applying it reconciles rather than rebuilds. */}
+        {quickOpen ? (
+          <QuickEntrySheet
+            waypoints={waypointRecords}
+            defaultRadius={NEW_ROW_RADIUS}
+            initialText={quickText}
+            knownNames={knownNames}
+            openDistance={openDistance}
+            timeZoneLabel={openDistance ? undefined : timeZoneLabel}
+            onUse={applyQuickTask}
+            onClose={() => setQuickOpen(false)}
           />
         ) : null}
 

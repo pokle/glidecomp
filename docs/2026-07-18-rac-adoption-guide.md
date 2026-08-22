@@ -213,10 +213,10 @@ instance only exists a tick after mount, so gate anything that drives it on
   boolean still answers to `role="checkbox"` in tests while a settings-page one
   answers to `role="switch"`).
 - **Converted files:** `pages/TaskDetail.tsx` (page + EditTaskDialog +
-  turnpoints table), `comp/TaskScores.tsx`, `comp/RouteEditorDialog.tsx`
-  (Tabulator grid → RAC Table → GridList card list → **RAC Table again**, via
-  the shared read-only `comp/TurnpointsTable.tsx` the task page also renders —
-  see the superseded section below for how that went),
+  turnpoints table), `comp/TaskScores.tsx`, `comp/RouteEditor.tsx` (Tabulator
+  grid → RAC Table → GridList card list → RAC Table again via the shared
+  read-only `comp/TurnpointsTable.tsx` → **`comp/TurnpointList.tsx`, a GridList
+  styled as NavList rows**, #661 — see "Route editor: how it works now"),
   `comp/SubmitTrackDialog.tsx`,
   `comp/ManualFlightDialog.tsx`, `comp/AddWaypointDialog.tsx`,
   `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only),
@@ -405,8 +405,9 @@ Points worth knowing before you reach for one:
    (why the route editor dropped it, 2026-07-23):** row dragging is **native
    HTML5 drag**, which does not start on touch without a long-press — unusable
    on a phone. For touch-first reorder, prefer explicit up/down arrow buttons
-   over DnD — though the route editor now has neither, since typing the route in
-   "Enter task" makes word order the row order. No component uses these hooks now.
+   over DnD — which is what the route editor's **Reorder mode** does (#661):
+   the buttons exist only while the mode is on, so a list at rest keeps clean
+   rows. Nothing in the app uses these hooks.
 5. **Grid focus management redirects programmatic `.focus()`** to the cell's
    cached child — Playwright drives must navigate like a user (click a cell,
    then arrow keys), not `.focus()` + key events.
@@ -419,9 +420,10 @@ Points worth knowing before you reach for one:
 9. Commit-on-blur/Enter pattern for inline cell editors (local draft state,
    Escape reverts) keeps expensive derived recompute per-edit, not
    per-keystroke. This is the RAC analogue of Tabulator's `cellEdited`. (The
-   worked example was `EditableCell` in RouteEditorDialog.tsx; that dialog's
-   list is read-only now, so the code is gone — the pattern still stands for the
-   next in-grid editor.)
+   worked example was `EditableCell` in the route editor; its list has no inline
+   editors at all now — a row opens `comp/TurnpointSheet.tsx`, which is the same
+   idea one step further out: a local draft applied on the way out, so the route
+   recomputes once per edit rather than per keystroke.)
 10. **SSR:** all converted components hydrate clean (`test:e2e:ssr` green).
     RAC Table renders native `<table>` markup. Keep the CLAUDE.md SSR rules
     (no window at module scope, deterministic dates, identical trees); heavy
@@ -750,59 +752,92 @@ bun run test:e2e                   # full suite (one known flaky dev-login test;
   a hidden `input[accept=…]`, still driveable with `setInputFiles`.
 - `bun run kill-dev` clears stale servers (port-in-use crashes on dev start).
 
-## Route editor: how it works now (2026-08)
+## Route editor: how it works now (2026-08, rev. #661)
 
-The route editor is **`comp/RouteEditorDialog.tsx`**, and the turnpoint list in
-it is no longer a GridList of editable cards. Three pieces:
+The route editor is **`comp/RouteEditor.tsx`**, a routed page
+(`/comp/:c/task/:t/route`). Since **#661** a whole route can be set here
+without typing the quick-task syntax at all. Five pieces:
 
-- **`comp/QuickTaskField.tsx` — "Enter task" — is where the route is edited.**
-  You type the route the way you'd say it (`ell 400m ell 5k mitta cudg ncor 1k`)
-  and the whole set of turnpoints falls out: names fuzzy-match the competition's
-  waypoints, and a distance after a name is that cylinder's radius (grammar in
-  `quick-task.ts`). So turnpoint **order** is the order of the words, and there
-  is nothing to reorder with buttons. The start settings ride the same line
-  (`mitta sss enter 13:15`, #436), so direction and gates are text you can see
-  and edit rather than defaults applied silently in a collapsed panel. The line
-  and the route are one thing seen two ways — the text round-trips exactly
-  (`quickTaskText`), so the field shows the loaded task as text and editing the
-  text rebuilds the route. It is a growing `TextArea`, not one line, and its
-  suggestions are an **inline** kit `ListBox` under the field — mobile first, no
-  overlays, because a phone keyboard can't cover what isn't floating.
-- **`comp/TurnpointsTable.tsx` is a read-only listing, shared with the task
-  page.** Its header comment states the reasoning: it is *"Shared by the task
-  detail page (read-only, server-rendered) and the route editor, which renders
-  it over the route being edited so the editor shows exactly what the task page
-  will. Read-only by design: it's a listing, not a grid — editing happens in the
-  editor's Enter task field and dialogs."* It is a RAC `Table` in XCTrack's
-  compact FLY-tab shape (role column with the Exit badge, turnpoint with radius
-  and altitude under it, optimised leg on the right, closed by the optimised
-  total), and it resolves the day's wind against each leg. SSR-safe: no
-  browser-only imports, and every number formatted deterministically from the
-  unit preferences.
-- **`TurnpointDetailsDialog` still lives inside `RouteEditorDialog.tsx`** and is
-  unchanged in the way that matters here: it edits a local `TurnpointDraft` and
-  commits only on Save, and "Load from a waypoint" is the kit **`ComboBox`**,
-  applying gotcha #12 exactly as written (controlled `selectedKey` +
-  `inputValue`, filtering at the call site with `useFilter().contains`, an empty
-  query yielding an empty list so the popover stays shut at rest and Esc can
-  close it). Today the only thing that opens it is **Add turnpoint** — the
-  per-row **Edit** entry point went away with the cards, so its `mode="edit"`
-  branch currently has no call site.
-- **`comp/RouteMap.tsx` carries a second ComboBox — and it obeys the opposite
-  rules.** `comp/PlaceSearchField.tsx` (#540) sits above the map so you can find
-  the valley before there is a waypoint to fit to. It is remote (Mapbox place
-  search), so every piece of gotcha #12's advice inverts: see **gotcha #21**
-  before touching it. Two ComboBoxes in one dialog following contradictory rules
-  is not an inconsistency to tidy up — it is what local and async collections
-  each require.
+- **`comp/TurnpointList.tsx` — the editable turnpoint list.** A RAC `GridList`
+  with **`variant="rows"`**, which paints it as `rac/nav-list.tsx` rows (the
+  two literally share `navRowClass`) — so it reads as the same family as the
+  settings lists while being a real collection underneath. It has to be a
+  GridList and not a NavList: its rows hold buttons in Reorder mode, and a
+  `<button>` inside NavList's `<a>` row is not legal HTML. Rows render from
+  **`rows`**, not from the derived `XCTask` — `buildRoute` drops a row whose
+  coordinates don't parse, so a list built from the derived task would hide the
+  very turnpoint you need to tap to fix; `route-editor.ts`'s `rowProblem()`
+  prints what a row still needs, off the same bounds `buildRoute` uses.
+  `dependencies={[geometry, reordering, lastRow]}` — gotcha #3, since roles,
+  legs and positions are all computed from outside the item.
+- **`comp/TurnpointSheet.tsx` — one turnpoint, at full screen.** Was
+  `TurnpointDetailsDialog`, a centred `Modal` whose form scrolled inside a
+  `max-h-[calc(100dvh-2rem)]` box; now `rac/full-screen-sheet.tsx`. It carries
+  **Delete**, and it has **no Cancel**: nothing here is saved, so Done and the
+  back gesture both keep the edits and the page's own Cancel is what throws the
+  route away. The draft applies on the way OUT, not per keystroke.
+- **Reorder is a MODE.** A `Reorder` ToggleButton beside "Add turnpoint"; while
+  it is on, rows stop opening the sheet and carry **Move up / Move down**
+  (`moveRow`-style swap, disabled at the ends), the role column becomes the
+  position number, and the leg distance stands down to make room on a phone.
+  Still **no drag-and-drop** — see gotcha #4. Three things the mode owes:
+  per-row accessible names that say the subject ("Move ELL up", not "Up"), a
+  `role="status"` announcement ("ELL moved to 2 of 7"), and focus that follows
+  the moved turnpoint rather than the position it left (`TurnpointList` finds
+  the button by `data-move-row`/`data-move-dir` after the swap).
+- **`comp/QuickEntrySheet.tsx` — "Quick entry", the syntax, behind a button.**
+  `QuickTaskField` is no longer a live mirror of the route. It was: the field
+  sat above the listing, showed the loaded task as text and pushed every pause
+  in your typing back into the route. The line is a LOSSY view — it names
+  waypoints, radii, types and the start, and cannot say a turnpoint's
+  coordinates, altitude or long name — so the mirror discarded exactly those,
+  on a keystroke rather than on a decision. Now the field is controlled by the
+  sheet, applying is one press (**"Use this route"**), and dismissing with the
+  text changed asks first.
+- **`comp/route-reconcile.ts` — applying the line RECONCILES, never rebuilds.**
+  Walk the picks in order, claim the first unclaimed row with the same name,
+  reuse it (id, coordinates, altitude, description) and overwrite only what the
+  line actually said. Two rules that are easy to get wrong and are unit-tested:
+  - **The exact-name guard.** A token spelling a turnpoint the route already
+    has is taken at its word and never fuzzy-matched (`quickTaskApply`'s
+    `knownNames`) — otherwise an imported XContest route, whose names match no
+    competition waypoint, comes back as the nearest guesses.
+  - **A radius nobody typed is not a claim.** `parseQuickTask` fills an
+    unstated radius from `defaultRadius`, so applying it would silently resize
+    a hand-set cylinder. `QuickTaskPick.radiusStated` carries the difference
+    (a leading distance — "2k ell mitta" — counts as stated), and
+    `quickTaskText` omits the token for a `null` radius so **Enter-to-tidy
+    can't invent one either**. For the same reason the field no longer tidies
+    **on blur**: rewriting the text in the instant the reader reaches for the
+    button changes what they are about to apply, after they decided.
+
+`comp/TurnpointsTable.tsx` is still the READ-ONLY listing on the task page —
+server-rendered, with the day's leg wind, and now a deliberate FORK of the
+editable one rather than a shared component with an `editable` prop. They show
+the same facts in the same order and diverge only where editing needs them to.
+**Both render a grid labelled "Turnpoints"** (the editor's says "Turnpoints,
+reordering" in the mode), so scope every e2e query. Coverage:
+`e2e/task-settings-pages.spec.ts`.
+
+**`comp/RouteMap.tsx` carries a ComboBox that obeys the opposite rules to the
+sheet's waypoint search.** `comp/PlaceSearchField.tsx` (#540) sits above the map
+so you can find the valley before there is a waypoint to fit to. It is remote
+(Mapbox place search), so every piece of gotcha #12's advice inverts: see
+**gotcha #21** before touching it. Two pickers in one editor following
+contradictory rules is not an inconsistency to tidy up — it is what local and
+async collections each require.
 
 ## Route editor list view (BUILT — 2026-07-18) — SUPERSEDED
 
-**Superseded 2026-08** — the list became `TurnpointsTable` (a RAC Table)
-again, so the specifics below are no longer true of the code: there is **no**
-GridList in the route editor, **no** per-row up/down reorder control, **no**
-`onAction` → `RouteMap` `focus={{lat,lon,key}}` map-pan, and **no**
-`dependencies={[rows, derived]}` on a GridList. Kept for the reasoning, which
+**Superseded 2026-08, and half of it came back with #661.** The list went to
+`TurnpointsTable` (a RAC Table) and then to `comp/TurnpointList.tsx`, a
+GridList again — so of the specifics below, the **GridList**, the **per-row
+up/down reorder** (now only inside Reorder mode) and the
+`dependencies={[...]}` are true again, while the per-row **Edit / remove**
+buttons (both live in the turnpoint sheet now), the inline row chrome and the
+`onAction` → `RouteMap` `focus={{lat,lon,key}}` **map-pan** (dropped: a row
+press opens the sheet) are not. Read "Route editor: how it works now" above for
+the current shape. Kept for the reasoning, which
 still applies to any card-shaped editable collection; read "Route editor: how it
 works now" above for the current shape.
 

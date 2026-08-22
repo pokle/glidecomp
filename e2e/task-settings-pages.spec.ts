@@ -330,3 +330,159 @@ test("the whole journey fits a phone: no horizontal overflow", async ({
   expect(saveBox, "the route editor's Save has a bounding box").not.toBeNull();
   expect(saveBox!.y).toBeLessThanOrEqual(viewport.height);
 });
+
+/**
+ * The route without the syntax (#661).
+ *
+ * The three pieces that replaced the read-only listing plus a text field: rows
+ * that open a full-screen turnpoint sheet, a Reorder MODE carrying Move up /
+ * Move down (no drag — see RAC gotcha #4), and Quick entry as its own sheet
+ * applied by an explicit press.
+ */
+const ROUTE_WAYPOINTS = [
+  { code: "ALPHA", name: "Alpha Hill", latitude: -36.5, longitude: 147.8, altitude: 900, radius: 400 },
+  { code: "BRAVO", name: "Bravo Gap", latitude: -36.6, longitude: 147.9, altitude: 800, radius: 400 },
+  { code: "CHARL", name: "Charlie Field", latitude: -36.7, longitude: 148.0, altitude: 700, radius: 400 },
+];
+
+/** A three-turnpoint route on the fixture task, straight through the API. */
+async function seedRoute(page: Page) {
+  const wp = await page.request.put(`/api/comp/${compId}/waypoints`, {
+    data: { waypoints: ROUTE_WAYPOINTS },
+  });
+  expect(wp.ok(), await wp.text()).toBe(true);
+
+  const patch = await page.request.patch(`/api/comp/${compId}/task/${taskId}`, {
+    data: {
+      xctsk: {
+        taskType: "CLASSIC",
+        version: 1,
+        turnpoints: ROUTE_WAYPOINTS.map((w, i) => ({
+          ...(i === 0 ? { type: "TAKEOFF" as const } : {}),
+          radius: 400,
+          waypoint: {
+            name: w.code,
+            description: w.name,
+            lat: w.latitude,
+            lon: w.longitude,
+            altSmoothed: w.altitude,
+          },
+        })),
+      },
+    },
+  });
+  expect(patch.ok(), await patch.text()).toBe(true);
+}
+
+/** Every turnpoint row's text, in route order. */
+async function routeRows(page: Page): Promise<string[]> {
+  const rows = page.getByRole("grid", { name: /^Turnpoints/ }).getByRole("row");
+  await expect(rows.first()).toBeVisible();
+  return (await rows.allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim());
+}
+
+test("a turnpoint is edited in a sheet, and reordered in a mode", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page);
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+
+  expect(await routeRows(page)).toHaveLength(3);
+
+  // A row opens the turnpoint sheet — over the editor, not away from it, so
+  // the unsaved route survives (and the unsaved-changes guard never fires on
+  // the way in, which a link would).
+  await page.getByRole("row").filter({ hasText: "BRAVO" }).click();
+  const sheet = page.getByRole("dialog", { name: /^Edit / });
+  await expect(sheet.getByRole("heading", { name: "Edit turnpoint" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(1);
+
+  // There is no Cancel: nothing here is saved, so Done and the back gesture
+  // both keep the edits, and Delete is the only way to lose a turnpoint.
+  await sheet.getByRole("button", { name: "Set radius 2000 metres" }).click();
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden();
+  expect((await routeRows(page)).join("\n")).toContain("BRAVO");
+  expect(await routeRows(page)).toEqual(
+    expect.arrayContaining([expect.stringContaining("r. 2 km")])
+  );
+
+  // THE reason the sheet is a sheet: the route is dirty now, and
+  // use-unsaved-changes-guard intercepts every same-origin anchor click while
+  // it is. A row that navigated would ask "Discard route changes?" on the way
+  // IN to editing a turnpoint — so opening one must raise no dialog at all.
+  await page.getByRole("row").filter({ hasText: "CHARL" }).click();
+  await expect(sheet.getByRole("heading", { name: "Edit turnpoint" })).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden();
+
+  // Reorder is a MODE: at rest the rows carry no per-row chrome at all.
+  await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+  await page.getByRole("button", { name: "Reorder", exact: true }).click();
+  await page.getByRole("button", { name: "Move CHARL up" }).click();
+
+  const order = (await routeRows(page)).map((t) => t.split(" ")[1]);
+  expect(order).toEqual(["ALPHA", "CHARL", "BRAVO"]);
+  // Rows swapping places is invisible to a screen reader, so it is said.
+  await expect(page.getByText("CHARL moved to 2 of 3")).toBeAttached();
+  // Focus follows the turnpoint, not the position it left — otherwise a
+  // second press would move whatever slid in underneath.
+  await expect(page.getByRole("button", { name: "Move CHARL up" })).toBeFocused();
+
+  await page.getByRole("button", { name: "Done reordering" }).click();
+  await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+});
+
+test("Quick entry rebuilds the route without losing what the line can't say", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page);
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  expect(await routeRows(page)).toHaveLength(3);
+
+  // Set a radius the ALPHA waypoint record does not carry, so a rebuild from
+  // the waypoints would visibly lose it.
+  await page.getByRole("row").filter({ hasText: "ALPHA" }).click();
+  const tp = page.getByRole("dialog", { name: /^Edit / });
+  await tp.getByRole("button", { name: "Set radius 3000 metres" }).click();
+  await tp.getByRole("button", { name: "Done" }).click();
+  await expect(tp).toBeHidden();
+
+  await page.getByRole("button", { name: "Quick entry" }).click();
+  const quick = page.getByRole("dialog", { name: "Quick entry" });
+  const line = quick.getByRole("textbox", { name: "Enter task" });
+  // The sheet opens showing the route that is loaded — it edits a route as
+  // well as entering one.
+  await expect(line).toHaveValue(/ALPHA/);
+  await expect(line).toHaveValue(/CHARL/);
+
+  await line.fill("ALPHA, BRAVO");
+  await quick.getByRole("button", { name: "Use this route" }).click();
+  await expect(quick).toBeHidden();
+
+  const rows = await routeRows(page);
+  expect(rows.map((t) => t.split(" ")[1])).toEqual(["ALPHA", "BRAVO"]);
+  // Reconciled, not rebuilt: the hand-set radius rode through the apply even
+  // though the grammar has no way to have said it.
+  expect(rows[0]).toContain("r. 3 km");
+
+  // Leaving with the text changed asks first — the press is the commit.
+  await page.getByRole("button", { name: "Quick entry" }).click();
+  await quick.getByRole("textbox", { name: "Enter task" }).fill("ALPHA");
+  await quick.getByRole("button", { name: "Cancel" }).click();
+  const discard = page.getByRole("alertdialog");
+  await expect(discard.getByText("Discard this text?")).toBeVisible();
+  await discard.getByRole("button", { name: "Keep editing" }).click();
+  await expect(quick).toBeVisible();
+  await quick.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Discard" }).click();
+  await expect(quick).toBeHidden();
+  // The route is untouched by a dismissed sheet.
+  expect((await routeRows(page)).map((t) => t.split(" ")[1])).toEqual([
+    "ALPHA",
+    "BRAVO",
+  ]);
+});

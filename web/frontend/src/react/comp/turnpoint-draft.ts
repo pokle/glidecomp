@@ -1,11 +1,13 @@
 /**
  * What one turnpoint's editable fields are, and the small vocabulary the
- * details dialog and the route grid both speak about them.
+ * turnpoint sheet and the route list both speak about them.
  *
- * Shared so RouteEditorDialog and TurnpointDetailsDialog agree by construction
- * rather than by both happening to say 1000 and "1 km".
+ * Shared so the route editor, its turnpoint sheet and the Quick entry
+ * reconcile agree by construction rather than by all happening to say 1000
+ * and "1 km".
  */
-import { TYPE_LABELS, type RouteRow } from "./route-editor";
+import type { WaypointFileRecord } from "@glidecomp/engine";
+import { formatCoords, TYPE_LABELS, type RouteRow } from "./route-editor";
 
 /** The radius a freshly added turnpoint starts at. */
 export const NEW_ROW_RADIUS = 400;
@@ -50,3 +52,22 @@ export function blankDraft(): TurnpointDraft {
   };
 }
 
+
+/**
+ * A competition waypoint's details as a turnpoint draft.
+ *
+ * The waypoint's values are COPIED in, so a later edit to the competition's
+ * waypoint never changes a task that was set from it. Shared by every route
+ * that turns a waypoint into a turnpoint — the map pick, the details sheet's
+ * "Load from a waypoint", and the Quick entry reconcile.
+ */
+export function draftFromRecord(rec: WaypointFileRecord): TurnpointDraft {
+  return {
+    name: rec.code,
+    description: rec.name !== rec.code ? rec.name : "",
+    type: "",
+    coords: formatCoords(rec.latitude, rec.longitude),
+    radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
+    altitude: rec.altitude ? rec.altitude : "",
+  };
+}
