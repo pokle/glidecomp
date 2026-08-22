@@ -17,6 +17,7 @@ import {
   Modal,
 } from "@/react/rac/dialog";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
+import { AltitudeField } from "./fields";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { ListBox, ListBoxItem } from "@/react/rac/list-box";
 import { formatCoords, parseCoords, type RouteRow } from "./route-editor";
@@ -58,6 +59,10 @@ export function TurnpointDetailsDialog({
   const [wpQuery, setWpQuery] = useState("");
   const { contains } = useFilter({ sensitivity: "base" });
   const radius = Number(draft.radius);
+  // Blank is "altitude unknown" and stays blank in the draft; the field spells
+  // that NaN.
+  const draftAltitudeM =
+    String(draft.altitude ?? "").trim() === "" ? NaN : Number(draft.altitude);
   const label = draft.name || "turnpoint";
 
   const patch = (p: Partial<TurnpointDraft>) => setDraft((d) => ({ ...d, ...p }));
@@ -259,12 +264,10 @@ export function TurnpointDetailsDialog({
               : 'Enter "lat, lon" decimal degrees'
           }
         />
-        <TextField
-          label="Altitude (m)"
+        <AltitudeField
           description="Waypoint altitude, optional"
-          value={String(draft.altitude ?? "")}
-          onChange={(v) => patch({ altitude: v })}
-          placeholder="0"
+          valueM={draftAltitudeM}
+          onChange={(m) => patch({ altitude: Number.isFinite(m) ? m : "" })}
         />
 
         <DialogFooter className="mt-1">

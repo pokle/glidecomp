@@ -1043,8 +1043,13 @@ function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
     text("Code", "code", { minWidth: 80, frozen: true, headerSort: true }),
     text("Name", "name", { minWidth: 130, headerSort: true }),
     coords,
-    text("Alt", "altitude", { width: 70, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
-    text("Radius", "radius", { width: 80, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
+    // Both quantities are the waypoint FILE's own unit — metres — whatever the
+    // reader's display preference, so the headers say so rather than leave a
+    // reader who thinks in feet to guess (issue #662). The single-value inputs
+    // (the Add-waypoint dialog, the route editor's turnpoint dialog) do convert
+    // into that preference; this grid is the file itself, edited in place.
+    text("Alt (m)", "altitude", { width: 84, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
+    text("Radius (m)", "radius", { width: 100, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
     remove,
   ];
 }
