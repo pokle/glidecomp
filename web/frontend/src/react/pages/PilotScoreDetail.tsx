@@ -85,7 +85,6 @@ import { TaskInCompScores } from "../comp/TaskInCompScores";
 import { HistoricalRulesNotice, RulesEditionBadge } from "../comp/RulesEdition";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
-import { useUser } from "../lib/user";
 import type { PilotScoreLoaderData } from "../loaders";
 
 // Lazy so mapbox (and its CSS) loads only with this page's map.
@@ -610,15 +609,14 @@ export function PilotScoreDetail() {
   // Deep-link into the standalone analysis viewer. `pilotId` narrows it to
   // this pilot's own track, which is what keeps the viewer's panel in
   // single-track mode with the full Events/Glides/Climbs/Sinks tooling.
+  //
+  // Offered to everyone. This page is public, and the viewer opens this one
+  // shape of link without a session (issue #666, `analysis/public-deep-link`)
+  // — so it is also static markup, identical on the server and after
+  // hydration, rather than something that appears once /api/auth/me answers.
   const analysisUrl = `/analysis?compId=${encodeURIComponent(
     compId,
   )}&taskId=${encodeURIComponent(taskId)}&pilotId=${encodeURIComponent(pilotId)}`;
-  // The analysis viewer is sign-in gated (it's the personal-library tool), so
-  // only offer the link to signed-in visitors — an anonymous reader of this
-  // public page would just hit the login wall. `user` is null during SSR and
-  // the first client paint (loading), so this stays hydration-safe: the button
-  // appears only after /api/auth/me resolves, matching TaskDetail's admin gate.
-  const { user } = useUser();
 
   // While the map is expanded to fill the viewport: Esc restores it, and the
   // page behind it must not scroll.
@@ -944,18 +942,16 @@ export function PilotScoreDetail() {
                 and the task in the standalone analysis viewer
                 (`/analysis?compId=…&pilotId=…`), with the deeper glide/thermal
                 tooling. */}
-            {user != null ? (
-              <a
-                href={analysisUrl}
-                target="_blank"
-                rel="noopener"
-                title="Open full track in the analysis map"
-                aria-label="Open full track in the analysis map (opens in a new tab)"
-                className="absolute bottom-20 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
-              >
-                <AnalysisMapIcon />
-              </a>
-            ) : null}
+            <a
+              href={analysisUrl}
+              target="_blank"
+              rel="noopener"
+              title="Open full track in the analysis map"
+              aria-label="Open full track in the analysis map (opens in a new tab)"
+              className="absolute bottom-20 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
+            >
+              <AnalysisMapIcon />
+            </a>
             <button
               type="button"
               onClick={() => setMapExpanded((v) => !v)}

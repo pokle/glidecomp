@@ -253,10 +253,14 @@
                     </div>
                 </div>
 
-                <hr role="separator">
+                <hr role="separator" data-requires-account>
 
-                <!-- Sample Flights -->
-                <div role="group" aria-labelledby="samples-heading">
+                <!-- Sample Flights. Both this group and the sample competition
+                     below reload the page with ?track= / ?sampleComp=, neither
+                     of which is the public competition deep link — so they are
+                     hidden from an anonymous reader, who would be met by the
+                     sign-in gate on the way back in (issue #666). -->
+                <div role="group" aria-labelledby="samples-heading" data-requires-account>
                     <div role="heading" id="samples-heading">Sample Flights</div>
                     <div role="menuitem" id="sample-tushar" data-keywords="tushar pokle moyes gecko seeyou navigator corryong sample flight">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -274,8 +278,8 @@
                 </div>
 
                 <!-- Sample Competitions -->
-                <hr role="separator">
-                <div role="group" aria-labelledby="sample-comps-heading">
+                <hr role="separator" data-requires-account>
+                <div role="group" aria-labelledby="sample-comps-heading" data-requires-account>
                     <div role="heading" id="sample-comps-heading">Sample Competitions</div>
                     <div role="menuitem" id="sample-comp-corryong" data-keywords="corryong cup 2026 competition scoring sample hanggliding race task">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

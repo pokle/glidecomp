@@ -14,6 +14,7 @@ import { parseIGC, parseXCTask, detectFlight, calculateOptimizedTaskDistance, ca
 import { SAMPLE_COMPS } from '@glidecomp/samples';
 import { getCurrentUserOnce, needsOnboarding } from '../auth/client';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
+import { isPublicCompLink } from './public-deep-link';
 import { createMapProvider, type MapProvider, type LoadedTrack, type OpenDistanceLine } from './map-provider';
 import { createAnalysisPanel, AnalysisPanel, FlightInfo, type OpenDistancePilotStats } from './analysis-panel';
 import { loadCorryongWaypoints } from './waypoint-loader';
@@ -96,12 +97,28 @@ interface FeatureToggleConfig {
  * Initialize the application
  */
 async function init(): Promise<void> {
+  // Who is reading this page?
+  //
+  // The report card is public and server-rendered, and it links one pilot's
+  // track in here as `?compId=…&taskId=…&pilotId=…` (issue #666). That deep
+  // link reads nothing the report card had not already fetched anonymously to
+  // draw its own map, so it opens with no session — read-only, on published
+  // competition data. Every other way into this page is the personal library
+  // and the file tooling, and still asks for an account.
+  //
+  // A failure to ask is not an answer (issue #481): `getCurrentUserOnce()`
+  // retries a dropped request or a 5xx before it answers, which is what stops
+  // a blip from reading as "anonymous" and quietly handing a signed-in
+  // visitor the reduced page.
   const user = await getCurrentUserOnce();
-  if (!user) {
+  const anonymous = user === null;
+  if (anonymous && !isPublicCompLink(window.location.search)) {
     window.location.href = "/u/me/";
     return;
   }
-  if (needsOnboarding(user)) {
+  // "No session" and "a session that has not been onboarded" are different
+  // answers and stay so — an anonymous reader has no account to finish.
+  if (user && needsOnboarding(user)) {
     window.location.href = "/onboarding";
     return;
   }
@@ -148,6 +165,29 @@ async function init(): Promise<void> {
 
   // Wire the command palette (filtering, keyboard nav) on its static markup
   initCommandMenus();
+
+  /**
+   * Hide the controls that would bounce an anonymous reader straight back out.
+   *
+   * Not a permission boundary — the account library is gated where it matters,
+   * in `storage` (client) and behind `requireAuth` (server), and an anonymous
+   * visitor is welcome to drop in a file of their own. This is only about the
+   * sample loaders, which reload the page with `?track=` / `?sampleComp=`:
+   * neither param is the public competition deep link, so the gate above would
+   * meet the reload and send the visitor to sign in. Offering a button that
+   * throws the reader off the page is worse than not offering it.
+   *
+   * Marked in the markup (`data-requires-account`) rather than listed by id
+   * here, so a new sample loader is covered by the attribute it is written
+   * with rather than by remembering this function exists.
+   */
+  const hideAccountOnlyControls = (root: Document | HTMLElement): void => {
+    if (!anonymous) return;
+    for (const el of root.querySelectorAll('[data-requires-account]')) {
+      el.classList.add('hidden');
+    }
+  };
+  hideAccountOnlyControls(document);
 
   // Initialize map
   try {
@@ -965,6 +1005,10 @@ async function init(): Promise<void> {
     },
     onOpenCompetitionSettings: () => openCompetitionSettings(),
   });
+
+  // The panel builds its own markup, including the empty state's "Try a sample
+  // flight" — which is a sample loader like any other.
+  hideAccountOnlyControls(eventPanelContainer);
 
   // Pass waypoint database to the analysis panel for task editor search
   if (waypointDatabase.length > 0) {
@@ -1791,6 +1835,15 @@ async function init(): Promise<void> {
         fetch(taskBase),
         fetch(`${taskBase}/igc`),
       ]);
+      // A 404 is the whole answer for a hidden `test` comp: all four routes
+      // give a non-admin the same "Not found" they give for an id that never
+      // existed, and nothing has been read that could name the competition —
+      // the breadcrumbs below are only built once the task really resolved.
+      // Say not-found and stop; anything else is a genuine failure.
+      if (taskRes.status === 404 || listRes.status === 404) {
+        showStatus('Competition task not found', 'error');
+        return;
+      }
       if (!taskRes.ok || !listRes.ok) {
         showStatus('Failed to load competition task', 'error');
         return;

@@ -340,6 +340,28 @@ These are the standing imperatives. Each links to the reference that explains it
   panels in the prerendered DOM). Write such things in vanilla JS/CSS against the
   existing tokens rather than pulling the RAC kit (or any framework) into these
   pages.
+- **The analysis page opens for ONE anonymous URL shape, and no other**
+  (issue #666). The public report card links a single pilot's track into
+  `/analysis` as `?compId=…&taskId=…&pilotId=…`, and that deep link reads only
+  published competition data the report card had already fetched anonymously
+  to draw its own map — so it loads with no session. `isPublicCompLink()` in
+  `src/analysis/public-deep-link.ts` is the entire gate, and it is a whitelist
+  of that one shape rather than a blocklist, so a param it has never heard of
+  cannot quietly widen it. Everything else still redirects to `/u/me/`: the
+  bare page, the personal library (`storedTrack`, `storedTask`, `u`), the
+  bundled samples (`track`, `task`, `sampleComp`) and the share target.
+  - The relaxation is **client-side only**. No worker route moved from
+    `requireAuth` to `optionalAuth` and no endpoint was added; a patch here
+    that touches `web/workers/` has gone too far. The account library stays
+    gated by `storage.isAvailable()` on the client and `requireAuth` on the
+    server, which is the boundary that actually holds.
+  - A hidden `test` comp stays hidden: all four routes the deep link uses 404
+    for a non-admin, and the viewer must say not-found while naming nothing —
+    the breadcrumbs are built only once the task really resolved.
+  - Anything that would RELOAD into a URL the gate refuses (the sample
+    loaders) is marked `data-requires-account` in the markup and hidden for an
+    anonymous reader, rather than left to bounce them out of the page.
+  - Coverage: the "signed out" block in `e2e/report-card.spec.ts`.
 - **SSR-safety.** When you touch anything the eight server-rendered comp pages
   import ([docs/ssr.md](docs/ssr.md)):
   - No `window`/`document`/`localStorage` at **module scope** — it runs in
