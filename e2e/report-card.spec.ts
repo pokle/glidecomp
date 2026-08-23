@@ -21,12 +21,18 @@
  *   (d) a repaired track shows its repairs, drawn client-side off the tracklog
  *       the page already downloaded for the map.
  *
+ * A fifth concern joined them with issue #666: this page is PUBLIC, and the
+ * link it offers into the analysis viewer now opens for a reader with no
+ * session. That is a gate, so it is tested as one — see the "signed out"
+ * block at the foot of the file.
+ *
  * The fixture is a private scored competition (e2e/fixtures/scored-comp.ts) —
  * real tracklogs with both altitude channels, which (d) needs, and a field of
  * three, which (c) needs to have anyone to be muted against.
  */
 import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
-import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
+import { FRONTEND_URL, SUPER_ADMIN, e2eCompName } from "./fixtures/stack";
+import { installMapbox } from "./fixtures/mapbox";
 import {
   createScoredComp,
   openClass,
@@ -49,6 +55,8 @@ test.describe("the pilot report card", () => {
   let fixture: ScoredComp;
   let cls: ScoredClass;
   let cardUrl: string;
+  /** The pilot `cardUrl` belongs to — the analysis deep link names them. */
+  let cardPilot: { comp_pilot_id: string; pilot_name: string };
   /** The report card of the pilot whose track needed repairing. */
   let repairedCardUrl: string;
 
@@ -74,6 +82,7 @@ test.describe("the pilot report card", () => {
     // The winner: the pilot most likely to carry every section (goal, time,
     // leading), so the page under test is the fullest one the fixture has.
     const you = cls.pilots[0];
+    cardPilot = you;
     const card = (compPilotId: string) =>
       `${BASE_URL}/comp/${fixture.compId}/task/${fixture.taskId}/pilot/${compPilotId}`;
     cardUrl = card(you.comp_pilot_id);
@@ -198,5 +207,165 @@ test.describe("the pilot report card", () => {
     // of the repair, the list is the record of it, and the list doubles as the
     // chart's controls.
     await expect(page.getByText(/\d+ fix(es)? · up to \d+ m off/).first()).toBeVisible();
+  });
+  /**
+   * The anonymous reader (issue #666).
+   *
+   * The report card is public and server-rendered, so most of its readers have
+   * no session — the pilot who was sent the link, their club, a meet director
+   * on somebody else's laptop. Under the map it offers "Open full track in the
+   * analysis map", and that link used to be drawn for signed-in visitors only,
+   * because the analysis viewer bounced everyone else to sign-in.
+   *
+   * What changed is deliberately one URL shape wide: `?compId=…&taskId=…`
+   * (plus `pilotId`) opens with no session, and nothing else does. The three
+   * tests here are the three halves of that claim — it works, it is narrow,
+   * and it still cannot see a hidden `test` comp.
+   *
+   * These tests run in the default context, which carries no session at all,
+   * so "signed out" needs no arranging.
+   */
+  test.describe("signed out", () => {
+    test("the report card offers the analysis map, and it opens this pilot's track", async ({
+      page,
+      context,
+    }) => {
+      const mapbox = await installMapbox(context);
+      await page.goto(cardUrl);
+
+      const link = page.getByRole("link", {
+        name: "Open full track in the analysis map (opens in a new tab)",
+      });
+      await expect(link).toBeVisible({ timeout: 30_000 });
+      // `pilotId` is what narrows the viewer to this one track, which is what
+      // keeps its panel in single-track mode. Without it the reader lands on
+      // the whole field and the per-track tabs are replaced by a score table
+      // the report card already showed them.
+      await expect(link).toHaveAttribute(
+        "href",
+        `/analysis?compId=${fixture.compId}&taskId=${fixture.taskId}` +
+          `&pilotId=${cardPilot.comp_pilot_id}`
+      );
+
+      // Follow it here rather than in the new tab it asks for — the URL is the
+      // thing under test, and a second tab only complicates the assertions.
+      await page.goto((await link.getAttribute("href"))!);
+
+      // Not bounced. This is the assertion the whole issue is about.
+      await expect(page).toHaveURL(/\/analysis\?compId=/);
+
+      // The task arrived: the breadcrumbs are only built once it resolved.
+      await expect(page.locator("#breadcrumbs")).toContainText("Task 4", {
+        timeout: 60_000,
+      });
+
+      // And the pilot's track was parsed and analysed, under their registered
+      // name rather than whatever the IGC header says.
+      await expect(page.locator("#event-panel-container")).toContainText(
+        cardPilot.pilot_name,
+        { timeout: 60_000 }
+      );
+
+      // All six single-track tabs — the tooling the report card does not have.
+      // The panel is a sidebar over the map, collapsed to zero width until the
+      // reader opens it from the "Analysis" control. Collapsed is not the same
+      // as absent: it keeps its markup (and enough of a box to look "visible"
+      // to a bounding-box check), so its own `aria-hidden` is what says
+      // whether it is open.
+      const panel = page.locator("#waypoint-sidebar");
+      if ((await panel.getAttribute("aria-hidden")) !== "false") {
+        await page.getByRole("button", { name: "Toggle analysis panel" }).click();
+      }
+      await expect(panel).toHaveAttribute("aria-hidden", "false");
+      const tabs = page.locator("#tab-row-single");
+      for (const name of ["Task", "Score", "Events", "Glides", "Climbs", "Sinks"]) {
+        await expect(tabs.getByRole("tab", { name, exact: true })).toBeVisible();
+      }
+
+      // The page is read-only in the one way that matters to a visitor: every
+      // control that would reload into a URL this gate does not allow is
+      // hidden, rather than left to throw the reader back out to sign-in.
+      const gated = page.locator("[data-requires-account]");
+      expect(await gated.count(), "the sample loaders should be marked").toBeGreaterThan(0);
+      for (const el of await gated.all()) {
+        await expect(el).toHaveClass(/\bhidden\b/);
+      }
+
+      mapbox.assertComplete();
+    });
+
+    test("every other way into the analysis page still asks for a sign-in", async ({
+      page,
+    }) => {
+      const link = `compId=${fixture.compId}&taskId=${fixture.taskId}`;
+      const gated = [
+        // The bare page — the personal library and the file tooling.
+        "",
+        // The bundled samples and the mobile share target.
+        "?track=2025-01-05-Tushar-Corryong.igc",
+        "?task=buje",
+        "?sampleComp=corryong-cup-2026-open-t1",
+        "?shared=1",
+        // The personal library proper.
+        "?storedTrack=whatever",
+        "?storedTask=buje",
+        "?u=someone",
+        // Half a competition link is not a competition link.
+        `?compId=${fixture.compId}`,
+        `?taskId=${fixture.taskId}`,
+        // And a real one cannot be used to smuggle the rest past the gate.
+        `?${link}&storedTrack=whatever`,
+        `?${link}&track=2025-01-05-Tushar-Corryong.igc`,
+      ];
+
+      for (const query of gated) {
+        await page.goto(`/analysis${query}`);
+        await page.waitForURL(/\/u\/me/, { timeout: 30_000 });
+      }
+    });
+
+    test("a deep link into a hidden test comp finds nothing, and names nothing", async ({
+      page,
+      context,
+    }) => {
+      const mapbox = await installMapbox(context);
+
+      // A `test` comp is invisible to anyone but its admins: all four routes
+      // the deep link uses answer a non-admin the same "Not found" they answer
+      // for an id that never existed.
+      const name = e2eCompName("hidden from the analysis deep link");
+      const compRes = await admin.post("/api/comp", {
+        data: { name, category: "hg", pilot_classes: ["open"], test: true },
+      });
+      expect(compRes.ok(), await compRes.text()).toBeTruthy();
+      const { comp_id: hiddenComp } = (await compRes.json()) as { comp_id: string };
+      try {
+        const taskRes = await admin.post(`/api/comp/${hiddenComp}/task`, {
+          data: { name: "Secret task", task_date: "2020-12-12", pilot_classes: ["open"] },
+        });
+        expect(taskRes.ok(), await taskRes.text()).toBeTruthy();
+        const { task_id: hiddenTask } = (await taskRes.json()) as { task_id: string };
+
+        await page.goto(`/analysis?compId=${hiddenComp}&taskId=${hiddenTask}`);
+
+        // Not-found, said as an answer rather than as a failure.
+        await expect(page.locator("#status-message")).toHaveText(
+          "Competition task not found",
+          { timeout: 60_000 }
+        );
+
+        // And nothing about the competition leaked on the way to saying so:
+        // the breadcrumbs are built only after the task resolved, and the
+        // title is the page's own.
+        await expect(page.locator("#breadcrumbs")).toHaveText("GlideComp");
+        expect(await page.locator("body").innerText()).not.toContain(name);
+        expect(await page.title()).not.toContain(name);
+        expect(await page.title()).not.toContain("Secret task");
+      } finally {
+        await admin.delete(`/api/comp/${hiddenComp}`);
+      }
+
+      mapbox.assertComplete();
+    });
   });
 });

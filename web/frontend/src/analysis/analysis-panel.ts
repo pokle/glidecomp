@@ -324,7 +324,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-muted-foreground">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="opacity-40"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
         <p>Drop an IGC file on the map, or use <strong>Menu</strong> to load one</p>
-        <button type="button" id="try-sample-flight" class="text-sm text-primary hover:underline cursor-pointer bg-transparent border-0">Try a sample flight</button>
+        <!-- A sample loader: it reloads with ?track=, which is not the public
+             competition deep link, so main.ts hides it from an anonymous
+             reader rather than bounce them to sign-in (issue #666). -->
+        <button type="button" id="try-sample-flight" data-requires-account class="text-sm text-primary hover:underline cursor-pointer bg-transparent border-0">Try a sample flight</button>
       </div>
     </div>
 
