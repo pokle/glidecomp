@@ -14,9 +14,9 @@
     }
   },
   "dependencies": {
-    "@turf/bbox": "^7.3.5",
-    "@turf/bearing": "^7.3.5",
-    "@turf/helpers": "^7.3.5",
+    "@turf/bbox": "^7.4.0",
+    "@turf/bearing": "^7.4.0",
+    "@turf/helpers": "^7.4.0",
     "tz-lookup": "^6.1.25"
   },
   "devDependencies": {

@@ -14,7 +14,7 @@
     "@glidecomp/engine": "workspace:*",
     "@glidecomp/worker-kit": "workspace:*",
     "@hono/zod-validator": "^0.9.0",
-    "hono": "^4.13.1",
+    "hono": "^4.13.3",
     "sqids": "^0.3.0",
     "zod": "^3.25.76"
   },
@@ -22,7 +22,7 @@
     "@cloudflare/vitest-pool-workers": "^0.19.1",
     "@cloudflare/workers-types": "^4.20260702.1",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "wrangler": "4.116.0"
   }
 }
