@@ -607,8 +607,9 @@ export function PilotScoreDetail() {
   const [mapRef, mapInView] = useInView<HTMLDivElement>();
   // Time scrubber: draw the track only up to this fix (null = whole flight).
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
-  // Deep-link into the standalone analysis viewer, which loads the whole
-  // field's tracks (this pilot pre-focused) with the full glide/thermal tools.
+  // Deep-link into the standalone analysis viewer. `pilotId` narrows it to
+  // this pilot's own track, which is what keeps the viewer's panel in
+  // single-track mode with the full Events/Glides/Climbs/Sinks tooling.
   const analysisUrl = `/analysis?compId=${encodeURIComponent(
     compId,
   )}&taskId=${encodeURIComponent(taskId)}&pilotId=${encodeURIComponent(pilotId)}`;
@@ -939,9 +940,9 @@ export function PilotScoreDetail() {
             )}
             {/* Map controls, styled like the providers' own controls (white
                 regardless of theme) and kept clear of them: bottom-right, above
-                the attribution line. The analysis link opens the full track in
-                the standalone analysis viewer (`/analysis?compId=…`), which
-                loads the whole field's tracks with the deeper glide/thermal
+                the attribution line. The analysis link opens this pilot's track
+                and the task in the standalone analysis viewer
+                (`/analysis?compId=…&pilotId=…`), with the deeper glide/thermal
                 tooling. */}
             {user != null ? (
               <a

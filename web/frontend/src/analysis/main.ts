@@ -1847,9 +1847,24 @@ async function init(): Promise<void> {
         return;
       }
 
+      // A pilotId means the visitor came from that pilot's report card to study
+      // THAT flight, so load only their track. One track keeps the panel in
+      // single-track mode, which is where Events, Glides, Climbs and Sinks
+      // live; the whole field swaps those for the competition score table the
+      // report card already shows.
+      let wantedTracks = trackList;
+      if (pilotId) {
+        const own = trackList.filter((t) => t.comp_pilot_id === pilotId);
+        if (own.length > 0) {
+          wantedTracks = own;
+        } else {
+          showStatus('That pilot has no track on this task — showing the whole field', 'warning');
+        }
+      }
+
       let loaded = 0;
       const fetchResults = await Promise.allSettled(
-        trackList.map(async (t) => {
+        wantedTracks.map(async (t) => {
           const res = await fetch(`${taskBase}/igc/${encodeURIComponent(t.comp_pilot_id)}/download`);
           if (!res.ok) throw new Error(`HTTP ${res.status} for ${t.pilot_name}`);
           // The download endpoint returns a gzipped body with Content-Encoding:
@@ -1857,7 +1872,7 @@ async function init(): Promise<void> {
           // leaves the header in place (mirrors the stored-track flow).
           const content = await gunzipResponse(res);
           loaded++;
-          showStatus(`Loading tracks: ${loaded}/${trackList.length}`, 'info');
+          showStatus(`Loading tracks: ${loaded}/${wantedTracks.length}`, 'info');
           return new File([content], `${t.comp_pilot_id}.igc`, { type: 'text/plain' });
         })
       );
@@ -1876,18 +1891,13 @@ async function init(): Promise<void> {
       }
 
       // Registered pilot names (keyed by download filename) beat IGC header
-      // names so tracks match the official roster and the pilotId param.
-      const pilotNames = new Map(trackList.map((t) => [`${t.comp_pilot_id}.igc`, t.pilot_name]));
+      // names so tracks match the official roster.
+      const pilotNames = new Map(wantedTracks.map((t) => [`${t.comp_pilot_id}.igc`, t.pilot_name]));
       await loadMultipleIGCFiles(files, true, pilotNames);
 
-      if (pilotId && state.tracks.length > 1) {
-        const focused = state.tracks.find((t) => t.filename === `${pilotId}.igc`);
-        if (focused) analysisPanel?.setPilotSelection(new Set([focused.pilotName]));
-      }
-
       // A partially-loaded field skews competition scores — say so.
-      if (files.length < trackList.length) {
-        showStatus(`Loaded ${files.length} of ${trackList.length} tracks — some downloads failed`, 'warning');
+      if (files.length < wantedTracks.length) {
+        showStatus(`Loaded ${files.length} of ${wantedTracks.length} tracks — some downloads failed`, 'warning');
       }
     } catch (err) {
       console.error('Failed to load competition task:', err);
@@ -2187,7 +2197,8 @@ async function init(): Promise<void> {
   const sampleCompId = params.get('sampleComp');
   // Competition task view (exclusive) — ?compId=X&taskId=Y loads the task
   // definition plus every uploaded track straight from the competition API;
-  // an optional &pilotId=Z pre-focuses that pilot's track.
+  // adding &pilotId=Z narrows it to that one pilot's track, which is how the
+  // report card links here.
   const compTrackCompId = params.get('compId');
   const compTrackTaskId = params.get('taskId');
   const compTrackPilotId = params.get('pilotId');
