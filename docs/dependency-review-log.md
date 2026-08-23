@@ -4,6 +4,79 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-08-23
+
+### Security Vulnerabilities Fixed
+
+None new. `bun audit` reports the same 3 pre-existing, already-deferred vulnerabilities before and after this cycle — all 3 Astro XSS advisories (GHSA-f48w-9m4c-m7f5, GHSA-7pw4-f3q4-r2p2, GHSA-4g3v-8h47-v7g6), fixed only in Astro 7.x, not exploitable here (no View Transitions or dynamic spread attributes in the static pages). `shell-quote` and `sharp` are confirmed still unified to single safe copies in `bun.lock` (no second nested resolution), so no new override work was needed there.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **hono** | 4.13.1 | 4.13.3 | frontend, auth-api, competition-api, airscore-api (+ root override) | Patch releases, bug fixes only. |
+| **mapbox-gl** | 3.28.1 | 3.29.0 | root, frontend | Adds `raster-color-scale`/`raster-allow-draping` properties, moves `symbol-z-offset` out of experimental, extends `distance`/`config` expressions, more granular interaction-handler APIs. **Breaking:** removes the legacy undocumented `Map.addSourceType` API (superseded by `CustomSourceInterface`) — confirmed unused via grep. |
+| **@turf/bbox**, **@turf/bearing**, **@turf/helpers** | 7.3.5 | 7.4.0 | engine | Minor release. |
+| **lucide-react** | 1.31.0 | 1.33.0 | frontend | New icons, no breaking changes. |
+| **input-otp** | 1.4.2 | 1.5.0 | frontend | Minor release. |
+| **sonner** | 2.0.7 | 2.0.8 | frontend | Patch release. |
+| **shadcn** | 4.16.2 | 4.19.0 | frontend | CLI-only tooling. 4.17.0: SOCKS4/5 proxy support for the registry HTTP stack. 4.18.0: merge registries from `package.json` and `components.json`; skip unreadable directories during scans instead of failing with `EACCES`. 4.19.0: private GitHub-registry support via `GH_TOKEN`; `npx shadcn migrate base-color`. No security fixes, no breaking changes. |
+| **vitest** | 4.1.10 | 4.1.11 | frontend, auth-api, competition-api | Patch release. |
+| **@types/react** | 19.2.2 | 19.2.18 | frontend | Type definition patches. |
+| **@types/react-dom** | 19.2.1 | 19.2.5 | frontend | Type definition patches. |
+| **@types/bun** | 1.3.14 | 1.4.0 | root | Type definition minor bump. |
+
+### Code Changes Required
+
+None. Every upgrade this cycle is a drop-in patch/minor release with no API changes affecting our usage. mapbox-gl 3.29.0's one breaking change (`Map.addSourceType` removal) was verified unused via grep before upgrading.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `hono` (^4.13.1 → ^4.13.3) | **Updated** | Keeps the override aligned with workspace versions. |
+
+Full override list is unchanged otherwise: `@babel/core`, `@hono/node-server`, `brace-expansion`, `defu`, `esbuild`, `fast-uri`, `form-data`, `hono`, `js-yaml`, `kysely`, `nanoid`, `postcss`, `protocol-buffers-schema`, `shell-quote`, `sharp`, `svgo`, `undici`, `vite`, `ws`.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **better-auth** | 1.6.26 | 1.7.1 | **New this cycle: in-range 1.6.x patches exist (1.6.27–1.6.29) but the outdated report resolves straight to 1.7.1, a *minor* version that ships several changes documented as breaking despite semver.** Most critically: "Scope account identity by trusted issuer instead of provider configuration" adds a **required** `Account.issuer` column and changes the account identity key to `(issuer, accountId)` — the generated schema migration "cannot assign trusted issuers or resolve existing identity collisions automatically," and the release notes call for a manual reviewed backfill before deploying. This repo configures `socialProviders` in `web/workers/auth-api/src/auth.ts:173`, so the change applies. Other 1.7.0 breaking changes not relevant here (generic-OAuth plugin rewrite, MCP plugin moved to `@better-auth/mcp`, captcha endpoint matching, Electron PKCE hardening) were grepped and confirmed unused. Needs a focused PR with a deliberate migration/backfill step, not a routine bump. |
+| **@better-auth/api-key** | 1.6.26 | 1.7.1 | Version-locked to better-auth; deferred alongside it. |
+| **wrangler** | 4.116.0 | 4.125.0 | **Still capped — re-checked every release since 4.116.0 (7 cycles now).** `npm view wrangler@<version> dependencies.miniflare` for 4.117.0 through 4.125.0 all report an alpha (`5.20260730.0-alpha` through `5.20260820.0-alpha`). No new release has appeared on the stable miniflare 4.x line since 4.116.0, which looks to be the last one. Re-evaluate with the same command before ever bumping past 4.116.0. |
+| @cloudflare/vitest-pool-workers | 0.19.1 | 0.22.0 | Paired with the wrangler cap above — still bundles the alpha miniflare. Re-evaluate alongside wrangler. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260823.1 | **Major (5.x).** No newer 4.x release available — confirmed again this cycle. Evaluate in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest. |
+| zod | 3.25.76 | 4.4.3 | Major. Standalone task — `@hono/zod-validator` 0.9.0 accepts both. |
+| vite | 7.3.6 | 8.2.2 | Major. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. Already at latest within `^7`. |
+| @vitejs/plugin-react | 5.2.0 | 6.1.0 | Major. Pairs with Vite 8. |
+| astro | 6.4.8 | 7.2.4 | **Major.** Still carries the 3 XSS advisories (GHSA-4g3v-8h47-v7g6, GHSA-f48w-9m4c-m7f5, GHSA-7pw4-f3q4-r2p2) fixed in 7.0.10+ — not exploitable here (no View Transitions / dynamic spread attributes in our static pages). Needs focused evaluation. |
+| @astrojs/mdx | 6.0.3 | 7.0.7 | Major. Pairs with Astro 7. |
+| kysely | 0.28.17 | 0.29.5 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.28`. Defer to a focused PR. |
+| jsdom | 25.0.1 | 30.0.1 | Major version jump. Already at latest within `^25`. Defer. |
+| katex | 0.17.0 | 0.18.4 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.17`. Defer. |
+| concurrently | 9.2.4 | 10.0.5 | Major. ESM-only, drops `--name-separator`. Already at latest within `^9`. Low priority. |
+| @types/node | 25.9.5 | 26.2.0 | Major. Already at latest within `^25`. Stay on 25.x. |
+| leaflet | 2.0.0-alpha.1 | 1.9.4 (stable) | Intentionally on v2 alpha. |
+| @pokle/basecoat | 0.3.10-beta3.pokle-selections | - | Custom fork, pinned. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine, airscore-api, auth-api, competition-api, dev-router).
+- `bun run test:all` — root/engine/airscore-api/dev-router/scripts tests pass + 724 frontend + 104 auth-api (6 todo) + 769 competition-api all pass.
+- `bun run test:e2e` — 175 passed, 6 skipped, clean run in 11.7 minutes, no flakes or collateral failures.
+- `bun run test:e2e:ssr` — 38/38 passed, clean, no flakes.
+- `bun audit` — 3 vulnerabilities before and after this cycle (2 moderate, 1 low), all the pre-existing, already-deferred Astro XSS advisories. No new advisories surfaced this cycle.
+
+### Lessons / Notes for Future Sessions
+
+- **`bun update --filter '<workspace>' <pkg...>` run from the repo root can still silently add packages to the ROOT `package.json` even with `--filter` set correctly.** This cycle, `bun update --filter '@glidecomp/frontend' mapbox-gl hono lucide-react input-otp sonner shadcn @types/react @types/react-dom vitest` (run from the repo root) left `web/frontend/package.json` completely unchanged and instead added `hono`, `input-otp`, `lucide-react`, `shadcn`, `sonner`, `vitest`, `@types/react`, `@types/react-dom` as brand-new direct dependencies of the ROOT `package.json`, at their newly-resolved versions — the exact stray-root-dependency failure mode the 2026-08-09 log already warned about for a bare `bun update <pkg>`, except this time `--filter` didn't prevent it. **The fix that worked: `cd` into the workspace directory itself and run `bun update <pkg...>` from there (no `--filter` flag), which correctly updated `web/frontend/package.json` in place and resolved the versions in `bun.lock`.** Prefer this over `--filter` from the root for multi-package `bun update` calls. Always diff the root `package.json` after any `bun update` invocation, whichever form you used, to catch this before it lands in a commit.
+- **mapbox-gl 3.29.0 removes the legacy `Map.addSourceType` API** (superseded by `CustomSourceInterface` — this was undocumented even before removal). Grepped `web/frontend/src` for `addSourceType`: no hits. Safe.
+- **better-auth's own versioning doesn't reliably signal breaking changes** — 1.6.26 → 1.7.1 is a minor bump by strict semver, but the 1.7.0 changelog itself uses the words "Breaking changes" for several items, including a required new `Account.issuer` column with a manual identity-collision backfill for any comp using social sign-in (which this repo does). Don't treat a pre-2.0 "minor" bump as automatically drop-in — read the actual changelog prose, not just the semver segment that changed, especially for an auth library.
+- **wrangler remains capped at 4.116.0, now 7 cycles running** (since 2026-08-02). Every release through 4.125.0 still bundles an alpha `miniflare`. Continue checking `npm view wrangler@<v> dependencies.miniflare` before ever bumping.
+- **The rest of the deferred-majors table (Astro, zod, vite, kysely, jsdom, katex, concurrently, `@types/node`, `@cloudflare/workers-types`) is unchanged from prior cycles** — re-verified this cycle, conclusions still hold.
+
 ## 2026-08-09
 
 ### Security Vulnerabilities Fixed
