@@ -179,6 +179,19 @@ export function taskAnalysisPath(
   return `${compPath(compId, compName)}/analysis/task/${slugSegment(taskId, taskName)}`;
 }
 
+/**
+ * The pilot-similarity sheet — a PROTOTYPE surface hung off the task's field
+ * analysis, so it nests under that report rather than under the task.
+ */
+export function taskSimilarityPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskAnalysisPath(compId, compName, taskId, taskName)}/similar`;
+}
+
 export function pilotPath(
   compId: string,
   compName: string | null | undefined,

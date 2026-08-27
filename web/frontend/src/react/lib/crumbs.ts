@@ -15,6 +15,7 @@ import {
   compPath,
   taskPath,
   compAnalysisPath,
+  taskAnalysisPath,
   compSettingsPath,
   pilotPath,
 } from "./slug";
@@ -69,6 +70,32 @@ export function underTask(
     {
       label: taskName || "Task",
       to: compId && taskId ? taskPath(compId, compName, taskId, taskName) : "/comp",
+    },
+  ];
+}
+
+/**
+ * Ancestors of a page under a per-task field-analysis chapter — today the
+ * pilot-similarity sheet.
+ *
+ * One crumb deeper than {@link underCompAnalysis}, because the sheet is about
+ * ONE task's field: going up should land on that task's chapter, which is the
+ * page it derives its numbers from, not on the whole-comp report.
+ */
+export function underTaskAnalysis(
+  compId: string | undefined,
+  compName: string | null | undefined,
+  taskId: string | undefined,
+  taskName: string | null | undefined
+): Crumb[] {
+  return [
+    ...underCompAnalysis(compId, compName),
+    {
+      label: taskName || "Task",
+      to:
+        compId && taskId
+          ? taskAnalysisPath(compId, compName, taskId, taskName)
+          : "/comp",
     },
   ];
 }

@@ -78,6 +78,13 @@ const ManualFlightPage = lazy(() =>
 const TaskWeatherPage = lazy(() =>
   import("./pages/TaskWeatherPage").then((m) => ({ default: m.TaskWeatherPage }))
 );
+// Prototype, and client-only (a noindex shell in the SSR Function) — lazy so
+// an experiment costs nothing on the pages that ship.
+const TaskPilotSimilarity = lazy(() =>
+  import("./pages/TaskPilotSimilarity").then((m) => ({
+    default: m.TaskPilotSimilarity,
+  }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -174,6 +181,14 @@ export function AppRoutes() {
           <Route
             path="/comp/:compId/analysis/task/:taskId"
             element={<TaskFieldAnalysis />}
+          />
+          {/* PROTOTYPE: pilot-to-pilot behavioural similarity, a leaf of the
+              per-task report it derives from. Client-only, so it needs a
+              NOINDEX_SHELL_ROUTES entry in functions/comp/[[path]].ts rather
+              than a loader. */}
+          <Route
+            path="/comp/:compId/analysis/task/:taskId/similar"
+            element={<TaskPilotSimilarity />}
           />
           <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
           {/* The task's three admin-only editors, all SIBLINGS: each is

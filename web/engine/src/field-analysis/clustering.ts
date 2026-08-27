@@ -48,7 +48,7 @@ export const MIN_CLUSTER_PILOTS = 8;
 export const MIN_COVERAGE = 0.6;
 
 /** Any pilot pair must share at least this many observed metrics. */
-const MIN_SHARED_METRICS = 3;
+export const MIN_SHARED_METRICS = 3;
 
 /** The largest k the silhouette search examines. */
 const MAX_K = 6;
@@ -219,8 +219,12 @@ const EXPLANATION =
   'of groups. Each group carries the spread of the GAP ranks of its members, which shows where a ' +
   'style paid and where it did not.';
 
-/** Behavioural metrics with enough data to shape a distance. */
-function usableMetrics(report: FieldAnalysisReport): MetricReport[] {
+/** Behavioural metrics with enough data to shape a distance.
+ *
+ * Exported so the cosine-similarity sheet (./similarity.ts) selects from
+ * exactly the same set: two surfaces disagreeing about which metrics count
+ * as behaviour would be a bug nobody could see. */
+export function usableMetrics(report: FieldAnalysisReport): MetricReport[] {
   return report.metrics.filter((m) => {
     if (m.outcome || m.error) return false;
     const values = m.perPilot.flatMap((p) =>
@@ -234,8 +238,12 @@ function usableMetrics(report: FieldAnalysisReport): MetricReport[] {
 /**
  * Per-metric within-field percentiles (0–100, ties averaged), aligned to
  * report.pilots; null where the pilot has no value.
+ *
+ * Exported for ./similarity.ts — see {@link usableMetrics}. The rank-first
+ * transform is the whole reason metrics in m/s, km and minutes can share one
+ * vector, so it must not be reimplemented alongside.
  */
-function percentileColumns(report: FieldAnalysisReport, metrics: MetricReport[]): (number | null)[][] {
+export function percentileColumns(report: FieldAnalysisReport, metrics: MetricReport[]): (number | null)[][] {
   return metrics.map((m) => {
     const idx: number[] = [];
     const values: number[] = [];
@@ -257,7 +265,7 @@ function percentileColumns(report: FieldAnalysisReport, metrics: MetricReport[])
 
 /** Gower distance in [0, 1]: mean |percentile gap|/100 over shared metrics;
  * null when the pair shares fewer than MIN_SHARED_METRICS. */
-function gower(cols: (number | null)[][], a: number, b: number): number | null {
+export function gower(cols: (number | null)[][], a: number, b: number): number | null {
   let sum = 0;
   let shared = 0;
   for (const col of cols) {
