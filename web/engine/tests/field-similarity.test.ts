@@ -89,20 +89,56 @@ describe('findSimilarPilots', () => {
     }
   });
 
-  it('the raw basis cannot express opposition; the centred one can', () => {
-    const report = shapedReport();
-    const centred = findSimilarPilots(report, { subjectTrackFile: 'p0.igc' })!;
-    const raw = findSimilarPilots(report, { subjectTrackFile: 'p0.igc', basis: 'raw' })!;
-    // Percentiles are all ≥ 0, so raw vectors live in the positive orthant and
-    // no pair can ever score below 0 — "flies the opposite way" and "unrelated"
-    // are the same number there. This is the degeneracy centring removes, and
-    // it holds for every field, not just this fixture.
-    expect(Math.min(...raw.neighbours.map((n) => n.cosine))).toBeGreaterThanOrEqual(0);
-    expect(Math.min(...centred.neighbours.map((n) => n.cosine))).toBeCloseTo(-1, 10);
-    const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
-    expect(spread(centred.neighbours.map((n) => n.cosine))).toBeGreaterThan(
-      spread(raw.neighbours.map((n) => n.cosine)),
+  it('is unaffected by the unit a behaviour is recorded in', () => {
+    // The whole reason for normalising: cosine over RAW values is dominated by
+    // whichever behaviour happens to be measured in big numbers, so recording
+    // one in a smaller unit would change who your nearest neighbour is. A
+    // z-score divides the unit out, so it cannot.
+    const base = findSimilarPilots(shapedReport(), { subjectTrackFile: 'p0.igc' })!;
+    const rescaled = shapedReport();
+    // m3 rescaled and shifted — metres rather than kilometres, say.
+    rescaled.metrics[2].perPilot = rescaled.metrics[2].perPilot.map((p) => ({
+      ...p,
+      value: p.value === null ? null : p.value * 1000 + 7,
+    }));
+    const after = findSimilarPilots(rescaled, { subjectTrackFile: 'p0.igc' })!;
+    expect(after.neighbours.map((n) => n.pilotName)).toEqual(
+      base.neighbours.map((n) => n.pilotName),
     );
+    after.neighbours.forEach((n, i) =>
+      expect(n.cosine).toBeCloseTo(base.neighbours[i].cosine, 10),
+    );
+  });
+
+  it('keeps the size of a gap, not just its order', () => {
+    // A and B are near-identical on m1/m3 while C is far off. A rank transform
+    // would put A and B a full place apart regardless; a z-score records them
+    // as nearly touching, which is the whole reason for choosing it.
+    const report = makeReport(
+      ['A', 'B', 'C'],
+      [
+        { id: 'm1', values: [10, 9.99, 1] },
+        { id: 'm2', values: [5, 5.01, 9] },
+        { id: 'm3', values: [2, 2.01, 9] },
+      ],
+    );
+    const r = findSimilarPilots(report, { subjectTrackFile: 'p0.igc' })!;
+    const b = r.neighbours.find((n) => n.pilotName === 'B')!;
+    const c = r.neighbours.find((n) => n.pilotName === 'C')!;
+    expect(b.typicalGap).toBeLessThan(0.1);
+    expect(c.typicalGap).toBeGreaterThan(1);
+    expect(b.cosine).toBeGreaterThan(c.cosine);
+  });
+
+  it('typicalGap is the RMS difference in z over the shared behaviours', () => {
+    const r = findSimilarPilots(shapedReport(), { subjectTrackFile: 'p0.igc' })!;
+    for (const n of r.neighbours) {
+      const rms = Math.sqrt(
+        n.contributions.reduce((s, c) => s + (c.subjectZ - c.neighbourZ) ** 2, 0) /
+          n.contributions.length,
+      );
+      expect(n.typicalGap).toBeCloseTo(rms, 10);
+    }
   });
 
   it('honours the selected behaviours', () => {
@@ -112,6 +148,24 @@ describe('findSimilarPilots', () => {
     })!;
     expect(r.metrics.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
     expect(r.neighbours.every((n) => n.sharedMetrics === 3)).toBe(true);
+  });
+
+  it('z-scores are measured against the field average, and are unit-free', () => {
+    const r = findSimilarPilots(shapedReport(), { subjectTrackFile: 'p0.igc' })!;
+    const c = r.neighbours[0].contributions.find((x) => x.metricId === 'm1')!;
+    // m1 values are [9, 8, 5, 1, 2]: mean 5, population SD 3.03…
+    const vals = [9, 8, 5, 1, 2];
+    const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
+    expect(c.subjectValue).toBe(9);
+    expect(c.subjectZ).toBeCloseTo((9 - mean) / sd, 10);
+    // ...and the neighbour's z comes off the same field statistics.
+    expect(c.neighbourValue).toBe(8);
+    expect(c.neighbourZ).toBeCloseTo((8 - mean) / sd, 10);
+    // The field average itself scores 0: C's m1 value IS the mean. (C has no
+    // direction at all here, so they are skipped rather than ranked — see the
+    // "no direction" test — hence reading them off the report, not a row.)
+    expect(r.skipped.map((x) => x.pilotName)).toContain('C');
   });
 
   it('ignores unknown metric ids rather than erroring, and refuses too few', () => {
@@ -161,8 +215,8 @@ describe('findSimilarPilots', () => {
   });
 
   it('says so rather than inventing a 0 for a pilot with no direction', () => {
-    // C sits at the field median on every metric, so their centred vector is
-    // the zero vector and the angle to them is undefined.
+    // C sits at the field average on every behaviour, so every z is 0: their
+    // vector has zero length and the angle to them is undefined.
     const report = makeReport(
       ['A', 'C', 'D'],
       [
@@ -175,10 +229,7 @@ describe('findSimilarPilots', () => {
     const r = findSimilarPilots(report, { subjectTrackFile: 'p0.igc' })!;
     expect(r.neighbours.map((n) => n.pilotName)).toEqual(['D']);
     expect(r.skipped.map((s) => s.pilotName)).toEqual(['C']);
-    expect(r.skipped[0].reason).toContain('no direction');
-    // On the raw basis nobody is directionless — the vector is all-positive.
-    const raw = findSimilarPilots(report, { subjectTrackFile: 'p0.igc', basis: 'raw' })!;
-    expect(raw.skipped).toHaveLength(0);
+    expect(r.skipped[0].reason).toContain('no direction to compare');
   });
 
   it('is null for a pilot who is not in the report', () => {

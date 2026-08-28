@@ -2,77 +2,68 @@
 
 /**
  * Pilot-to-pilot behavioural similarity — cosine over a chosen set of
- * behaviours. PROTOTYPE (issue: "explore cosine similarity"), so read the
- * caveats at the bottom before trusting a number off it.
+ * behaviours. PROTOTYPE, so read the caveats at the bottom before trusting a
+ * number off it.
  *
  * The question this answers is deliberately NOT the one the rest of field
  * analysis answers. The correlation tables ask which behaviours separated the
  * leaderboard, and style clustering asks which groups the field falls into.
  * This asks only: given the behaviours I picked, who flew most like this
- * pilot? No score, no GAP rank and no outcome metric enters anywhere — not in
- * the vector, not in the ordering, not in the output. `outcome` metrics are
- * excluded by {@link usableMetrics}, which is the same gate clustering uses.
+ * pilot? No score, GAP rank or outcome metric enters anywhere — not in the
+ * vector, not in the ordering, not in the output. `outcome` metrics are
+ * excluded by {@link usableMetrics}, the same gate clustering uses.
  *
  * Method:
  *  - Pure derivation at read time from a finished FieldAnalysisReport, like
  *    clusterPilotStyles: nothing is stored and no recompute is triggered.
- *  - Each selected metric is rank-transformed to a within-field percentile
- *    (0–100) by {@link percentileColumns} — the same transform clustering
- *    uses, so metrics in m/s, km and minutes can share one vector without the
- *    largest unit dominating the geometry.
- *  - CENTRING IS THE WHOLE BALL GAME, so it is a parameter, not a constant.
- *    Percentiles are all ≥ 0, so raw-percentile vectors sit in the positive
- *    orthant and no pair can score below 0 — "flies the opposite way" and
- *    "unrelated" collapse to the same number, and in practice the pairs bunch
- *    high. Centring on the field's middle (percentile − 50) makes each
- *    component a SIGNED deviation, so the full [−1, 1] range opens up and
- *    cosine reads as "do these two depart from field-typical in the same
- *    pattern". That is the interesting question and the default. Raw is
- *    offered anyway, because seeing the collapse is how you come to trust
- *    the centred number.
+ *  - Each selected behaviour is converted to a Z-SCORE within this field:
+ *    (value − field mean) / field standard deviation. The unit cancels, so
+ *    km/h, metres and ratios can share one vector without the metric that
+ *    happens to be measured in big numbers dominating the geometry. On
+ *    Corryong 2026 open T2 the raw values are 89% start-delay-and-ESS-margin
+ *    by vector length, purely because seconds and metres are large numbers —
+ *    without normalising, the "similarity" is almost entirely those two.
+ *  - A z-score keeps the SIZE of a gap, not just its order. Two pilots 0.3
+ *    km/h apart on glide speed are ~0.03 apart in z, where a rank transform
+ *    would have separated them by a full place regardless. That is the
+ *    intended reading of "flew alike": the order does not matter, the
+ *    distance does.
  *  - Missing values are never imputed (the drop-don't-fill convention
- *    everywhere else in field analysis): each pair is compared over the
- *    metrics BOTH pilots have, and pairs sharing fewer than
- *    {@link MIN_SHARED_METRICS} are reported skipped rather than scored.
- *  - Every neighbour carries its per-metric contributions, which sum exactly
- *    to the cosine — so "why are these two similar" is answerable from the
- *    output alone (the explainability rule).
+ *    everywhere else in field analysis): the mean and standard deviation are
+ *    taken over the pilots that HAVE the behaviour, each pair is compared
+ *    over the behaviours BOTH pilots have, and a pair sharing fewer than
+ *    {@link MIN_SHARED_METRICS} is reported skipped rather than scored.
+ *  - Every neighbour carries its per-behaviour contributions, which sum
+ *    exactly to the cosine, so "why are these two similar" is answerable from
+ *    the output alone (the explainability rule).
+ *
+ * KNOWN LIMITATION of the z-score basis, and the price of keeping distances:
+ * one pilot with a wild value on one behaviour gets a large |z| there, which
+ * can dominate their own vector's direction. Flying metrics are heavy-tailed,
+ * so this is not hypothetical. A rank transform is immune to it and is what
+ * ./clustering.ts uses; this surface deliberately trades that robustness for
+ * a measure that knows the difference between "just ahead" and "miles ahead".
  */
 
-import {
-  MIN_SHARED_METRICS,
-  gower,
-  percentileColumns,
-  usableMetrics,
-} from './clustering';
+import { MIN_SHARED_METRICS, usableMetrics } from './clustering';
 import type { FieldAnalysisReport, MetricFamily, MetricReport } from './types';
 
-/**
- * What a vector component means.
- *
- * - `centred` — percentile − 50. A signed deviation from the field's middle;
- *   cosine reads as "same pattern of departures from typical".
- * - `raw` — the percentile itself. Kept so the prototype can SHOW why it is
- *   the wrong basis: all-positive components crush every pair towards 1.
- */
-export type SimilarityBasis = 'centred' | 'raw';
-
-/** One metric's share of a pair's cosine. Contributions sum to the cosine. */
+/** One behaviour's share of a pair's cosine. Contributions sum to the cosine. */
 export interface SimilarityContribution {
   metricId: string;
   label: string;
   shortLabel?: string;
   unit: string;
   family: MetricFamily;
-  /** Within-field percentile (0–100) of each pilot's raw value. */
-  subjectPercentile: number;
-  neighbourPercentile: number;
-  /** The raw metric values behind those percentiles, for display. */
+  /** Standard deviations from the field mean on this behaviour (signed). */
+  subjectZ: number;
+  neighbourZ: number;
+  /** The raw metric values behind those z-scores, for display. */
   subjectValue: number;
   neighbourValue: number;
   /**
    * (a_i · b_i) / (‖a‖ ‖b‖) for this component. Positive = the two pilots sit
-   * on the same side of the field's middle on this behaviour and it pushed
+   * on the same side of the field's average on this behaviour and it pushed
    * them together; negative = opposite sides, and it pushed them apart.
    * Summing this field over every entry reproduces `cosine` exactly.
    */
@@ -84,15 +75,18 @@ export interface SimilarPilot {
   pilotName: string;
   /** −1 … 1. */
   cosine: number;
-  /** How many of the selected metrics both pilots actually had. */
+  /** How many of the selected behaviours both pilots actually had. */
   sharedMetrics: number;
   /**
-   * Mean |percentile gap| / 100 over the same shared metrics — the distance
-   * style clustering uses. Carried as a foil, not a ranking: cosine ignores
-   * how FAR from typical a pilot is and Gower does not, so a pair that is
-   * close on one and not the other is the finding worth looking at.
+   * Root-mean-square difference in z, over the same shared behaviours — "these
+   * two differ by about this many standard deviations per behaviour".
+   *
+   * Carried as a foil, not a ranking. Cosine compares only the DIRECTION of
+   * the two vectors, so it cannot tell a mildly unusual pilot from a wildly
+   * unusual one with the same shape; this can. A pair that is close on one and
+   * far on the other is the interesting case.
    */
-  gowerDistance: number | null;
+  typicalGap: number;
   /** |contribution| descending — what made the pair similar, and what fought it. */
   contributions: SimilarityContribution[];
 }
@@ -106,9 +100,8 @@ export interface SkippedPilot {
 export interface PilotSimilarityReport {
   /** Method description in plain words (the explainability rule). */
   explanation: string;
-  basis: SimilarityBasis;
   subject: { trackFile: string; pilotName: string };
-  /** The metrics that actually entered the vectors, in report order. */
+  /** The behaviours that actually entered the vectors, in report order. */
   metrics: { id: string; label: string; shortLabel?: string; family: MetricFamily; unit: string }[];
   /** Every comparable pilot, most similar first. */
   neighbours: SimilarPilot[];
@@ -125,32 +118,55 @@ export interface FindSimilarPilotsOptions {
    * a saved link outlives a metric-registry change.
    */
   metricIds?: string[];
-  /** Defaults to 'centred' — see {@link SimilarityBasis}. */
-  basis?: SimilarityBasis;
 }
 
-const EXPLANATION_CENTRED =
-  'GlideComp converts each selected behaviour to a percentile inside this field, then subtracts ' +
-  '50 so the number says how far above or below the middle of the field the pilot sat. Each pilot ' +
-  'becomes a vector of those deviations, and two pilots are compared by the cosine of the angle ' +
-  'between their vectors over the behaviours that both pilots have. A missing value is never ' +
-  'filled in. The result says whether two pilots depart from the typical pilot in the same ' +
-  'pattern. It ignores how large the departure was, so a mildly unusual pilot and a very unusual ' +
-  'one can score 1.00 together. No score and no ranking is used.';
+const EXPLANATION =
+  'GlideComp converts each selected behaviour to a z-score inside this field: how many standard ' +
+  'deviations above or below the field average the pilot sat. That removes the unit, so a speed ' +
+  'in kilometres per hour and a glide ratio can sit in one list without the larger numbers taking ' +
+  'over, and it keeps the size of a gap rather than only the order. Each pilot becomes a list of ' +
+  'those numbers, and two pilots are compared by the cosine of the angle between their lists, over ' +
+  'the behaviours that both pilots have. A missing value is never filled in. The result says ' +
+  'whether two pilots depart from the average pilot in the same pattern. It ignores how large the ' +
+  'departure was, so a slightly unusual pilot and a very unusual one can score 1.00 together. No ' +
+  'score and no ranking is used.';
 
-const EXPLANATION_RAW =
-  'GlideComp converts each selected behaviour to a percentile inside this field and compares two ' +
-  'pilots by the cosine of the angle between the percentile vectors, over the behaviours that ' +
-  'both pilots have. Every percentile is at least zero, so no pair can score below zero: a pilot ' +
-  'who flies the opposite way and a pilot who is simply unrelated get the same answer, and the ' +
-  'scores bunch towards the top of the range. Use the centred basis to read a real difference. ' +
-  'No score and no ranking is used.';
+/**
+ * Per-behaviour z-scores, aligned to report.pilots; null where the pilot has
+ * no value. The mean and standard deviation are taken over the pilots that
+ * HAVE the value — a missing value is never filled in, and never drags the
+ * field's average toward zero.
+ *
+ * The population (not sample) standard deviation: this is the whole field, not
+ * a sample drawn from a larger one.
+ */
+function zScoreColumns(
+  report: FieldAnalysisReport,
+  metrics: MetricReport[],
+): (number | null)[][] {
+  return metrics.map((m) => {
+    const values: number[] = [];
+    for (const p of m.perPilot) {
+      if (p.value !== null && isFinite(p.value)) values.push(p.value);
+    }
+    const mean = values.reduce((s, v) => s + v, 0) / values.length;
+    const sd = Math.sqrt(
+      values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length,
+    );
+    return m.perPilot.map((p) => {
+      if (p.value === null || !isFinite(p.value)) return null;
+      // usableMetrics already drops zero-variance behaviours, so sd > 0 here;
+      // the guard keeps a NaN out of the vector if that ever stops holding.
+      return sd === 0 ? 0 : (p.value - mean) / sd;
+    });
+  });
+}
 
 /**
  * Rank the field by behavioural similarity to one pilot.
  *
  * Returns null when the subject isn't in the report, or when fewer than
- * {@link MIN_SHARED_METRICS} of the requested metrics are usable at all —
+ * {@link MIN_SHARED_METRICS} of the requested behaviours are usable at all —
  * the caller says so rather than showing a cosine over one behaviour, which
  * can only ever be +1 or −1.
  *
@@ -161,7 +177,6 @@ export function findSimilarPilots(
   report: FieldAnalysisReport,
   options: FindSimilarPilotsOptions,
 ): PilotSimilarityReport | null {
-  const basis: SimilarityBasis = options.basis ?? 'centred';
   const subjectIndex = report.pilots.findIndex(
     (p) => p.trackFile === options.subjectTrackFile,
   );
@@ -173,10 +188,7 @@ export function findSimilarPilots(
   );
   if (metrics.length < MIN_SHARED_METRICS) return null;
 
-  const cols = percentileColumns(report, metrics);
-  /** Percentile → vector component under the chosen basis. */
-  const component = (pct: number): number => (basis === 'centred' ? pct - 50 : pct);
-
+  const cols = zScoreColumns(report, metrics);
   const neighbours: SimilarPilot[] = [];
   const skipped: SkippedPilot[] = [];
 
@@ -184,7 +196,7 @@ export function findSimilarPilots(
     if (i === subjectIndex) continue;
     const pilot = report.pilots[i];
 
-    // Shared support first: the vectors are built over the metrics BOTH
+    // Shared support first: the vectors are built over the behaviours BOTH
     // pilots have, so the norms below are the norms of the compared vectors
     // and the contributions really do sum to the cosine.
     const shared: number[] = [];
@@ -203,26 +215,28 @@ export function findSimilarPilots(
     let dot = 0;
     let sumA = 0;
     let sumB = 0;
+    let sqGap = 0;
     for (const mi of shared) {
-      const a = component(cols[mi][subjectIndex]!);
-      const b = component(cols[mi][i]!);
+      const a = cols[mi][subjectIndex]!;
+      const b = cols[mi][i]!;
       dot += a * b;
       sumA += a * a;
       sumB += b * b;
+      sqGap += (a - b) ** 2;
     }
     const normA = Math.sqrt(sumA);
     const normB = Math.sqrt(sumB);
     if (normA === 0 || normB === 0) {
-      // Only reachable on the centred basis: a pilot sitting exactly at the
-      // field's median on every shared behaviour has no direction at all, so
-      // the angle to them is undefined. Saying so beats inventing a 0.
+      // A pilot sitting exactly at the field average on every shared behaviour
+      // has no direction at all, so the angle to them is undefined. Saying so
+      // beats inventing a 0.
       skipped.push({
         trackFile: pilot.trackFile,
         pilotName: pilot.pilotName,
         reason:
           normA === 0
-            ? 'the selected pilot sits exactly at the middle of the field on every shared behaviour, so their vector has no direction'
-            : 'this pilot sits exactly at the middle of the field on every shared behaviour, so their vector has no direction',
+            ? 'the selected pilot sits exactly at the field average on every shared behaviour, so there is no direction to compare'
+            : 'this pilot sits exactly at the field average on every shared behaviour, so there is no direction to compare',
       });
       continue;
     }
@@ -231,20 +245,19 @@ export function findSimilarPilots(
     const contributions: SimilarityContribution[] = shared
       .map((mi) => {
         const m = metrics[mi];
-        const subjectPercentile = cols[mi][subjectIndex]!;
-        const neighbourPercentile = cols[mi][i]!;
+        const subjectZ = cols[mi][subjectIndex]!;
+        const neighbourZ = cols[mi][i]!;
         return {
           metricId: m.id,
           label: m.label,
           ...(m.shortLabel !== undefined ? { shortLabel: m.shortLabel } : {}),
           unit: m.unit,
           family: m.family,
-          subjectPercentile,
-          neighbourPercentile,
+          subjectZ,
+          neighbourZ,
           subjectValue: m.perPilot[subjectIndex].value!,
           neighbourValue: m.perPilot[i].value!,
-          contribution:
-            (component(subjectPercentile) * component(neighbourPercentile)) / denom,
+          contribution: (subjectZ * neighbourZ) / denom,
         } satisfies SimilarityContribution;
       })
       // Ties broken by metric id so the "what made them similar" list can
@@ -259,7 +272,7 @@ export function findSimilarPilots(
       pilotName: pilot.pilotName,
       cosine: dot / denom,
       sharedMetrics: shared.length,
-      gowerDistance: gower(cols, subjectIndex, i),
+      typicalGap: Math.sqrt(sqGap / shared.length),
       contributions,
     });
   }
@@ -270,8 +283,7 @@ export function findSimilarPilots(
   skipped.sort((a, b) => a.pilotName.localeCompare(b.pilotName));
 
   return {
-    explanation: basis === 'centred' ? EXPLANATION_CENTRED : EXPLANATION_RAW,
-    basis,
+    explanation: EXPLANATION,
     subject: {
       trackFile: report.pilots[subjectIndex].trackFile,
       pilotName: report.pilots[subjectIndex].pilotName,

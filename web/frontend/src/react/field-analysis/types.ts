@@ -52,7 +52,6 @@ export type {
   StyleClusterMember,
   StyleSignature,
   UnclusteredPilot,
-  SimilarityBasis,
   SimilarityContribution,
   SimilarPilot,
   PilotSimilarityReport,

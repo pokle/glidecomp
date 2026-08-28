@@ -222,8 +222,10 @@ const EXPLANATION =
 /** Behavioural metrics with enough data to shape a distance.
  *
  * Exported so the cosine-similarity sheet (./similarity.ts) selects from
- * exactly the same set: two surfaces disagreeing about which metrics count
- * as behaviour would be a bug nobody could see. */
+ * exactly the same set: two surfaces disagreeing about which counts as a
+ * behaviour would be a bug nobody could see. The two then diverge on purpose
+ * over how a value is normalised — clustering rank-transforms, similarity
+ * takes a z-score — which is a documented difference, not a drift. */
 export function usableMetrics(report: FieldAnalysisReport): MetricReport[] {
   return report.metrics.filter((m) => {
     if (m.outcome || m.error) return false;
@@ -238,12 +240,8 @@ export function usableMetrics(report: FieldAnalysisReport): MetricReport[] {
 /**
  * Per-metric within-field percentiles (0–100, ties averaged), aligned to
  * report.pilots; null where the pilot has no value.
- *
- * Exported for ./similarity.ts — see {@link usableMetrics}. The rank-first
- * transform is the whole reason metrics in m/s, km and minutes can share one
- * vector, so it must not be reimplemented alongside.
  */
-export function percentileColumns(report: FieldAnalysisReport, metrics: MetricReport[]): (number | null)[][] {
+function percentileColumns(report: FieldAnalysisReport, metrics: MetricReport[]): (number | null)[][] {
   return metrics.map((m) => {
     const idx: number[] = [];
     const values: number[] = [];
@@ -265,7 +263,7 @@ export function percentileColumns(report: FieldAnalysisReport, metrics: MetricRe
 
 /** Gower distance in [0, 1]: mean |percentile gap|/100 over shared metrics;
  * null when the pair shares fewer than MIN_SHARED_METRICS. */
-export function gower(cols: (number | null)[][], a: number, b: number): number | null {
+function gower(cols: (number | null)[][], a: number, b: number): number | null {
   let sum = 0;
   let shared = 0;
   for (const col of cols) {

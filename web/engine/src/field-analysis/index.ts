@@ -71,7 +71,6 @@ export {
 } from './clustering';
 export {
   findSimilarPilots,
-  type SimilarityBasis,
   type SimilarityContribution,
   type SimilarPilot,
   type SkippedPilot,

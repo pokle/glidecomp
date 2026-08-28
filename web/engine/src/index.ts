@@ -458,7 +458,6 @@ export {
   type SharedThermal,
   type SharedThermalOptions,
   type SignatureHint,
-  type SimilarityBasis,
   type SimilarityContribution,
   type SimilarPilot,
   type SkippedPilot,

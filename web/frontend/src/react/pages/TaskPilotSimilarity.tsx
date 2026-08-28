@@ -5,8 +5,8 @@
  * the behaviours you care about, and the field is ranked by the cosine
  * similarity of the resulting vectors. The question is whether this is a
  * useful way to read a field at all, so the page shows its working rather
- * than hiding it — the basis toggle, the per-behaviour contributions and the
- * Gower column all exist to be argued with.
+ * than hiding it — the per-behaviour contributions and the typical-gap column
+ * both exist to be argued with.
  *
  * Deliberately NOT about the leaderboard. No score, rank or outcome metric
  * appears anywhere on this page, and findSimilarPilots refuses to let one into
@@ -14,14 +14,21 @@
  * means similar FLYING, and two pilots at opposite ends of the results sheet
  * are expected to sit next to each other whenever they flew alike.
  *
+ * There is deliberately NO basis control. An earlier cut offered a choice of
+ * normalisation, which read as if it were about the standings (it is not — the
+ * comparison is against the field's AVERAGE BEHAVIOUR, never its finishing
+ * order) and whose second option existed only to demonstrate why the first was
+ * needed. The engine now always takes a z-score, and the page explains that
+ * once in "How this is worked out" rather than making the reader choose.
+ *
  * Client-only, and listed in the SSR Function's NOINDEX_SHELL_ROUTES: the
  * whole computation is a pure derivation from the stored field-analysis report
  * the page fetches anyway, so there is nothing to server-render and nothing a
  * crawler should keep while the idea is still being tried out.
  *
- * All state round-trips through the URL (`?pilot=`, `?class=`, `?metrics=`,
- * `?basis=`) so a reading of the field can be pasted to someone else — which
- * is most of how a prototype gets evaluated.
+ * All state round-trips through the URL (`?pilot=`, `?class=`, `?metrics=`) so
+ * a reading of the field can be pasted to someone else — which is most of how
+ * a prototype gets evaluated.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -49,7 +56,6 @@ import {
   formatMetricValue,
   findSimilarPilots,
   type MetricFamily,
-  type SimilarityBasis,
   type TaskFieldAnalysisData,
 } from "../field-analysis/types";
 
@@ -57,10 +63,15 @@ import {
 const PILOT_PARAM = "pilot";
 const CLASS_PARAM = "class";
 const METRICS_PARAM = "metrics";
-const BASIS_PARAM = "basis";
 
 /** How many neighbours the table shows before the "show everyone" toggle. */
 const TOP_N = 12;
+
+/** A signed z-score, e.g. "+1.4 SD" — always with its sign, so above and below
+ * the field average are told apart at a glance. */
+function fmtZ(z: number): string {
+  return `${z >= 0 ? "+" : "−"}${Math.abs(z).toFixed(1)} SD`;
+}
 
 /** −1 … 1 as a diverging bar. Colour is never the only channel — the number
  * sits beside it, and the bar is decorative to AT. */
@@ -172,9 +183,10 @@ export function TaskPilotSimilarity() {
       : (classes[0]?.pilot_class ?? "");
   const active = classes.find((c) => c.pilot_class === selectedClass);
 
-  // Values converted to the viewer's units for DISPLAY. Percentiles and the
-  // cosine itself are invariant under the linear conversion, so the geometry
-  // is the same either way — this only changes the numbers printed.
+  // Values converted to the viewer's units for DISPLAY. A z-score and the
+  // cosine are both invariant under the linear conversion — that is the point
+  // of normalising — so the geometry is identical either way and this only
+  // changes the raw numbers printed beside each z.
   const units = useUnits();
   const report = useMemo(
     () => (active ? displayReport(active.report, units) : null),
@@ -228,9 +240,6 @@ export function TaskPilotSimilarity() {
     );
   }
 
-  const basis: SimilarityBasis =
-    searchParams.get(BASIS_PARAM) === "raw" ? "raw" : "centred";
-
   // The subject. The NAME rather than the trackFile, matching PilotPicker: a
   // URL a person can read beats an internal filename. An unresolvable name
   // falls back to the first pilot rather than rendering nothing.
@@ -245,15 +254,14 @@ export function TaskPilotSimilarity() {
     return findSimilarPilots(report, {
       subjectTrackFile: subject.trackFile,
       metricIds: selectedMetricIds,
-      basis,
     });
-  }, [report, subject, selectedMetricIds, basis]);
+  }, [report, subject, selectedMetricIds]);
 
   // A behaviour set the reader narrowed too far, or a pilot nobody shares
   // enough data with. Told apart because the fixes differ.
   const tooFewMetrics = report !== null && subject !== null && similarity === null;
 
-  useEffect(() => setShowAll(false), [subject?.trackFile, metricsParam, basis]);
+  useEffect(() => setShowAll(false), [subject?.trackFile, metricsParam]);
 
   if (status === "loading") return <Loading>Loading the field analysis…</Loading>;
   if (status === "notFound") return <NotFound />;
@@ -349,17 +357,6 @@ export function TaskPilotSimilarity() {
                   .map((p) => ({ value: p.pilotName, label: p.pilotName }))}
                 className="min-w-56"
               />
-
-              <SimpleSelect
-                label="Compare on"
-                value={basis}
-                onChange={(v) => setParam(BASIS_PARAM, v === "raw" ? "raw" : null)}
-                options={[
-                  { value: "centred", label: "Distance from the middle of the field" },
-                  { value: "raw", label: "Raw percentiles" },
-                ]}
-                className="min-w-72"
-              />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -424,7 +421,7 @@ export function TaskPilotSimilarity() {
                     <Column isRowHeader>Pilot</Column>
                     <Column>Similarity</Column>
                     <Column>Behaviours shared</Column>
-                    <Column>Gap (Gower)</Column>
+                    <Column>Typical gap (SD)</Column>
                     <Column>What made them alike</Column>
                   </TableHeader>
                   <TableBody>
@@ -438,9 +435,7 @@ export function TaskPilotSimilarity() {
                           </span>
                         </Cell>
                         <Cell className="tabular-nums">{n.sharedMetrics}</Cell>
-                        <Cell className="tabular-nums">
-                          {n.gowerDistance === null ? "—" : n.gowerDistance.toFixed(3)}
-                        </Cell>
+                        <Cell className="tabular-nums">{n.typicalGap.toFixed(2)}</Cell>
                         <Cell>
                           <span className="text-xs text-muted-foreground">
                             {n.contributions
@@ -506,12 +501,12 @@ export function TaskPilotSimilarity() {
                         <Row key={c.metricId}>
                           <Cell>{c.shortLabel ?? c.label}</Cell>
                           <Cell className="tabular-nums">
-                            {formatMetricValue(c.unit, c.subjectValue)} {c.unit} (P
-                            {c.subjectPercentile.toFixed(0)})
+                            {formatMetricValue(c.unit, c.subjectValue)} {c.unit} (
+                            {fmtZ(c.subjectZ)})
                           </Cell>
                           <Cell className="tabular-nums">
-                            {formatMetricValue(c.unit, c.neighbourValue)} {c.unit} (P
-                            {c.neighbourPercentile.toFixed(0)})
+                            {formatMetricValue(c.unit, c.neighbourValue)} {c.unit} (
+                            {fmtZ(c.neighbourZ)})
                           </Cell>
                           <Cell className="tabular-nums">
                             {c.contribution >= 0 ? "+" : "−"}
@@ -532,12 +527,20 @@ export function TaskPilotSimilarity() {
             </h2>
             <p className="text-sm text-muted-foreground">{similarity?.explanation}</p>
             <p className="text-sm text-muted-foreground">
-              The "Gap (Gower)" column is the same pair measured a different way: the
-              average distance between the two pilots' percentiles. It falls between 0
-              and 1, and smaller means closer. It is here as a check — similarity
-              ignores how far from typical a pilot flew, and the gap does not, so a
-              pair that agrees on one and disagrees on the other is the interesting
-              case.
+              A standard deviation is how far a typical pilot sits from the field
+              average on that behaviour, so "+1.4 SD" means clearly above average and
+              "−0.1 SD" means all but average. Reading gaps this way keeps the size of
+              a difference: two pilots who glided 0.3 km/h apart stay next to each
+              other, where counting places would have separated them as much as any
+              other pair.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              The "Typical gap" column measures the same pair a second way — how far
+              apart the two sat, on average, across the behaviours you chose. It is
+              here as a check. Similarity compares only the shape of two pilots'
+              flying and ignores how far from average either flew, while the gap does
+              not, so a pair that looks close by one measure and distant by the other
+              is the interesting case.
             </p>
           </Card>
         </>
