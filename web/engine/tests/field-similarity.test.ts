@@ -329,6 +329,50 @@ describe('findSimilarPilots', () => {
     expect(findSimilarPilots(shapedReport(), { subjectTrackFile: 'nope.igc' })).toBeNull();
   });
 
+  it('carries a per-row noise floor, and flags rows that do not clear it', () => {
+    const r = findSimilarPilots(shapedReport(), { subjectTrackFile: 'p0.igc' })!;
+    for (const n of r.neighbours) {
+      expect(n.noiseFloor).toBeGreaterThan(0);
+      expect(n.aboveNoiseFloor).toBe(n.similarity > n.noiseFloor);
+    }
+    // B is a genuine near-twin over four behaviours and must clear its floor.
+    expect(r.neighbours.find((x) => x.pilotName === 'B')!.aboveNoiseFloor).toBe(true);
+  });
+
+  it('gives a sparse pair a harder floor than a well-supported one', () => {
+    // Sparse shares 3 behaviours with A; everyone else shares all 6. The
+    // sparse row must be held to a much higher bar before it means anything.
+    const report = makeReport(
+      ['A', 'B', 'C', 'Sparse'],
+      [
+        { id: 'm1', values: [9, 8, 1, 7] },
+        { id: 'm2', values: [8, 7, 2, 6] },
+        { id: 'm3', values: [2, 3, 9, 4] },
+        { id: 'm4', values: [1, 2, 8, null] },
+        { id: 'm5', values: [7, 6, 3, null] },
+        { id: 'm6', values: [3, 4, 7, null] },
+      ],
+    );
+    const r = findSimilarPilots(report, { subjectTrackFile: 'p0.igc' })!;
+    const sparse = r.neighbours.find((n) => n.pilotName === 'Sparse')!;
+    const dense = r.neighbours.find((n) => n.pilotName === 'B')!;
+    expect(sparse.sharedMetrics).toBe(3);
+    expect(dense.sharedMetrics).toBe(6);
+    expect(sparse.noiseFloor).toBeGreaterThan(dense.noiseFloor);
+  });
+
+  it('a gap-ranked sheet has no noise floor to report', () => {
+    const r = findSimilarPilots(shapedReport(), {
+      subjectTrackFile: 'p0.igc',
+      metricIds: ['m1'],
+    })!;
+    expect(r.ranking).toBe('gap');
+    for (const n of r.neighbours) {
+      expect(n.noiseFloor).toBeNaN();
+      expect(n.aboveNoiseFloor).toBe(false);
+    }
+  });
+
   it('is deterministic and independent of the leaderboard', () => {
     const a = findSimilarPilots(shapedReport(), { subjectTrackFile: 'p0.igc' })!;
     // The same field with the ranks reversed must produce the same answer.

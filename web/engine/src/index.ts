@@ -394,6 +394,7 @@ export {
   clusterSharedThermals,
   findSimilarPilots,
   MIN_COSINE_METRICS,
+  similarityNoiseFloor,
   combineWindEstimates,
   correlationVerdict,
   DEFAULT_PHASE_OPTIONS,

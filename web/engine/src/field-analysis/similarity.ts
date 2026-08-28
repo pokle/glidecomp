@@ -82,6 +82,7 @@
  */
 
 import { usableMetrics } from './clustering';
+import { similarityNoiseFloor } from './similarity-noise-floor';
 import type { FieldAnalysisReport, MetricFamily, MetricReport } from './types';
 
 /**
@@ -152,6 +153,20 @@ export interface SimilarPilot {
   shapeOnly: number;
   /** How many of the selected behaviours both pilots actually had. */
   sharedMetrics: number;
+  /**
+   * The similarity two UNRELATED pilots exceed 5% of the time at this
+   * `sharedMetrics` — see ./similarity-noise-floor.ts. A row whose
+   * `similarity` does not clear its own floor carries no information, however
+   * confident the three decimal places look, and a surface must say so rather
+   * than rank it as though it did.
+   *
+   * Per-row rather than per-report because a dropped value is never imputed,
+   * so one sheet can hold a pair compared over 22 behaviours beside a pair
+   * compared over 3. NaN on a gap-ranked sheet, where the score is unused.
+   */
+  noiseFloor: number;
+  /** Whether `similarity` clears {@link noiseFloor}. False on a gap sheet. */
+  aboveNoiseFloor: boolean;
   /**
    * Root-mean-square difference in z, over the same shared behaviours — "these
    * two differ by about this many standard deviations per behaviour".
@@ -366,6 +381,10 @@ export function findSimilarPilots(
     const tanimotoDenom = sumA + sumB - dot;
     // Cosine's denominator, for the shape-only figure reported alongside.
     const cosineDenom = normA * normB;
+    const similarityValue = tanimotoDenom === 0 ? 0 : dot / tanimotoDenom;
+    // How high two unrelated pilots reach over THIS pair's behaviour count.
+    // Meaningless on a gap sheet, which ranks by distance rather than score.
+    const floor = ranking === 'cosine' ? similarityNoiseFloor(shared.length) : NaN;
     const contributions: SimilarityContribution[] = shared
       .map((mi) => {
         const m = metrics[mi];
@@ -395,7 +414,9 @@ export function findSimilarPilots(
     neighbours.push({
       trackFile: pilot.trackFile,
       pilotName: pilot.pilotName,
-      similarity: tanimotoDenom === 0 ? 0 : dot / tanimotoDenom,
+      similarity: similarityValue,
+      noiseFloor: floor,
+      aboveNoiseFloor: ranking === 'cosine' && similarityValue > floor,
       shapeOnly: cosineDenom === 0 ? 0 : dot / cosineDenom,
       sharedMetrics: shared.length,
       typicalGap: Math.sqrt(sqGap / shared.length),

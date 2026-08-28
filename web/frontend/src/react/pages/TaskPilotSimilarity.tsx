@@ -49,6 +49,7 @@ import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "../com
 import { underTaskAnalysis } from "../lib/crumbs";
 import { idFromSegment, taskAnalysisPath } from "../lib/slug";
 import { useUnits } from "../lib/units";
+import { cn } from "../lib/utils";
 import { displayReport } from "../field-analysis/units";
 import {
   FAMILY_ORDER,
@@ -80,17 +81,17 @@ function fmtZ(z: number): string {
  * pilots who flew alike but only −1/3 for two who did the opposite, so each
  * side is drawn against its own limit rather than letting a full-strength
  * opposite render as a third of a bar. */
-function SimilarityBar({ value }: { value: number }) {
+function SimilarityBar({ value, muted }: { value: number; muted?: boolean }) {
   const limit = value >= 0 ? 1 : 1 / 3;
   const half = Math.min(50, (Math.abs(value) / limit) * 50);
   return (
     <span aria-hidden className="relative block h-2 w-24 rounded-full bg-muted">
       <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
       <span
-        className={
-          "absolute inset-y-0 rounded-full " +
-          (value >= 0 ? "bg-primary" : "bg-destructive")
-        }
+        className={cn(
+          "absolute inset-y-0 rounded-full",
+          muted ? "bg-muted-foreground/40" : value >= 0 ? "bg-primary" : "bg-destructive"
+        )}
         style={
           value >= 0
             ? { left: "50%", width: `${half}%` }
@@ -440,6 +441,7 @@ export function TaskPilotSimilarity() {
                     ) : (
                       <>
                         <Column>Similarity</Column>
+                        <Column>Needs to beat</Column>
                         <Column>Shape only</Column>
                         <Column>Typical gap (SD)</Column>
                         <Column>Shared</Column>
@@ -466,11 +468,27 @@ export function TaskPilotSimilarity() {
                           <>
                             <Cell>
                               <span className="flex items-center gap-2">
-                                <span className="tabular-nums">
+                                <span
+                                  className={cn(
+                                    "tabular-nums",
+                                    !n.aboveNoiseFloor && "text-muted-foreground"
+                                  )}
+                                >
                                   {n.similarity.toFixed(3)}
                                 </span>
-                                <SimilarityBar value={n.similarity} />
+                                <SimilarityBar
+                                  value={n.similarity}
+                                  muted={!n.aboveNoiseFloor}
+                                />
+                                {n.aboveNoiseFloor ? null : (
+                                  <span className="text-xs text-muted-foreground">
+                                    too little data to tell
+                                  </span>
+                                )}
                               </span>
+                            </Cell>
+                            <Cell className="tabular-nums text-muted-foreground">
+                              {n.noiseFloor.toFixed(2)}
                             </Cell>
                             <Cell className="tabular-nums text-muted-foreground">
                               {n.shapeOnly.toFixed(2)}
@@ -594,6 +612,16 @@ export function TaskPilotSimilarity() {
                   The "Typical gap" column measures the pair a third way: how far
                   apart the two sat, on average, across the behaviours you chose,
                   in standard deviations.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  "Needs to beat" is how high two pilots who flew nothing alike
+                  would score anyway, one time in twenty, simply because they were
+                  compared over so few behaviours. Two pilots sharing three
+                  behaviours reach 0.67 that often; two sharing twenty-two barely
+                  reach 0.21. A row that does not beat its own figure is greyed and
+                  marked, because there is not enough in common between those two
+                  pilots to say anything — the score is real arithmetic, but it
+                  carries no finding.
                 </p>
               </>
             )}

@@ -21,6 +21,7 @@ export {
   // Cosine similarity between pilots over a chosen set of behaviours —
   // computed here at read time from the same stored report, like clustering.
   findSimilarPilots,
+  similarityNoiseFloor,
   // The metric registry itself: the comp aggregate stores no method
   // descriptions, so the comp page's glossary reads them from here — the
   // same definitions the engine computes with.
