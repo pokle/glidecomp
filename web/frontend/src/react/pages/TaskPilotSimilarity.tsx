@@ -28,7 +28,8 @@
  * All state round-trips through the URL (`?pilot=`, `?class=`, `?metrics=`) so
  * one reading of the field can be pasted to someone else.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFilter, type Selection } from "react-aria-components";
 import { useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeftIcon } from "lucide-react";
 
@@ -37,6 +38,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Checkbox } from "@/react/rac/checkbox";
+import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
+import { TagGroup, Tag } from "@/react/rac/tag-group";
 import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
@@ -233,16 +236,39 @@ export function TaskPilotSimilarity() {
   }, [metricsParam, available]);
   const selectedSet = useMemo(() => new Set(selectedMetricIds), [selectedMetricIds]);
 
-  function toggleMetric(id: string, on: boolean) {
-    const next = on
-      ? available.filter((m) => selectedSet.has(m.id) || m.id === id).map((m) => m.id)
-      : selectedMetricIds.filter((m) => m !== id);
-    // "Everything" is the default, so it is written as an absent parameter
-    // rather than a 26-id query string.
+  /** Write a selection, keeping it in the registry order the checkboxes read
+   * back from. "Everything" is the default, so it is written as an ABSENT
+   * parameter rather than a 22-id query string. */
+  function writeSelection(ids: Set<string>) {
+    const next = available.filter((m) => ids.has(m.id)).map((m) => m.id);
     setParam(
       METRICS_PARAM,
       next.length === available.length ? null : next.join(",")
     );
+  }
+
+  /** The family header: select or clear that family, leaving the others be.
+   * Never leaves the sheet with nothing selected — emptying the last family
+   * would strand the reader on an error, so the first behaviour survives. */
+  function toggleFamily(family: MetricFamily, on: boolean) {
+    const ids = new Set(selectedMetricIds);
+    for (const m of byFamily.get(family) ?? []) {
+      if (on) ids.add(m.id);
+      else ids.delete(m.id);
+    }
+    if (ids.size === 0 && available[0]) ids.add(available[0].id);
+    writeSelection(ids);
+  }
+
+  /** One family's chips changed. RAC hands back that group's selection only,
+   * so the other families are carried across unchanged. */
+  function selectFamilyKeys(family: MetricFamily, keys: Selection) {
+    const familyIds = (byFamily.get(family) ?? []).map((m) => m.id);
+    const ids = new Set(selectedMetricIds.filter((id) => !familyIds.includes(id)));
+    if (keys === "all") for (const id of familyIds) ids.add(id);
+    else for (const k of keys) ids.add(String(k));
+    if (ids.size === 0 && available[0]) ids.add(available[0].id);
+    writeSelection(ids);
   }
 
   // The subject. The NAME rather than the trackFile, matching PilotPicker: a
@@ -253,6 +279,45 @@ export function TaskPilotSimilarity() {
     (pilotParam ? report?.pilots.find((p) => p.pilotName === pilotParam) : null) ??
     report?.pilots[0] ??
     null;
+
+  // The combobox's text is local view state; the URL still owns WHO is picked.
+  // Both `selectedKey` and `inputValue` are controlled per RAC gotcha #12, so
+  // the field has to be told when the resolved pilot changes underneath it —
+  // on load from a shared link, and on a class switch that lands elsewhere.
+  const [pilotQuery, setPilotQuery] = useState("");
+  const subjectName = subject?.pilotName ?? "";
+  const lastSubjectName = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastSubjectName.current !== subjectName) {
+      lastSubjectName.current = subjectName;
+      setPilotQuery(subjectName);
+    }
+  }, [subjectName]);
+
+  // `contains` rather than `startsWith`: pilots are searched by surname at
+  // least as often as by given name.
+  const { contains } = useFilter({ sensitivity: "base" });
+  // SETTLED — the field showing exactly the current pilot — yields an empty
+  // list, which is the kit's convention (see field-analysis/PilotPicker) and
+  // here it is load-bearing rather than cosmetic. This field is never empty:
+  // the sheet always has a subject, so selecting one sets the controlled
+  // inputValue to that name, and with the kit's menuTrigger="input" any
+  // inputValue change reopens the popover. Left to itself the list springs
+  // back open over the results the moment you pick someone, and only a click
+  // elsewhere shuts it. An empty collection has nothing to reopen with.
+  //
+  // Clearing the field is still how you browse: an empty query lists the whole
+  // roster, so the way to see who else is here is to select-all and delete,
+  // which is also how you would start typing a different name.
+  const settled = pilotQuery === subjectName;
+  const pilotMatches = useMemo(() => {
+    if (settled) return [];
+    const all = [...(report?.pilots ?? [])].sort((a, b) =>
+      a.pilotName.localeCompare(b.pilotName)
+    );
+    if (pilotQuery.trim() === "") return all;
+    return all.filter((p) => contains(p.pilotName, pilotQuery));
+  }, [report, pilotQuery, settled, contains]);
 
   const similarity = useMemo(() => {
     if (!report || !subject) return null;
@@ -330,7 +395,7 @@ export function TaskPilotSimilarity() {
               Pick a pilot and the behaviours
             </h2>
 
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap items-end gap-4">
               {classes.length > 1 ? (
                 <SimpleSelect
                   label="Class"
@@ -344,53 +409,103 @@ export function TaskPilotSimilarity() {
                 />
               ) : null}
 
-              <SimpleSelect
+              {/* Type-ahead rather than a plain select: a select lists every
+                  name with no way to narrow it, which is tolerable at 37
+                  pilots and useless at 150. Both `selectedKey` and
+                  `inputValue` are controlled (RAC gotcha #12), and the URL
+                  stays the single source of truth for who is picked. */}
+              <ComboBox
                 label="Pilot"
-                value={subject.pilotName}
-                onChange={(v) => setParam(PILOT_PARAM, v)}
-                options={[...report.pilots]
-                  .sort((a, b) => a.pilotName.localeCompare(b.pilotName))
-                  .map((p) => ({ value: p.pilotName, label: p.pilotName }))}
-                className="min-w-56"
-              />
+                className="min-w-64"
+                selectedKey={subject.pilotName}
+                inputValue={pilotQuery}
+                onInputChange={setPilotQuery}
+                onSelectionChange={(key) => {
+                  if (key === null) return;
+                  setParam(PILOT_PARAM, String(key));
+                }}
+                onBlur={() => setPilotQuery(subject.pilotName)}
+                items={pilotMatches}
+                // Only offer the empty state while a real search is running:
+                // at rest the collection is empty by design (see `settled`),
+                // and "no pilot of that name" over an untouched field would be
+                // a lie as well as a popover nobody asked for.
+                allowsEmptyCollection={!settled && pilotQuery.trim().length > 0}
+                renderEmptyState={() => (
+                  <span className="px-1.5 py-1 text-sm text-muted-foreground">
+                    No pilot of that name in this class
+                  </span>
+                )}
+              >
+                {(p: { pilotName: string }) => (
+                  <ComboBoxItem id={p.pilotName} textValue={p.pilotName}>
+                    {p.pilotName}
+                  </ComboBoxItem>
+                )}
+              </ComboBox>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">
-                Behaviours ({selectedMetricIds.length} of {available.length})
-              </span>
-              <Button size="sm" variant="outline" onPress={() => setParam(METRICS_PARAM, null)}>
-                Select all
-              </Button>
-              {FAMILY_ORDER.filter((f) => (byFamily.get(f) ?? []).length > 0).map((f) => (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-sm font-medium">
+                  Behaviours ({selectedMetricIds.length} of {available.length})
+                </span>
                 <Button
-                  key={f}
                   size="sm"
-                  variant="outline"
-                  onPress={() =>
-                    setParam(METRICS_PARAM, (byFamily.get(f) ?? []).map((m) => m.id).join(","))
-                  }
+                  variant="ghost"
+                  onPress={() => setParam(METRICS_PARAM, null)}
+                  isDisabled={selectedMetricIds.length === available.length}
                 >
-                  Only {FAMILY_LABELS[f].toLowerCase()}
+                  Select all
                 </Button>
-              ))}
-            </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onPress={() => setParam(METRICS_PARAM, available[0]?.id ?? null)}
+                  isDisabled={selectedMetricIds.length <= 1}
+                >
+                  Clear
+                </Button>
+              </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {FAMILY_ORDER.filter((f) => (byFamily.get(f) ?? []).length > 0).map((f) => (
-                <fieldset key={f} className="flex flex-col gap-1.5">
-                  <legend className="mb-1 text-sm font-medium">{FAMILY_LABELS[f]}</legend>
-                  {(byFamily.get(f) ?? []).map((m) => (
+              {/* One family per row: a tri-state parent for the whole family,
+                  then its behaviours as selectable chips. The parent replaces
+                  the old "Only <family>" buttons, which sat beside checkboxes
+                  but REPLACED the whole selection rather than adding to it —
+                  two mental models in one block, and the surprising one was
+                  unlabelled. Indeterminate is the honest third state and says
+                  "some of these", which a two-state control cannot. */}
+              {FAMILY_ORDER.filter((f) => (byFamily.get(f) ?? []).length > 0).map((f) => {
+                const family = byFamily.get(f) ?? [];
+                const chosen = family.filter((m) => selectedSet.has(m.id)).length;
+                return (
+                  <div key={f} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-4">
                     <Checkbox
-                      key={m.id}
-                      isSelected={selectedSet.has(m.id)}
-                      onChange={(on) => toggleMetric(m.id, on)}
+                      className="w-full sm:w-44 sm:shrink-0"
+                      isSelected={chosen === family.length}
+                      isIndeterminate={chosen > 0 && chosen < family.length}
+                      onChange={(on) => toggleFamily(f, on)}
                     >
-                      {m.shortLabel ?? m.label}
+                      <span className="text-sm font-medium">{FAMILY_LABELS[f]}</span>
                     </Checkbox>
-                  ))}
-                </fieldset>
-              ))}
+                    <TagGroup
+                      label={`${FAMILY_LABELS[f]} behaviours`}
+                      selectionMode="multiple"
+                      selectedKeys={family
+                        .filter((m) => selectedSet.has(m.id))
+                        .map((m) => m.id)}
+                      onSelectionChange={(keys) => selectFamilyKeys(f, keys)}
+                      className="min-w-0 flex-1"
+                    >
+                      {family.map((m) => (
+                        <Tag key={m.id} id={m.id} textValue={m.shortLabel ?? m.label}>
+                          {m.shortLabel ?? m.label}
+                        </Tag>
+                      ))}
+                    </TagGroup>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
