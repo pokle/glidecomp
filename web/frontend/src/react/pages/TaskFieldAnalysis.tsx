@@ -717,9 +717,9 @@ export function TaskFieldAnalysis() {
                 Pilot style clusters
               </h2>
               <StyleClusters report={report} />
-              {/* PROTOTYPE (its own page rather than a section: it is an
-                  interactive sheet with its own controls, and the reader
-                  picks a pilot and a behaviour set rather than reading). */}
+              {/* Its own page rather than a section: it is an interactive
+                  sheet with its own controls, and the reader picks a pilot and
+                  a behaviour set rather than reading. */}
               <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                 <LinkButton
                   href={taskSimilarityPath(compId, comp?.name, taskId, task?.name)}
@@ -730,7 +730,7 @@ export function TaskFieldAnalysis() {
                 </LinkButton>
                 <span className="text-sm text-muted-foreground">
                   Pick a pilot and a set of behaviours, and see which other pilots
-                  flew most like them. Experimental.
+                  flew most like them.
                 </span>
               </div>
             </Card>

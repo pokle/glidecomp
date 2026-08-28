@@ -2,8 +2,7 @@
 
 /**
  * Pilot-to-pilot behavioural similarity — cosine over a chosen set of
- * behaviours. PROTOTYPE, so read the caveats at the bottom before trusting a
- * number off it.
+ * behaviours.
  *
  * The question this answers is deliberately NOT the one the rest of field
  * analysis answers. The correlation tables ask which behaviours separated the

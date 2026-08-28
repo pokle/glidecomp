@@ -1,12 +1,11 @@
 /**
- * "Who flew like me?" — PROTOTYPE.
+ * "Who flew like me?"
  *
- * An exploratory sheet hung off the task's field analysis: pick a pilot, pick
- * the behaviours you care about, and the field is ranked by the cosine
- * similarity of the resulting vectors. The question is whether this is a
- * useful way to read a field at all, so the page shows its working rather
- * than hiding it — the per-behaviour contributions and the typical-gap column
- * both exist to be argued with.
+ * A sheet hung off the task's field analysis: pick a pilot, pick the
+ * behaviours you care about, and the field is ranked by how closely their
+ * flying matched. The page shows its working rather than hiding it — the
+ * per-behaviour contributions, the shape-only column and the typical-gap
+ * column all exist to be argued with.
  *
  * Deliberately NOT about the leaderboard. No score, rank or outcome metric
  * appears anywhere on this page, and findSimilarPilots refuses to let one into
@@ -18,17 +17,16 @@
  * normalisation, which read as if it were about the standings (it is not — the
  * comparison is against the field's AVERAGE BEHAVIOUR, never its finishing
  * order) and whose second option existed only to demonstrate why the first was
- * needed. The engine now always takes a z-score, and the page explains that
- * once in "How this is worked out" rather than making the reader choose.
+ * needed. The engine always takes a z-score, and the page explains that once
+ * in "How this is worked out" rather than making the reader choose.
  *
  * Client-only, and listed in the SSR Function's NOINDEX_SHELL_ROUTES: the
  * whole computation is a pure derivation from the stored field-analysis report
- * the page fetches anyway, so there is nothing to server-render and nothing a
- * crawler should keep while the idea is still being tried out.
+ * the page fetches anyway, so there is nothing to server-render, and it is an
+ * interactive tool rather than a document, so nothing here for a crawler.
  *
  * All state round-trips through the URL (`?pilot=`, `?class=`, `?metrics=`) so
- * a reading of the field can be pasted to someone else — which is most of how
- * a prototype gets evaluated.
+ * one reading of the field can be pasted to someone else.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -314,16 +312,6 @@ export function TaskPilotSimilarity() {
           Field analysis
         </LinkButton>
       </div>
-
-      <Alert>
-        <AlertTitle>Prototype</AlertTitle>
-        <AlertDescription>
-          This sheet is an experiment in reading a field by behaviour rather than by
-          result. The numbers are honest but the idea is still being tried out, so
-          treat a similarity score as a prompt to go and look at two tracks, not as a
-          verdict.
-        </AlertDescription>
-      </Alert>
 
       {report === null || subject === null ? (
         <Card>

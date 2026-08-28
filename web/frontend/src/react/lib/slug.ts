@@ -180,8 +180,8 @@ export function taskAnalysisPath(
 }
 
 /**
- * The pilot-similarity sheet — a PROTOTYPE surface hung off the task's field
- * analysis, so it nests under that report rather than under the task.
+ * The pilot-similarity sheet, hung off the task's field analysis, so it nests
+ * under that report rather than under the task.
  */
 export function taskSimilarityPath(
   compId: string,
