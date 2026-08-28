@@ -149,6 +149,28 @@ describe('field analysis integration (kosci-loop-t1)', () => {
     // The day tables exist regardless.
     expect(byId.get('day.climb_by_hour')!.extraTables?.[0]?.rows.length).toBeGreaterThan(0);
     expect(byId.get('day.wind')!.extraTables?.length).toBeGreaterThanOrEqual(1);
+
+    // The climb total covers EVERY climb the hourly rows count — the one
+    // invariant that catches a total quietly built from a subset (or from the
+    // rows themselves, which would leave n as the hour count).
+    const climbSeries = byId
+      .get('day.climb_by_hour')!
+      .extraSeries?.find((s) => s.kind === 'climb-hourly');
+    expect(climbSeries).toBeDefined();
+    if (climbSeries?.kind === 'climb-hourly') {
+      const hourlyTotal = climbSeries.hours.reduce((sum, h) => sum + h.n, 0);
+      expect(climbSeries.wholeTask).not.toBeNull();
+      expect(climbSeries.wholeTask!.n).toBe(hourlyTotal);
+      // A pooled median cannot sit outside the spread of the hours it pools.
+      const medians = climbSeries.hours.map((h) => h.median);
+      expect(climbSeries.wholeTask!.median).toBeGreaterThanOrEqual(Math.min(...medians));
+      expect(climbSeries.wholeTask!.median).toBeLessThanOrEqual(Math.max(...medians));
+      // And the table leads with it, under a column that admits it is there.
+      const table = byId.get('day.climb_by_hour')!.extraTables![0];
+      expect(table.columns[0].header).toBe('Period');
+      expect(table.rows[0][0]).toBe('Whole task');
+      expect(table.rows.length).toBe(climbSeries.hours.length + 1);
+    }
   }, 120_000);
 
   it('orders the goal field perfectly by time behind at ESS (horserace sanity)', () => {

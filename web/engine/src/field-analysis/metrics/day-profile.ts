@@ -19,6 +19,7 @@
 
 import type {
   ClimbHourlySeries,
+  ClimbQuantiles,
   DayTimingSeries,
   FieldContext,
   MetricComputer,
@@ -348,6 +349,30 @@ function hourlyClimbBuckets(field: FieldContext): Map<number, number[]> {
   return buckets;
 }
 
+/**
+ * The quantile fan of a set of climb rates, cut from ONE sorted copy.
+ *
+ * Every published climb figure goes through here — the hourly rows and the
+ * whole-task total alike — so the two can never disagree about what a
+ * percentile means. `rates` is not mutated.
+ *
+ * Returns null for an empty set rather than a fan of NaN: an hour with no
+ * climbs is not an hour of zero lift, and `percentile` answers NaN for an
+ * empty array precisely so the caller has to decide.
+ */
+export function climbQuantiles(rates: number[]): ClimbQuantiles | null {
+  if (rates.length === 0) return null;
+  const sorted = [...rates].sort((a, b) => a - b);
+  return {
+    p10: percentile(sorted, 10),
+    p25: percentile(sorted, 25),
+    median: percentile(sorted, 50),
+    p75: percentile(sorted, 75),
+    p90: percentile(sorted, 90),
+    n: rates.length,
+  };
+}
+
 const dayClimbByHour: MetricComputer = {
   id: 'day.climb_by_hour',
   label: 'How strong the day’s climbs were, hour by hour',
@@ -359,9 +384,14 @@ const dayClimbByHour: MetricComputer = {
     'When the day started, reached its peak, and ended. We group the thermal climbs of all ' +
     'pilots by the hour in which each climb started, labelled in the time zone of the ' +
     'competition. The median and the 90th-percentile average climb rate for each hour show how ' +
-    'the lift developed. This metric describes the day, so it has no value for each pilot.',
+    'the lift developed. The first row is the whole task, measured over every climb of the day ' +
+    'in one set, and not as an average of the hourly rows. This metric describes the day, so it ' +
+    'has no value for each pilot.',
   compute(field) {
     const buckets = hourlyClimbBuckets(field);
+    // The whole-task fan pools EVERY climb and sorts once — see
+    // ClimbHourlySeries.wholeTask for why it is never built from the rows.
+    const wholeTask = climbQuantiles([...buckets.values()].flat());
     const rows: ReportCell[][] = [];
     // The series carries the full quantile fan; the table prints its
     // median/p90 slice — both cut from the same sorted bucket.
@@ -370,27 +400,28 @@ const dayClimbByHour: MetricComputer = {
       title: 'Climb by hour',
       kind: 'climb-hourly',
       hours: [],
+      wholeTask,
     };
+    // The whole-task total leads as the baseline the hourly rows vary around,
+    // exactly as it does in day.wind's "Wind by hour" table.
+    if (wholeTask) {
+      rows.push([
+        'Whole task',
+        wholeTask.median.toFixed(1),
+        wholeTask.p90.toFixed(1),
+        String(wholeTask.n),
+      ]);
+    }
     for (const h of [...buckets.keys()].sort((a, b) => a - b)) {
-      const rates = buckets.get(h)!;
-      const sorted = [...rates].sort((a, b) => a - b);
-      const med = percentile(sorted, 50);
-      const p90 = percentile(sorted, 90);
-      rows.push([timeCell(h), med.toFixed(1), p90.toFixed(1), String(rates.length)]);
-      series.hours.push({
-        t: new Date(h).toISOString(),
-        p10: percentile(sorted, 10),
-        p25: percentile(sorted, 25),
-        median: med,
-        p75: percentile(sorted, 75),
-        p90,
-        n: rates.length,
-      });
+      const fan = climbQuantiles(buckets.get(h)!)!;
+      rows.push([timeCell(h), fan.median.toFixed(1), fan.p90.toFixed(1), String(fan.n)]);
+      series.hours.push({ t: new Date(h).toISOString(), ...fan });
     }
     const table: ReportTable = {
       title: 'Climb by hour',
       columns: [
-        { header: 'Hour', align: 'left' },
+        // 'Period', not 'Hour': the leading row is the whole task.
+        { header: 'Period', align: 'left' },
         { header: 'Median (m/s)', align: 'right' },
         { header: 'p90 (m/s)', align: 'right' },
         { header: 'n', align: 'right' },
@@ -398,7 +429,8 @@ const dayClimbByHour: MetricComputer = {
       rows,
       footnotes: [
         'The average climb rate of every thermal use across the field, grouped by the start of ' +
-          'the climb. The hours are in the time zone of the competition.',
+          'the climb. The hours are in the time zone of the competition. The whole-task row is ' +
+          'measured over all of those climbs together, not averaged from the hours.',
       ],
     };
     return { perPilot: allNullPerPilot(field), extraTables: [table], extraSeries: [series] };

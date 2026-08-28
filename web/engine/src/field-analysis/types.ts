@@ -255,21 +255,44 @@ export interface WindLegsSeries extends ReportSeriesBase {
 }
 
 /**
+ * The quantile fan of a set of climb rates, in m/s, over `n` thermal uses.
+ *
+ * One sample is one pilot's average climb rate in one shared thermal, and the
+ * samples are pooled UNWEIGHTED — a pilot who took four short climbs
+ * contributes four samples, one who took a single long climb contributes one.
+ * That is the same population the hourly buckets count, which is the point:
+ * weighting by climb duration would make the whole-task figure describe a
+ * different day from the hours beneath it.
+ */
+export interface ClimbQuantiles {
+  p10: number;
+  p25: number;
+  median: number;
+  p75: number;
+  p90: number;
+  n: number;
+}
+
+/**
  * Hourly climb-rate distribution — the data twin of the "Climb by hour"
  * table, with the full quantile fan (the table prints median and p90). All
  * rates are m/s; `t` is the bucket's hour-start instant.
  */
 export interface ClimbHourlySeries extends ReportSeriesBase {
   kind: 'climb-hourly';
-  hours: {
-    t: string;
-    p10: number;
-    p25: number;
-    median: number;
-    p75: number;
-    p90: number;
-    n: number;
-  }[];
+  hours: ({ t: string } & ClimbQuantiles)[];
+  /**
+   * The same fan over EVERY climb of the task, cut from one pooled sort —
+   * never assembled from the hourly rows, because a quantile of quantiles is
+   * not a quantile: the hours hold wildly different climb counts, so an
+   * average of six hourly medians answers "what did a typical HOUR look like"
+   * when the question is "what did a typical CLIMB look like".
+   *
+   * Null when the task has no shared thermals at all. Optional so reports
+   * stored before FIELD_ANALYSIS_VERSION 25 still parse — such a row is
+   * served stale while it revalidates, so consumers must render without it.
+   */
+  wholeTask?: ClimbQuantiles | null;
 }
 
 /**

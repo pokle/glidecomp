@@ -278,4 +278,34 @@
 //     correlation changes. The bump rolls stored reports so they gain the
 //     field on their next lazy revalidation instead of showing neutral labels
 //     under a heading that promises winners forever.
-export const FIELD_ANALYSIS_VERSION = 24;
+// v25: day.climb_by_hour gains a whole-task climb figure — the full quantile
+//     fan (p10/p25/median/p75/p90 + n) over every climb of the day, pooled and
+//     sorted once, on the 'climb-hourly' series as `wholeTask` and as the
+//     table's leading "Whole task" row. day.wind's "Wind by hour" table has led
+//     with that row since v5; the climb table beside it never had one, so the
+//     day's own climb strength was a figure the report could not state — only
+//     six hourly rows to average by eye.
+//     Pooled deliberately, and NOT assembled from the hourly rows: a quantile
+//     of quantiles is not a quantile. The hours hold very different climb
+//     counts — Corryong 2026 open T1 runs 3 climbs in its thinnest hour against
+//     453 in its busiest — so a mean of the six hourly medians answers "what
+//     did a typical HOUR look like" when the question is "what did a typical
+//     CLIMB look like", and it lets a three-climb sliver at the edge of the day
+//     weigh as much as the hour that held a third of the task.
+//     Measured over the bundled comps, pooling against averaging the hourly
+//     medians moves the day's median climb by 0.002–0.125 m/s (corryong 2026
+//     open T1/T2/T3: 0.002 / 0.039 / 0.079; corryong 2021 open T1: 0.125;
+//     unungra 2020 open T1/T2: 0.117 / 0.063; corryong 2026 floater T1: 0.076),
+//     in both directions. Small on a task whose climbs are spread evenly, and
+//     largest exactly where the day was lopsided — the synthetic kosci-loop-t1
+//     fixture, two hours holding 21 and 158 climbs, differs by 1.488 m/s.
+//     Samples are pooled unweighted — one per thermal use, the same population
+//     the hourly buckets count — so the total and the rows beneath it describe
+//     the same day.
+//     No hourly value moves, and the fan is cut by the same helper for both
+//     scopes so they cannot drift. The table's first column is renamed
+//     "Hour" → "Period" (a whole-task row under a column headed "Hour" is a
+//     lie), matching the wind table. The bump rolls stored reports so they gain
+//     the total on their next lazy revalidation; a v24 row renders its hourly
+//     rows alone until it does, so consumers must tolerate `wholeTask` absent.
+export const FIELD_ANALYSIS_VERSION = 25;

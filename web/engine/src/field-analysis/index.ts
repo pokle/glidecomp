@@ -17,6 +17,7 @@ export type {
   WindHourlySeries,
   WindLegsSeries,
   ClimbHourlySeries,
+  ClimbQuantiles,
   DayTimingSeries,
   MetricOutput,
   MetricComputer,
