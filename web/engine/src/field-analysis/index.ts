@@ -69,6 +69,17 @@ export {
   type SignatureHint,
   type UnclusteredPilot,
 } from './clustering';
+export {
+  findSimilarPilots,
+  MIN_COSINE_METRICS,
+  type SimilarityRanking,
+  type SimilarityContribution,
+  type SimilarPilot,
+  type SkippedPilot,
+  type PilotSimilarityReport,
+  type FindSimilarPilotsOptions,
+} from './similarity';
+export { similarityNoiseFloor } from './similarity-noise-floor';
 export { renderFieldReport, renderCompReport, formatMetricValue } from './report';
 export { aggregateComp } from './aggregate';
 export { ALL_METRICS, FAMILY_ORDER, FAMILY_LABELS } from './registry';

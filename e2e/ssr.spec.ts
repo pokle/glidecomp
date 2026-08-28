@@ -297,6 +297,10 @@ test.describe("SSR — isolation and fallback", () => {
     // Admin-only settings pages (index + a group sub-page).
     "/comp/anything/settings",
     "/comp/anything/settings/scoring",
+    // The pilot-similarity prototype: a real SPA route that derives everything
+    // client-side from the report it fetches, so it has nothing to
+    // server-render and must reach the shell rather than the 404 fallback.
+    "/comp/anything/analysis/task/anything/similar",
   ]) {
     test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {
       const res = await request.get(path, { failOnStatusCode: false });

@@ -123,6 +123,11 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   // Where the per-task report lived before it was re-nested under the comp
   // report; the SPA redirects it, so it must reach the shell rather than 404.
   /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/?$/,
+  // The pilot-similarity sheet under the per-task field analysis. Everything
+  // on it is derived client-side from the report the page fetches anyway, so
+  // there is nothing to server-render; it is an interactive tool rather than a
+  // document, so there is nothing here for a crawler either.
+  /^\/comp\/[^/]+\/analysis\/task\/[^/]+\/similar\/?$/,
 ];
 
 const ROUTES: Array<{

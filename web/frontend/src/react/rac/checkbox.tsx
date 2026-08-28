@@ -14,7 +14,7 @@ import {
 
 import { cn } from "@/react/lib/utils";
 import { Label, Description, FieldError } from "./field";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, MinusIcon } from "lucide-react";
 
 export function Checkbox({
   className,
@@ -35,17 +35,28 @@ export function Checkbox({
       )}
       {...props}
     >
-      {({ isSelected }) => (
+      {({ isSelected, isIndeterminate }) => (
         <>
           <span
             aria-hidden
             className={cn(
               "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors dark:bg-input/30",
               "group-data-focus-visible:border-ring group-data-focus-visible:ring-3 group-data-focus-visible:ring-ring/50",
-              isSelected && "border-primary bg-primary text-primary-foreground"
+              (isSelected || isIndeterminate) &&
+                "border-primary bg-primary text-primary-foreground"
             )}
           >
-            {isSelected ? <CheckIcon className="size-3.5" /> : null}
+            {/* Indeterminate needs its OWN glyph, not the unchecked box: a
+                tri-state parent over a group of children ("some of these are
+                on") is indistinguishable from "none of these are on" without
+                one, and the whole point of the third state is that it says
+                something the other two cannot. RAC already sets the input's
+                native `indeterminate` property, so this is presentation only. */}
+            {isIndeterminate ? (
+              <MinusIcon className="size-3.5" />
+            ) : isSelected ? (
+              <CheckIcon className="size-3.5" />
+            ) : null}
           </span>
           <span className="flex flex-col gap-0.5">
             {children}

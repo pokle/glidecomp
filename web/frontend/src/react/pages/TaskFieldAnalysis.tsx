@@ -34,7 +34,12 @@ import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { underCompAnalysis } from "../lib/crumbs";
-import { idFromSegment, taskPath, taskAnalysisPath } from "../lib/slug";
+import {
+  idFromSegment,
+  taskPath,
+  taskAnalysisPath,
+  taskSimilarityPath,
+} from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { usePollWhile } from "../lib/use-poll-while";
 import { api } from "../../comp/api";
@@ -712,6 +717,22 @@ export function TaskFieldAnalysis() {
                 Pilot style clusters
               </h2>
               <StyleClusters report={report} />
+              {/* Its own page rather than a section: it is an interactive
+                  sheet with its own controls, and the reader picks a pilot and
+                  a behaviour set rather than reading. */}
+              <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                <LinkButton
+                  href={taskSimilarityPath(compId, comp?.name, taskId, task?.name)}
+                  variant="outline"
+                  size="sm"
+                >
+                  Who flew like me?
+                </LinkButton>
+                <span className="text-sm text-muted-foreground">
+                  Pick a pilot and a set of behaviours, and see which other pilots
+                  flew most like them.
+                </span>
+              </div>
             </Card>
 
             {/* In print, this whole section starts a fresh page and every
