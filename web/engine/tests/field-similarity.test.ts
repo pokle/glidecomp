@@ -168,18 +168,68 @@ describe('findSimilarPilots', () => {
     expect(r.skipped.map((x) => x.pilotName)).toContain('C');
   });
 
-  it('ignores unknown metric ids rather than erroring, and refuses too few', () => {
+  it('ignores unknown metric ids rather than erroring', () => {
     const withGhost = findSimilarPilots(shapedReport(), {
       subjectTrackFile: 'p0.igc',
       metricIds: ['m1', 'm2', 'm3', 'gone.away'],
     })!;
     expect(withGhost.metrics.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+    // Nothing usable at all is the only null.
     expect(
       findSimilarPilots(shapedReport(), {
         subjectTrackFile: 'p0.igc',
-        metricIds: ['m1', 'm2'],
+        metricIds: ['gone.away'],
       }),
     ).toBeNull();
+  });
+
+  it('two behaviours are enough for a cosine — the old floor of three was wrong', () => {
+    const r = findSimilarPilots(shapedReport(), {
+      subjectTrackFile: 'p0.igc',
+      metricIds: ['m1', 'm3'],
+    })!;
+    expect(r.ranking).toBe('cosine');
+    expect(r.neighbours.length).toBeGreaterThan(0);
+    expect(r.neighbours.every((n) => n.sharedMetrics === 2)).toBe(true);
+  });
+
+  it('one behaviour ranks by the gap, because cosine can only say ±1 there', () => {
+    const r = findSimilarPilots(shapedReport(), {
+      subjectTrackFile: 'p0.igc',
+      metricIds: ['m1'],
+    })!;
+    expect(r.ranking).toBe('gap');
+    // m1 is [9, 8, 5, 1, 2] for A..E, and A is the subject: nearest by value
+    // first, all the way out to the far end of the field.
+    expect(r.neighbours.map((n) => n.pilotName)).toEqual(['B', 'C', 'E', 'D']);
+    // Ordered by gap ascending, and every gap is |Δz| on that one behaviour.
+    const gaps = r.neighbours.map((n) => n.typicalGap);
+    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
+    for (const n of r.neighbours) {
+      const c = n.contributions[0];
+      expect(n.typicalGap).toBeCloseTo(Math.abs(c.subjectZ - c.neighbourZ), 10);
+    }
+    // The cosine column really is degenerate — exactly the reason for the mode.
+    // In one dimension it can only be +1 (same side of the average), −1 (the
+    // other side), or 0 (a pilot sitting exactly ON the average, where the
+    // angle is undefined). Three values, and no ordering inside any of them.
+    const seen = new Set(r.neighbours.map((n) => n.cosine));
+    expect([...seen].every((c) => c === 1 || c === -1 || c === 0)).toBe(true);
+    expect(seen.size).toBeLessThanOrEqual(3);
+    expect(r.explanation).toContain('one behaviour');
+  });
+
+  it('a gap sheet keeps a pilot sitting exactly at the field average', () => {
+    // C's m1 value IS the mean, so their z is 0 — no direction, which a cosine
+    // sheet must skip. On a gap sheet they are a legitimate (and here, close)
+    // answer, so they must NOT be dropped.
+    const r = findSimilarPilots(shapedReport(), {
+      subjectTrackFile: 'p0.igc',
+      metricIds: ['m1'],
+    })!;
+    expect(r.skipped).toHaveLength(0);
+    const c = r.neighbours.find((n) => n.pilotName === 'C')!;
+    expect(c.contributions[0].neighbourZ).toBeCloseTo(0, 10);
   });
 
   it('excludes outcome metrics — no score-derived value may enter the vector', () => {

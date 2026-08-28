@@ -257,9 +257,10 @@ export function TaskPilotSimilarity() {
     });
   }, [report, subject, selectedMetricIds]);
 
-  // A behaviour set the reader narrowed too far, or a pilot nobody shares
-  // enough data with. Told apart because the fixes differ.
-  const tooFewMetrics = report !== null && subject !== null && similarity === null;
+  // Only a set with nothing usable in it has no answer at all — narrowing to a
+  // single behaviour is a supported mode (ranked by gap), not an error.
+  const nothingUsable = report !== null && subject !== null && similarity === null;
+  const byGap = similarity?.ranking === "gap";
 
   useEffect(() => setShowAll(false), [subject?.trackFile, metricsParam]);
 
@@ -398,13 +399,12 @@ export function TaskPilotSimilarity() {
             </div>
           </Card>
 
-          {tooFewMetrics ? (
+          {nothingUsable ? (
             <Alert variant="destructive">
-              <AlertTitle>Too few behaviours selected</AlertTitle>
+              <AlertTitle>No behaviours to compare on</AlertTitle>
               <AlertDescription>
-                A similarity needs at least three behaviours in common. With one or two
-                the answer can only ever be "identical" or "opposite", which says
-                nothing about the flying. Tick a few more.
+                None of the selected behaviours has usable values for this field. Tick
+                a different one.
               </AlertDescription>
             </Alert>
           ) : (
@@ -413,40 +413,71 @@ export function TaskPilotSimilarity() {
                 <h2 id="results-heading" className="text-lg font-semibold">
                   Closest to {subject.pilotName}
                 </h2>
+                {byGap ? (
+                  <p className="text-sm text-muted-foreground">
+                    On a single behaviour there is no shape to compare, so these
+                    pilots are ranked by how near they sat to {subject.pilotName} on
+                    it — closest first.
+                  </p>
+                ) : null}
                 <Table
                   aria-label={`Pilots ranked by behavioural similarity to ${subject.pilotName}`}
                   scrollLabel="Similarity results"
                 >
                   <TableHeader>
                     <Column isRowHeader>Pilot</Column>
-                    <Column>Similarity</Column>
-                    <Column>Behaviours shared</Column>
-                    <Column>Typical gap (SD)</Column>
-                    <Column>What made them alike</Column>
+                    {byGap ? (
+                      <>
+                        <Column>Their value</Column>
+                        <Column>Gap (SD)</Column>
+                      </>
+                    ) : (
+                      <>
+                        <Column>Similarity</Column>
+                        <Column>Behaviours shared</Column>
+                        <Column>Typical gap (SD)</Column>
+                        <Column>What made them alike</Column>
+                      </>
+                    )}
                   </TableHeader>
                   <TableBody>
                     {shown.map((n) => (
                       <Row key={n.trackFile}>
                         <Cell>{n.pilotName}</Cell>
-                        <Cell>
-                          <span className="flex items-center gap-2">
-                            <span className="tabular-nums">{n.cosine.toFixed(3)}</span>
-                            <CosineBar value={n.cosine} />
-                          </span>
-                        </Cell>
-                        <Cell className="tabular-nums">{n.sharedMetrics}</Cell>
-                        <Cell className="tabular-nums">{n.typicalGap.toFixed(2)}</Cell>
-                        <Cell>
-                          <span className="text-xs text-muted-foreground">
-                            {n.contributions
-                              .slice(0, 3)
-                              .map(
-                                (c) =>
-                                  `${c.contribution >= 0 ? "+" : "−"} ${c.shortLabel ?? c.label}`
-                              )
-                              .join(", ")}
-                          </span>
-                        </Cell>
+                        {byGap ? (
+                          <>
+                            <Cell className="tabular-nums">
+                              {formatMetricValue(
+                                n.contributions[0].unit,
+                                n.contributions[0].neighbourValue
+                              )}{" "}
+                              {n.contributions[0].unit} ({fmtZ(n.contributions[0].neighbourZ)})
+                            </Cell>
+                            <Cell className="tabular-nums">{n.typicalGap.toFixed(2)}</Cell>
+                          </>
+                        ) : (
+                          <>
+                            <Cell>
+                              <span className="flex items-center gap-2">
+                                <span className="tabular-nums">{n.cosine.toFixed(3)}</span>
+                                <CosineBar value={n.cosine} />
+                              </span>
+                            </Cell>
+                            <Cell className="tabular-nums">{n.sharedMetrics}</Cell>
+                            <Cell className="tabular-nums">{n.typicalGap.toFixed(2)}</Cell>
+                            <Cell>
+                              <span className="text-xs text-muted-foreground">
+                                {n.contributions
+                                  .slice(0, 3)
+                                  .map(
+                                    (c) =>
+                                      `${c.contribution >= 0 ? "+" : "−"} ${c.shortLabel ?? c.label}`
+                                  )
+                                  .join(", ")}
+                              </span>
+                            </Cell>
+                          </>
+                        )}
                       </Row>
                     ))}
                   </TableBody>
@@ -477,7 +508,7 @@ export function TaskPilotSimilarity() {
                 ) : null}
               </Card>
 
-              {shown[0] ? (
+              {shown[0] && !byGap ? (
                 <Card aria-labelledby="drivers-heading" className="gap-3">
                   <h2 id="drivers-heading" className="text-lg font-semibold">
                     Why {subject.pilotName} and {shown[0].pilotName} came out closest
@@ -534,14 +565,16 @@ export function TaskPilotSimilarity() {
               other, where counting places would have separated them as much as any
               other pair.
             </p>
-            <p className="text-sm text-muted-foreground">
-              The "Typical gap" column measures the same pair a second way — how far
-              apart the two sat, on average, across the behaviours you chose. It is
-              here as a check. Similarity compares only the shape of two pilots'
-              flying and ignores how far from average either flew, while the gap does
-              not, so a pair that looks close by one measure and distant by the other
-              is the interesting case.
-            </p>
+            {byGap ? null : (
+              <p className="text-sm text-muted-foreground">
+                The "Typical gap" column measures the same pair a second way — how far
+                apart the two sat, on average, across the behaviours you chose. It is
+                here as a check. Similarity compares only the shape of two pilots'
+                flying and ignores how far from average either flew, while the gap
+                does not, so a pair that looks close by one measure and distant by the
+                other is the interesting case.
+              </p>
+            )}
           </Card>
         </>
       )}

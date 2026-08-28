@@ -53,6 +53,7 @@ export type {
   StyleSignature,
   UnclusteredPilot,
   SimilarityContribution,
+  SimilarityRanking,
   SimilarPilot,
   PilotSimilarityReport,
 } from "@glidecomp/engine";

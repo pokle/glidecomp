@@ -71,6 +71,8 @@ export {
 } from './clustering';
 export {
   findSimilarPilots,
+  MIN_COSINE_METRICS,
+  type SimilarityRanking,
   type SimilarityContribution,
   type SimilarPilot,
   type SkippedPilot,

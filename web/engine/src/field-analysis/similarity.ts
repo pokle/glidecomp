@@ -28,11 +28,21 @@
  *    would have separated them by a full place regardless. That is the
  *    intended reading of "flew alike": the order does not matter, the
  *    distance does.
+ *  - ONE behaviour is a special case, not an error. Cosine compares the
+ *    DIRECTION of two vectors, and in one dimension there are only two
+ *    directions — so every pilot on the subject's side of the average scores
+ *    exactly +1 and everyone else exactly −1, with no ordering in between
+ *    (measured: 2 distinct values over 4000 random pairs, against ~3989 at
+ *    two behaviours). "Who is closest on this one behaviour" is still a good
+ *    question; cosine is simply the wrong instrument for it, so a
+ *    single-behaviour sheet is ranked by {@link SimilarPilot.typicalGap}
+ *    instead — which in one dimension is just |Δz|, the distance between the
+ *    two pilots on that behaviour. See {@link SimilarityRanking}.
  *  - Missing values are never imputed (the drop-don't-fill convention
  *    everywhere else in field analysis): the mean and standard deviation are
  *    taken over the pilots that HAVE the behaviour, each pair is compared
- *    over the behaviours BOTH pilots have, and a pair sharing fewer than
- *    {@link MIN_SHARED_METRICS} is reported skipped rather than scored.
+ *    over the behaviours BOTH pilots have, and a pair sharing too few to rank
+ *    is reported skipped rather than scored.
  *  - Every neighbour carries its per-behaviour contributions, which sum
  *    exactly to the cosine, so "why are these two similar" is answerable from
  *    the output alone (the explainability rule).
@@ -45,8 +55,29 @@
  * a measure that knows the difference between "just ahead" and "miles ahead".
  */
 
-import { MIN_SHARED_METRICS, usableMetrics } from './clustering';
+import { usableMetrics } from './clustering';
 import type { FieldAnalysisReport, MetricFamily, MetricReport } from './types';
+
+/**
+ * Cosine needs two behaviours to have anything to say — in one dimension it can
+ * only return ±1. Two is the floor for the ANGLE being meaningful, not for it
+ * being reliable: a pair compared on two behaviours is thin evidence, which is
+ * why every row reports its own `sharedMetrics`.
+ */
+export const MIN_COSINE_METRICS = 2;
+
+/**
+ * How a sheet was ranked, decided by the behaviour count rather than by the
+ * reader — there is no basis control, and this is not one.
+ *
+ * - `cosine` — two or more behaviours: the angle between the two pilots'
+ *   z-score vectors. Compares the SHAPE of their flying and ignores how far
+ *   from average either flew.
+ * - `gap` — exactly one behaviour: |Δz| on that behaviour, smallest first.
+ *   Cosine is degenerate here (see the file comment), so the sheet answers the
+ *   question that one behaviour can actually answer.
+ */
+export type SimilarityRanking = 'cosine' | 'gap';
 
 /** One behaviour's share of a pair's cosine. Contributions sum to the cosine. */
 export interface SimilarityContribution {
@@ -73,7 +104,11 @@ export interface SimilarityContribution {
 export interface SimilarPilot {
   trackFile: string;
   pilotName: string;
-  /** −1 … 1. */
+  /**
+   * −1 … 1. On a single-behaviour sheet (`ranking: 'gap'`) this is ±1 for
+   * every pilot by construction and carries no ordering — read `typicalGap`
+   * there instead.
+   */
   cosine: number;
   /** How many of the selected behaviours both pilots actually had. */
   sharedMetrics: number;
@@ -100,6 +135,8 @@ export interface SkippedPilot {
 export interface PilotSimilarityReport {
   /** Method description in plain words (the explainability rule). */
   explanation: string;
+  /** What `neighbours` is sorted by, and which column a reader should trust. */
+  ranking: SimilarityRanking;
   subject: { trackFile: string; pilotName: string };
   /** The behaviours that actually entered the vectors, in report order. */
   metrics: { id: string; label: string; shortLabel?: string; family: MetricFamily; unit: string }[];
@@ -119,6 +156,14 @@ export interface FindSimilarPilotsOptions {
    */
   metricIds?: string[];
 }
+
+const EXPLANATION_GAP =
+  'You picked one behaviour, so this sheet is not a cosine similarity. GlideComp converts the ' +
+  'behaviour to a z-score inside this field: how many standard deviations above or below the ' +
+  'field average each pilot sat. It then lists the pilots by how close their z-score is to ' +
+  'yours, closest first. An angle between two lists needs at least two behaviours to mean ' +
+  'anything, so with one behaviour the honest answer is simply who sat nearest to you on it. ' +
+  'No score and no ranking is used.';
 
 const EXPLANATION =
   'GlideComp converts each selected behaviour to a z-score inside this field: how many standard ' +
@@ -165,10 +210,10 @@ function zScoreColumns(
 /**
  * Rank the field by behavioural similarity to one pilot.
  *
- * Returns null when the subject isn't in the report, or when fewer than
- * {@link MIN_SHARED_METRICS} of the requested behaviours are usable at all —
- * the caller says so rather than showing a cosine over one behaviour, which
- * can only ever be +1 or −1.
+ * Two or more behaviours are ranked by cosine; exactly one is ranked by the
+ * gap on that behaviour, because cosine cannot order a single dimension (see
+ * the file comment). Returns null only when the subject isn't in the report or
+ * no requested behaviour is usable at all.
  *
  * Pure and deterministic: the same report and options always give the same
  * ordering (ties broken by name, so it never hinges on array order).
@@ -186,7 +231,14 @@ export function findSimilarPilots(
   const metrics: MetricReport[] = usableMetrics(report).filter(
     (m) => wanted === null || wanted.has(m.id),
   );
-  if (metrics.length < MIN_SHARED_METRICS) return null;
+  if (metrics.length === 0) return null;
+
+  // The behaviour count picks the ranking; the reader never does.
+  const ranking: SimilarityRanking =
+    metrics.length >= MIN_COSINE_METRICS ? 'cosine' : 'gap';
+  // A pair needs enough SHARED behaviours for whichever measure is in play —
+  // two for an angle, one for a gap.
+  const requiredShared = ranking === 'cosine' ? MIN_COSINE_METRICS : 1;
 
   const cols = zScoreColumns(report, metrics);
   const neighbours: SimilarPilot[] = [];
@@ -203,11 +255,14 @@ export function findSimilarPilots(
     for (let mi = 0; mi < metrics.length; mi++) {
       if (cols[mi][subjectIndex] !== null && cols[mi][i] !== null) shared.push(mi);
     }
-    if (shared.length < MIN_SHARED_METRICS) {
+    if (shared.length < requiredShared) {
       skipped.push({
         trackFile: pilot.trackFile,
         pilotName: pilot.pilotName,
-        reason: `only ${shared.length} of the ${metrics.length} selected behaviours in common (needs ≥ ${MIN_SHARED_METRICS})`,
+        reason:
+          shared.length === 0
+            ? 'no value recorded for the selected behaviours'
+            : `only ${shared.length} of the ${metrics.length} selected behaviours in common (needs ≥ ${requiredShared})`,
       });
       continue;
     }
@@ -226,7 +281,9 @@ export function findSimilarPilots(
     }
     const normA = Math.sqrt(sumA);
     const normB = Math.sqrt(sumB);
-    if (normA === 0 || normB === 0) {
+    // Only an angle needs a direction. On a gap sheet a pilot sitting exactly
+    // at the field average is a fine answer — they may well be the closest.
+    if (ranking === 'cosine' && (normA === 0 || normB === 0)) {
       // A pilot sitting exactly at the field average on every shared behaviour
       // has no direction at all, so the angle to them is undefined. Saying so
       // beats inventing a 0.
@@ -241,6 +298,7 @@ export function findSimilarPilots(
       continue;
     }
 
+    // Zero only on a gap sheet, where the cosine below is unused anyway.
     const denom = normA * normB;
     const contributions: SimilarityContribution[] = shared
       .map((mi) => {
@@ -257,7 +315,7 @@ export function findSimilarPilots(
           neighbourZ,
           subjectValue: m.perPilot[subjectIndex].value!,
           neighbourValue: m.perPilot[i].value!,
-          contribution: (subjectZ * neighbourZ) / denom,
+          contribution: denom === 0 ? 0 : (subjectZ * neighbourZ) / denom,
         } satisfies SimilarityContribution;
       })
       // Ties broken by metric id so the "what made them similar" list can
@@ -270,20 +328,23 @@ export function findSimilarPilots(
     neighbours.push({
       trackFile: pilot.trackFile,
       pilotName: pilot.pilotName,
-      cosine: dot / denom,
+      cosine: denom === 0 ? 0 : dot / denom,
       sharedMetrics: shared.length,
       typicalGap: Math.sqrt(sqGap / shared.length),
       contributions,
     });
   }
 
-  neighbours.sort(
-    (a, b) => b.cosine - a.cosine || a.pilotName.localeCompare(b.pilotName),
+  neighbours.sort((a, b) =>
+    ranking === 'cosine'
+      ? b.cosine - a.cosine || a.pilotName.localeCompare(b.pilotName)
+      : a.typicalGap - b.typicalGap || a.pilotName.localeCompare(b.pilotName),
   );
   skipped.sort((a, b) => a.pilotName.localeCompare(b.pilotName));
 
   return {
-    explanation: EXPLANATION,
+    explanation: ranking === 'cosine' ? EXPLANATION : EXPLANATION_GAP,
+    ranking,
     subject: {
       trackFile: report.pilots[subjectIndex].trackFile,
       pilotName: report.pilots[subjectIndex].pilotName,
