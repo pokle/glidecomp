@@ -73,10 +73,16 @@ function fmtZ(z: number): string {
   return `${z >= 0 ? "+" : "−"}${Math.abs(z).toFixed(1)} SD`;
 }
 
-/** −1 … 1 as a diverging bar. Colour is never the only channel — the number
- * sits beside it, and the bar is decorative to AT. */
-function CosineBar({ value }: { value: number }) {
-  const half = Math.min(50, Math.abs(value) * 50);
+/** The similarity as a diverging bar. Colour is never the only channel — the
+ * number sits beside it, and the bar is decorative to AT.
+ *
+ * The scale is asymmetric because the measure is: Tanimoto reaches 1 for two
+ * pilots who flew alike but only −1/3 for two who did the opposite, so each
+ * side is drawn against its own limit rather than letting a full-strength
+ * opposite render as a third of a bar. */
+function SimilarityBar({ value }: { value: number }) {
+  const limit = value >= 0 ? 1 : 1 / 3;
+  const half = Math.min(50, (Math.abs(value) / limit) * 50);
   return (
     <span aria-hidden className="relative block h-2 w-24 rounded-full bg-muted">
       <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
@@ -434,8 +440,9 @@ export function TaskPilotSimilarity() {
                     ) : (
                       <>
                         <Column>Similarity</Column>
-                        <Column>Behaviours shared</Column>
+                        <Column>Shape only</Column>
                         <Column>Typical gap (SD)</Column>
+                        <Column>Shared</Column>
                         <Column>What made them alike</Column>
                       </>
                     )}
@@ -459,12 +466,17 @@ export function TaskPilotSimilarity() {
                           <>
                             <Cell>
                               <span className="flex items-center gap-2">
-                                <span className="tabular-nums">{n.cosine.toFixed(3)}</span>
-                                <CosineBar value={n.cosine} />
+                                <span className="tabular-nums">
+                                  {n.similarity.toFixed(3)}
+                                </span>
+                                <SimilarityBar value={n.similarity} />
                               </span>
                             </Cell>
-                            <Cell className="tabular-nums">{n.sharedMetrics}</Cell>
+                            <Cell className="tabular-nums text-muted-foreground">
+                              {n.shapeOnly.toFixed(2)}
+                            </Cell>
                             <Cell className="tabular-nums">{n.typicalGap.toFixed(2)}</Cell>
+                            <Cell className="tabular-nums">{n.sharedMetrics}</Cell>
                             <Cell>
                               <span className="text-xs text-muted-foreground">
                                 {n.contributions
@@ -515,7 +527,8 @@ export function TaskPilotSimilarity() {
                   </h2>
                   <p className="text-sm text-muted-foreground">
                     Each behaviour pushes the pair together (+) or apart (−). The
-                    contributions add up to the similarity score, {shown[0].cosine.toFixed(3)}.
+                    contributions add up to the similarity score,{" "}
+                    {shown[0].similarity.toFixed(3)}.
                   </p>
                   <Table
                     aria-label={`Per-behaviour contributions for ${shown[0].pilotName}`}
@@ -566,14 +579,23 @@ export function TaskPilotSimilarity() {
               other pair.
             </p>
             {byGap ? null : (
-              <p className="text-sm text-muted-foreground">
-                The "Typical gap" column measures the same pair a second way — how far
-                apart the two sat, on average, across the behaviours you chose. It is
-                here as a check. Similarity compares only the shape of two pilots'
-                flying and ignores how far from average either flew, while the gap
-                does not, so a pair that looks close by one measure and distant by the
-                other is the interesting case.
-              </p>
+              <>
+                <p className="text-sm text-muted-foreground">
+                  The "Shape only" column is what the comparison would say if it
+                  looked at the direction of two pilots' departures and ignored the
+                  size of them. It is shown because the two disagreeing is the
+                  finding: a high shape figure beside a low similarity means these
+                  pilots did the same things by very different amounts. On one task
+                  in testing, the pair with the highest shape figure in the whole
+                  field sat 4.6 and 0.2 standard deviations below average on the same
+                  behaviour — the same direction, and nothing alike.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The "Typical gap" column measures the pair a third way: how far
+                  apart the two sat, on average, across the behaviours you chose,
+                  in standard deviations.
+                </p>
+              </>
             )}
           </Card>
         </>

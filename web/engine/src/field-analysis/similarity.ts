@@ -16,6 +16,30 @@
  * Method:
  *  - Pure derivation at read time from a finished FieldAnalysisReport, like
  *    clusterPilotStyles: nothing is stored and no recompute is triggered.
+ *  - Two pilots are compared by the TANIMOTO coefficient (extended Jaccard)
+ *    over their z-score vectors:
+ *
+ *        T(a, b) = (a · b) / (‖a‖² + ‖b‖² − a · b)
+ *
+ *    Cosine was the first cut and is wrong for the question. Cosine divides by
+ *    ‖a‖‖b‖, and that division IS the discarding of magnitude — it compares
+ *    direction only, so a pilot who is mildly below average and one who is
+ *    catastrophically below average on the same behaviours score as near-
+ *    identical. That is not hypothetical: on Corryong 2026 open T2 the highest
+ *    cosine in the entire field (0.916, #1 of 666 pairs) was John Harriott
+ *    against Todd Wisewould, who sat at −4.60 SD and −0.21 SD on out-climb
+ *    respectively. Same direction, nothing alike.
+ *
+ *    Tanimoto keeps the same numerator but divides by how much ground the two
+ *    vectors cover TOGETHER, so a magnitude mismatch is charged for. It agrees
+ *    with cosine when the two magnitudes match, and diverges as they separate:
+ *    that pair drops to 0.056 (#210 of 666), while every healthy neighbour
+ *    list on that task keeps its cosine order. Both numbers are reported so
+ *    the difference is legible — see {@link SimilarPilot.shapeOnly}.
+ *
+ *    Range is [−1/3, 1], not [−1, 1]: two exactly opposed vectors of equal
+ *    length score −1/3, because they still cover ground together. Asymmetric,
+ *    and the one wart of the measure.
  *  - Each selected behaviour is converted to a Z-SCORE within this field:
  *    (value − field mean) / field standard deviation. The unit cancels, so
  *    km/h, metres and ratios can share one vector without the metric that
@@ -37,7 +61,9 @@
  *    question; cosine is simply the wrong instrument for it, so a
  *    single-behaviour sheet is ranked by {@link SimilarPilot.typicalGap}
  *    instead — which in one dimension is just |Δz|, the distance between the
- *    two pilots on that behaviour. See {@link SimilarityRanking}.
+ *    two pilots on that behaviour. See {@link SimilarityRanking}. (Tanimoto
+ *    is not degenerate in one dimension the way cosine is, but the gap is the
+ *    plainer statement of the same thing there, and needs no explaining.)
  *  - Missing values are never imputed (the drop-don't-fill convention
  *    everywhere else in field analysis): the mean and standard deviation are
  *    taken over the pilots that HAVE the behaviour, each pair is compared
@@ -59,10 +85,12 @@ import { usableMetrics } from './clustering';
 import type { FieldAnalysisReport, MetricFamily, MetricReport } from './types';
 
 /**
- * Cosine needs two behaviours to have anything to say — in one dimension it can
- * only return ±1. Two is the floor for the ANGLE being meaningful, not for it
- * being reliable: a pair compared on two behaviours is thin evidence, which is
- * why every row reports its own `sharedMetrics`.
+ * Below two behaviours there is no shape to compare — cosine can only return
+ * ±1 in one dimension, and the score reduces to a statement about a single
+ * number that {@link SimilarityRanking} `'gap'` makes more plainly. Two is the
+ * floor for the comparison being meaningful, not for it being reliable: a pair
+ * compared on two behaviours is thin evidence, which is why every row reports
+ * its own `sharedMetrics`.
  */
 export const MIN_COSINE_METRICS = 2;
 
@@ -93,10 +121,12 @@ export interface SimilarityContribution {
   subjectValue: number;
   neighbourValue: number;
   /**
-   * (a_i · b_i) / (‖a‖ ‖b‖) for this component. Positive = the two pilots sit
-   * on the same side of the field's average on this behaviour and it pushed
-   * them together; negative = opposite sides, and it pushed them apart.
-   * Summing this field over every entry reproduces `cosine` exactly.
+   * This behaviour's share of the similarity: (a_i · b_i) / (‖a‖² + ‖b‖² − a·b).
+   * Positive = the two pilots sit on the same side of the field's average here
+   * and it pushed them together; negative = opposite sides, and it pushed them
+   * apart. Summing this field over every entry reproduces `similarity`
+   * exactly — the denominator is one scalar, so the decomposition survives the
+   * move from cosine to Tanimoto.
    */
   contribution: number;
 }
@@ -105,11 +135,21 @@ export interface SimilarPilot {
   trackFile: string;
   pilotName: string;
   /**
-   * −1 … 1. On a single-behaviour sheet (`ranking: 'gap'`) this is ±1 for
-   * every pilot by construction and carries no ordering — read `typicalGap`
-   * there instead.
+   * Tanimoto over the two z-vectors, −1/3 … 1. Direction AND magnitude both
+   * count. This is what `neighbours` is sorted by on a cosine-ranked sheet.
+   *
+   * On a single-behaviour sheet (`ranking: 'gap'`) it carries no ordering —
+   * read `typicalGap` there instead.
    */
-  cosine: number;
+  similarity: number;
+  /**
+   * Plain cosine over the same two vectors, −1 … 1: the SHAPE alone, with
+   * magnitude divided out. Reported beside `similarity` rather than dropped,
+   * because the two disagreeing is the finding — a high `shapeOnly` against a
+   * low `similarity` says "these two did the same things by very different
+   * amounts", which is exactly the case cosine alone got wrong.
+   */
+  shapeOnly: number;
   /** How many of the selected behaviours both pilots actually had. */
   sharedMetrics: number;
   /**
@@ -165,16 +205,20 @@ const EXPLANATION_GAP =
   'anything, so with one behaviour the honest answer is simply who sat nearest to you on it. ' +
   'No score and no ranking is used.';
 
+const EXPLANATION_COSINE_TAIL =
+  ' Two pilots are then compared by how much their two lists overlap, measured against how much ' +
+  'ground the two of them cover between them. Both the direction and the size of a departure ' +
+  'count: two pilots who did the same things by very different amounts score low, where a measure ' +
+  'of shape alone would call them near-identical. A missing value is never filled in. The score ' +
+  'runs from 1 for two pilots who flew alike down to about −0.33 for two who did the opposite. No ' +
+  'score and no ranking is used.';
+
 const EXPLANATION =
   'GlideComp converts each selected behaviour to a z-score inside this field: how many standard ' +
   'deviations above or below the field average the pilot sat. That removes the unit, so a speed ' +
   'in kilometres per hour and a glide ratio can sit in one list without the larger numbers taking ' +
   'over, and it keeps the size of a gap rather than only the order. Each pilot becomes a list of ' +
-  'those numbers, and two pilots are compared by the cosine of the angle between their lists, over ' +
-  'the behaviours that both pilots have. A missing value is never filled in. The result says ' +
-  'whether two pilots depart from the average pilot in the same pattern. It ignores how large the ' +
-  'departure was, so a slightly unusual pilot and a very unusual one can score 1.00 together. No ' +
-  'score and no ranking is used.';
+  'those numbers, over the behaviours that both pilots have.' + EXPLANATION_COSINE_TAIL;
 
 /**
  * Per-behaviour z-scores, aligned to report.pilots; null where the pilot has
@@ -281,8 +325,8 @@ export function findSimilarPilots(
     }
     const normA = Math.sqrt(sumA);
     const normB = Math.sqrt(sumB);
-    // Only an angle needs a direction. On a gap sheet a pilot sitting exactly
-    // at the field average is a fine answer — they may well be the closest.
+    // Only a shape comparison needs a direction. On a gap sheet a pilot sitting
+    // exactly at the field average is a fine answer — possibly the closest.
     if (ranking === 'cosine' && (normA === 0 || normB === 0)) {
       // A pilot sitting exactly at the field average on every shared behaviour
       // has no direction at all, so the angle to them is undefined. Saying so
@@ -298,8 +342,12 @@ export function findSimilarPilots(
       continue;
     }
 
-    // Zero only on a gap sheet, where the cosine below is unused anyway.
-    const denom = normA * normB;
+    // Tanimoto's denominator: how much ground the two vectors cover together.
+    // Zero only when both are the zero vector, which the guard above has
+    // already skipped on a cosine sheet; on a gap sheet the score is unused.
+    const tanimotoDenom = sumA + sumB - dot;
+    // Cosine's denominator, for the shape-only figure reported alongside.
+    const cosineDenom = normA * normB;
     const contributions: SimilarityContribution[] = shared
       .map((mi) => {
         const m = metrics[mi];
@@ -315,7 +363,8 @@ export function findSimilarPilots(
           neighbourZ,
           subjectValue: m.perPilot[subjectIndex].value!,
           neighbourValue: m.perPilot[i].value!,
-          contribution: denom === 0 ? 0 : (subjectZ * neighbourZ) / denom,
+          contribution:
+            tanimotoDenom === 0 ? 0 : (subjectZ * neighbourZ) / tanimotoDenom,
         } satisfies SimilarityContribution;
       })
       // Ties broken by metric id so the "what made them similar" list can
@@ -328,7 +377,8 @@ export function findSimilarPilots(
     neighbours.push({
       trackFile: pilot.trackFile,
       pilotName: pilot.pilotName,
-      cosine: denom === 0 ? 0 : dot / denom,
+      similarity: tanimotoDenom === 0 ? 0 : dot / tanimotoDenom,
+      shapeOnly: cosineDenom === 0 ? 0 : dot / cosineDenom,
       sharedMetrics: shared.length,
       typicalGap: Math.sqrt(sqGap / shared.length),
       contributions,
@@ -337,7 +387,7 @@ export function findSimilarPilots(
 
   neighbours.sort((a, b) =>
     ranking === 'cosine'
-      ? b.cosine - a.cosine || a.pilotName.localeCompare(b.pilotName)
+      ? b.similarity - a.similarity || a.pilotName.localeCompare(b.pilotName)
       : a.typicalGap - b.typicalGap || a.pilotName.localeCompare(b.pilotName),
   );
   skipped.sort((a, b) => a.pilotName.localeCompare(b.pilotName));

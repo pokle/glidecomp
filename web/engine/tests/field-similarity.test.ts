@@ -74,19 +74,62 @@ describe('findSimilarPilots', () => {
     expect(r).not.toBeNull();
     expect(r.subject.pilotName).toBe('A');
     expect(r.neighbours[0].pilotName).toBe('B');
-    expect(r.neighbours[0].cosine).toBeGreaterThan(0.9);
-    // D and E are both exact mirrors of A's shape (D at full amplitude, E at
-    // half) — cosine ignores amplitude, so they tie at −1 and sort by name.
-    expect(r.neighbours.slice(-2).map((n) => n.pilotName)).toEqual(['D', 'E']);
-    for (const n of r.neighbours.slice(-2)) expect(n.cosine).toBeCloseTo(-1, 10);
+    expect(r.neighbours[0].similarity).toBeGreaterThan(0.9);
+    // D and E both mirror A's shape, D at full amplitude and E at half. Their
+    // SHAPE-only figure is −1 for both — that is what cosine alone would say —
+    // but the similarity separates them, because D opposes A at A's own
+    // magnitude while E is a half-sized opposite.
+    for (const n of r.neighbours.slice(-2)) expect(n.shapeOnly).toBeCloseTo(-1, 10);
+    expect(r.neighbours.at(-1)!.pilotName).toBe('D');
+    expect(r.neighbours.at(-1)!.similarity).toBeLessThan(0);
   });
 
-  it('contributions sum to the cosine', () => {
+  it('contributions sum to the similarity', () => {
     const r = findSimilarPilots(shapedReport(), { subjectTrackFile: 'p0.igc' })!;
     for (const n of r.neighbours) {
       const sum = n.contributions.reduce((acc, c) => acc + c.contribution, 0);
-      expect(sum).toBeCloseTo(n.cosine, 10);
+      expect(sum).toBeCloseTo(n.similarity, 10);
     }
+  });
+
+  it('charges for a magnitude mismatch, where shape alone does not', () => {
+    // B departs from the field average in exactly A's direction, but barely:
+    // A sits at ±2.98 SD and B at ±0.04 SD. Cosine cannot tell them apart at
+    // all; the measure we ship must. (Eight filler pilots keep A from dragging
+    // the mean far enough to flip B's sign — z is measured from the field
+    // average, so "a fraction of the amount" in raw units is not a fraction of
+    // the z unless the field is wide enough to hold both.)
+    const filler = [2, 2, 2, 2, 2, 2, 2, 2];
+    const report = makeReport(
+      ['A', 'B', ...filler.map((_, i) => `F${i}`)],
+      [
+        { id: 'm1', values: [10, 3, ...filler] },
+        { id: 'm2', values: [10, 3, ...filler] },
+        { id: 'm3', values: [-10, -3, ...filler.map((v) => -v)] },
+      ],
+    );
+    const r = findSimilarPilots(report, { subjectTrackFile: 'p0.igc' })!;
+    const b = r.neighbours.find((n) => n.pilotName === 'B')!;
+    expect(b.shapeOnly).toBeCloseTo(1, 6); // shape alone sees no difference
+    expect(b.similarity).toBeLessThan(0.05); // the shipped measure charges for it
+    expect(b.typicalGap).toBeGreaterThan(2.5);
+  });
+
+  it('agrees with shape alone when the two magnitudes match', () => {
+    // Identical vectors: both measures top out together.
+    const report = makeReport(
+      ['A', 'Twin', 'C'],
+      [
+        { id: 'm1', values: [8, 8, 1] },
+        { id: 'm2', values: [3, 3, 9] },
+        { id: 'm3', values: [6, 6, 2] },
+      ],
+    );
+    const r = findSimilarPilots(report, { subjectTrackFile: 'p0.igc' })!;
+    const twin = r.neighbours.find((n) => n.pilotName === 'Twin')!;
+    expect(twin.shapeOnly).toBeCloseTo(1, 10);
+    expect(twin.similarity).toBeCloseTo(1, 10);
+    expect(twin.typicalGap).toBeCloseTo(0, 10);
   });
 
   it('is unaffected by the unit a behaviour is recorded in', () => {
@@ -106,7 +149,7 @@ describe('findSimilarPilots', () => {
       base.neighbours.map((n) => n.pilotName),
     );
     after.neighbours.forEach((n, i) =>
-      expect(n.cosine).toBeCloseTo(base.neighbours[i].cosine, 10),
+      expect(n.similarity).toBeCloseTo(base.neighbours[i].similarity, 10),
     );
   });
 
@@ -127,7 +170,7 @@ describe('findSimilarPilots', () => {
     const c = r.neighbours.find((n) => n.pilotName === 'C')!;
     expect(b.typicalGap).toBeLessThan(0.1);
     expect(c.typicalGap).toBeGreaterThan(1);
-    expect(b.cosine).toBeGreaterThan(c.cosine);
+    expect(b.similarity).toBeGreaterThan(c.similarity);
   });
 
   it('typicalGap is the RMS difference in z over the shared behaviours', () => {
@@ -209,11 +252,11 @@ describe('findSimilarPilots', () => {
       const c = n.contributions[0];
       expect(n.typicalGap).toBeCloseTo(Math.abs(c.subjectZ - c.neighbourZ), 10);
     }
-    // The cosine column really is degenerate — exactly the reason for the mode.
+    // Shape alone really is degenerate here — exactly the reason for the mode.
     // In one dimension it can only be +1 (same side of the average), −1 (the
-    // other side), or 0 (a pilot sitting exactly ON the average, where the
-    // angle is undefined). Three values, and no ordering inside any of them.
-    const seen = new Set(r.neighbours.map((n) => n.cosine));
+    // other side), or 0 (a pilot sitting exactly ON the average, where there is
+    // no direction). Three values, and no ordering inside any of them.
+    const seen = new Set(r.neighbours.map((n) => n.shapeOnly));
     expect([...seen].every((c) => c === 1 || c === -1 || c === 0)).toBe(true);
     expect(seen.size).toBeLessThanOrEqual(3);
     expect(r.explanation).toContain('one behaviour');
@@ -292,8 +335,8 @@ describe('findSimilarPilots', () => {
     const reranked = shapedReport();
     reranked.pilots = reranked.pilots.map((p, i) => ({ ...p, rank: 5 - i }));
     const b = findSimilarPilots(reranked, { subjectTrackFile: 'p0.igc' })!;
-    expect(b.neighbours.map((n) => [n.pilotName, n.cosine])).toEqual(
-      a.neighbours.map((n) => [n.pilotName, n.cosine]),
+    expect(b.neighbours.map((n) => [n.pilotName, n.similarity])).toEqual(
+      a.neighbours.map((n) => [n.pilotName, n.similarity]),
     );
   });
 });
