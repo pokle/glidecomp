@@ -201,7 +201,7 @@ describe("buildSuggestions", () => {
     );
     expect(suggestions[0]).toEqual({
       kind: "analysis",
-      path: "/comp/corryong-cup-2026-newc/analysis/task/task-1-open-newt",
+      path: "/comp/corryong-cup-2026-newc/task/task-1-open-newt/analysis",
       label: "Field analysis",
       context: "Task 1 (Open) · Corryong Cup 2026",
     });

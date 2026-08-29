@@ -289,9 +289,6 @@ test.describe("SSR — isolation and fallback", () => {
    * crawler. (Field analysis is no longer here — it is SSR'd; see below.)
    */
   for (const path of [
-    // The pre-re-nesting field-analysis URL, redirected client-side — still
-    // needs the shell rather than an SSR render or a 404.
-    "/comp/anything/task/anything/analysis",
     // Admin-only roster editor page.
     "/comp/anything/pilots",
     // Admin-only settings pages (index + a group sub-page).
@@ -300,7 +297,7 @@ test.describe("SSR — isolation and fallback", () => {
     // The pilot-similarity prototype: a real SPA route that derives everything
     // client-side from the report it fetches, so it has nothing to
     // server-render and must reach the shell rather than the 404 fallback.
-    "/comp/anything/analysis/task/anything/similar",
+    "/comp/anything/task/anything/analysis/similar",
   ]) {
     test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {
       const res = await request.get(path, { failOnStatusCode: false });
@@ -352,6 +349,35 @@ test.describe("URL canonicalisation (301 to slug-id)", () => {
     expect(new URL(res.headers()["location"]).pathname).toBe(canonical);
   });
 
+  /**
+   * The per-task field analysis was public and server-rendered at
+   * /comp/:c/analysis/task/:t through July–August 2026 before moving under the
+   * task. That URL is in the wild, so it must 301 rather than serve a shell —
+   * a crawler handed a noindex shell learns only that the page is gone.
+   */
+  test("the superseded per-task analysis URL 301s to the one under the task", async ({
+    request,
+  }) => {
+    const { compId, taskId } = await discover(request);
+    for (const [from, to] of [
+      [
+        `/comp/${compId}/analysis/task/${taskId}?class=open`,
+        `/comp/${compId}/task/${taskId}/analysis`,
+      ],
+      [
+        `/comp/${compId}/analysis/task/${taskId}/similar`,
+        `/comp/${compId}/task/${taskId}/analysis/similar`,
+      ],
+    ]) {
+      const res = await request.get(from, { maxRedirects: 0 });
+      expect(res.status()).toBe(301);
+      const loc = new URL(res.headers()["location"]);
+      expect(loc.pathname).toBe(to);
+      // The query is the shareable half of these URLs (`?class=`, `?pilot=`).
+      expect(loc.search).toBe(from.includes("?") ? "?class=open" : "");
+    }
+  });
+
   test("a trailing slash 301s to the canonical (no slash)", async ({ request }) => {
     const { compId, compName } = await discover(request);
     const canonical = compPath(compId, compName);
@@ -389,20 +415,61 @@ test.describe("SSR — field analysis (public)", () => {
     const { compId, taskId } = await discover(request);
     await warmTaskAnalysis(request, compId, taskId);
 
-    const res = await request.get(`/comp/${compId}/analysis/task/${taskId}`);
+    const res = await request.get(`/comp/${compId}/task/${taskId}/analysis`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     // The defining SSR property: the loader data is embedded in the raw HTML.
     expect(html).toContain("window.__SSR_DATA__");
     expect(html).toContain("Field analysis —");
-    // Branch on the actual server HTML (race-free): warm renders the ranking
-    // heading and is indexable; cold renders the pending notice and is noindex.
-    if (html.includes("Which behaviours went with better ranks")) {
+    // Branch on the actual server HTML (race-free): warm renders the summary's
+    // section boxes and is indexable; cold renders the pending notice and is
+    // noindex.
+    if (html.includes("Winning strategies")) {
       expect(html).not.toContain('name="robots" content="noindex"');
     } else {
       expect(html.toLowerCase()).toContain("pending");
       expect(html).toContain('name="robots" content="noindex"');
     }
+  });
+
+  /**
+   * Each section of the task report is its own public page, through the same
+   * loader. They carry the substance the chapter page now only summarises, so
+   * they are the ones that have to be server-rendered — a client-only shell
+   * here would take the whole per-task analysis out of the index.
+   */
+  test("each section of the task report server-renders under its own title", async ({
+    request,
+  }) => {
+    const { compId, taskId } = await discover(request);
+    await warmTaskAnalysis(request, compId, taskId);
+
+    for (const [slug, heading] of [
+      ["strategies", "Winning strategies"],
+      ["weather", "Weather"],
+      ["thermals", "Thermals"],
+      ["metrics", "Metric details"],
+      ["style", "Flying style"],
+      ["method", "How this was measured"],
+    ]) {
+      const res = await request.get(`/comp/${compId}/task/${taskId}/analysis/${slug}`);
+      expect(res.ok(), slug).toBeTruthy();
+      const html = await res.text();
+      expect(html, slug).toContain("window.__SSR_DATA__");
+      expect(html, slug).toContain(`${heading} —`);
+    }
+  });
+
+  test("an unknown section of the task report is a 404 noindex shell", async ({
+    request,
+  }) => {
+    const { compId, taskId } = await discover(request);
+    const res = await request.get(
+      `/comp/${compId}/task/${taskId}/analysis/nonsense`,
+      { failOnStatusCode: false }
+    );
+    expect(res.status()).toBe(404);
+    expect(await res.text()).toContain('name="robots" content="noindex"');
   });
 
   test("comp field analysis server-renders with a title and SSR data", async ({
@@ -534,6 +601,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     ":pilot",
     ":compAnalysis",
     ":taskAnalysis",
+    ":taskStrategies",
     // WITH a query string. Not the guard for the pathname-only SSR bug — both
     // of these passed while it was live (the "?class= deep link" test above is
     // what catches that). They are here because no URL in this list carried a
@@ -558,7 +626,8 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":task": `/comp/${d.compId}/task/${d.taskId}`,
         ":pilot": `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`,
         ":compAnalysis": `/comp/${d.compId}/analysis`,
-        ":taskAnalysis": `/comp/${d.compId}/analysis/task/${d.taskId}`,
+        ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,
+        ":taskStrategies": `/comp/${d.compId}/task/${d.taskId}/analysis/strategies`,
         ":scoresByTask": `/comp/${d.compId}/scores?task=${d.taskId}`,
         ":compAnalysisByClass": `/comp/${d.compId}/analysis${
           cls ? `?class=${encodeURIComponent(cls)}` : ""

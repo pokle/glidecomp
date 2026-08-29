@@ -68,9 +68,13 @@ async function analysisUrls(request: APIRequestContext) {
     if (analysis) {
       const task = analysis.tasks[0];
       if (task) {
+        const taskAnalysis = `/comp/${comp.comp_id}/task/${task.task_id}/analysis`;
         return {
           comp: `/comp/${comp.comp_id}/analysis`,
-          task: `/comp/${comp.comp_id}/analysis/task/${task.task_id}`,
+          // The task report is a page per section: the ranking's ⓘs are on
+          // the strategies page, and the notes behind them on the method page.
+          strategies: `${taskAnalysis}/strategies`,
+          method: `${taskAnalysis}/method`,
         };
       }
       if (analysis.pending_task_count === 0) {
@@ -123,19 +127,27 @@ test("task analysis: ρ and coverage are behind the ranking's column ⓘs", asyn
   request,
 }) => {
   const urls = await analysisUrls(request);
-  await page.goto(urls.task);
+  await page.goto(urls.strategies);
   await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
 
   await expect(
     page.getByText(/a reading drawn from half the field/).first()
   ).toBeHidden();
 
+  // Named rather than bare `getByRole("dialog")`: the popover being dismissed
+  // is still in the DOM while it animates out, so a bare locator can resolve
+  // to two and fail strict mode outright — which is a race, not a finding, and
+  // one this page lost the moment it stopped carrying the whole report.
   await page.getByRole("button", { name: "About Strength" }).first().click();
-  await expect(page.getByRole("dialog")).toContainText("Spearman");
+  await expect(page.getByRole("dialog", { name: "About Strength" })).toContainText(
+    "Spearman"
+  );
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "About Pilots measured" }).first().click();
-  await expect(page.getByRole("dialog")).toContainText("half the field is thinner");
+  await expect(
+    page.getByRole("dialog", { name: "About Pilots measured" })
+  ).toContainText("half the field is thinner");
 });
 
 test("print carries every note that moved behind a ⓘ", async ({ page, request }) => {
@@ -157,17 +169,16 @@ test("print carries every note that moved behind a ⓘ", async ({ page, request 
   // that cannot happen.
   await expect(page.getByRole("button", { name: "About Day to day" })).toBeHidden();
 
+  // The task report is a page per section now, and printing a whole task in
+  // one go is no longer a goal — so its notes are not a print mirror at all.
+  // They are the visible content of "How this was measured", which is the one
+  // page whose whole job is explaining the readings.
   await page.emulateMedia({ media: "screen" });
-  await page.goto(urls.task);
-  await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
-  await page.emulateMedia({ media: "print" });
+  await page.goto(urls.method);
   for (const phrase of [
     "How to read the table",
     "half the field is thinner",
     "will look strong on luck alone",
-    // The heatmap caption's own print mirror, a separate mechanism to the
-    // footnote's — worth asserting once so both patterns are covered.
-    "The columns start with the behaviours",
   ]) {
     await expect(page.getByText(phrase, { exact: false }).first()).toBeVisible();
   }

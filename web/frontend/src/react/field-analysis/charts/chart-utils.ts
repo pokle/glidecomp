@@ -10,6 +10,7 @@
  * framework.
  */
 import { formatMetricValue, type MetricReport } from "../types";
+import { unitWords } from "../units";
 import { extent, linearScale, niceTicks, spreadLabels } from "@/react/charts/scale";
 
 // Moved to charts/scale.ts when the report card's score charts needed the
@@ -47,6 +48,18 @@ export function formatTickValue(unit: string, value: number): string {
     default:
       return num;
   }
+}
+
+/**
+ * The x axis's name: the metric and the unit it is measured in. `count` and
+ * `ratio` are unitless in the engine's vocabulary — `formatTickValue` leaves
+ * their ticks bare for the same reason — so they get no parenthetical rather
+ * than a meaningless "(count)".
+ */
+export function axisTitleFor(metric: Pick<MetricReport, "label" | "unit">): string {
+  return metric.unit === "count" || metric.unit === "ratio"
+    ? metric.label
+    : `${metric.label} (${unitWords(metric.unit)})`;
 }
 
 /** One sample of a fitted trend, in DATA space (not pixels). */

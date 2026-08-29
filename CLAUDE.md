@@ -433,15 +433,32 @@ These are the standing imperatives. Each links to the reference that explains it
 - **Field analysis** — 26 behavioural metrics (climbing, gliding, decision-making,
   gaggle, race craft, day profile) ranked by Spearman ρ against GAP rank, in
   `web/engine/src/field-analysis/`, surfacing on the public, SSR'd
-  `/comp/:id/analysis` and `/comp/:id/analysis/task/:id`
+  `/comp/:id/analysis` and `/comp/:id/task/:id/analysis` (+ `/<section>`)
   (`src/react/pages/{Comp,Task}FieldAnalysis.tsx` + `src/react/field-analysis/`),
   and via the CLI: `bun run score-task -- --field-analysis` / `--comp <slug>`.
   See [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md).
-  - The per-task page is nested under the comp report because it's a chapter of
-    it, so "up" returns to the other tasks. The old
-    `/comp/:id/task/:id/analysis` redirects.
-  - **Presentation order is fixed** — separation ranking first, then per-family
+  - The per-task page is a child of the TASK, in the URL and in the
+    breadcrumbs alike — that is where a reader comes from. The comp report
+    collects the chapters and is a sibling link on each one, not their parent.
+    `/comp/:id/analysis/task/:id`, where the chapter lived from July to August
+    2026, 301s in the SSR Function (it was public and indexable, so a shell
+    would not do) and redirects again in the SPA for in-app navigation.
+  - The per-task chapter is a **contents list of boxes**, one per section, and
+    each section is its own page
+    (`/analysis/strategies|weather|thermals|metrics|style|method`, listed in
+    `src/react/field-analysis/sections.ts` — the SSR route pattern is built from
+    that list; the pilot-similarity sheet gets a box too but predates them and
+    keeps its own route). A box carries its name and one line of this-task fact,
+    never an explanation: it is there to be chosen between, and what needs
+    explaining is on the other side of it. One report behind all of them:
+    `use-task-report.ts` fetches it and `TaskAnalysisFrame` wears the trail, the
+    class select and the freshness poll, so no page can disagree with another
+    about which class it is showing. **Presentation order is fixed** — the
+    behaviours that separated the field first, then the day, then the per-pilot
     tables — because which metrics have explanatory power *is* the finding.
+  - Printing a whole task's analysis in one go is **not** a goal (dropped
+    2026-08-29): each page prints as itself. Per-component print mirrors (the
+    heatmap's caption) stay; the page-level ones went with the one-page report.
   - Some metrics emit charting series (`ReportSeries`, a discriminated union)
     alongside their tables. The day family's series are composed by
     `charts/day-profile/DayProfilePanel.tsx` onto ONE shared comp-zone time axis

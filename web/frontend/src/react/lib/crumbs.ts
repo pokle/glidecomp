@@ -14,7 +14,6 @@
 import {
   compPath,
   taskPath,
-  compAnalysisPath,
   taskAnalysisPath,
   compSettingsPath,
   pilotPath,
@@ -78,9 +77,15 @@ export function underTask(
  * Ancestors of a page under a per-task field-analysis chapter — today the
  * pilot-similarity sheet.
  *
- * One crumb deeper than {@link underCompAnalysis}, because the sheet is about
- * ONE task's field: going up should land on that task's chapter, which is the
- * page it derives its numbers from, not on the whole-comp report.
+ * The chapter itself is one crumb shorter: it calls {@link underTask} and
+ * passes {@link FIELD_ANALYSIS_LABEL} as its own `current`, so the two trails
+ * agree crumb for crumb.
+ *
+ * Both parent on the TASK, which is what the URL says too
+ * (/comp/:c/task/:t/analysis). A reader arrives here from the task page, and a
+ * trail that dropped the task in favour of a report they have never opened
+ * read as a different branch of the site. The whole-comp report collects these
+ * chapters, and is a sibling link on each one.
  */
 export function underTaskAnalysis(
   compId: string | undefined,
@@ -89,9 +94,9 @@ export function underTaskAnalysis(
   taskName: string | null | undefined
 ): Crumb[] {
   return [
-    ...underCompAnalysis(compId, compName),
+    ...underTask(compId, compName, taskId, taskName),
     {
-      label: taskName || "Task",
+      label: FIELD_ANALYSIS_LABEL,
       to:
         compId && taskId
           ? taskAnalysisPath(compId, compName, taskId, taskName)
@@ -120,28 +125,6 @@ export function underPilot(
         compId && taskId && pilotId
           ? pilotPath(compId, compName, taskId, taskName, pilotId, pilotName)
           : "/comp",
-    },
-  ];
-}
-
-/**
- * Ancestors of a per-task field analysis chapter.
- *
- * Deliberately NOT `underTask`: the per-task report is a chapter of the
- * competition's field analysis, not a leaf of the task page. Going up from a
- * chapter should land you back in the report (where you can compare it against
- * the other tasks), which is also what the URL says — /comp/:c/analysis/task/:t.
- * The task page is reachable from a sibling link on the chapter instead.
- */
-export function underCompAnalysis(
-  compId: string | undefined,
-  compName: string | null | undefined
-): Crumb[] {
-  return [
-    ...underComp(compId, compName),
-    {
-      label: FIELD_ANALYSIS_LABEL,
-      to: compId ? compAnalysisPath(compId, compName) : "/comp",
     },
   ];
 }

@@ -13,7 +13,7 @@
  */
 import { FAMILY_ORDER, FAMILY_LABELS, type MetricDirection, type MetricFamily } from "./types";
 import { directionWords, unitWords } from "./units";
-import { FootnoteHeading } from "./Footnotes";
+import { FootnoteHeading, type FootnoteLevel } from "./Footnotes";
 import { Card } from "@/react/rac/card";
 
 /** What one glossary entry needs — a subset of MetricReport/MetricComputer,
@@ -38,18 +38,26 @@ export function MetricGlossary({
   entries,
   intro = "How GlideComp measures every metric on this page. On screen, the ⓘ beside a metric opens the same description in place. On paper, this section is the reference for all of them.",
   nested = false,
+  headingLevel,
 }: {
   entries: GlossaryEntry[];
   /** The line under the heading — override on pages without ⓘ popovers. */
   intro?: string;
   /**
-   * Rendered inside the task page's Footnotes section, where "Footnotes" is
-   * the h2 — so the glossary drops to an h3 and its family headings to h4,
-   * and it stops starting its own print page (the section already does).
-   * The comp page renders it standalone and leaves this false.
+   * Rendered inside someone else's panel — the "How this was measured" page
+   * gathers it with the other reference notes in one card — so it stays a
+   * plain section and stops starting its own print page. The comp page
+   * renders it standalone and leaves this false.
    */
   nested?: boolean;
+  /**
+   * Where it sits in the page's heading tree. Independent of `nested`: on the
+   * method page it shares a card with the other notes AND is one of the
+   * page's own sections, so it is nested and an h2 at the same time.
+   */
+  headingLevel?: FootnoteLevel;
 }) {
+  const level: FootnoteLevel = headingLevel ?? (nested ? 3 : 2);
   if (entries.length === 0) return null;
 
   const byFamily = new Map<MetricFamily, GlossaryEntry[]>();
@@ -71,13 +79,9 @@ export function MetricGlossary({
       className={nested ? "space-y-4" : "gap-4 print:break-before-page"}
     >
       <div>
-        {nested ? (
-          <FootnoteHeading id="glossary-heading">Metric glossary</FootnoteHeading>
-        ) : (
-          <h2 id="glossary-heading" className="scroll-mt-20 text-lg font-semibold">
-            Metric glossary
-          </h2>
-        )}
+        <FootnoteHeading id="glossary-heading" level={level}>
+          Metric glossary
+        </FootnoteHeading>
         <p className="mt-1 text-sm text-muted-foreground">{intro}</p>
       </div>
 
@@ -85,14 +89,14 @@ export function MetricGlossary({
         (family) => (
           <div key={family} className="space-y-3">
             {/* One level below the glossary's own heading, whichever that is. */}
-            {nested ? (
-              <h4 className="text-sm font-semibold text-muted-foreground">
-                {FAMILY_LABELS[family]}
-              </h4>
-            ) : (
+            {level === 2 ? (
               <h3 className="text-sm font-semibold text-muted-foreground">
                 {FAMILY_LABELS[family]}
               </h3>
+            ) : (
+              <h4 className="text-sm font-semibold text-muted-foreground">
+                {FAMILY_LABELS[family]}
+              </h4>
             )}
             <dl className="space-y-3">
               {byFamily.get(family)!.map((e) => (

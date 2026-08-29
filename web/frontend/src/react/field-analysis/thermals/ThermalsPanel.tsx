@@ -919,7 +919,6 @@ export function ThermalsPanel({
       </p>
 
       <MasterDetail
-        stackedTop="toc-bar"
         detailLabel="detail"
         detailHeadingId={headingId}
         master={census}

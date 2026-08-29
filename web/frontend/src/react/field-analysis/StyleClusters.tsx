@@ -13,7 +13,7 @@
  *
  * Accessibility: the member lists ARE the content (names and ranks as text);
  * hovering a member lights that pilot up page-wide via PilotHighlightContext,
- * a visual nicety layered on top, same pattern as the percentile heatmap.
+ * a visual nicety layered on top.
  */
 import { useMemo } from "react";
 import { cn } from "@/react/lib/utils";
@@ -34,18 +34,25 @@ function fmtRank(r: number): string {
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
 }
 
-function ClusterCard({ cluster }: { cluster: StyleCluster }) {
+function ClusterCard({
+  cluster,
+  headingLevel,
+}: {
+  cluster: StyleCluster;
+  headingLevel: 2 | 3;
+}) {
   const { highlight, setHighlight } = usePilotHighlight();
   const headingId = `style-cluster-${cluster.id}`;
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
     <article
       aria-labelledby={headingId}
       className="space-y-3 rounded-lg border p-4"
     >
       <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 id={headingId} className="font-semibold">
+        <Heading id={headingId} className="font-semibold">
           Group {cluster.id} — {cluster.label}
-        </h3>
+        </Heading>
         <p className="text-xs text-muted-foreground">
           {cluster.members.length} pilots · ranks {cluster.rankBest}–{cluster.rankWorst} · median{" "}
           {fmtRank(cluster.rankMedian)} · middle half {fmtRank(cluster.rankP25)}–
@@ -117,8 +124,25 @@ function ClusterCard({ cluster }: { cluster: StyleCluster }) {
   );
 }
 
-export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
-  const sc = useMemo(() => clusterPilotStyles(report), [report]);
+export function StyleClusters({
+  report,
+  clusters: precomputedClusters,
+  headingLevel = 3,
+}: {
+  report: FieldAnalysisReport;
+  clusters?: StyleClusterReport | null;
+  /**
+   * Where a group's name sits in the page's heading tree. 3 under a section
+   * heading; 2 on the clusters' own page, whose h1 already names the section
+   * — repeating it as an h2 there would be the same words twice, and leaving
+   * the groups at h3 would skip a level.
+   */
+  headingLevel?: 2 | 3;
+}) {
+  const sc = useMemo(
+    () => (precomputedClusters !== undefined ? precomputedClusters : clusterPilotStyles(report)),
+    [precomputedClusters, report]
+  );
 
   if (!sc) {
     return (
@@ -140,7 +164,7 @@ export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
       </p>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(22rem,100%),1fr))] gap-4">
         {sc.clusters.map((c) => (
-          <ClusterCard key={c.id} cluster={c} />
+          <ClusterCard key={c.id} cluster={c} headingLevel={headingLevel} />
         ))}
       </div>
       {sc.unclustered.length > 0 ? (

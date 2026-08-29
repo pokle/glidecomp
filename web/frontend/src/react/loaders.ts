@@ -278,7 +278,7 @@ export async function loadCompFieldAnalysis(
   return { analysis, analysisEtag, comp };
 }
 
-// ── /comp/:compId/analysis/task/:taskId ──────────────────────────────────────
+// ── /comp/:compId/task/:taskId/analysis ──────────────────────────────────────
 
 export interface TaskFieldAnalysisLoaderData {
   /** GET /api/comp/:id/task/:id/field-analysis. A warm report, a `pending`

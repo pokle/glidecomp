@@ -22,7 +22,7 @@
  * go that the popover has not already said.
  */
 import { cn } from "@/react/lib/utils";
-import { Footnote } from "./Footnotes";
+import { Footnote, type FootnoteLevel } from "./Footnotes";
 import { MIN_CORRELATION_N } from "./types";
 
 export const HOW_TO_READ_ID = "how-to-read";
@@ -160,15 +160,26 @@ export function HowToReadFootnote({
   page,
   behaviourCount,
   className,
+  level,
+  printOnly = true,
 }: {
   page: "comp" | "task";
   /** Drives the one-day caveat's wording on the task page. */
   behaviourCount?: number;
   className?: string;
+  level?: FootnoteLevel;
+  /**
+   * Whether this is only the printed twin of the ⓘ popovers beside the table.
+   * True where it sits under the table it explains (the comp report), because
+   * the paragraphs on screen would put back exactly what the popovers were
+   * introduced to take away. False on "How this was measured", where being
+   * readable is the whole point of the page.
+   */
+  printOnly?: boolean;
 }) {
   return (
-    <div className={cn("hidden print:block", className)}>
-      <Footnote id={HOW_TO_READ_ID} title="How to read the table">
+    <div className={cn(printOnly && "hidden print:block", className)}>
+      <Footnote id={HOW_TO_READ_ID} level={level} title="How to read the table">
       {page === "comp" ? (
         <>
           <NoteBlock title="Across tasks">

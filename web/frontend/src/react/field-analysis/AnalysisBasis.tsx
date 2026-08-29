@@ -1,177 +1,71 @@
 /**
- * The basis line: what the numbers above were computed FROM.
+ * What the analysis rests on, once the readings themselves have gone to the
+ * sections they belong to.
  *
- * Every metric here is derived from detector output over a sampled grid, so
- * the report is only as trustworthy as its inputs. Stating the pilot count,
- * how much airtime it rests on and when that was flown, how many thermals were
- * actually shared, the working band and how the airtime divided between flight
- * phases up front is the same explainability rule the scoring pages follow — a
- * number without its basis is not an explanation.
+ * It used to be a row of tiles — pilots, airtime, thermals, working band —
+ * with nothing to say which section each reading belonged to. Every one of
+ * them now sits on the box for the section it describes, the working band
+ * beside the thermals it is the band OF, which says more than any of them did
+ * in a row of four. See field-analysis/basis-facts.ts.
  *
- * What is NOT here is anything a reader consults once: the 10 s resampling
- * grid (identical on every task of every comp) and the names and reasons
- * behind the excluded pilots. Both moved to the Footnotes section at the foot
- * of the page. This box is meant to be a glance at what was evaluated, and it
- * stops being one the moment a caveat list outgrows the facts.
+ * What is left is the pair that belongs to no section: how the field's airtime
+ * divided between flight phases, and how many pilots the scores hold that this
+ * analysis could not measure. The names and reasons behind that count are
+ * reference material a reader consults once — on a task where eight pilots
+ * flew without tracklogs the list ran longer than every fact above it put
+ * together — so `excludedHref` points at the page that carries them.
+ *
+ * Renders nothing at all when it has neither: a report stored before the split
+ * existed (v12 or earlier, served while it revalidates) can leave this with
+ * nothing to say, and an empty card is worse than no card.
  */
 import { Card } from "@/react/rac/card";
-import { formatTimeRange } from "@/react/lib/time";
-import { formatAltitude, useUnits } from "@/react/lib/units";
 import { AirtimeSplitBar } from "./charts/AirtimeSplitBar";
 import { EXCLUDED_PILOTS_ID } from "./Footnotes";
 import type { FieldAnalysisBasis } from "./types";
 
-function Fact({
-  term,
-  className,
-  children,
-}: {
-  term: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={className}>
-      <dt className="text-xs text-muted-foreground">{term}</dt>
-      <dd className="text-sm tabular-nums">{children}</dd>
-    </div>
-  );
-}
-
-/**
- * A fact's value as a door into the section that explains it — "182
- * thermals" should take the reader to the day's thermals, the way the
- * excluded-pilots count below already links to its footnote. A quiet
- * underline rather than link colour: the value is still primarily a reading,
- * and four blue figures in a row would make the box shout. Renders plain
- * content when there is no target (the section didn't render, or the caller
- * predates the prop).
- */
-function FactLink({
-  href,
-  children,
-}: {
-  href?: string;
-  children: React.ReactNode;
-}) {
-  if (!href) return <>{children}</>;
-  return (
-    <a
-      href={href}
-      className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-current"
-    >
-      {children}
-    </a>
-  );
-}
-
-/**
- * "82h (13:05–18:40 AEDT)" — how much flying the report rests on, and when it
- * happened.
- *
- * The two belong in one fact because neither answers the reader's question
- * alone: 80 hours is a long day or a crowded one, and only the window says
- * which. Sub-10-hour totals keep a decimal — a thin day (7 pilots, 5.6 h) is
- * exactly when a reader needs to distrust the correlations below, and "6h"
- * hides that where "5.6h" doesn't.
- */
-function airtimeText(
-  seconds: number,
-  window: { from: string; to: string } | undefined,
-  timeZone: string | undefined
-): string {
-  const hours = seconds / 3600;
-  const total = `${hours < 10 ? hours.toFixed(1) : hours.toFixed(0)}h`;
-  return window
-    ? `${total} (${formatTimeRange(window.from, window.to, timeZone)})`
-    : total;
-}
-
 export function AnalysisBasis({
   basis,
   excluded,
-  timeZone,
-  weatherHref,
-  thermalsHref,
+  excludedHref,
 }: {
   basis: FieldAnalysisBasis;
   excluded: { pilot_name: string; reason: string }[];
-  /** Competition zone for the analysis window. Viewer-local when undefined. */
-  timeZone?: string;
-  /** Anchor of the weather/day-profile section, when it rendered — makes the
-   * airtime and working-band facts doors into the charts behind them. */
-  weatherHref?: string;
-  /** Anchor of the day's-thermals section, when it rendered. */
-  thermalsHref?: string;
+  /** Where the excluded pilots are named. A prop rather than a bare `#`
+   * anchor: the list is on its own page (the method section), so this box
+   * cannot assume it is on the same one. */
+  excludedHref?: string;
 }) {
-  const units = useUnits();
+  if (!basis.airtimeSplit && excluded.length === 0) return null;
+
   return (
     <Card aria-label="Analysis basis">
-      {/* Four scalar facts, then the airtime split on a full row of its own at
-          every breakpoint — the bars are three shares of one whole read against
-          each other, so they need the width rather than a column beside the
-          scalars. Column counts are 2 and 4 (both divide the four facts) so no
-          breakpoint leaves a fact orphaned beside empty slots. */}
-      <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(9rem,100%),1fr))] gap-x-6 gap-y-3">
-        <Fact term="Pilots">{basis.pilotCount}</Fact>
-        {/* Both halves are optional (≤ v12 / v13 rows) — fall back to whichever
-            half a stale report carries rather than dropping the fact. */}
-        {basis.airtimeSplit || basis.analysisWindow ? (
-          <Fact term="Airtime">
-            <FactLink href={weatherHref}>
-              {basis.airtimeSplit
-                ? airtimeText(
-                    basis.airtimeSplit.airborneSeconds,
-                    basis.analysisWindow,
-                    timeZone
-                  )
-                : formatTimeRange(
-                    basis.analysisWindow!.from,
-                    basis.analysisWindow!.to,
-                    timeZone
-                  )}
-            </FactLink>
-          </Fact>
-        ) : null}
-        {/* "82 of 308 multi-pilot" read as though 82 pilots were meant. The
-            count of thermals is the fact; how many had company in them is the
-            qualifier, and "shared by 2+ pilots" says which. */}
-        <Fact term="Thermals">
-          <FactLink href={thermalsHref}>{basis.sharedThermalCount}</FactLink>
-          <span className="ml-1 text-xs text-muted-foreground">
-            {basis.multiPilotThermalCount} shared by 2+ pilots
-          </span>
-        </Fact>
-        <Fact term="Working band">
-          <FactLink href={weatherHref}>
-            {formatAltitude(basis.workingBandFloor, { prefs: units }).formatted}–
-            {formatAltitude(basis.workingBandCeiling, { prefs: units }).withUnit}
-          </FactLink>
-          {basis.workingBandFallback ? (
-            <span className="ml-1 text-xs text-muted-foreground">(estimated)</span>
-          ) : null}
-        </Fact>
-        {/* Absent on reports stored before this field existed (v12 and
-            earlier), which are served stale until they revalidate. */}
-        {basis.airtimeSplit ? (
-          <Fact term="Airtime split" className="col-span-2 lg:col-span-4">
-            <AirtimeSplitBar split={basis.airtimeSplit} />
-          </Fact>
-        ) : null}
-      </dl>
+      {/* Three shares of one whole, read against each other, so the bars take
+          the full width rather than sit in a column beside anything. */}
+      {basis.airtimeSplit ? (
+        <dl>
+          <div>
+            <dt className="text-xs text-muted-foreground">Airtime split</dt>
+            <dd className="text-sm tabular-nums">
+              <AirtimeSplitBar split={basis.airtimeSplit} />
+            </dd>
+          </div>
+        </dl>
+      ) : null}
 
-      {/* The names and reasons are a footnote, not a headline — on a task where
-          eight pilots flew without tracklogs the list was longer than every
-          fact above it put together, and it is reference material a reader
-          consults once. The count still belongs here: it qualifies the pilot
-          count directly above it. */}
+      {/* The count belongs here rather than on a section's box: it qualifies
+          the whole analysis, not one reading in it. */}
       {excluded.length > 0 ? (
-        <p className="mt-4 border-t pt-3 text-sm">
+        <p
+          className={
+            basis.airtimeSplit ? "mt-4 border-t pt-3 text-sm" : "text-sm"
+          }
+        >
           <strong>{excluded.length}</strong> pilot
           {excluded.length === 1 ? " is" : "s are"} in the scores but not in
           this analysis.{" "}
           <a
-            href={`#${EXCLUDED_PILOTS_ID}`}
+            href={excludedHref ?? `#${EXCLUDED_PILOTS_ID}`}
             className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
           >
             Which, and why

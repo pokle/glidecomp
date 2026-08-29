@@ -294,9 +294,10 @@ export function CompFieldAnalysis() {
             </Alert>
           ) : null}
 
-          {/* The per-task reports are chapters of this page, so they get a real
-              nav landmark rather than a prose footnote — this is the only way
-              in to them, and each is now a child URL of this one. */}
+          {/* The per-task reports are chapters of this page, so they get a
+              real nav landmark rather than a prose footnote. Each lives under
+              its own task's URL (lib/slug.ts) — this page collects them, which
+              makes it the only place they can be read against each other. */}
           {data.tasks.length > 0 ? (
             <nav
               aria-label="Per-task field analysis"

@@ -39,6 +39,7 @@ import {
 import { unitWords, verdictWords } from "../units";
 import { usePilotHighlight } from "../PilotHighlightContext";
 import {
+  axisTitleFor,
   extent,
   formatTickValue,
   linearScale,
@@ -46,6 +47,9 @@ import {
   niceTicks,
   spreadLabels,
 } from "./chart-utils";
+// Re-exported where it grew up, so RankScatter's own tests and any reader
+// that knows it from here are unchanged by the move to chart-utils.
+export { axisTitleFor };
 import { notableExcludedRanks, notableRanksPhrase } from "../exclusions";
 import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
 
@@ -156,17 +160,6 @@ export function captionText(
   return parts.join(" ");
 }
 
-/**
- * The x axis's name: the metric and the unit it is measured in. `count` and
- * `ratio` are unitless in the engine's vocabulary — `formatTickValue` leaves
- * their ticks bare for the same reason — so they get no parenthetical rather
- * than a meaningless "(count)".
- */
-export function axisTitleFor(metric: Pick<MetricReport, "label" | "unit">): string {
-  return metric.unit === "count" || metric.unit === "ratio"
-    ? metric.label
-    : `${metric.label} (${unitWords(metric.unit)})`;
-}
 
 export function RankScatter({
   metric,

@@ -25,11 +25,13 @@ export {
   // The metric registry itself: the comp aggregate stores no method
   // descriptions, so the comp page's glossary reads them from here — the
   // same definitions the engine computes with.
+  combineWindEstimates,
   ALL_METRICS,
 } from "@glidecomp/engine";
 export type {
   FieldAnalysisReport,
   FieldAnalysisBasis,
+  FieldThermalsSummary,
   MetricReport,
   MetricFamily,
   MetricDirection,

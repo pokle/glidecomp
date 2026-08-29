@@ -21,10 +21,13 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 | `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
 | `/comp/:id/task/:id/pilot/:id` | the report card |
 | `/comp/:id/analysis` | field analysis, comp report |
-| `/comp/:id/analysis/task/:id` | field analysis, per-task chapter |
+| `/comp/:id/task/:id/analysis` | field analysis, this task's chapter (a contents list for the six below) |
+| `/comp/:id/task/:id/analysis/:section` | one section of that chapter — `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
 
 A cold field-analysis report server-renders its pending notice and is noindexed
-**per request**, not shell-noindexed.
+**per request**, not shell-noindexed. The section route's pattern is built from
+`field-analysis/sections.ts`, so a section added there cannot be a 404 here; an
+unknown slug falls through to the 404 shell like any other junk `/comp` URL.
 
 `NOINDEX_SHELL_ROUTES` (checked *before* `ROUTES`) covers the `/comp` paths that
 are real SPA routes but have nothing to server-render — they must reach the
@@ -38,13 +41,21 @@ shell rather than 404, and there is nothing here for a crawler:
 | `/comp/:id/task/:id/route` | the route editor |
 | `/comp/:id/task/:id/weather` | the weather notes |
 | `/comp/:id/task/:id/pilot/:id/manual-flight` | recording a manual flight |
-| `/comp/:id/task/:id/analysis` | the superseded per-task analysis URL, which the SPA redirects |
+| `/comp/:id/task/:id/analysis/similar` | the pilot-similarity sheet, derived client-side |
 
 All but the last are admin-only editors, and every one of them was a dialog over
 a public page until #636/#637 — which is why the list grew: converting a dialog
 to a routed page creates a URL the SSR Function has to have an answer for, and
 without an entry here that answer is a genuine 404. The route editor has a
 second reason never to be server-rendered: it pulls Mapbox.
+
+Superseded public URLs are the other case the Function answers itself, ahead
+of both tables: `/comp/:id/analysis/task/:id` (and `/similar` below it) is where
+the per-task report lived from July to August 2026, and it **301s** to the URL
+under the task, query preserved. A redirect and not a shell entry, because that
+URL was server-rendered and indexable while it stood — a crawler handed a
+noindex shell would learn the page was gone rather than where it went. The SPA
+carries the same redirect for in-app and back/forward navigation.
 
 **Adding a routed admin editor means adding it here.** The Function's fallback
 for an unmatched `/comp` path is a real 404 with `noindex` — deliberately, so

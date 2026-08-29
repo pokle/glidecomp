@@ -44,6 +44,7 @@ import { TaskDetail } from "./pages/TaskDetail";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { CompFieldAnalysis } from "./pages/CompFieldAnalysis";
 import { TaskFieldAnalysis } from "./pages/TaskFieldAnalysis";
+import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
 
 /*
  * Everything else is signed-in, admin-only or otherwise never server-rendered,
@@ -118,18 +119,27 @@ export function AppProviders({
 }
 
 /**
- * The per-task field analysis moved from /comp/:c/task/:t/analysis to
- * /comp/:c/analysis/task/:t. Keeps old links (and anyone's open tab) working.
- * `?class=` is carried across — it's the shareable part of the URL.
+ * The per-task field analysis lives under the task again:
+ * /comp/:c/analysis/task/:t → /comp/:c/task/:t/analysis, and likewise for the
+ * similarity sheet below it. Keeps old links (and anyone's open tab) working.
+ * `?class=`, `?pilot=` and friends are carried across — they are the shareable
+ * part of the URL.
+ *
+ * A hard load of the old URL never gets here: the Pages Function 301s it (see
+ * functions/comp/[[path]].ts), because that URL was public and server-rendered
+ * and a crawler must be told where the page went. This covers the in-app and
+ * back/forward cases.
  */
-function TaskAnalysisRedirect() {
+function TaskAnalysisRedirect({ similar = false }: { similar?: boolean }) {
   const { compId, taskId } = useParams();
   const [searchParams] = useSearchParams();
   const query = searchParams.toString();
   return (
     <Navigate
       replace
-      to={`/comp/${compId}/analysis/task/${taskId}${query ? `?${query}` : ""}`}
+      to={`/comp/${compId}/task/${taskId}/analysis${similar ? "/similar" : ""}${
+        query ? `?${query}` : ""
+      }`}
     />
   );
 }
@@ -169,27 +179,15 @@ export function AppRoutes() {
             element={<CompSettingsPage />}
           />
           <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
-          {/* Field analysis (behavioural metrics). One report per competition,
-              with a chapter per task NESTED UNDER IT — the per-task page is a
-              drill-down of the comp report, not a leaf of the task page, so
-              "up one level" lands back in the report where the other tasks are.
+          {/* Field analysis (behavioural metrics). One report per competition
+              at /analysis, and one chapter per task UNDER THAT TASK — see the
+              task routes below. The comp report collects the chapters; it does
+              not own their URLs, and the breadcrumbs agree (lib/crumbs.ts).
               PUBLIC and server-rendered since July 2026 — both have ROUTES
               entries in functions/comp/[[path]].ts, and a cold report renders
               its pending notice server-side (noindex) while the client polls.
               A hidden `test` comp still 404s for non-admins. */}
           <Route path="/comp/:compId/analysis" element={<CompFieldAnalysis />} />
-          <Route
-            path="/comp/:compId/analysis/task/:taskId"
-            element={<TaskFieldAnalysis />}
-          />
-          {/* Pilot-to-pilot behavioural similarity, a leaf of the per-task
-              report it derives from. Client-only, so it needs a
-              NOINDEX_SHELL_ROUTES entry in functions/comp/[[path]].ts rather
-              than a loader. */}
-          <Route
-            path="/comp/:compId/analysis/task/:taskId/similar"
-            element={<TaskPilotSimilarity />}
-          />
           <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
           {/* The task's three admin-only editors, all SIBLINGS: each is
               reached from the part of the task page it edits, so none nests
@@ -211,10 +209,37 @@ export function AppRoutes() {
             path="/comp/:compId/task/:taskId/weather"
             element={<TaskWeatherPage />}
           />
-          {/* Where the per-task analysis lived until the re-nesting above. */}
+          {/* This task's chapter of the comp field analysis: a summary, with
+              a box per section linking to the section's own page. */}
           <Route
             path="/comp/:compId/task/:taskId/analysis"
+            element={<TaskFieldAnalysis />}
+          />
+          {/* Pilot-to-pilot behavioural similarity, a leaf of the chapter it
+              derives from. Client-only, so it needs a NOINDEX_SHELL_ROUTES
+              entry in functions/comp/[[path]].ts rather than a loader. It is
+              a STATIC segment, so it out-ranks the :section route below
+              whichever order they are declared in. */}
+          <Route
+            path="/comp/:compId/task/:taskId/analysis/similar"
+            element={<TaskPilotSimilarity />}
+          />
+          {/* One section of the chapter, each showing that one thing. Five
+              slugs, listed in field-analysis/sections.ts and matched by the
+              SSR Function's own pattern; anything else renders NotFound. */}
+          <Route
+            path="/comp/:compId/task/:taskId/analysis/:section"
+            element={<TaskAnalysisSection />}
+          />
+          {/* Where the per-task analysis lived while it was nested under the
+              comp report (July–August 2026). */}
+          <Route
+            path="/comp/:compId/analysis/task/:taskId"
             element={<TaskAnalysisRedirect />}
+          />
+          <Route
+            path="/comp/:compId/analysis/task/:taskId/similar"
+            element={<TaskAnalysisRedirect similar />}
           />
           <Route
             path="/comp/:compId/task/:taskId/pilot/:pilotId"

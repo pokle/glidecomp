@@ -372,14 +372,45 @@ rollout note below):
 | Route | Page | Content |
 |---|---|---|
 | `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the scores behind them |
-| `/comp/:compId/analysis/task/:taskId` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
+| `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | A box per section, plus the airtime split and the exclusion count |
+| `/comp/:compId/task/:taskId/analysis/:section` | `pages/TaskAnalysisSection.tsx` | One section: `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
 
-The per-task page is nested **under the comp report**, not under the task
-page, because it is one chapter of that report: going up should land you
-among the other tasks to compare against. The task page still links to it
-(a cross-link into another subtree), and the chapter links back with a
-"View task" sibling button. The pre-nesting URL
-`/comp/:compId/task/:taskId/analysis` redirects.
+The per-task page is a child of the **task**, in the URL and in the
+breadcrumbs alike — Competitions › comp › task › Field analysis — because
+that is the path a reader actually walks. It was nested under the comp
+report instead from July to August 2026, on the reasoning that a chapter
+belongs with its report; in use the trail dropped the task and felt
+disconnected from the page the reader had just left.
+`/comp/:compId/analysis/task/:taskId` 301s (see [ssr.md](ssr.md)).
+
+The whole-comp report, which collects every chapter, is reachable from a
+"Comp field analysis" sibling button in the chapter's header row.
+
+**The per-task report is a page per section** (August 2026). It was one scroll
+— basis, debrief, weather, thermals, ranking, heatmap, clusters, every
+per-family table and every footnote — with a table of contents and an overview
+block bolted on to make it survivable. Both of those were symptoms: a page that
+needs a map is too big. The chapter URL is now a contents list — a box per
+section, carrying its name and one line of this-task fact and no explanation —
+and each section is its own page showing that one thing.
+
+The basis box went the same way. Its four tiles — pilots, airtime, thermals,
+working band — sat together with nothing to say which section each reading
+belonged to; each is now the fact line on the box for the section it describes
+(`field-analysis/basis-facts.ts`), so the working band reads beside the
+thermals it is the band OF. What was left over belongs to no section and stays
+above the boxes: the airtime split, and the count of pilots the scores hold
+that the analysis could not measure. The percentile heatmap
+went with the split: a wall of every pilot against every behaviour is the same
+"read the whole report at once" the split exists to undo, and the per-family
+tables state the readings exactly. `field-analysis/sections.ts` is the single list all of it reads —
+the summary's boxes, the section page's `:section` param, and the SSR
+Function's route pattern.
+
+One report behind all six pages: `field-analysis/use-task-report.ts` does the
+fetching, the class selection, the unit conversion and the pending poll, and
+`field-analysis/TaskAnalysisFrame.tsx` wears the trail, the heading, the
+freshness line and the controls. A section page is its body and nothing else.
 
 Presentation components are in `web/frontend/src/react/field-analysis/`. They
 re-export the engine's `formatMetricValue` / `FAMILY_ORDER` / `FAMILY_LABELS`
