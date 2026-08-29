@@ -18,12 +18,18 @@
  * This page is a CONTENTS LIST, not the report. It was the whole report until
  * August 2026 — basis, debrief, weather, thermals, ranking, heatmap, clusters,
  * every per-family table and every footnote, in one scroll with a table of
- * contents to survive it. What it is now is the basis box, which is the
- * four-second answer to "what was measured", and one box per section: its
- * name, and what this task has in it. Nothing else. A box is something to
+ * contents to survive it. What it is now is one box per section: its name, and
+ * one line of what this task has in it. Nothing else. A box is something to
  * choose between, so it carries no explanation — whatever needs explaining is
  * on the other side of the box, on the section's own page
  * (pages/TaskAnalysisSection.tsx, field-analysis/sections.ts).
+ *
+ * The fact lines are the old basis box, redistributed: its four tiles said
+ * pilots, airtime, thermals and working band with nothing to say which
+ * section each belonged to, and each now sits on the box for the section it
+ * describes (field-analysis/basis-facts.ts). What was left over — the airtime
+ * split, and the count of pilots the scores hold that this could not measure —
+ * belongs to no section and stays in AnalysisBasis above the boxes.
  *
  * Presentation order still leads with the behaviours that separated the field:
  * which metrics have explanatory power is the finding, and the per-pilot
@@ -48,6 +54,8 @@ import {
 } from "../field-analysis/sections";
 import { rankMetrics } from "../field-analysis/SeparationRanking";
 import { EXCLUDED_PILOTS_ID } from "../field-analysis/Footnotes";
+import { fieldFact, thermalsFact, windFact } from "../field-analysis/basis-facts";
+import { useUnits } from "../lib/units";
 import type { MetricReport } from "../field-analysis/types";
 
 /** How many behaviours the strategies box names. The same top-3 the metric
@@ -80,6 +88,9 @@ function winningLabel(
 export function TaskFieldAnalysis() {
   const bundle = useTaskFieldAnalysis();
   const { compId, taskId, comp, task, styleClusters } = bundle;
+  // The box facts are altitudes and wind speeds, so they convert at the edge
+  // like every other reading (the metric values in `report` already have).
+  const units = useUnits();
 
   // Settle the address bar on the canonical `${slug}-${id}` once both names
   // load (the analysis body carries neither, so wait for the name fetches).
@@ -104,33 +115,45 @@ export function TaskFieldAnalysis() {
         const strategies = rankMetrics(report.metrics)
           .filter((r) => STRATEGY_VERDICTS.has(r.correlation.verdict))
           .slice(0, STRATEGY_COUNT);
+        // Null when no circle produced an estimate: a task nobody thermalled
+        // has no wind to report, and saying nothing beats reporting the
+        // absence of a measurement as a calm day.
+        const weather = windFact(bundle.dayMetrics, units);
 
         /** The one line of this-task fact each box carries under its name. */
         const facts: Partial<Record<TaskAnalysisSectionSlug, React.ReactNode>> = {
-          strategies:
-            strategies.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {strategies.map(({ metric, correlation }) => (
-                  <Badge key={metric.id} variant="secondary">
-                    {winningLabel(metric, correlation.rho)}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              // "No clear pattern" is itself the day's finding — a lottery
-              // day — and a box that vanished on those days would quietly
-              // overclaim on all the rest.
-              <Facts>No clear pattern</Facts>
-            ),
-          weather: bundle.weatherNotes.trim().length > 0 ? <Facts>Notes from the organiser</Facts> : null,
-          thermals: bundle.hasThermalsSection ? (
-            <Facts>{report.thermals?.shapes.length ?? 0} reconstructed</Facts>
-          ) : null,
-          metrics: (
-            <Facts>
-              {report.pilots.length} pilots · {report.metrics.length} behaviours
-            </Facts>
+          strategies: (
+            <>
+              {strategies.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {strategies.map(({ metric, correlation }) => (
+                    <Badge key={metric.id} variant="secondary">
+                      {winningLabel(metric, correlation.rho)}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                // "No clear pattern" is itself the day's finding — a lottery
+                // day — and a box that vanished on those days would quietly
+                // overclaim on all the rest.
+                <Facts>No clear pattern</Facts>
+              )}
+              {/* What the correlations rest on, beside the correlations: a
+                  thin day is exactly when a reader should distrust them. */}
+              <Facts>{fieldFact(report.basis, comp?.timezone ?? undefined)}</Facts>
+            </>
           ),
+          weather: weather ? (
+            <Facts>{weather}</Facts>
+          ) : bundle.weatherNotes.trim().length > 0 ? (
+            // No wind estimate, but the organiser wrote the day up. Saying so
+            // is the fact: it is what is behind the box.
+            <Facts>Notes from the organiser</Facts>
+          ) : null,
+          thermals: <Facts>{thermalsFact(report.basis, units)}</Facts>,
+          // Not the pilot count too: it is already on the strategies box, and
+          // the same number twice in a list of seven is noise.
+          metrics: <Facts>{report.metrics.length} behaviours</Facts>,
           style: styleClusters ? <Facts>{styleClusters.k} groups</Facts> : null,
         };
 
@@ -144,17 +167,13 @@ export function TaskFieldAnalysis() {
 
         return (
           <>
-            {/* What the numbers were computed from. The one box that is not a
-                door: it IS the summary, and there is nothing deeper behind it.
-                Its facts are doors, though — the airtime and working band open
-                the weather, the thermal count the thermals, and the excluded
-                count the method page's list. */}
+            {/* The two facts that belong to no one section: how the airtime
+                divided, and how many pilots the scores hold that this could
+                not measure. Everything else the basis used to state now sits
+                on the box for the section it describes. */}
             <AnalysisBasis
               basis={report.basis}
               excluded={active.excluded}
-              timeZone={comp?.timezone ?? undefined}
-              weatherHref={bundle.hasWeatherSection ? hrefFor("weather") : undefined}
-              thermalsHref={bundle.hasThermalsSection ? hrefFor("thermals") : undefined}
               excludedHref={`${hrefFor("method")}#${EXCLUDED_PILOTS_ID}`}
             />
 
