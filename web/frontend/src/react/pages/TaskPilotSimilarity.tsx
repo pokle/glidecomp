@@ -8,10 +8,17 @@
  * column all exist to be argued with.
  *
  * Deliberately NOT about the leaderboard. No score, rank or outcome metric
- * appears anywhere on this page, and findSimilarPilots refuses to let one into
- * the vector (see web/engine/src/field-analysis/similarity.ts). "Similar" here
+ * enters the COMPUTATION anywhere: findSimilarPilots refuses to let one into
+ * the vector (see web/engine/src/field-analysis/similarity.ts), and nothing
+ * here orders, filters, weights or colours by the standings. "Similar" here
  * means similar FLYING, and two pilots at opposite ends of the results sheet
  * are expected to sit next to each other whenever they flew alike.
+ *
+ * The task rank IS printed beside each name, and precisely for that reason.
+ * The sentence above is this page's entire claim, and a reader who cannot see
+ * that the pilot who flew most like the winner came 31st has to take it on
+ * trust — the rank is what makes the finding legible rather than what makes
+ * it. It is a label read off the report's own pilot list, never an input.
  *
  * There is deliberately NO basis control. An earlier cut offered a choice of
  * normalisation, which read as if it were about the standings (it is not — the
@@ -44,6 +51,7 @@ import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 
+import { MetricDistribution } from "../field-analysis/charts/MetricDistribution";
 import { NotFound } from "../components/NotFound";
 import { api } from "../../comp/api";
 import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "../comp/types";
@@ -65,6 +73,7 @@ import {
 const PILOT_PARAM = "pilot";
 const CLASS_PARAM = "class";
 const METRICS_PARAM = "metrics";
+const CHART_PARAM = "chart";
 
 /** How many neighbours the table shows before the "show everyone" toggle. */
 const TOP_N = 12;
@@ -99,6 +108,26 @@ function SimilarityBar({ value, muted }: { value: number; muted?: boolean }) {
             : { right: "50%", width: `${half}%` }
         }
       />
+    </span>
+  );
+}
+
+/**
+ * A pilot as this sheet names them: their rank on the task, then their name.
+ *
+ * The rank is DISPLAY ONLY — see the file comment. Muted and tabular so a
+ * column of them lines up and reads as a label on the name rather than as a
+ * standing in its own right, which is the one thing this page is not about.
+ * Absent when the report has no rank for that track, rather than printing a
+ * placeholder ordinal nobody can act on.
+ */
+function PilotName({ rank, name }: { rank: number | undefined; name: string }) {
+  return (
+    <span>
+      {rank === undefined ? null : (
+        <span className="tabular-nums text-muted-foreground">{rank}. </span>
+      )}
+      {name}
     </span>
   );
 }
@@ -199,6 +228,14 @@ export function TaskPilotSimilarity() {
   const report = useMemo(
     () => (active ? displayReport(active.report, units) : null),
     [active, units]
+  );
+
+  // Task rank by track file, for the label beside each name. The report's
+  // pilot list is already in rank order and carries the rank outright, so this
+  // costs no extra request and cannot disagree with the scores page.
+  const rankByTrack = useMemo(
+    () => new Map((report?.pilots ?? []).map((p) => [p.trackFile, p.rank])),
+    [report]
   );
 
   /** Write one parameter; `null` clears it. */
@@ -331,6 +368,27 @@ export function TaskPilotSimilarity() {
   // single behaviour is a supported mode (ranked by gap), not an error.
   const nothingUsable = report !== null && subject !== null && similarity === null;
   const byGap = similarity?.ranking === "gap";
+
+  // Which behaviour the spread chart draws. The default is the behaviour that
+  // did most to make the closest pair alike, so the chart opens on this
+  // sheet's own headline finding rather than on whatever the registry happens
+  // to list first; the reader's choice then round-trips through the URL like
+  // every other piece of state here. A `chart` naming a behaviour that is no
+  // longer ticked falls back to that default rather than erroring — the
+  // metrics the sheet offers are exactly the ones that entered the vectors.
+  const chartParam = searchParams.get(CHART_PARAM);
+  const chartMetricId = useMemo(() => {
+    const offered = similarity?.metrics ?? [];
+    if (offered.length === 0) return null;
+    if (chartParam && offered.some((m) => m.id === chartParam)) return chartParam;
+    const top = similarity?.neighbours[0]?.contributions[0]?.metricId;
+    if (top && offered.some((m) => m.id === top)) return top;
+    return offered[0].id;
+  }, [similarity, chartParam]);
+  const chartMetric = useMemo(
+    () => report?.metrics.find((m) => m.id === chartMetricId) ?? null,
+    [report, chartMetricId]
+  );
 
   useEffect(() => setShowAll(false), [subject?.trackFile, metricsParam]);
 
@@ -530,6 +588,39 @@ export function TaskPilotSimilarity() {
                     it — closest first.
                   </p>
                 ) : null}
+                {chartMetric ? (
+                  <section aria-labelledby="spread-heading" className="flex flex-col gap-2">
+                    <h3 id="spread-heading" className="text-base font-medium">
+                      Where the field sat on this behaviour
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Each dot is one pilot. The table below compares pilots across
+                      every behaviour you ticked; this is the plain spread behind one
+                      of them.
+                    </p>
+                    {/* Nothing to choose on a single-behaviour sheet: the one
+                        behaviour ticked is the one drawn. */}
+                    {(similarity?.metrics.length ?? 0) > 1 ? (
+                      <SimpleSelect
+                        label="Behaviour"
+                        value={chartMetric.id}
+                        onChange={(v) => setParam(CHART_PARAM, v)}
+                        options={(similarity?.metrics ?? []).map((m) => ({
+                          value: m.id,
+                          label: m.label,
+                        }))}
+                        className="min-w-56"
+                      />
+                    ) : null}
+                    <MetricDistribution
+                      metric={chartMetric}
+                      pilots={report.pilots}
+                      subjectTrackFile={subject.trackFile}
+                      ringed={neighbours.slice(0, 3)}
+                    />
+                  </section>
+                ) : null}
+
                 <Table
                   aria-label={`Pilots ranked by behavioural similarity to ${subject.pilotName}`}
                   scrollLabel="Similarity results"
@@ -555,7 +646,12 @@ export function TaskPilotSimilarity() {
                   <TableBody>
                     {shown.map((n) => (
                       <Row key={n.trackFile}>
-                        <Cell>{n.pilotName}</Cell>
+                        <Cell>
+                          <PilotName
+                            rank={rankByTrack.get(n.trackFile)}
+                            name={n.pilotName}
+                          />
+                        </Cell>
                         {byGap ? (
                           <>
                             <Cell className="tabular-nums">
