@@ -24,7 +24,9 @@ import {
   type FieldContext,
   type ReportTable,
 } from '../src/field-analysis';
-import { DAY_METRICS, pickBestConditionsHour } from '../src/field-analysis/metrics/day-profile';
+import { DAY_METRICS, pickBestConditionsHour,
+  climbQuantiles,
+} from '../src/field-analysis/metrics/day-profile';
 import {
   makeTestField,
   straightFixes,
@@ -365,8 +367,10 @@ describe('day.climb_by_hour', () => {
     expect(out.perPilot.every((v) => v.value === null)).toBe(true);
 
     const table = out.extraTables![0];
-    expect(table.rows.length).toBeGreaterThanOrEqual(1);
-    const row = table.rows[0];
+    expect(table.rows.length).toBeGreaterThanOrEqual(2);
+    // Row 0 is the whole-task total; the hours follow it.
+    expect(table.rows[0][0]).toBe('Whole task');
+    const row = table.rows[1];
     expect(row[0]).toEqual({ t: '2024-01-15T10:00:00.000Z' }); // BASE_TIME hour, as an instant
     const med = Number(row[1]);
     const p90 = Number(row[2]);
@@ -385,10 +389,11 @@ describe('day.climb_by_hour', () => {
     const out = dayClimbByHour.compute(makeDriftField());
     const series = out.extraSeries![0];
     if (series.kind !== 'climb-hourly') throw new Error('kind');
-    expect(series.hours.length).toBe(out.extraTables![0].rows.length);
+    // One row per hour, plus the leading whole-task total.
+    expect(series.hours.length).toBe(out.extraTables![0].rows.length - 1);
 
     const hour = series.hours[0];
-    const row = out.extraTables![0].rows[0];
+    const row = out.extraTables![0].rows[1];
     expect(hour.t).toBe((row[0] as { t: string }).t);
     expect(hour.median.toFixed(1)).toBe(row[1] as string);
     expect(hour.p90.toFixed(1)).toBe(row[2] as string);
@@ -577,4 +582,56 @@ describe('day metrics over kosci-loop-t1 (smoke)', () => {
     expect(rendered).toContain('Wind by leg');
     expect(rendered).toContain('Climb by hour');
   }, 120_000);
+});
+
+describe('climbQuantiles', () => {
+  it('is null for no climbs rather than a fan of NaN', () => {
+    expect(climbQuantiles([])).toBeNull();
+  });
+
+  it('orders the fan and counts every sample', () => {
+    const fan = climbQuantiles([3, 1, 2, 5, 4])!;
+    expect(fan.n).toBe(5);
+    expect(fan.p10).toBeLessThanOrEqual(fan.p25);
+    expect(fan.p25).toBeLessThanOrEqual(fan.median);
+    expect(fan.median).toBeLessThanOrEqual(fan.p75);
+    expect(fan.p75).toBeLessThanOrEqual(fan.p90);
+    expect(fan.median).toBeCloseTo(3, 10);
+  });
+
+  it('does not mutate the caller’s array', () => {
+    const rates = [3, 1, 2];
+    climbQuantiles(rates);
+    expect(rates).toEqual([3, 1, 2]);
+  });
+
+  it('pools the climbs instead of averaging the hours', () => {
+    // A lopsided day: one busy weak hour, one thin strong hour — exactly the
+    // shape that makes a mean of hourly medians misdescribe the day. A pilot
+    // asking "what was a typical climb?" is answered by the 21 climbs, not by
+    // the two hours weighted equally.
+    const weakHour = Array.from({ length: 18 }, () => 1);
+    const strongHour = [5, 5, 5];
+    const hourlyMedians = [
+      climbQuantiles(weakHour)!.median,
+      climbQuantiles(strongHour)!.median,
+    ];
+    const meanOfHourlyMedians = (hourlyMedians[0] + hourlyMedians[1]) / 2;
+
+    const pooled = climbQuantiles([...weakHour, ...strongHour])!;
+    expect(pooled.n).toBe(21);
+    expect(pooled.median).toBe(1); // the 11th of 21 sorted samples
+    expect(meanOfHourlyMedians).toBe(3); // what the wrong answer would be
+    expect(pooled.median).not.toBe(meanOfHourlyMedians);
+    // The strong hour still reaches the top of the fan — it is a tenth of the
+    // day's climbs, so p90 sits inside it.
+    expect(pooled.p90).toBeGreaterThan(1);
+  });
+
+  it('cuts the same fan for one hour as for a whole task of that hour', () => {
+    // The helper is the ONLY path to a published climb percentile, so the
+    // hourly rows and the total can never disagree about what p90 means.
+    const rates = [0.4, 1.1, 1.9, 2.2, 2.8, 3.6];
+    expect(climbQuantiles(rates)).toEqual(climbQuantiles([...rates].reverse()));
+  });
 });

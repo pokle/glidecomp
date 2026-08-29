@@ -428,6 +428,7 @@ export {
   type BuildFieldContextOptions,
   type CategoricalReportSeries,
   type ClimbHourlySeries,
+  type ClimbQuantiles,
   type CompAggregateReport,
   type CompMetricAggregate,
   type CompTaskResult,
