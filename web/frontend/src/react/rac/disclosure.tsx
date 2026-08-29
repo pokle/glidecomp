@@ -20,6 +20,7 @@ export function Disclosure({
   title,
   badge,
   className,
+  headingLevel = 3,
   children,
   ...props
 }: Omit<AriaDisclosureProps, "className" | "children"> & {
@@ -27,6 +28,13 @@ export function Disclosure({
   /** Optional inline annotation next to the title (e.g. a summary). */
   badge?: React.ReactNode;
   className?: string;
+  /**
+   * Where the title sits in the page's heading tree. RAC defaults a
+   * Disclosure's Heading to 3, which is right under someone else's h2 — pass 2
+   * where the disclosures ARE the page's sections, so the tree does not skip
+   * a level.
+   */
+  headingLevel?: 2 | 3 | 4;
   children: React.ReactNode;
 }) {
   return (
@@ -34,7 +42,7 @@ export function Disclosure({
       className={cn("group border-t border-border pt-3", className)}
       {...props}
     >
-      <Heading className="flex items-center gap-2">
+      <Heading level={headingLevel} className="flex items-center gap-2">
         <AriaButton
           slot="trigger"
           className="flex items-center gap-1.5 rounded text-sm font-medium outline-none data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50"

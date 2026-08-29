@@ -5,8 +5,9 @@
  * The report is a page per section since August 2026
  * (/comp/:id/task/:id/analysis/<section>, see field-analysis/sections.ts), so
  * what used to be one scroll is three loads here: the ranking on
- * /separation, the thermals on /day, the heatmap on /pilots. The chapter URL
- * itself is now a summary of boxes and has nothing these tests assert.
+ * /strategies, the thermals on /thermals, the per-pilot tables on /metrics.
+ * The chapter URL itself is a contents list of boxes and has nothing these
+ * tests assert.
  *
  * The ranking table and the chart of the row you pick are one pair now: the
  * chart pins to the top of the viewport on a narrow screen and sits beside
@@ -112,7 +113,7 @@ test.beforeAll(async ({ browser, playwright }) => {
   await api.dispose();
 
   page = await browser.newPage();
-  await openSection("separation");
+  await openSection("strategies");
 });
 
 test.afterAll(async () => {
@@ -131,17 +132,17 @@ test.beforeEach(async () => {
  * keeps a freshness poll in flight by design.
  */
 let openSlug: string | null = null;
-async function openSection(slug: "separation" | "day" | "pilots") {
+async function openSection(slug: "strategies" | "thermals" | "metrics") {
   if (openSlug === slug) return;
   await page.goto(`${analysisPath}/${slug}`, { waitUntil: "domcontentloaded" });
   openSlug = slug;
-  if (slug === "separation") {
+  if (slug === "strategies") {
     await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
     await ranking().waitFor();
-  } else if (slug === "day") {
+  } else if (slug === "thermals") {
     await page.getByRole("heading", { name: THERMALS_HEADING }).waitFor();
   } else {
-    await heatmap().waitFor();
+    await openFamilyTable().waitFor();
   }
 }
 
@@ -150,9 +151,12 @@ function ranking() {
   return page.getByRole("grid", { name: "Behaviour ranking" });
 }
 
-/** The heatmap, on the per-pilot section. */
-function heatmap() {
-  return page.locator('[role="img"][aria-label^="Percentile heatmap"]');
+/**
+ * The first per-pilot table on the metric-details page. Families open by
+ * default when they hold a top-3 behaviour, so at least one is expanded.
+ */
+function openFamilyTable() {
+  return page.getByRole("grid", { name: /metrics by pilot$/ }).first();
 }
 
 /** The card the ranking and its chart share. */
@@ -190,7 +194,7 @@ async function setViewport(width: number, height: number) {
 // FIRST, and must stay first: the only test here that reads first-paint state
 // (which metric the pane opens on), and the only one nothing resets.
 test("picking a row swaps the chart, and the top metric is charted first", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   const table = ranking();
   const pane = detailPane();
 
@@ -215,7 +219,7 @@ test("picking a row swaps the chart, and the top metric is charted first", async
 });
 
 test("wide: the chart sits beside the table, and the table still fits", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   await setViewport(1600, 1000);
   const table = ranking();
   const pane = detailPane();
@@ -238,7 +242,7 @@ test("wide: the chart sits beside the table, and the table still fits", async ()
 });
 
 test("narrow: the chart pins to the top while the table scrolls under it", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   await setViewport(390, 780);
   const table = ranking();
   const pane = detailPane();
@@ -283,7 +287,7 @@ test("narrow: the chart pins to the top while the table scrolls under it", async
 });
 
 test("narrow: picking a bottom row swaps a chart that is on screen", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   await setViewport(390, 780);
   const table = ranking();
   const pane = detailPane();
@@ -310,7 +314,7 @@ test("narrow: picking a bottom row swaps a chart that is on screen", async () =>
 });
 
 test("narrow: a keyboard-focused row is never hidden by the pinned chart", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   await setViewport(390, 780);
   const rows = ranking().locator("tbody tr");
 
@@ -352,7 +356,7 @@ test("narrow: a keyboard-focused row is never hidden by the pinned chart", async
 });
 
 test("expanding the chart makes it very much bigger, in both orientations", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   for (const [label, width, height] of [
     ["portrait", 390, 780],
     ["landscape", 780, 390],
@@ -383,7 +387,7 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
 });
 
 test("the expanded chart stays open when you tap a dot, and returns focus on close", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   await setViewport(390, 780);
 
   const trigger = rankingExpand();
@@ -406,7 +410,7 @@ test("the expanded chart stays open when you tap a dot, and returns focus on clo
 });
 
 test("narrow: the chart can be folded away to read the table", async () => {
-  await openSection("separation");
+  await openSection("strategies");
   await setViewport(390, 780);
   const pane = detailPane();
   const toggle = page.getByRole("button", { name: /chart$/ });
@@ -423,7 +427,7 @@ test("narrow: the chart can be folded away to read the table", async () => {
 });
 
 test("narrow: the thermals census drives its own pinned pane", async () => {
-  await openSection("day");
+  await openSection("thermals");
   await setViewport(390, 780);
   const census = page.getByRole("grid", { name: "Reconstructed thermals" });
   await census.scrollIntoViewIfNeeded();
@@ -453,7 +457,7 @@ test("narrow: the thermals census drives its own pinned pane", async () => {
 });
 
 test("the map's maximise control fills the screen, and the same control restores it", async () => {
-  await openSection("day");
+  await openSection("thermals");
   await setViewport(390, 780);
   const thermalsCard = page.locator("section", {
     has: page.getByRole("heading", { name: THERMALS_HEADING }),
@@ -481,34 +485,36 @@ test("the map's maximise control fills the screen, and the same control restores
 });
 
 test("the pilot picker pins a highlight page-wide, through the URL", async () => {
-  await openSection("pilots");
+  await openSection("metrics");
   await setViewport(1600, 1000);
 
-  // A real pilot from this report: the heatmap's top row reads "1. Name".
-  await heatmap().scrollIntoViewIfNeeded();
-  const firstRow = heatmap().locator("div.group").first();
-  const name = ((await firstRow.innerText()).match(/^\s*\d+\.\s*(.+)$/m) ?? [])[1]?.trim();
+  // A real pilot from this report, read off the first open family's table.
+  // Second cell: the first is the rank.
+  const firstRow = openFamilyTable().locator("tbody tr").first();
+  await firstRow.scrollIntoViewIfNeeded();
+  const name = (await firstRow.locator("th, td").nth(1).innerText()).trim();
   expect(name).toBeTruthy();
 
   // Pick them. The pin lands in the URL (a shareable reading of the task)
-  // and their heatmap row tints without any hover.
+  // and their row tints without any hover.
   const box = page.getByRole("combobox", { name: "Highlight a pilot" });
   await box.click();
-  await box.fill(name!.slice(0, Math.min(6, name!.length)));
-  await page.getByRole("option", { name: name! }).click();
+  await box.fill(name.slice(0, Math.min(6, name.length)));
+  await page.getByRole("option", { name }).click();
   await expect(page).toHaveURL(/[?&]pilot=/);
   await page.mouse.move(5, 5); // no hover in play — the tint below is the pin
   await expect(firstRow).toHaveClass(/bg-accent/);
 
   // A fresh load of the pinned URL restores pick and tint (the shared link).
   await page.reload({ waitUntil: "domcontentloaded" });
-  await heatmap().waitFor();
-  await expect(page.getByRole("combobox", { name: "Highlight a pilot" })).toHaveValue(name!);
-  await heatmap().scrollIntoViewIfNeeded();
-  await expect(heatmap().locator("div.group").first()).toHaveClass(/bg-accent/);
+  await openFamilyTable().waitFor();
+  await expect(page.getByRole("combobox", { name: "Highlight a pilot" })).toHaveValue(name);
+  const reloadedRow = openFamilyTable().locator("tbody tr").first();
+  await reloadedRow.scrollIntoViewIfNeeded();
+  await expect(reloadedRow).toHaveClass(/bg-accent/);
 
   // ✕ clears pin, URL and tint — leave the page as found (serial suite).
   await page.getByRole("button", { name: `Stop highlighting ${name}` }).click();
   await expect(page).not.toHaveURL(/[?&]pilot=/);
-  await expect(heatmap().locator("div.group").first()).not.toHaveClass(/bg-accent/);
+  await expect(reloadedRow).not.toHaveClass(/bg-accent/);
 });

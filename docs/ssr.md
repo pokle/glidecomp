@@ -21,8 +21,8 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 | `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
 | `/comp/:id/task/:id/pilot/:id` | the report card |
 | `/comp/:id/analysis` | field analysis, comp report |
-| `/comp/:id/task/:id/analysis` | field analysis, this task's chapter (a summary of the five below) |
-| `/comp/:id/task/:id/analysis/:section` | one section of that chapter — `separation`, `day`, `pilots`, `styles`, `method` |
+| `/comp/:id/task/:id/analysis` | field analysis, this task's chapter (a contents list for the six below) |
+| `/comp/:id/task/:id/analysis/:section` | one section of that chapter — `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
 
 A cold field-analysis report server-renders its pending notice and is noindexed
 **per request**, not shell-noindexed. The section route's pattern is built from

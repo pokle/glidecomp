@@ -13,7 +13,7 @@
  *
  * Accessibility: the member lists ARE the content (names and ranks as text);
  * hovering a member lights that pilot up page-wide via PilotHighlightContext,
- * a visual nicety layered on top, same pattern as the percentile heatmap.
+ * a visual nicety layered on top.
  */
 import { useMemo } from "react";
 import { cn } from "@/react/lib/utils";

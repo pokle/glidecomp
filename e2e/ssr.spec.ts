@@ -424,7 +424,7 @@ test.describe("SSR — field analysis (public)", () => {
     // Branch on the actual server HTML (race-free): warm renders the summary's
     // section boxes and is indexable; cold renders the pending notice and is
     // noindex.
-    if (html.includes("What separated the field")) {
+    if (html.includes("Winning strategies")) {
       expect(html).not.toContain('name="robots" content="noindex"');
     } else {
       expect(html.toLowerCase()).toContain("pending");
@@ -445,9 +445,11 @@ test.describe("SSR — field analysis (public)", () => {
     await warmTaskAnalysis(request, compId, taskId);
 
     for (const [slug, heading] of [
-      ["separation", "What separated the field"],
-      ["day", "The day they flew"],
-      ["pilots", "Where each pilot sat"],
+      ["strategies", "Winning strategies"],
+      ["weather", "Weather"],
+      ["thermals", "Thermals"],
+      ["metrics", "Metric details"],
+      ["style", "Flying style"],
       ["method", "How this was measured"],
     ]) {
       const res = await request.get(`/comp/${compId}/task/${taskId}/analysis/${slug}`);
@@ -599,7 +601,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     ":pilot",
     ":compAnalysis",
     ":taskAnalysis",
-    ":taskSeparation",
+    ":taskStrategies",
     // WITH a query string. Not the guard for the pathname-only SSR bug — both
     // of these passed while it was live (the "?class= deep link" test above is
     // what catches that). They are here because no URL in this list carried a
@@ -625,7 +627,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":pilot": `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`,
         ":compAnalysis": `/comp/${d.compId}/analysis`,
         ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,
-        ":taskSeparation": `/comp/${d.compId}/task/${d.taskId}/analysis/separation`,
+        ":taskStrategies": `/comp/${d.compId}/task/${d.taskId}/analysis/strategies`,
         ":scoresByTask": `/comp/${d.compId}/scores?task=${d.taskId}`,
         ":compAnalysisByClass": `/comp/${d.compId}/analysis${
           cls ? `?class=${encodeURIComponent(cls)}` : ""

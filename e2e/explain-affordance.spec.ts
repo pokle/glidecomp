@@ -72,11 +72,9 @@ async function analysisUrls(request: APIRequestContext) {
         return {
           comp: `/comp/${comp.comp_id}/analysis`,
           // The task report is a page per section: the ranking's ⓘs are on
-          // the separation page, the notes behind them on the method page,
-          // and the heatmap on the per-pilot page.
-          separation: `${taskAnalysis}/separation`,
+          // the strategies page, and the notes behind them on the method page.
+          strategies: `${taskAnalysis}/strategies`,
           method: `${taskAnalysis}/method`,
-          pilots: `${taskAnalysis}/pilots`,
         };
       }
       if (analysis.pending_task_count === 0) {
@@ -129,7 +127,7 @@ test("task analysis: ρ and coverage are behind the ranking's column ⓘs", asyn
   request,
 }) => {
   const urls = await analysisUrls(request);
-  await page.goto(urls.separation);
+  await page.goto(urls.strategies);
   await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
 
   await expect(
@@ -184,12 +182,4 @@ test("print carries every note that moved behind a ⓘ", async ({ page, request 
   ]) {
     await expect(page.getByText(phrase, { exact: false }).first()).toBeVisible();
   }
-
-  // The heatmap caption keeps its own print mirror — a separate mechanism to
-  // the footnote's, and one a single printed section still wants.
-  await page.goto(urls.pilots);
-  await page.emulateMedia({ media: "print" });
-  await expect(
-    page.getByText("The columns start with the behaviours", { exact: false }).first()
-  ).toBeVisible();
 });

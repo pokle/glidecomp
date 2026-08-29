@@ -373,7 +373,7 @@ rollout note below):
 |---|---|---|
 | `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the scores behind them |
 | `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | Basis, then a box per section linking to it |
-| `/comp/:compId/task/:taskId/analysis/:section` | `pages/TaskAnalysisSection.tsx` | One section: `separation`, `day`, `pilots`, `styles`, `method` |
+| `/comp/:compId/task/:taskId/analysis/:section` | `pages/TaskAnalysisSection.tsx` | One section: `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
 
 The per-task page is a child of the **task**, in the URL and in the
 breadcrumbs alike — Competitions › comp › task › Field analysis — because
@@ -390,9 +390,12 @@ The whole-comp report, which collects every chapter, is reachable from a
 — basis, debrief, weather, thermals, ranking, heatmap, clusters, every
 per-family table and every footnote — with a table of contents and an overview
 block bolted on to make it survivable. Both of those were symptoms: a page that
-needs a map is too big. The chapter URL is now a summary, one box per section
-saying what is behind it, and each section is its own page showing that one
-thing. `field-analysis/sections.ts` is the single list all of it reads —
+needs a map is too big. The chapter URL is now a contents list — a box per
+section, carrying its name and one line of this-task fact and no explanation —
+and each section is its own page showing that one thing. The percentile heatmap
+went with the split: a wall of every pilot against every behaviour is the same
+"read the whole report at once" the split exists to undo, and the per-family
+tables state the readings exactly. `field-analysis/sections.ts` is the single list all of it reads —
 the summary's boxes, the section page's `:section` param, and the SSR
 Function's route pattern.
 

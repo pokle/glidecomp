@@ -1,10 +1,11 @@
 /**
  * The task field analysis, as a set of pages rather than one long scroll.
  *
- * The chapter page (/comp/:c/task/:t/analysis) is now a summary: a box per
- * section, each stating what is behind it and linking to it. Everything a box
- * summarises lives on its own page, /analysis/<slug>, which shows that one
- * thing and nothing else.
+ * The chapter page (/comp/:c/task/:t/analysis) is a contents list: a box per
+ * section, naming it and stating what this task has in it. Everything a box
+ * stands for lives on its own page, /analysis/<slug>, which shows that one
+ * thing and nothing else. A box carries no explanation — it is there to be
+ * chosen between, and whatever needs explaining is on the other side of it.
  *
  * This module is the single list both ends read: the summary page builds its
  * boxes from it, the section page resolves :section against it, and the SSR
@@ -12,45 +13,55 @@
  * one place and forgotten in the others would be a 404 nobody notices.
  *
  * Order is the page's order, and it is deliberate: the basis first (what was
- * measured), then which behaviours separated the field — the finding — then
- * the day that shaped it, then where each pilot sat in it. Method last: it is
- * consulted once.
+ * measured, and not a section — it IS the summary), then which behaviours
+ * separated the field, then the day that shaped it, then where each pilot sat
+ * in it. Method last: it is consulted once.
+ *
+ * The pilot-similarity sheet sits in the same list of boxes on the summary but
+ * is NOT here: it predates these pages, has its own route, and is a tool
+ * rather than a section of the report.
  */
 
 export type TaskAnalysisSectionSlug =
-  | "separation"
-  | "day"
-  | "pilots"
-  | "styles"
+  | "strategies"
+  | "weather"
+  | "thermals"
+  | "metrics"
+  | "style"
   | "method";
 
 export interface TaskAnalysisSectionDef {
   slug: TaskAnalysisSectionSlug;
-  /** Heading of the section's own page, and of its box on the summary. */
+  /** Heading of the section's own page, and the box that leads to it. */
   label: string;
-  /** The section page's standfirst, under its heading. */
+  /** The section page's standfirst, under its heading. Not shown on the box. */
   lede: string;
 }
 
 export const TASK_ANALYSIS_SECTIONS: TaskAnalysisSectionDef[] = [
   {
-    slug: "separation",
-    label: "What separated the field",
+    slug: "strategies",
+    label: "Winning strategies",
     lede: "Which behaviours went with better ranks on this task.",
   },
   {
-    slug: "day",
-    label: "The day they flew",
-    lede: "The organiser's notes, the day's profile, and the thermals the field shared.",
+    slug: "weather",
+    label: "Weather",
+    lede: "The organiser's account of the day, and the day's own profile.",
   },
   {
-    slug: "pilots",
-    label: "Where each pilot sat",
-    lede: "Every pilot's standing on every behaviour, and the numbers behind it.",
+    slug: "thermals",
+    label: "Thermals",
+    lede: "The thermals the field shared, and how each of them leaned.",
   },
   {
-    slug: "styles",
-    label: "Pilot style clusters",
+    slug: "metrics",
+    label: "Metric details",
+    lede: "Every pilot's reading on every behaviour, family by family.",
+  },
+  {
+    slug: "style",
+    label: "Flying style",
     lede: "Pilots grouped by how alike their flying was.",
   },
   {

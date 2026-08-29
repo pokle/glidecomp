@@ -46,6 +46,7 @@ export function MetricFamilySection({
   defaultExpanded,
   isExpanded,
   onExpandedChange,
+  headingLevel = 3,
   printBreakBefore = false,
 }: {
   family: MetricFamily;
@@ -59,6 +60,10 @@ export function MetricFamilySection({
    * collapsed family before scrolling to it). */
   isExpanded?: boolean;
   onExpandedChange?: (isExpanded: boolean) => void;
+  /** Where the family's name sits in the page's heading tree. 2 where the
+   * families ARE the page's sections (the metric-details page), which also
+   * lifts each metric block inside them from h4 to h3. */
+  headingLevel?: 2 | 3;
   /** Start this family on a fresh printed page — every family is a chapter.
    * The caller skips the first rendered family so it stays with the section
    * heading instead of orphaning it. */
@@ -89,6 +94,7 @@ export function MetricFamilySection({
     >
     <Disclosure
       title={familyLabel}
+      headingLevel={headingLevel}
       defaultExpanded={defaultExpanded}
       isExpanded={isExpanded}
       onExpandedChange={onExpandedChange}
@@ -133,7 +139,11 @@ export function MetricFamilySection({
               className="scroll-mt-20 space-y-1"
               aria-label={m.label}
             >
-              <h4 className="text-sm font-medium">{m.label}</h4>
+              {headingLevel === 2 ? (
+                <h3 className="text-sm font-medium">{m.label}</h3>
+              ) : (
+                <h4 className="text-sm font-medium">{m.label}</h4>
+              )}
               {/* The ⓘ text inline, so the block's charts and tables read
                   with their method — on screen and in print. */}
               <MetricMethod
