@@ -9,10 +9,11 @@
  * Its own page rather than a section on the task page: it is a long,
  * exploratory read that shouldn't compete with the official scores.
  *
- * Lives at /comp/:compId/analysis/task/:taskId — a chapter of the comp's
- * field analysis, NOT a leaf of the task page, so the breadcrumb's parent is
- * that report and the H1 is the task's name (the section name is already in
- * the trail). The task page is a sibling link in the header.
+ * Lives at /comp/:compId/task/:taskId/analysis — this task's chapter of the
+ * comp's field analysis. Both the URL and the breadcrumb parent on the TASK,
+ * so the H1 is "Field analysis" and the task's name sits in the subtitle. The
+ * whole-comp report, which collects every chapter, is a sibling link in the
+ * header.
  *
  * SSR'd via loadTaskFieldAnalysis + functions/comp/[[path]].ts: the server
  * seeds the most-recently-cached report from `useInitialData()`, or a pending
@@ -33,10 +34,10 @@ import { Loading } from "@/react/rac/progress";
 import { Button, LinkButton } from "@/react/rac/button";
 import { SimpleSelect } from "@/react/rac/select";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
-import { underCompAnalysis } from "../lib/crumbs";
+import { FIELD_ANALYSIS_LABEL, underTask } from "../lib/crumbs";
 import {
   idFromSegment,
-  taskPath,
+  compAnalysisPath,
   taskAnalysisPath,
   taskSimilarityPath,
 } from "../lib/slug";
@@ -422,10 +423,13 @@ export function TaskFieldAnalysis() {
     }
   }
 
-  // Parented on the comp's field analysis, not the task page — this is one
-  // chapter of that report, and "up" should return to the other chapters.
-  const crumbs = underCompAnalysis(compId, comp?.name);
-  const heading = task?.name ?? "Task";
+  // Parented on the TASK, which is what the URL says too. A reader gets here
+  // from the task, and a trail that swapped the task out for the whole-comp
+  // report — a page they may never have opened — read as a jump into some
+  // other branch of the site. The report is a sibling link instead.
+  const crumbs = underTask(compId, comp?.name, taskId, task?.name);
+  // The h1 says what the final crumb says, per the app-wide convention.
+  const heading = FIELD_ANALYSIS_LABEL;
 
   // Gate on `status` only, never on the user session: the content is public,
   // and useUser().loading is true throughout SSR + the first hydration render,
@@ -498,20 +502,21 @@ export function TaskFieldAnalysis() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">{heading}</h1>
           <p className="text-sm text-muted-foreground">
-            How the field flew this task, and which behaviours separated
-            it.
+            {task?.name ?? "This task"} — how the field flew it, and which
+            behaviours separated them.
           </p>
         </div>
         {/* Pure navigation/actions — meaningless on paper. */}
         <div className="flex items-center gap-2 print:hidden">
-          {/* The trail now goes up to the comp report, so the task page — a
-              genuine sibling relationship — gets an explicit link here. */}
+          {/* The trail goes up to the task, so the whole-comp report — the
+              other half of this page's kinship — gets an explicit link here.
+              It is also where the other tasks' chapters are listed. */}
           <LinkButton
             variant="outline"
             size="sm"
-            href={taskPath(compId, comp?.name, taskId, task?.name)}
+            href={compAnalysisPath(compId, comp?.name)}
           >
-            View task
+            Comp field analysis
           </LinkButton>
           {isAdmin ? (
             <Button

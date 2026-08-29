@@ -388,13 +388,16 @@ components so future work stays consistent:
   style, current page omitted) coexisted through the RAC migration; it was
   removed once every page converted, because two conventions made trail
   depth inconsistent between sibling pages.
-- **The trail is the information architecture, not the history.** A page's
-  parent crumb is where it *belongs*, which is not always where you came
-  from: the per-task field analysis
-  (`/comp/:compId/analysis/task/:taskId`) is a chapter of the comp's field
-  analysis, so it parents on that report even though the task page also
-  links to it. Cross-links between subtrees get an explicit sibling link on
-  the destination ("View task") rather than a bent breadcrumb.
+- **The trail is the information architecture, not the history** — and where
+  a page has two plausible parents, the URL and the trail must pick the same
+  one. The per-task field analysis was briefly the counter-example: it lived
+  at `/comp/:compId/analysis/task/:taskId` as a chapter of the comp's field
+  analysis, while everyone in fact arrived from the task page, and a trail
+  that swapped the task out for a report they had never opened read as a jump
+  into another branch of the site. Both now parent on the task
+  (`/comp/:compId/task/:taskId/analysis`), and the whole-comp report — the
+  other genuine parent — is an explicit sibling link on the destination
+  ("Comp field analysis") rather than a second bent breadcrumb.
 - **One Submit track *form* everywhere** — superseded wording, 2026-08-02
   (#535). It used to be one dialog (`comp/SubmitTrackDialog.tsx`) behind every
   Submit track button. It is now one form, `comp/SubmitTrackForm.tsx`, with two

@@ -433,13 +433,16 @@ These are the standing imperatives. Each links to the reference that explains it
 - **Field analysis** — 26 behavioural metrics (climbing, gliding, decision-making,
   gaggle, race craft, day profile) ranked by Spearman ρ against GAP rank, in
   `web/engine/src/field-analysis/`, surfacing on the public, SSR'd
-  `/comp/:id/analysis` and `/comp/:id/analysis/task/:id`
+  `/comp/:id/analysis` and `/comp/:id/task/:id/analysis`
   (`src/react/pages/{Comp,Task}FieldAnalysis.tsx` + `src/react/field-analysis/`),
   and via the CLI: `bun run score-task -- --field-analysis` / `--comp <slug>`.
   See [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md).
-  - The per-task page is nested under the comp report because it's a chapter of
-    it, so "up" returns to the other tasks. The old
-    `/comp/:id/task/:id/analysis` redirects.
+  - The per-task page is a child of the TASK, in the URL and in the
+    breadcrumbs alike — that is where a reader comes from. The comp report
+    collects the chapters and is a sibling link on each one, not their parent.
+    `/comp/:id/analysis/task/:id`, where the chapter lived from July to August
+    2026, 301s in the SSR Function (it was public and indexable, so a shell
+    would not do) and redirects again in the SPA for in-app navigation.
   - **Presentation order is fixed** — separation ranking first, then per-family
     tables — because which metrics have explanatory power *is* the finding.
   - Some metrics emit charting series (`ReportSeries`, a discriminated union)

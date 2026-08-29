@@ -120,15 +120,20 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/[^/]+\/task\/[^/]+\/(settings|route|weather)\/?$/,
   // Recording a manual flight for one pilot (FAI S7F §9.2.2) — admin-only.
   /^\/comp\/[^/]+\/task\/[^/]+\/pilot\/[^/]+\/manual-flight\/?$/,
-  // Where the per-task report lived before it was re-nested under the comp
-  // report; the SPA redirects it, so it must reach the shell rather than 404.
-  /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/?$/,
   // The pilot-similarity sheet under the per-task field analysis. Everything
   // on it is derived client-side from the report the page fetches anyway, so
   // there is nothing to server-render; it is an interactive tool rather than a
   // document, so there is nothing here for a crawler either.
-  /^\/comp\/[^/]+\/analysis\/task\/[^/]+\/similar\/?$/,
+  /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/similar\/?$/,
 ];
+
+/**
+ * The superseded per-task field-analysis URLs, 301'd in onRequest. The slug
+ * segments are carried across untouched — this is a re-shape of the path, not
+ * a lookup, so it needs no comp or task data and costs no round trip.
+ */
+const LEGACY_TASK_ANALYSIS =
+  /^\/comp\/([^/]+)\/analysis\/task\/([^/]+?)(\/similar)?\/?$/;
 
 const ROUTES: Array<{
   pattern: RegExp;
@@ -344,8 +349,9 @@ const ROUTES: Array<{
     },
   },
   {
-    // Per-task field analysis (a chapter of the comp report above).
-    pattern: /^\/comp\/([^/]+)\/analysis\/task\/([^/]+)\/?$/,
+    // Per-task field analysis: this one task's chapter of the comp report
+    // above, and a child of the task's own URL.
+    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/analysis\/?$/,
     async run(f, m, origin) {
       const compId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
@@ -374,8 +380,11 @@ const ROUTES: Array<{
             breadcrumb(origin, [
               ["Competitions", "/comp"],
               [compName, compPath(compId, data.comp?.name)],
-              ["Field analysis", compAnalysisPath(compId, data.comp?.name)],
-              [taskName, taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name)],
+              [taskName, taskPath(compId, data.comp?.name, taskId, data.task?.name)],
+              [
+                "Field analysis",
+                taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name),
+              ],
             ])
           ),
         },
@@ -389,6 +398,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const url = new URL(request.url);
   const path = url.pathname;
   const cookie = request.headers.get("Cookie");
+
+  // The per-task field analysis moved back under the task it is about. Its
+  // July–August 2026 URL (/comp/:c/analysis/task/:t, and /similar below it)
+  // was public and server-rendered, so it gets a real 301 rather than the
+  // client-side bounce the SPA also carries: a crawler that asked for it must
+  // be told where the page went, not handed a noindex shell and left to guess.
+  const legacy = path.match(LEGACY_TASK_ANALYSIS);
+  if (legacy) {
+    const to = `/comp/${legacy[1]}/task/${legacy[2]}/analysis${legacy[3] ?? ""}`;
+    return canonicalRedirect(url.origin + to + url.search, cookie);
+  }
 
   // Private SPA-only routes under /comp: served as the plain shell (they
   // fetch their own data client-side), but marked noindex — there is nothing

@@ -70,7 +70,7 @@ async function analysisUrls(request: APIRequestContext) {
       if (task) {
         return {
           comp: `/comp/${comp.comp_id}/analysis`,
-          task: `/comp/${comp.comp_id}/analysis/task/${task.task_id}`,
+          task: `/comp/${comp.comp_id}/task/${task.task_id}/analysis`,
         };
       }
       if (analysis.pending_task_count === 0) {

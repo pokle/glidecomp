@@ -100,7 +100,7 @@ describe("path builders", () => {
       "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs"
     );
     expect(taskAnalysisPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)")).toBe(
-      "/comp/corryong-cup-2026-voqc/analysis/task/task-3-open-zqfs"
+      "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/analysis"
     );
     expect(pilotPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)", "abcd", "Jane Doe")).toBe(
       "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/pilot/jane-doe-abcd"

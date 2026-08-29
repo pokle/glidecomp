@@ -372,14 +372,18 @@ rollout note below):
 | Route | Page | Content |
 |---|---|---|
 | `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the scores behind them |
-| `/comp/:compId/analysis/task/:taskId` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
+| `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
 
-The per-task page is nested **under the comp report**, not under the task
-page, because it is one chapter of that report: going up should land you
-among the other tasks to compare against. The task page still links to it
-(a cross-link into another subtree), and the chapter links back with a
-"View task" sibling button. The pre-nesting URL
-`/comp/:compId/task/:taskId/analysis` redirects.
+The per-task page is a child of the **task**, in the URL and in the
+breadcrumbs alike — Competitions › comp › task › Field analysis — because
+that is the path a reader actually walks. It was nested under the comp
+report instead from July to August 2026, on the reasoning that a chapter
+belongs with its report; in use the trail dropped the task and felt
+disconnected from the page the reader had just left.
+`/comp/:compId/analysis/task/:taskId` 301s (see [ssr.md](ssr.md)).
+
+The whole-comp report, which collects every chapter, is reachable from a
+"Comp field analysis" sibling button in the chapter's header row.
 
 Presentation components are in `web/frontend/src/react/field-analysis/`. They
 re-export the engine's `formatMetricValue` / `FAMILY_ORDER` / `FAMILY_LABELS`

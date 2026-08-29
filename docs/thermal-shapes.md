@@ -50,7 +50,7 @@ clustering (`shared-thermals.ts`) and the circle detector.
   census (a UI must say "top N of M", never present the cap as the census).
   Added in `FIELD_ANALYSIS_VERSION` 20; stale-first storage, ETag, SSR seed
   and invalidation all ride the existing `task_field_analysis` machinery.
-- **Task analysis page** (`/comp/:id/analysis/task/:id`): "The day's thermals"
+- **Task analysis page** (`/comp/:id/task/:id/analysis`): "The day's thermals"
   section — census table, top-down lift rose (with an ⓘ legend popover),
   readouts, climb profile, per-pilot climb table and band table. The model-wind cross-check comes from the task's weather column
   (independent request, `windAtHeight` interpolation) and is always drawn

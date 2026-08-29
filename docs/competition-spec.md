@@ -355,10 +355,10 @@ comp:
   - Also lists all recently created non-test competitions (created within the last 24 months)
 - `/comp/{comp_id}`: Competition page for existing competition.
 - `/comp/{comp_id}/task/{task_id}`: Task page for existing tasks.
-- `/comp/{comp_id}/analysis`, `/comp/{comp_id}/analysis/task/{task_id}`:
-  field analysis (behavioural metrics); the per-task page is a chapter of the
-  comp report (the old `/comp/{comp_id}/task/{task_id}/analysis` URL
-  redirects). **Public and server-rendered** since July 2026 — both have
+- `/comp/{comp_id}/analysis`, `/comp/{comp_id}/task/{task_id}/analysis`:
+  field analysis (behavioural metrics); the per-task page is one chapter of the
+  comp report, living under the task it is about (the
+  `/comp/{comp_id}/analysis/task/{task_id}` URL it briefly used redirects). **Public and server-rendered** since July 2026 — both have
   `ROUTES` entries in `functions/comp/[[path]].ts`; a hidden `test` comp still
   404s for non-admins, and a cold report server-renders its `pending` notice
   (noindex) while the client polls. See

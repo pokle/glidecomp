@@ -1,6 +1,6 @@
 /**
  * OverviewBlock — the task field-analysis summary and navigation block at the
- * top of /comp/:id/analysis/task/:id (issue #673).
+ * top of /comp/:id/task/:id/analysis (issue #673).
  *
  * Two jobs, in this order:
  *  1. Overview: a reader who spends four seconds at scroll 0 knows what this

@@ -1,5 +1,5 @@
 /**
- * Task field analysis (/comp/:id/analysis/task/:id) — the separation
+ * Task field analysis (/comp/:id/task/:id/analysis) — the separation
  * ranking's master/detail behaviour (issue #455).
  *
  * The ranking table and the chart of the row you pick are one pair now: the
@@ -86,7 +86,7 @@ test.beforeAll(async ({ browser, playwright }) => {
   expect(detail.ok()).toBe(true);
   const { tasks } = (await detail.json()) as { tasks: Array<{ task_id: string }> };
   const taskId = tasks[0].task_id;
-  analysisPath = `/comp/${compId}/analysis/task/${taskId}`;
+  analysisPath = `/comp/${compId}/task/${taskId}/analysis`;
 
   // Field analysis never computes on the read path — a cold report answers
   // "pending" and schedules the work. Poll it warm here so the UI tests get a

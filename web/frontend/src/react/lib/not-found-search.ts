@@ -70,10 +70,10 @@ const SHAPES: Array<{
   page: PageKind;
 }> = [
   { re: new RegExp(`^/comp/${SEGMENT}/task/${SEGMENT}/pilot/${SEGMENT}/?$`), parts: ["comp", "task", "pilot"], page: "pilot" },
-  { re: new RegExp(`^/comp/${SEGMENT}/analysis/task/${SEGMENT}/?$`), parts: ["comp", "task"], page: "taskAnalysis" },
+  { re: new RegExp(`^/comp/${SEGMENT}/task/${SEGMENT}/analysis/?$`), parts: ["comp", "task"], page: "taskAnalysis" },
   // The superseded per-task analysis URL. It redirects when it resolves, so a
   // dead one still means the report, not the task page.
-  { re: new RegExp(`^/comp/${SEGMENT}/task/${SEGMENT}/analysis/?$`), parts: ["comp", "task"], page: "taskAnalysis" },
+  { re: new RegExp(`^/comp/${SEGMENT}/analysis/task/${SEGMENT}/?$`), parts: ["comp", "task"], page: "taskAnalysis" },
   { re: new RegExp(`^/comp/${SEGMENT}/task/${SEGMENT}/?$`), parts: ["comp", "task"], page: "task" },
   { re: new RegExp(`^/comp/${SEGMENT}/scores/?$`), parts: ["comp"], page: "scores" },
   { re: new RegExp(`^/comp/${SEGMENT}/waypoints/?$`), parts: ["comp"], page: "waypoints" },
