@@ -372,7 +372,8 @@ rollout note below):
 | Route | Page | Content |
 |---|---|---|
 | `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the scores behind them |
-| `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | Basis → **separation ranking** → per-family `Disclosure`s (per-pilot table, field summaries, `extraTables`) |
+| `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | Basis, then a box per section linking to it |
+| `/comp/:compId/task/:taskId/analysis/:section` | `pages/TaskAnalysisSection.tsx` | One section: `separation`, `day`, `pilots`, `styles`, `method` |
 
 The per-task page is a child of the **task**, in the URL and in the
 breadcrumbs alike — Competitions › comp › task › Field analysis — because
@@ -384,6 +385,21 @@ disconnected from the page the reader had just left.
 
 The whole-comp report, which collects every chapter, is reachable from a
 "Comp field analysis" sibling button in the chapter's header row.
+
+**The per-task report is a page per section** (August 2026). It was one scroll
+— basis, debrief, weather, thermals, ranking, heatmap, clusters, every
+per-family table and every footnote — with a table of contents and an overview
+block bolted on to make it survivable. Both of those were symptoms: a page that
+needs a map is too big. The chapter URL is now a summary, one box per section
+saying what is behind it, and each section is its own page showing that one
+thing. `field-analysis/sections.ts` is the single list all of it reads —
+the summary's boxes, the section page's `:section` param, and the SSR
+Function's route pattern.
+
+One report behind all six pages: `field-analysis/use-task-report.ts` does the
+fetching, the class selection, the unit conversion and the pending poll, and
+`field-analysis/TaskAnalysisFrame.tsx` wears the trail, the heading, the
+freshness line and the controls. A section page is its body and nothing else.
 
 Presentation components are in `web/frontend/src/react/field-analysis/`. They
 re-export the engine's `formatMetricValue` / `FAMILY_ORDER` / `FAMILY_LABELS`

@@ -10,9 +10,10 @@
  *
  * What is NOT here is anything a reader consults once: the 10 s resampling
  * grid (identical on every task of every comp) and the names and reasons
- * behind the excluded pilots. Both moved to the Footnotes section at the foot
- * of the page. This box is meant to be a glance at what was evaluated, and it
- * stops being one the moment a caveat list outgrows the facts.
+ * behind the excluded pilots. Both live on "How this was measured", which
+ * `excludedHref` points at. This box is meant to be a glance at what was
+ * evaluated, and it stops being one the moment a caveat list outgrows the
+ * facts.
  */
 import { Card } from "@/react/rac/card";
 import { formatTimeRange } from "@/react/lib/time";
@@ -93,6 +94,7 @@ export function AnalysisBasis({
   timeZone,
   weatherHref,
   thermalsHref,
+  excludedHref,
 }: {
   basis: FieldAnalysisBasis;
   excluded: { pilot_name: string; reason: string }[];
@@ -103,6 +105,10 @@ export function AnalysisBasis({
   weatherHref?: string;
   /** Anchor of the day's-thermals section, when it rendered. */
   thermalsHref?: string;
+  /** Where the excluded pilots are named. A prop rather than a bare `#`
+   * anchor: the list moved to its own page (the method section), so this box
+   * can no longer assume it is on the same one. */
+  excludedHref?: string;
 }) {
   const units = useUnits();
   return (
@@ -171,7 +177,7 @@ export function AnalysisBasis({
           {excluded.length === 1 ? " is" : "s are"} in the scores but not in
           this analysis.{" "}
           <a
-            href={`#${EXCLUDED_PILOTS_ID}`}
+            href={excludedHref ?? `#${EXCLUDED_PILOTS_ID}`}
             className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
           >
             Which, and why

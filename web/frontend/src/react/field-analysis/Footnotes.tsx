@@ -1,22 +1,32 @@
 /**
- * Footnotes — the page's reference material, gathered at the foot of it.
+ * The reference material: which pilots couldn't be analysed and why, and how
+ * the field is compared.
  *
- * Everything here is something a reader consults ONCE and then never again:
- * which pilots couldn't be analysed and why, how the field is compared, and
- * how every metric is measured. None of it belongs in the reading flow, and
- * the excluded-pilot list in particular used to sit in the basis box at the
- * very top — on a task where eight pilots flew without tracklogs it was
- * longer than every fact above it combined, so the first thing a reader met
- * was the caveats rather than the findings.
+ * Everything here is something a reader consults ONCE and then never again,
+ * so none of it belongs in the reading flow — the excluded-pilot list in
+ * particular used to sit in the basis box at the very top, and on a task where
+ * eight pilots flew without tracklogs it was longer than every fact above it
+ * combined, so the first thing a reader met was the caveats rather than the
+ * findings. They were a "Footnotes" section at the foot of the one-page task
+ * report; since that page became a summary they are the "How this was
+ * measured" page (field-analysis/sections.ts), where they are the content
+ * rather than the small print — hence `level`.
  *
- * Each footnote keeps a stable id and a real heading, so the TOC lists them,
- * a link from the body can land on one, and print (where the ⓘ popovers do
- * not exist) still carries the reference.
+ * Each keeps a stable id and a real heading, so a link from the body can land
+ * on one.
  */
-import { Card } from "@/react/rac/card";
+import { cn } from "../lib/utils";
 
 export const EXCLUDED_PILOTS_ID = "excluded-pilots";
 export const METHOD_NOTE_ID = "method-note";
+
+/**
+ * How deep in the page's heading tree a footnote sits. 3 is the historical
+ * level, under someone else's h2 — the comp report still renders them there.
+ * 2 is a footnote that IS the page, as on "How this was measured", where an h3
+ * directly under the h1 would skip a level.
+ */
+export type FootnoteLevel = 2 | 3;
 
 /**
  * A footnote's heading. Exported so the metric glossary — which is a footnote
@@ -24,30 +34,21 @@ export const METHOD_NOTE_ID = "method-note";
  */
 export function FootnoteHeading({
   id,
+  level = 3,
   children,
 }: {
   id: string;
+  level?: FootnoteLevel;
   children: React.ReactNode;
 }) {
+  const Tag = level === 2 ? "h2" : "h3";
   return (
-    <h3 id={id} className="scroll-mt-20 text-sm font-semibold">
-      {children}
-    </h3>
-  );
-}
-
-export function Footnotes({ children }: { children: React.ReactNode }) {
-  return (
-    // A reference chapter, so print starts it on a fresh page.
-    <Card
-      aria-labelledby="footnotes-heading"
-      className="gap-6 print:break-before-page"
+    <Tag
+      id={id}
+      className={cn("scroll-mt-20 font-semibold", level === 2 ? "text-lg" : "text-sm")}
     >
-      <h2 id="footnotes-heading" className="scroll-mt-20 text-lg font-semibold">
-        Footnotes
-      </h2>
       {children}
-    </Card>
+    </Tag>
   );
 }
 
@@ -55,15 +56,19 @@ export function Footnotes({ children }: { children: React.ReactNode }) {
 export function Footnote({
   id,
   title,
+  level,
   children,
 }: {
   id: string;
   title: string;
+  level?: FootnoteLevel;
   children: React.ReactNode;
 }) {
   return (
-    <div className="break-inside-avoid">
-      <FootnoteHeading id={id}>{title}</FootnoteHeading>
+    <div>
+      <FootnoteHeading id={id} level={level}>
+        {title}
+      </FootnoteHeading>
       <div className="mt-1 space-y-2 text-sm">{children}</div>
     </div>
   );
@@ -78,12 +83,15 @@ export function Footnote({
  */
 export function ExcludedPilots({
   excluded,
+  level,
 }: {
   excluded: { pilot_name: string; reason: string }[];
+  level?: FootnoteLevel;
 }) {
   return (
     <Footnote
       id={EXCLUDED_PILOTS_ID}
+      level={level}
       title={`${excluded.length} pilot${excluded.length === 1 ? "" : "s"} in the scores but not in this analysis`}
     >
       <ul className="space-y-0.5">
@@ -111,9 +119,15 @@ export function ExcludedPilots({
  * so it is stated here — in terms that mean something to a pilot rather than
  * naming the parameter.
  */
-export function MethodNote({ gridStepSeconds }: { gridStepSeconds: number }) {
+export function MethodNote({
+  gridStepSeconds,
+  level,
+}: {
+  gridStepSeconds: number;
+  level?: FootnoteLevel;
+}) {
   return (
-    <Footnote id={METHOD_NOTE_ID} title="How the field is compared">
+    <Footnote id={METHOD_NOTE_ID} level={level} title="How the field is compared">
       <p>
         Everything that compares pilots to each other uses one shared clock.
         That includes gaggles, shared thermals, and the position of each pilot

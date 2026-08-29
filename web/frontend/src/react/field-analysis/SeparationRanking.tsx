@@ -195,7 +195,6 @@ export function SeparationRanking({
         </p>
       ) : (
         <MasterDetail
-          stackedTop="toc-bar"
           detailLabel="chart"
           master={
             <RankingTable

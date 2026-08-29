@@ -30,6 +30,10 @@ import {
 } from "../../web/frontend/src/react/loaders";
 import { buildScoresCsv, scoresCsvFilename } from "../../web/frontend/src/scores-csv";
 import {
+  TASK_ANALYSIS_SECTIONS,
+  findTaskAnalysisSection,
+} from "../../web/frontend/src/react/field-analysis/sections";
+import {
   idFromSegment,
   compPath,
   compScoresPath,
@@ -37,6 +41,7 @@ import {
   compAnalysisPath,
   taskPath,
   taskAnalysisPath,
+  taskAnalysisSectionPath,
   pilotPath,
 } from "../../web/frontend/src/react/lib/slug";
 
@@ -385,6 +390,59 @@ const ROUTES: Array<{
                 "Field analysis",
                 taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name),
               ],
+            ])
+          ),
+        },
+      };
+    },
+  },
+  {
+    // One section of the per-task chapter — the same report, seen from one
+    // angle. The pattern is built from the section list itself, so a section
+    // added there cannot be a 404 here. `similar` never reaches this: it is a
+    // client-only tool and NOINDEX_SHELL_ROUTES is checked first.
+    pattern: new RegExp(
+      `^/comp/([^/]+)/task/([^/]+)/analysis/(${TASK_ANALYSIS_SECTIONS.map(
+        (s) => s.slug
+      ).join("|")})/?$`
+    ),
+    async run(f, m, origin) {
+      const compId = idFromSegment(m[1]);
+      const taskId = idFromSegment(m[2]);
+      const section = findTaskAnalysisSection(m[3])!;
+      const data = await loadTaskFieldAnalysis(f, compId, taskId);
+      const a = data.analysis;
+      const compName = data.comp?.name ?? "GlideComp";
+      const taskName = data.task?.name ?? "Task";
+      const canonical =
+        data.comp && data.task
+          ? taskAnalysisSectionPath(
+              compId,
+              data.comp.name,
+              taskId,
+              data.task.name,
+              section.slug
+            )
+          : undefined;
+      const hasContent = a.classes.length > 0 && !a.pending;
+      return {
+        data,
+        canonicalPath: canonical,
+        cache: { computedAt: a.computed_at, stale: a.stale || a.pending },
+        head: {
+          title: `${section.label} — ${taskName}, ${compName}`,
+          description: `${section.lede} ${taskName} at ${compName} — a per-pilot behavioural breakdown on GlideComp.`,
+          noindex: !hasContent,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [compName, compPath(compId, data.comp?.name)],
+              [taskName, taskPath(compId, data.comp?.name, taskId, data.task?.name)],
+              [
+                "Field analysis",
+                taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name),
+              ],
+              [section.label, canonical ?? origin],
             ])
           ),
         },

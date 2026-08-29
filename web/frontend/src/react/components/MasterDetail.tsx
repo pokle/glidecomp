@@ -38,10 +38,11 @@
  * the widest master (the ranking table) its min-content beside a useful pane.
  *
  * Sticky offsets are dictated by whatever owns the top of the viewport, which
- * is why `stackedTop` exists: on the field-analysis pages it is PageToc's
- * fixed 60px bar (up long before any of these sections); elsewhere it is the
- * Shell's 60px glass header — which is `static` under `sm` and on short
- * viewports, where the pane pins to the very top instead.
+ * is why `stackedTop` exists. Today that is always the Shell's 60px glass
+ * header — which is `static` under `sm` and on short viewports, where the pane
+ * pins to the very top instead. The field-analysis pages used to carry a fixed
+ * table-of-contents bar above it and needed their own offset; the report is a
+ * page per section now, and small enough to need no rail.
  */
 import { useId, useState, type ReactNode } from "react";
 import { Button } from "@/react/rac/button";
@@ -49,10 +50,8 @@ import { cn } from "@/react/lib/utils";
 
 /** What owns the top of the viewport while stacked (see file doc). */
 const STACKED_TOP = {
-  /** Field-analysis pages: PageToc's fixed 60px bar at every narrow width. */
-  "toc-bar": "top-[60px]",
-  /** Everywhere else: the Shell header — static under sm and on short
-   * viewports, so the pane pins flush to the top there. */
+  /** The Shell header — static under sm and on short viewports, so the pane
+   * pins flush to the top there. */
   header: "top-[60px] max-sm:top-0 [@media(max-height:500px)]:top-0",
 } as const;
 

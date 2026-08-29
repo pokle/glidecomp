@@ -1,6 +1,12 @@
 /**
- * Task field analysis (/comp/:id/task/:id/analysis) — the separation
- * ranking's master/detail behaviour (issue #455).
+ * Task field analysis — the separation ranking's master/detail behaviour
+ * (issue #455), plus the thermals census and the page-wide pilot pin.
+ *
+ * The report is a page per section since August 2026
+ * (/comp/:id/task/:id/analysis/<section>, see field-analysis/sections.ts), so
+ * what used to be one scroll is three loads here: the ranking on
+ * /separation, the thermals on /day, the heatmap on /pilots. The chapter URL
+ * itself is now a summary of boxes and has nothing these tests assert.
  *
  * The ranking table and the chart of the row you pick are one pair now: the
  * chart pins to the top of the viewport on a narrow screen and sits beside
@@ -39,16 +45,18 @@ import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";
 const RANKING_HEADING = /Which behaviours went with better ranks/;
+const THERMALS_HEADING = /The day's thermals/;
 
 let analysisPath: string;
 
-// ONE page load for the whole file. Every test here asserts CSS/ARIA
-// behaviour of an already-rendered report, and this is the heaviest page in
-// the app — loading it per test made this spec 76s of the E2E suite's 178s
-// (43%), eight loads' worth. So the tests share a single page and only ever
-// change the viewport, which the layout is built to respond to live (a
-// container query plus a ResizeObserver): resizing exercises the same code
-// path a reload would, without paying for the report again.
+// ONE page load PER SECTION for the whole file, and the tests are ordered so
+// each section is loaded once. Every test here asserts CSS/ARIA behaviour of
+// an already-rendered report, and this is the heaviest report in the app —
+// loading it per test made this spec 76s of the E2E suite's 178s (43%), eight
+// loads' worth. So the tests share a single page and only ever change the
+// viewport, which the layout is built to respond to live (a container query
+// plus a ResizeObserver): resizing exercises the same code path a reload
+// would, without paying for the report again.
 //
 // The cost of sharing is that state leaks forward, which shapes two rules:
 // serial mode (so a failure skips the rest rather than reporting a cascade of
@@ -103,12 +111,8 @@ test.beforeAll(async ({ browser, playwright }) => {
 
   await api.dispose();
 
-  // The one load. Wait on the ranking — never on the network going idle: a
-  // field-analysis page keeps a freshness poll in flight by design.
   page = await browser.newPage();
-  await page.goto(analysisPath, { waitUntil: "domcontentloaded" });
-  await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
-  await ranking().waitFor();
+  await openSection("separation");
 });
 
 test.afterAll(async () => {
@@ -121,26 +125,53 @@ test.beforeEach(async () => {
   await page.evaluate(() => window.scrollTo(0, 0));
 });
 
+/**
+ * Open one section of the report, or stay put if it is already open. Waits on
+ * a role locator — never on the network going idle: every page of the report
+ * keeps a freshness poll in flight by design.
+ */
+let openSlug: string | null = null;
+async function openSection(slug: "separation" | "day" | "pilots") {
+  if (openSlug === slug) return;
+  await page.goto(`${analysisPath}/${slug}`, { waitUntil: "domcontentloaded" });
+  openSlug = slug;
+  if (slug === "separation") {
+    await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
+    await ranking().waitFor();
+  } else if (slug === "day") {
+    await page.getByRole("heading", { name: THERMALS_HEADING }).waitFor();
+  } else {
+    await heatmap().waitFor();
+  }
+}
+
 /** The ranking table. */
 function ranking() {
   return page.getByRole("grid", { name: "Behaviour ranking" });
 }
 
-/** The ranking pane's Expand button. Scoped to the ranking's card: the
- * thermals figure above carries its own full-screen Expand now, so a bare
- * `.first()` would land there. */
+/** The heatmap, on the per-pilot section. */
+function heatmap() {
+  return page.locator('[role="img"][aria-label^="Percentile heatmap"]');
+}
+
+/** The card the ranking and its chart share. */
+function rankingCard() {
+  return page.locator("section", {
+    has: page.getByRole("heading", { name: RANKING_HEADING }),
+  });
+}
+
+/** The ranking pane's Expand button. Scoped to the ranking's card, which also
+ * keeps it honest if anything else on the page grows a full-screen control. */
 function rankingExpand() {
-  return page
-    .locator("section", { has: page.getByRole("heading", { name: RANKING_HEADING }) })
-    .getByRole("button", { name: /full screen$/ })
-    .first();
+  return rankingCard().getByRole("button", { name: /full screen$/ }).first();
 }
 
 /** The selected-metric pane. Scoped to the ranking's own card — the thermals
- * section above it is a MasterDetail too now, with a pane of the same shape. */
+ * census is a MasterDetail too, with a pane of the same shape. */
 function detailPane() {
-  return page
-    .locator("section", { has: page.getByRole("heading", { name: RANKING_HEADING }) })
+  return rankingCard()
     .locator('[role="region"][aria-labelledby]')
     .filter({ has: page.locator("svg") })
     .first();
@@ -159,6 +190,7 @@ async function setViewport(width: number, height: number) {
 // FIRST, and must stay first: the only test here that reads first-paint state
 // (which metric the pane opens on), and the only one nothing resets.
 test("picking a row swaps the chart, and the top metric is charted first", async () => {
+  await openSection("separation");
   const table = ranking();
   const pane = detailPane();
 
@@ -183,6 +215,7 @@ test("picking a row swaps the chart, and the top metric is charted first", async
 });
 
 test("wide: the chart sits beside the table, and the table still fits", async () => {
+  await openSection("separation");
   await setViewport(1600, 1000);
   const table = ranking();
   const pane = detailPane();
@@ -205,6 +238,7 @@ test("wide: the chart sits beside the table, and the table still fits", async ()
 });
 
 test("narrow: the chart pins to the top while the table scrolls under it", async () => {
+  await openSection("separation");
   await setViewport(390, 780);
   const table = ranking();
   const pane = detailPane();
@@ -221,8 +255,9 @@ test("narrow: the chart pins to the top while the table scrolls under it", async
   const stillStuck = (await pane.boundingBox())!;
   // Pinned: 250px of page scroll did not move the pane…
   expect(Math.abs(stillStuck.y - stuck.y)).toBeLessThanOrEqual(1);
-  // …and it sits fully on screen, below PageToc's fixed 60px bar.
-  expect(stillStuck.y).toBeGreaterThanOrEqual(59);
+  // …and it sits fully on screen. Flush to the top here: the Shell's header
+  // is static under `sm`, so on a phone nothing is above the pane to clear.
+  expect(stillStuck.y).toBeGreaterThanOrEqual(0);
   expect(stillStuck.y + stillStuck.height).toBeLessThanOrEqual(781);
 
   // While stuck, its buttons must still take clicks — the Chromium
@@ -235,13 +270,20 @@ test("narrow: the chart pins to the top while the table scrolls under it", async
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
-  // Past the last row, the pane releases and scrolls away with its section.
+  // Past the last row the pane releases: it stops holding the top of the
+  // viewport and stays inside its own section. It used to scroll clean off
+  // the top, but only because a long report followed it — the ranking is
+  // nearly the whole page now that each section has its own, so what is left
+  // to observe is that the pane is bounded by its section and not by the
+  // viewport.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   const released = (await pane.boundingBox())!;
-  expect(released.y + released.height).toBeLessThan(0);
+  const card = (await rankingCard().boundingBox())!;
+  expect(released.y + released.height).toBeLessThanOrEqual(card.y + card.height + 1);
 });
 
 test("narrow: picking a bottom row swaps a chart that is on screen", async () => {
+  await openSection("separation");
   await setViewport(390, 780);
   const table = ranking();
   const pane = detailPane();
@@ -268,6 +310,7 @@ test("narrow: picking a bottom row swaps a chart that is on screen", async () =>
 });
 
 test("narrow: a keyboard-focused row is never hidden by the pinned chart", async () => {
+  await openSection("separation");
   await setViewport(390, 780);
   const rows = ranking().locator("tbody tr");
 
@@ -309,6 +352,7 @@ test("narrow: a keyboard-focused row is never hidden by the pinned chart", async
 });
 
 test("expanding the chart makes it very much bigger, in both orientations", async () => {
+  await openSection("separation");
   for (const [label, width, height] of [
     ["portrait", 390, 780],
     ["landscape", 780, 390],
@@ -339,6 +383,7 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
 });
 
 test("the expanded chart stays open when you tap a dot, and returns focus on close", async () => {
+  await openSection("separation");
   await setViewport(390, 780);
 
   const trigger = rankingExpand();
@@ -360,12 +405,30 @@ test("the expanded chart stays open when you tap a dot, and returns focus on clo
   await expect(trigger).toBeFocused();
 });
 
+test("narrow: the chart can be folded away to read the table", async () => {
+  await openSection("separation");
+  await setViewport(390, 780);
+  const pane = detailPane();
+  const toggle = page.getByRole("button", { name: /chart$/ });
+
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(pane).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(pane).toBeHidden();
+
+  await toggle.click();
+  await expect(pane).toBeVisible();
+});
+
 test("narrow: the thermals census drives its own pinned pane", async () => {
+  await openSection("day");
   await setViewport(390, 780);
   const census = page.getByRole("grid", { name: "Reconstructed thermals" });
   await census.scrollIntoViewIfNeeded();
   const pane = page
-    .locator("section", { has: page.getByRole("heading", { name: /The day's thermals/ }) })
+    .locator("section", { has: page.getByRole("heading", { name: THERMALS_HEADING }) })
     .locator('[role="region"][aria-labelledby]')
     .first();
 
@@ -390,9 +453,10 @@ test("narrow: the thermals census drives its own pinned pane", async () => {
 });
 
 test("the map's maximise control fills the screen, and the same control restores it", async () => {
+  await openSection("day");
   await setViewport(390, 780);
   const thermalsCard = page.locator("section", {
-    has: page.getByRole("heading", { name: /The day's thermals/ }),
+    has: page.getByRole("heading", { name: THERMALS_HEADING }),
   });
   await thermalsCard.scrollIntoViewIfNeeded();
   // The map (and its corner controls) only exist with a Mapbox token.
@@ -416,29 +480,13 @@ test("the map's maximise control fills the screen, and the same control restores
   await mapToggle.click();
 });
 
-test("narrow: the chart can be folded away to read the table", async () => {
-  await setViewport(390, 780);
-  const pane = detailPane();
-  const toggle = page.getByRole("button", { name: /chart$/ });
-
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(pane).toBeVisible();
-
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(pane).toBeHidden();
-
-  await toggle.click();
-  await expect(pane).toBeVisible();
-});
-
 test("the pilot picker pins a highlight page-wide, through the URL", async () => {
+  await openSection("pilots");
   await setViewport(1600, 1000);
 
   // A real pilot from this report: the heatmap's top row reads "1. Name".
-  const heatmap = page.locator('[role="img"][aria-label^="Percentile heatmap"]');
-  await heatmap.scrollIntoViewIfNeeded();
-  const firstRow = heatmap.locator("div.group").first();
+  await heatmap().scrollIntoViewIfNeeded();
+  const firstRow = heatmap().locator("div.group").first();
   const name = ((await firstRow.innerText()).match(/^\s*\d+\.\s*(.+)$/m) ?? [])[1]?.trim();
   expect(name).toBeTruthy();
 
@@ -454,48 +502,13 @@ test("the pilot picker pins a highlight page-wide, through the URL", async () =>
 
   // A fresh load of the pinned URL restores pick and tint (the shared link).
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
+  await heatmap().waitFor();
   await expect(page.getByRole("combobox", { name: "Highlight a pilot" })).toHaveValue(name!);
-  await heatmap.scrollIntoViewIfNeeded();
-  await expect(heatmap.locator("div.group").first()).toHaveClass(/bg-accent/);
+  await heatmap().scrollIntoViewIfNeeded();
+  await expect(heatmap().locator("div.group").first()).toHaveClass(/bg-accent/);
 
   // ✕ clears pin, URL and tint — leave the page as found (serial suite).
   await page.getByRole("button", { name: `Stop highlighting ${name}` }).click();
   await expect(page).not.toHaveURL(/[?&]pilot=/);
-  await expect(heatmap.locator("div.group").first()).not.toHaveClass(/bg-accent/);
+  await expect(heatmap().locator("div.group").first()).not.toHaveClass(/bg-accent/);
 });
-
-test("overview block is visible at scroll 0 on phone viewport and all link targets exist", async () => {
-  await setViewport(390, 780);
-  const overview = page.getByRole("navigation", { name: "Report contents" });
-  await expect(overview).toBeVisible();
-
-  // Assert it is visible at scroll 0 before scrolling
-  const box = (await overview.boundingBox())!;
-  expect(box.y).toBeGreaterThanOrEqual(0);
-  expect(box.y).toBeLessThan(780);
-
-  // Generic assertion: every href^="#" inside the overview block points to an element in the DOM
-  const hrefs = await overview.locator('a[href^="#"]').evaluateAll((anchors) =>
-    anchors.map((a) => a.getAttribute("href")!)
-  );
-  expect(hrefs.length).toBeGreaterThan(0);
-
-  for (const href of hrefs) {
-    const id = href.slice(1);
-    const count = await page.locator(`[id="${id}"]`).count();
-    expect(count, `Target element #${id} should exist in DOM`).toBeGreaterThan(0);
-  }
-});
-
-test("tapping an overview node lands on the matching section heading", async () => {
-  await setViewport(390, 780);
-  const overview = page.getByRole("navigation", { name: "Report contents" });
-  const basisLink = overview.getByRole("link", { name: /^Analysis basis/ });
-  await basisLink.click();
-
-  // Should have scrolled to the section
-  const section = page.locator("#analysis-basis");
-  await expect(section).toBeInViewport();
-});
-

@@ -18,9 +18,9 @@
  * saved. Converting those would be actively worse — a filter rendered as a
  * card of rows pushes the thing you are filtering off the screen, which is the
  * opposite of the problem the conversion set out to solve. The surviving call
- * sites are the field-analysis class and metric pickers, `PageToc`'s jump-to,
- * the scores-view picker and the manage table's per-row pilot status (a row
- * action, where a list in flow would blow the row apart).
+ * sites are the field-analysis class and metric pickers, the scores-view
+ * picker and the manage table's per-row pilot status (a row action, where a
+ * list in flow would blow the row apart).
  *
  * So: **is this value part of a form the user will Save?** Then it belongs in
  * `choice-list.tsx`. Is it choosing what to look at? Then it belongs here.

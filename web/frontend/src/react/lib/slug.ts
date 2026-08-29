@@ -185,6 +185,20 @@ export function taskAnalysisPath(
   return `${taskPath(compId, compName, taskId, taskName)}/analysis`;
 }
 
+/**
+ * One section of the task's field analysis, on its own page. The chapter page
+ * is a summary of these — see field-analysis/sections.ts for the set.
+ */
+export function taskAnalysisSectionPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  section: string
+): string {
+  return `${taskAnalysisPath(compId, compName, taskId, taskName)}/${section}`;
+}
+
 /** The pilot-similarity sheet, hung off the task's field analysis. */
 export function taskSimilarityPath(
   compId: string,

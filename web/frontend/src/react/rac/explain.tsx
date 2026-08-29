@@ -14,9 +14,10 @@
  * is not meant to hold prose. See rac/popover.tsx.
  *
  * In print the trigger is hidden — a popover cannot exist on paper. Anything
- * moved behind one MUST also be rendered statically somewhere the printout
- * carries (the field-analysis pages use `Footnotes` / `MetricGlossary`), or
- * the explanation is simply lost. `footnoteHref` links the two together.
+ * moved behind one MUST also be readable somewhere else: the comp report
+ * carries a print-only twin under its table, and the task report states the
+ * lot on its "How this was measured" page. `footnoteHref` links the two
+ * together.
  */
 import { InfoIcon } from "lucide-react";
 import { Popover, PopoverTrigger } from "./popover";

@@ -44,6 +44,7 @@ import { TaskDetail } from "./pages/TaskDetail";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { CompFieldAnalysis } from "./pages/CompFieldAnalysis";
 import { TaskFieldAnalysis } from "./pages/TaskFieldAnalysis";
+import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
 
 /*
  * Everything else is signed-in, admin-only or otherwise never server-rendered,
@@ -208,17 +209,27 @@ export function AppRoutes() {
             path="/comp/:compId/task/:taskId/weather"
             element={<TaskWeatherPage />}
           />
-          {/* This task's chapter of the comp field analysis. */}
+          {/* This task's chapter of the comp field analysis: a summary, with
+              a box per section linking to the section's own page. */}
           <Route
             path="/comp/:compId/task/:taskId/analysis"
             element={<TaskFieldAnalysis />}
           />
           {/* Pilot-to-pilot behavioural similarity, a leaf of the chapter it
               derives from. Client-only, so it needs a NOINDEX_SHELL_ROUTES
-              entry in functions/comp/[[path]].ts rather than a loader. */}
+              entry in functions/comp/[[path]].ts rather than a loader. It is
+              a STATIC segment, so it out-ranks the :section route below
+              whichever order they are declared in. */}
           <Route
             path="/comp/:compId/task/:taskId/analysis/similar"
             element={<TaskPilotSimilarity />}
+          />
+          {/* One section of the chapter, each showing that one thing. Five
+              slugs, listed in field-analysis/sections.ts and matched by the
+              SSR Function's own pattern; anything else renders NotFound. */}
+          <Route
+            path="/comp/:compId/task/:taskId/analysis/:section"
+            element={<TaskAnalysisSection />}
           />
           {/* Where the per-task analysis lived while it was nested under the
               comp report (July–August 2026). */}

@@ -433,7 +433,7 @@ These are the standing imperatives. Each links to the reference that explains it
 - **Field analysis** — 26 behavioural metrics (climbing, gliding, decision-making,
   gaggle, race craft, day profile) ranked by Spearman ρ against GAP rank, in
   `web/engine/src/field-analysis/`, surfacing on the public, SSR'd
-  `/comp/:id/analysis` and `/comp/:id/task/:id/analysis`
+  `/comp/:id/analysis` and `/comp/:id/task/:id/analysis` (+ `/<section>`)
   (`src/react/pages/{Comp,Task}FieldAnalysis.tsx` + `src/react/field-analysis/`),
   and via the CLI: `bun run score-task -- --field-analysis` / `--comp <slug>`.
   See [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md).
@@ -443,8 +443,18 @@ These are the standing imperatives. Each links to the reference that explains it
     `/comp/:id/analysis/task/:id`, where the chapter lived from July to August
     2026, 301s in the SSR Function (it was public and indexable, so a shell
     would not do) and redirects again in the SPA for in-app navigation.
-  - **Presentation order is fixed** — separation ranking first, then per-family
-    tables — because which metrics have explanatory power *is* the finding.
+  - The per-task chapter is a **summary of boxes**, one per section, and each
+    section is its own page (`/analysis/separation|day|pilots|styles|method`,
+    listed in `src/react/field-analysis/sections.ts` — the SSR route pattern is
+    built from that list). One report behind all of them: `use-task-report.ts`
+    fetches it and `TaskAnalysisFrame` wears the trail, the class select and the
+    freshness poll, so no page can disagree with another about which class it is
+    showing. **Presentation order is fixed** — separation ranking first, then
+    the day, then the per-pilot tables — because which metrics have explanatory
+    power *is* the finding.
+  - Printing a whole task's analysis in one go is **not** a goal (dropped
+    2026-08-29): each page prints as itself. Per-component print mirrors (the
+    heatmap's caption) stay; the page-level ones went with the one-page report.
   - Some metrics emit charting series (`ReportSeries`, a discriminated union)
     alongside their tables. The day family's series are composed by
     `charts/day-profile/DayProfilePanel.tsx` onto ONE shared comp-zone time axis
