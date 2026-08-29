@@ -25,6 +25,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SimpleSelect } from "@/react/rac/select";
 import { cn } from "@/react/lib/utils";
+import { scrollToSection } from "@/react/lib/scroll-to-section";
 
 export interface PageTocItem {
   /** DOM id of the target element. */
@@ -89,23 +90,7 @@ export function PageToc({ items }: { items: PageTocItem[] }) {
 
   function go(item: PageTocItem) {
     setActiveId(item.id);
-    item.onBeforeScroll?.();
-    // Two frames: one for React to commit, one for a just-expanded
-    // disclosure panel to exist before we measure and scroll to it.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const el = document.getElementById(item.id);
-        if (!el) return;
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-        const target = el.matches("a,button,[tabindex]")
-          ? el
-          : (el.querySelector<HTMLElement>("a,button,[tabindex],h1,h2,h3,h4") ?? el);
-        if (!target.hasAttribute("tabindex") && !target.matches("a,button")) {
-          target.setAttribute("tabindex", "-1");
-        }
-        target.focus({ preventScroll: true });
-      })
-    );
+    scrollToSection(item.id, item.onBeforeScroll);
   }
 
   if (items.length === 0) return null;

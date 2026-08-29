@@ -117,8 +117,17 @@ function ClusterCard({ cluster }: { cluster: StyleCluster }) {
   );
 }
 
-export function StyleClusters({ report }: { report: FieldAnalysisReport }) {
-  const sc = useMemo(() => clusterPilotStyles(report), [report]);
+export function StyleClusters({
+  report,
+  clusters: precomputedClusters,
+}: {
+  report: FieldAnalysisReport;
+  clusters?: StyleClusterReport | null;
+}) {
+  const sc = useMemo(
+    () => (precomputedClusters !== undefined ? precomputedClusters : clusterPilotStyles(report)),
+    [precomputedClusters, report]
+  );
 
   if (!sc) {
     return (

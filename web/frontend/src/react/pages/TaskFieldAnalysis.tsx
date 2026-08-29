@@ -66,7 +66,7 @@ import { PageToc, type PageTocItem } from "../components/PageToc";
 import { metricTocLabel } from "../field-analysis/toc-labels";
 import { cn } from "../lib/utils";
 import { AnalysisBasis } from "../field-analysis/AnalysisBasis";
-import { FindingsDigest } from "../field-analysis/FindingsDigest";
+import { OverviewBlock } from "../field-analysis/OverviewBlock";
 import { TaskDebrief } from "../field-analysis/TaskDebrief";
 import { MetricGlossary } from "../field-analysis/MetricGlossary";
 import {
@@ -89,6 +89,7 @@ import { useUnits } from "../lib/units";
 import {
   FAMILY_ORDER,
   FAMILY_LABELS,
+  clusterPilotStyles,
   type MetricReport,
   type TaskFieldAnalysisData,
 } from "../field-analysis/types";
@@ -275,6 +276,11 @@ export function TaskFieldAnalysis() {
   const report = useMemo(
     () => (active ? displayReport(active.report, units) : null),
     [active, units]
+  );
+
+  const styleClusters = useMemo(
+    () => (report ? clusterPilotStyles(report) : null),
+    [report]
   );
 
   // Families containing a top-3 metric open by default — the ranking above
@@ -520,18 +526,24 @@ export function TaskFieldAnalysis() {
         </div>
       </div>
 
-      {/* The headline first, ahead even of the route: the finding is what the
-          reader came for, and each entry jumps to — and selects — its row in
-          the ranking below, caveat chips attached. The analysis order itself
-          is unchanged. Deliberately absent from the TOC, which lists the
-          destination, not the signpost. */}
+      {/* The overview block — four-second overview of the task analysis and
+          single-tap navigation to every section, absorbing the findings digest
+          as its centrepiece. Server-rendered with the rest of the page. */}
       {active && report ? (
-        <div className="mt-4">
-          <FindingsDigest
-            metrics={report.metrics}
-            onPickMetric={setSelectedBehaviour}
-          />
-        </div>
+        <OverviewBlock
+          report={report}
+          excluded={active.excluded}
+          grouped={grouped}
+          dayMetrics={dayMetrics}
+          weather={weather.data?.weather ?? null}
+          weatherPending={weatherPending}
+          compTimezone={comp?.timezone ?? null}
+          hasWeatherSection={hasWeatherSection}
+          hasThermalsSection={hasThermalsSection}
+          hasDebrief={hasDebrief}
+          styleClusters={styleClusters}
+          onPickMetric={setSelectedBehaviour}
+        />
       ) : null}
 
       {/* What the field was asked to fly. Everything below is about how they
@@ -716,7 +728,7 @@ export function TaskFieldAnalysis() {
               <h2 id="clusters-heading" className="scroll-mt-20 text-lg font-semibold">
                 Pilot style clusters
               </h2>
-              <StyleClusters report={report} />
+              <StyleClusters report={report} clusters={styleClusters} />
               {/* Its own page rather than a section: it is an interactive
                   sheet with its own controls, and the reader picks a pilot and
                   a behaviour set rather than reading. */}

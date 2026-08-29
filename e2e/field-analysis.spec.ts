@@ -464,3 +464,38 @@ test("the pilot picker pins a highlight page-wide, through the URL", async () =>
   await expect(page).not.toHaveURL(/[?&]pilot=/);
   await expect(heatmap.locator("div.group").first()).not.toHaveClass(/bg-accent/);
 });
+
+test("overview block is visible at scroll 0 on phone viewport and all link targets exist", async () => {
+  await setViewport(390, 780);
+  const overview = page.getByRole("navigation", { name: "Report contents" });
+  await expect(overview).toBeVisible();
+
+  // Assert it is visible at scroll 0 before scrolling
+  const box = (await overview.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeLessThan(780);
+
+  // Generic assertion: every href^="#" inside the overview block points to an element in the DOM
+  const hrefs = await overview.locator('a[href^="#"]').evaluateAll((anchors) =>
+    anchors.map((a) => a.getAttribute("href")!)
+  );
+  expect(hrefs.length).toBeGreaterThan(0);
+
+  for (const href of hrefs) {
+    const id = href.slice(1);
+    const count = await page.locator(`[id="${id}"]`).count();
+    expect(count, `Target element #${id} should exist in DOM`).toBeGreaterThan(0);
+  }
+});
+
+test("tapping an overview node lands on the matching section heading", async () => {
+  await setViewport(390, 780);
+  const overview = page.getByRole("navigation", { name: "Report contents" });
+  const basisLink = overview.getByRole("link", { name: /^Analysis basis/ });
+  await basisLink.click();
+
+  // Should have scrolled to the section
+  const section = page.locator("#analysis-basis");
+  await expect(section).toBeInViewport();
+});
+

@@ -27,6 +27,7 @@
  */
 import type { Key } from "react-aria-components";
 import { Card } from "@/react/rac/card";
+import { scrollToSection } from "@/react/lib/scroll-to-section";
 import { rankMetrics, VerdictBadge } from "./SeparationRanking";
 import type { MetricReport } from "./types";
 
@@ -61,31 +62,39 @@ function winningLabel(
 export function FindingsDigest({
   metrics,
   onPickMetric,
+  nested = false,
 }: {
   metrics: MetricReport[];
   /** Select this metric in the separation ranking (the entry's anchor does
    * the scrolling; this makes the chart follow). */
   onPickMetric?: (id: Key) => void;
+  /**
+   * Rendered inside the overview block, so it swaps its Card for a plain
+   * section to avoid a card-in-a-card.
+   */
+  nested?: boolean;
 }) {
   const top = rankMetrics(metrics)
     .filter((r) => DIGEST_VERDICTS.has(r.correlation.verdict))
     .slice(0, DIGEST_COUNT);
 
+  const Box = nested ? "section" : Card;
+
   if (top.length === 0) {
     return (
-      <Card aria-labelledby="findings-digest-heading" className="gap-2">
+      <Box aria-labelledby="findings-digest-heading" className="gap-2">
         <h2 id="findings-digest-heading" className="text-lg font-semibold">
           What separated the field?
         </h2>
         <p className="text-base text-muted-foreground">
           Can't say — no clear pattern
         </p>
-      </Card>
+      </Box>
     );
   }
 
   return (
-    <Card aria-labelledby="findings-digest-heading" className="gap-3">
+    <Box aria-labelledby="findings-digest-heading" className="gap-3">
       <div>
         {/* Counted, not hardcoded: the verdict filter above can leave one or
             two entries, and "Top 3" over a list of one is a miscount the
@@ -104,7 +113,21 @@ export function FindingsDigest({
                 finding, and the card exists to shout them. */}
             <a
               href="#separation-heading"
-              onClick={() => onPickMetric?.(metric.id)}
+              onClick={(e) => {
+                onPickMetric?.(metric.id);
+                if (
+                  e.defaultPrevented ||
+                  e.button !== 0 ||
+                  e.metaKey ||
+                  e.ctrlKey ||
+                  e.altKey ||
+                  e.shiftKey
+                ) {
+                  return;
+                }
+                e.preventDefault();
+                scrollToSection("separation-heading");
+              }}
               className="text-lg font-semibold outline-none after:absolute after:inset-0 after:rounded-lg after:transition-colors hover:underline hover:after:bg-foreground/5 focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
             >
               {winningLabel(metric, correlation.rho)}
@@ -113,6 +136,7 @@ export function FindingsDigest({
           </li>
         ))}
       </ul>
-    </Card>
+    </Box>
   );
 }
+
