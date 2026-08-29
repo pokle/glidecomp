@@ -19,7 +19,8 @@
  *
  * The pilot-similarity sheet sits in the same list of boxes on the summary but
  * is NOT here: it predates these pages, has its own route, and is a tool
- * rather than a section of the report.
+ * rather than a section of the report. The summary places it beside the flying
+ * style it extends, which is to say ahead of the method note.
  */
 
 export type TaskAnalysisSectionSlug =

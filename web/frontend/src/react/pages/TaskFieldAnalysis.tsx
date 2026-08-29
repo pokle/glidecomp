@@ -165,6 +165,32 @@ export function TaskFieldAnalysis() {
           (slug === "weather" && !bundle.hasWeatherSection) ||
           (slug === "thermals" && !bundle.hasThermalsSection);
 
+        // The similarity sheet is not a section of the report — its own route,
+        // its own controls, a tool rather than a reading — but it belongs in
+        // the same list, because that is where a reader looks for it: one flat
+        // set of places to go, rather than a door hidden inside another page.
+        // It sits beside the flying style it extends, and ahead of the method
+        // note, which stays last because it is consulted once. Positioned
+        // against `method` rather than by index so it stays there whatever
+        // else the day left out.
+        const boxes: {
+          key: string;
+          href: string;
+          label: string;
+          facts?: React.ReactNode;
+        }[] = TASK_ANALYSIS_SECTIONS.filter((s) => !empty(s.slug)).map((section) => ({
+          key: section.slug,
+          href: hrefFor(section.slug),
+          label: section.label,
+          facts: facts[section.slug],
+        }));
+        const method = boxes.findIndex((b) => b.key === "method");
+        boxes.splice(method === -1 ? boxes.length : method, 0, {
+          key: "similar",
+          href: taskSimilarityPath(compId, comp?.name, taskId, task?.name) + query,
+          label: "Similar pilots",
+        });
+
         return (
           <>
             {/* The two facts that belong to no one section: how the airtime
@@ -177,23 +203,14 @@ export function TaskFieldAnalysis() {
               excludedHref={`${hrefFor("method")}#${EXCLUDED_PILOTS_ID}`}
             />
 
-            {TASK_ANALYSIS_SECTIONS.filter((s) => !empty(s.slug)).map((section) => (
+            {boxes.map((box) => (
               <SectionBox
-                key={section.slug}
-                href={hrefFor(section.slug)}
-                label={section.label}
-                facts={facts[section.slug]}
+                key={box.key}
+                href={box.href}
+                label={box.label}
+                facts={box.facts}
               />
             ))}
-
-            {/* Not a section of the report: its own route, its own controls,
-                and a tool rather than a reading. It sits in the same list
-                because that is where a reader looks for it — one flat set of
-                places to go, rather than a door hidden inside another page. */}
-            <SectionBox
-              href={taskSimilarityPath(compId, comp?.name, taskId, task?.name) + query}
-              label="Similar pilots"
-            />
           </>
         );
       }}
