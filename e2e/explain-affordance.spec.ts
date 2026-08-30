@@ -1,5 +1,5 @@
 /**
- * The ⓘ affordance (rac/explain.tsx) on the two field-analysis pages.
+ * The ⓘ affordance (rac/explain.tsx) on the two task-analysis pages.
  *
  * These pages used to state every method note inline: 300 words of Spearman's
  * ρ, column definitions and verdict thresholds before the comp table's first
@@ -35,7 +35,7 @@ async function analysisUrls(request: APIRequestContext) {
   if (!comp) {
     throw new Error("No public sample comp seeded — run `bun run seed corryong-cup-2026`.");
   }
-  // Field analysis is lazy and stale-first (docs/2026-07-18-field-analysis-plan.md):
+  // Task analysis is lazy and stale-first (docs/2026-07-18-field-analysis-plan.md):
   // a cold read returns `pending` and SCHEDULES the compute — it never computes
   // synchronously — and the app UI polls. So must this helper. A single read
   // raced the background compute: whenever anything invalidates the
@@ -50,14 +50,14 @@ async function analysisUrls(request: APIRequestContext) {
     let analysis: { tasks: { task_id: string }[]; pending_task_count: number } | null =
       null;
     try {
-      const res = await request.get(`/api/comp/${comp.comp_id}/field-analysis`);
+      const res = await request.get(`/api/comp/${comp.comp_id}/analysis`);
       // 5xx / no answer: `wrangler dev` kills itself over a severed connection
       // and its supervisor brings it back (docs/local-dev.md) — the same blip
       // the stackUp fixture rides out BETWEEN tests. Wait it out and poll on;
       // only a 4xx is a real answer about this comp.
       if (res.status() >= 400 && res.status() < 500) {
         throw new Error(
-          `field-analysis answered ${res.status()} for ${comp.name}`
+          `task-analysis answered ${res.status()} for ${comp.name}`
         );
       }
       if (res.ok()) analysis = await res.json();

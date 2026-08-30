@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { clusterSharedThermals } from '../src/field-analysis';
+import { clusterSharedThermals } from '../src/analysis';
 import type { ThermalSegment } from '../src/event-types';
 import { createFix, TEST_ORIGIN, DEG_LAT_PER_M } from './field-test-helpers';
 import type { IGCFix } from '../src/igc-parser';

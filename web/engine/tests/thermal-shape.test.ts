@@ -3,7 +3,7 @@ import {
   evaluateField,
   extractThermalShapes,
   type ThermalShapePilot,
-} from '../src/field-analysis';
+} from '../src/analysis';
 import type { ThermalSegment } from '../src/event-types';
 import type { IGCFix } from '../src/igc-parser';
 import {
@@ -179,7 +179,7 @@ describe('extractThermalShapes', () => {
     }
   });
 
-  it('rides the field-analysis report as report.thermals (real detectors)', () => {
+  it('rides the task-analysis report as report.thermals (real detectors)', () => {
     // Two pilots spiralling up the same column at overlapping times, through
     // the REAL foundation pass — detectors find the thermals, evaluateField
     // summarises the shapes into the report.

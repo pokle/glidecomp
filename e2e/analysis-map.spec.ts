@@ -52,7 +52,7 @@ const scaleBar = (page: import("@playwright/test").Page) =>
  * The seeded sample comp's id, seeding it first if the store is cold.
  *
  * Seeding matters here more than it does in the specs this is copied from
- * (comp-detail, comp-waypoints, field-analysis, full-screen-sheets), because
+ * (comp-detail, comp-waypoints, task-analysis, full-screen-sheets), because
  * Playwright runs spec FILES in alphabetical order and `analysis-map` sorts
  * ahead of every one of them. On a developer's machine that is invisible — the
  * store was seeded weeks ago — but CI starts from an empty D1 (nothing in the

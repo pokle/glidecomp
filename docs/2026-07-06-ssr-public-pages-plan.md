@@ -16,13 +16,13 @@ tables already moved onto the comp page in IA v2 before SSR landed).
 > summary, so "curl the comp page for full scores" no longer holds — curl
 > `/comp/:id/scores` instead). `/scores?comp_id=X` now redirects to
 > `/comp/X/scores`. The admin-only `/comp/:id/pilots` roster editor joined the
-> noindex-shell routes alongside field analysis.
+> noindex-shell routes alongside task analysis.
 >
 > **Update (2026-07-29):** the count is now **eight** — `ROUTES` in
 > `functions/comp/[[path]].ts` holds `/comp`, `/comp/:id`,
 > `/comp/:id/scores`, `/comp/:id/waypoints`, `/comp/:id/task/:id`,
-> `/comp/:id/task/:id/pilot/:id`, and the two field-analysis pages
-> `/comp/:id/analysis` and `/comp/:id/analysis/task/:id`. Field analysis went
+> `/comp/:id/task/:id/pilot/:id`, and the two task-analysis pages
+> `/comp/:id/analysis` and `/comp/:id/analysis/task/:id`. Task analysis went
 > public in July 2026 and is server-rendered rather than noindex-shelled (a
 > cold report SSRs its pending notice and the client polls); only the
 > superseded `/comp/:id/task/:id/analysis` URL and the admin

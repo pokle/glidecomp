@@ -1,7 +1,7 @@
 /**
  * Track data-quality on the read path: a tracklog that a HARD check withholds
  * (engine track-quality.ts, FAI S7A §4.4.2) must be kept out of scoring, out
- * of field analysis and out of the 3D replay WITHOUT deleting the pilot from
+ * of task analysis and out of the 3D replay WITHOUT deleting the pilot from
  * the results, and without costing the rest of the field their points.
  */
 import { env } from "cloudflare:test";

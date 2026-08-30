@@ -38,7 +38,7 @@ import {
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { PriorityNav, type PriorityNavItem } from "@/react/rac/priority-nav";
 import { Disclosure } from "@/react/rac/disclosure";
-import { compCrumbs } from "../lib/crumbs";
+import { compCrumbs, COMP_ANALYSIS_LABEL } from "../lib/crumbs";
 import {
   idFromSegment,
   compPath,
@@ -274,21 +274,21 @@ function CompDetailView({
           },
         ]
       : []),
-    // Field analysis has nothing to measure on an open-distance comp (no legs,
+    // Comp analysis has nothing to measure on an open-distance comp (no legs,
     // no speed section), so it's hidden there. Its own page — it's a long
     // exploratory read.
     ...(comp.scoring_format !== "open_distance"
       ? [
           {
             id: "analysis",
-            label: "Field analysis",
+            label: COMP_ANALYSIS_LABEL,
             href: compAnalysisPath(compId, comp.name),
             children: (
               <Link
                 to={compAnalysisPath(compId, comp.name)}
                 className={sectionLinkClass}
               >
-                Field analysis
+                {COMP_ANALYSIS_LABEL}
               </Link>
             ),
           },

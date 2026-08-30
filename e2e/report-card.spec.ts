@@ -169,7 +169,7 @@ test.describe("the pilot report card", () => {
     await expect(you.first()).toBeVisible();
     expect(await you.count(), "one accent dot per curve, and only one").toBeGreaterThan(0);
 
-    // The curve is sampled from the scorer's own function. The field-analysis
+    // The curve is sampled from the scorer's own function. The task-analysis
     // charts say "a trend fitted through the dots" and these must never — the
     // difference between a formula and a regression is the whole claim.
     await expect(page.getByText(/fitted through the dots/)).toHaveCount(0);

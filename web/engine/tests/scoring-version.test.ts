@@ -61,7 +61,7 @@ describe('scoring engine version', () => {
 
   it('derives a version that fits an exact integer and the D1 column', () => {
     // engine_version is INTEGER NOT NULL in task_scores (migration 0012) and
-    // task_field_analysis (0019), and every consumer compares it with =/!=.
+    // task_analysis (0019), and every consumer compares it with =/!=.
     // 48 bits keeps it an exact JS integer, so no consumer needs to change.
     expect(Number.isSafeInteger(SCORING_ENGINE_VERSION)).toBe(true);
     expect(SCORING_ENGINE_VERSION).toBeGreaterThan(0);

@@ -2,7 +2,7 @@
 
 /**
  * Generate the similarity noise-floor table baked into
- * web/engine/src/field-analysis/similarity.ts.
+ * web/engine/src/analysis/similarity.ts.
  *
  *     bun web/scripts/generate-similarity-noise-floor.ts
  *
@@ -13,7 +13,7 @@
  * pilot's neighbour list looks exactly like a well-supported one.
  *
  * Why a table rather than a formula. Spearman's floor has a closed form (see
- * spearmanNoiseFloor in field-analysis/stats.ts, via the t distribution).
+ * spearmanNoiseFloor in analysis/stats.ts, via the t distribution).
  * Tanimoto's does not: T = c / (r + 1/r − c) depends on BOTH the cosine c and
  * the magnitude ratio r = ‖a‖/‖b‖, and both are random, so there is no tidy
  * quantile to invert. A fitted 1.25 / n^0.58 tracks the simulation to ~2%,

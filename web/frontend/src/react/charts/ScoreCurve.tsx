@@ -1,7 +1,7 @@
 /**
  * A scoring component's formula, with the field on it and one pilot picked out.
  *
- * Built for the report card, and deliberately NOT the field-analysis
+ * Built for the report card, and deliberately NOT the task-analysis
  * RankScatter with different data. Three differences drive the design:
  *
  *  1. **This is an emphasis chart, not a field chart.** RankScatter treats

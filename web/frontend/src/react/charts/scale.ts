@@ -2,13 +2,13 @@
  * Pure chart geometry: extents, linear scales, nice ticks, label spreading.
  *
  * Hand-rolled rather than d3-scale, for the reasons given where these grew up
- * (field-analysis/charts/chart-utils.ts) — which keeps the field-analysis
+ * (analysis/charts/chart-utils.ts) — which keeps the task-analysis
  * specific pieces (the LOESS trend, the metric tick formatter) and re-exports
  * these, so its callers and tests are unchanged.
  *
- * Promoted out of field-analysis when the report card's score charts needed
+ * Promoted out of task-analysis when the report card's score charts needed
  * the same four functions. That module declared itself "scoped to
- * field-analysis and not a chart framework"; this is the deliberate widening
+ * task-analysis and not a chart framework"; this is the deliberate widening
  * of that scope rather than an accidental reach across it. Everything here is
  * pure arithmetic with no DOM, so it is safe in the SSR bundle.
  */

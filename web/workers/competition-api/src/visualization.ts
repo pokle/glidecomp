@@ -180,7 +180,7 @@ export async function buildTask3dvisBundle(
 
   // A track a HARD data-quality check withheld is not this flight (S7A
   // §4.4.2 — wrong day, wrong place), so it must not be drawn any more than
-  // it may be scored. Scoring and field analysis have always dropped these;
+  // it may be scored. Scoring and task analysis have always dropped these;
   // the replay did not, and one such track is enough to ruin the whole
   // picture: it enters the packed bounds like any other, and a file from
   // another country put a task's scene extent at 2,225 km against a real

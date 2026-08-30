@@ -23,9 +23,9 @@ import {
   evaluateField,
   type FieldContext,
   type MetricOutput,
-} from '../src/field-analysis';
-import { spearman } from '../src/field-analysis/stats';
-import { RACECRAFT_METRICS } from '../src/field-analysis/metrics/racecraft';
+} from '../src/analysis';
+import { spearman } from '../src/analysis/stats';
+import { RACECRAFT_METRICS } from '../src/analysis/metrics/racecraft';
 import {
   makeTestField,
   straightFixes,

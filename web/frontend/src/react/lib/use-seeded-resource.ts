@@ -22,7 +22,7 @@
  *
  * ## What deliberately does NOT use this
  *
- * The two field-analysis pages keep their own loader: they answer with a
+ * The two task-analysis pages keep their own loader: they answer with a
  * five-way status (`forbidden` for a hidden test comp, a synthetic body for the
  * 422 "cannot be analysed") that this hook's plain found/not-found would have
  * to grow branches to express. `PilotScoreDetail` likewise resolves four

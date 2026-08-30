@@ -16,8 +16,8 @@ import { parseXCTask } from '../src/xctsk-parser';
 import { calculateOptimizedTaskDistance } from '../src/task-optimizer';
 import { scoreTask, resolveCompGapParams, type PilotFlight } from '../src/gap-scoring';
 import type { TurnpointReaching } from '../src/turnpoint-sequence';
-import { buildFieldContext, evaluateField, type FieldContext } from '../src/field-analysis';
-import { DECISION_METRICS } from '../src/field-analysis/metrics/decision';
+import { buildFieldContext, evaluateField, type FieldContext } from '../src/analysis';
+import { DECISION_METRICS } from '../src/analysis/metrics/decision';
 import {
   makeTestField,
   straightFixes,

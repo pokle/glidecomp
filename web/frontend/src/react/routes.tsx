@@ -42,8 +42,8 @@ import { CompScoresPage } from "./pages/CompScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
-import { CompFieldAnalysis } from "./pages/CompFieldAnalysis";
-import { TaskFieldAnalysis } from "./pages/TaskFieldAnalysis";
+import { CompAnalysis } from "./pages/CompAnalysis";
+import { TaskAnalysis } from "./pages/TaskAnalysis";
 import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
 
 /*
@@ -119,7 +119,7 @@ export function AppProviders({
 }
 
 /**
- * The per-task field analysis lives under the task again:
+ * The per-task analysis lives under the task again:
  * /comp/:c/analysis/task/:t → /comp/:c/task/:t/analysis, and likewise for the
  * similarity sheet below it. Keeps old links (and anyone's open tab) working.
  * `?class=`, `?pilot=` and friends are carried across — they are the shareable
@@ -179,7 +179,7 @@ export function AppRoutes() {
             element={<CompSettingsPage />}
           />
           <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
-          {/* Field analysis (behavioural metrics). One report per competition
+          {/* Analysis (behavioural metrics). One COMP analysis per competition
               at /analysis, and one chapter per task UNDER THAT TASK — see the
               task routes below. The comp report collects the chapters; it does
               not own their URLs, and the breadcrumbs agree (lib/crumbs.ts).
@@ -187,7 +187,7 @@ export function AppRoutes() {
               entries in functions/comp/[[path]].ts, and a cold report renders
               its pending notice server-side (noindex) while the client polls.
               A hidden `test` comp still 404s for non-admins. */}
-          <Route path="/comp/:compId/analysis" element={<CompFieldAnalysis />} />
+          <Route path="/comp/:compId/analysis" element={<CompAnalysis />} />
           <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
           {/* The task's three admin-only editors, all SIBLINGS: each is
               reached from the part of the task page it edits, so none nests
@@ -209,11 +209,11 @@ export function AppRoutes() {
             path="/comp/:compId/task/:taskId/weather"
             element={<TaskWeatherPage />}
           />
-          {/* This task's chapter of the comp field analysis: a summary, with
+          {/* This task's own TASK analysis, collected by the comp analysis: a summary, with
               a box per section linking to the section's own page. */}
           <Route
             path="/comp/:compId/task/:taskId/analysis"
-            element={<TaskFieldAnalysis />}
+            element={<TaskAnalysis />}
           />
           {/* Pilot-to-pilot behavioural similarity, a leaf of the chapter it
               derives from. Client-only, so it needs a NOINDEX_SHELL_ROUTES
@@ -225,7 +225,7 @@ export function AppRoutes() {
             element={<TaskPilotSimilarity />}
           />
           {/* One section of the chapter, each showing that one thing. Five
-              slugs, listed in field-analysis/sections.ts and matched by the
+              slugs, listed in analysis/sections.ts and matched by the
               SSR Function's own pattern; anything else renders NotFound. */}
           <Route
             path="/comp/:compId/task/:taskId/analysis/:section"

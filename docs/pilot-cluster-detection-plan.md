@@ -6,9 +6,9 @@ task, and make those clusters easy to notice forming/dissolving as you scrub the
 replay (Corryong Cup 2026 Task 1, ~32 pilots).
 
 > **Consumers (2026-07):** besides the `/replay` viewer this plan was built
-> for, `detectGaggles` now also powers the engine's field analysis — the
-> gaggle metrics in `web/engine/src/field-analysis/` feed it frames from the
-> engine's shared resampler (`field-analysis/resample.ts`). As shipped,
+> for, `detectGaggles` now also powers the engine's task analysis — the
+> gaggle metrics in `web/engine/src/analysis/` feed it frames from the
+> engine's shared resampler (`analysis/resample.ts`). As shipped,
 > `DEFAULT_GAGGLE_PARAMS` uses `minPilots: 2` (not this plan's starting value
 > of 3) plus a `stickyFactor: 1.6` hysteresis field — see `cluster-detector.ts`.
 

@@ -34,7 +34,7 @@ import {
   useUnits,
   type UnitPreferences,
 } from "../lib/units";
-import { unitDisplay } from "../field-analysis/units";
+import { unitDisplay } from "../analysis/units";
 import { buildTaskLegs } from "./task-legs";
 import { legWind, legWindWord, type TaskWind } from "./task-wind";
 

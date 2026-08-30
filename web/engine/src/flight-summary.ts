@@ -107,7 +107,7 @@ function toDateString(date: Date): string {
 }
 
 /**
- * The airborne window, by the same rule the field analysis uses: take the
+ * The airborne window, by the same rule the task analysis uses: take the
  * detector's takeoff/landing indices, and fall back to the whole file when
  * they are missing or the wrong way round.
  */

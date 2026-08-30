@@ -16,9 +16,9 @@ import type {
   PilotAnalysisData,
 } from "./comp/types";
 import type {
-  CompFieldAnalysisData,
-  TaskFieldAnalysisData,
-} from "./field-analysis/types";
+  CompAnalysisData,
+  TaskAnalysisData,
+} from "./analysis/types";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import type { CompClassScore, TaskInfo } from "../scores-views";
 import { todayInZone } from "./lib/format";
@@ -250,29 +250,29 @@ export async function loadPilotScoreDetail(
 
 // ── /comp/:compId/analysis ───────────────────────────────────────────────────
 
-export interface CompFieldAnalysisLoaderData {
-  /** GET /api/comp/:id/field-analysis — the aggregate, or a pending placeholder
+export interface CompAnalysisLoaderData {
+  /** GET /api/comp/:id/analysis — the aggregate, or a pending placeholder
    *  (pending_task_count > 0) while the first per-task computes run. */
-  analysis: CompFieldAnalysisData;
+  analysis: CompAnalysisData;
   analysisEtag: string | null;
   /** null when the comp fetch fails (cosmetic — name + timezone only). */
   comp: CompDetailData | null;
 }
 
-export async function loadCompFieldAnalysis(
+export async function loadCompAnalysis(
   f: FetchFn,
   compId: string
-): Promise<CompFieldAnalysisLoaderData> {
+): Promise<CompAnalysisLoaderData> {
   const cid = encodeURIComponent(compId);
   const [analysisRes, compRes] = await Promise.all([
-    f(`/api/comp/${cid}/field-analysis`),
+    f(`/api/comp/${cid}/analysis`),
     f(`/api/comp/${cid}`),
   ]);
   // 404/400 (missing, or a test comp hidden from this visitor) → real 404.
   if (analysisRes.status === 404 || analysisRes.status === 400)
-    throw new NotFoundError(`/api/comp/${cid}/field-analysis`);
-  if (!analysisRes.ok) throw new Error(`field-analysis -> ${analysisRes.status}`);
-  const analysis = (await analysisRes.json()) as CompFieldAnalysisData;
+    throw new NotFoundError(`/api/comp/${cid}/analysis`);
+  if (!analysisRes.ok) throw new Error(`task-analysis -> ${analysisRes.status}`);
+  const analysis = (await analysisRes.json()) as CompAnalysisData;
   const analysisEtag = analysisRes.headers.get("ETag");
   const comp = compRes.ok ? ((await compRes.json()) as CompDetailData) : null;
   return { analysis, analysisEtag, comp };
@@ -280,32 +280,32 @@ export async function loadCompFieldAnalysis(
 
 // ── /comp/:compId/task/:taskId/analysis ──────────────────────────────────────
 
-export interface TaskFieldAnalysisLoaderData {
-  /** GET /api/comp/:id/task/:id/field-analysis. A warm report, a `pending`
+export interface TaskAnalysisLoaderData {
+  /** GET /api/comp/:id/task/:id/analysis. A warm report, a `pending`
    *  placeholder (cold — a background compute was just scheduled), or an
    *  `error` body (422: the task has no route to analyse). */
-  analysis: TaskFieldAnalysisData;
+  analysis: TaskAnalysisData;
   analysisEtag: string | null;
   /** null when the fetch fails (cosmetic — heading + breadcrumb names). */
   task: TaskDetailData | null;
   comp: CompDetailData | null;
 }
 
-export async function loadTaskFieldAnalysis(
+export async function loadTaskAnalysis(
   f: FetchFn,
   compId: string,
   taskId: string
-): Promise<TaskFieldAnalysisLoaderData> {
+): Promise<TaskAnalysisLoaderData> {
   const cid = encodeURIComponent(compId);
   const tid = encodeURIComponent(taskId);
   const [analysisRes, taskRes, compRes] = await Promise.all([
-    f(`/api/comp/${cid}/task/${tid}/field-analysis`),
+    f(`/api/comp/${cid}/task/${tid}/analysis`),
     f(`/api/comp/${cid}/task/${tid}`),
     f(`/api/comp/${cid}`),
   ]);
   if (analysisRes.status === 404 || analysisRes.status === 400)
-    throw new NotFoundError(`/api/comp/${cid}/task/${tid}/field-analysis`);
-  let analysis: TaskFieldAnalysisData;
+    throw new NotFoundError(`/api/comp/${cid}/task/${tid}/analysis`);
+  let analysis: TaskAnalysisData;
   if (analysisRes.status === 422) {
     // Task exists but has no route to analyse — a real, renderable page (the
     // "No analysis for this task" state), not a 404. Mirror the client fetch.
@@ -320,9 +320,9 @@ export async function loadTaskFieldAnalysis(
       error: body.error ?? "This task cannot be analysed",
     };
   } else if (!analysisRes.ok) {
-    throw new Error(`field-analysis -> ${analysisRes.status}`);
+    throw new Error(`task-analysis -> ${analysisRes.status}`);
   } else {
-    analysis = (await analysisRes.json()) as TaskFieldAnalysisData;
+    analysis = (await analysisRes.json()) as TaskAnalysisData;
   }
   const analysisEtag = analysisRes.headers.get("ETag");
   const task = taskRes.ok ? ((await taskRes.json()) as TaskDetailData) : null;

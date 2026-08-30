@@ -31,7 +31,7 @@ import { useMemo, useRef, useState } from "react";
 import type { XCTask } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
 import { useUnits } from "../lib/units";
-import { unitDisplay } from "../field-analysis/units";
+import { unitDisplay } from "../analysis/units";
 import {
   buildTaskDiagram,
   describeTaskRoute,

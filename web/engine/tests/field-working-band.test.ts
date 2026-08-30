@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { detectThermals } from '../src/flight-phase-detectors';
 import { fixAltitude, type IGCFix } from '../src/igc-parser';
-import { estimateWorkingBand } from '../src/field-analysis/working-band';
+import { estimateWorkingBand } from '../src/analysis/working-band';
 import { DEFAULT_THRESHOLDS } from '../src/thresholds';
 import type { ThermalSegment } from '../src/event-types';
 import { createFix } from './test-helpers';

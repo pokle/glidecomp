@@ -12,8 +12,8 @@ import {
   evaluateField,
   type FieldContext,
   type MetricOutput,
-} from '../src/field-analysis';
-import { GLIDING_METRICS } from '../src/field-analysis/metrics/gliding';
+} from '../src/analysis';
+import { GLIDING_METRICS } from '../src/analysis/metrics/gliding';
 import type { TurnpointReaching } from '../src/turnpoint-sequence-types';
 import {
   makeTestField,

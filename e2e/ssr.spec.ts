@@ -286,7 +286,7 @@ test.describe("SSR — isolation and fallback", () => {
    * A hard reload of an admin-only / redirect-only deep URL must still get a
    * usable SPA shell — the Functions fallback path, which `vite dev` never
    * exercises — and must not be indexable, since there is nothing in it for a
-   * crawler. (Field analysis is no longer here — it is SSR'd; see below.)
+   * crawler. (Task analysis is no longer here — it is SSR'd; see below.)
    */
   for (const path of [
     // Admin-only roster editor page.
@@ -350,7 +350,7 @@ test.describe("URL canonicalisation (301 to slug-id)", () => {
   });
 
   /**
-   * The per-task field analysis was public and server-rendered at
+   * The per-task analysis was public and server-rendered at
    * /comp/:c/analysis/task/:t through July–August 2026 before moving under the
    * task. That URL is in the wild, so it must 301 rather than serve a shell —
    * a crawler handed a noindex shell learns only that the page is gone.
@@ -388,7 +388,7 @@ test.describe("URL canonicalisation (301 to slug-id)", () => {
 });
 
 /**
- * The cold field-analysis path returns `pending` and schedules a background
+ * The cold task-analysis path returns `pending` and schedules a background
  * compute, so poll to give it a chance to warm. Callers must still tolerate a
  * pending result — a slow compute must never make a test flaky.
  */
@@ -397,7 +397,7 @@ async function warmTaskAnalysis(
   compId: string,
   taskId: string
 ): Promise<void> {
-  const apiUrl = `/api/comp/${compId}/task/${taskId}/field-analysis`;
+  const apiUrl = `/api/comp/${compId}/task/${taskId}/analysis`;
   for (let i = 0; i < 20; i++) {
     const r = await request.get(apiUrl);
     if (r.ok()) {
@@ -408,8 +408,8 @@ async function warmTaskAnalysis(
   }
 }
 
-test.describe("SSR — field analysis (public)", () => {
-  test("task field analysis server-renders (warm content or a pending notice)", async ({
+test.describe("SSR — comp & task analysis (public)", () => {
+  test("task analysis server-renders (warm content or a pending notice)", async ({
     request,
   }) => {
     const { compId, taskId } = await discover(request);
@@ -420,7 +420,7 @@ test.describe("SSR — field analysis (public)", () => {
     const html = await res.text();
     // The defining SSR property: the loader data is embedded in the raw HTML.
     expect(html).toContain("window.__SSR_DATA__");
-    expect(html).toContain("Field analysis —");
+    expect(html).toContain("Task analysis —");
     // Branch on the actual server HTML (race-free): warm renders the summary's
     // section boxes and is indexable; cold renders the pending notice and is
     // noindex.
@@ -472,7 +472,7 @@ test.describe("SSR — field analysis (public)", () => {
     expect(await res.text()).toContain('name="robots" content="noindex"');
   });
 
-  test("comp field analysis server-renders with a title and SSR data", async ({
+  test("comp analysis server-renders with a title and SSR data", async ({
     request,
   }) => {
     const { compId, compName } = await discover(request);
@@ -480,10 +480,10 @@ test.describe("SSR — field analysis (public)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain("window.__SSR_DATA__");
-    expect(html).toContain(`Field analysis — ${compName}`);
+    expect(html).toContain(`Comp analysis — ${compName}`);
   });
 
-  test("field analysis of an invalid comp is a 404 noindex shell", async ({ request }) => {
+  test("comp analysis of an invalid comp is a 404 noindex shell", async ({ request }) => {
     const res = await request.get("/comp/zzznope/analysis", { failOnStatusCode: false });
     expect(res.status()).toBe(404);
     const html = await res.text();
@@ -514,7 +514,7 @@ test.describe("SSR — field analysis (public)", () => {
     // polling it is also what warms it.
     let classes: string[] = [];
     for (let i = 0; i < 45; i++) {
-      const r = await request.get(`/api/comp/${compId}/field-analysis`);
+      const r = await request.get(`/api/comp/${compId}/analysis`);
       if (r.ok()) {
         const b = (await r.json()) as {
           classes: Array<{ pilot_class: string }>;
@@ -559,7 +559,7 @@ test.describe("sitemap", () => {
     for (const path of ["/", "/about", "/scoring", "/scoring/gap", "/scoring/open-distance"]) {
       expect(xml).toContain(`<loc>${origin}${path}</loc>`);
     }
-    // The comp list + this comp's hub, scores, and (GAP) field analysis — all
+    // The comp list + this comp's hub, scores, and (GAP) comp analysis — all
     // as canonical `${slug}-${id}` URLs (the form the SSR Function 301s to).
     const { compName } = await discover(request);
     expect(xml).toContain(`<loc>${origin}/comp</loc>`);

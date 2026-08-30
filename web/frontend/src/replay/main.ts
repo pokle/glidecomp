@@ -48,7 +48,7 @@ function bundleUrl(): string {
 
 /**
  * The reconstructed thermal shapes for this task, from the stored
- * field-analysis report — the same single source of truth the analysis page
+ * task-analysis report — the same single source of truth the analysis page
  * renders, so the replay can never disagree with it about where a thermal
  * was. Multi-class tasks answer with one report per class; the largest class
  * carries the field the bundle mostly shows.
@@ -64,7 +64,7 @@ async function fetchThermalShapes(): Promise<ThermalShapeSummary[] | null> {
   const comp = q.get('comp');
   const task = q.get('task');
   if (!comp || !task) return null;
-  const url = `/api/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}/field-analysis`;
+  const url = `/api/comp/${encodeURIComponent(comp)}/task/${encodeURIComponent(task)}/analysis`;
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
       const res = await fetch(url, { credentials: 'include' });

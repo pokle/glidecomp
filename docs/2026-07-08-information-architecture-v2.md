@@ -44,14 +44,14 @@ review comments there, and aligns with
 >   asked about. What `<nav aria-label="Sections">` in `pages/CompDetail.tsx`
 >   carries today: **Tasks (n)** · **Scores** · **Waypoints (n)** ·
 >   **Pilots (n)** (admins only — the roster moved to its own admin page) ·
->   **Field analysis** (only when `scoring_format !== "open_distance"`, because
+>   **Task analysis** (only when `scoring_format !== "open_distance"`, because
 >   an open-distance comp has no legs to measure) · **Activity**. Only Tasks
 >   and Activity are in-page anchors; the rest are links to sibling pages.
 >   SSR covers **eight** public pages — the authoritative list is
 >   the `ROUTES` table in `functions/comp/[[path]].ts`: `/comp`,
 >   `/comp/:id`, `/comp/:id/scores`, `/comp/:id/waypoints`,
 >   `/comp/:id/task/:id`, `/comp/:id/task/:id/pilot/:id`, and the two
->   field-analysis reports `/comp/:id/analysis` and
+>   task-analysis reports `/comp/:id/analysis` and
 >   `/comp/:id/analysis/task/:id` (both went public and SSR'd later; a cold
 >   report server-renders its pending notice under `noindex` and the client
 >   polls). The admin-only `/comp/:id/pilots` roster and the superseded
@@ -390,14 +390,14 @@ components so future work stays consistent:
   depth inconsistent between sibling pages.
 - **The trail is the information architecture, not the history** — and where
   a page has two plausible parents, the URL and the trail must pick the same
-  one. The per-task field analysis was briefly the counter-example: it lived
+  one. The per-task analysis was briefly the counter-example: it lived
   at `/comp/:compId/analysis/task/:taskId` as a chapter of the comp's field
   analysis, while everyone in fact arrived from the task page, and a trail
   that swapped the task out for a report they had never opened read as a jump
   into another branch of the site. Both now parent on the task
   (`/comp/:compId/task/:taskId/analysis`), and the whole-comp report — the
   other genuine parent — is an explicit sibling link on the destination
-  ("Comp field analysis") rather than a second bent breadcrumb.
+  ("Comp analysis") rather than a second bent breadcrumb.
 - **One Submit track *form* everywhere** — superseded wording, 2026-08-02
   (#535). It used to be one dialog (`comp/SubmitTrackDialog.tsx`) behind every
   Submit track button. It is now one form, `comp/SubmitTrackForm.tsx`, with two

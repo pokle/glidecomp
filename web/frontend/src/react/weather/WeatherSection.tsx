@@ -1,7 +1,7 @@
 /**
  * The task page's "Weather" section: the organizer's notes on what the day
  * actually did, followed by the modelled conditions (TaskWeatherPanel) —
- * the same charts the field-analysis report leads with. The conditions are
+ * the same charts the task-analysis report leads with. The conditions are
  * context for reading everything below them on the page, which is why this
  * sits under the route and above the results.
  *

@@ -10,10 +10,10 @@ import type { TurnpointReaching } from '../src/turnpoint-sequence';
 import {
   buildFieldContext,
   evaluateField,
-  type FieldAnalysisReport,
+  type TaskAnalysisReport,
   type FieldContext,
-} from '../src/field-analysis';
-import { GAGGLE_METRICS } from '../src/field-analysis/metrics/gaggle';
+} from '../src/analysis';
+import { GAGGLE_METRICS } from '../src/analysis/metrics/gaggle';
 import {
   makeTestField,
   straightFixes,
@@ -37,7 +37,7 @@ function reachingAt(taskIndex: number, seconds: number): TurnpointReaching {
 }
 
 /** The metric's aligned per-pilot value for a trackFile. */
-function valueFor(report: FieldAnalysisReport, metricId: string, trackFile: string) {
+function valueFor(report: TaskAnalysisReport, metricId: string, trackFile: string) {
   const metric = report.metrics.find((m) => m.id === metricId)!;
   expect(metric).toBeDefined();
   const idx = report.pilots.findIndex((p) => p.trackFile === trackFile);

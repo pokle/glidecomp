@@ -313,9 +313,9 @@ for a `test` comp.
 | GET | `/api/comp/:comp_id/waypoints/:format` | Optional | Export them (`seeyou-cup`, `gpx`, `compegps`, `ozi`, `fs-geo`, `fs-utm`, `kml`, `csv`; anything else 404s). |
 | GET | `/api/comp/:comp_id/task/:task_id/waypoints/:format` | Optional | Export just the waypoints a task uses — same formats plus `xctsk`. |
 | PUT | `/api/comp/:comp_id/waypoints` | Admin | Replace the comp's waypoint file. |
-| GET | `/api/comp/:comp_id/task/:task_id/field-analysis` | Optional | Per-task behavioural-metric report. Stale-first (`task_field_analysis`, 0019) with **lazy** revalidation; a cold row returns `pending` rather than computing inline, and the UI polls. |
-| GET | `/api/comp/:comp_id/field-analysis` | Optional | Comp-level report — pure aggregation over the per-task rows, nothing extra materialized. |
-| POST | `/api/comp/:comp_id/task/:task_id/field-analysis/refresh` | Admin | Explicit "recompute now" for one task's report. Bumps only the analysis row. |
+| GET | `/api/comp/:comp_id/task/:task_id/task-analysis` | Optional | Per-task behavioural-metric report. Stale-first (`task_analysis`, 0019) with **lazy** revalidation; a cold row returns `pending` rather than computing inline, and the UI polls. |
+| GET | `/api/comp/:comp_id/task-analysis` | Optional | Comp-level report — pure aggregation over the per-task rows, nothing extra materialized. |
+| POST | `/api/comp/:comp_id/task/:task_id/analysis/refresh` | Admin | Explicit "recompute now" for one task's report. Bumps only the analysis row. |
 | GET | `/api/comp/:comp_id/task/:task_id/weather` | Optional | The task's modelled weather (`task_weather`, 0023). Invalidated by query key, not `inputs_rev` — so no mutation site bumps it. |
 | POST | `/api/comp/:comp_id/task/:task_id/weather/refresh` | Admin | Re-fetch: clears a provider-failure backoff, or pulls a settled answer for a provisional day. |
 | GET | `/api/comp/:comp_id/task/:task_id/pilot-status` | Optional | Per-task pilot statuses. Only pilots moved off the Present default have a row. |
@@ -356,7 +356,7 @@ comp:
 - `/comp/{comp_id}`: Competition page for existing competition.
 - `/comp/{comp_id}/task/{task_id}`: Task page for existing tasks.
 - `/comp/{comp_id}/analysis`, `/comp/{comp_id}/task/{task_id}/analysis`:
-  field analysis (behavioural metrics); the per-task page is one chapter of the
+  task analysis (behavioural metrics); the per-task page is one chapter of the
   comp report, living under the task it is about (the
   `/comp/{comp_id}/analysis/task/{task_id}` URL it briefly used redirects). **Public and server-rendered** since July 2026 — both have
   `ROUTES` entries in `functions/comp/[[path]].ts`; a hidden `test` comp still

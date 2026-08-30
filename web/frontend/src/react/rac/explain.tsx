@@ -4,7 +4,7 @@
  *
  * The reading flow should carry the finding; the method belongs one click
  * away, on the heading or the column header that raises the question. This is
- * the one trigger for that everywhere in the app — the field-analysis pages
+ * the one trigger for that everywhere in the app — the task-analysis pages
  * met it first (48 instances a page, as `MetricExplanation`, which now sits on
  * top of this), and the scores and settings surfaces use the same shape so a
  * reader only ever learns one vocabulary.

@@ -11,12 +11,12 @@
  * field will be on leg 4 — so pretending to a per-leg wind would be inventing
  * precision. The combined wind over the task's window at flying height is the
  * honest summary, and the UI says as much. (Once a task HAS been flown, the
- * field analysis computes real per-leg wind from the pilots' own circling;
+ * task analysis computes real per-leg wind from the pilots' own circling;
  * that is a different, better number for a different, later question.)
  *
  * The hourly estimates are combined by the engine's `combineWindEstimates` —
  * the ONE policy every wind-reporting surface shares (median magnitude,
- * vector-mean direction) — so this page and the field-analysis report cannot
+ * vector-mean direction) — so this page and the task-analysis report cannot
  * disagree about the same wind.
  *
  * Wind direction is degrees the wind blows FROM, matching the engine's weather

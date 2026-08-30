@@ -118,7 +118,7 @@ export async function fetchIgcFile(
 }
 
 /** Just the fixes. Kept for the callers that genuinely want nothing else —
- * notably field analysis, which holds a whole field's tracklogs at once and
+ * notably task analysis, which holds a whole field's tracklogs at once and
  * should drop the IGCFile wrapper immediately. */
 export async function fetchIgcFixes(
   r2: R2Bucket,

@@ -183,14 +183,14 @@ whether it is a record or a forecast. Answers are cached; a task nobody has
 opened yet returns a `pending` marker rather than blocking on the provider, so
 poll if you get one.
 
-### Task field analysis
+### Task task analysis
 
 ```bash
-curl https://glidecomp.com/api/comp/compa/task/taska/field-analysis
+curl https://glidecomp.com/api/comp/compa/task/taska/task-analysis
 ```
 
 ```bash
-curl https://glidecomp.com/api/comp/compa/field-analysis
+curl https://glidecomp.com/api/comp/compa/task-analysis
 ```
 
 Per-pilot behavioural metrics across the whole field (climbing, gliding,

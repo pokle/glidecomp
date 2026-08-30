@@ -77,7 +77,7 @@ const untracked = git('ls-files', '--others', '--exclude-standard');
 const changed = [...diff.out.split('\n'), ...untracked.out.split('\n')].filter(Boolean);
 
 // Only the files the fingerprint actually hashes count as a scoring change.
-// Anything else under src/ — field analysis, weather, the 3D replay — cannot
+// Anything else under src/ — task analysis, weather, the 3D replay — cannot
 // move a published score and needs no note.
 const hashed = new Set(
   computeScoringFingerprint().files.map((f) => `${SRC_PREFIX}${f}`),

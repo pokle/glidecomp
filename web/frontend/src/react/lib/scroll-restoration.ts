@@ -89,7 +89,7 @@ export function useScrollRestoration(): void {
     // over a bare-id URL (marked with preserveScroll, and able to arrive
     // SECONDS late on a slow connection — yanking a reader who has scrolled
     // back to the top), or a filter rewriting the query string (same
-    // pathname, e.g. the field-analysis class select). A replace that lands
+    // pathname, e.g. the task-analysis class select). A replace that lands
     // on a DIFFERENT page (the /profile → /settings kind) still starts at
     // the top.
     const samePage =

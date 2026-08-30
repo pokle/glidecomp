@@ -1,8 +1,8 @@
 /**
  * The full-bleed modal shell, `rac/full-screen-sheet.tsx`, through the two
  * callers that had no cover: the task route glyph (#476) and the waypoint/task
- * export QR (#312). The third caller — the field-analysis metric chart (#455)
- * — is exercised by field-analysis.spec.ts, which owns the assertions specific
+ * export QR (#312). The third caller — the task-analysis metric chart (#455)
+ * — is exercised by task-analysis.spec.ts, which owns the assertions specific
  * to it (that expanding really enlarges the plot, and that tapping a dot does
  * NOT dismiss).
  *
@@ -118,7 +118,7 @@ test("a picture sheet dismisses on a tap anywhere, and on Escape", async ({ page
   await trigger.waitFor({ timeout: 30_000 });
 
   // dismissOnPress: the diagram is a picture, so the whole sheet is a close
-  // target. (The metric chart deliberately is not — see field-analysis.spec.)
+  // target. (The metric chart deliberately is not — see task-analysis.spec.)
   await trigger.click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();

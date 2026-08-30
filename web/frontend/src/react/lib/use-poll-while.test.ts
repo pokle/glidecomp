@@ -1,7 +1,7 @@
 /**
  * The poll behind "this page refreshes itself".
  *
- * Both field-analysis pages make that promise while a cold analysis computes
+ * Both task-analysis pages make that promise while a cold analysis computes
  * in the background, and each used to keep its own identical copy of the
  * effect. The three behaviours that matter are the ones a copy could quietly
  * lose: it backs off, it eventually stops, and it doesn't talk to the API from

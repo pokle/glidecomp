@@ -13,8 +13,8 @@ import {
   evaluateField,
   type FieldContext,
   type MetricOutput,
-} from '../src/field-analysis';
-import { CLIMBING_METRICS } from '../src/field-analysis/metrics/climbing';
+} from '../src/analysis';
+import { CLIMBING_METRICS } from '../src/analysis/metrics/climbing';
 import {
   makeTestField,
   straightFixes,

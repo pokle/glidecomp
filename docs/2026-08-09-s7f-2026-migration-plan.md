@@ -200,7 +200,7 @@ direct, avoiding a new dependency; `geographiclib-geodesic` (MIT) is the
 fallback if Vincenty's antipodal non-convergence ever bites — it can't in
 task-scale geometry). Keep Turf for bearings/bbox (display only). Validate
 against `spec-distances.test.ts` reworked for §7, the Annex A PROJ constants,
-and the distance corpus. Everything downstream of `geo.ts` (field analysis,
+and the distance corpus. Everything downstream of `geo.ts` (task analysis,
 flown distances) moves by metres; the audit run documents it.
 
 ### Phase 6 — New features: altitude limits and Elevated Goal

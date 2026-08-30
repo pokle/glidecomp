@@ -289,7 +289,7 @@ export interface ScoredTrackRow {
  * agree" contract as the rest of {@link TaskScoringConfig}:
  * resolveTaskScoringConfig seeds it from track_analysis (pure D1, no R2),
  * computeTaskScore fills the misses — it is the only pass that already has the
- * parsed IGC in hand — and computeTaskFieldAnalysis reads it afterwards for
+ * parsed IGC in hand — and computeTaskAnalysis reads it afterwards for
  * free, because it calls computeTaskScore first. A track absent from
  * `byTrackId` has an UNKNOWN verdict, never an assumed-good one.
  */
@@ -303,7 +303,7 @@ export interface TaskQualityMemo {
  * Everything that shapes how a task is scored, resolved from D1 once — the
  * geometry plus the field it is scored over.
  *
- * Extracted so the field-analysis path (computeTaskFieldAnalysis) provably
+ * Extracted so the task-analysis path (computeTaskAnalysis) provably
  * scores against the SAME parameters as the published scores. Without a
  * shared resolution the two would drift silently the first time someone
  * touched the GAP defaults, and the analysis would correlate its metrics

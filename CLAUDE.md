@@ -14,7 +14,7 @@ Cloudflare monorepo on the Workers Paid plan ($5/mo — includes paid-plan
 features like Email Sending; still cost-conscious, avoid services beyond that).
 
 - **`web/engine`** — pure TypeScript analysis library: IGC/XCTask parsing, event
-  detection, GAP scoring, cross-pilot field analysis (`src/field-analysis/`),
+  detection, GAP scoring, cross-pilot task analysis (`src/analysis/`),
   track quality (`src/track-quality.ts`), task weather (`src/weather/`). No DOM
   dependencies; all track analysis runs client-side in the browser.
 - **`web/frontend`** — Vite app on Cloudflare Pages. Three kinds of page:
@@ -175,7 +175,7 @@ These are the standing imperatives. Each links to the reference that explains it
     (absent/DNF/landed feed launch validity, S7F §9.1). Roster metadata like team
     names is read live and needs no bump.
   - **One bump covers every derived table.** `bumpScoreInputs()` batches an upsert
-    for `task_scores` *and* `task_field_analysis`, so call sites stay unaware of
+    for `task_scores` *and* `task_analysis`, so call sites stay unaware of
     the second table — anything new that derives from scoring inputs belongs in
     that same batch rather than in 28 new call sites.
   - Two standing exceptions, both because they are **not** derived from
@@ -254,10 +254,10 @@ These are the standing imperatives. Each links to the reference that explains it
   `resolveCompGapParams(comp…)` is a fallback for old cached payloads only.
 - **(c) The report card's charts are EMPHASIS charts, not field charts** — one
   accent dot for this pilot, muted ink for everyone else. Do not reuse the
-  field-analysis `RankScatter`, which paints every dot alike and would bury the
+  task-analysis `RankScatter`, which paints every dot alike and would bury the
   reader in the crowd they came to locate themselves in. The curve is sampled
   from the scorer's own functions (`score-explanation-charts.ts`), so it is the
-  formula and never a fit — the field-analysis captions say "a trend fitted
+  formula and never a fit — the task-analysis captions say "a trend fitted
   through the dots"; these must not. A pilot is plotted only when the curve
   provably explains their published points; anyone carrying a reduction it
   doesn't model (§12.1, §12.3.5) is counted out, and if that's the viewing pilot
@@ -425,28 +425,40 @@ These are the standing imperatives. Each links to the reference that explains it
   [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) — the map
   provider must match this spec.
 - **Track quality** ([docs/track-quality.md](docs/track-quality.md)): two HARD
-  checks withhold a track from scoring and field analysis; three SOFT checks only
+  checks withhold a track from scoring and task analysis; three SOFT checks only
   annotate. A withheld pilot is **never** deleted from the scores — they are
   seated last at 0 with reasons. Every verdict is organiser-overridable (FAI S7A
   §4.4.6). Re-tune thresholds only via `audit-track-quality.ts` over both the
   bundled comps and the archive.
-- **Field analysis** — 26 behavioural metrics (climbing, gliding, decision-making,
-  gaggle, race craft, day profile) ranked by Spearman ρ against GAP rank, in
-  `web/engine/src/field-analysis/`, surfacing on the public, SSR'd
-  `/comp/:id/analysis` and `/comp/:id/task/:id/analysis` (+ `/<section>`)
-  (`src/react/pages/{Comp,Task}FieldAnalysis.tsx` + `src/react/field-analysis/`),
-  and via the CLI: `bun run score-task -- --field-analysis` / `--comp <slug>`.
-  See [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md).
-  - The per-task page is a child of the TASK, in the URL and in the
-    breadcrumbs alike — that is where a reader comes from. The comp report
-    collects the chapters and is a sibling link on each one, not their parent.
-    `/comp/:id/analysis/task/:id`, where the chapter lived from July to August
+- **Comp analysis and task analysis are two different things, and are named
+  apart.** Both are built from the same 26 behavioural metrics (climbing,
+  gliding, decision-making, gaggle, race craft, day profile) ranked by Spearman
+  ρ against GAP rank, in `web/engine/src/analysis/`. Both are public and SSR'd.
+  They are not interchangeable, and neither is called "field analysis" any more
+  — that one name covered both and told a reader nothing about which they had
+  open. Where the distinction genuinely does not matter, say "analysis".
+  - **TASK analysis** is ONE task's field read against itself:
+    `/comp/:id/task/:id/analysis` (+ `/<section>`), `pages/TaskAnalysis.tsx`.
+    It hangs off the TASK — in the URL, in the breadcrumbs, and in the IA — and
+    it is the only one of the two that is STORED (`task_analysis`).
+  - **COMP analysis** is the same separation question asked across every task of
+    a competition: `/comp/:id/analysis`, `pages/CompAnalysis.tsx`. It hangs off
+    the COMP, and is a pure aggregation over the stored task analyses —
+    `aggregateComp()`, materializing nothing.
+  - Shared UI is `src/react/analysis/`; the CLI prints a task analysis with
+    `bun run score-task -- --analysis` (and every task of a comp with
+    `--comp <slug>`).
+    See [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md).
+  - The task analysis is a child of the TASK, in the URL and in the
+    breadcrumbs alike — that is where a reader comes from. The comp analysis
+    collects the task analyses and is a sibling link on each one, not their
+    parent. `/comp/:id/analysis/task/:id`, where it lived from July to August
     2026, 301s in the SSR Function (it was public and indexable, so a shell
     would not do) and redirects again in the SPA for in-app navigation.
-  - The per-task chapter is a **contents list of boxes**, one per section, and
+  - The task analysis is a **contents list of boxes**, one per section, and
     each section is its own page
     (`/analysis/strategies|weather|thermals|metrics|style|method`, listed in
-    `src/react/field-analysis/sections.ts` — the SSR route pattern is built from
+    `src/react/analysis/sections.ts` — the SSR route pattern is built from
     that list; the pilot-similarity sheet gets a box too but predates them and
     keeps its own route). A box carries its name and one line of this-task fact,
     never an explanation: it is there to be chosen between, and what needs
@@ -456,7 +468,7 @@ These are the standing imperatives. Each links to the reference that explains it
     about which class it is showing. **Presentation order is fixed** — the
     behaviours that separated the field first, then the day, then the per-pilot
     tables — because which metrics have explanatory power *is* the finding.
-  - Printing a whole task's analysis in one go is **not** a goal (dropped
+  - Printing a whole task analysis in one go is **not** a goal (dropped
     2026-08-29): each page prints as itself. Per-component print mirrors (the
     heatmap's caption) stay; the page-level ones went with the one-page report.
   - Some metrics emit charting series (`ReportSeries`, a discriminated union)
@@ -464,13 +476,13 @@ These are the standing imperatives. Each links to the reference that explains it
     `charts/day-profile/DayProfilePanel.tsx` onto ONE shared comp-zone time axis
     rather than per-metric; tables stay the accessible exact reading, and a new
     series kind must be **ignored, not crash**, in older UIs.
-  - Storage is stale-first (`task_field_analysis`, migration 0019) with two
+  - Storage is stale-first (`task_analysis`, migration 0019) with two
     departures from scores: revalidation is **lazy** (triggered by a read — it's
     expensive and few people read it) and the cold path **never computes
     synchronously** (returns `pending`, schedules, UI polls).
-  - Visibility is `canViewFieldAnalysis()` in `routes/field-analysis.ts`, mirroring
-    the score route: anyone may read a normal comp's report; a hidden `test` comp
-    404s for non-admins.
+  - Visibility is `canViewAnalysis()` in `routes/analysis.ts` — one rule for
+    both — mirroring the score route: anyone may read a normal comp's analysis;
+    a hidden `test` comp 404s for non-admins.
 - **Weather** ([docs/weather.md](docs/weather.md)) — provider-neutral interface
   over outside meteorological sources, so a call site names no provider. A
   prediction can never be read as a record; every chart prints its source, and
@@ -494,7 +506,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Map interaction spec | [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) |
 | Score caching (stale-first) | [docs/score-caching-stale-first-plan.md](docs/score-caching-stale-first-plan.md) |
 | Engine generation + scoring changelog | [docs/scoring-version.md](docs/scoring-version.md) |
-| Field analysis internals | [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md) |
+| Comp & task analysis internals | [docs/2026-07-18-field-analysis-plan.md](docs/2026-07-18-field-analysis-plan.md) |
 | Information architecture + design language | [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) |
 | 3D replay | [docs/3d-flight-replay-notes.md](docs/3d-flight-replay-notes.md) |
 | Database | [docs/database.md](docs/database.md) |

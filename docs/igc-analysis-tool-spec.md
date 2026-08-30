@@ -198,7 +198,7 @@ When an event is selected from the panel, the map highlights the event location 
 ├── task-optimizer.ts            # Optimized task line + §8.6.1 remaining routes (golden section search)
 ├── gap-scoring.ts               # CIVL GAP multi-track task scoring (FAI Section 7F)
 ├── open-distance-scoring.ts     # Open-distance task scoring
-├── field-analysis/              # Per-pilot behavioural metrics across a whole field of
+├── analysis/              # Per-pilot behavioural metrics across a whole field of
 │                                # tracks, ranked by Spearman correlation vs GAP rank
 │                                # (see docs/2026-07-18-field-analysis-plan.md)
 ├── segment-extractors.ts        # Data extraction for glides, climbs, sinks
@@ -214,8 +214,8 @@ When an event is selected from the panel, the map highlights the event location 
 ├── detect-events.ts             # Detect flight events from an IGC file
 ├── get-xcontest-task.ts         # Download a task from XContest by code
 ├── score-task.ts                # Score multiple pilots against a task (CIVL GAP);
-│                                # --field-analysis / --comp print the behavioural
-│                                # field-analysis report after the scores
+│                                # --analysis / --comp print the behavioural
+│                                # task-analysis report after the scores
 └── comp-manifest.ts             # Bundled-comp manifest reading for --comp mode
 
 /web/frontend/src/          # (key modules; not exhaustive)

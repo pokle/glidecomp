@@ -114,7 +114,7 @@ const COPY = {
   },
   analysis: {
     computedPrefix: "Analysis computed",
-    pendingTitle: "The field analysis is pending…",
+    pendingTitle: "The task analysis is pending…",
     staleTitle: "Hold tight, the analysis is being recomputed…",
     staleBody:
       "Something changed (a track, a penalty, or the task). The analysis below was computed before that change and may shift slightly.",
@@ -142,9 +142,9 @@ export function ScoreFreshness({
   etag?: string | null;
   /** Endpoint to poll for the re-score landing; usually the one that served the data. */
   pollUrl?: string | null;
-  /** Which copy set to use. Field analysis passes "analysis". */
+  /** Which copy set to use. The analysis pages pass "analysis". */
   variant?: keyof typeof COPY;
-  /** No previous result at all (the field-analysis cold path, which never
+  /** No previous result at all (the task-analysis cold path, which never
    * computes on the request). Shows "being computed for the first time"
    * rather than a stale-results warning about results that don't exist. */
   pending?: boolean;

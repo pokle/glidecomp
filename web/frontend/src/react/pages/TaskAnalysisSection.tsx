@@ -1,8 +1,8 @@
 /**
- * One section of a task's field analysis, on its own page.
+ * One section of a task's analysis, on its own page.
  *
  * /comp/:compId/task/:taskId/analysis/:section — five sections, one route, one
- * component. They are five views of ONE report (see field-analysis/sections.ts
+ * component. They are five views of ONE report (see analysis/sections.ts
  * and use-task-report.ts), so five page components would have been five copies
  * of the same fetch, the same class select and the same freshness poll; what
  * actually differs between them is the body, which is the switch below.
@@ -24,32 +24,32 @@ import { Explain } from "@/react/rac/explain";
 import { NotFound } from "../components/NotFound";
 import { idFromSegment, taskAnalysisSectionPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { TaskAnalysisFrame } from "../field-analysis/TaskAnalysisFrame";
-import { useTaskFieldAnalysis } from "../field-analysis/use-task-report";
-import { findTaskAnalysisSection } from "../field-analysis/sections";
-import { SeparationRanking, rankMetrics } from "../field-analysis/SeparationRanking";
-import { HowToReadFootnote, OneDayCaveatNote } from "../field-analysis/ReadingNotes";
+import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
+import { useTaskAnalysis } from "../analysis/use-task-report";
+import { findTaskAnalysisSection } from "../analysis/sections";
+import { SeparationRanking, rankMetrics } from "../analysis/SeparationRanking";
+import { HowToReadFootnote, OneDayCaveatNote } from "../analysis/ReadingNotes";
 import {
   MetricFamilySection,
   metricsByFamily,
-} from "../field-analysis/MetricFamilySection";
-import { TaskDebrief } from "../field-analysis/TaskDebrief";
-import { MetricGlossary } from "../field-analysis/MetricGlossary";
-import { ExcludedPilots, MethodNote } from "../field-analysis/Footnotes";
-import { StyleClusters } from "../field-analysis/StyleClusters";
-import { ThermalsPanel } from "../field-analysis/thermals/ThermalsPanel";
-import { DayProfilePanel } from "../field-analysis/charts/day-profile/DayProfilePanel";
+} from "../analysis/MetricFamilySection";
+import { TaskDebrief } from "../analysis/TaskDebrief";
+import { MetricGlossary } from "../analysis/MetricGlossary";
+import { ExcludedPilots, MethodNote } from "../analysis/Footnotes";
+import { StyleClusters } from "../analysis/StyleClusters";
+import { ThermalsPanel } from "../analysis/thermals/ThermalsPanel";
+import { DayProfilePanel } from "../analysis/charts/day-profile/DayProfilePanel";
 import { WeatherNotesBlock } from "../weather/WeatherNotesBlock";
 import {
   FAMILY_ORDER,
   FAMILY_LABELS,
   type MetricReport,
-} from "../field-analysis/types";
+} from "../analysis/types";
 
 export function TaskAnalysisSection() {
   const { section: sectionParam } = useParams<{ section: string }>();
   const section = findTaskAnalysisSection(sectionParam);
-  const bundle = useTaskFieldAnalysis();
+  const bundle = useTaskAnalysis();
   const { compId, taskId, comp, task } = bundle;
 
   // Settle the address bar on the canonical `${slug}-${id}` once both names
@@ -63,7 +63,7 @@ export function TaskAnalysisSection() {
   // An unknown slug is a dead URL, not an empty section. The SSR Function's
   // route pattern lists the five, so this is reachable only by a client-side
   // navigation to a typo'd path.
-  if (!section) return <NotFound title="Field analysis section not found" />;
+  if (!section) return <NotFound title="Task analysis section not found" />;
 
   return (
     <TaskAnalysisFrame
@@ -95,7 +95,7 @@ function SectionBody({
   report,
 }: {
   slug: string;
-  bundle: ReturnType<typeof useTaskFieldAnalysis>;
+  bundle: ReturnType<typeof useTaskAnalysis>;
   active: FrameCtx["active"];
   report: FrameCtx["report"];
 }) {
@@ -124,7 +124,7 @@ function StrategiesSection({
   active,
   report,
 }: {
-  bundle: ReturnType<typeof useTaskFieldAnalysis>;
+  bundle: ReturnType<typeof useTaskAnalysis>;
   active: FrameCtx["active"];
   report: FrameCtx["report"];
 }) {
@@ -172,7 +172,7 @@ function StrategiesSection({
 }
 
 /** The organiser's account of the day, and the day's own profile. */
-function WeatherSection({ bundle }: { bundle: ReturnType<typeof useTaskFieldAnalysis> }) {
+function WeatherSection({ bundle }: { bundle: ReturnType<typeof useTaskAnalysis> }) {
   const { comp, dayMetrics, weather, weatherNotes, weatherPending } = bundle;
 
   if (!bundle.hasWeatherSection) {
@@ -212,7 +212,7 @@ function ThermalsSection({
   bundle,
   report,
 }: {
-  bundle: ReturnType<typeof useTaskFieldAnalysis>;
+  bundle: ReturnType<typeof useTaskAnalysis>;
   report: FrameCtx["report"];
 }) {
   const { comp, compId, taskId, weather, weatherPending } = bundle;
@@ -254,7 +254,7 @@ function MetricsSection({
   bundle,
   report,
 }: {
-  bundle: ReturnType<typeof useTaskFieldAnalysis>;
+  bundle: ReturnType<typeof useTaskAnalysis>;
   report: FrameCtx["report"];
 }) {
   const grouped = useMemo(() => metricsByFamily(report.metrics), [report]);
@@ -308,7 +308,7 @@ function StyleSection({
   bundle,
   report,
 }: {
-  bundle: ReturnType<typeof useTaskFieldAnalysis>;
+  bundle: ReturnType<typeof useTaskAnalysis>;
   report: FrameCtx["report"];
 }) {
   // No heading of its own: the page's h1 already says "Flying style", and

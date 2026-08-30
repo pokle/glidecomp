@@ -1,4 +1,4 @@
-# Field analysis readability — making the two pages approachable
+# Task analysis readability — making the two pages approachable
 
 Plan for `/comp/:id/analysis` and `/comp/:id/analysis/task/:id`. Sub-issue
 material for [#450](https://github.com/pokle/glidecomp/issues/450) (Field
@@ -17,7 +17,7 @@ with it. §C, §E, §F, §H are untouched by anything since. §D is half-answere
 Rendered against the bundled Corryong Cup 2026, Task 1 (Open) — 32 pilots, a
 mid-sized field, not a worst case:
 
-| | Task field analysis | Comp field analysis |
+| | Task analysis | Comp analysis |
 |---|---|---|
 | Page height @1440px | **19,664 px** (~18 screens) | 7,515 px |
 | Page height @400px (phone) | **24,489 px** (~28 screens) | — |
@@ -64,7 +64,7 @@ Two specific consequences worth naming:
 The mechanisms this plan needs mostly exist. This is an extension job, not a
 redesign.
 
-- **`MetricExplanation`** (`field-analysis/MetricExplanation.tsx`) — the ⓘ ghost
+- **`MetricExplanation`** (`analysis/MetricExplanation.tsx`) — the ⓘ ghost
   button + popover pattern, 48 instances on the task page. `size-6` pointer
   target, real `aria-label`, `print:hidden`, links out to the glossary.
 - **`MetricGlossary`** — the same prose rendered statically at the foot of the
@@ -112,7 +112,7 @@ redesign.
    already-compliant shape.
 7. **Metric labels live in the engine registry**, shared with the CLI, and are
    *stored inside* each cached report. Changing one means bumping
-   `FIELD_ANALYSIS_VERSION` (`web/engine/src/field-analysis/version.ts` — read
+   `TASK_ANALYSIS_VERSION` (`web/engine/src/analysis/version.ts` — read
    the current value there, it moves often) or cached rows keep serving the old
    text.
 
@@ -150,7 +150,7 @@ Implementation notes:
 
 **SHIPPED.** The helper is `web/frontend/src/react/charts/AxisTitle.tsx` —
 promoted to the shared chart directory (beside `scale.ts`) rather than left in
-`field-analysis/`, because the report card's score charts draw the same
+`analysis/`, because the report card's score charts draw the same
 furniture. `ConsistencyMap` now draws its titles from the helper too, so the
 chart the pattern came from cannot drift from its own descendants.
 
@@ -168,7 +168,7 @@ Two things came out differently from the table above:
   `rank` is good — naming the axis was a title's job and the corner form was
   the bug. `AxisTitle.tsx` documents which to reach for.
 
-One instance is knowingly left alone: `field-analysis/thermals/ThermalsPanel.tsx`
+One instance is knowingly left alone: `analysis/thermals/ThermalsPanel.tsx`
 (`ClimbProfile`) landed in #521 with its own inline x title, at 9px and
 left-anchored rather than the helper's 10px centred — deliberate choices for a
 320-unit panel that adopting the helper would silently overturn.
@@ -178,7 +178,7 @@ left-anchored rather than the helper's 10px centred — deliberate choices for a
 The ⓘ vocabulary exists and readers already meet it 48 times on this page. Do
 not invent a second style — extend it upward.
 
-**New: `field-analysis/Explain.tsx`.** A thin generalisation of
+**New: `analysis/Explain.tsx`.** A thin generalisation of
 `MetricExplanation`'s trigger: same `size-6` ghost button, same
 `print:hidden`, `aria-label="About <thing>"`, arbitrary children in the
 popover, optional link to a footnote id. `MetricExplanation` should be
@@ -202,12 +202,12 @@ Net effect on the task page: roughly 1,400 of the 3,588 prose words leave the
 default reading flow without leaving the page.
 
 **SHIPPED**, as part of a whole-SPA copy reduction rather than a
-field-analysis-only change, so the affordance is the RAC kit's
-`rac/explain.tsx` rather than `field-analysis/Explain.tsx` — the comp hub, the
+task-analysis-only change, so the affordance is the RAC kit's
+`rac/explain.tsx` rather than `analysis/Explain.tsx` — the comp hub, the
 scores tables and `SettingsDialog` use it too, and a reader should only ever
 learn one vocabulary. `MetricExplanation` sits on top of it, as planned.
 
-The notes themselves live in `field-analysis/ReadingNotes.tsx`, one component
+The notes themselves live in `analysis/ReadingNotes.tsx`, one component
 per note, so the popover and the printed copy are the same JSX and cannot
 drift. Measured against the bundled Corryong Cup 2026 (fresh numbers, per the
 warning above):
@@ -262,7 +262,7 @@ Everything a reader consults once should start closed. Use `Disclosure`
 [#519](https://github.com/pokle/glidecomp/pull/519) rewrote every metric's FULL
 label to name the quantity ("Glide speed between climbs", "Share of lift turned
 in that was kept as a climb"), and #520 renamed `decision.altitude_floor` to
-match what it measures. `FIELD_ANALYSIS_VERSION` went 17 → 20 with them, so
+match what it measures. `TASK_ANALYSIS_VERSION` went 17 → 20 with them, so
 cached reports carry the new text. That is a straight win for §A too, since the
 scatter's x-axis title is built from `metric.label`.
 
@@ -278,7 +278,7 @@ the per-family per-pilot tables.
 
 - Audit every `shortLabel` in the engine registry for readability. They are the
   engine's, shared with the CLI text report, and **stored inside cached
-  reports** — a change needs `FIELD_ANALYSIS_VERSION` bumped so stale rows
+  reports** — a change needs `TASK_ANALYSIS_VERSION` bumped so stale rows
   expire (it is 21 as of #526, and moves often — read it, don't quote this).
 - Where a short label cannot be made self-explaining in ~10 characters, prefer
   the full label rotated with a `max-height` truncation over a cryptic
@@ -292,7 +292,7 @@ The strongest anti-intimidation move available: **2–4 plain sentences under th
 H1**, before the task diagram, so a casual reader can leave in 15 seconds with
 the answer.
 
-Everything needed is already computed. `field-analysis/debrief.ts` +
+Everything needed is already computed. `analysis/debrief.ts` +
 `TaskDebrief` already do exactly this shape of thing (derive sentences from the
 report, render nothing when there is no evidence, unit-tested in
 `debrief.test.ts`) — extend that machinery rather than starting a new one.
@@ -325,7 +325,7 @@ Default **Plain English**. Persisted per-viewer in `localStorage`, read in an
 effect after hydration (SSR constraint #3), so the server always renders the
 default. Print always renders the statistics form.
 
-Implementation: a `StatsDetailContext` in `field-analysis/`, a `useStatsDetail()`
+Implementation: a `StatsDetailContext` in `analysis/`, a `useStatsDetail()`
 hook, and consumers deciding which `Column`s to build (never CSS-hiding —
 constraint #5).
 
@@ -388,7 +388,7 @@ Each phase is independently shippable and independently reviewable.
    first so it is reviewed against a shorter page.
 5. **Detail-level control (§F)** — touches both pages' table construction and
    introduces the only persisted state; last of the core work.
-6. **Vocabulary (§D)** — engine change plus a `FIELD_ANALYSIS_VERSION` bump;
+6. **Vocabulary (§D)** — engine change plus a `TASK_ANALYSIS_VERSION` bump;
    independent of the rest and can go any time.
 7. **Comp-page ⓘs (§G)** — small, can ride with any phase.
 

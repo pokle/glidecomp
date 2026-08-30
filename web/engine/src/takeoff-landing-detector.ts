@@ -291,7 +291,7 @@ export function takeoffLandingToEvents(
 /**
  * {@link detectTakeoffLandingIndices} flattened through
  * {@link takeoffLandingToEvents} — kept for the consumers that want the
- * event stream directly (the analysis CLI, field analysis). Consumers that
+ * event stream directly (the analysis CLI, task analysis). Consumers that
  * only need the fix indices should take the typed result instead of
  * un-parsing these events.
  */

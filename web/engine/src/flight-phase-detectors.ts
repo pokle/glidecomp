@@ -32,7 +32,7 @@ function buildThermalSegment(fixes: IGCFix[], startIndex: number, endIndex: numb
   const count = endIndex - startIndex + 1;
   // fixAltitude, not raw gnssAltitude: a zero-GNSS dropout fix on a segment
   // boundary would otherwise record an entry/exit at sea level and poison
-  // every downstream consumer (the field-analysis working band is a p10 over
+  // every downstream consumer (the task-analysis working band is a p10 over
   // exactly these values).
   const altGain = fixAltitude(fixes[endIndex]) - fixAltitude(fixes[startIndex]);
 

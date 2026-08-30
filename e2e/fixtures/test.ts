@@ -43,7 +43,7 @@ async function stackIsUp(): Promise<boolean> {
  * Returns how long it waited, so the caller can give the time back.
  *
  * Exported for tests that POLL an API in a loop (e.g. waiting out a
- * field-analysis compute): the auto fixture only guards the START of a test,
+ * task-analysis compute): the auto fixture only guards the START of a test,
  * so a poll that lands in a supervisor-restart gap mid-test should call this
  * and carry on rather than fail the attempt on a stack blip.
  */

@@ -9,10 +9,10 @@
  *   bun run score-task -- task.xctsk pilot1.igc pilot2.igc pilot3.igc
  *   bun run score-task -- task.xctsk ./tracks/
  *   bun run score-task -- task.xctsk ./tracks/ extra-pilot.igc
- *   bun run score-task -- task.xctsk ./tracks/ --wing HG --field-analysis
+ *   bun run score-task -- task.xctsk ./tracks/ --wing HG --analysis
  *   bun run score-task -- --comp corryong-cup-2026
  *
- * Field analysis (--field-analysis, implied by --comp): after the scores, a
+ * Task analysis (--analysis, implied by --comp): after the scores, a
  * behavioural report over the whole field — per-pilot metrics (climbing,
  * gliding, decision-making, gaggle, race craft, day profile/wind) led by the
  * metric-separation ranking (Spearman ρ vs GAP rank), which tells the reader
@@ -35,10 +35,10 @@
  *     --open-distance                        Score as open distance (GAP options ignored)
  *     --comp <slug-or-dir>                   Score a whole bundled comp (comp.json manifest):
  *                                            every task per class, plus a per-class comp
- *                                            aggregate. Implies --field-analysis; wing comes
+ *                                            aggregate. Implies --analysis; wing comes
  *                                            from the manifest category (--wing overrides).
- *   Field analysis:
- *     --field-analysis                       After the scores, print the behavioural field
+ *   Task analysis:
+ *     --analysis                             After the scores, print the behavioural task
  *                                            analysis (see docs/2026-07-18-field-analysis-plan.md)
  *   Nominal parameters:
  *     --nominal-distance <m>                 `nominalDistance` (default: 70% of task)
@@ -77,12 +77,12 @@ import type { XCTask } from '../src/xctsk-parser';
 import {
   buildFieldContext,
   evaluateField,
-  renderFieldReport,
+  renderTaskAnalysis,
   aggregateComp,
-  renderCompReport,
+  renderCompAnalysis,
   type CompTaskResult,
-  type FieldAnalysisReport,
-} from '../src/field-analysis';
+  type TaskAnalysisReport,
+} from '../src/analysis';
 import { timezoneForXctsk } from '../src/timezone';
 import { loadCompManifest, readTaskDir, pilotKeyFor } from './comp-manifest';
 import { join } from 'path';
@@ -141,10 +141,10 @@ function usage(): never {
     '  --comp <slug-or-dir>       Score a bundled comp (web/samples/comps/<slug>/comp.json,\n' +
     '                             or a directory/path holding comp.json): every task per\n' +
     '                             class plus a per-class comp aggregate. Implies\n' +
-    '                             --field-analysis; wing comes from the manifest category\n' +
+    '                             --analysis; wing comes from the manifest category\n' +
     '                             (--wing overrides).\n\n' +
-    'Field analysis:\n' +
-    '  --field-analysis           After the scores, print the behavioural field analysis\n' +
+    'Task analysis:\n' +
+    '  --analysis                 After the scores, print the behavioural task analysis\n' +
     '                             (per-pilot metrics vs the field, ranked by Spearman\n' +
     '                             correlation against GAP rank)\n\n' +
     'Output:\n' +
@@ -160,8 +160,8 @@ if (args.length < 2) usage();
 const params: Partial<GAPParameters> = {};
 let jsonOutput = false;
 let openDistance = false;
-let fieldAnalysis = false;
-// Whole-comp mode: the --comp slug or directory (implies --field-analysis).
+let taskAnalysis = false;
+// Whole-comp mode: the --comp slug or directory (implies --analysis).
 let compArg: string | null = null;
 // Stopped task (S7F §13.4): the stop announcement time, when given.
 let stopAnnouncementMs: number | null = null;
@@ -247,8 +247,8 @@ for (let i = 0; i < args.length; i++) {
     case '--open-distance':
       openDistance = true;
       break;
-    case '--field-analysis':
-      fieldAnalysis = true;
+    case '--analysis':
+      taskAnalysis = true;
       break;
     case '--comp': {
       const v = args[++i];
@@ -257,7 +257,7 @@ for (let i = 0; i < args.length; i++) {
         process.exit(1);
       }
       compArg = v;
-      fieldAnalysis = true;
+      taskAnalysis = true;
       break;
     }
     case '--json':
@@ -403,17 +403,17 @@ function runScoring(
   return { result, taskDistance };
 }
 
-/** Build the field-analysis report; a failure warns rather than killing the scores. */
-function tryFieldAnalysis(
+/** Build the task-analysis report; a failure warns rather than killing the scores. */
+function tryTaskAnalysis(
   task: XCTask,
   pilots: PilotFlight[],
   result: TaskScoreResult,
   category: 'hg' | 'pg',
-): FieldAnalysisReport | null {
+): TaskAnalysisReport | null {
   try {
     return evaluateField(buildFieldContext(task, pilots, result, category));
   } catch (err) {
-    process.stderr.write(`Warning: field analysis failed: ${err}\n`);
+    process.stderr.write(`Warning: task analysis failed: ${err}\n`);
     return null;
   }
 }
@@ -486,17 +486,17 @@ function runSingleTask(): void {
     process.stderr.write(`Scoring ${pilots.length} pilots against task (${formatDist(taskDistance)})\n`);
   }
 
-  const report = fieldAnalysis ? tryFieldAnalysis(task, pilots, result, category) : null;
+  const report = taskAnalysis ? tryTaskAnalysis(task, pilots, result, category) : null;
 
   if (jsonOutput) {
     const output = stripCrossings(result) as Record<string, unknown>;
-    if (report) output.fieldAnalysis = report;
+    if (report) output.taskAnalysis = report;
     console.log(JSON.stringify(output, null, 2));
   } else {
     printResultTables(task, result);
     // Render report times in the task's local zone (derived from its first
     // turnpoint); the engine emitted them as UTC instants.
-    if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
+    if (report) console.log(renderTaskAnalysis(report, { timeZone: timezoneForXctsk(task) }));
   }
 }
 
@@ -542,20 +542,20 @@ function runComp(arg: string): void {
       );
 
       const { result } = runScoring(task, pilots, openDist, category);
-      const report = tryFieldAnalysis(task, pilots, result, category);
+      const report = tryTaskAnalysis(task, pilots, result, category);
 
       if (jsonOutput) {
         jsonTasks.push({
           pilotClass,
           label: fullLabel,
           result: stripCrossings(result),
-          fieldAnalysis: report,
+          taskAnalysis: report,
         });
       } else {
         console.log('');
         console.log(`${'='.repeat(20)} ${manifest.name} — ${pilotClass} — ${fullLabel} ${'='.repeat(20)}`);
         printResultTables(task, result);
-        if (report) console.log(renderFieldReport(report, { timeZone: timezoneForXctsk(task) }));
+        if (report) console.log(renderTaskAnalysis(report, { timeZone: timezoneForXctsk(task) }));
       }
 
       if (report) {
@@ -582,7 +582,7 @@ function runComp(arg: string): void {
       } else {
         console.log('');
         console.log(`${'='.repeat(20)} ${manifest.name} — ${pilotClass} — whole comp ${'='.repeat(20)}`);
-        console.log(renderCompReport(aggregate));
+        console.log(renderCompAnalysis(aggregate));
       }
     }
   }

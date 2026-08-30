@@ -17,7 +17,7 @@
  * it here makes the merged tree produce the right key by construction.
  *
  * Nothing orders this value — every consumer compares it with `=` or `!=`
- * (score-store.ts, field-analysis-store.ts, routes/cache.ts) or interpolates
+ * (score-store.ts, task-analysis-store.ts, routes/cache.ts) or interpolates
  * it into a string key (state-key.ts, geom-hash.ts) — so an opaque number
  * serves as well as a sequence, and the readable history lives in
  * web/engine/scoring-changes/ instead.
@@ -69,7 +69,7 @@ export interface ScoringFingerprint {
    *
    * 48 bits so it stays an exact JS integer (well under 2^53) and fits the
    * existing `engine_version INTEGER NOT NULL` column in task_scores and
-   * task_field_analysis — no migration, no consumer change. Collisions are
+   * task_analysis — no migration, no consumer change. Collisions are
    * the only failure mode and would take ~2^24 generations to become likely.
    */
   version: number;

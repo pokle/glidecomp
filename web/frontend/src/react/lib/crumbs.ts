@@ -21,8 +21,20 @@ import {
 
 export type Crumb = { label: string; to: string };
 
-/** The label the field-analysis pages use, as heading and as ancestor crumb. */
-export const FIELD_ANALYSIS_LABEL = "Field analysis";
+/**
+ * The two analysis pages are two different things and are named apart.
+ *
+ * COMP analysis is the whole competition read across its tasks, and hangs off
+ * the competition. TASK analysis is one task's field read against itself, and
+ * hangs off that task. Both used to be called "Task analysis", which said
+ * neither, so a reader could not tell from a crumb, a heading or a tab title
+ * which of the two they had open.
+ *
+ * Each label is used as that page's heading AND as its ancestor crumb, so the
+ * trail and the H1 can never disagree.
+ */
+export const COMP_ANALYSIS_LABEL = "Comp analysis";
+export const TASK_ANALYSIS_LABEL = "Task analysis";
 
 const COMPETITIONS: Crumb = { label: "Competitions", to: "/comp" };
 
@@ -74,11 +86,11 @@ export function underTask(
 }
 
 /**
- * Ancestors of a page under a per-task field-analysis chapter — today the
+ * Ancestors of a page under a task analysis — today the
  * pilot-similarity sheet.
  *
  * The chapter itself is one crumb shorter: it calls {@link underTask} and
- * passes {@link FIELD_ANALYSIS_LABEL} as its own `current`, so the two trails
+ * passes {@link TASK_ANALYSIS_LABEL} as its own `current`, so the two trails
  * agree crumb for crumb.
  *
  * Both parent on the TASK, which is what the URL says too
@@ -96,7 +108,7 @@ export function underTaskAnalysis(
   return [
     ...underTask(compId, compName, taskId, taskName),
     {
-      label: FIELD_ANALYSIS_LABEL,
+      label: TASK_ANALYSIS_LABEL,
       to:
         compId && taskId
           ? taskAnalysisPath(compId, compName, taskId, taskName)

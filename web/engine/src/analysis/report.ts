@@ -1,0 +1,532 @@
+// Copyright (c) 2026, Tushar Pokle.  All rights reserved.
+
+/**
+ * Plain-text rendering of task-analysis reports (~100 columns, monospace).
+ *
+ * Generic over the report model: a Stage 1 metric added to its family array
+ * shows up here with zero renderer changes — explanation line, a column in
+ * the family's per-pilot table, its fieldSummary/extraTables, and a row in
+ * the correlation ranking.
+ */
+
+import { FAMILY_LABELS, FAMILY_ORDER } from './registry';
+import { MIN_CORRELATION_N } from './evaluate';
+import { clusterPilotStyles, MIN_CLUSTER_PILOTS, type StyleClusterReport } from './clustering';
+import { timeWithZone, timeRangeWithZone } from './format-time';
+import { roundPercentagesToHundred } from './stats';
+import type {
+  FieldAirtimeSplit,
+  TaskAnalysisBasis,
+  CompAnalysisReport,
+  CompMetricAggregate,
+  TaskAnalysisReport,
+  FieldThermalsSummary,
+  MetricReport,
+  ReportCell,
+  ReportTable,
+} from './types';
+
+const WIDTH = 100;
+
+/** Options for the text renderers. */
+export interface RenderReportOptions {
+  /** IANA zone for `{ t }` time cells (the task's local zone). UTC when unset. */
+  timeZone?: string;
+}
+
+/** A report cell as display text: literal strings pass through; `{ t }`
+ * instants render as a time of day and `{ from, to }` as a range, in `timeZone`
+ * ("14:00 AEDT", "13:05–14:30 AEDT", "13:00 UTC"). */
+function cellText(cell: ReportCell | undefined, timeZone?: string): string {
+  if (cell === undefined) return '';
+  if (typeof cell === 'string') return cell;
+  if ('t' in cell) return timeWithZone(new Date(cell.t).getTime(), timeZone);
+  return timeRangeWithZone(new Date(cell.from).getTime(), new Date(cell.to).getTime(), timeZone);
+}
+
+function padRight(s: string, n: number): string {
+  return s.length >= n ? s : s + ' '.repeat(n - s.length);
+}
+
+function padLeft(s: string, n: number): string {
+  return s.length >= n ? s : ' '.repeat(n - s.length) + s;
+}
+
+function heading(title: string, char: string): string {
+  const head = `${char.repeat(3)} ${title} `;
+  return head + char.repeat(Math.max(0, WIDTH - head.length));
+}
+
+/** Format a metric value for its unit. The display tokens ('mph', 'kts',
+ * 'fpm', 'ft') are what the UI's preferred-unit conversion rewrites 'km/h',
+ * 'm/s' and 'm' into; the engine itself always emits the metric units. */
+export function formatMetricValue(unit: string, value: number | null): string {
+  if (value === null || !isFinite(value)) return '—';
+  switch (unit) {
+    case 'pct':
+    case 'm':
+    case 'ft':
+    case 'fpm':
+    case 's':
+      return value.toFixed(0);
+    case 'm/s':
+    case 'km/h':
+    case 'mph':
+    case 'kts':
+    case 'km':
+    case 'mi':
+    case 'nmi':
+    case 'min':
+    case 'count':
+      return value.toFixed(1);
+    case 'ratio':
+      return value.toFixed(2);
+    default:
+      return value.toFixed(1);
+  }
+}
+
+function columnHeader(m: MetricReport): string {
+  return m.shortLabel ?? (m.label.length <= 10 ? m.label : m.label.slice(0, 10));
+}
+
+function renderTable(t: ReportTable, timeZone?: string): string[] {
+  // Format cells to display text first ({ t } instants → zoned time) so column
+  // widths measure the rendered strings, not the ISO payloads.
+  const text = t.rows.map((r) => t.columns.map((_c, i) => cellText(r[i], timeZone)));
+  const widths = t.columns.map((c, i) =>
+    Math.max(c.header.length, ...text.map((r) => r[i].length)),
+  );
+  const pad = (s: string, i: number): string =>
+    t.columns[i].align === 'left' ? padRight(s, widths[i]) : padLeft(s, widths[i]);
+  const lines: string[] = [];
+  lines.push(t.title + ':');
+  const headerLine = '  ' + t.columns.map((c, i) => pad(c.header, i)).join('  ');
+  lines.push(headerLine);
+  lines.push('  ' + '-'.repeat(Math.max(0, headerLine.length - 2)));
+  for (const row of text) {
+    lines.push('  ' + row.map((cell, i) => pad(cell, i)).join('  '));
+  }
+  for (const f of t.footnotes ?? []) lines.push(`  ${f}`);
+  return lines;
+}
+
+/**
+ * "38% climbing / 23% gliding / 39% searching" — integers that sum to 100.
+ *
+ * Gerunds because "38% climb" can be heard as a count of climbs where "38%
+ * climbing" can only be time spent. The line these percentages sit on opens
+ * with "airtime", which is what says they are shares of TIME and not of the
+ * distances alongside them.
+ */
+function formatAirtimeSplit(split: FieldAirtimeSplit): string {
+  const [climb, glide, search] = roundPercentagesToHundred([
+    split.climbPct,
+    split.glidePct,
+    split.searchPct,
+  ]);
+  return `${climb}% climbing / ${glide}% gliding / ${search}% searching`;
+}
+
+/**
+ * The basis's second line: "airtime 82 h (13:05–18:40 AEDT) · 38% climbing …".
+ *
+ * Split off the first line because that one already runs past the 100-column
+ * width on its own, and because these facts belong together — the total, the
+ * window it was flown in, and how it divided.
+ */
+function renderAirtimeLine(b: TaskAnalysisBasis, timeZone?: string): string | null {
+  const parts: string[] = [];
+  if (b.airtimeSplit) {
+    const hours = b.airtimeSplit.airborneSeconds / 3600;
+    const window = b.analysisWindow
+      ? ` (${timeRangeWithZone(
+          new Date(b.analysisWindow.from).getTime(),
+          new Date(b.analysisWindow.to).getTime(),
+          timeZone,
+        )})`
+      : '';
+    parts.push(`airtime ${hours.toFixed(0)} h${window}`, formatAirtimeSplit(b.airtimeSplit));
+  } else if (b.analysisWindow) {
+    parts.push(
+      `flying ${timeRangeWithZone(
+        new Date(b.analysisWindow.from).getTime(),
+        new Date(b.analysisWindow.to).getTime(),
+        timeZone,
+      )}`,
+    );
+  }
+  return parts.length > 0 ? '       ' + parts.join(' · ') : null;
+}
+
+export function renderTaskAnalysis(
+  report: TaskAnalysisReport,
+  opts: RenderReportOptions = {},
+): string {
+  const { timeZone } = opts;
+  const lines: string[] = [];
+  const b = report.basis;
+
+  lines.push(heading('Task Analysis', '='));
+  lines.push(
+    `Basis: ${b.pilotCount} scored pilots · grid ${b.gridStepSeconds} s · ` +
+      `${b.sharedThermalCount} shared thermals (${b.multiPilotThermalCount} multi-pilot) · ` +
+      `working band ${b.workingBandFloor.toFixed(0)}–${b.workingBandCeiling.toFixed(0)} m` +
+      (b.workingBandFallback ? ' (fix-altitude fallback)' : ''),
+  );
+  const airtimeLine = renderAirtimeLine(b, timeZone);
+  if (airtimeLine) lines.push(airtimeLine);
+
+  // The separation ranking leads: it tells the reader which strategies
+  // actually mattered on this task, and so how to read everything below.
+  lines.push('', heading('Metric separation ranking (Spearman ρ vs GAP rank)', '-'));
+  lines.push(...renderCorrelationTable(report));
+
+  for (const family of FAMILY_ORDER) {
+    const metrics = report.metrics.filter((m) => m.family === family);
+    if (metrics.length === 0) continue;
+    lines.push('');
+    lines.push(heading(FAMILY_LABELS[family], '-'));
+
+    // Method lines — the explainability rule: every number's derivation in
+    // one sentence, printed with the numbers.
+    for (const m of metrics) {
+      lines.push(`• ${m.label} [${m.unit}]: ${m.explanation}`);
+      if (m.error) lines.push(`  ERROR computing this metric: ${m.error}`);
+    }
+
+    // One per-pilot table per family, a column per metric that has values.
+    const tabular = metrics.filter((m) => m.perPilot.some((v) => v.value !== null));
+    if (tabular.length > 0) {
+      const table: ReportTable = {
+        title: 'Per pilot (rank order)',
+        columns: [
+          { header: '#', align: 'right' },
+          { header: 'Pilot', align: 'left' },
+          ...tabular.map((m) => ({ header: columnHeader(m), align: 'right' as const })),
+        ],
+        rows: report.pilots.map((p, i) => [
+          String(p.rank),
+          p.pilotName.slice(0, 22),
+          ...tabular.map((m) => formatMetricValue(m.unit, m.perPilot[i].value)),
+        ]),
+      };
+      lines.push('', ...renderTable(table));
+    }
+
+    for (const m of metrics) {
+      if (m.fieldSummary?.length) {
+        lines.push('');
+        for (const s of m.fieldSummary) lines.push(s);
+      }
+      for (const t of m.extraTables ?? []) {
+        lines.push('', ...renderTable(t, timeZone));
+      }
+    }
+  }
+
+  lines.push('', heading('Pilot style clusters (who flew alike)', '-'));
+  lines.push(...renderStyleClusters(clusterPilotStyles(report)));
+
+  if (report.thermals) {
+    lines.push('', heading('Reconstructed thermals (multi-pilot, chronological)', '-'));
+    lines.push(...renderThermals(report.thermals, timeZone));
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * One row per reconstructed thermal. Compact by design: the full band detail
+ * lives in the web UI; here the reader wants the census and the headline
+ * measurements (climb, lean vs wind, strongest side).
+ */
+function renderThermals(thermals: FieldThermalsSummary, timeZone?: string): string[] {
+  const { shapes, totalShapeCount } = thermals;
+  const lines: string[] = [];
+  if (shapes.length < totalShapeCount) {
+    lines.push(
+      `Top ${shapes.length} of ${totalShapeCount} multi-pilot thermals (by pilot count).`,
+    );
+  }
+  const rows = shapes.map((s) => {
+    const bands = s.bands;
+    const altLo = bands[0].altMin;
+    const altHi = bands[bands.length - 1].altMax;
+    const weighted = bands.reduce(
+      (acc, b) => ({ v: acc.v + b.meanVario * b.sampleCount, n: acc.n + b.sampleCount }),
+      { v: 0, n: 0 },
+    );
+    const lean = s.lean
+      ? `${s.lean.tiltDeg.toFixed(0)}° to ${Math.round(s.lean.bearing)}°${s.lean.confounded ? '*' : ''}`
+      : '—';
+    const wind = s.wind
+      ? `${s.wind.speed.toFixed(1)} m/s @ ${Math.round(s.wind.direction)}°`
+      : '—';
+    const side = s.strongestSide
+      ? `${Math.round(s.strongestSide.bearing)}° (+${s.strongestSide.meanVario.toFixed(1)})`
+      : '—';
+    return [
+      { t: new Date(s.startMs).toISOString() },
+      String(s.pilotCount),
+      `${Math.round(altLo)}–${Math.round(altHi)} m`,
+      weighted.n > 0 ? `+${(weighted.v / weighted.n).toFixed(1)}` : '—',
+      lean,
+      wind,
+      side,
+    ];
+  });
+  lines.push(
+    ...renderTable(
+      {
+        title: 'Thermals',
+        columns: [
+          { header: 'Start', align: 'left' },
+          { header: 'Pilots', align: 'right' },
+          { header: 'Altitude', align: 'right' },
+          { header: 'Climb', align: 'right' },
+          { header: 'Lean', align: 'right' },
+          { header: 'Wind (tracks)', align: 'right' },
+          { header: 'Best side', align: 'right' },
+        ],
+        rows,
+      },
+      timeZone,
+    ),
+  );
+  if (shapes.some((s) => s.lean?.confounded)) {
+    lines.push('* the field climbed as one wave, so lean cannot be told from drift');
+  }
+  return lines;
+}
+
+/** A rank statistic for display: whole ranks stay whole, an even-count
+ * median shows its half. */
+function fmtRank(r: number): string {
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+function renderStyleClusters(sc: StyleClusterReport | null): string[] {
+  if (sc === null) {
+    return [
+      `(not clustered: fewer than ${MIN_CLUSTER_PILOTS} pilots with enough metric coverage to compare)`,
+    ];
+  }
+  const lines: string[] = [];
+  lines.push(
+    `Clustered ${sc.pilotCount} pilots on ${sc.metricCount} behavioural metrics into ` +
+      `${sc.k} groups (mean silhouette ${sc.meanSilhouette.toFixed(2)}, k searched ${sc.kMin}–${sc.kMax}).`,
+  );
+  lines.push(
+    'Method: a within-field percentile for each metric, then the Gower distance over the metrics',
+    'that both pilots have, with nothing filled in, then a Ward-linkage tree cut at the k with the',
+    'best silhouette. The groups are STYLE. The rank spread beside each group is where that style',
+    'paid and where it did not. A silhouette near 0 means the group boundaries are soft. A value',
+    'nearer 1 means tight, well-separated groups.',
+  );
+  for (const c of sc.clusters) {
+    lines.push(
+      '',
+      `Group ${c.id} "${c.label}" — ${c.members.length} pilots · ranks ${c.rankBest}–${c.rankWorst} ` +
+        `(median ${fmtRank(c.rankMedian)}, middle half ${fmtRank(c.rankP25)}–${fmtRank(c.rankP75)})`,
+    );
+    if (c.signatures.length === 0) {
+      lines.push('  • no strong signature — near field-typical on every metric');
+    }
+    for (const s of c.signatures) {
+      // The hint is the metric's documented direction prior, not this task's
+      // verdict — hence "usually". Neutral metrics get none: their sign is
+      // the finding.
+      const hint =
+        s.hint === 'strength' ? ' — usually a strength' : s.hint === 'cost' ? ' — usually costly' : '';
+      lines.push(
+        `  • ${s.deviation > 0 ? 'high' : 'low'} ${s.label}: group median P${s.medianPercentile.toFixed(0)} ` +
+          `vs field P50 (${formatMetricValue(s.unit, s.medianValue)} ${s.unit})${hint}`,
+      );
+    }
+    // Members wrapped to the report width; '*' marks the group's most
+    // typical pilot (smallest mean style distance to the rest).
+    const parts = c.members.map(
+      (m) => `${m.rank}. ${m.pilotName}${m.trackFile === c.exemplarTrackFile ? '*' : ''}`,
+    );
+    let line = ' ';
+    for (const part of parts) {
+      if (line.length + part.length + 3 > WIDTH && line.trim() !== '') {
+        lines.push(line);
+        line = ' ';
+      }
+      line += ` ${part} ·`;
+    }
+    if (line.trim() !== '') lines.push(line.replace(/ ·$/, ''));
+  }
+  lines.push('  * most typical of its group (smallest mean style distance to the rest)');
+  if (sc.unclustered.length > 0) {
+    lines.push('', 'Not clustered:');
+    for (const u of sc.unclustered) {
+      lines.push(`  ${u.rank}. ${u.pilotName} — ${u.reason}`);
+    }
+  }
+  return lines;
+}
+
+const CORRELATION_COLUMNS: ReportTable['columns'] = [
+  { header: 'Metric', align: 'left' },
+  { header: 'ρ', align: 'right' },
+  { header: '|ρ|', align: 'right' },
+  { header: 'n', align: 'right' },
+  { header: 'direction', align: 'left' },
+  { header: 'verdict', align: 'left' },
+];
+
+function correlationRows(metrics: MetricReport[]): ReportCell[][] {
+  const withCorr = metrics
+    .filter((m) => m.correlation !== null)
+    .sort((a, b) => b.correlation!.absRho - a.correlation!.absRho);
+  const without = metrics.filter(
+    (m) => m.correlation === null && m.perPilot.some((v) => v.value !== null),
+  );
+  return [
+    ...withCorr.map((m) => {
+      const c = m.correlation!;
+      return [m.id, c.rho.toFixed(2), c.absRho.toFixed(2), String(c.n), m.direction, c.verdict];
+    }),
+    ...without.map((m) => [m.id, '—', '—', '—', m.direction, 'not enough data']),
+  ];
+}
+
+function renderCorrelationTable(report: TaskAnalysisReport): string[] {
+  // Outcome-derived metrics (time behind the leader, …) correlate with rank
+  // by construction, so ranking them among the behaviours would make the
+  // headline a non-finding. They get their own table, framed as what they
+  // are: eval sanity checks.
+  const behavioural = correlationRows(report.metrics.filter((m) => !m.outcome));
+  const outcome = correlationRows(report.metrics.filter((m) => m.outcome));
+
+  if (behavioural.length === 0 && outcome.length === 0) {
+    return ['(no per-pilot metrics registered yet)'];
+  }
+
+  const lines: string[] = [];
+  if (behavioural.length > 0) {
+    lines.push(
+      ...renderTable({
+        title: 'Ranked by |ρ| — the behaviours that separate the leaderboard hardest',
+        columns: CORRELATION_COLUMNS,
+        rows: behavioural,
+        footnotes: [
+          'Rank 1 is best, so a well-behaved "higher" metric shows NEGATIVE ρ and a "lower" metric positive ρ.',
+          'For "neutral" metrics the sign itself is the finding.',
+          'Verdicts: strong is |ρ| ≥ 0.5, moderate is ≥ 0.3, and weak is less than that. A metric',
+          'gets a verdict only after it clears the α = 0.05 noise floor for that n, and it reads',
+          `"within noise" if it does not. A verdict also needs n ≥ ${MIN_CORRELATION_N}.`,
+          'This task ranks many metrics, so the top rows are partly luck. Trust the metrics that',
+          'repeat across tasks, in the whole-competition report.',
+        ],
+      }),
+    );
+  }
+  if (outcome.length > 0) {
+    lines.push(
+      '',
+      ...renderTable({
+        title: 'Outcome checks — derived from the race outcome, so they correlate by construction',
+        columns: CORRELATION_COLUMNS,
+        rows: outcome,
+        footnotes: ['A LOW |ρ| here questions the eval, not the flying.'],
+      }),
+    );
+  }
+  return lines;
+}
+
+export function renderCompAnalysis(report: CompAnalysisReport): string {
+  const lines: string[] = [];
+  lines.push(heading('Comp Analysis', '='));
+
+  // Separation first here too — task-by-task ρ columns show which strategies
+  // mattered on which day; the scores are context, not the headline.
+  // Outcome-derived metrics rank apart, same as the per-task report: they
+  // correlate by construction, so they must not top the behavioural ranking.
+  // |mean signed ρ| ranks CONSISTENT separation: a metric flip-flopping
+  // +0.5/−0.5 across tasks cancels here instead of ranking beside one that
+  // is consistently −0.5 (its per-day power stays visible in mean|ρ|).
+  const signedStrength = (m: CompMetricAggregate): number =>
+    m.meanSignedRho === null ? -1 : Math.abs(m.meanSignedRho);
+  const rankBySigned = (a: CompMetricAggregate, b: CompMetricAggregate): number =>
+    signedStrength(b) - signedStrength(a);
+  const ranked = report.metrics.filter((m) => !m.outcome).sort(rankBySigned);
+  const outcomeRanked = report.metrics.filter((m) => m.outcome).sort(rankBySigned);
+  const compColumns: ReportTable['columns'] = [
+    { header: 'Metric', align: 'left' },
+    ...report.taskLabels.map((l) => ({ header: l, align: 'right' as const })),
+    { header: 'mean ρ', align: 'right' },
+    { header: 'mean|ρ|', align: 'right' },
+    { header: 'signs', align: 'left' },
+    { header: 'comp ρ', align: 'right' },
+    { header: 'n', align: 'right' },
+    { header: 'verdict', align: 'left' },
+  ];
+  const signsCell = (m: CompMetricAggregate): string => {
+    const s = m.signSummary;
+    if (s.negative + s.positive === 0) return 'quiet';
+    return `${s.negative}−/${s.positive}+ ${m.consistency}`;
+  };
+  const compRow = (m: CompMetricAggregate): ReportCell[] => [
+    m.id,
+    ...m.perTaskRho.map((r) => (r === null ? '—' : r.toFixed(2))),
+    m.meanSignedRho === null ? '—' : m.meanSignedRho.toFixed(2),
+    m.meanAbsRho === null ? '—' : m.meanAbsRho.toFixed(2),
+    signsCell(m),
+    m.compRho ? m.compRho.rho.toFixed(2) : '—',
+    m.compRho ? String(m.compRho.n) : '—',
+    m.compRho?.verdict ?? '—',
+  ];
+  const separation: ReportTable = {
+    title: 'Metric separation across the comp (Spearman ρ vs rank, per task and comp-level)',
+    columns: compColumns,
+    rows: ranked.map(compRow),
+    footnotes: [
+      'comp ρ correlates each pilot\'s cross-task metric mean against their comp rank (total score).',
+      'Ranked by |mean ρ| (n-weighted signed mean): flip-flopping tasks cancel, so consistent',
+      'separation leads. mean|ρ| is per-day power regardless of direction — a large gap between',
+      'the two means the payoff depended on the day.',
+      'signs counts tasks whose |ρ| cleared their noise floor: − = larger value went with better',
+      'ranks. A split is a finding (day-dependent payoff), not a defect.',
+      'Verdicts: strong is |ρ| ≥ 0.5, moderate is ≥ 0.3, and weak is less than that. A metric gets',
+      'a verdict only after it clears the α = 0.05 noise floor for that n, and it reads "within',
+      'noise" if it does not.',
+    ],
+  };
+  lines.push('', ...renderTable(separation));
+  if (outcomeRanked.length > 0) {
+    lines.push(
+      '',
+      ...renderTable({
+        title: 'Outcome checks — derived from the race outcome, so they correlate by construction',
+        columns: compColumns,
+        rows: outcomeRanked.map(compRow),
+        footnotes: ['A LOW |ρ| here questions the eval, not the flying.'],
+      }),
+    );
+  }
+
+  const scores: ReportTable = {
+    title: `Comp scores (${report.taskLabels.length} tasks)`,
+    columns: [
+      { header: '#', align: 'right' },
+      { header: 'Pilot', align: 'left' },
+      { header: 'Tasks', align: 'right' },
+      { header: 'Total', align: 'right' },
+    ],
+    rows: report.pilots.map((p) => [
+      String(p.rank),
+      p.name.slice(0, 25),
+      String(p.taskCount),
+      p.totalScore.toFixed(1),
+    ]),
+  };
+  lines.push('', ...renderTable(scores));
+  lines.push('');
+  return lines.join('\n');
+}

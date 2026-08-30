@@ -2,7 +2,7 @@
  * Drives the task weather work end-to-end as a signed-in super-admin:
  *   1. Task page — add weather notes through the admin dialog, confirm they
  *      render for an ANONYMOUS visitor too.
- *   2. Field analysis — wait out the background compute, open the Day family,
+ *   2. Task analysis — wait out the background compute, open the Day family,
  *      and screenshot the day panel with the weather charts stacked on the
  *      shared time axis.
  *
@@ -98,8 +98,8 @@ async function main() {
   await anon.close();
 
   // ── 2. The day panel with the weather charts ─────────────────────────────
-  await page.getByRole("link", { name: "Field analysis" }).first().click();
-  await page.waitForURL(/\/analysis\/task\/[^/]+$/);
+  await page.getByRole("link", { name: "Task analysis" }).first().click();
+  await page.waitForURL(/\/task\/[^/]+\/analysis$/);
 
   // Cold analysis => pending; poll (networkidle never settles — freshness poller).
   let ready = false;
@@ -111,7 +111,7 @@ async function main() {
       break;
     }
   }
-  if (!ready) throw new Error("field analysis never finished computing");
+  if (!ready) throw new Error("task analysis never finished computing");
 
   // Open the Day family and find the panel. Anchor the name: /Day/i also
   // matches the ranking table's ⓘ buttons ("How high in the day's band …"),
@@ -119,7 +119,7 @@ async function main() {
   const dayFamily = page.getByRole("button", { name: /^Day profile/ }).first();
   if (await dayFamily.count()) await dayFamily.click();
   await page.getByRole("heading", { name: /What the weather did/i }).waitFor({ timeout: 20000 });
-  console.log("field analysis: weather group present");
+  console.log("task analysis: weather group present");
 
   // Only the wind and cloud charts are guaranteed: a dataset with neither a
   // boundary layer nor a dewpoint would legitimately drop the height chart.
@@ -134,7 +134,7 @@ async function main() {
 
   // The notes must travel to this page too.
   await page.locator("figure p", { hasText: /Glass off around 3/ }).first().waitFor();
-  console.log("field analysis: organizer notes shown with the charts ✓");
+  console.log("task analysis: organizer notes shown with the charts ✓");
 
   const panel = page.locator("figure", { hasText: "The day at a glance" }).first();
   await panel.screenshot({ path: path.join(SHOTS, `wx-day-panel${process.env.COMP_MATCH ? "-" + process.env.COMP_MATCH.toLowerCase() : ""}.png`) });
@@ -142,11 +142,11 @@ async function main() {
 
   await browser.close();
 
-  // Reported, not fatal — matching drive-field-analysis.mjs. A cold run
-  // triggers the whole-field analysis compute alongside the driver's reload
+  // Reported, not fatal — matching drive-task-analysis.mjs. A cold run
+  // triggers the task-analysis compute alongside the driver's reload
   // poll, and local Miniflare D1 throws transient
   // "D1_ERROR: Failed to parse body as JSON" (SQLITE_BUSY underneath) under
-  // that contention. Verified pre-existing: the untouched field-analysis
+  // that contention. Verified pre-existing: the untouched task-analysis
   // driver produces the same 500s on endpoints this work never touched.
   // The weather assertions above are the real pass/fail signal.
   const realErrors = errors.filter((e) => !/favicon|mapbox/i.test(e));

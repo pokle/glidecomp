@@ -9,8 +9,8 @@ import {
   spearmanNoiseFloor,
   correlationVerdict,
   roundPercentagesToHundred,
-} from '../src/field-analysis';
-import { combineWindEstimates, pearson } from '../src/field-analysis/stats';
+} from '../src/analysis';
+import { combineWindEstimates, pearson } from '../src/analysis/stats';
 
 describe('percentile', () => {
   it('interpolates linearly on a sorted array', () => {

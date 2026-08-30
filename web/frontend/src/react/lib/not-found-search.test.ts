@@ -187,7 +187,7 @@ describe("buildSuggestions", () => {
   test.each([
     ["scores", "/comp/corryong-cup-2026-voqc/scores", "/comp/corryong-cup-2026-newc/scores", "Scores"],
     ["waypoints", "/comp/corryong-cup-2026-voqc/waypoints", "/comp/corryong-cup-2026-newc/waypoints", "Waypoints"],
-    ["field analysis", "/comp/corryong-cup-2026-voqc/analysis", "/comp/corryong-cup-2026-newc/analysis", "Field analysis"],
+    ["comp analysis", "/comp/corryong-cup-2026-voqc/analysis", "/comp/corryong-cup-2026-newc/analysis", "Comp analysis"],
   ])("a dead %s URL is rebuilt as itself, first", (_what, dead, live, label) => {
     const suggestions = buildSuggestions(parsePathIdentity(dead), results);
     // Same page, live id — not merely something nearby in the same comp.
@@ -202,7 +202,7 @@ describe("buildSuggestions", () => {
     expect(suggestions[0]).toEqual({
       kind: "analysis",
       path: "/comp/corryong-cup-2026-newc/task/task-1-open-newt/analysis",
-      label: "Field analysis",
+      label: "Task analysis",
       context: "Task 1 (Open) · Corryong Cup 2026",
     });
   });

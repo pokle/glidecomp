@@ -1,7 +1,7 @@
 /**
  * Zone-aware date machinery, built on Intl only — deliberately: the engine
  * must not pull in a tz-lookup database (see the note in
- * field-analysis/format-time.ts).
+ * analysis/format-time.ts).
  */
 
 const DAY_MS = 86_400_000;

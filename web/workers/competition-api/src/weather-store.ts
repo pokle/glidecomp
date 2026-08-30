@@ -1,7 +1,7 @@
 /**
  * Stale-first weather storage — the D1 `task_weather` table (migration 0023).
  *
- * A third sibling of score-store.ts and field-analysis-store.ts rather than a
+ * A third sibling of score-store.ts and task-analysis-store.ts rather than a
  * shared abstraction, for the same reason those two are separate from each
  * other: the contract is the same (reads never fetch; a lease lock makes the
  * background job exactly-once; a guarded write can't record a superseded
@@ -23,7 +23,7 @@
  *   it isn't a provisional answer past its TTL, AND
  *   it isn't a failure still inside its backoff.
  *
- * Like field analysis, the cold path never fetches synchronously: an
+ * Like task analysis, the cold path never fetches synchronously: an
  * outbound API call has no business blocking a page render.
  */
 

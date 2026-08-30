@@ -4,7 +4,7 @@
  * Two parts: a fixed list of the static content pages (home + the evergreen
  * scoring explainers, built by the Astro app) and one entry per PUBLIC comp
  * for its top-level surfaces — the hub, the scores page, and (GAP comps only)
- * the field analysis page. Deeper pages (per task, per pilot) are deliberately
+ * the comp analysis page. Deeper pages (per task, per pilot) are deliberately
  * NOT listed: they are reached by crawlers via links from the comp pages, and
  * listing every one would bloat the sitemap for little indexing benefit.
  *
@@ -68,7 +68,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const lastmod = (comp.last_task_date ?? comp.creation_date)?.slice(0, 10);
         urls.push({ loc: `${origin}${compPath(comp.comp_id, comp.name)}`, lastmod });
         urls.push({ loc: `${origin}${compScoresPath(comp.comp_id, comp.name)}`, lastmod });
-        // Field analysis has nothing to measure on an open-distance comp (no
+        // Comp analysis has nothing to measure on an open-distance comp (no
         // legs, no speed section) — its page renders empty + noindex there, so
         // only GAP comps get a sitemap entry.
         if (comp.scoring_format !== "open_distance") {

@@ -2,7 +2,7 @@
  * Wire shape of the task-weather endpoint, plus re-exports of the engine's
  * weather types.
  *
- * Re-exported rather than redeclared, exactly as field-analysis/types.ts does
+ * Re-exported rather than redeclared, exactly as analysis/types.ts does
  * for the report types: the provider decides what a `WeatherHour` contains,
  * and a second hand-written copy here would drift the moment a provider is
  * added.
