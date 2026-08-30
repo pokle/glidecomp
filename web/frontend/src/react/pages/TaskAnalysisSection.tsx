@@ -16,8 +16,7 @@
  * hints and printed twins of its ⓘ popovers so a whole task could be put on
  * paper in one go; that is no longer a goal, and each page prints as itself.
  */
-import { useEffect, useMemo, useState } from "react";
-import type { Key } from "react-aria-components";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Card } from "@/react/rac/card";
 import { Explain } from "@/react/rac/explain";
@@ -128,11 +127,6 @@ function StrategiesSection({
   active: FrameCtx["active"];
   report: FrameCtx["report"];
 }) {
-  // The ranking's selection lives here rather than inside it so a class switch
-  // resets it, instead of carrying a stale metric id across metric sets.
-  const [selected, setSelected] = useState<Key | null>(null);
-  useEffect(() => setSelected(null), [active.pilot_class]);
-
   return (
     <>
       <Card aria-labelledby="separation-heading" className="gap-3">
@@ -148,12 +142,7 @@ function StrategiesSection({
             <OneDayCaveatNote behaviourCount={rankMetrics(report.metrics).length} />
           </Explain>
         </h2>
-        <SeparationRanking
-          metrics={report.metrics}
-          report={report}
-          selectedMetricId={selected}
-          onSelectedMetricIdChange={setSelected}
-        />
+        <SeparationRanking metrics={report.metrics} report={report} />
       </Card>
 
       {/* Renders nothing unless this task actually ran against the consensus

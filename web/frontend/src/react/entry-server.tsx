@@ -25,7 +25,7 @@ export async function render(
 ): Promise<ReadableStream<Uint8Array>> {
   // Pathname AND search: several public pages read view state from the query
   // (`?class=` on both analysis pages, `?thermal=` on the thermals section,
-  // `?task=` on the scores page), and the
+  // `?metric=` on the strategies ranking, `?task=` on the scores page), and the
   // client's first render always sees it. Rendering the pathname alone made
   // the server pick the default view and the client hydrate a different one —
   // a mismatch on every shared deep link. The fragment never reaches a

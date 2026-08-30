@@ -659,7 +659,6 @@ function TurnpointsSection({
             <MasterDetail
               detailLabel="diagram"
               detailAriaLabel="Route diagram"
-              wideCols="@5xl:grid-cols-[minmax(0,1fr)_auto]"
               detail={
                 <div className="flex justify-center bg-muted/20 p-2">
                   <TaskDiagram

@@ -17,10 +17,10 @@
  * absence.
  *
  * Labelling: the best/worst three pilots and the value extremes are named
- * permanently (selective direct labels); the focused dot is named in place
- * while focused (click, tap, or arrow keys); and an opt-in checkbox labels
- * every pilot, growing the chart vertically so the names have room. In
- * label-everyone mode the special labels go bold to stand out of the crowd.
+ * permanently (selective direct labels); the focused or pinned dot is named
+ * in place; and an opt-in checkbox labels every pilot, growing the chart
+ * vertically so the names have room. In label-everyone mode the special
+ * labels go bold to stand out of the crowd.
  *
  * Accessibility: the figure carries a caption stating the statistics in
  * words; every dot is a focusable element with the pilot's name/value/rank as
@@ -28,7 +28,7 @@
  * tables below the page remain the full data equivalent. A readout line under
  * the plot mirrors hover/focus for sighted users (works on touch, prints).
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/react/lib/utils";
 import { Checkbox } from "@/react/rac/checkbox";
 import {
@@ -38,10 +38,10 @@ import {
 } from "../types";
 import { unitWords, verdictWords } from "../units";
 import { usePilotHighlight } from "../PilotHighlightContext";
+import { PilotHighlightMark } from "../PilotHighlightMark";
 import {
   axisTitleFor,
   extent,
-  formatTickValue,
   linearScale,
   loessTrend,
   niceTicks,
@@ -63,8 +63,39 @@ const BASE_H = 316;
 // ticks and the x-axis title beneath them. Both grew when the axes were
 // titled — BASE_H grew with them so the plot itself did not shrink.
 const MARGIN = { top: 10, right: 16, bottom: 42, left: 52 };
-/** Vertical room per label when naming every pilot (labels spread at 11). */
-const LABEL_ROW = 12;
+
+/**
+ * ViewBox font-size that renders at the document's body size (1rem) once the
+ * SVG is scaled to its CSS width. `text-[10px]` is 10 viewBox units, so on a
+ * 360px-wide pane it paints at ~6px — unreadable, which is why the names
+ * looked like a smudge on both phone and desktop. Measuring the drawn width
+ * and asking for `bodyPx * W / cssWidth` is the same conversion minHeight
+ * uses for the rank axis.
+ */
+function useBodySizedLabel(viewBoxWidth: number): {
+  svgRef: (el: SVGSVGElement | null) => void;
+  fontSize: number;
+} {
+  const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
+  const [fontSize, setFontSize] = useState(16);
+  useEffect(() => {
+    if (!svgEl || typeof ResizeObserver === "undefined") return;
+    const update = () => {
+      const w = svgEl.getBoundingClientRect().width;
+      if (w <= 0) return;
+      const body =
+        typeof window !== "undefined"
+          ? parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+          : 16;
+      setFontSize((body * viewBoxWidth) / w);
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(svgEl);
+    update();
+    return () => observer.disconnect();
+  }, [svgEl, viewBoxWidth]);
+  return { svgRef: setSvgEl, fontSize };
+}
 
 interface ScatterPoint {
   trackFile: string;
@@ -179,10 +210,9 @@ export function RankScatter({
    * always drawn {@link W} wide and scales to whatever CSS width it is given,
    * so its aspect ratio decides how much of a tall box it can use: at the
    * default {@link BASE_H} a phone-width chart is ~190px tall no matter how
-   * much screen is free, which is exactly what makes the full-screen overlay
-   * (MetricChartOverlay) worth having. That overlay measures its box and
-   * passes the height that matches its aspect, so the rank axis gets the
-   * whole screen instead of a letterboxed strip.
+   * much screen is free. Callers that want the rank axis to spend the screen
+   * (the ranking pane, the full-screen overlay) measure their box and pass
+   * the height that matches its aspect.
    *
    * A floor, never a cap: below BASE_H the axis labels and the spread-out
    * pilot names stop fitting, so a smaller request is ignored.
@@ -228,6 +258,24 @@ export function RankScatter({
   // Page-wide pilot highlight (no-op outside the provider): hovering a dot
   // lights the pilot up in the heatmap and tables, and vice versa.
   const { highlight, setHighlight } = usePilotHighlight();
+  const { svgRef, fontSize } = useBodySizedLabel(W);
+  const labelGap = fontSize + 4;
+  const xAxisTitle = axisTitleFor(metric).replace(/ \(([^)]+)\)$/, "\n($1)");
+  const xTitleLines = xAxisTitle.includes("\n") ? 2 : 1;
+  // Room for body-sized ticks and axis titles. The constants below were
+  // fitted to 10 viewBox-unit type; growing them with fontSize is what
+  // keeps "30" and "rank — 1 is the winner" on the page. A second x-title
+  // line (the unit in words) is what stops a phone-width chart clipping
+  // "kilometres per hour" off both sides.
+  const margin = {
+    top: MARGIN.top,
+    right: MARGIN.right,
+    bottom: Math.max(
+      MARGIN.bottom,
+      Math.round(fontSize * (1.2 + 1.15 * xTitleLines) + 8)
+    ),
+    left: Math.max(MARGIN.left, Math.round(fontSize * 2.8 + 8)),
+  };
 
   const excluded = pilots.length - points.length;
   const maxRank = Math.max(...pilots.map((p) => p.rank), 1);
@@ -262,15 +310,15 @@ export function RankScatter({
   // caller's floor (the full-screen overlay's measured aspect) comes in on
   // the same max(): whichever wants more room wins.
   const height = Math.max(
-    BASE_H,
+    BASE_H + (margin.bottom - MARGIN.bottom),
     minHeight ?? 0,
-    showAllLabels ? MARGIN.top + MARGIN.bottom + points.length * LABEL_ROW + 16 : 0
+    showAllLabels ? margin.top + margin.bottom + points.length * labelGap + 16 : 0
   );
   const plot = {
-    left: MARGIN.left,
-    right: W - MARGIN.right,
-    top: MARGIN.top,
-    bottom: height - MARGIN.bottom,
+    left: margin.left,
+    right: W - margin.right,
+    top: margin.top,
+    bottom: height - margin.bottom,
   };
 
   const xDomain = extent(points.map((p) => p.value))!;
@@ -282,7 +330,6 @@ export function RankScatter({
     : null;
   const trendEnd = trendRanks?.[trendRanks.length - 1];
 
-  const xAxisTitle = axisTitleFor(metric);
   const xTicks = niceTicks(xDomain, 5);
   // Rank ticks: always show 1 (it is the whole point of the axis), then
   // whatever whole-number steps fit.
@@ -310,18 +357,32 @@ export function RankScatter({
   ]);
 
   // What actually gets a label: everyone (opt-in), or the specials plus the
-  // focused dot — naming the dot you just clicked in place beats making you
-  // glance down at the readout line.
+  // focused or pinned dot — naming the one you just clicked (or picked in
+  // Highlight a pilot) in place beats making you glance down at the readout.
   const focusedIdx =
     focusedTrack !== null ? points.findIndex((p) => p.trackFile === focusedTrack) : -1;
+  const highlightedIdx =
+    highlight !== null ? points.findIndex((p) => p.trackFile === highlight) : -1;
   const labelIndices = showAllLabels
     ? points.map((_, i) => i)
-    : [...new Set([...specialIndices, ...(focusedIdx >= 0 ? [focusedIdx] : [])])];
+    : [
+        ...new Set([
+          ...specialIndices,
+          ...(focusedIdx >= 0 ? [focusedIdx] : []),
+          ...(highlightedIdx >= 0 ? [highlightedIdx] : []),
+        ]),
+      ];
+  const emphasized =
+    highlightedIdx >= 0
+      ? points[highlightedIdx]
+      : focusedIdx >= 0
+        ? points[focusedIdx]
+        : undefined;
   // Adjacent ranks sit only a few pixels apart vertically, so the label
   // baselines are spread to at least a line-height apart.
   const labelYs = spreadLabels(
     labelIndices.map((i) => y(points[i].rank) + 3),
-    11,
+    labelGap,
     plot.top + 8,
     plot.bottom - 2
   );
@@ -362,6 +423,7 @@ export function RankScatter({
   return (
     <figure className="space-y-1">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${height}`}
         className="h-auto w-full"
         role="group"
@@ -396,24 +458,27 @@ export function RankScatter({
         ))}
 
         {/* Tick labels. aria-hidden: the caption and dot labels carry the
-            information; stray "20"s only add noise to a screen reader. */}
-        <g aria-hidden className="text-[10px] text-muted-foreground">
+            information; stray "20"s only add noise to a screen reader.
+            X ticks are the number only: the axis title already names the
+            unit in words, and body-sized "40 km/h" on every tick stacked. */}
+        <g aria-hidden fontSize={fontSize} className="text-muted-foreground">
           {xTicks.map((t) => (
             <text
               key={`tx${t}`}
               x={x(t)}
-              y={plot.bottom + 14}
+              y={plot.bottom + fontSize * 0.95}
               textAnchor="middle"
               className="fill-current"
             >
-              {formatTickValue(metric.unit, t)}
+              {formatMetricValue(metric.unit, t).replace(/\.0+$/, "")}
+              {metric.unit === "pct" ? "%" : ""}
             </text>
           ))}
           {yTicks.map((t) => (
             <text
               key={`ty${t}`}
-              x={plot.left - 6}
-              y={y(t) + 3}
+              x={plot.left - Math.max(6, fontSize * 0.35)}
+              y={y(t) + fontSize * 0.35}
               textAnchor="end"
               className="fill-current"
             >
@@ -425,10 +490,24 @@ export function RankScatter({
         {/* The axes, named. Rank 1 is at the top and is the winner, which is
             the single most misreadable thing about this chart — the corner
             label that used to sit here said only "rank". */}
-        <YAxisTitle x={12} top={plot.top} bottom={plot.bottom}>
+        <YAxisTitle
+          x={Math.max(12, Math.round(fontSize * 0.95))}
+          top={plot.top}
+          bottom={plot.bottom}
+          fontSize={fontSize}
+        >
           rank — 1 is the winner
         </YAxisTitle>
-        <XAxisTitle left={plot.left} right={plot.right} y={plot.bottom + 34}>
+        {/* Centred on the full viewBox, not the plot: the left margin is
+            fat (rotated title + rank ticks) and a body-sized metric name is
+            often as wide as the chart, so a plot-centred title ran off the
+            right. */}
+        <XAxisTitle
+          left={0}
+          right={W}
+          y={plot.bottom + fontSize * 2.1}
+          fontSize={fontSize}
+        >
           {xAxisTitle}
         </XAxisTitle>
 
@@ -461,16 +540,7 @@ export function RankScatter({
             {/* Invisible halo: a 24px pointer/focus target over a 10px dot
                 (accessibility standard §4.5, WCAG 2.5.8). */}
             <circle cx={x(p.value)} cy={y(p.rank)} r={12} className="fill-transparent" />
-            <circle
-              cx={x(p.value)}
-              cy={y(p.rank)}
-              r={5}
-              className={cn(
-                "fill-chart-1/70",
-                (focusedTrack === p.trackFile || highlight === p.trackFile) &&
-                  "stroke-ring stroke-2"
-              )}
-            />
+            <circle cx={x(p.value)} cy={y(p.rank)} r={5} className="fill-chart-1/70" />
           </g>
         ))}
 
@@ -481,17 +551,20 @@ export function RankScatter({
             dot already announces its pilot. */}
         <g
           aria-hidden
-          className="stroke-background text-[10px] text-muted-foreground [paint-order:stroke] [stroke-width:3px]"
+          fontSize={fontSize}
+          strokeWidth={Math.max(3, fontSize * 0.18)}
+          className="stroke-background text-muted-foreground [paint-order:stroke]"
         >
           {labelIndices.map((pi, k) => {
             const p = points[pi];
             const px = x(p.value);
             // Anchor away from the nearer plot edge so names never run off.
             const onRight = px > (plot.left + plot.right) / 2;
+            const inset = Math.max(9, fontSize * 0.55);
             return (
               <text
                 key={p.trackFile}
-                x={onRight ? px - 9 : px + 9}
+                x={onRight ? px - inset : px + inset}
                 y={labelYs[k]}
                 textAnchor={onRight ? "end" : "start"}
                 className={cn(
@@ -557,6 +630,22 @@ export function RankScatter({
           >
             trend
           </text>
+        ) : null}
+
+        {/* Emphasis last, over the field, the names and the trend. A 2px
+            --ring stroke on a --chart-1 fill was invisible: those tokens are
+            the same blue. A diamond in --chart-5 (and a background casing so
+            it punches through the curve) is the pin you can actually find —
+            shape as well as colour, matching the glyph next to Highlight a
+            pilot. Colour is not the only difference.
+            pointer-events none: the rank-order dots below keep the hit
+            target and the keyboard. */}
+        {emphasized ? (
+          <PilotHighlightMark
+            x={x(emphasized.value)}
+            y={y(emphasized.rank)}
+            className="pointer-events-none"
+          />
         ) : null}
       </svg>
 

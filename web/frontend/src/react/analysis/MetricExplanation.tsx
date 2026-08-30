@@ -24,10 +24,11 @@ export { directionWords };
 
 /**
  * The ⓘ text, inline: unit + direction, then the method prose. Chart blocks
- * render this UNDER their heading so the method reads with the chart, on
- * screen and on paper alike — no popover to open (and none to lose in
- * print). The ⓘ popover stays for the metrics named inside dense tables,
- * where twenty-six inline explanations would bury the numbers.
+ * render this in a disclosure below the scatter ("How this is measured") so
+ * the plot is the pane's highlight, on screen and on paper alike — print
+ * expands the disclosure; there is no popover to lose. The ⓘ popover stays
+ * for the metrics named inside dense tables, where twenty-six inline
+ * explanations would bury the numbers.
  */
 export function MetricMethod({
   unit,

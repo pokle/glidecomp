@@ -19,7 +19,11 @@
  *   context (no inner scrollbox on the master — that was tried in #553 and
  *   one ordinary page scroll defeated it).
  * - SIDE BY SIDE (wide), the detail is the sticky right-hand column, pinned
- *   under the Shell's glass header, covering nothing.
+ *   under the Shell's glass header, covering nothing. A drag handle sits in
+ *   the gutter between the two — pointer and arrow keys — so the reader can
+ *   give the list or the pane more of the row. The share is remembered per
+ *   `detailLabel` (chart / map / diagram / …) and does not apply stacked:
+ *   there the pane is either pinned or the whole view.
  *
  * Pinning is why the stacked layout is BLOCK flow with grid applied only at
  * the wide breakpoint: as a single-column grid item the pane's containing
@@ -48,10 +52,12 @@
  * ## `navigation`: one pane at a time, stacked
  *
  * A pinned pane is the right stacked answer when the detail is SMALL — a
- * chart, a diagram — and the reader is really working the list. It is the
- * wrong answer when the detail is a page in its own right: the thermal detail
- * is a rose, five readouts, a climb profile and two tables, and no cap that
- * leaves the census usable leaves the detail readable.
+ * map, a diagram — and the reader is really working the list. It is the
+ * wrong answer when the detail is a page in its own right: the thermal
+ * detail is a rose, five readouts, a climb profile and two tables, and the
+ * ranking's chart is a scatter, a distribution and the metric's method
+ * behind a disclosure — no cap that leaves the list usable leaves those
+ * readable.
  *
  * So a caller may pass `navigation` and get the phone behaviour people expect
  * of a master/detail: stacked shows the LIST alone, choosing a row shows the
@@ -68,10 +74,29 @@
  * a navigation that pushes history (stacked) or just a change of view (side
  * by side). It must not decide anything that is rendered.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { ArrowLeftIcon } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { cn } from "@/react/lib/utils";
+import {
+  DEFAULT_MASTER_SHARE,
+  MAX_MASTER_SHARE,
+  MIN_MASTER_SHARE,
+  SHARE_STEP,
+  clampMasterShare,
+  masterShareFromPointer,
+  readStoredMasterShare,
+  writeStoredMasterShare,
+} from "./master-detail-split";
 
 /** The `@5xl` container query above, in pixels, for `onWideChange`. */
 const WIDE_PX = 64 * 16;
@@ -103,7 +128,7 @@ export function MasterDetail({
   detailAriaLabel,
   stackedTop = "header",
   bleed = "card",
-  wideCols = "@5xl:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]",
+  defaultMasterShare = DEFAULT_MASTER_SHARE,
   paneWidthClassName = "mx-auto max-w-[35rem] @5xl:max-w-none",
   paneClassName,
   hideDetailInPrint = false,
@@ -123,9 +148,9 @@ export function MasterDetail({
   detailAriaLabel?: string;
   stackedTop?: keyof typeof STACKED_TOP;
   bleed?: keyof typeof BLEED;
-  /** The wide grid template, as a LITERAL `@5xl:grid-cols-[…]` class (the
-   * Tailwind scanner must see it in source). Master is column 1, detail 2. */
-  wideCols?: string;
+  /** Side-by-side list share before the reader drags, 0–1. Default 5/8
+   * (the old 5fr/3fr). Waypoints pass ½ so the map and table start even. */
+  defaultMasterShare?: number;
   /** Width classes shared by the pane and its toggle row. The default caps a
    * stacked pane at the width past which a 560-unit chart is only magnified;
    * pass e.g. "w-full" for content that wants the whole line (a map). */
@@ -153,11 +178,21 @@ export function MasterDetail({
   // survives the caller swapping the detail's content on a new selection.
   const [collapsed, setCollapsed] = useState(false);
   const detailId = useId();
+  const masterId = useId();
+  const [masterShare, setMasterShare] = useState(() =>
+    clampMasterShare(defaultMasterShare)
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const paneWrapRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const masterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const stored = readStoredMasterShare(detailLabel);
+    if (stored != null) setMasterShare(stored);
+  }, [detailLabel]);
 
   // The measured breakpoint. Held here as well as reported up because the
   // focus move below is stacked-only; it renders nothing, so the server and
@@ -213,7 +248,15 @@ export function MasterDetail({
 
   return (
     <div ref={containerRef} className="@container">
-      <div className={cn("@5xl:grid @5xl:items-start @5xl:gap-6 print:block", wideCols)}>
+      <div
+        ref={gridRef}
+        className="@5xl:grid @5xl:items-start print:block"
+        style={{
+          // Ignored while stacked (the box is not a grid). Side by side the
+          // handle is the middle `auto` column, replacing the old gap-6.
+          gridTemplateColumns: `minmax(0, ${masterShare}fr) auto minmax(0, ${1 - masterShare}fr)`,
+        }}
+      >
         <div
           ref={paneWrapRef}
           className={cn(
@@ -242,7 +285,8 @@ export function MasterDetail({
                 ),
             // Side by side it becomes the sticky right-hand column, where it
             // pins against the Shell's 60px glass header and covers nothing.
-            "@5xl:top-20 @5xl:order-2",
+            // order-3: list, handle, pane.
+            "@5xl:top-20 @5xl:order-3",
             // Paper has no viewport to pin to.
             "print:static print:z-auto print:m-0 print:bg-transparent print:p-0",
             hideDetailInPrint && "print:hidden"
@@ -301,7 +345,24 @@ export function MasterDetail({
             {detail}
           </div>
         </div>
+        <SplitHandle
+          share={masterShare}
+          detailLabel={detailLabel}
+          detailId={detailId}
+          masterId={masterId}
+          gridRef={gridRef}
+          onShareChange={(next) => {
+            setMasterShare(next);
+            writeStoredMasterShare(detailLabel, next);
+          }}
+          onReset={() => {
+            const next = clampMasterShare(defaultMasterShare);
+            setMasterShare(next);
+            writeStoredMasterShare(detailLabel, next);
+          }}
+        />
         <div
+          id={masterId}
           ref={masterRef}
           // Focus target for the way back out of a stacked detail. -1 keeps it
           // out of the tab order: it is a destination, not a stop.
@@ -333,6 +394,129 @@ export function MasterDetail({
         >
           {master}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The gutter between list and pane. Hidden stacked and on paper; side by
+ * side it is a full-height hit target with a grip that stays on screen as
+ * the list scrolls (sticky under the shell). Window-splitter pattern:
+ * role=separator, arrows move it, Home/End the stops, double-click resets.
+ */
+function SplitHandle({
+  share,
+  detailLabel,
+  detailId,
+  masterId,
+  gridRef,
+  onShareChange,
+  onReset,
+}: {
+  share: number;
+  detailLabel: string;
+  detailId: string;
+  masterId: string;
+  gridRef: RefObject<HTMLDivElement | null>;
+  onShareChange: (share: number) => void;
+  onReset: () => void;
+}) {
+  const dragging = useRef(false);
+  const [active, setActive] = useState(false);
+
+  const applyPointer = (clientX: number, handle: HTMLElement) => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    onShareChange(
+      masterShareFromPointer(
+        clientX,
+        grid.getBoundingClientRect(),
+        handle.getBoundingClientRect().width
+      )
+    );
+  };
+
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    dragging.current = true;
+    setActive(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    applyPointer(e.clientX, e.currentTarget);
+  };
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    setActive(false);
+    applyPointer(e.clientX, e.currentTarget);
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    let next: number | null = null;
+    if (e.key === "ArrowLeft") next = share - SHARE_STEP;
+    else if (e.key === "ArrowRight") next = share + SHARE_STEP;
+    else if (e.key === "Home") next = MIN_MASTER_SHARE;
+    else if (e.key === "End") next = MAX_MASTER_SHARE;
+    if (next == null) return;
+    e.preventDefault();
+    onShareChange(clampMasterShare(next));
+  };
+
+  const listPct = Math.round(share * 100);
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize list and ${detailLabel}`}
+      aria-controls={`${masterId} ${detailId}`}
+      aria-valuemin={Math.round(MIN_MASTER_SHARE * 100)}
+      aria-valuemax={Math.round(MAX_MASTER_SHARE * 100)}
+      aria-valuenow={listPct}
+      aria-valuetext={`${listPct} percent list, ${100 - listPct} percent ${detailLabel}`}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onKeyDown={onKeyDown}
+      onDoubleClick={onReset}
+      className={cn(
+        "group relative z-20 hidden w-7 cursor-col-resize touch-none select-none self-stretch",
+        "@5xl:flex @5xl:order-2 print:hidden",
+        "pointer-coarse:w-11",
+        "justify-center outline-none",
+        "hover:bg-muted/60 focus-visible:bg-muted/60",
+        "focus-visible:ring-2 focus-visible:ring-ring/50"
+      )}
+    >
+      {/* Seam down the whole row so the split is visible even when the
+          grip has stuck away from the pointer. */}
+      <div
+        aria-hidden
+        className={cn(
+          "absolute inset-y-2 left-1/2 w-1 -translate-x-1/2 rounded-full bg-muted-foreground/35",
+          "group-hover:bg-foreground/50 group-focus-visible:bg-ring",
+          active && "bg-foreground/60"
+        )}
+      />
+      {/* Grip stays under the header as the list scrolls, so the handle
+          does not vanish into a 2000px table. */}
+      <div
+        aria-hidden
+        className={cn(
+          "sticky top-40 z-10 flex h-12 w-6 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-border bg-muted shadow-sm",
+          "group-hover:border-foreground/40 group-focus-visible:border-ring",
+          active && "border-foreground/50"
+        )}
+      >
+        <span className="grid grid-cols-2 gap-0.5">
+          {Array.from({ length: 6 }, (_, i) => (
+            <span key={i} className="size-1 rounded-full bg-foreground/70" />
+          ))}
+        </span>
       </div>
     </div>
   );

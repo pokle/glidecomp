@@ -635,7 +635,7 @@ export function CompWaypoints() {
           detailLabel="map"
           detailAriaLabel="Waypoint map"
           bleed="page"
-          wideCols="@5xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+          defaultMasterShare={0.5}
           // A map wants the whole line, not the chart pane's 35rem cap.
           paneWidthClassName="w-full"
           detail={

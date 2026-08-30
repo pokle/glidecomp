@@ -10,18 +10,28 @@
  * When given the full report, the table is single-selectable and the
  * selected metric renders as a rank scatter beside it — the coefficient says
  * a metric separated the field; the scatter shows whether that is a clean
- * trend, two clusters, or one outlier. The top-ranked metric starts
- * selected, so the strongest finding is visualized on first paint.
+ * trend, two clusters, or one outlier.
  *
  * Table and chart are a MASTER/DETAIL PAIR (issue #455), laid out by the
- * shared {@link MasterDetail}: the chart pins to the top of the viewport on a
- * narrow screen and sits beside the table on a wide one. Everything that used
- * to sit between them — the verdict legend, the caveat paragraphs — is below
- * the pair now, because a row and the chart it selects have to be readable
- * without scrolling between them. The component's doc carries the whys (the
- * container query, the pinning, the WCAG 2.4.11 debts).
+ * shared {@link MasterDetail} in its `navigation` mode — side by side on a
+ * wide screen, one at a time on a phone. Which metric is selected lives in
+ * the URL, as `?metric=<id>`. That is what makes the stacked layout a real
+ * master/detail rather than a pinned preview: a phone shows the ranking
+ * alone, choosing a row NAVIGATES to the chart, and the browser's own Back
+ * returns to the list. Side by side nothing navigates — both halves are on
+ * screen — so a pick only replaces the URL, and Back still means "leave this
+ * page". Everything that used to sit between the pair — the verdict legend,
+ * the caveat paragraphs — is below it now, because a row and the chart it
+ * selects have to be readable without scrolling between them.
  */
-import { useId, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
@@ -94,6 +104,24 @@ export function bestAbsRho(metrics: MetricReport[]): number | null {
   return bestCorrelation(metrics)?.absRho ?? null;
 }
 
+/** The URL parameter the selected metric round-trips through. */
+const METRIC_PARAM = "metric";
+
+/**
+ * The metric a query value names, or null for "nothing chosen".
+ *
+ * Absent, empty and junk all mean nothing chosen — stacked, that is the
+ * ranking as the view. An id this ranking does not carry (a class switch,
+ * a shared link from another task) is the same: never a guess.
+ */
+export function metricFromParam(
+  param: string | null,
+  rankedIds: readonly string[]
+): string | null {
+  if (param === null || param === "") return null;
+  return rankedIds.includes(param) ? param : null;
+}
+
 /** Shared verdict chip (also used by the comp page). "could be chance" and
  * "too few pilots" deliberately wear the quietest style — they are warnings
  * that the number may be luck, not findings. */
@@ -110,19 +138,11 @@ export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }
 export function SeparationRanking({
   metrics,
   report,
-  selectedMetricId,
-  onSelectedMetricIdChange,
 }: {
   metrics: MetricReport[];
   /** When provided, rows are selectable and the selected metric is plotted
-   * against rank below the table. */
+   * against rank beside the table. */
   report?: TaskAnalysisReport;
-  /** Lifted selection: pass (with the callback) when something OUTSIDE the
-   * ranking also picks a metric — the task page's findings digest selects a
-   * row from the top of the page. `undefined` keeps the selection internal;
-   * `null` means "no pick yet" (the top-ranked metric, as ever). */
-  selectedMetricId?: Key | null;
-  onSelectedMetricIdChange?: (id: Key | null) => void;
 }) {
   const ranked = rankMetrics(metrics);
   // The outcome checks, ranked the same way but shown apart (below the
@@ -133,29 +153,77 @@ export function SeparationRanking({
     .flatMap((m) => (m.correlation ? [{ metric: m, correlation: m.correlation }] : []))
     .sort((a, b) => b.correlation.absRho - a.correlation.absRho);
 
-  // The user's pick, if it still exists in this class's ranking (class
-  // switches swap the metric set out from under it); the top-ranked metric
-  // otherwise. Controlled by the caller when selectedMetricId is passed
-  // (undefined means uncontrolled — never conflate it with null, a real
-  // "no pick yet").
-  const [internalId, setInternalId] = useState<Key | null>(null);
-  const selectedId = selectedMetricId !== undefined ? selectedMetricId : internalId;
-  const setSelectedId = (id: Key | null) => {
-    if (selectedMetricId === undefined) setInternalId(id);
-    onSelectedMetricIdChange?.(id);
-  };
+  const rankedIds = ranked.map((r) => r.metric.id);
+  // The selection is URL state, not component state: stacked, choosing a row
+  // is a navigation, and Back is how a reader gets out of the detail. Read
+  // from the query on both the server and the first client render, so a
+  // shared link opens on the metric it names.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const chosen = metricFromParam(searchParams.get(METRIC_PARAM), rankedIds);
+  // What the pane shows. With nothing chosen it is still the top-ranked
+  // metric: side by side the pane is on screen from the first paint and must
+  // not be empty, and stacked it is off screen anyway until a row is picked.
+  const defaultId = ranked[0]?.metric.id ?? null;
+  const selectedId = chosen ?? defaultId;
+  const selectedMetric =
+    selectedId !== null ? (metrics.find((m) => m.id === selectedId) ?? null) : null;
+
   // Owned here, not in the scatter, so ticking "label every pilot" survives
   // switching metrics (per-session only; a refresh resets it).
   const [showAllLabels, setShowAllLabels] = useState(false);
   const detailHeadingId = `${useId()}-heading`;
-  const effectiveId =
-    report && ranked.length > 0
-      ? ranked.some((r) => r.metric.id === selectedId)
-        ? selectedId
-        : ranked[0].metric.id
-      : null;
-  const selectedMetric =
-    effectiveId !== null ? (metrics.find((m) => m.id === effectiveId) ?? null) : null;
+
+  // Side by side, told by MasterDetail's ResizeObserver (never by a viewport
+  // media query — the ranking's width is not a function of the viewport, and
+  // a second opinion about the breakpoint would be a second breakpoint).
+  const [wide, setWide] = useState(false);
+  // Whether THIS panel pushed the history entry the detail is showing on, so
+  // its own back control can unwind that entry rather than stack another.
+  const pushed = useRef(false);
+  useEffect(() => {
+    if (!chosen) pushed.current = false;
+  }, [chosen]);
+
+  /** Write the selection to the query. Stacked that is a navigation (push);
+   *  side by side it is only a change of view (replace). */
+  const choose = (id: string, replace: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    next.set(METRIC_PARAM, id);
+    setSearchParams(next, { replace });
+    if (!replace) pushed.current = true;
+  };
+
+  // Side by side the pane always has a subject, so the ranking must always
+  // have the matching row lit — which means the query has to name it. It is
+  // seeded once the layout is known (never on the server, where the width is
+  // not), and `replace`d, so it never costs the reader a Back press. Re-seed
+  // whenever the param is missing while wide: a canonical-URL settle on a
+  // bare-id load can wipe a just-written query, and a class switch can leave
+  // an id this ranking does not carry.
+  useEffect(() => {
+    if (!report || !wide || chosen || defaultId === null) return;
+    choose(defaultId, true);
+    // choose() closes over the current query; re-running on every render of
+    // it would fight the reader's own navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide, chosen, report, defaultId]);
+
+  /** Out of the detail and back to the ranking (stacked only). Unwinding our
+   *  own push keeps the history clean; a deep link that arrived on the detail
+   *  has no entry to unwind, so it drops the parameter in place. */
+  const back = () => {
+    if (pushed.current) {
+      pushed.current = false;
+      navigate(-1);
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete(METRIC_PARAM);
+    setSearchParams(next, { replace: true });
+  };
+
+  const onWideChange = useCallback((next: boolean) => setWide(next), []);
 
   if (ranked.length === 0 && outcomeRanked.length === 0) {
     return (
@@ -175,8 +243,19 @@ export function SeparationRanking({
     Math.max(0, ...[...ranked, ...outcomeRanked].map((r) => r.correlation.n));
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
+    // `@container` on the outer wrapper, not just inside MasterDetail: the
+    // outcome checks sit OUTSIDE the pair and have to hide with the list
+    // when stacked, using the same `@5xl` query the split uses. A sibling of
+    // MasterDetail's own container would have no container to query.
+    <div className="@container space-y-3">
+      <p
+        className={cn(
+          "text-sm text-muted-foreground",
+          // Stacked detail is a chart page: this is list copy, and hiding it
+          // with the master (same query) gives the scatter the height.
+          chosen !== null && "hidden @5xl:block print:block"
+        )}
+      >
         {/* The heading already asks the question ("which behaviours went with
             better ranks"), so one clause is enough here. What ρ is, which
             sign is good, and what "pilots measured" is worth are on the
@@ -196,6 +275,26 @@ export function SeparationRanking({
       ) : (
         <MasterDetail
           detailLabel="chart"
+          detailHeadingId={detailHeadingId}
+          navigation={
+            report
+              ? {
+                  showingDetail: chosen !== null,
+                  backLabel: "All behaviours",
+                  onBack: back,
+                }
+              : undefined
+          }
+          onWideChange={report ? onWideChange : undefined}
+          // Stacked the pane IS the view, inside a Card that already is the
+          // surface: a second rounded, bordered box spent ~2rem of a phone's
+          // width on chrome the chart needs. Side by side the pane is a
+          // column of its own and the card comes back.
+          paneWidthClassName="w-full"
+          // Side by side the pane is a column of its own: give it the sticky
+          // column's height (same 7rem as MasterDetail's max-h) so the
+          // scatter can fill it. Stacked it sizes from content. Paper too.
+          paneClassName="rounded-none border-0 bg-transparent @5xl:rounded-lg @5xl:border @5xl:bg-card @5xl:h-[calc(100vh-7rem)] print:h-auto"
           master={
             <RankingTable
               ranked={ranked}
@@ -220,9 +319,17 @@ export function SeparationRanking({
               selection={
                 report
                   ? {
-                      selectedKeys: effectiveId !== null ? [effectiveId] : [],
+                      // The CHOSEN metric, not the one the pane happens to be
+                      // showing. Lighting the default row before anyone picked
+                      // it would make re-picking it a no-op — RAC drops a
+                      // selection event that does not change the set — and
+                      // stacked that row is the only way in.
+                      selectedKeys: chosen ? [chosen] : [],
                       onSelectionChange: (keys: Selection) => {
-                        if (keys !== "all") setSelectedId([...keys][0] ?? null);
+                        if (keys !== "all") {
+                          const key = [...keys][0];
+                          if (key !== undefined) choose(String(key), wide);
+                        }
                       },
                     }
                   : undefined
@@ -237,11 +344,15 @@ export function SeparationRanking({
                 headingId={detailHeadingId}
                 showAllLabels={showAllLabels}
                 onShowAllLabelsChange={setShowAllLabels}
-                methodClassName="hidden @5xl:block"
-                className="rounded-none border-0"
-                // The pinned pane is a few hundred pixels on a phone, which
-                // is not enough chart to read; this is the way to the whole
-                // screen. Useful at every width, so it is not narrow-only.
+                // No inner pad stacked: the Card already pays p-5, and a
+                // second p-4 was a nested card's margins after the chrome
+                // came off. Side by side the pane is a card again, so the
+                // pad returns with it.
+                className="rounded-none border-0 p-0 @5xl:p-4"
+                fillViewport
+                // The inline plot is still a few hundred pixels on a phone;
+                // this is the way to the whole screen. Useful at every
+                // width, so it is not narrow-only.
                 headerAction={
                   <MetricChartOverlay
                     metric={selectedMetric}
@@ -253,7 +364,6 @@ export function SeparationRanking({
               />
             ) : null
           }
-          detailHeadingId={detailHeadingId}
           // On paper the print-only strong-metric panels below replace the
           // interactive one — printing both would duplicate a chart. When no
           // metric earned "strong", this pane is all print gets, so it stays.
@@ -261,44 +371,51 @@ export function SeparationRanking({
         />
       )}
 
-      {/* The verdict legend and the one-day caveat used to sit here as two
-          paragraphs of statistics under every ranking. They are on the column
-          headers' ⓘ now, and printed in HowToReadFootnote. What stays visible
-          is the COUNT below: a fact about this report, not a method note. */}
-      {underpowered.length > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {underpowered.length} behaviour{underpowered.length === 1 ? " was" : "s were"}{" "}
-          measured on fewer than {MIN_CORRELATION_N} pilots — too few to tell
-          either way.
-        </p>
-      ) : null}
-
-      {report ? <StrongMetricPrintCharts ranked={ranked} metrics={metrics} report={report} /> : null}
-
-      {outcomeRanked.length > 0 ? (
-        <div className="space-y-2 pt-2">
-          <h3 className="flex items-center gap-1 text-base font-semibold">
-            Outcome checks
-            <Explain label="Outcome checks">
-              <OutcomeChecksNote />
-              <p>
-                Their per-pilot tables stay in the Race craft section below.
-              </p>
-            </Explain>
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            These measure the result, not a behaviour, so they always follow the
-            ranks.
+      {/* Below the pair: a fact about this report, then the outcome checks.
+          Stacked they belong with the LIST, not under a full-page chart —
+          hidden by the same container query as the master, so the two can
+          never disagree about the breakpoint. Paper still gets both. */}
+      <div
+        className={cn(
+          "space-y-3",
+          chosen !== null && "hidden @5xl:block print:block"
+        )}
+      >
+        {underpowered.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {underpowered.length} behaviour{underpowered.length === 1 ? " was" : "s were"}{" "}
+            measured on fewer than {MIN_CORRELATION_N} pilots — too few to tell
+            either way.
           </p>
-          <RankingTable
-            ranked={outcomeRanked}
-            ariaLabel="Outcome checks"
-            subjectLabel="Outcome"
-            fieldSize={fieldSize}
-            pilots={report?.pilots}
-          />
-        </div>
-      ) : null}
+        ) : null}
+
+        {report ? <StrongMetricPrintCharts ranked={ranked} metrics={metrics} report={report} /> : null}
+
+        {outcomeRanked.length > 0 ? (
+          <div className="space-y-2 pt-2">
+            <h3 className="flex items-center gap-1 text-base font-semibold">
+              Outcome checks
+              <Explain label="Outcome checks">
+                <OutcomeChecksNote />
+                <p>
+                  Their per-pilot tables stay in the Race craft section below.
+                </p>
+              </Explain>
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              These measure the result, not a behaviour, so they always follow the
+              ranks.
+            </p>
+            <RankingTable
+              ranked={outcomeRanked}
+              ariaLabel="Outcome checks"
+              subjectLabel="Outcome"
+              fieldSize={fieldSize}
+              pilots={report?.pilots}
+            />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -352,7 +469,13 @@ function RankingTable({
       {...(selection
         ? {
             selectionMode: "single" as const,
-            selectionBehavior: "replace" as const,
+            // TOGGLE, not "replace": under `replace` react-aria selects
+            // whatever the arrow keys focus, and stacked that would navigate
+            // away from the ranking on the first Down press — taking the
+            // list, and the keyboard user's place in it, off the screen.
+            // Toggle moves focus and waits for Enter, which is what a list
+            // you navigate OUT of has to do. A click still picks, on both.
+            selectionBehavior: "toggle" as const,
             disallowEmptySelection: true,
             ...selection,
           }

@@ -9,35 +9,30 @@
  * The chapter URL itself is a contents list of boxes and has nothing these
  * tests assert.
  *
- * The ranking table and the chart of the row you pick are one pair now: the
- * chart pins to the top of the viewport on a narrow screen and sits beside
- * the table on a wide one, so choosing a row never means scrolling away from
- * the table to see the result. These tests pin the three properties that make
- * that true, because all three are pure CSS (a container query, `position:
- * sticky`, `order`) and a stray utility class can undo any of them without
- * failing a type check or a unit test:
+ * Ranking and thermals are the same MasterDetail in `navigation` mode: the
+ * detail is a page in its own right, so stacked it REPLACES the list rather
+ * than pinning above it, and the selection lives in the query (`?metric=`,
+ * `?thermal=`) so the browser's Back is the way out. These tests assert the
+ * properties that mode is made of, because every part of it is a class or a
+ * history call that nothing else would catch: the hiding is a container
+ * query, the push is one boolean off a ResizeObserver, and the selection
+ * lives in the URL.
  *
- *   1. picking a row swaps the pane's heading,
- *   2. wide → the pane is to the RIGHT of the table and vertically level with
- *      it, and the table has NOT gone back to scrolling sideways,
- *   3. narrow → the pane pins to the top of the viewport while the table
- *      pages under it (releasing with the last row), lower rows still chart
- *      on screen, its buttons still take clicks while stuck, and keyboard
- *      focus never lands behind it (WCAG 2.4.11).
+ *   1. picking a row swaps the pane's heading (and the top metric is charted
+ *      first),
+ *   2. wide → both halves on screen, the pane to the RIGHT of the table,
+ *      the table has NOT gone back to scrolling sideways, a pick does not
+ *      grow history,
+ *   3. narrow → the list alone until a row is chosen, then the detail
+ *      alone; Back and the in-page control return to the list; arrows move
+ *      focus without navigating, Enter chooses, focus follows the view.
  *
- * The THERMALS census is the same component in its other mode: its detail is
- * a page in its own right, so stacked it replaces the census rather than
- * pinning above it, and the selection lives in `?thermal=` so the browser's
- * Back is the way out. Its tests assert the pair of properties that mode adds
- * — one half on screen at a time (a container query again), and a push
- * history entry stacked against a plain replace side by side.
- *
- * A second group covers the full-screen overlay (MetricChartOverlay): the
- * pinned chart is only a few hundred pixels on a phone, so "Expand" is what
- * makes it readable, and the assertion that matters is that the chart really
- * does get bigger — the plot scales to its CSS width, so a full-screen sheet
- * that did not also grow the viewBox would render the same size in portrait
- * and the feature would be a no-op.
+ * A second group covers the full-screen overlay (MetricChartOverlay). The
+ * inline plot already spends most of a phone's height on the rank axis;
+ * Expand is the way to the remaining width, so labels come up to a readable
+ * size. The assertion that matters is that the sheet really does grow the
+ * viewBox — a full-screen dialog that kept BASE_H would letterbox the same
+ * strip the page already showed.
  *
  * READ-ONLY against the seeded "Corryong Cup 2026" sample comp: nothing is
  * created, so there is nothing to clean up (an e2e-created comp is exactly
@@ -217,6 +212,27 @@ function detailPane() {
     .first();
 }
 
+/** The metric the detail pane is showing, per the query. */
+function metricParam(): string | null {
+  return new URL(page.url()).searchParams.get("metric");
+}
+
+/** Stacked: get back to the ranking list if an earlier test left a metric chosen. */
+async function ensureRankingList() {
+  const back = rankingCard().getByRole("button", { name: "All behaviours" });
+  if (await back.isVisible()) await back.click();
+  await expect(ranking()).toBeVisible();
+  await expect(detailPane()).toBeHidden();
+}
+
+/** Stacked: get onto the detail if the list is currently the view. */
+async function ensureRankingDetail() {
+  if (await ranking().isVisible()) {
+    await ranking().locator("tbody tr").first().locator("th, td").first().click();
+  }
+  await expect(detailPane()).toBeVisible();
+}
+
 /**
  * Resize and let the chart catch up. The plot is drawn from a box the
  * ResizeObserver reports, so a measurement taken in the same tick as the
@@ -247,7 +263,7 @@ test("picking a row swaps the chart, and the top metric is charted first", async
 
   const fourth = table.locator("tbody tr").nth(3);
   const fourthName = (await fourth.locator("th, td").first().innerText()).split("\n")[0].trim();
-  await fourth.click();
+  await fourth.locator("th, td").first().click();
 
   await expect(heading).toHaveText(fourthName);
   // RAC drives the selection state, so the row says so to assistive tech.
@@ -268,6 +284,21 @@ test("wide: the chart sits beside the table, and the table still fits", async ()
   expect(paneBox.x).toBeGreaterThan(tableBox.x + tableBox.width - 1);
   expect(Math.abs(paneBox.y - tableBox.y)).toBeLessThan(4);
 
+  // The gutter handle sits between them — visible, not a 1px ghost.
+  const split = rankingCard().getByRole("separator", { name: /Resize list and chart/ });
+  await expect(split).toBeVisible();
+  const splitBox = (await split.boundingBox())!;
+  expect(splitBox.x).toBeGreaterThan(tableBox.x + tableBox.width - 8);
+  expect(splitBox.x + splitBox.width).toBeLessThan(paneBox.x + 8);
+
+  // The scatter spends the sticky column on the rank axis, not a ~190px
+  // strip under the method prose. One frame for the ResizeObserver.
+  await page.waitForTimeout(400);
+  const plot = (await pane.locator('svg[role="group"]').boundingBox())!;
+  expect(plot.height, "desktop plot should fill the sticky column").toBeGreaterThan(
+    1000 * 0.45
+  );
+
   // The split must not have squeezed the ranking back into a sideways
   // scroll — that regression is what issue #453 was closed on.
   const overflow = await table.evaluate((el) => {
@@ -275,123 +306,107 @@ test("wide: the chart sits beside the table, and the table still fits", async ()
     return wrapper.scrollWidth - wrapper.clientWidth;
   });
   expect(overflow).toBeLessThanOrEqual(1);
-});
 
-test("narrow: the chart pins to the top while the table scrolls under it", async () => {
-  await openSection("strategies");
-  await setViewport(390, 780);
-  const table = ranking();
-  const pane = detailPane();
-
-  // Scroll the WINDOW well into the ranking — the natural gesture, and the
-  // one the previous layout (a capped table box, chart in normal flow)
-  // answered by letting the chart leave with the page.
-  await table.evaluate((el) => {
-    window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY);
-  });
-  const stuck = (await pane.boundingBox())!;
-
-  await page.evaluate(() => window.scrollBy(0, 250));
-  const stillStuck = (await pane.boundingBox())!;
-  // Pinned: 250px of page scroll did not move the pane…
-  expect(Math.abs(stillStuck.y - stuck.y)).toBeLessThanOrEqual(1);
-  // …and it sits fully on screen. Flush to the top here: the Shell's header
-  // is static under `sm`, so on a phone nothing is above the pane to clear.
-  expect(stillStuck.y).toBeGreaterThanOrEqual(0);
-  expect(stillStuck.y + stillStuck.height).toBeLessThanOrEqual(781);
-
-  // While stuck, its buttons must still take clicks — the Chromium
-  // hit-testing failure that sank the previous pinned design (#553) was
-  // Expand silently ignoring clicks once an ancestor had horizontal padding,
-  // and the pane now lives inside the section's padded panel.
-  await rankingExpand().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-
-  // Past the last row the pane releases: it stops holding the top of the
-  // viewport and stays inside its own section. It used to scroll clean off
-  // the top, but only because a long report followed it — the ranking is
-  // nearly the whole page now that each section has its own, so what is left
-  // to observe is that the pane is bounded by its section and not by the
-  // viewport.
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  const released = (await pane.boundingBox())!;
-  const card = (await rankingCard().boundingBox())!;
-  expect(released.y + released.height).toBeLessThanOrEqual(card.y + card.height + 1);
-});
-
-test("narrow: picking a bottom row swaps a chart that is on screen", async () => {
-  await openSection("strategies");
-  await setViewport(390, 780);
-  const table = ranking();
-  const pane = detailPane();
+  // Side by side the query names the pane's subject (seeded, so the row is
+  // lit) and a pick must not cost a Back press — both halves are on screen.
+  await expect.poll(() => metricParam()).toBeTruthy();
+  await expect(table.locator('tr[aria-selected="true"]')).toHaveCount(1);
   const rows = table.locator("tbody tr");
-  const last = rows.nth((await rows.count()) - 1);
-  const lastName = (await last.locator("th, td").first().innerText())
-    .split("\n")[0]
-    .trim();
-
-  // The FIRST cell, not the row: a row's middle holds the ⓘ that opens the
-  // method popover. Playwright scrolls the row into view first, which the
-  // table's scroll-margin places below the pinned pane.
-  await last.locator("th, td").first().click();
-
-  // The complaint that repinned the pane: a low row used to swap a chart
-  // that had long scrolled off the top. Now the chart is right there…
-  await expect(pane.locator("h3").first()).toHaveText(lastName);
-  const paneBox = (await pane.boundingBox())!;
-  expect(paneBox.y).toBeGreaterThanOrEqual(0);
-  expect(paneBox.y + paneBox.height).toBeLessThanOrEqual(781);
-  // …and the row it charts is itself visible below it, not behind it.
-  const rowBox = (await last.boundingBox())!;
-  expect(rowBox.y).toBeGreaterThanOrEqual(paneBox.y + paneBox.height - 1);
+  const other = rows.nth((await rows.count()) - 1);
+  const start = (await other.locator("th, td").first().innerText()).split("\n")[0].trim();
+  const entries = await page.evaluate(() => history.length);
+  await other.locator("th, td").first().click();
+  await expect(pane.locator("h3").first()).toHaveText(start);
+  expect(await page.evaluate(() => history.length)).toBe(entries);
 });
 
-test("narrow: a keyboard-focused row is never hidden by the pinned chart", async () => {
+test("narrow: choosing a behaviour navigates, and Back returns to the ranking", async () => {
   await openSection("strategies");
   await setViewport(390, 780);
-  const rows = ranking().locator("tbody tr");
+  await ensureRankingList();
 
-  // Start low and walk UP — the direction that drives a focused row toward
-  // the pane pinned at the top of the viewport. The table's scroll-margin
-  // constants exist exactly so each step stops the row BELOW the pane
-  // (WCAG 2.4.11): assert it never lands behind the chart or off screen.
-  // The FIRST cell, not the row: a row's middle holds the ⓘ that opens the
-  // method popover, and clicking that focuses a dialog instead of the row.
-  await rows
-    .nth(Math.min(16, (await rows.count()) - 1))
-    .locator("th, td")
-    .first()
-    .click();
-  // The walk below is only meaningful from a focused row.
-  expect(
-    await page.evaluate(() => Boolean((document.activeElement as HTMLElement)?.closest("tr")))
-  ).toBe(true);
-  for (let i = 0; i < 10; i++) {
-    await page.keyboard.press("ArrowUp");
-    const hidden = await page.evaluate(() => {
-      const row = (document.activeElement as HTMLElement).closest("tr");
-      if (!row) return null;
-      const r = row.getBoundingClientRect();
-      // Scoped to the ranking's card: the thermals pane above matches the
-      // bare selector too.
-      const chart = document
-        .querySelector('[aria-labelledby="separation-heading"] [role="region"][aria-labelledby]')!
-        .getBoundingClientRect();
-      return {
-        offViewport: r.bottom < 0 || r.top > window.innerHeight,
-        behindChart: r.top < chart.bottom && r.bottom > chart.top,
-      };
-    });
-    expect(hidden).not.toBeNull();
-    expect(hidden!.offViewport, "focused row scrolled off the viewport").toBe(false);
-    expect(hidden!.behindChart, "focused row overlaps the chart").toBe(false);
-  }
+  // The list alone. Nothing of the detail is on screen until one is chosen.
+  await expect(ranking()).toBeVisible();
+  await expect(detailPane()).toBeHidden();
+  expect(metricParam()).toBeNull();
+
+  const first = ranking().locator("tbody tr").first();
+  const start = (await first.locator("th, td").first().innerText()).split("\n")[0].trim();
+  await first.locator("th, td").first().click();
+
+  // The detail takes the whole view, and the URL names what it is showing —
+  // so the reading is shareable and Back has an entry to return to.
+  await expect(detailPane()).toBeVisible();
+  await expect(detailPane().locator("h3").first()).toHaveText(start);
+  await expect(ranking()).toBeHidden();
+  expect(metricParam()).toBeTruthy();
+
+  // The method prose is a disclosure under the chart, not a paragraph above
+  // it. The trigger is there; the explanation is not, until opened.
+  const how = detailPane().getByRole("button", { name: "How this is measured" });
+  await expect(how).toBeVisible();
+  await expect(how).toHaveAttribute("aria-expanded", "false");
+
+  // The scatter takes most of the screen, not a ~190px strip under the essay.
+  await page.waitForTimeout(400);
+  const plot = (await detailPane().locator('svg[role="group"]').boundingBox())!;
+  expect(plot.height, "inline plot should fill most of the viewport").toBeGreaterThan(
+    780 * 0.55
+  );
+
+  await page.goBack();
+  await expect(ranking()).toBeVisible();
+  await expect(detailPane()).toBeHidden();
+  expect(metricParam()).toBeNull();
+
+  // The in-page control is the same way out, for a reader who does not use
+  // the browser's — and it unwinds our push rather than stacking on it.
+  await first.locator("th, td").first().click();
+  await expect(detailPane()).toBeVisible();
+  const entries = await page.evaluate(() => history.length);
+  await rankingCard().getByRole("button", { name: "All behaviours" }).click();
+  await expect(ranking()).toBeVisible();
+  expect(metricParam()).toBeNull();
+  expect(await page.evaluate(() => history.length)).toBe(entries);
 });
 
-test("expanding the chart makes it very much bigger, in both orientations", async () => {
+test("narrow: arrowing through the ranking does not navigate; Enter does", async () => {
+  await openSection("strategies");
+  await setViewport(390, 780);
+  await ensureRankingList();
+  await expect(ranking()).toBeVisible();
+
+  // The ranking selects on TOGGLE, not on focus: under react-aria's "replace"
+  // behaviour the arrow keys select whatever they focus, which here would
+  // take the list — and the reader's place in it — off the screen on the
+  // first Down press.
+  // Focus a cell that is not the behaviour name: that cell holds the ⓘ, and
+  // Enter there would open the method popover instead of choosing the row.
+  await ranking().locator("tbody tr").first().locator("th, td").nth(1).focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
+  await expect(ranking()).toBeVisible();
+  await expect(detailPane()).toBeHidden();
+  expect(metricParam()).toBeNull();
+
+  const focused = await page.evaluate(() => {
+    const cell = (document.activeElement as HTMLElement)?.closest("tr")?.querySelector("th, td");
+    return cell ? (cell as HTMLElement).innerText.split("\n")[0].trim() : "";
+  });
+  expect(focused).toBeTruthy();
+
+  await page.keyboard.press("Enter");
+  await expect(detailPane()).toBeVisible();
+  await expect(detailPane().locator("h3").first()).toHaveText(focused);
+  // Focus follows the view, or a keyboard reader is left on a hidden node.
+  expect(await page.evaluate(() => document.activeElement?.getAttribute("role"))).toBe(
+    "region"
+  );
+
+  await page.goBack();
+  await expect(ranking()).toBeVisible();
+});
+
+test("expanding the chart grows the viewBox to fill the sheet", async () => {
   await openSection("strategies");
   for (const [label, width, height] of [
     ["portrait", 390, 780],
@@ -400,6 +415,7 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
     // The inline plot is re-measured after each resize, so both orientations
     // compare like with like without reloading between them.
     await setViewport(width, height);
+    await ensureRankingDetail();
 
     const inline = (await page.locator('svg[role="group"]').first().boundingBox())!;
     await rankingExpand().click();
@@ -409,13 +425,18 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
     // One frame for the ResizeObserver to report the sheet's box.
     await page.waitForTimeout(400);
     const expanded = (await dialog.locator('svg[role="group"]').boundingBox())!;
+    const viewBox = await dialog.locator('svg[role="group"]').getAttribute("viewBox");
+    const viewBoxHeight = Number(viewBox?.split(" ")[3]);
 
-    // Not a token increase: the plot is drawn on a fixed-width viewBox, so
-    // filling the sheet has to grow the viewBox too or portrait gets the same
-    // strip it already had.
-    const growth = (expanded.width * expanded.height) / (inline.width * inline.height);
-    expect(growth, `${label} should be a real expansion`).toBeGreaterThan(1.8);
-    expect(expanded.width).toBeGreaterThanOrEqual(inline.width);
+    // The inline plot already spends most of a portrait viewport on the rank
+    // axis, so Expand is no longer a 2× jump. What it still has to do is grow
+    // the viewBox to match the sheet — otherwise portrait letterboxes BASE_H
+    // in a full-screen dialog. Landscape is already full-width; the sheet
+    // must not shrink it.
+    expect(expanded.width, `${label} width`).toBeGreaterThanOrEqual(inline.width - 1);
+    if (label === "portrait") {
+      expect(viewBoxHeight, "portrait sheet should grow the viewBox").toBeGreaterThan(316);
+    }
 
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
@@ -425,6 +446,7 @@ test("expanding the chart makes it very much bigger, in both orientations", asyn
 test("the expanded chart stays open when you tap a dot, and returns focus on close", async () => {
   await openSection("strategies");
   await setViewport(390, 780);
+  await ensureRankingDetail();
 
   const trigger = rankingExpand();
   await trigger.click();
@@ -443,23 +465,6 @@ test("the expanded chart stays open when you tap a dot, and returns focus on clo
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
-});
-
-test("narrow: the chart can be folded away to read the table", async () => {
-  await openSection("strategies");
-  await setViewport(390, 780);
-  const pane = detailPane();
-  const toggle = page.getByRole("button", { name: /chart$/ });
-
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(pane).toBeVisible();
-
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(pane).toBeHidden();
-
-  await toggle.click();
-  await expect(pane).toBeVisible();
 });
 
 /** The thermal census (the master). The print-only copy of every row is
@@ -492,13 +497,13 @@ async function chooseFirstThermal(): Promise<string> {
 }
 
 /**
- * The thermals section is the one MasterDetail in `navigation` mode: its
- * detail is a page in its own right (rose, readouts, climb profile, two
- * tables), so stacked it does not pin above the census — it REPLACES it, and
- * the way back is the browser's own Back. That contract is what this asserts,
- * because every part of it is a class or a history call that nothing else
- * would catch: the hiding is a container query, the push is one boolean off a
- * ResizeObserver, and the selection lives in the URL.
+ * The thermals section is the same MasterDetail in `navigation` mode as the
+ * ranking above. Its detail is a page in its own right (rose, readouts, climb
+ * profile, two tables), so stacked it does not pin above the census — it
+ * REPLACES it, and the way back is the browser's own Back. That contract is
+ * what this asserts, because every part of it is a class or a history call
+ * that nothing else would catch: the hiding is a container query, the push is
+ * one boolean off a ResizeObserver, and the selection lives in the URL.
  */
 test("narrow: choosing a thermal navigates, and Back returns to the census", async () => {
   await openSection("thermals");
