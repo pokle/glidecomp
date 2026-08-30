@@ -23,28 +23,47 @@
  * reader gets the sentence; these are the sighted reader's version of it.
  */
 
-/** Centred under the plot, naming what runs across. */
+/** Centred under the plot, naming what runs across. A newline in
+ * `children` becomes a second centred line — used when a body-sized unit
+ * in words will not fit beside the metric name. */
 export function XAxisTitle({
   left,
   right,
   y,
+  fontSize,
   children,
 }: {
   left: number;
   right: number;
   /** Baseline, in viewBox units — below the tick labels, not on them. */
   y: number;
+  /** ViewBox font-size. Omit to keep the furniture's default 10. */
+  fontSize?: number;
   children: string;
 }) {
+  const lines = children.split("\n");
+  const cx = (left + right) / 2;
+  const lineGap = (fontSize ?? 12) * 1.15;
   return (
     <text
       aria-hidden
-      x={(left + right) / 2}
+      x={cx}
       y={y}
       textAnchor="middle"
-      className="fill-current text-[10px] text-muted-foreground"
+      fontSize={fontSize}
+      className={
+        fontSize == null
+          ? "fill-current text-[10px] text-muted-foreground"
+          : "fill-current text-muted-foreground"
+      }
     >
-      {children}
+      {lines.length === 1
+        ? children
+        : lines.map((line, i) => (
+            <tspan key={i} x={cx} dy={i === 0 ? 0 : lineGap}>
+              {line}
+            </tspan>
+          ))}
     </text>
   );
 }
@@ -63,6 +82,7 @@ export function YAxisTitle({
   x,
   top,
   bottom,
+  fontSize,
   children,
 }: {
   /** Distance from the left edge of the viewBox — inside the plot's left
@@ -70,6 +90,8 @@ export function YAxisTitle({
   x: number;
   top: number;
   bottom: number;
+  /** ViewBox font-size. Omit to keep the furniture's default 10. */
+  fontSize?: number;
   children: string;
 }) {
   const cy = (top + bottom) / 2;
@@ -80,7 +102,12 @@ export function YAxisTitle({
       y={cy}
       textAnchor="middle"
       transform={`rotate(-90 ${x} ${cy})`}
-      className="fill-current text-[10px] text-muted-foreground"
+      fontSize={fontSize}
+      className={
+        fontSize == null
+          ? "fill-current text-[10px] text-muted-foreground"
+          : "fill-current text-muted-foreground"
+      }
     >
       {children}
     </text>
