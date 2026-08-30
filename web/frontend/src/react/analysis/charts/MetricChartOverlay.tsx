@@ -1,10 +1,10 @@
 /**
  * The selected metric's scatter, filling the screen.
  *
- * On a phone the pinned chart is ~330px wide, and the plot is drawn on a
- * 560-unit viewBox — so every label renders at about 6px and thirty-odd dots
- * pile into 190px of rank axis. It reads as a smudge. This is the way out:
- * one tap and the same chart gets the whole viewport.
+ * On a phone the inline chart is a few hundred pixels wide, and the plot is
+ * drawn on a 560-unit viewBox — so every label renders at about 6px even
+ * once the rank axis has most of the viewport. This is the way out: one tap
+ * and the same chart gets the whole screen, width as well as height.
  *
  * Full-screen via rac/full-screen-sheet.tsx, the shell shared with the task
  * route glyph (#476) and the waypoint QR (#312), on the app's own surface

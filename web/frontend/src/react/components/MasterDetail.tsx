@@ -48,10 +48,12 @@
  * ## `navigation`: one pane at a time, stacked
  *
  * A pinned pane is the right stacked answer when the detail is SMALL — a
- * chart, a diagram — and the reader is really working the list. It is the
- * wrong answer when the detail is a page in its own right: the thermal detail
- * is a rose, five readouts, a climb profile and two tables, and no cap that
- * leaves the census usable leaves the detail readable.
+ * map, a diagram — and the reader is really working the list. It is the
+ * wrong answer when the detail is a page in its own right: the thermal
+ * detail is a rose, five readouts, a climb profile and two tables, and the
+ * ranking's chart is a scatter, a distribution and the metric's method
+ * behind a disclosure — no cap that leaves the list usable leaves those
+ * readable.
  *
  * So a caller may pass `navigation` and get the phone behaviour people expect
  * of a master/detail: stacked shows the LIST alone, choosing a row shows the

@@ -7,7 +7,8 @@
  * it dies the moment the pointer moves on. Pinning is what turns 19,000 px
  * of field data into one pilot's story: pick yourself here and you stay lit
  * for the whole read. A passing hover still takes over momentarily — the
- * page stays explorable — and the pin re-lights when it ends.
+ * page stays explorable — and the pin re-lights when it ends. The diamond
+ * next to the field is the same mark the scatter draws on that pilot.
  *
  * THE URL IS THE ONLY SOURCE OF TRUTH for the pin: `?pilot=<name>`, like the
  * class in `?class=`, so a pilot can be handed a link to their own reading
@@ -39,6 +40,7 @@ import { useSearchParams } from "react-router-dom";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { Button } from "@/react/rac/button";
 import { usePilotHighlight } from "./PilotHighlightContext";
+import { PilotHighlightLegend } from "./PilotHighlightMark";
 
 interface PickerPilot {
   trackFile: string;
@@ -110,7 +112,11 @@ export function PilotPicker({ pilots }: { pilots: PickerPilot[] }) {
   }, [pilots, query, settled]);
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
+      {/* Same diamond the scatter draws on the pinned pilot — a legend, not
+          a second control. aria-hidden: the combobox already names the
+          action. */}
+      <PilotHighlightLegend />
       <ComboBox
         aria-label="Highlight a pilot"
         placeholder="Highlight a pilot…"

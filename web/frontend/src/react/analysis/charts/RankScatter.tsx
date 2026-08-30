@@ -17,10 +17,10 @@
  * absence.
  *
  * Labelling: the best/worst three pilots and the value extremes are named
- * permanently (selective direct labels); the focused dot is named in place
- * while focused (click, tap, or arrow keys); and an opt-in checkbox labels
- * every pilot, growing the chart vertically so the names have room. In
- * label-everyone mode the special labels go bold to stand out of the crowd.
+ * permanently (selective direct labels); the focused or pinned dot is named
+ * in place; and an opt-in checkbox labels every pilot, growing the chart
+ * vertically so the names have room. In label-everyone mode the special
+ * labels go bold to stand out of the crowd.
  *
  * Accessibility: the figure carries a caption stating the statistics in
  * words; every dot is a focusable element with the pilot's name/value/rank as
@@ -38,6 +38,7 @@ import {
 } from "../types";
 import { unitWords, verdictWords } from "../units";
 import { usePilotHighlight } from "../PilotHighlightContext";
+import { PilotHighlightMark } from "../PilotHighlightMark";
 import {
   axisTitleFor,
   extent,
@@ -179,10 +180,9 @@ export function RankScatter({
    * always drawn {@link W} wide and scales to whatever CSS width it is given,
    * so its aspect ratio decides how much of a tall box it can use: at the
    * default {@link BASE_H} a phone-width chart is ~190px tall no matter how
-   * much screen is free, which is exactly what makes the full-screen overlay
-   * (MetricChartOverlay) worth having. That overlay measures its box and
-   * passes the height that matches its aspect, so the rank axis gets the
-   * whole screen instead of a letterboxed strip.
+   * much screen is free. Callers that want the rank axis to spend the screen
+   * (the ranking pane, the full-screen overlay) measure their box and pass
+   * the height that matches its aspect.
    *
    * A floor, never a cap: below BASE_H the axis labels and the spread-out
    * pilot names stop fitting, so a smaller request is ignored.
@@ -310,13 +310,27 @@ export function RankScatter({
   ]);
 
   // What actually gets a label: everyone (opt-in), or the specials plus the
-  // focused dot — naming the dot you just clicked in place beats making you
-  // glance down at the readout line.
+  // focused or pinned dot — naming the one you just clicked (or picked in
+  // Highlight a pilot) in place beats making you glance down at the readout.
   const focusedIdx =
     focusedTrack !== null ? points.findIndex((p) => p.trackFile === focusedTrack) : -1;
+  const highlightedIdx =
+    highlight !== null ? points.findIndex((p) => p.trackFile === highlight) : -1;
   const labelIndices = showAllLabels
     ? points.map((_, i) => i)
-    : [...new Set([...specialIndices, ...(focusedIdx >= 0 ? [focusedIdx] : [])])];
+    : [
+        ...new Set([
+          ...specialIndices,
+          ...(focusedIdx >= 0 ? [focusedIdx] : []),
+          ...(highlightedIdx >= 0 ? [highlightedIdx] : []),
+        ]),
+      ];
+  const emphasized =
+    highlightedIdx >= 0
+      ? points[highlightedIdx]
+      : focusedIdx >= 0
+        ? points[focusedIdx]
+        : undefined;
   // Adjacent ranks sit only a few pixels apart vertically, so the label
   // baselines are spread to at least a line-height apart.
   const labelYs = spreadLabels(
@@ -461,16 +475,7 @@ export function RankScatter({
             {/* Invisible halo: a 24px pointer/focus target over a 10px dot
                 (accessibility standard §4.5, WCAG 2.5.8). */}
             <circle cx={x(p.value)} cy={y(p.rank)} r={12} className="fill-transparent" />
-            <circle
-              cx={x(p.value)}
-              cy={y(p.rank)}
-              r={5}
-              className={cn(
-                "fill-chart-1/70",
-                (focusedTrack === p.trackFile || highlight === p.trackFile) &&
-                  "stroke-ring stroke-2"
-              )}
-            />
+            <circle cx={x(p.value)} cy={y(p.rank)} r={5} className="fill-chart-1/70" />
           </g>
         ))}
 
@@ -557,6 +562,22 @@ export function RankScatter({
           >
             trend
           </text>
+        ) : null}
+
+        {/* Emphasis last, over the field, the names and the trend. A 2px
+            --ring stroke on a --chart-1 fill was invisible: those tokens are
+            the same blue. A diamond in --chart-5 (and a background casing so
+            it punches through the curve) is the pin you can actually find —
+            shape as well as colour, matching the glyph next to Highlight a
+            pilot. Colour is not the only difference.
+            pointer-events none: the rank-order dots below keep the hit
+            target and the keyboard. */}
+        {emphasized ? (
+          <PilotHighlightMark
+            x={x(emphasized.value)}
+            y={y(emphasized.rank)}
+            className="pointer-events-none"
+          />
         ) : null}
       </svg>
 
