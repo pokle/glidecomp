@@ -89,7 +89,33 @@ function taskLabel(name: string, index: number): string {
   return short ? `T${short[1]}` : `T${index + 1}`;
 }
 
+/**
+ * These endpoints were `/field-analysis` until the comp/task analysis rename.
+ *
+ * A browser tab still running the pre-rename bundle keeps polling the old path,
+ * and on those pages a 404 is TERMINAL — nothing re-fetches it, so the tab
+ * would sit on a permanent "not found" until someone reloaded. One redirect
+ * costs nothing and removes that window entirely.
+ *
+ * 308, not 302: it preserves the method and body, so the admin refresh POST
+ * survives the hop as a POST. `fetch()` follows it transparently, so no client
+ * needed changing. The query string is carried across — `?class=` is the
+ * shareable half of these URLs.
+ *
+ * Deletable once no pre-rename bundle can still be live.
+ */
+function redirectSupersededPath(c: Context): Response {
+  const url = new URL(c.req.url);
+  url.pathname = url.pathname.replace("/field-analysis", "/analysis");
+  return c.redirect(url.pathname + url.search, 308);
+}
+
 export const analysisRoutes = new Hono<AuthedEnv>()
+
+  // ── Superseded `/field-analysis` paths → `/analysis` ──
+  .all("/api/comp/:comp_id/field-analysis", redirectSupersededPath)
+  .all("/api/comp/:comp_id/task/:task_id/field-analysis", redirectSupersededPath)
+  .all("/api/comp/:comp_id/task/:task_id/field-analysis/refresh", redirectSupersededPath)
 
   // ── GET /api/comp/:comp_id/task/:task_id/analysis ── (public)
   .get(

@@ -174,6 +174,61 @@ function conditionalAdminGet(path: string, etag: string): Promise<Response> {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The rename left three `/field-analysis` URLs behind. A tab still running the
+ * pre-rename bundle polls them, and on those pages a 404 is terminal — nothing
+ * re-fetches it — so they redirect rather than break.
+ */
+describe("superseded /field-analysis paths", () => {
+  test("a GET redirects to the new path, carrying the query string", async () => {
+    const t = await seedTask();
+    const res = await SELF.fetch(
+      `https://test/api/comp/${t.compId}/task/${t.taskId}/field-analysis?class=open`,
+      { headers: { Cookie: "test-user=user-1" }, redirect: "manual" }
+    );
+    expect(res.status).toBe(308);
+    // `?class=` is the shareable half of these URLs; dropping it would land the
+    // reader on a different class than the link they followed.
+    expect(res.headers.get("Location")).toBe(
+      `/api/comp/${t.compId}/task/${t.taskId}/analysis?class=open`
+    );
+  });
+
+  test("the comp-level path redirects too", async () => {
+    const t = await seedTask();
+    const res = await SELF.fetch(`https://test/api/comp/${t.compId}/field-analysis`, {
+      headers: { Cookie: "test-user=user-1" },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(308);
+    expect(res.headers.get("Location")).toBe(`/api/comp/${t.compId}/analysis`);
+  });
+
+  test("308 (not 302) so the admin refresh POST stays a POST", async () => {
+    const t = await seedTask();
+    const res = await SELF.fetch(
+      `https://test/api/comp/${t.compId}/task/${t.taskId}/field-analysis/refresh`,
+      { method: "POST", headers: { Cookie: "test-user=user-1" }, redirect: "manual" }
+    );
+    // 301/302 would let a client downgrade the POST to GET and silently skip
+    // the recompute; 308 forbids that.
+    expect(res.status).toBe(308);
+    expect(res.headers.get("Location")).toBe(
+      `/api/comp/${t.compId}/task/${t.taskId}/analysis/refresh`
+    );
+  });
+
+  test("following the redirect lands on the real handler", async () => {
+    const t = await seedTask();
+    const res = await SELF.fetch(
+      `https://test/api/comp/${t.compId}/task/${t.taskId}/field-analysis`,
+      { headers: { Cookie: "test-user=user-1" } }
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as ServedAnalysis).pending).toBe(true);
+  });
+});
+
 describe("task analysis read path", () => {
   test("a cold task returns pending WITHOUT computing on the request path", async () => {
     const t = await seedTask();

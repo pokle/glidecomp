@@ -174,6 +174,17 @@ with a `stale` flag and schedules a recompute. Poll with the `ETag` rather than
 blocking. You never need `/rescore` for an ordinary edit — every mutation marks
 what it affects stale by itself.
 
+Both analyses were served under `/field-analysis` until the two were named
+apart. The old paths still answer, with a `308` to the new one — the method,
+body and query string all survive the hop, so an integrator on the old URL
+needs no change beyond following redirects (every HTTP client does by default).
+
+| Method | Path | |
+|---|---|---|
+| `ALL` | `/api/comp/:comp_id/field-analysis` | Superseded — `308` to `/api/comp/:comp_id/analysis` |
+| `ALL` | `/api/comp/:comp_id/task/:task_id/field-analysis` | Superseded — `308` to `…/task/:task_id/analysis` |
+| `ALL` | `/api/comp/:comp_id/task/:task_id/field-analysis/refresh` | Superseded — `308` to `…/analysis/refresh` |
+
 ### Competition scores
 
 Aggregate results across all tasks, grouped by pilot class:
