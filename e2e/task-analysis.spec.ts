@@ -284,6 +284,13 @@ test("wide: the chart sits beside the table, and the table still fits", async ()
   expect(paneBox.x).toBeGreaterThan(tableBox.x + tableBox.width - 1);
   expect(Math.abs(paneBox.y - tableBox.y)).toBeLessThan(4);
 
+  // The gutter handle sits between them — visible, not a 1px ghost.
+  const split = rankingCard().getByRole("separator", { name: /Resize list and chart/ });
+  await expect(split).toBeVisible();
+  const splitBox = (await split.boundingBox())!;
+  expect(splitBox.x).toBeGreaterThan(tableBox.x + tableBox.width - 8);
+  expect(splitBox.x + splitBox.width).toBeLessThan(paneBox.x + 8);
+
   // The scatter spends the sticky column on the rank axis, not a ~190px
   // strip under the method prose. One frame for the ResizeObserver.
   await page.waitForTimeout(400);
