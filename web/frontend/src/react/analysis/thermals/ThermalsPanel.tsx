@@ -7,10 +7,17 @@
  * selected thermal in detail — a top-down lift rose around the measured core,
  * the headline readouts (lean vs wind, strongest side, feeders), the climb
  * profile by altitude band, and the exact numbers in a band table. Census and
- * detail are laid out by the shared {@link MasterDetail} (select a row, the
- * pinned pane follows), exactly like the separation ranking above it. The
+ * detail are laid out by the shared {@link MasterDetail}, in its `navigation`
+ * mode — side by side on a wide screen, one at a time on a phone. The
  * summaries are MEASUREMENTS pooled from the field's own tracks, never a
  * fitted model, and the captions say so.
+ *
+ * Which thermal is selected lives in the URL, as `?thermal=<id>`. That is what
+ * makes the stacked layout a real master/detail rather than a pinned preview:
+ * a phone shows the census alone, choosing a row NAVIGATES to the detail, and
+ * the browser's own Back returns to the list (MasterDetail's `navigation`
+ * mode). Side by side nothing navigates — both halves are on screen — so a
+ * pick only replaces the URL, and Back still means "leave this page".
  *
  * The model wind is the one outside number: the task's weather column
  * (independent request, same as DayProfilePanel) interpolated to each band's
@@ -18,7 +25,17 @@
  * a model run beside the track-measured wind — a reader must never mistake
  * the prediction for the measurement (docs/weather.md).
  */
-import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { Selection } from "react-aria-components";
 import { InfoIcon } from "lucide-react";
 import { windAtHeight } from "@glidecomp/engine";
@@ -156,6 +173,9 @@ const ROSE_R = 132;
 /** Census rows shown before "Show all …": the most-shared thermals — enough
  * to read the day's pattern, few enough that the rose leads the section. */
 const TOP_THERMALS = 10;
+
+/** The URL parameter the selected thermal round-trips through. */
+const THERMAL_PARAM = "thermal";
 
 // The map backdrop stays a separate lazy chunk: mapbox-gl (and its CSS) load
 // only when someone flips the toggle, and never in the SSR entry.
@@ -748,7 +768,14 @@ export function ThermalsPanel({
       ).id,
     [shapes]
   );
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // The selection is URL state, not component state: stacked, choosing a row
+  // is a navigation, and Back is how a reader gets out of the detail. Read
+  // from the query on both the server and the first client render, so a
+  // shared link opens on the thermal it names.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const paramId = Number(searchParams.get(THERMAL_PARAM));
+  const chosen = shapes.find((s) => s.id === paramId) ?? null;
   // Satellite backdrop under the rose — off by default (and in the SSR
   // snapshot), so mapbox-gl only ever loads on an explicit flip. Shared by
   // the inline figure and the full-screen sheet.
@@ -756,9 +783,62 @@ export function ThermalsPanel({
   // The figure filling the screen (rac/full-screen-sheet.tsx), for actually
   // exploring the terrain around the thermal.
   const [expanded, setExpanded] = useState(false);
-  const selected = shapes.find((s) => s.id === (selectedId ?? defaultId)) ?? shapes[0];
+  // What the pane shows. With nothing chosen it is still the default thermal:
+  // side by side the pane is on screen from the first paint and must not be
+  // empty, and stacked it is off screen anyway until a row is picked.
+  const selected = chosen ?? shapes.find((s) => s.id === defaultId) ?? shapes[0];
   // Labels the detail region (it is read before the census it belongs to).
   const headingId = useId();
+
+  // Side by side, told by MasterDetail's ResizeObserver (never by a viewport
+  // media query — the census's width is not a function of the viewport, and a
+  // second opinion about the breakpoint would be a second breakpoint).
+  const [wide, setWide] = useState(false);
+  // Whether THIS panel pushed the history entry the detail is showing on, so
+  // its own back control can unwind that entry rather than stack another.
+  const pushed = useRef(false);
+  useEffect(() => {
+    if (!chosen) pushed.current = false;
+  }, [chosen]);
+
+  /** Write the selection to the query. Stacked that is a navigation (push);
+   *  side by side it is only a change of view (replace). */
+  const choose = (id: number, replace: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    next.set(THERMAL_PARAM, String(id));
+    setSearchParams(next, { replace });
+    if (!replace) pushed.current = true;
+  };
+
+  // Side by side the pane always has a subject, so the census must always
+  // have the matching row lit — which means the query has to name it. It is
+  // seeded once the layout is known (never on the server, where the width is
+  // not), and `replace`d, so it never costs the reader a Back press.
+  const seededWide = useRef(false);
+  useEffect(() => {
+    if (!wide || chosen || seededWide.current) return;
+    seededWide.current = true;
+    choose(selected.id, true);
+    // choose() closes over the current query; re-running on every render of
+    // it would fight the reader's own navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide, chosen]);
+
+  /** Out of the detail and back to the census (stacked only). Unwinding our
+   *  own push keeps the history clean; a deep link that arrived on the detail
+   *  has no entry to unwind, so it drops the parameter in place. */
+  const back = () => {
+    if (pushed.current) {
+      pushed.current = false;
+      navigate(-1);
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete(THERMAL_PARAM);
+    setSearchParams(next, { replace: true });
+  };
+
+  const onWideChange = useCallback((next: boolean) => setWide(next), []);
 
   const model = useMemo(() => modelWindFor(selected, weather), [selected, weather]);
 
@@ -825,13 +905,23 @@ export function ThermalsPanel({
       {...(interactive
         ? {
             selectionMode: "single" as const,
-            selectionBehavior: "replace" as const,
+            // TOGGLE, not the ranking's "replace": under `replace` react-aria
+            // selects whatever the arrow keys focus, and stacked that would
+            // navigate away from the census on the first Down press — taking
+            // the list, and the keyboard user's place in it, off the screen.
+            // Toggle moves focus and waits for Enter, which is what a list
+            // you navigate OUT of has to do. A click still picks, on both.
+            selectionBehavior: "toggle" as const,
             disallowEmptySelection: true,
-            selectedKeys: [selected.id],
+            // The CHOSEN thermal, not the one the pane happens to be showing.
+            // Lighting the default row before anyone picked it would make
+            // re-picking it a no-op — RAC drops a selection event that does
+            // not change the set — and stacked that row is the only way in.
+            selectedKeys: chosen ? [chosen.id] : [],
             onSelectionChange: (keys: Selection) => {
               if (keys !== "all") {
                 const key = [...keys][0];
-                if (key !== undefined) setSelectedId(Number(key));
+                if (key !== undefined) choose(Number(key), wide);
               }
             },
           }
@@ -921,6 +1011,12 @@ export function ThermalsPanel({
       <MasterDetail
         detailLabel="detail"
         detailHeadingId={headingId}
+        navigation={{
+          showingDetail: chosen !== null,
+          backLabel: "All thermals",
+          onBack: back,
+        }}
+        onWideChange={onWideChange}
         master={census}
         detail={<div className="p-4">
         <h3 id={headingId} className="text-sm font-semibold">

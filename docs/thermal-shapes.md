@@ -50,11 +50,20 @@ clustering (`shared-thermals.ts`) and the circle detector.
   census (a UI must say "top N of M", never present the cap as the census).
   Added in `TASK_ANALYSIS_VERSION` 20; stale-first storage, ETag, SSR seed
   and invalidation all ride the existing `task_analysis` machinery.
-- **Task analysis page** (`/comp/:id/task/:id/analysis`): "The day's thermals"
-  section — census table, top-down lift rose (with an ⓘ legend popover),
-  readouts, climb profile, per-pilot climb table and band table. The model-wind cross-check comes from the task's weather column
+- **Task analysis page** (`/comp/:id/task/:id/analysis/thermals`): "The day's
+  thermals" section — census table, top-down lift rose (with an ⓘ legend
+  popover), readouts, climb profile, per-pilot climb table and band table. The model-wind cross-check comes from the task's weather column
   (independent request, `windAtHeight` interpolation) and is always drawn
   dashed and credited as a model run, never blended with the measurement.
+  - Census and detail are the shared `MasterDetail` in its `navigation` mode,
+    and **the selected thermal is `?thermal=<id>` in the query** — the same
+    parameter name the 3D replay uses, so the two read alike. On a wide
+    screen both halves are on view and a pick only `replace`s the URL; on a
+    phone the census is the whole page, choosing a row navigates to the
+    detail, and **the browser's Back returns to the census** (there is an
+    "All thermals" control too). Nothing measures the viewport to decide
+    that: the split is the same `@5xl` container query everywhere, and the
+    only thing the ResizeObserver decides is push versus replace.
   - The rose (`react/analysis/thermals/ThermalsPanel.tsx`) puts the two
     radii on the picture, not just in the band table. Wedge length is
     *relative* climb by sector — the shape of the lift, with sink marked in
