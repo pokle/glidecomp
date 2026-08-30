@@ -1,7 +1,7 @@
 /**
  * How far the field got, as one dot per pilot on a single lane.
  *
- * The same encoding as the takeoff lane on the field-analysis day profile
+ * The same encoding as the takeoff lane on the task-analysis day profile
  * (`day-profile/ClimbHourlyChart.tsx`), and for the same reason: with a few
  * dozen values on one axis, individual marks read better than bins. A
  * histogram has to choose a bucket width, and at this size the buckets read as
@@ -25,7 +25,7 @@
  * caption states the field size, this pilot's distance and how many they beat,
  * which are the readings the picture carries. The section's own item rows
  * remain the exact figures. Non-interactive by design, matching the
- * field-analysis strip it is modelled on.
+ * task-analysis strip it is modelled on.
  */
 import type { ScoreDistributionChart } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";

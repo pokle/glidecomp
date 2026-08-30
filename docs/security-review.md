@@ -44,7 +44,7 @@
 | 2026-07-05 | [round](security-review/rounds/2026-07-05.md) | Scoring fallbacks + replay window; no new findings |
 | 2026-07-06 | [round](security-review/rounds/2026-07-06.md) | React/Base-UI migration deep-dive; SEC-28 (CSV formula injection) documented |
 | 2026-07-12 | [round](security-review/rounds/2026-07-12.md) | SSR pages + new mutating endpoints; SEC-29 documented |
-| 2026-07-19 | [round](security-review/rounds/2026-07-19.md) | Email-OTP + field analysis; SEC-30 (open redirect) fixed inline; SEC-31 documented |
+| 2026-07-19 | [round](security-review/rounds/2026-07-19.md) | Email-OTP + task analysis; SEC-30 (open redirect) fixed inline; SEC-31 documented |
 | 2026-07-26 | [round](security-review/rounds/2026-07-26.md) | Weather + track quality; SEC-32/33 (engine DoS) + SEC-34 documented, SEC-34 part-fixed |
 | 2026-07-28 | [round](security-review/rounds/2026-07-28.md) | SSR identity + dev-router; SEC-35 (3dvis cache) fixed inline |
 | 2026-07-29 | [round](security-review/rounds/2026-07-29.md) | CIVL rankings + report card; SEC-36 fixed inline; SEC-28 finally fixed |
@@ -86,12 +86,12 @@ rounds linked here.
 | SEC-23 | Replay gaggle tooltip renders turnpoint name into `innerHTML` | Fixed | [2026-07-03](security-review/rounds/2026-07-03.md) | Fixed same round |
 | SEC-24 | Super-admin users page interpolates username into `href` | Fixed | [2026-07-03](security-review/rounds/2026-07-03.md) | Fixed same round |
 | SEC-25 | `comp-detail.ts` quote-unsafe `escapeHtml` | Closed / moot | [2026-07-03](security-review/rounds/2026-07-03.md) | [2026-07-06](security-review/rounds/2026-07-06.md) — file deleted |
-| SEC-26 | 3D-replay packer + field-analysis read path decompress without SEC-11 cap | Open (deferred) | [2026-07-03](security-review/rounds/2026-07-03.md) | Gap G-08 |
+| SEC-26 | 3D-replay packer + task-analysis read path decompress without SEC-11 cap | Open (deferred) | [2026-07-03](security-review/rounds/2026-07-03.md) | Gap G-08 |
 | SEC-27 | Super-admin allowlist matches on email alone | Open (Info) | [2026-07-03](security-review/rounds/2026-07-03.md) | — |
 | SEC-28 | Pilots CSV export writes spreadsheet formula triggers verbatim | Fixed | [2026-07-06](security-review/rounds/2026-07-06.md) | [2026-07-29](security-review/rounds/2026-07-29.md) — shared `csvEscape()` |
 | SEC-29 | Quadratic-time GPX/KML client waypoint parsers | Open (deferred) | [2026-07-12](security-review/rounds/2026-07-12.md) | Gap G-12 |
 | SEC-30 | Open redirect via backslash-folded `next` in sign-in | Fixed | [2026-07-19](security-review/rounds/2026-07-19.md) | Fixed same round (`safe-next.ts`) |
-| SEC-31 | Field-analysis field cap by track count, not bytes | Open (deferred) | [2026-07-19](security-review/rounds/2026-07-19.md) | Gap G-13 |
+| SEC-31 | Task-analysis field cap by track count, not bytes | Open (deferred) | [2026-07-19](security-review/rounds/2026-07-19.md) | Gap G-13 |
 | SEC-32 | Quadratic-time altitude cleaning on crafted IGC timestamps | Fixed | [2026-07-26](security-review/rounds/2026-07-26.md) | Fixed 2026-08-03 (`SlidingMedian`), verified [2026-08-05](security-review/rounds/2026-08-05.md) |
 | SEC-33 | Quadratic-time track-quality glide window | Fixed | [2026-07-26](security-review/rounds/2026-07-26.md) | Fixed 2026-08-03 (monotone deque), verified [2026-08-05](security-review/rounds/2026-08-05.md) |
 | SEC-34 | Dirty `bun audit` — dev/build-time advisories | Open — 3 residual (`astro` ×3) | [2026-07-26](security-review/rounds/2026-07-26.md) | [2026-08-12](security-review/rounds/2026-08-12.md) — 10→3; gap G-16 |
@@ -122,12 +122,12 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 - **G-05** — Confirm no legacy `Cookie: test-user=…` acceptance in production (source-level check only so far).
 - **G-06** — TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (needs a live concurrency test).
 - **G-07** — Flip CSP from Report-Only to enforced (nonce/hash the four inline-script blocks first).
-- **G-08** — SEC-26: packer/field-analysis decompression cap + test.
+- **G-08** — SEC-26: packer/task-analysis decompression cap + test.
 - **G-09** — Extend `html-sinks.test.ts` from count-pinning towards content (statement-level escapeHtml check) if a tenth SEC-41-class instance ever appears.
 - **G-10** — SEC-45: bound the PathFinder branch-and-bound search; oracle tests + ~60k-fix adversarial regression, in its own PR (`scoring-changes/` note + archive parity measurement owed).
 - **G-11** — SEC-40: bound or restructure `findSubCores` in `thermal-shape.ts`.
 - **G-12** — SEC-29: parser loop bounds + `file.size` pre-check + regression test.
-- **G-13** — SEC-31: byte/fix-based field-analysis cap.
+- **G-13** — SEC-31: byte/fix-based task-analysis cap.
 - **G-14** — Turnpoint-count cap in the engine's own `xctsk-parser.ts`/`route-optimizer.ts`, independent of the API-layer Zod schema.
 - **G-15** — Email SPF/DKIM/DMARC on a live deploy.
 - **G-16** — SEC-34 residual: `astro` 6→7 (with `upgrade-deps`).

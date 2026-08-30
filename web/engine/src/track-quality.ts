@@ -14,7 +14,7 @@
  * relocates the whole task onto its own calendar day and scores normally. A
  * real example, Corryong Cup 2025 task 4: one entry was a New Zealand flight
  * from ten days later. It scored the S7F §5.3 minimum distance, and its hour
- * buckets stretched the field-analysis day-profile axis from 5 hours to 262.
+ * buckets stretched the task-analysis day-profile axis from 5 hours to 262.
  *
  * What this module is NOT: it is not a scoring rule. S7F §5.3 and §9.3
  * award minimum distance to EVERY pilot who takes off, with no start-validity
@@ -30,7 +30,7 @@
  *          statements about identity, not airmanship, and both are decided
  *          with margins so large (days, thousands of kilometres) that no
  *          honest entry can reach them. The caller withholds the track from
- *          scoring and from field analysis.
+ *          scoring and from task analysis.
  *   SOFT — the file is plausibly this flight but something about it deserves
  *          a human's eye. Never changes a score. These fire routinely on
  *          legitimate 0-scoring tracks (blown launches, top-landings), so
@@ -286,7 +286,7 @@ export interface TrackQualityFinding {
 export interface TrackQualityReport {
   findings: TrackQualityFinding[];
   /** Any finding of severity 'hard': the caller must withhold this track from
-   * scoring AND from field analysis (subject to a scorekeeper override). */
+   * scoring AND from task analysis (subject to a scorekeeper override). */
   hardFailed: boolean;
   /** Checks that actually ran. */
   checked: TrackQualityCheckId[];

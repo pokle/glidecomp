@@ -7,7 +7,7 @@ excluded — those live in
 [mapbox-interactions-spec.md](mapbox-interactions-spec.md).
 
 **This is not a map of the competition SPA.** Competitions, comp and task
-detail, scores, the report card, field analysis, track submission and the
+detail, scores, the report card, task analysis, track submission and the
 organiser/admin pages are deliberately out of scope here. For those, read
 [2026-07-08-information-architecture-v2.md](2026-07-08-information-architecture-v2.md),
 which is the current information architecture.

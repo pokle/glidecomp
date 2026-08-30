@@ -92,7 +92,7 @@ export function TaskWeatherNotes({
             }
           />
           <Description>
-            Shown to everyone on this task and alongside the field analysis
+            Shown to everyone on this task and alongside the task analysis
             charts. Plain text; line breaks are kept. {draft.length}/{MAX_NOTES}
             characters.
           </Description>

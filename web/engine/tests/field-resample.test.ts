@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { buildTimeGrid, sampleAt } from '../src/field-analysis';
+import { buildTimeGrid, sampleAt } from '../src/analysis';
 import { createFix, BASE_TIME, TEST_ORIGIN, DEG_LAT_PER_M } from './field-test-helpers';
 
 const ORIGIN = TEST_ORIGIN;

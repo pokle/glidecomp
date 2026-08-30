@@ -228,7 +228,7 @@ in-place edit — the analysis page's task editor adjusts radii on the live
 object — can never be served a stale line. The §7.1.6 task-area centre and
 its LTM projection are cached the same way (the spec computes the centre
 ONCE per task and reuses it for every route of that task). Sequence
-resolution, the explainers and the field analysis all recompute the line per
+resolution, the explainers and the task analysis all recompute the line per
 pilot, so the caches are what keep the §9.3 per-fix remaining-route
 optimisations affordable; the remaining routes themselves (fresh route per
 position, but the task's cached projection) are not cached.

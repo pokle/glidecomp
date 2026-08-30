@@ -16,11 +16,11 @@
  *               at 3"). Subjective, local, and the only source that knows
  *               what a 9 km grid cell cannot.
  *
- * PUBLIC, with the same visibility rule as scores and field analysis:
+ * PUBLIC, with the same visibility rule as scores and task analysis:
  * readable by anyone for a normal comp, admin-only for a hidden `test` comp,
  * which 404s rather than 403s so the endpoint's existence isn't a signal.
  *
- * Stale-first (see weather-store.ts) with field analysis's departure: the
+ * Stale-first (see weather-store.ts) with task analysis's departure: the
  * cold path NEVER fetches synchronously. Blocking a page render on a
  * third-party HTTP request would make GlideComp's availability depend on
  * Open-Meteo's, so a cold task returns `pending: true`, schedules the fetch,
@@ -58,7 +58,7 @@ import {
 
 /**
  * Who may read task weather. Public for a normal comp; a hidden `test` comp
- * stays admin-only. Mirrors canViewFieldAnalysis exactly — if that rule
+ * stays admin-only. Mirrors canViewAnalysis exactly — if that rule
  * changes, this one changes with it.
  */
 async function canViewWeather(

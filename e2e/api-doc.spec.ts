@@ -29,13 +29,21 @@ const SAMPLE_XCTSK = resolve(
   "web/samples/comps/corryong-cup-2026-open-t1/task.xctsk"
 );
 
-// Placeholder IDs the doc uses in its example URLs / key header. These mirror
-// the sqids format (lowercase letters); keep them in sync with docs/api.md.
+// The doc's examples are real commands: they reference four shell variables a
+// reader exports once (see "Running the examples" in docs/api.md), rather than
+// baking fake ids into the paths. `/api/comp/compa/task/taska` put each id
+// directly after the literal segment that shares its name and was hard to read.
+//
+// So this harness plays the part of the shell, expanding the same four names.
+// Keep them in sync with the doc's export block.
+//
+// Order matters when substituting: longest first, so `$COMP_ID` is never
+// matched as `$COMP` with a stray `_ID` left behind. SUBST_ORDER pins that.
 const PLACEHOLDER = {
-  comp: "compa",
-  task: "taska",
-  pilot: "pilota",
-  key: "glc_XXXXXXXX...",
+  comp: "$COMP_ID",
+  task: "$TASK_ID",
+  pilot: "$PILOT_ID",
+  key: "$API_KEY",
   host: "https://glidecomp.com",
   igcFile: "flight.igc",
 };
@@ -130,7 +138,10 @@ function parseBlock(raw: string, subst: () => Record<string, string>): DocCall {
   const map = subst();
   const apply = (s: string): string => {
     let out = s.replace(PLACEHOLDER.host, "");
-    for (const [ph, real] of Object.entries(map)) out = out.split(ph).join(real);
+    // Longest name first — see the PLACEHOLDER note.
+    for (const ph of Object.keys(map).sort((a, b) => b.length - a.length)) {
+      out = out.split(ph).join(map[ph]);
+    }
     return out;
   };
 

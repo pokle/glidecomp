@@ -248,7 +248,7 @@ export interface OpenDistanceTaskScoreResult extends TaskScoreResultBase {
  *
  * Degrade rule for stored bodies: payloads persisted before this discriminant
  * existed carry no `format`. Every such persisted result is a GAP result (the
- * competition API refuses field analysis — the one store embedding whole
+ * competition API refuses task analysis — the one store embedding whole
  * results — for open-distance tasks), so a consumer reading a stored body
  * must treat an absent `format` as 'gap', never fail.
  */

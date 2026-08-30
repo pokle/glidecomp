@@ -20,7 +20,7 @@
  * `group.tests.length` and cuts the sequence into equal-sized pieces, walking
  * groups in project-then-filename order. Measured against the real durations
  * from run 32355085390, `--shard=i/4` yields 292s / 90s / 69s / 103s: the
- * alphabetical run of analysis-map, explain-affordance and field-analysis —
+ * alphabetical run of analysis-map, explain-affordance and task-analysis —
  * the three heaviest specs in the suite — all land in shard 1. You would pay
  * for four runners and still wait for a 292s shard.
  *
@@ -56,12 +56,12 @@ export const E2E_SHARDS = {
    * The map, the analysis page and the charts that explain a score — the
    * heaviest specs in the suite, and heavy for real reasons: they render
    * Mapbox (from recordings), draw charts, and wait on the analysis the engine
-   * computes. field-analysis alone is 78.9s, and it is `mode: "serial"` with a
+   * computes. task-analysis alone is 78.9s, and it is `mode: "serial"` with a
    * shared `beforeAll` page, so it cannot be split further. It sets the floor
    * for how fast any shard can be.
    */
   "maps-and-analysis": [
-    "field-analysis.spec.ts", // 78.9s
+    "task-analysis.spec.ts", // 78.9s
     "analysis-map.spec.ts", // 72.8s
     "explain-affordance.spec.ts", // 39.9s
     "report-card.spec.ts", // 7.4s

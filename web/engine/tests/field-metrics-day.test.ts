@@ -4,7 +4,7 @@
  *
  * Synthetic fields via the frozen field-test-helpers factory, plus one smoke
  * test over the real kosci-loop-t1 comp (builder copied from
- * field-analysis.test.ts per the Stage 1 package rules).
+ * task-analysis.test.ts per the Stage 1 package rules).
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -20,13 +20,13 @@ import type { TurnpointReaching } from '../src/turnpoint-sequence';
 import {
   buildFieldContext,
   evaluateField,
-  renderFieldReport,
+  renderTaskAnalysis,
   type FieldContext,
   type ReportTable,
-} from '../src/field-analysis';
+} from '../src/analysis';
 import { DAY_METRICS, pickBestConditionsHour,
   climbQuantiles,
-} from '../src/field-analysis/metrics/day-profile';
+} from '../src/analysis/metrics/day-profile';
 import {
   makeTestField,
   straightFixes,
@@ -347,10 +347,10 @@ describe('day.wind', () => {
     // +11) reads 21:00 for BASE_TIME's 10:00Z hour; the default is UTC. The leg
     // leg windows render as a range with a single trailing token.
     const report = evaluateField(makeDriftField(), DAY_METRICS);
-    const zoned = renderFieldReport(report, { timeZone: 'Australia/Melbourne' });
+    const zoned = renderTaskAnalysis(report, { timeZone: 'Australia/Melbourne' });
     expect(zoned).toContain('21:00 AEDT');
     expect(zoned).toMatch(/\d{2}:\d{2}–\d{2}:\d{2} AEDT/); // the leg When range
-    expect(renderFieldReport(report)).toContain('10:00 UTC');
+    expect(renderTaskAnalysis(report)).toContain('10:00 UTC');
   });
 });
 
@@ -516,7 +516,7 @@ const KOSCI_DIR = join(
   '../../samples/comps/kosci-loop-t1',
 );
 
-/** Score kosci-loop-t1 and build the field (pattern from field-analysis.test.ts). */
+/** Score kosci-loop-t1 and build the field (pattern from task-analysis.test.ts). */
 function buildKosciField(): FieldContext {
   const entries = readdirSync(KOSCI_DIR);
   const taskFile = entries.find((f) => f.endsWith('.xctsk'))!;
@@ -577,7 +577,7 @@ describe('day metrics over kosci-loop-t1 (smoke)', () => {
     expect(timingSeries.deadline).toBeNull();
 
     // The whole thing renders.
-    const rendered = renderFieldReport(report);
+    const rendered = renderTaskAnalysis(report);
     expect(rendered).toContain('Wind by hour');
     expect(rendered).toContain('Wind by leg');
     expect(rendered).toContain('Climb by hour');

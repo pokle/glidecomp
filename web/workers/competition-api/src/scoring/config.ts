@@ -8,7 +8,7 @@
  *   the per-pilot transparency endpoint needs, and all it should pay for.
  * - {@link resolveTaskScoringConfig} — the geometry plus the roster, the
  *   tracks, the scored classes, the DNF counts and the stored quality
- *   verdicts. What the scorer and the field analysis need.
+ *   verdicts. What the scorer and the task analysis need.
  *
  * Anything that resolves these by hand instead will drift the moment somebody
  * touches the GAP defaults, and the drift is silent.
@@ -49,7 +49,7 @@ import type {
  * distances per class, departure/arrival flags per task). Task values win
  * field-by-field; a field no task pinned still follows the comp settings
  * dialog. Every scoring read path merges through here so the published
- * score, the transparency narrative, the field analysis and the 3D pack
+ * score, the transparency narrative, the task analysis and the 3D pack
  * all resolve identical parameters.
  */
 export function mergeStoredGapParamsJson(

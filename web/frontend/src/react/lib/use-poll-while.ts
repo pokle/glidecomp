@@ -1,7 +1,7 @@
 /**
  * Poll while something is still being computed, and give up eventually.
  *
- * The field-analysis pages both promise "this page refreshes itself" while a
+ * The task-analysis pages both promise "this page refreshes itself" while a
  * cold analysis computes in the background — the cold path never computes on
  * the request, so the first reader gets `pending` and has to be told when the
  * real answer lands. The ScoreFreshness ETag poll cannot cover it: a pending

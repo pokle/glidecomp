@@ -20,13 +20,13 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 | `/comp/:id/waypoints` | |
 | `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
 | `/comp/:id/task/:id/pilot/:id` | the report card |
-| `/comp/:id/analysis` | field analysis, comp report |
-| `/comp/:id/task/:id/analysis` | field analysis, this task's chapter (a contents list for the six below) |
+| `/comp/:id/analysis` | the COMP analysis: every task's read against each other |
+| `/comp/:id/task/:id/analysis` | the TASK analysis (a contents list for the six below) |
 | `/comp/:id/task/:id/analysis/:section` | one section of that chapter — `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
 
-A cold field-analysis report server-renders its pending notice and is noindexed
+A cold task-analysis report server-renders its pending notice and is noindexed
 **per request**, not shell-noindexed. The section route's pattern is built from
-`field-analysis/sections.ts`, so a section added there cannot be a 404 here; an
+`analysis/sections.ts`, so a section added there cannot be a 404 here; an
 unknown slug falls through to the 404 shell like any other junk `/comp` URL.
 
 `NOINDEX_SHELL_ROUTES` (checked *before* `ROUTES`) covers the `/comp` paths that

@@ -42,7 +42,7 @@ import {
   extractThermalShapes,
   type ThermalShape,
   type ThermalShapePilot,
-} from '../src/field-analysis';
+} from '../src/analysis';
 import {
   fetchTaskWeather,
   taskCentroid,
@@ -84,7 +84,7 @@ const { task, pilots: flights } = readTaskDir(dir);
 process.stderr.write(`Loaded ${flights.length} tracks from ${dir}\n`);
 
 // Per-pilot detector pass — same slice-to-airborne-then-offset-back dance as
-// field-analysis buildFieldContext.analysePilot, minus the scoring.
+// task-analysis buildFieldContext.analysePilot, minus the scoring.
 const pilots: ThermalShapePilot[] = [];
 for (const flight of flights) {
   const { fixes } = flight;

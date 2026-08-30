@@ -1,14 +1,14 @@
 /**
  * Fetch a task's weather, polling while the server is still fetching it.
  *
- * A separate request from the field analysis, deliberately. The two are
+ * A separate request from the task analysis, deliberately. The two are
  * independent caches with independent failure modes: an Open-Meteo outage
  * must not stop the behavioural metrics rendering, and a task too big to
  * analyse should still show what the day did. Folding weather into the
  * analysis response would have coupled them at exactly the point where
  * independence is worth most.
  *
- * The polling mirrors the field-analysis page's: the cold path never fetches
+ * The polling mirrors the task-analysis page's: the cold path never fetches
  * synchronously on the server, so a first view legitimately answers
  * `pending: true` and the answer arrives a second or two later.
  */

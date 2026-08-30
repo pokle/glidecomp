@@ -238,7 +238,7 @@ function exactRebuild(
         ? {
             kind: "analysis",
             path: taskAnalysisPath(task.comp_id, task.comp_name, task.task_id, task.name),
-            label: "Field analysis",
+            label: "Task analysis",
             context: `${task.name} · ${task.comp_name}`,
           }
         : null;
@@ -255,7 +255,7 @@ function exactRebuild(
       return {
         kind: "analysis",
         path: compAnalysisPath(...c),
-        label: "Field analysis",
+        label: "Comp analysis",
         context: comp.name,
       };
     // The roster is admin-only and has no public page to rebuild, so the comp
@@ -324,7 +324,7 @@ export function buildSuggestions(
   for (const c of comps) {
     add({ kind: "comp", path: compPath(c.comp_id, c.name), label: c.name });
     // A single confidently-identified comp is worth expanding: its scores and
-    // its field analysis are the two pages most links into a comp are after,
+    // its comp analysis are the two pages most links into a comp are after,
     // and they are one hop from wherever the dead link was pointing.
     if (results.comps.length === 1) {
       add({
@@ -336,7 +336,7 @@ export function buildSuggestions(
       add({
         kind: "analysis",
         path: compAnalysisPath(c.comp_id, c.name),
-        label: "Field analysis",
+        label: "Comp analysis",
         context: c.name,
       });
     }

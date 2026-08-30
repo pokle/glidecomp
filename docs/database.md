@@ -92,7 +92,7 @@ after the initial schema.
 |-------|--------|
 | Auth (Better Auth) | `user`, `session`, `account`, `verification`, `apikey` (0002), `rateLimit` (0017 — the D1-backed request limiter; in-memory counters reset with every workerd isolate) |
 | Competition | `pilot`, `comp`, `comp_admin`, `comp_pilot`, `comp_waypoints` (0015), `task`, `task_class`, `task_track`, `task_manual_flight` (0014), `task_pilot_status` (0006), `audit_log` (0005) |
-| Derived, stale-first | `task_scores` (0012), `track_analysis` (0012), `task_field_analysis` (0019), `task_weather` (0023) |
+| Derived, stale-first | `task_scores` (0012), `track_analysis` (0012), `task_analysis` (0019, renamed 0033), `task_weather` (0023) |
 | Derived, trigger-fed | `search_doc` + `search_fts` + `search_dirty` (0026) — the site search index. The only derived store that maintains itself: SQL triggers queue the changed keys, so no route handler calls it. See [2026-08-01-site-search.md](2026-08-01-site-search.md) |
 | Rankings | `pilot_ranking` (0025) — the FAI/CIVL monthly world ranking; deliberately standalone, no FK to `pilot`/`comp_pilot`. A roster COPIES a pilot's WPRS score out of it onto `comp_pilot.wprs_points` + `civl_ranking_slug`/`_date` (0029, 0030) rather than joining, so a competition's launch order does not move when CIVL publishes. See [civl-rankings.md](civl-rankings.md) |
 | User files | `user_preferences` (0007), `user_track`, `user_task`, `user_annotation` (0008) |
@@ -127,3 +127,4 @@ of the notable ones.
 | `0030_comp_pilot_wprs_points` | Roster keeps the WPRS **score**, not the rank: a rank is a position within one list's pool and the pools differ 1000-fold. Converts stored ranks back to their points; drops `civl_ranking` |
 | `0031_task_official_results` | The officially published results beside GlideComp's rescored ones (#603): per-pilot rank/total plus links to AirScore's own comp and task scores pages, written by the importer. Display-only — audited, but never a scoring input, so no score bump |
 | `0032_task_track_igc_sha256` | Content identity for tracklogs (SHA-256 of the raw IGC text), so a re-seed only re-uploads tracks whose content changed. NULL never skips; the upload path restamps the hash on every replacement |
+| `0033_rename_task_analysis` | `task_field_analysis` → `task_analysis`. "Field analysis" named both the whole-comp report and the one-task one; the two are now COMP analysis and TASK analysis, and only the task one is stored. A pure `ALTER TABLE … RENAME TO`: no row rewritten, no cached report discarded |

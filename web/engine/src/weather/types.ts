@@ -12,7 +12,7 @@
  *
  * Conventions, fixed across every provider so the UI never has to ask:
  *   * Wind DIRECTION is degrees the wind blows FROM (0–360), matching the
- *     engine's own `circularMeanWind` and the field-analysis tables.
+ *     engine's own `circularMeanWind` and the task-analysis tables.
  *   * Wind SPEED is km/h. The frontend converts at the display boundary via
  *     `unitDisplay`, exactly as it does for the pilot-derived wind.
  *   * Heights are metres. `heightM` on a level is AMSL; boundary-layer depth

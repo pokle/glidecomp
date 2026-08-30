@@ -33,18 +33,18 @@ describe('scoring source closure', () => {
   });
 
   it('resolves a specifier against the importing file, not the root', () => {
-    // './stats' inside field-analysis/ means field-analysis/stats.ts. Joining
+    // './stats' inside analysis/ means analysis/stats.ts. Joining
     // it onto the root instead would silently hash the wrong file — or, worse,
     // a real file of the same name that is not the dependency at all.
     const tree = virtualSourceTree({
       'stats.ts': `export const wrong = true;`,
-      'root.ts': `import './field-analysis/shape';`,
-      'field-analysis/shape.ts': `import { percentile } from './stats';`,
-      'field-analysis/stats.ts': `export const percentile = 1;`,
+      'root.ts': `import './analysis/shape';`,
+      'analysis/shape.ts': `import { percentile } from './stats';`,
+      'analysis/stats.ts': `export const percentile = 1;`,
     });
     expect(scoringSourceFiles(['root.ts'], tree)).toEqual([
-      'field-analysis/shape.ts',
-      'field-analysis/stats.ts',
+      'analysis/shape.ts',
+      'analysis/stats.ts',
       'root.ts',
     ]);
   });

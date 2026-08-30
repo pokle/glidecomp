@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'bun:test';
-import { findSimilarPilots } from '../src/field-analysis/similarity';
+import { findSimilarPilots } from '../src/analysis/similarity';
 import type {
-  FieldAnalysisReport,
+  TaskAnalysisReport,
   MetricFamily,
   MetricReport,
-} from '../src/field-analysis/types';
+} from '../src/analysis/types';
 
 interface MetricSpec {
   id: string;
@@ -16,7 +16,7 @@ interface MetricSpec {
 
 /** A minimal-but-valid report. Ranks are filled in but deliberately never
  * asserted on: this surface must not depend on the leaderboard at all. */
-function makeReport(names: string[], specs: MetricSpec[]): FieldAnalysisReport {
+function makeReport(names: string[], specs: MetricSpec[]): TaskAnalysisReport {
   const pilots = names.map((pilotName, i) => ({
     trackFile: `p${i}.igc`,
     pilotName,
@@ -56,7 +56,7 @@ function makeReport(names: string[], specs: MetricSpec[]): FieldAnalysisReport {
  * Five pilots over four behaviours. A and B share a shape (high on m1/m2,
  * low on m3/m4); D is A's mirror image; C sits in the middle of the field.
  */
-function shapedReport(): FieldAnalysisReport {
+function shapedReport(): TaskAnalysisReport {
   return makeReport(
     ['A', 'B', 'C', 'D', 'E'],
     [

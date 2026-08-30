@@ -6,7 +6,7 @@
  *
  * Read `types.ts` first: it fixes the conventions (wind FROM in degrees,
  * km/h, metres, ISO-UTC hour starts) that make a provider's output drop
- * straight onto the field-analysis day-profile axis beside the wind and
+ * straight onto the task-analysis day-profile axis beside the wind and
  * climb the pilots' own tracks reveal.
  *
  * Callers use `weatherQueryForTask` + `fetchTaskWeather` and never name a

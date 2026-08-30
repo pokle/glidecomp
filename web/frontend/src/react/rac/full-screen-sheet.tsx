@@ -21,7 +21,7 @@
  * how much of the edge to spend depends on what is being shown.
  *
  * Extracted from the three overlays that had grown the same shell: the
- * waypoint QR (#312), the task route glyph (#476) and the field-analysis
+ * waypoint QR (#312), the task route glyph (#476) and the task-analysis
  * metric chart (#455).
  */
 import type { ReactNode } from "react";

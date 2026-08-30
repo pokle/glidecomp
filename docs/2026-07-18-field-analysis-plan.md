@@ -1,4 +1,10 @@
-# Field Analysis — per-task / per-comp behavioural metrics in the engine + scoring CLI
+# Comp analysis and task analysis — behavioural metrics in the engine + scoring CLI
+
+> **Naming.** This plan was written as "field analysis", one name for two
+> different things. They are now named apart: the **task analysis** is one
+> task's field read against itself, and the **comp analysis** is the same
+> question aggregated across a competition's tasks. The filename keeps its
+> original date; the text below uses the current names.
 
 ## Context
 
@@ -18,10 +24,10 @@ Key facts from exploration (verified 2026-07-18):
 
 ## Module architecture
 
-New pure (fs/DOM-free) module `web/engine/src/field-analysis/`; file I/O and manifest reading stay in the CLI layer.
+New pure (fs/DOM-free) module `web/engine/src/analysis/`; file I/O and manifest reading stay in the CLI layer.
 
 ```
-web/engine/src/field-analysis/
+web/engine/src/analysis/
   types.ts            # ALL shared types + MetricComputer contract  (FROZEN after Stage 0)
   stats.ts            # percentile, median, mean, rankWithTies, spearman, circularMeanWind
   resample.ts         # time-grid resampler → TimeGrid + ResampledTrack (feeds detectGaggles)
@@ -30,14 +36,14 @@ web/engine/src/field-analysis/
   working-band.ts     # day usable altitude band from field-wide thermal data
   context.ts          # buildPilotContext / buildFieldContext (runs every detector ONCE per pilot)
   registry.ts         # imports six family arrays, exports ALL_METRICS   (FROZEN after Stage 0)
-  evaluate.ts         # run metrics, Spearman vs GAP rank, build FieldAnalysisReport model
+  evaluate.ts         # run metrics, Spearman vs GAP rank, build TaskAnalysisReport model
   report.ts           # plain-text renderer (~100 col), generic over the registry
   aggregate.ts        # cross-task comp aggregation + comp-level correlations
   index.ts            # barrel
   metrics/climbing.ts gliding.ts decision.ts gaggle.ts racecraft.ts day-profile.ts   # Stage 1
 ```
 
-`web/engine/src/index.ts` gets one export line re-exporting the barrel (`buildFieldContext`, `evaluateField`, `renderFieldReport`, `aggregateComp`, `ALL_METRICS`, types).
+`web/engine/src/index.ts` gets one export line re-exporting the barrel (`buildFieldContext`, `evaluateField`, `renderTaskAnalysis`, `aggregateComp`, `ALL_METRICS`, types).
 
 ### MetricComputer contract (`types.ts`) — the parallel-work interface
 
@@ -224,13 +230,13 @@ Conventions: **post-SSS** = at/after `sssMs` (never started → null unless stat
 - Per metric: pilots with `value !== null` and a GAP rank; correlate value vs rank (rank 1 = best → a 'higher' metric should show **negative** ρ). Report signed ρ, |ρ|, n, direction, verdict ('strong' |ρ| ≥ 0.5, 'moderate' ≥ 0.3, 'weak' < 0.3, 'n too small' n < 8 — still shown, flagged).
 - 'neutral' metrics ranked purely by |ρ|; the sign tells the user which way the behaviour pays.
 - Cross-task (`aggregate.ts`): per metric, n-weighted mean |ρ| across tasks with per-task signed ρ listed; comp-level ρ on per-pilot metric means (matched by `pilotKeyFor`) vs comp rank (Σ totalScore desc). Classes never mix (open and floater are separate fields).
-- Types: `MetricCorrelation {metricId, rho, absRho, n, verdict}`, `FieldAnalysisReport {basis, families, correlations}`, `CompAggregateReport`.
+- Types: `MetricCorrelation {metricId, rho, absRho, n, verdict}`, `TaskAnalysisReport {basis, families, correlations}`, `CompAnalysisReport`.
 
 ## CLI integration — `web/engine/cli/score-task.ts` + `web/engine/cli/comp-manifest.ts`
 
 Flags:
-- `--field-analysis` — single-task mode: after the score table (~line 555), `buildFieldContext` → `evaluateField` → `renderFieldReport`, print. With `--json`, attach the `FieldAnalysisReport` model as a `fieldAnalysis` key instead of text.
-- `--comp <slug-or-dir>` — whole-comp mode (implies `--field-analysis`; positionals become optional). `<slug>` → `web/samples/comps/<slug>/comp.json`; a path containing `comp.json` used directly. Wing from manifest `category` (hg→HG, pg→PG), `--wing` overrides. `scoring_format: 'open_distance'` comps (big-chip): score via `scoreOpenDistance`, rank by distance, same metrics (start-relative ones null) — supported but secondary.
+- `--analysis` — single-task mode: after the score table (~line 555), `buildFieldContext` → `evaluateField` → `renderTaskAnalysis`, print. With `--json`, attach the `TaskAnalysisReport` model as a `taskAnalysis` key instead of text.
+- `--comp <slug-or-dir>` — whole-comp mode (implies `--analysis`; positionals become optional). `<slug>` → `web/samples/comps/<slug>/comp.json`; a path containing `comp.json` used directly. Wing from manifest `category` (hg→HG, pg→PG), `--wing` overrides. `scoring_format: 'open_distance'` comps (big-chip): score via `scoreOpenDistance`, rank by distance, same metrics (start-relative ones null) — supported but secondary.
 
 New CLI-local helper `web/engine/cli/comp-manifest.ts` (mirror, don't refactor, the seed script's read path — `web/scripts/seed-sample-comp.ts` ~lines 283–464 — which is coupled to D1/Miniflare):
 
@@ -242,12 +248,12 @@ export function readTaskDir(dir: string): { task: XCTask; pilots: PilotFlight[] 
 export function pilotKeyFor(trackFile: string, pilotName: string): string;
 ```
 
-Comp flow: per class, per task (chronological): score exactly as single-task mode (auto nominal-distance 70% as today) → score table → per-task field-analysis report; retain per-task reports; then per class print the comp aggregate (`aggregateComp`). `--json` emits `{ tasks: [...], comp: {...} }`.
+Comp flow: per class, per task (chronological): score exactly as single-task mode (auto nominal-distance 70% as today) → score table → per-task task-analysis report; retain per-task reports; then per class print the comp aggregate (`aggregateComp`). `--json` emits `{ tasks: [...], comp: {...} }`.
 
 Report layout (`report.ts`, ~100 col, reuses the CLI's `padLeft`/`padRight` style):
 
 ```
-=== Field Analysis ===========================================================
+=== Task Analysis ===========================================================
 Basis: 42 scored pilots · grid 10 s · 118 shared thermals (73 multi-pilot) ·
 working band 850–2350 m · phases cover 100.0% of flight time
 --- Day profile & wind ---   (wind table, climb-by-hour table, launch-timing line)
@@ -267,14 +273,14 @@ working band 850–2350 m · phases cover 100.0% of flight time
 
 ## Testing
 
-Stage 0: `web/engine/tests/field-resample.test.ts` (interpolation, >60 s gaps → nulls, ENU z = −north matches cluster-detector), `field-shared-thermals.test.ts` (concurrent 300 m apart clusters; 2 km / 10 min apart don't; singletons kept), `field-phase-partition.test.ts` (exact coverage, no overlaps, fast-straight → glide, slow-meander → search), `field-stats.test.ts` (Spearman hand-computed incl. ties/constant/n=2), `field-analysis.test.ts` (integration skeleton over `web/samples/comps/kosci-loop-t1/`: parse → `scoreTask` (PG) → `buildFieldContext` → `evaluateField` → `renderFieldReport`; passes with stub families), plus `web/engine/tests/field-test-helpers.ts` (`makeTestField(...)` factory — FROZEN after Stage 0).
+Stage 0: `web/engine/tests/field-resample.test.ts` (interpolation, >60 s gaps → nulls, ENU z = −north matches cluster-detector), `field-shared-thermals.test.ts` (concurrent 300 m apart clusters; 2 km / 10 min apart don't; singletons kept), `field-phase-partition.test.ts` (exact coverage, no overlaps, fast-straight → glide, slow-meander → search), `field-stats.test.ts` (Spearman hand-computed incl. ties/constant/n=2), `task-analysis.test.ts` (integration skeleton over `web/samples/comps/kosci-loop-t1/`: parse → `scoreTask` (PG) → `buildFieldContext` → `evaluateField` → `renderTaskAnalysis`; passes with stub families), plus `web/engine/tests/field-test-helpers.ts` (`makeTestField(...)` factory — FROZEN after Stage 0).
 
 Stage 1: one test file per package (below), synthetic contexts via `makeTestField`.
 
 Stage 2 manual verification:
 ```
 bun run score-task -- web/samples/comps/corryong-cup-2026-open-t1/*.xctsk \
-  web/samples/comps/corryong-cup-2026-open-t1/ --wing HG --field-analysis
+  web/samples/comps/corryong-cup-2026-open-t1/ --wing HG --analysis
 bun run score-task -- --comp corryong-cup-2026
 bun run score-task -- --comp kosci-loop
 ```
@@ -285,15 +291,15 @@ Eyeball: horserace matches the airscore-parity task's known results; wind plausi
 ### Stage 0 — serial, ONE agent (foundation; types.ts, registry.ts, test helpers FROZEN after) — DONE
 - [x] Merge `origin/master` into this branch
 - [x] Commit this plan as `docs/2026-07-18-field-analysis-plan.md`
-- [x] `field-analysis/`: `types.ts` (full contract above), `stats.ts`, `resample.ts`, `shared-thermals.ts`, `phase-partition.ts`, `working-band.ts`, `context.ts`, `evaluate.ts`, `report.ts`, `aggregate.ts`, `index.ts`; one export line in `web/engine/src/index.ts`
+- [x] `analysis/`: `types.ts` (full contract above), `stats.ts`, `resample.ts`, `shared-thermals.ts`, `phase-partition.ts`, `working-band.ts`, `context.ts`, `evaluate.ts`, `report.ts`, `aggregate.ts`, `index.ts`; one export line in `web/engine/src/index.ts`
 - [x] Six `metrics/*.ts` stubs each exporting a typed empty array (`export const CLIMBING_METRICS: MetricComputer[] = []` etc.); `registry.ts` concatenating them into `ALL_METRICS`
-- [x] CLI: `--field-analysis`, `--comp`, `cli/comp-manifest.ts`; stub metrics yield a valid (nearly empty) report end-to-end
+- [x] CLI: `--analysis`, `--comp`, `cli/comp-manifest.ts`; stub metrics yield a valid (nearly empty) report end-to-end
 - [x] Foundation tests + integration skeleton + `tests/field-test-helpers.ts`; `bun run test` green
 
 **Stage 0 as-built notes for Stage 1 agents:**
 - The contract deltas vs the spec above: no `PilotAnalysisContext.events` (see NOTE), `MetricComputer.shortLabel?` added, `WorkingBand.usedFallback: boolean` added, and `resample.ts` also exports `stepFor(grid, tMs)` (clamped grid-step lookup).
 - `tests/field-test-helpers.ts` (FROZEN) exports `makeTestField(specs, opts?)` — runs the REAL foundation pass over hand-built fixes with a faked score — plus `makeTestTask`, `makeEmptyTurnpointResult`, `straightFixes`, `circlingFixes`, `TEST_ORIGIN`, `DEG_LAT_PER_M`, `DEG_LON_PER_M`.
-- `tests/field-analysis.test.ts` has the metric authoring template: the `test.flown_distance` case shows a full MetricComputer, evaluation, correlation assertion, and render check. Copy its shape.
+- `tests/task-analysis.test.ts` has the metric authoring template: the `test.flown_distance` case shows a full MetricComputer, evaluation, correlation assertion, and render check. Copy its shape.
 - `evaluateField` re-aligns `perPilot` by trackFile (order-tolerant), turns a thrown `compute()` into `MetricReport.error`, and skips correlation below 3 non-null values. Family sections render in `FAMILY_ORDER` (day first).
 - Correlation sanity from the stub run: kosci-loop-t1 `test.flown_distance` shows ρ ≈ −0.9 vs rank.
 
@@ -338,7 +344,7 @@ Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for
 | Gaggle lead/follow index (front vs back of gaggle, first to leave shared thermals) | Not selected this round; GAP leading points already partially capture it | Refinement pass after the eval says gaggle metrics separate |
 | True MacCready speed-to-fly discipline | No glider polar data; proxy ships now (#9) | Polar database per glider class |
 | Consistency & long game (rank variance, throwaway-task profile, skill trajectory, behavioural fingerprint radar) | Cross-comp per-pilot identity + history needed | Pilot identity across comps + stored per-task metric results |
-| Task debrief surface (per pilot per task: annotated timeline, personal waterfall narrative) | UI/UX surface; out of scope this round | SPA task-page integration of `FieldAnalysisReport` |
+| Task debrief surface (per pilot per task: annotated timeline, personal waterfall narrative) | UI/UX surface; out of scope this round | SPA task-page integration of `TaskAnalysisReport` |
 | Site guide & **cross-comp pilot profile** surfaces | Cross-comp + UI | Both of the above |
 | Horserace as a visual animation | CLI is text; the table ships now (#21) | UI surface (would make a great task-page feature) |
 
@@ -352,9 +358,9 @@ card" now means in this codebase (see
 ## Verification
 
 1. `bun run test` — all foundation + metric-family unit tests and the kosci-loop-t1 integration test pass; `bun run typecheck:all` clean.
-2. `bun run score-task -- web/samples/comps/corryong-cup-2026-open-t1/*.xctsk web/samples/comps/corryong-cup-2026-open-t1/ --wing HG --field-analysis` — scores table unchanged, field-analysis report printed after it, all family sections populated, correlation table sorted by |ρ| with `race.time_behind` near the top (sanity |ρ| ≈ 1).
+2. `bun run score-task -- web/samples/comps/corryong-cup-2026-open-t1/*.xctsk web/samples/comps/corryong-cup-2026-open-t1/ --wing HG --analysis` — scores table unchanged, task-analysis report printed after it, all family sections populated, correlation table sorted by |ρ| with `race.time_behind` near the top (sanity |ρ| ≈ 1).
 3. `bun run score-task -- --comp corryong-cup-2026` — six tasks across two classes each print scores + analysis, then two per-class comp aggregates; classes never mixed; runtime < ~30 s.
-4. `--json` modes emit well-formed JSON including `fieldAnalysis`.
+4. `--json` modes emit well-formed JSON including `taskAnalysis`.
 5. Existing behaviour untouched: `score-task` without new flags byte-identical output; `airscore-parity.test.ts` still green.
 
 ---
@@ -371,12 +377,12 @@ rollout note below):
 
 | Route | Page | Content |
 |---|---|---|
-| `/comp/:compId/analysis` | `pages/CompFieldAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the scores behind them |
-| `/comp/:compId/task/:taskId/analysis` | `pages/TaskFieldAnalysis.tsx` | A box per section, plus the airtime split and the exclusion count |
+| `/comp/:compId/analysis` | `pages/CompAnalysis.tsx` | Per-task ρ matrix + mean \|ρ\| + comp ρ, then the scores behind them |
+| `/comp/:compId/task/:taskId/analysis` | `pages/TaskAnalysis.tsx` | A box per section, plus the airtime split and the exclusion count |
 | `/comp/:compId/task/:taskId/analysis/:section` | `pages/TaskAnalysisSection.tsx` | One section: `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
 
 The per-task page is a child of the **task**, in the URL and in the
-breadcrumbs alike — Competitions › comp › task › Field analysis — because
+breadcrumbs alike — Competitions › comp › task › Task analysis — because
 that is the path a reader actually walks. It was nested under the comp
 report instead from July to August 2026, on the reasoning that a chapter
 belongs with its report; in use the trail dropped the task and felt
@@ -384,7 +390,7 @@ disconnected from the page the reader had just left.
 `/comp/:compId/analysis/task/:taskId` 301s (see [ssr.md](ssr.md)).
 
 The whole-comp report, which collects every chapter, is reachable from a
-"Comp field analysis" sibling button in the chapter's header row.
+"Comp analysis" sibling button in the chapter's header row.
 
 **The per-task report is a page per section** (August 2026). It was one scroll
 — basis, debrief, weather, thermals, ranking, heatmap, clusters, every
@@ -397,29 +403,29 @@ and each section is its own page showing that one thing.
 The basis box went the same way. Its four tiles — pilots, airtime, thermals,
 working band — sat together with nothing to say which section each reading
 belonged to; each is now the fact line on the box for the section it describes
-(`field-analysis/basis-facts.ts`), so the working band reads beside the
+(`analysis/basis-facts.ts`), so the working band reads beside the
 thermals it is the band OF. What was left over belongs to no section and stays
 above the boxes: the airtime split, and the count of pilots the scores hold
 that the analysis could not measure. The percentile heatmap
 went with the split: a wall of every pilot against every behaviour is the same
 "read the whole report at once" the split exists to undo, and the per-family
-tables state the readings exactly. `field-analysis/sections.ts` is the single list all of it reads —
+tables state the readings exactly. `analysis/sections.ts` is the single list all of it reads —
 the summary's boxes, the section page's `:section` param, and the SSR
 Function's route pattern.
 
-One report behind all six pages: `field-analysis/use-task-report.ts` does the
+One report behind all six pages: `analysis/use-task-report.ts` does the
 fetching, the class selection, the unit conversion and the pending poll, and
-`field-analysis/TaskAnalysisFrame.tsx` wears the trail, the heading, the
+`analysis/TaskAnalysisFrame.tsx` wears the trail, the heading, the
 freshness line and the controls. A section page is its body and nothing else.
 
-Presentation components are in `web/frontend/src/react/field-analysis/`. They
+Presentation components are in `web/frontend/src/react/analysis/`. They
 re-export the engine's `formatMetricValue` / `FAMILY_ORDER` / `FAMILY_LABELS`
 rather than reimplementing them, so the pages and the CLI text report can never
 disagree about a number.
 
 **Rollout was admin + super-admin only** at first, deliberately — these metrics
 are exploratory and easy to misread. The gate is one function,
-`canViewFieldAnalysis()` in `web/workers/competition-api/src/routes/field-analysis.ts`,
+`canViewAnalysis()` in `web/workers/competition-api/src/routes/analysis.ts`,
 which carried a "WHEN WE GO PUBLIC" note listing the four things that change
 (the gate, Cache-Control, a pleasant anonymous cold path, and SSR + a `ROUTES`
 entry in `functions/comp/[[path]].ts`).
@@ -430,10 +436,10 @@ entry in `functions/comp/[[path]].ts`).
 > anonymous cold path moved with it; SSR did **not** — the pages are still a
 > noindex client shell (`NOINDEX_SHELL_ROUTES`), because a cold report returns
 > `pending` and computes in the background, leaving nothing to render on a
-> first visit. Read `canViewFieldAnalysis()` for the current rule; this
+> first visit. Read `canViewAnalysis()` for the current rule; this
 > section is the 2026-07-19 snapshot.
 
-**Storage: stale-first, like scores.** `task_field_analysis` (migration 0019)
+**Storage: stale-first, like scores.** `task_analysis` (migration 0019)
 materializes one gzipped report per task, following the `task_scores` contract:
 reads never compute, mutations mark it stale, a lease-locked guarded CAS is the
 only writer. Two differences, both because this compute is expensive and read
@@ -445,7 +451,7 @@ by few people:
 2. **The cold path never computes synchronously.** It returns `pending: true`,
    schedules the work, and the UI polls (reusing `ScoreFreshness`'s
    If-None-Match poller). Because nothing else creates a row,
-   `revalidateFieldAnalysis` seeds a placeholder before taking its lease — the
+   `revalidateTaskAnalysis` seeds a placeholder before taking its lease — the
    lock is an `UPDATE`, which would otherwise no-op forever on a task that has
    never been mutated. *(That bug shipped past the unit tests, which pre-seeded
    rows, and was caught by driving the real app. There are now two regression
@@ -453,15 +459,15 @@ by few people:
 
 **Invalidation is shared.** `bumpScoreInputs()` bumps BOTH tables in one batch,
 so the 28 mutation call sites never learn this table exists. A test in
-`test/field-analysis.test.ts` uploads an IGC through the real route and asserts
-`task_field_analysis.inputs_rev` moved — that is what stops someone re-splitting
+`test/analysis.test.ts` uploads an IGC through the real route and asserts
+`task_analysis.inputs_rev` moved — that is what stops someone re-splitting
 the bump later.
 
 **Two integration constraints worth remembering:**
 
 - **It re-scores.** `buildFieldContext` reads `PilotScore.turnpointResult`,
   which `scoreFlights` (the path `computeTaskScore` takes) deliberately strips.
-  So `computeTaskFieldAnalysis` calls the engine's `scoreTask()` itself from raw
+  So `computeTaskAnalysis` calls the engine's `scoreTask()` itself from raw
   fixes. Both paths run from the extracted `resolveTaskScoringConfig()`, so the
   GAP parameters cannot drift apart.
 - **Correlations use OFFICIAL ranks.** The re-score covers tracked pilots only,
@@ -473,10 +479,10 @@ the bump later.
 **Sizing.** 32 pilots × 26 metrics ≈ 202 KB JSON, **19.9 KB gzipped** —
 extrapolating to ~90 KB at 150 pilots, comfortably a D1 BLOB. Memory, not CPU,
 is the ceiling (the whole field's fixes are live at once), hence
-`MAX_FIELD_ANALYSIS_TRACKS = 80` in `scoring.ts`: an explicit, explainable
+`MAX_TASK_ANALYSIS_TRACKS = 80` in `scoring.ts`: an explicit, explainable
 refusal instead of a silent isolate kill.
 
-**Verified** by `.claude/skills/run-glidecomp/drive-field-analysis.mjs`, which
+**Verified** by `.claude/skills/run-glidecomp/drive-task-analysis.mjs`, which
 drives the real app end to end. The rendered separation ranking for Corryong T1
 (Open) matches the CLI exactly across all 14 visible metrics —
 `race.time_behind` 0.96, `glide.speed` −0.79, `gaggle.departure_winrate` −0.54,

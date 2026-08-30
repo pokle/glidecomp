@@ -9,7 +9,7 @@ rendered as a sentence.
 
 ## The checks
 
-**HARD** — withholds the track from scoring *and* from field analysis:
+**HARD** — withholds the track from scoring *and* from task analysis:
 
 - fixes outside the task's LOCAL day by more than a day
 - no fix within 100 km of any turnpoint

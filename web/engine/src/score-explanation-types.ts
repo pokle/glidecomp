@@ -173,7 +173,7 @@ export interface ScoreDistributionMarker {
  * nominal distance the day is measured against, and their own.
  *
  * A strip of individual dots rather than binned bars, matching the takeoff
- * lane on the field-analysis day profile. Bars force a bucket width, and at
+ * lane on the task-analysis day profile. Bars force a bucket width, and at
  * this scale the buckets read as an arbitrary grid rather than as the shape of
  * the field — you see the container, not the data. One dot per pilot has no
  * such parameter: where the field bunched, the dots overlap and darken, and

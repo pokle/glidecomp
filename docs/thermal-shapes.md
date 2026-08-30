@@ -14,7 +14,7 @@ invented.
 
 ## How a shape is measured
 
-`web/engine/src/field-analysis/thermal-shape.ts`, on top of the shared-thermal
+`web/engine/src/analysis/thermal-shape.ts`, on top of the shared-thermal
 clustering (`shared-thermals.ts`) and the circle detector.
 
 1. Cluster every pilot's thermal segments into shared thermals (space + time
@@ -38,24 +38,24 @@ clustering (`shared-thermals.ts`) and the circle detector.
    **wind** (per-circle estimates: direction from the vector mean, speed from
    the median magnitude — a vector mean's length collapses with scatter and
    would misreport a windy day as calm), and the **strongest side**.
-6. Per pilot: `pilotClimbs` (added in `FIELD_ANALYSIS_VERSION` 21) —
+6. Per pilot: `pilotClimbs` (added in `TASK_ANALYSIS_VERSION` 21) —
    min/median/max of that pilot's smoothed vario samples in the thermal,
    parallel to `pilots`. Optional in the type, so payloads stored before the
    bump still parse; a UI hides the table rather than failing.
 
 ## Storage and surfaces
 
-- The field-analysis report carries `thermals` — summaries only, no point
+- The task-analysis report carries `thermals` — summaries only, no point
   clouds — capped at `MAX_THERMAL_SHAPES` with `totalShapeCount` recording the
   census (a UI must say "top N of M", never present the cap as the census).
-  Added in `FIELD_ANALYSIS_VERSION` 20; stale-first storage, ETag, SSR seed
-  and invalidation all ride the existing `task_field_analysis` machinery.
+  Added in `TASK_ANALYSIS_VERSION` 20; stale-first storage, ETag, SSR seed
+  and invalidation all ride the existing `task_analysis` machinery.
 - **Task analysis page** (`/comp/:id/task/:id/analysis`): "The day's thermals"
   section — census table, top-down lift rose (with an ⓘ legend popover),
   readouts, climb profile, per-pilot climb table and band table. The model-wind cross-check comes from the task's weather column
   (independent request, `windAtHeight` interpolation) and is always drawn
   dashed and credited as a model run, never blended with the measurement.
-  - The rose (`react/field-analysis/thermals/ThermalsPanel.tsx`) puts the two
+  - The rose (`react/analysis/thermals/ThermalsPanel.tsx`) puts the two
     radii on the picture, not just in the band table. Wedge length is
     *relative* climb by sector — the shape of the lift, with sink marked in
     blue — while the **dashed ring is the working radius** (the bands'

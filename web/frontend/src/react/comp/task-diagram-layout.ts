@@ -25,7 +25,7 @@
  *
  * Deterministic by construction — same task in, same numbers out — so the
  * server-rendered markup and the client's first render agree (SSR pages
- * render this: comp hub, task detail, task field analysis).
+ * render this: comp hub, task detail, task analysis).
  */
 import {
   calculateOptimizedTaskLine,

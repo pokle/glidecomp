@@ -203,7 +203,7 @@ test.describe("the homepage's vanilla enhancements", () => {
 
   test("the chart tabs move selection to the tab that was pressed", async ({ page }) => {
     await page.goto("/");
-    const tabs = page.getByRole("tablist", { name: "Field analysis charts" });
+    const tabs = page.getByRole("tablist", { name: "Analysis charts" });
     const first = tabs.getByRole("tab").first();
     const wind = tabs.getByRole("tab", { name: "Wind, leg by leg" });
     await expect(first).toHaveAttribute("aria-selected", "true");

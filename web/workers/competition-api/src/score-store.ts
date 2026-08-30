@@ -22,7 +22,7 @@
 
 import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
 import type { Env } from "./env";
-import { fieldAnalysisBumpStatement } from "./field-analysis-store";
+import { taskAnalysisBumpStatement } from "./task-analysis-store";
 import {
   computeScoreStateKey,
   computeTaskScore,
@@ -104,8 +104,8 @@ export async function readTaskScoreRowsForComp(
  * scored, so the very first mutation already gives readers a transactional
  * staleness signal.
  *
- * This bumps BOTH derived tables — `task_scores` and `task_field_analysis`
- * (migration 0019). Field analysis is a function of exactly the same inputs
+ * This bumps BOTH derived tables — `task_scores` and `task_analysis`
+ * (migration 0019). Task analysis is a function of exactly the same inputs
  * as scores, so one call covers both and the 28 mutation call sites never
  * learn the second table exists. Anything added later that derives from
  * scoring inputs belongs here too.
@@ -114,13 +114,13 @@ export async function readTaskScoreRowsForComp(
  * transaction, so folding them together would couple the sacred
  * "mutation ⇒ scores stale" invariant to the newer table's existence — a
  * worker deployed against a DB missing migration 0019 would roll back the
- * task_scores bump along with the failing field-analysis statement, and the
- * catch would swallow it. Scores bump first; a field-analysis failure then
+ * task_scores bump along with the failing task-analysis statement, and the
+ * catch would swallow it. Scores bump first; a task-analysis failure then
  * costs only a stale analysis signal, never a stale score.
  *
  * (The two then revalidate differently: scores eagerly, via
- * scheduleTaskRevalidation below; field analysis lazily, on read — it is far
- * more expensive and read by far fewer people. See field-analysis-store.ts.)
+ * scheduleTaskRevalidation below; task analysis lazily, on read — it is far
+ * more expensive and read by far fewer people. See task-analysis-store.ts.)
  *
  * Best-effort like audit(): a failure must never fail the mutation itself.
  */
@@ -149,10 +149,10 @@ export async function bumpScoreInputs(
   }
   try {
     await db.batch(
-      taskIds.map((id) => fieldAnalysisBumpStatement(db, id))
+      taskIds.map((id) => taskAnalysisBumpStatement(db, id))
     );
   } catch (err) {
-    console.error("bumpScoreInputs (field analysis) failed", err, { taskIds });
+    console.error("bumpScoreInputs (task analysis) failed", err, { taskIds });
   }
 }
 

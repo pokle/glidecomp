@@ -28,7 +28,7 @@ reasoning still applies to new UI.
 
 **How it went.** The exploration converted the task detail page first
 (2026-07-18), then the route editor's turnpoint grid to a **GridList card
-list**, then the field-analysis pages (built RAC-native), the comp list
+list**, then the task-analysis pages (built RAC-native), the comp list
 (PR #401), and — 2026-07-21 — the comp detail page with all its sections and
 dialogs, plus the waypoints page (whose hand-rolled editable table became an
 inline Tabulator grid per the policy below). That left the remaining work
@@ -140,11 +140,11 @@ instance only exists a tick after mount, so gate anything that drives it on
   `meter` (DivergingMeter/ProportionMeter — a **measurement**, `role="meter"`;
   NOT ProgressBar, which means task completion. RAC's own `Meter` is imported
   inside the file as `AriaMeter` and is not exported. `DivergingMeter` draws a
-  signed value from a centred zero axis for the field-analysis ρ bars: sign is
+  signed value from a centred zero axis for the task-analysis ρ bars: sign is
   which side it grows toward, never colour alone, and the signed number is
   always printed beside it. `ProportionMeter` is the part-of-a-whole reading —
   deliberately plainer (thinner, no axis) — used by the Dashboard's storage bar
-  and the field-analysis coverage bars),
+  and the task-analysis coverage bars),
   `popover` (standalone DialogTrigger+Popover+Dialog,
   reusing `popoverClass` from select.tsx — **use this, not tooltip, whenever
   the content is prose**: tooltips are hover-only, so touch users never see
@@ -185,7 +185,7 @@ instance only exists a tick after mount, so gate anything that drives it on
   interactive inside would dismiss on the way to being pressed; without it,
   give the sheet an `autoFocus` Close button, since Escape alone isn't a
   discoverable affordance. Callers: the waypoint QR, the task route glyph, the
-  field-analysis metric chart), `nav-list` (NavList/NavRow/NavActionRow — the
+  task-analysis metric chart), `nav-list` (NavList/NavRow/NavActionRow — the
   grouped tappable-row list for hierarchical settings screens: each row is a
   RAC Link (or Button, for `NavActionRow` actions like "Delete competition")
   showing a label, a muted current-value summary and a chevron, on a minimum
@@ -220,8 +220,8 @@ instance only exists a tick after mount, so gate anything that drives it on
   `comp/SubmitTrackDialog.tsx`,
   `comp/ManualFlightDialog.tsx`, `comp/AddWaypointDialog.tsx`,
   `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only),
-  `pages/TaskFieldAnalysis.tsx` + `pages/CompFieldAnalysis.tsx` and all of
-  `react/field-analysis/` (built RAC-native from the start — 2026-07-19),
+  `pages/TaskAnalysis.tsx` + `pages/CompAnalysis.tsx` and all of
+  `react/analysis/` (built RAC-native from the start — 2026-07-19),
   `pages/Competitions.tsx` (2026-07-21 — list cards are RAC Links, create
   dialog on the kit, plus a client-side SearchField filter over the loaded
   list; see gotcha #13), and — 2026-07-21 — the whole comp detail page:
@@ -734,7 +734,7 @@ bun run test:e2e                   # full suite (one known flaky dev-login test;
   passes by never executing.
 
 - **`waitUntil: "networkidle"` never settles on a page with a freshness
-  poller** (field analysis, and any scores surface showing a stale banner) —
+  poller** (task analysis, and any scores surface showing a stale banner) —
   `ScoreFreshness` deliberately keeps a conditional request in flight. Wait on
   the DOM (`waitUntil: "domcontentloaded"` + a role locator) instead, or the
   drive times out on a page that rendered fine.
@@ -971,7 +971,7 @@ rather than "how to convert one".
 |---|---|
 | `src/react/rac/` | **The kit.** One component family per file. Includes `date-picker` (RAC under the hood, lazy-loaded so it stays out of the SSR bundle) and two behaviour-free static pieces, `badge` and `alert`. |
 | `src/react/vendor/` | Thin wrappers over third-party widgets RAC doesn't provide: `input-otp` (the sign-in code field) and `sonner` (the toaster). Not a kit — don't grow it without a reason of that kind. |
-| `src/react/comp/`, `pages/`, `field-analysis/`, `weather/` | Feature code. Uses the kit; owns no primitives. Local one-page helpers are fine (`SettingsCard` in Settings.tsx, which is all `ui/card` ever was). |
+| `src/react/comp/`, `pages/`, `analysis/`, `weather/` | Feature code. Uses the kit; owns no primitives. Local one-page helpers are fine (`SettingsCard` in Settings.tsx, which is all `ui/card` ever was). |
 | Tabulator grids | Editable grids only, per the policy above: the comp pilots editor and the waypoints admin grid, both through `comp/TabulatorGrid.tsx`. |
 | `src/analysis/`, `src/replay/` | Vanilla TS entries — own styling, no React, deliberately outside all of this. |
 | `web/frontend/static/` | The prerendered Astro content pages. No framework by design. |

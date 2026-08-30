@@ -1,8 +1,9 @@
 /**
  * Drives the breadcrumb trail on every /comp page as a signed-in super-admin,
- * and walks the field-analysis journey the way a user does:
- *   comp detail -> Field analysis -> a task chapter -> up one level
- * asserting the trail's text and that "up" lands on the comp report.
+ * and walks the analysis journey the way a user does:
+ *   comp detail -> Comp analysis -> one task's Task analysis -> up one level
+ * asserting the trail's text and that "up" lands on the TASK — the task
+ * analysis is a child of its task, and the comp analysis is a sibling link.
  */
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
@@ -93,76 +94,86 @@ async function main() {
   const compDetailTrail = `Competitions › ${comp.name}`;
   check("comp detail trail", await trail(page, compDetailTrail), compDetailTrail);
 
-  // --- 2. Comp detail -> Field analysis ------------------------------------
-  const faLink = page.getByRole("navigation", { name: "Sections" }).getByRole("link", {
-    name: "Field analysis",
+  // --- 2. Comp detail -> Comp analysis --------------------------------------
+  const caLink = page.getByRole("navigation", { name: "Sections" }).getByRole("link", {
+    name: "Comp analysis",
   });
-  await faLink.waitFor({ state: "visible", timeout: 15_000 });
-  await faLink.click();
+  await caLink.waitFor({ state: "visible", timeout: 15_000 });
+  await caLink.click();
   await page.waitForURL(/\/comp\/[^/]+\/analysis$/);
-  const compAnalysisTrail = `Competitions › ${comp.name} › Field analysis`;
+  const compAnalysisTrail = `Competitions › ${comp.name} › Comp analysis`;
   check("comp analysis trail", await trail(page, compAnalysisTrail), compAnalysisTrail);
   await page.screenshot({ path: path.join(SHOTS, "bc-comp-analysis.png"), fullPage: false });
 
-  // --- 3. Comp analysis -> a task chapter ----------------------------------
-  // The chapters only appear once at least one task has a stored analysis;
-  // the first visit schedules them, so poll.
-  const perTask = page.getByRole("navigation", { name: "Per-task field analysis" });
+  // --- 3. Comp analysis -> one task's own task analysis ----------------------
+  // The per-task links only appear once at least one task has a stored
+  // analysis; the first visit schedules them, so poll.
+  const perTask = page.getByRole("navigation", { name: "Task analyses" });
   for (let i = 0; i < 40 && (await perTask.count()) === 0; i++) {
     await page.waitForTimeout(1500);
     await page.reload({ waitUntil: "domcontentloaded" });
   }
-  if ((await perTask.count()) === 0) throw new Error("per-task chapter nav never appeared");
+  if ((await perTask.count()) === 0) throw new Error("per-task analysis nav never appeared");
 
-  const chapter = perTask.getByRole("link").first();
-  const chapterName = (await chapter.innerText()).trim();
-  await chapter.click();
-  await page.waitForURL(/\/comp\/[^/]+\/analysis\/task\/[^/]+$/);
-  console.log(`\n  chapter URL: ${new URL(page.url()).pathname}`);
+  const taskLink = perTask.getByRole("link").first();
+  const linkName = (await taskLink.innerText()).trim();
+  await taskLink.click();
+  await page.waitForURL(/\/comp\/[^/]+\/task\/[^/]+\/analysis$/);
+  console.log(`\n  task analysis URL: ${new URL(page.url()).pathname}`);
 
-  // The chapter's own crumb is the TASK name; "Field analysis" is its parent.
-  // Wait for the chapter's own chrome before reading — the previous route's
-  // tree is still mounted for a beat after waitForURL resolves.
-  await page.getByRole("link", { name: "View task" }).waitFor({ timeout: 15_000 });
-  const expectedChapterTrail = `Competitions › ${comp.name} › Field analysis › ${chapterName.replace(/^T\d+\s+/, "")}`;
-  check("task chapter trail", await trail(page, expectedChapterTrail), expectedChapterTrail);
+  // The task analysis hangs off the TASK, so the trail is
+  // Competitions › comp › task › Task analysis. The nav link reads
+  // "T1 Task 1 (Open)"; the crumb is the task name alone.
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Comp analysis" })
+    .waitFor({ state: "attached", timeout: 15_000 })
+    .catch(() => {});
+  const taskName = linkName.replace(/^T\d+\s+/, "");
+  const expectedTaskAnalysisTrail =
+    `Competitions › ${comp.name} › ${taskName} › Task analysis`;
+  check(
+    "task analysis trail",
+    await trail(page, expectedTaskAnalysisTrail),
+    expectedTaskAnalysisTrail
+  );
   await page.screenshot({ path: path.join(SHOTS, "bc-task-analysis.png"), fullPage: false });
 
-  // --- 4. THE BUG: up one level must land on the comp report ---------------
+  // --- 4. Up one level from a task analysis lands on the TASK ----------------
+  // This is the IA: the task analysis is a child of the task, not of the comp
+  // analysis. The comp analysis is a SIBLING link in the header row (step 5).
   const upOne = page
     .getByRole("navigation", { name: "Breadcrumb" })
-    .getByRole("link", { name: "Field analysis" });
+    .getByRole("link", { name: taskName });
   await upOne.click();
+  await page.waitForURL(/\/comp\/[^/]+\/task\/[^/]+$/);
+  const taskTrail = `Competitions › ${comp.name} › ${taskName}`;
+  check("task detail trail", await trail(page, taskTrail), taskTrail);
+
+  // --- 5. The sibling "Comp analysis" link back out -------------------------
+  await page.goBack({ waitUntil: "domcontentloaded" });
+  await page.waitForURL(/\/comp\/[^/]+\/task\/[^/]+\/analysis$/);
+  const sibling = page.getByRole("link", { name: "Comp analysis" }).first();
+  await sibling.waitFor({ state: "visible", timeout: 15_000 });
+  await sibling.click();
   await page.waitForURL(/\/comp\/[^/]+\/analysis$/);
   check(
-    "up-one-level from a chapter",
+    "comp analysis is a sibling link from a task analysis",
     pathIds(new URL(page.url()).pathname),
     `/comp/${comp.comp_id}/analysis`
   );
 
-  // --- 5. Old URL still works (redirect) -----------------------------------
-  await page.goto(`${BASE}/comp/${comp.comp_id}/task/${task.task_id}/analysis?class=Open`, {
+  // --- 6. The superseded URL still works (redirect) -------------------------
+  // The task analysis lived under the comp report from July to August 2026.
+  await page.goto(`${BASE}/comp/${comp.comp_id}/analysis/task/${task.task_id}?class=Open`, {
     waitUntil: "domcontentloaded",
   });
-  await page.waitForURL(/\/analysis\/task\//, { timeout: 15_000 });
+  await page.waitForURL(/\/task\/[^/]+\/analysis/, { timeout: 15_000 });
   check(
-    "legacy URL redirects (and keeps ?class=)",
-    new URL(page.url()).pathname + new URL(page.url()).search,
-    `/comp/${comp.comp_id}/analysis/task/${task.task_id}?class=Open`
+    "superseded URL redirects (and keeps ?class=)",
+    pathIds(new URL(page.url()).pathname) + new URL(page.url()).search,
+    `/comp/${comp.comp_id}/task/${task.task_id}/analysis?class=Open`
   );
-
-  // --- 6. The sibling "View task" link -------------------------------------
-  const viewTask = page.getByRole("link", { name: "View task" });
-  await viewTask.waitFor({ state: "visible", timeout: 15_000 });
-  await viewTask.click();
-  await page.waitForURL(/\/comp\/[^/]+\/task\/[^/]+$/);
-  check(
-    "View task lands on the task page",
-    pathIds(new URL(page.url()).pathname),
-    `/comp/${comp.comp_id}/task/${task.task_id}`
-  );
-  const taskTrail = `Competitions › ${comp.name} › ${task.name}`;
-  check("task detail trail", await trail(page, taskTrail), taskTrail);
 
   // --- 7. The two converted legacy pages -----------------------------------
   await page.goto(`${BASE}/comp/${comp.comp_id}/waypoints`, { waitUntil: "domcontentloaded" });

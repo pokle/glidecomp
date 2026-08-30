@@ -5,7 +5,7 @@
  * replaced drew.
  *
  * Callers that render a *standing* notice rather than an interruption (the
- * score-freshness banners, the field-analysis "pending" panels) override with
+ * score-freshness banners, the task-analysis "pending" panels) override with
  * `role="status"` + `aria-live="polite"`, which is why role is overridable.
  */
 import { cva, type VariantProps } from "class-variance-authority";

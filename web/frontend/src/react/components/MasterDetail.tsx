@@ -29,7 +29,7 @@
  * earlier pinned design over them): scroll-margin constants sized to the
  * pane's stuck footprint keep keyboard-focused rows from stopping behind it
  * (WCAG 2.4.11), and its buttons must stay hit-testable inside a padded
- * ancestor while stuck — a Chromium regression the field-analysis e2e guards
+ * ancestor while stuck — a Chromium regression the task-analysis e2e guards
  * by clicking Expand mid-scroll.
  *
  * The split is a CONTAINER query (`@5xl`), not `lg:`, because the width a
@@ -40,7 +40,7 @@
  * Sticky offsets are dictated by whatever owns the top of the viewport, which
  * is why `stackedTop` exists. Today that is always the Shell's 60px glass
  * header — which is `static` under `sm` and on short viewports, where the pane
- * pins to the very top instead. The field-analysis pages used to carry a fixed
+ * pins to the very top instead. The task-analysis pages used to carry a fixed
  * table-of-contents bar above it and needed their own offset; the report is a
  * page per section now, and small enough to need no rail.
  */

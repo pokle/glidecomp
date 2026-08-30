@@ -1,7 +1,7 @@
 /**
  * "Who flew like me?"
  *
- * A sheet hung off the task's field analysis: pick a pilot, pick the
+ * A sheet hung off the task's analysis: pick a pilot, pick the
  * behaviours you care about, and the field is ranked by how closely their
  * flying matched. The page shows its working rather than hiding it — the
  * per-behaviour contributions, the shape-only column and the typical-gap
@@ -9,7 +9,7 @@
  *
  * Deliberately NOT about the leaderboard. No score, rank or outcome metric
  * enters the COMPUTATION anywhere: findSimilarPilots refuses to let one into
- * the vector (see web/engine/src/field-analysis/similarity.ts), and nothing
+ * the vector (see web/engine/src/analysis/similarity.ts), and nothing
  * here orders, filters, weights or colours by the standings. "Similar" here
  * means similar FLYING, and two pilots at opposite ends of the results sheet
  * are expected to sit next to each other whenever they flew alike.
@@ -28,7 +28,7 @@
  * in "How this is worked out" rather than making the reader choose.
  *
  * Client-only, and listed in the SSR Function's NOINDEX_SHELL_ROUTES: the
- * whole computation is a pure derivation from the stored field-analysis report
+ * whole computation is a pure derivation from the stored task-analysis report
  * the page fetches anyway, so there is nothing to server-render, and it is an
  * interactive tool rather than a document, so nothing here for a crawler.
  *
@@ -51,7 +51,7 @@ import { Loading } from "@/react/rac/progress";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 
-import { MetricDistribution } from "../field-analysis/charts/MetricDistribution";
+import { MetricDistribution } from "../analysis/charts/MetricDistribution";
 import { NotFound } from "../components/NotFound";
 import { api } from "../../comp/api";
 import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "../comp/types";
@@ -59,15 +59,15 @@ import { underTaskAnalysis } from "../lib/crumbs";
 import { idFromSegment, taskAnalysisPath } from "../lib/slug";
 import { useUnits } from "../lib/units";
 import { cn } from "../lib/utils";
-import { displayReport } from "../field-analysis/units";
+import { displayReport } from "../analysis/units";
 import {
   FAMILY_ORDER,
   FAMILY_LABELS,
   formatMetricValue,
   findSimilarPilots,
   type MetricFamily,
-  type TaskFieldAnalysisData,
-} from "../field-analysis/types";
+  type TaskAnalysisData,
+} from "../analysis/types";
 
 /** URL parameters this sheet round-trips its whole state through. */
 const PILOT_PARAM = "pilot";
@@ -141,7 +141,7 @@ export function TaskPilotSimilarity() {
   const taskId = idFromSegment(taskParam ?? "");
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [data, setData] = useState<TaskFieldAnalysisData | null>(null);
+  const [data, setData] = useState<TaskAnalysisData | null>(null);
   const [task, setTask] = useState<TaskDetailData | null>(null);
   const [comp, setComp] = useState<CompDetailData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "notFound" | "error">(
@@ -160,7 +160,7 @@ export function TaskPilotSimilarity() {
       try {
         const res = await fetchWithRetry(() =>
           fetch(
-            `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/field-analysis`,
+            `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/analysis`,
             { credentials: "include" }
           )
         );
@@ -173,7 +173,7 @@ export function TaskPilotSimilarity() {
           setStatus("error");
           return;
         }
-        setData((await res.json()) as TaskFieldAnalysisData);
+        setData((await res.json()) as TaskAnalysisData);
         setStatus("ready");
       } catch {
         if (!cancelled) setStatus("error");
@@ -335,7 +335,7 @@ export function TaskPilotSimilarity() {
   // least as often as by given name.
   const { contains } = useFilter({ sensitivity: "base" });
   // SETTLED — the field showing exactly the current pilot — yields an empty
-  // list, which is the kit's convention (see field-analysis/PilotPicker) and
+  // list, which is the kit's convention (see analysis/PilotPicker) and
   // here it is load-bearing rather than cosmetic. This field is never empty:
   // the sheet always has a subject, so selecting one sets the controlled
   // inputValue to that name, and with the kit's menuTrigger="input" any
@@ -392,14 +392,14 @@ export function TaskPilotSimilarity() {
 
   useEffect(() => setShowAll(false), [subject?.trackFile, metricsParam]);
 
-  if (status === "loading") return <Loading>Loading the field analysis…</Loading>;
+  if (status === "loading") return <Loading>Loading the task analysis…</Loading>;
   if (status === "notFound") return <NotFound />;
   if (status === "error")
     return (
       <Alert variant="destructive">
         <AlertTitle>Could not load the analysis</AlertTitle>
         <AlertDescription>
-          The field analysis for this task could not be fetched. Reload to try again.
+          The task analysis could not be fetched. Reload to try again.
         </AlertDescription>
       </Alert>
     );
@@ -432,16 +432,16 @@ export function TaskPilotSimilarity() {
         </div>
         <LinkButton href={analysisHref} variant="outline" size="sm">
           <ArrowLeftIcon className="size-4" />
-          Field analysis
+          Task analysis
         </LinkButton>
       </div>
 
       {report === null || subject === null ? (
         <Card>
           <p className="text-sm text-muted-foreground">
-            There is no field analysis for this task yet. Open the{" "}
+            There is no analysis for this task yet. Open the{" "}
             <a className="underline" href={analysisHref}>
-              field analysis
+              task analysis
             </a>{" "}
             first — it computes in the background the first time it is opened.
           </p>

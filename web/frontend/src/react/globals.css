@@ -14,7 +14,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-/* Atkinson Hyperlegible Next — the app UI face and the field-analysis pages'
+/* Atkinson Hyperlegible Next — the app UI face and the analysis pages'
    reading face (the report is dense number-reading; the font is designed for
    exactly that). One variable file spans every weight the UI uses, so a page
    fetches one woff2 rather than one per weight — see ../fonts.css. Only the
@@ -164,7 +164,7 @@
      weight and tracking do the branding). */
   --font-brand: var(--font-app);
   /* `font-hyperlegible` utility — Atkinson Hyperlegible Next with the system
-     stack as fallback. Used by the field-analysis pages, screen and print. */
+     stack as fallback. Used by the analysis pages, screen and print. */
   --font-hyperlegible: "Atkinson Hyperlegible Next", var(--font-app);
 }
 

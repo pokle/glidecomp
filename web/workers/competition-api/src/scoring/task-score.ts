@@ -77,7 +77,7 @@ export async function computeTaskScore(
   db: D1Database,
   r2: R2Bucket,
   alphabet: string,
-  // A pre-resolved config, when the caller already has one. Field analysis
+  // A pre-resolved config, when the caller already has one. Task analysis
   // passes its own so the official ranks it overlays are guaranteed to come
   // from the SAME parameters/geometry as its re-score — two independent
   // resolutions could straddle a concurrent task edit — and so the compute
@@ -86,7 +86,7 @@ export async function computeTaskScore(
 ): Promise<TaskScoreResponse> {
   // Kept as one object, not just destructured: `config.quality` is a mutable
   // memo this pass FILLS (it is the only one holding the parsed IGCs), and
-  // computeTaskFieldAnalysis reads it back from the very same object after
+  // computeTaskAnalysis reads it back from the very same object after
   // calling us. Destructuring away the config would drop those verdicts on
   // the floor whenever the caller didn't supply a cfg.
   const config = cfg ?? (await resolveTaskScoringConfig(taskId, db));

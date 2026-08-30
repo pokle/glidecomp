@@ -6,7 +6,7 @@
 - Pilots (or competition organizers) load IGC track log files and XCTask task files in the browser
 - The app analyzes flights: task completion, scoring explanations, glide performance, thermal/climb analysis
 - Full **CIVL GAP scoring** implementation (FAI Sporting Code Section 7F) — distance, time, leading, and arrival points for both PG and HG
-- **Field analysis** — every track on a task measured against every other one across climbing, gliding, decision-making, gaggle and race craft, ranked by how strongly each behaviour separated the field, and read against the day's weather
+- **Task analysis** — every track on a task measured against every other one across climbing, gliding, decision-making, gaggle and race craft, ranked by how strongly each behaviour separated the field, and read against the day's weather
 - Includes 2D (Mapbox) and 3D (Three.js globe) map visualization of flight tracks
 - Competition management features: pilot registration, task setup, scoring, penalties, with a full audit log for transparency
 
@@ -31,7 +31,7 @@ The app is live at **[glidecomp.com](https://glidecomp.com)**.
 - **GAP scoring** — CIVL GAP scoring with distance, time, leading, and arrival points, including stopped tasks (S7F §12.3)
 - **Open-distance scoring** — for tasks flown downwind from a launch cylinder rather than around a route
 - **Report card** — a per-pilot page explaining exactly how their score was arrived at, with the substituted arithmetic, each component's scoring curve drawn with the field on it, and links into the scoring guides
-- **Field analysis** — 26 cross-pilot behavioural metrics per task, ranked by Spearman correlation against finishing position, with per-comp consistency across tasks
+- **Task analysis** — 26 cross-pilot behavioural metrics per task, ranked by Spearman correlation against finishing position, with per-comp consistency across tasks
 - **Task weather** — modelled wind, climb and timing for the task's day from an outside provider, plus the organizer's own weather notes, read against what the field actually flew
 - **Track quality checks** — every tracklog assessed against its task (FAI S7A §4.4.2); hard findings withhold a track from scoring, and every verdict is overridable by the organizer
 - **Competition management** — create competitions, register pilots, upload IGC tracks, manage tasks, apply penalties, with full audit logging
@@ -238,9 +238,9 @@ bun run score-task -- <task.xctsk> <igc-file-or-folder>... [options]
 #   --open-distance            Score as open distance (GAP options ignored)
 #   --comp <slug-or-dir>       Score a whole bundled comp (every task per class,
 #                              plus a per-class cross-task aggregate); wing comes
-#                              from the comp.json manifest. Implies --field-analysis.
-# Field analysis:
-#   --field-analysis           After the scores, print the behavioural field
+#                              from the comp.json manifest. Implies --analysis.
+# Task analysis:
+#   --analysis                 After the scores, print the behavioural task
 #                              analysis — per-pilot metrics (climbing, gliding,
 #                              decisions, gaggle, race craft, day profile/wind)
 #                              led by the metric-separation ranking (Spearman ρ
@@ -274,7 +274,7 @@ bun run score-task \
   web/samples/comps/corryong-cup-2026-open-t1/ \
   --wing HG
 
-# Example: score the whole bundled comp, with field analysis per task and a
+# Example: score the whole bundled comp, with task analysis per task and a
 # per-class cross-task aggregate
 bun run score-task -- --comp corryong-cup-2026
 ```
@@ -342,7 +342,7 @@ web/
     static/              - Astro app: the prerendered content pages (home, about,
                            legal, the scoring guides)
   engine/                - Shared analysis library (IGC parsing, event detection, GAP scoring,
-                           field analysis, track quality, weather)
+                           task analysis, track quality, weather)
     cli/                 - CLI utilities (detect-events, get-xcontest-task, score-task, build-3dvis, benchmarks)
   workers/
     auth-api/            - Authentication API (Cloudflare Worker + D1)

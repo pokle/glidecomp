@@ -7,10 +7,10 @@
  * up is a better rank" — a sentence that existed only because its x axis had
  * no title and its y axis said "rank" in 10px grey in a corner. A caption is
  * read once; an axis is consulted continuously, and a screenshot or a printed
- * page separates the two. field-analysis/charts/ConsistencyMap was the one
+ * page separates the two. analysis/charts/ConsistencyMap was the one
  * chart doing it properly, and this is its pattern extracted.
  *
- * Promoted out of field-analysis/charts/ for the same reason `scale.ts` was:
+ * Promoted out of analysis/charts/ for the same reason `scale.ts` was:
  * the report card's score charts draw the same furniture, and two chart
  * families spelling it two ways is exactly the drift a shared module prevents.
  * Everything here is presentation-only with no DOM access, so it is safe in

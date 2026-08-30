@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { similarityNoiseFloor } from '../src/field-analysis/similarity-noise-floor';
+import { similarityNoiseFloor } from '../src/analysis/similarity-noise-floor';
 
 describe('similarityNoiseFloor', () => {
   it('falls as the behaviour count rises', () => {

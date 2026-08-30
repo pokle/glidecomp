@@ -138,7 +138,7 @@ Consequences worth knowing:
   (`stop_announcement_time`, `weather_notes`) are reset, exactly as the old
   delete-and-reinsert did.
 - The wipe still clears that comp's materialized derived caches (`task_scores`,
-  `task_field_analysis`, `track_analysis`). The tracks behind them are all
+  `task_analysis`, `track_analysis`). The tracks behind them are all
   rebuilt, so every blob is stale even where the ids it names still resolve — and
   a reused task is never deleted, so the FK cascade would not fire for it at all.
 

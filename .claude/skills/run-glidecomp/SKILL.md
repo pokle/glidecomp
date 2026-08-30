@@ -73,19 +73,20 @@ screenshots them. Paths below are relative to the repo root.
    Override target with env vars: `BASE_URL`, `COMP_MATCH` (e.g.
    `COMP_MATCH=Corryong bun .claude/skills/run-glidecomp/driver.mjs`).
 
-4. **Drive the admin-only Field Analysis pages** — signs in as the super-admin,
-   follows the task page's "Field analysis" link, waits out the background
+4. **Drive the admin-only Task Analysis pages** — signs in as the super-admin,
+   follows the task page's "Task analysis" link, waits out the background
    compute, expands a metric family, then checks the comp-level aggregate and
    that an anonymous visitor is gated:
    ```bash
-   bun .claude/skills/run-glidecomp/drive-field-analysis.mjs
+   bun .claude/skills/run-glidecomp/drive-task-analysis.mjs
    ```
-   Ends with `✓ drove field analysis end-to-end`; shots land in `shots/`
-   (`fa-task.png`, `fa-task-family.png`, `fa-comp.png`, `fa-anon.png`).
+   Ends with `✓ drove task analysis end-to-end`; shots land in `shots/`
+   (`ta-task.png`, `ta-task-family.png`, `ta-comp.png`, `ta-anon.png`).
    **Breadcrumbs / navigation hierarchy** have their own driver — it asserts
-   the trail text on every `/comp` page and walks the field-analysis journey
-   (comp detail → Field analysis → a task chapter → up one level), including
-   the legacy-URL redirect and the "View task" sibling link:
+   the trail text on every `/comp` page and walks the analysis journey
+   (comp detail → Comp analysis → one task's Task analysis → up one level to
+   the task), including the superseded-URL redirect and the "Comp analysis"
+   sibling link:
    ```bash
    bun .claude/skills/run-glidecomp/drive-breadcrumbs.mjs
    ```
@@ -97,7 +98,7 @@ screenshots them. Paths below are relative to the repo root.
    `trail()` polls toward an expected string for this reason.
 
    Cross-check the rendered separation ranking against the engine directly:
-   `bun run score-task -- --wing HG --field-analysis web/samples/comps/corryong-cup-2026-open-t1/task.xctsk web/samples/comps/corryong-cup-2026-open-t1/`
+   `bun run score-task -- --wing HG --analysis web/samples/comps/corryong-cup-2026-open-t1/task.xctsk web/samples/comps/corryong-cup-2026-open-t1/`
    — the ρ values must match exactly.
 
 5. **Review a restyle across the whole app** — `shoot-contact-sheet.mjs` shoots
@@ -184,7 +185,7 @@ cd web/frontend && bunx vitest run     # or: bun run --filter '@glidecomp/fronte
   and takes the stack with it. Redirect to a file instead:
   `bun run dev > /tmp/glidecomp-dev.log 2>&1`.
 - **`waitUntil: "networkidle"` never settles on pages with a freshness poller**
-  (field analysis; any scores view showing a stale banner). `ScoreFreshness`
+  (task analysis; any scores view showing a stale banner). `ScoreFreshness`
   keeps a conditional request in flight by design. Use `"domcontentloaded"` plus
   a role locator, or the drive times out on a page that rendered perfectly.
 - **The comp's public id (sqid) changes every seed.** Never hardcode it; the

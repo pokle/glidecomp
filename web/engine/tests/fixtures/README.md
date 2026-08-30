@@ -42,7 +42,7 @@ task 4** (flown 11 Jan 2025 at ELLIOT, Victoria, Australia), it is actually a
 **New Zealand** flight from **21 Jan 2025** — `HFDTE210125`, first fix
 41°43′S 172°30′E in the Nelson Lakes, 2,186 km from the nearest task
 turnpoint. AirScore scored it 0 km / 0 points; GlideComp awarded it the S7F
-§5.3 minimum distance and let its hour buckets stretch the field-analysis
+§5.3 minimum distance and let its hour buckets stretch the task-analysis
 day-profile axis from 5 hours to 262.
 
 Trimmed to the headers plus the first and last 100 B-records (11,158 in the

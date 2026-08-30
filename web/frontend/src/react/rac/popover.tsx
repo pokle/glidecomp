@@ -5,7 +5,7 @@
  * Use this rather than rac/tooltip.tsx whenever the content is prose: a
  * tooltip is hover-triggered (so unreachable on touch), dismisses on the
  * slightest pointer move, and is not meant to hold a paragraph. The
- * field-analysis pages use it for each metric's method description.
+ * task-analysis pages use it for each metric's method description.
  *
  * Styling reuses `popoverClass` from rac/select.tsx — the same surface,
  * shadow and enter/exit animation as the select and combo-box overlays.

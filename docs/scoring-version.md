@@ -35,8 +35,8 @@ Two values come out of it:
 
 48 bits because it has to stay an exact JS integer and fit the existing
 `engine_version INTEGER NOT NULL` column in `task_scores` (migration 0012) and
-`task_field_analysis` (0019). Every consumer compares it with `=` / `!=`
-(`score-store.ts`, `field-analysis-store.ts`, `routes/cache.ts`) or
+`task_analysis` (0019). Every consumer compares it with `=` / `!=`
+(`score-store.ts`, `task-analysis-store.ts`, `routes/cache.ts`) or
 interpolates it into a string key (`state-key.ts`, `geom-hash.ts`) — nothing
 orders it — so no consumer and no migration had to change when it stopped
 being a sequence.

@@ -338,7 +338,7 @@ points.
 
 ### The governing principle: these are emphasis charts, not field charts
 
-The field-analysis charts treat every pilot as equally the subject: `RankScatter`
+The task-analysis charts treat every pilot as equally the subject: `RankScatter`
 paints all dots one colour and permanently labels the top and bottom three. **The
 report card is about one pilot**, so the same marks need a different colour job —
 one accent dot for you, de-emphasis grey for the field. Anyone reusing
@@ -425,7 +425,7 @@ this shape and already takes an `emphasizeTrackFile` prop.
 
 *As built, that is two components, not one — don't go hunting for a single
 `DistributionStrip`. The one described here is
-`field-analysis/charts/DistributionStrip.tsx`, which takes a `MetricReport` and
+`analysis/charts/DistributionStrip.tsx`, which takes a `MetricReport` and
 an `emphasizeTrackFile`. The report card got a second, different component at
 `src/react/charts/DistributionStrip.tsx`, which takes a
 `ScoreDistributionChart` from the engine and has no `emphasizeTrackFile` — the
@@ -495,7 +495,7 @@ the top of it.
 charts should follow them rather than reinvent:
 
 - hand-rolled inline SVG, no chart library (so it **server-renders** — which
-  matters here more than on the field-analysis pages, since the report card is
+  matters here more than on the task-analysis pages, since the report card is
   the SEO centrepiece)
 - `fill-chart-*` tokens for data, `stroke-foreground` for the curve — the curve
   is an annotation over one series, not a second series, and the existing comment
@@ -516,7 +516,7 @@ pilot sits exactly on it"* — because that distinction is the entire reason the
 chart is trustworthy, and reusing the trend-line wording would quietly downgrade
 a fact into a fit.
 
-Tables stay. The field-analysis rule (tables are the accessible exact reading,
+Tables stay. The task-analysis rule (tables are the accessible exact reading,
 charts sit alongside) applies here too — and on this page the existing
 item/value/detail lines already *are* the table, so charts are additive and never
 replace a line.
@@ -525,11 +525,11 @@ replace a line.
 
 `chart-utils.ts` (`linearScale`, `niceTicks`, `extent`, `spreadLabels`,
 `quantileSorted`) is exactly what these charts need and its own header says it is
-"scoped to field-analysis and not a chart framework". Using it from the report
+"scoped to task-analysis and not a chart framework". Using it from the report
 card means promoting it to something like `src/react/charts/` — a deliberate
 scope decision to make explicitly rather than by quietly importing across.
 **Done — `src/react/charts/scale.ts`** now holds `extent`, `linearScale`,
-`niceTicks` and `spreadLabels`, and `field-analysis/charts/chart-utils.ts`
+`niceTicks` and `spreadLabels`, and `analysis/charts/chart-utils.ts`
 re-exports them so its own callers and tests are unchanged.
 
 Keep them small inline (~160px) inside the section each explains, with the

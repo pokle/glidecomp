@@ -69,7 +69,7 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
-import { underComp } from "../lib/crumbs";
+import { underComp, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
 import {
   idFromSegment,
   compPath,
@@ -327,23 +327,22 @@ export function TaskDetail() {
             3D replay
           </a>
         ) : null}
-        {/* Field analysis: meaningless without a route or on an open-distance
+        {/* Task analysis: meaningless without a route or on an open-distance
             task (which has no legs or speed section to measure against).
             Requires comp to be LOADED — `comp?.scoring_format !== …` would
             fail open to a dead-end refusal page whenever the non-critical comp
             fetch degrades. Unlike the two anchors above this is an SPA route,
             so it uses a RAC LinkButton through the RouterProvider.
 
-            Cross-links into the comp's field analysis subtree (the per-task
-            report is a chapter of that report, not of this page), so from
-            there "up" goes to the comp report, not back here. */}
+            The task analysis is a page of its own under this task; the comp
+            analysis collects every task's, and is a sibling link from there. */}
         {task.xctsk && comp && comp.scoring_format !== "open_distance" ? (
           <LinkButton
             variant="outline"
             size="sm"
             href={taskAnalysisPath(compId, comp?.name, taskId, task.name)}
           >
-            Field analysis
+            {TASK_ANALYSIS_LABEL}
           </LinkButton>
         ) : null}
         {/* An organiser's tool: the people who need a file to test submission
@@ -407,7 +406,7 @@ export function TaskDetail() {
       />
 
       {/* The day's weather — the organizer's notes plus the modelled
-          conditions (the same charts the field-analysis report leads with).
+          conditions (the same charts the task-analysis report leads with).
           Sits directly under the route, above the results: the conditions
           are context for reading everything below them. */}
       <WeatherSection

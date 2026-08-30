@@ -313,7 +313,7 @@ export function zoneAbbrev(date: Date, timeZone: string | undefined): string {
 /**
  * An ISO instant as a time of day in `timeZone` with a compact zone token —
  * "02:00 AEDT", "14:30 GMT+5:30", "07:00 UTC". Viewer-local when `timeZone` is
- * undefined. Used to render the field-analysis report's `{ t }` time cells
+ * undefined. Used to render the task-analysis report's `{ t }` time cells
  * (hour buckets, takeoff clocks) in the competition's zone. Returns the raw
  * input unchanged when it is not a valid instant.
  */
@@ -326,7 +326,7 @@ export function formatTimeOfDay(iso: string, timeZone: string | undefined): stri
 /**
  * A range of two ISO instants as a time of day with one trailing zone token —
  * "13:05–14:30 AEDT". Viewer-local when `timeZone` is undefined. Used for the
- * field-analysis report's `{ from, to }` cells (e.g. when the field flew a leg).
+ * task-analysis report's `{ from, to }` cells (e.g. when the field flew a leg).
  * Returns "from–to" verbatim if either end is not a valid instant.
  */
 export function formatTimeRange(

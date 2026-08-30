@@ -2,14 +2,14 @@ import { describe, it, expect } from 'bun:test';
 import {
   clusterPilotStyles,
   MIN_CLUSTER_PILOTS,
-} from '../src/field-analysis/clustering';
-import { renderFieldReport } from '../src/field-analysis/report';
+} from '../src/analysis/clustering';
+import { renderTaskAnalysis } from '../src/analysis/report';
 import type {
-  FieldAnalysisReport,
+  TaskAnalysisReport,
   MetricDirection,
   MetricFamily,
   MetricReport,
-} from '../src/field-analysis/types';
+} from '../src/analysis/types';
 
 /** A synthetic metric column for makeReport. */
 interface MetricSpec {
@@ -23,11 +23,11 @@ interface MetricSpec {
 }
 
 /**
- * A minimal-but-valid FieldAnalysisReport: pilot i is `Pilot i` on track
+ * A minimal-but-valid TaskAnalysisReport: pilot i is `Pilot i` on track
  * `p<i>.igc`; ranks come from the caller so style groups and the leaderboard
  * can deliberately disagree.
  */
-function makeReport(ranks: number[], specs: MetricSpec[]): FieldAnalysisReport {
+function makeReport(ranks: number[], specs: MetricSpec[]): TaskAnalysisReport {
   const pilots = ranks.map((rank, i) => ({
     trackFile: `p${i}.igc`,
     pilotName: `Pilot ${i}`,
@@ -72,7 +72,7 @@ function around(centre: number, n: number, step = 0.01): number[] {
 /** Two 6-pilot style groups over 6 metrics: pilots 0–5 run HIGH on metrics
  * a1–a3 and LOW on b1–b3; pilots 6–11 the reverse. Ranks interleave the
  * groups so style ≠ leaderboard order. */
-function twoGroupReport(): FieldAnalysisReport {
+function twoGroupReport(): TaskAnalysisReport {
   const hi = around(10, 6);
   const lo = around(1, 6);
   const ranks = [1, 3, 5, 7, 9, 11, 2, 4, 6, 8, 10, 12];
@@ -288,7 +288,7 @@ describe('clusterPilotStyles', () => {
   });
 
   it('renders a style-clusters section in the text report', () => {
-    const text = renderFieldReport(twoGroupReport());
+    const text = renderTaskAnalysis(twoGroupReport());
     expect(text).toContain('Pilot style clusters');
     expect(text).toContain('Group A "');
     expect(text).toContain('mean silhouette');
@@ -297,7 +297,7 @@ describe('clusterPilotStyles', () => {
   it('says why when the field is too small to cluster, in the text report', () => {
     const ranks = [1, 2, 3];
     const v = around(1, 3);
-    const text = renderFieldReport(
+    const text = renderTaskAnalysis(
       makeReport(ranks, [
         { id: 'm1', values: v },
         { id: 'm2', values: v },

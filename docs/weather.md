@@ -9,7 +9,7 @@ Together, in two prominent places, **notes first**:
 
 1. **The task page's "Weather" section** — under the route, above the results.
    Modelled charts only, via `src/react/weather/TaskWeatherPanel.tsx`.
-2. **A top-level "What the weather did" section on the task field-analysis
+2. **A top-level "What the weather did" section on the task task-analysis
    page** — placed *before* the separation ranking, because the conditions decide
    which metrics matter.
 
@@ -81,7 +81,7 @@ data.) Move the route or the date and the engine's `weatherQueryKey` stops
 matching the stored row, which re-fetches on next read.
 
 Provisional answers — fetched inside a source's publication lag — re-fetch on a
-TTL; failures back off. Like field analysis, the cold path never fetches
+TTL; failures back off. Like task analysis, the cold path never fetches
 synchronously: a page render must not depend on a third party's uptime.
 
 ## Weather notes

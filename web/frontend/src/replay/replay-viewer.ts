@@ -539,7 +539,7 @@ export class ReplayViewer {
 
   /**
    * Supply the reconstructed thermal shapes (fetched from the task's
-   * field-analysis report after load) and build the column layer.
+   * task-analysis report after load) and build the column layer.
    */
   setThermalShapes(shapes: ThermalShapeSummary[]): void {
     this.thermalShapes = shapes;

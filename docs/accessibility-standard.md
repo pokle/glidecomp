@@ -299,10 +299,10 @@ they get explicit rules:
   - **The report card's charts**, in `src/react/charts/` — `ScoreCurve.tsx`,
     `ValiditySparkline.tsx`, `DistributionStrip.tsx` and
     `TrackCleaningChart.tsx`.
-  - **The field-analysis charts**, in `src/react/field-analysis/charts/`
+  - **The task-analysis charts**, in `src/react/analysis/charts/`
     (including the day-profile set in `charts/day-profile/`), and the thermal
     rose and altitude-band profile in
-    `field-analysis/thermals/ThermalsPanel.tsx`.
+    `analysis/thermals/ThermalsPanel.tsx`.
 - **A chart is a `role="img"` whose accessible name states its reading in a
   sentence, with the exact values in an adjacent RAC `Table`.** This is what the
   roughly twenty hand-rolled SVG charts already do, and it is the rule for the

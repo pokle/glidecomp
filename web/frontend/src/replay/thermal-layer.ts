@@ -4,7 +4,7 @@
  * ThermalLayer — the reconstructed thermal columns, drawn in the replay.
  *
  * Renders the stored ThermalShapeSummary list (fetched from the task's
- * field-analysis report; no point clouds) as in-scene geometry: one ring per
+ * task-analysis report; no point clouds) as in-scene geometry: one ring per
  * altitude band at the band's measured core and working radius — so the
  * stack of rings IS the column, leaning exactly as the measurement says —
  * plus the core axis as a line, and octahedron markers for bands with

@@ -171,7 +171,7 @@ export function taskWeatherPath(
 }
 
 /**
- * The per-task field analysis. A child of the TASK: it is the one task's
+ * The per-task analysis. A child of the TASK: it is the one task's
  * report, it is where a reader arrives from, and the breadcrumbs say the same
  * (lib/crumbs.ts). The whole-comp report at {@link compAnalysisPath} collects
  * these chapters but does not own their URLs.
@@ -186,8 +186,8 @@ export function taskAnalysisPath(
 }
 
 /**
- * One section of the task's field analysis, on its own page. The chapter page
- * is a summary of these — see field-analysis/sections.ts for the set.
+ * One section of the task's analysis, on its own page. The chapter page
+ * is a summary of these — see analysis/sections.ts for the set.
  */
 export function taskAnalysisSectionPath(
   compId: string,
@@ -199,7 +199,7 @@ export function taskAnalysisSectionPath(
   return `${taskAnalysisPath(compId, compName, taskId, taskName)}/${section}`;
 }
 
-/** The pilot-similarity sheet, hung off the task's field analysis. */
+/** The pilot-similarity sheet, hung off the task's analysis. */
 export function taskSimilarityPath(
   compId: string,
   compName: string | null | undefined,

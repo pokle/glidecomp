@@ -1,5 +1,5 @@
 /**
- * Test factory for field-analysis metric tests.
+ * Test factory for task-analysis metric tests.
  *
  * FROZEN after Stage 0 (docs/2026-07-18-field-analysis-plan.md): the Stage 1
  * metric packages import from here but must not edit this file.
@@ -19,7 +19,7 @@ import {
   type TaskScoreResult,
 } from '../src/gap-scoring';
 import type { TurnpointSequenceResult } from '../src/turnpoint-sequence';
-import { buildFieldContext, type FieldContext } from '../src/field-analysis';
+import { buildFieldContext, type FieldContext } from '../src/analysis';
 import { createFix, BASE_TIME } from './test-helpers';
 
 export { createFix, BASE_TIME };

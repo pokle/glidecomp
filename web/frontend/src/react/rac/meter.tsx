@@ -5,7 +5,7 @@
  * reading, not the completion of a task, and `role="meter"` is what tells a
  * screen reader so.
  *
- * The consumers so far are both in the field-analysis separation ranking:
+ * The consumers so far are both in the task-analysis separation ranking:
  * DivergingMeter for a signed Spearman ρ in [-1, 1], which grows from the
  * centre of its track, and ProportionMeter for a part of a whole (how much of
  * the field a correlation actually measured). Sign is encoded by WHICH SIDE

@@ -1,0 +1,208 @@
+// Copyright (c) 2026, Tushar Pokle.  All rights reserved.
+
+/**
+ * Small statistics helpers for task analysis.
+ *
+ * Spearman correlation is the task-analysis eval: each behavioural metric is
+ * correlated against GAP rank to find which behaviours separate the
+ * leaderboard. Ties get average ranks (the standard Spearman treatment), so a
+ * field where many pilots share a value doesn't fabricate correlation.
+ */
+
+import { bearingFromComponents } from '../geo';
+
+/**
+ * Linear-interpolated percentile of an ASCENDING-sorted array.
+ * `p` in [0, 100]. NaN for an empty array.
+ */
+export function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return NaN;
+  if (sorted.length === 1) return sorted[0];
+  const pos = (Math.min(100, Math.max(0, p)) / 100) * (sorted.length - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+/** Median of an UNSORTED array. NaN for empty. */
+export function median(values: number[]): number {
+  return percentile([...values].sort((a, b) => a - b), 50);
+}
+
+/** Arithmetic mean. NaN for empty. */
+export function mean(values: number[]): number {
+  if (values.length === 0) return NaN;
+  let sum = 0;
+  for (const v of values) sum += v;
+  return sum / values.length;
+}
+
+/**
+ * 1-based ranks with ties given their average rank (Spearman tie treatment):
+ * [10, 20, 20, 30] → [1, 2.5, 2.5, 4].
+ */
+export function rankWithTies(values: number[]): number[] {
+  const order = values.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+  const ranks = new Array<number>(values.length);
+  let i = 0;
+  while (i < order.length) {
+    let j = i;
+    while (j + 1 < order.length && order[j + 1].v === order[i].v) j++;
+    const avgRank = (i + j) / 2 + 1; // 1-based average of positions i..j
+    for (let k = i; k <= j; k++) ranks[order[k].i] = avgRank;
+    i = j + 1;
+  }
+  return ranks;
+}
+
+/**
+ * Pearson correlation of two parallel series (over the first
+ * min(a.length, b.length) pairs). Returns NaN when fewer than 2 pairs or
+ * either series is constant.
+ */
+export function pearson(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return NaN;
+  let ma = 0;
+  let mb = 0;
+  for (let i = 0; i < n; i++) {
+    ma += a[i];
+    mb += b[i];
+  }
+  ma /= n;
+  mb /= n;
+  let cov = 0;
+  let va = 0;
+  let vb = 0;
+  for (let i = 0; i < n; i++) {
+    const da = a[i] - ma;
+    const db = b[i] - mb;
+    cov += da * db;
+    va += da * da;
+    vb += db * db;
+  }
+  if (va === 0 || vb === 0) return NaN;
+  return cov / Math.sqrt(va * vb);
+}
+
+/**
+ * Spearman rank correlation of two parallel series: Pearson correlation of
+ * their tied ranks. Returns NaN when n < 3 or either series is constant.
+ */
+export function spearman(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length);
+  if (n < 3) return NaN;
+  return pearson(rankWithTies(a.slice(0, n)), rankWithTies(b.slice(0, n)));
+}
+
+/**
+ * Approximate two-tailed α = 0.05 critical |ρ| for a Spearman correlation of
+ * n pairs — the "noise floor": shuffled ranks produce |ρ| this large 5% of
+ * the time, so an observed |ρ| below it is indistinguishable from luck.
+ *
+ * Uses the t-approximation t = ρ·√((n−2)/(1−ρ²)) inverted at t₀.₉₇₅,ₙ₋₂
+ * (Cornish–Fisher expansion for the t quantile; exact small-df values where
+ * the expansion is poor). Within a few percent of exact permutation tables —
+ * fine for a verdict gate, documented as approximate.
+ * NaN for n < 3 (no correlation is computed there at all).
+ */
+export function spearmanNoiseFloor(n: number): number {
+  if (n < 3) return NaN;
+  const df = n - 2;
+  // t quantile at 0.975 for df degrees of freedom.
+  let t: number;
+  if (df === 1) t = 12.706;
+  else if (df === 2) t = 4.303;
+  else {
+    const z = 1.959964; // Φ⁻¹(0.975)
+    t =
+      z +
+      (z ** 3 + z) / (4 * df) +
+      (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * df * df) +
+      (3 * z ** 7 + 19 * z ** 5 + 17 * z ** 3 - 15 * z) / (384 * df ** 3);
+  }
+  return Math.min(1, t / Math.sqrt(df + t * t));
+}
+
+/** A wind sample for {@link circularMeanWind}: speed m/s, direction ° FROM. */
+export interface WindSample {
+  speed: number;
+  direction: number;
+}
+
+/** Vector-averaged wind: speed (m/s), direction (° FROM), sample count. */
+export interface MeanWind {
+  speed: number;
+  direction: number;
+  n: number;
+}
+
+/**
+ * Vector (u/v component) average of wind estimates. Averaging components
+ * rather than angles keeps a 350°/10° pair from averaging to 180°, and lets
+ * conflicting estimates cancel — a low mean speed over many samples honestly
+ * reads as "light and variable". Null when no samples.
+ */
+export function circularMeanWind(samples: WindSample[]): MeanWind | null {
+  if (samples.length === 0) return null;
+  // Wind FROM `direction` blows TOWARD direction+180: velocity components
+  // u (east) = -speed·sin(dir), v (north) = -speed·cos(dir).
+  let u = 0;
+  let v = 0;
+  for (const s of samples) {
+    const rad = (s.direction * Math.PI) / 180;
+    u += -s.speed * Math.sin(rad);
+    v += -s.speed * Math.cos(rad);
+  }
+  u /= samples.length;
+  v /= samples.length;
+  const speed = Math.hypot(u, v);
+  const direction = bearingFromComponents(-u, -v);
+  return { speed, direction, n: samples.length };
+}
+
+/**
+ * The ONE combining policy for per-circle wind estimates, shared by every
+ * surface that reports a wind (day.wind's tables and the thermal shapes), so
+ * one report can never print two different winds for the same circles.
+ *
+ * Direction comes from the VECTOR mean ({@link circularMeanWind}), where the
+ * scatter of individual estimates cancels. Speed comes from the MEDIAN of the
+ * estimate magnitudes: a vector mean's length collapses toward zero as
+ * directions scatter, so it answers "how consistent were the estimates", not
+ * "how strong was the wind" — measured 5 km/h against a modelled 20 km/h on a
+ * day the directions agreed to a degree was this bias, not a calm.
+ *
+ * Which estimates a caller feeds in (one per circle, or both estimator
+ * methods pooled) is deliberately the caller's own rule — only the combining
+ * is canonical here. Null when no samples.
+ */
+export function combineWindEstimates(samples: WindSample[]): MeanWind | null {
+  const vector = circularMeanWind(samples);
+  if (!vector) return null;
+  const speeds = samples.map((s) => s.speed).sort((a, b) => a - b);
+  return { speed: percentile(speeds, 50), direction: vector.direction, n: samples.length };
+}
+
+/**
+ * Round percentages to integers that still sum to 100 (largest remainder).
+ *
+ * Rounding each part independently lets a three-way split display as 99% or
+ * 101%, which reads as an arithmetic bug in a part-of-whole figure. Callers
+ * pass parts that already sum to 100; anything else is returned floored with
+ * the same remainder ordering, since there is no correct answer to spread.
+ */
+export function roundPercentagesToHundred(values: number[]): number[] {
+  const out = values.map(Math.floor);
+  let short = Math.round(values.reduce((a, b) => a + b, 0)) - out.reduce((a, b) => a + b, 0);
+  const byRemainder = values
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of byRemainder) {
+    if (short <= 0) break;
+    out[i]++;
+    short--;
+  }
+  return out;
+}

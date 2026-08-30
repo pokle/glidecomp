@@ -8,23 +8,23 @@
  *
  * This is the TASK PAGE's weather surface: modelled charts alone, because the
  * task page has no pilot-derived series to set them against. The
- * field-analysis page instead stacks the same charts (via MetChartsGroup)
+ * task-analysis page instead stacks the same charts (via MetChartsGroup)
  * under the flown, track-derived ones on a single axis — see
- * field-analysis/charts/day-profile/DayProfilePanel.tsx — so a reader there
+ * analysis/charts/day-profile/DayProfilePanel.tsx — so a reader there
  * can compare the predicted day against the day the field actually flew.
  */
 import { useMemo, useState } from "react";
 import { bestDaylightWindow } from "@glidecomp/engine";
 import type { TaskWeather } from "./types";
 import { zoneAbbrev } from "@/react/lib/time";
-import { buildTimeAxis } from "@/react/field-analysis/charts/day-profile/time-axis";
-import { PLOT_LEFT, PLOT_RIGHT } from "@/react/field-analysis/charts/day-profile/shared";
+import { buildTimeAxis } from "@/react/analysis/charts/day-profile/time-axis";
+import { PLOT_LEFT, PLOT_RIGHT } from "@/react/analysis/charts/day-profile/shared";
 import {
   MetChartsGroup,
   MetAttribution,
-} from "@/react/field-analysis/charts/day-profile/MetChartsGroup";
-import { weatherInstants } from "@/react/field-analysis/charts/day-profile/met-shared";
-import { TimeAxisTitle } from "@/react/field-analysis/charts/day-profile/TimeAxisParts";
+} from "@/react/analysis/charts/day-profile/MetChartsGroup";
+import { weatherInstants } from "@/react/analysis/charts/day-profile/met-shared";
+import { TimeAxisTitle } from "@/react/analysis/charts/day-profile/TimeAxisParts";
 
 const HOUR_MS = 3_600_000;
 

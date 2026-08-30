@@ -590,7 +590,7 @@ up inside a cone — a wall of flat colour with no thermal visible.
 
 **Chrome and fetch.** The drawer's `#thermalPanelWrap` section (a show/hide
 toggle, a `<select>` of columns labelled "time · N pilots · altitude band",
-and a caption) starts `hidden`. `main.ts` fetches the task's field-analysis
+and a caption) starts `hidden`. `main.ts` fetches the task's task-analysis
 report *after* load, never blocking, and only reveals the section when that
 report answers with shapes — so **sample mode shows nothing** (the fetch
 needs `?comp=`/`?task=` and returns null without them), and neither does a
@@ -603,7 +603,7 @@ shows.
 
 **`?thermal=<id>` is a first-class URL parameter.** The analysis page's
 "Watch this thermal in the 3D replay" link appends it
-(`react/pages/TaskFieldAnalysis.tsx`). Parsing lives apart from the entry
+(`react/pages/TaskAnalysis.tsx`). Parsing lives apart from the entry
 point in `replay/thermal-link.ts` (`parseThermalParam`) for one reason worth
 saying out loud: `URLSearchParams.get()` answers `null` for an absent param
 and `Number(null)` is `0` — a perfectly good thermal id — so a naive
@@ -742,8 +742,8 @@ file, so any user can view it and the same path serves any comp task.
     `/replay?comp=<id>&task=<id>`. Gated on `replayAvailable`, which
     `ScoresSection` reports once the task has scoreable tracks, so the button
     appears only when there is something to replay.
-  - The **task field-analysis page**
-    (`src/react/pages/TaskFieldAnalysis.tsx`, via `ThermalsPanel`) → "Watch
+  - The **task task-analysis page**
+    (`src/react/pages/TaskAnalysis.tsx`, via `ThermalsPanel`) → "Watch
     this thermal in the 3D replay" on the selected thermal, which appends
     `&thermal=<id>` (§5.17) and opens in a new tab.
 

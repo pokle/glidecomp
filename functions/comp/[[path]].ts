@@ -22,8 +22,8 @@ import {
   loadCompWaypoints,
   loadTaskDetail,
   loadPilotScoreDetail,
-  loadCompFieldAnalysis,
-  loadTaskFieldAnalysis,
+  loadCompAnalysis,
+  loadTaskAnalysis,
   publicMaxAgeSeconds,
   NotFoundError,
   type FetchFn,
@@ -32,7 +32,7 @@ import { buildScoresCsv, scoresCsvFilename } from "../../web/frontend/src/scores
 import {
   TASK_ANALYSIS_SECTIONS,
   findTaskAnalysisSection,
-} from "../../web/frontend/src/react/field-analysis/sections";
+} from "../../web/frontend/src/react/analysis/sections";
 import {
   idFromSegment,
   compPath,
@@ -87,7 +87,7 @@ interface Rendered {
   /** The SSR loader result, embedded as window.__SSR_DATA__.data. */
   data: unknown;
   head: HeadTags;
-  /** Freshness of the materialized content, if any (scores / field analysis). */
+  /** Freshness of the materialized content, if any (scores / task analysis). */
   cache?: CacheHint;
   /** The canonical `${slug}-${id}` pathname for this page, once the names are
    * known. When it differs from the request path, onRequest 301s to it. Absent
@@ -99,7 +99,7 @@ interface HeadTags {
   title: string;
   description: string;
   /** Emit <meta robots noindex> — for pages with no substantive content yet
-   * (a pending or empty field analysis). */
+   * (a pending or empty task analysis). */
   noindex?: boolean;
   /** Extra raw tags (JSON-LD) already HTML-serialized. */
   extra: string;
@@ -110,7 +110,7 @@ interface HeadTags {
  * not be indexed: admin-gated, private, and empty without a signed-in
  * admin's API session. Checked before ROUTES.
  *
- * Field analysis (behavioural metrics) is now public and SSR'd — it has ROUTES
+ * Task analysis (behavioural metrics) is now public and SSR'd — it has ROUTES
  * entries with loaders below (a pending/empty report is rendered but noindexed
  * per-request, not shell-noindexed here).
  */
@@ -125,7 +125,7 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/[^/]+\/task\/[^/]+\/(settings|route|weather)\/?$/,
   // Recording a manual flight for one pilot (FAI S7F §9.2.2) — admin-only.
   /^\/comp\/[^/]+\/task\/[^/]+\/pilot\/[^/]+\/manual-flight\/?$/,
-  // The pilot-similarity sheet under the per-task field analysis. Everything
+  // The pilot-similarity sheet under the per-task analysis. Everything
   // on it is derived client-side from the report the page fetches anyway, so
   // there is nothing to server-render; it is an interactive tool rather than a
   // document, so there is nothing here for a crawler either.
@@ -133,7 +133,7 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
 ];
 
 /**
- * The superseded per-task field-analysis URLs, 301'd in onRequest. The slug
+ * The superseded per-task task-analysis URLs, 301'd in onRequest. The slug
  * segments are carried across untouched — this is a re-shape of the path, not
  * a lookup, so it needs no comp or task data and costs no round trip.
  */
@@ -153,7 +153,7 @@ const ROUTES: Array<{
         head: {
           title: "Competitions — GlideComp",
           description:
-            "Browse hang gliding and paragliding competitions on GlideComp: tasks, live scores, per-pilot score explanations, and the field analysis of how each day was flown.",
+            "Browse hang gliding and paragliding competitions on GlideComp: tasks, live scores, per-pilot score explanations, and the task analysis of how each day was flown.",
           extra: jsonLd({
               "@context": "https://schema.org",
               "@type": "ItemList",
@@ -320,11 +320,11 @@ const ROUTES: Array<{
     },
   },
   {
-    // Comp field analysis (behavioural metrics across the comp's tasks).
+    // Comp analysis (behavioural metrics across the comp's tasks).
     pattern: /^\/comp\/([^/]+)\/analysis\/?$/,
     async run(f, m, origin) {
       const compId = idFromSegment(m[1]);
-      const data = await loadCompFieldAnalysis(f, compId);
+      const data = await loadCompAnalysis(f, compId);
       const a = data.analysis;
       const name = data.comp?.name ?? a.comp_name;
       const canonical = compAnalysisPath(compId, name);
@@ -339,14 +339,14 @@ const ROUTES: Array<{
           stale: a.stale || a.pending_task_count > 0,
         },
         head: {
-          title: `Field analysis — ${name} — GlideComp`,
+          title: `Comp analysis — ${name} — GlideComp`,
           description: `Which flying behaviours separated the field at ${name} — climbing, gliding, decision-making and race craft, ranked by how strongly each tracks finishing position.`,
           noindex: !hasContent,
           extra: jsonLd(
             breadcrumb(origin, [
               ["Competitions", "/comp"],
               [name, compPath(compId, name)],
-              ["Field analysis", canonical],
+              ["Comp analysis", canonical],
             ])
           ),
         },
@@ -354,13 +354,13 @@ const ROUTES: Array<{
     },
   },
   {
-    // Per-task field analysis: this one task's chapter of the comp report
+    // Per-task analysis: this one task's chapter of the comp report
     // above, and a child of the task's own URL.
     pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/analysis\/?$/,
     async run(f, m, origin) {
       const compId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
-      const data = await loadTaskFieldAnalysis(f, compId, taskId);
+      const data = await loadTaskAnalysis(f, compId, taskId);
       const a = data.analysis;
       const compName = data.comp?.name ?? "GlideComp";
       const taskName = data.task?.name ?? "Task";
@@ -378,7 +378,7 @@ const ROUTES: Array<{
         canonicalPath: canonical,
         cache: { computedAt: a.computed_at, stale: a.stale || a.pending },
         head: {
-          title: `Field analysis — ${taskName}, ${compName}`,
+          title: `Task analysis — ${taskName}, ${compName}`,
           description: `How the field flew ${taskName} at ${compName}, and which behaviours separated the leaderboard — a per-pilot behavioural breakdown on GlideComp.`,
           noindex: !hasContent,
           extra: jsonLd(
@@ -387,7 +387,7 @@ const ROUTES: Array<{
               [compName, compPath(compId, data.comp?.name)],
               [taskName, taskPath(compId, data.comp?.name, taskId, data.task?.name)],
               [
-                "Field analysis",
+                "Task analysis",
                 taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name),
               ],
             ])
@@ -410,7 +410,7 @@ const ROUTES: Array<{
       const compId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
       const section = findTaskAnalysisSection(m[3])!;
-      const data = await loadTaskFieldAnalysis(f, compId, taskId);
+      const data = await loadTaskAnalysis(f, compId, taskId);
       const a = data.analysis;
       const compName = data.comp?.name ?? "GlideComp";
       const taskName = data.task?.name ?? "Task";
@@ -439,7 +439,7 @@ const ROUTES: Array<{
               [compName, compPath(compId, data.comp?.name)],
               [taskName, taskPath(compId, data.comp?.name, taskId, data.task?.name)],
               [
-                "Field analysis",
+                "Task analysis",
                 taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name),
               ],
               [section.label, canonical ?? origin],
@@ -457,7 +457,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const path = url.pathname;
   const cookie = request.headers.get("Cookie");
 
-  // The per-task field analysis moved back under the task it is about. Its
+  // The per-task analysis moved back under the task it is about. Its
   // July–August 2026 URL (/comp/:c/analysis/task/:t, and /similar below it)
   // was public and server-rendered, so it gets a real 301 rather than the
   // client-side bounce the SPA also carries: a crawler that asked for it must
@@ -631,7 +631,7 @@ function compFetcher(env: Env, cookie: string | null): FetchFn {
 /**
  * Cache-Control for a rendered SSR page. Cookie-forwarded renders are
  * visitor-specific and never shared-cached. For anonymous renders of
- * stale-first content (scores / field analysis) the max-age grows with how
+ * stale-first content (scores / task analysis) the max-age grows with how
  * long the content has already been stable (publicMaxAgeSeconds) — a finished
  * comp's pages stop being re-fetched, a live one stays near-realtime — while
  * pages with no freshness signal keep the always-revalidate default.

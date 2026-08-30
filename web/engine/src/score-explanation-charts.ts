@@ -7,14 +7,14 @@
  * field sits along it, are things prose cannot carry. These builders supply
  * them as data (the UI draws).
  *
- * Three rules make these different from the field-analysis charts, and they
+ * Three rules make these different from the task-analysis charts, and they
  * are the whole design:
  *
  *  1. **The curve is the formula, not a fit.** Every sample comes from the
  *     scorer's own function (calculateSpeedFraction, calculateLeadingPoints,
  *     calculateArrivalPoints, calculateDistanceDifficulty) — never a
  *     regression through the dots. The
- *     field-analysis scatter draws a LOESS trend and withholds it below a
+ *     task-analysis scatter draws a LOESS trend and withholds it below a
  *     noise floor because there a curve is a claim about data; here it is the
  *     definition, so it is always drawn and never gated.
  *
@@ -528,7 +528,7 @@ function pctOf(fraction: number): string {
  * A strip of one dot per pilot, not a histogram. Bars force a bucket width,
  * and at this size the buckets read as an arbitrary grid laid over the data
  * rather than as the shape of it. Dots have no such parameter: overlap is the
- * density, which is the same encoding the field-analysis day profile uses for
+ * density, which is the same encoding the task-analysis day profile uses for
  * its takeoff lane.
  *
  * Every flying pilot gets a dot, including those the component charts leave

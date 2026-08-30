@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // doesn't apply that define, so provide it before the component tree renders.
 (globalThis as Record<string, unknown>).__GIT_SHA__ ??= "test";
 import { render } from "./entry-server";
-import type { CompetitionsLoaderData, CompFieldAnalysisLoaderData } from "./loaders";
+import type { CompetitionsLoaderData, CompAnalysisLoaderData } from "./loaders";
 
 /**
  * Mirrors the Pages Function exactly: the router gets the full URL, while
@@ -72,7 +72,7 @@ describe("entry-server render (SSR)", () => {
   // a different tree. Every shared deep link was a hydration mismatch.
   it("renders the view the query string asks for, not the default", async () => {
     const aggregate = { taskLabels: [], pilots: [], metrics: [] };
-    const data: CompFieldAnalysisLoaderData = {
+    const data: CompAnalysisLoaderData = {
       analysis: {
         comp_id: "abc",
         comp_name: "Corryong Cup 2026",
@@ -106,7 +106,7 @@ describe("entry-server render (SSR)", () => {
   // the page — the same validate-against-the-data rule the client applies.
   it("falls back to the default view when the query names an unknown value", async () => {
     const aggregate = { taskLabels: [], pilots: [], metrics: [] };
-    const data: CompFieldAnalysisLoaderData = {
+    const data: CompAnalysisLoaderData = {
       analysis: {
         comp_id: "abc",
         comp_name: "Corryong Cup 2026",

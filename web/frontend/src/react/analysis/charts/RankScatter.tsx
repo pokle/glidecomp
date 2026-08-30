@@ -1,0 +1,587 @@
+/**
+ * Metric value against published rank — Spearman ρ made visible.
+ *
+ * The separation ranking reduces each metric to one coefficient; this scatter
+ * is the evidence behind it. A ρ of −0.6 can be a clean monotone trend, two
+ * gaggle-shaped clusters, or one outlier doing all the work, and only the
+ * dots can tell you which.
+ *
+ * Rank 1 renders at the TOP so "up is better" everywhere on the page. Hand-
+ * rolled SVG, no chart library: see charts/chart-utils.ts for why.
+ *
+ * Trend curve: a LOESS fit (chart-utils `loessTrend`) traces the shape the ρ
+ * is claiming — but ONLY where ρ clears its noise floor. A curve is a strong
+ * claim: the eye follows it and stops reading the dots, so drawing one
+ * through scatter that shuffled ranks reproduce would manufacture a finding.
+ * Where it is withheld the caption says why, rather than leaving a silent
+ * absence.
+ *
+ * Labelling: the best/worst three pilots and the value extremes are named
+ * permanently (selective direct labels); the focused dot is named in place
+ * while focused (click, tap, or arrow keys); and an opt-in checkbox labels
+ * every pilot, growing the chart vertically so the names have room. In
+ * label-everyone mode the special labels go bold to stand out of the crowd.
+ *
+ * Accessibility: the figure carries a caption stating the statistics in
+ * words; every dot is a focusable element with the pilot's name/value/rank as
+ * its accessible name, arrow keys walk the dots in rank order, and the family
+ * tables below the page remain the full data equivalent. A readout line under
+ * the plot mirrors hover/focus for sighted users (works on touch, prints).
+ */
+import { useMemo, useRef, useState } from "react";
+import { cn } from "@/react/lib/utils";
+import { Checkbox } from "@/react/rac/checkbox";
+import {
+  formatMetricValue,
+  type TaskAnalysisReport,
+  type MetricReport,
+} from "../types";
+import { unitWords, verdictWords } from "../units";
+import { usePilotHighlight } from "../PilotHighlightContext";
+import {
+  axisTitleFor,
+  extent,
+  formatTickValue,
+  linearScale,
+  loessTrend,
+  niceTicks,
+  spreadLabels,
+} from "./chart-utils";
+// Re-exported where it grew up, so RankScatter's own tests and any reader
+// that knows it from here are unchanged by the move to chart-utils.
+export { axisTitleFor };
+import { notableExcludedRanks, notableRanksPhrase } from "../exclusions";
+import { XAxisTitle, YAxisTitle } from "@/react/charts/AxisTitle";
+
+const W = 560;
+/** The plot's viewBox width — the unit `minHeight` is expressed in, so a
+ * caller sizing the chart against a measured box can ask for the matching
+ * aspect without hardcoding this number twice. */
+export const SCATTER_WIDTH = W;
+const BASE_H = 316;
+// left fits the rank ticks AND the rotated y-axis title; bottom fits the x
+// ticks and the x-axis title beneath them. Both grew when the axes were
+// titled — BASE_H grew with them so the plot itself did not shrink.
+const MARGIN = { top: 10, right: 16, bottom: 42, left: 52 };
+/** Vertical room per label when naming every pilot (labels spread at 11). */
+const LABEL_ROW = 12;
+
+interface ScatterPoint {
+  trackFile: string;
+  name: string;
+  rank: number;
+  value: number;
+}
+
+/** Where the drawn trend curve starts and ends, in ranks (already clamped to
+ * the rank axis and rounded). Null when no curve is drawn. */
+export interface TrendEnds {
+  startRank: number;
+  endRank: number;
+}
+
+/** The caption's statistics-in-words, shared with the accessible name.
+ * Exported for tests. `excludedTopRanks` — top-3 leaderboard ranks among the
+ * unplotted pilots — turns a silent absence into information: a ρ over a
+ * subpopulation that excludes the winner must say so, because "not
+ * applicable" for the best pilots is often structural, not random (a race
+ * leader ends gaggles rather than leaving them). */
+export function captionText(
+  metric: MetricReport,
+  excluded: number,
+  excludedTopRanks: number[] = [],
+  trend: TrendEnds | null = null,
+): string {
+  const c = metric.correlation;
+  const parts: string[] = [];
+  if (c) {
+    // verdictWords, not the raw token: this caption sits under the chart the
+    // ranking's chip links to, and the two must say the same thing.
+    parts.push(`ρ = ${c.rho.toFixed(2)} (${verdictWords(c.verdict)}, n = ${c.n}).`);
+    if (metric.direction === "neutral") {
+      parts.push(
+        c.rho === 0
+          ? "No expected direction, and no lean either way here."
+          : `No expected direction — the sign is the finding: larger values went with ${
+              c.rho < 0 ? "better" : "worse"
+            } ranks here.`
+      );
+    } else {
+      // Rank 1 is at the top and numerically smallest, so ρ < 0 means larger
+      // values went with better ranks — the dots gather top-right. The
+      // gathering sentence must follow the OBSERVED sign, not the registry's
+      // higher/lower prior: on the day a metric runs against expectation the
+      // caption has to say so, not describe the day it expected to see.
+      const expected = metric.direction === "higher" ? "More" : "Less";
+      if (c.rho === 0) {
+        parts.push(`${expected} is expected to be better here, but there was no lean either way.`);
+      } else {
+        const gatherRight = c.rho < 0;
+        const side = gatherRight ? "right" : "left";
+        const asExpected = (metric.direction === "higher") === gatherRight;
+        parts.push(
+          asExpected
+            ? `${expected} is expected to be better here, and it was: top ranks gather to the ${side}.`
+            : `${expected} is expected to be better here, but this task ran the other way: top ranks gather to the ${side}.`
+        );
+      }
+    }
+  } else {
+    parts.push("Too few usable values for a correlation — read the dots, not a trend.");
+  }
+  // The curve, and — just as important — why there isn't one. A curve fitted
+  // through dots whose ρ is indistinguishable from shuffled ranks would draw
+  // a shape out of luck and be believed, so the absence gets stated rather
+  // than left for the reader to notice.
+  if (trend) {
+    parts.push(
+      `The curve is a trend fitted through the dots: left to right it runs from about rank ${
+        trend.startRank
+      } to about rank ${trend.endRank}.`
+    );
+  } else if (c && (c.verdict === "within noise" || c.verdict === "n too small")) {
+    parts.push(
+      c.verdict === "n too small"
+        ? "There is no trend curve. Too few pilots have a value to fit one that means anything."
+        : "There is no trend curve. ρ does not clear the noise floor, so a curve here follows luck."
+    );
+  }
+  if (excluded > 0) {
+    const notable =
+      excludedTopRanks.length > 0
+        ? `, including ${notableRanksPhrase(excludedTopRanks)}`
+        : "";
+    parts.push(
+      `${excluded} pilot${excluded === 1 ? " has" : "s have"} no value and ${
+        excluded === 1 ? "is" : "are"
+      } not plotted${notable}.`
+    );
+  }
+  return parts.join(" ");
+}
+
+
+export function RankScatter({
+  metric,
+  pilots,
+  showAllLabels = false,
+  onShowAllLabelsChange,
+  minHeight,
+}: {
+  metric: MetricReport;
+  pilots: TaskAnalysisReport["pilots"];
+  /** Name every dot (bolding the special ones). Owned by the caller so the
+   * choice survives switching metrics. */
+  showAllLabels?: boolean;
+  onShowAllLabelsChange?: (value: boolean) => void;
+  /**
+   * Floor for the viewBox height, in the same units as {@link W}. The plot is
+   * always drawn {@link W} wide and scales to whatever CSS width it is given,
+   * so its aspect ratio decides how much of a tall box it can use: at the
+   * default {@link BASE_H} a phone-width chart is ~190px tall no matter how
+   * much screen is free, which is exactly what makes the full-screen overlay
+   * (MetricChartOverlay) worth having. That overlay measures its box and
+   * passes the height that matches its aspect, so the rank axis gets the
+   * whole screen instead of a letterboxed strip.
+   *
+   * A floor, never a cap: below BASE_H the axis labels and the spread-out
+   * pilot names stop fitting, so a smaller request is ignored.
+   */
+  minHeight?: number;
+}) {
+  // Join by trackFile, never by array index (project rule) — and sort by
+  // rank so arrow keys read the leaderboard top-down.
+  const points = useMemo<ScatterPoint[]>(() => {
+    const valueByTrack = new Map(metric.perPilot.map((p) => [p.trackFile, p.value]));
+    return pilots
+      .flatMap((p) => {
+        const value = valueByTrack.get(p.trackFile);
+        return value === null || value === undefined || !Number.isFinite(value)
+          ? []
+          : [{ trackFile: p.trackFile, name: p.pilotName, rank: p.rank, value }];
+      })
+      .sort((a, b) => a.rank - b.rank);
+  }, [metric, pilots]);
+
+  // The trend curve, in data space (value → rank) — memoised because it is
+  // real arithmetic and every hover re-renders this component.
+  //
+  // The noise floor is the gate: a curve is a strong claim (the eye follows
+  // it and stops reading the dots), so one is only drawn where ρ says there
+  // is a monotone relationship to follow. 'within noise' and 'n too small'
+  // get dots alone — a shape traced through scatter that shuffled ranks
+  // reproduce 5% of the time is an invitation to see a finding that isn't
+  // there. The caption says why it is missing (captionText).
+  const trend = useMemo(() => {
+    const c = metric.correlation;
+    if (!c || c.verdict === "within noise" || c.verdict === "n too small") return null;
+    return loessTrend(
+      points.map((p) => p.value),
+      points.map((p) => p.rank)
+    );
+  }, [metric.correlation, points]);
+
+  const [focusIndex, setFocusIndex] = useState(0);
+  const [focusedTrack, setFocusedTrack] = useState<string | null>(null);
+  const [readout, setReadout] = useState<ScatterPoint | null>(null);
+  const dotRefs = useRef<(SVGGElement | null)[]>([]);
+  // Page-wide pilot highlight (no-op outside the provider): hovering a dot
+  // lights the pilot up in the heatmap and tables, and vice versa.
+  const { highlight, setHighlight } = usePilotHighlight();
+
+  const excluded = pilots.length - points.length;
+  const maxRank = Math.max(...pilots.map((p) => p.rank), 1);
+  // Clamped into the rank axis: local linear regression extrapolates at the
+  // edges, and "rank 0.4" is not a thing that exists.
+  const trendRanks = trend?.map((p) => ({
+    x: p.x,
+    y: Math.min(maxRank, Math.max(1, p.y)),
+  }));
+  const caption = captionText(
+    metric,
+    excluded,
+    notableExcludedRanks(pilots, metric.perPilot),
+    trendRanks && trendRanks.length > 0
+      ? {
+          startRank: Math.round(trendRanks[0].y),
+          endRank: Math.round(trendRanks[trendRanks.length - 1].y),
+        }
+      : null
+  );
+
+  if (points.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No pilot has a usable value for this metric, so there is nothing to plot.
+      </p>
+    );
+  }
+
+  // Naming everyone needs a row of vertical space per pilot, so the chart
+  // grows instead of the labels compressing into an unreadable pile. The
+  // caller's floor (the full-screen overlay's measured aspect) comes in on
+  // the same max(): whichever wants more room wins.
+  const height = Math.max(
+    BASE_H,
+    minHeight ?? 0,
+    showAllLabels ? MARGIN.top + MARGIN.bottom + points.length * LABEL_ROW + 16 : 0
+  );
+  const plot = {
+    left: MARGIN.left,
+    right: W - MARGIN.right,
+    top: MARGIN.top,
+    bottom: height - MARGIN.bottom,
+  };
+
+  const xDomain = extent(points.map((p) => p.value))!;
+  const x = linearScale(xDomain, [plot.left + 10, plot.right - 10]);
+  const y = linearScale([1, maxRank], [plot.top + 8, plot.bottom - 8]);
+
+  const trendPath = trendRanks
+    ? `M${trendRanks.map((p) => `${x(p.x).toFixed(1)},${y(p.y).toFixed(1)}`).join("L")}`
+    : null;
+  const trendEnd = trendRanks?.[trendRanks.length - 1];
+
+  const xAxisTitle = axisTitleFor(metric);
+  const xTicks = niceTicks(xDomain, 5);
+  // Rank ticks: always show 1 (it is the whole point of the axis), then
+  // whatever whole-number steps fit.
+  const yTicks = [
+    1,
+    ...niceTicks([1, maxRank], 4).filter((t) => Number.isInteger(t) && t !== 1),
+  ];
+
+  // The always-on labels: the best and worst three plotted pilots, plus the
+  // value extremes regardless of rank — "flew the fastest, still ranked
+  // 15th" is exactly the kind of outlier the scatter exists to surface.
+  // Points are rank-sorted, so the strict comparisons resolve a tied extreme
+  // to its best-ranked pilot, and the Set dedupes overlaps.
+  let minIdx = 0;
+  let maxIdx = 0;
+  points.forEach((p, i) => {
+    if (p.value < points[minIdx].value) minIdx = i;
+    if (p.value > points[maxIdx].value) maxIdx = i;
+  });
+  const specialIndices = new Set([
+    ...points.slice(0, 3).keys(),
+    ...points.map((_, i) => i).slice(-3),
+    minIdx,
+    maxIdx,
+  ]);
+
+  // What actually gets a label: everyone (opt-in), or the specials plus the
+  // focused dot — naming the dot you just clicked in place beats making you
+  // glance down at the readout line.
+  const focusedIdx =
+    focusedTrack !== null ? points.findIndex((p) => p.trackFile === focusedTrack) : -1;
+  const labelIndices = showAllLabels
+    ? points.map((_, i) => i)
+    : [...new Set([...specialIndices, ...(focusedIdx >= 0 ? [focusedIdx] : [])])];
+  // Adjacent ranks sit only a few pixels apart vertically, so the label
+  // baselines are spread to at least a line-height apart.
+  const labelYs = spreadLabels(
+    labelIndices.map((i) => y(points[i].rank) + 3),
+    11,
+    plot.top + 8,
+    plot.bottom - 2
+  );
+
+  function pointLabel(p: ScatterPoint): string {
+    return `${p.name}, ${formatMetricValue(metric.unit, p.value)} ${unitWords(
+      metric.unit
+    )}, rank ${p.rank}`;
+  }
+
+  function onDotKeyDown(e: React.KeyboardEvent, i: number) {
+    let next: number | null = null;
+    switch (e.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        next = Math.min(i + 1, points.length - 1);
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        next = Math.max(i - 1, 0);
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = points.length - 1;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    if (next !== i) {
+      setFocusIndex(next);
+      dotRefs.current[next]?.focus();
+    }
+  }
+
+  return (
+    <figure className="space-y-1">
+      <svg
+        viewBox={`0 0 ${W} ${height}`}
+        className="h-auto w-full"
+        role="group"
+        aria-label={`${metric.label} against rank, scatter plot. ${caption}`}
+        onMouseLeave={() => {
+          setReadout(null);
+          setHighlight(null);
+        }}
+      >
+        {/* Gridlines first, so dots draw over them. */}
+        {xTicks.map((t) => (
+          <line
+            key={`gx${t}`}
+            x1={x(t)}
+            x2={x(t)}
+            y1={plot.top}
+            y2={plot.bottom}
+            className="stroke-border"
+            strokeWidth={1}
+          />
+        ))}
+        {yTicks.map((t) => (
+          <line
+            key={`gy${t}`}
+            x1={plot.left}
+            x2={plot.right}
+            y1={y(t)}
+            y2={y(t)}
+            className="stroke-border"
+            strokeWidth={1}
+          />
+        ))}
+
+        {/* Tick labels. aria-hidden: the caption and dot labels carry the
+            information; stray "20"s only add noise to a screen reader. */}
+        <g aria-hidden className="text-[10px] text-muted-foreground">
+          {xTicks.map((t) => (
+            <text
+              key={`tx${t}`}
+              x={x(t)}
+              y={plot.bottom + 14}
+              textAnchor="middle"
+              className="fill-current"
+            >
+              {formatTickValue(metric.unit, t)}
+            </text>
+          ))}
+          {yTicks.map((t) => (
+            <text
+              key={`ty${t}`}
+              x={plot.left - 6}
+              y={y(t) + 3}
+              textAnchor="end"
+              className="fill-current"
+            >
+              {t}
+            </text>
+          ))}
+        </g>
+
+        {/* The axes, named. Rank 1 is at the top and is the winner, which is
+            the single most misreadable thing about this chart — the corner
+            label that used to sit here said only "rank". */}
+        <YAxisTitle x={12} top={plot.top} bottom={plot.bottom}>
+          rank — 1 is the winner
+        </YAxisTitle>
+        <XAxisTitle left={plot.left} right={plot.right} y={plot.bottom + 34}>
+          {xAxisTitle}
+        </XAxisTitle>
+
+        {points.map((p, i) => (
+          <g
+            key={p.trackFile}
+            ref={(el) => {
+              dotRefs.current[i] = el;
+            }}
+            role="img"
+            aria-label={pointLabel(p)}
+            tabIndex={i === focusIndex ? 0 : -1}
+            className="cursor-default outline-none"
+            onKeyDown={(e) => onDotKeyDown(e, i)}
+            onFocus={() => {
+              setFocusIndex(i);
+              setFocusedTrack(p.trackFile);
+              setReadout(p);
+              setHighlight(p.trackFile);
+            }}
+            onBlur={() => {
+              setFocusedTrack(null);
+              setHighlight(null);
+            }}
+            onMouseEnter={() => {
+              setReadout(p);
+              setHighlight(p.trackFile);
+            }}
+          >
+            {/* Invisible halo: a 24px pointer/focus target over a 10px dot
+                (accessibility standard §4.5, WCAG 2.5.8). */}
+            <circle cx={x(p.value)} cy={y(p.rank)} r={12} className="fill-transparent" />
+            <circle
+              cx={x(p.value)}
+              cy={y(p.rank)}
+              r={5}
+              className={cn(
+                "fill-chart-1/70",
+                (focusedTrack === p.trackFile || highlight === p.trackFile) &&
+                  "stroke-ring stroke-2"
+              )}
+            />
+          </g>
+        ))}
+
+        {/* Direct labels, drawn over the dots so names stay legible — plus a
+            background-coloured stroke halo (paint-order) so a name crossing a
+            dot or gridline still reads. Text wears muted ink, not the series
+            colour — the dot beside it carries identity. aria-hidden: every
+            dot already announces its pilot. */}
+        <g
+          aria-hidden
+          className="stroke-background text-[10px] text-muted-foreground [paint-order:stroke] [stroke-width:3px]"
+        >
+          {labelIndices.map((pi, k) => {
+            const p = points[pi];
+            const px = x(p.value);
+            // Anchor away from the nearer plot edge so names never run off.
+            const onRight = px > (plot.left + plot.right) / 2;
+            return (
+              <text
+                key={p.trackFile}
+                x={onRight ? px - 9 : px + 9}
+                y={labelYs[k]}
+                textAnchor={onRight ? "end" : "start"}
+                className={cn(
+                  "fill-current",
+                  // In label-everyone mode the special pilots go bold to
+                  // stand out of the crowd.
+                  showAllLabels && specialIndices.has(pi) && "font-semibold"
+                )}
+              >
+                {p.rank}. {p.name}
+              </text>
+            );
+          })}
+        </g>
+
+        {/* The trend curve LAST, over the dots and the names, and — unlike
+            every other mark here — with NO background casing. Both of the
+            obvious alternatives are worse: underneath, the pilot labels'
+            casing punches gaps through it and an interrupted line reads as a
+            dashed one (a different encoding entirely — projected, uncertain);
+            on top WITH a casing, it erases glyphs out of the names it
+            crosses, which in label-every-pilot mode is most of them. A bare
+            2px line crosses a letter or a dot without destroying either, and
+            ink-vs-series-colour keeps the two apart.
+
+            Foreground ink, NOT a chart colour: the curve is an annotation
+            over the one series, not a second series, and the same convention
+            the labels follow ("the dot carries identity") applies. It is also
+            the only choice that passes on both counts — --chart-3 sits at
+            2.2:1 on the light background, under the 3:1 non-text-contrast bar
+            (accessibility standard §3.1), and orange/blue is a colour-only
+            distinction where ink/colour is not.
+
+            aria-hidden: the caption states the trend in words. */}
+        {trendPath ? (
+          <path
+            aria-hidden
+            d={trendPath}
+            fill="none"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="stroke-foreground"
+          />
+        ) : null}
+
+        {/* Direct label rather than a legend box: with one curve, a legend
+            would be a whole extra element to explain a single line, and this
+            names it where the eye already is. It sits on the side of the
+            curve's end AWAY from rank 1, because the permanent top-3 names
+            live up there and the curve's better-ranked end usually points
+            straight at them. Drawn last, over both dots and pilot names. */}
+        {trendEnd ? (
+          <text
+            aria-hidden
+            x={x(trendEnd.x) - 6}
+            y={Math.min(
+              plot.bottom - 3,
+              Math.max(plot.top + 9, y(trendEnd.y) + (trendEnd.y < maxRank / 2 ? 15 : -9))
+            )}
+            textAnchor="end"
+            className="fill-current stroke-background text-[10px] font-medium text-foreground [paint-order:stroke] [stroke-width:3px]"
+          >
+            trend
+          </text>
+        ) : null}
+      </svg>
+
+      {onShowAllLabelsChange ? (
+        <Checkbox
+          isSelected={showAllLabels}
+          onChange={onShowAllLabelsChange}
+          className="print:hidden"
+        >
+          Label every pilot
+        </Checkbox>
+      ) : null}
+
+      {/* Visual mirror of hover/focus — the dots' aria-labels serve screen
+          readers, so no aria-live here (it would double-announce). Hidden in
+          print: an invitation to hover is meaningless on paper. */}
+      <p aria-hidden className="min-h-4 text-xs text-muted-foreground print:hidden">
+        {readout ? pointLabel(readout) : "Hover or focus a dot to name the pilot behind it."}
+      </p>
+
+      {/* The axes now say which way is which, so the caption no longer
+          opens by explaining them — it is the statistics, in words. */}
+      <figcaption className="text-xs text-muted-foreground">
+        Each dot is a pilot. {caption}
+      </figcaption>
+    </figure>
+  );
+}
