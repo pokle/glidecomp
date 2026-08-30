@@ -25,6 +25,13 @@
  *      on screen, its buttons still take clicks while stuck, and keyboard
  *      focus never lands behind it (WCAG 2.4.11).
  *
+ * The THERMALS census is the same component in its other mode: its detail is
+ * a page in its own right, so stacked it replaces the census rather than
+ * pinning above it, and the selection lives in `?thermal=` so the browser's
+ * Back is the way out. Its tests assert the pair of properties that mode adds
+ * — one half on screen at a time (a container query again), and a push
+ * history entry stacked against a plain replace side by side.
+ *
  * A second group covers the full-screen overlay (MetricChartOverlay): the
  * pinned chart is only a few hundred pixels on a phone, so "Expand" is what
  * makes it readable, and the assertion that matters is that the chart really
@@ -49,6 +56,16 @@ const RANKING_HEADING = /Which behaviours went with better ranks/;
 const THERMALS_HEADING = /The day's thermals/;
 
 let analysisPath: string;
+/**
+ * The task the THERMALS tests load. Deliberately not always `analysisPath`'s:
+ * thermal ids start at ZERO, and the section's selection lives in the query,
+ * so a task whose census carries a thermal with id 0 is the one that catches
+ * an absent parameter being read as a choice of it — which is exactly how
+ * this section shipped broken once (the census could never be the view, and
+ * "All thermals" appeared to do nothing). Falls back to the same task as the
+ * rest of the spec when the seed has no such report.
+ */
+let thermalsPath: string;
 
 // ONE page load PER SECTION for the whole file, and the tests are ordered so
 // each section is loaded once. Every test here asserts CSS/ARIA behaviour of
@@ -96,6 +113,7 @@ test.beforeAll(async ({ browser, playwright }) => {
   const { tasks } = (await detail.json()) as { tasks: Array<{ task_id: string }> };
   const taskId = tasks[0].task_id;
   analysisPath = `/comp/${compId}/task/${taskId}/analysis`;
+  thermalsPath = analysisPath;
 
   // Task analysis never computes on the read path — a cold report answers
   // "pending" and schedules the work. Poll it warm here so the UI tests get a
@@ -108,6 +126,23 @@ test.beforeAll(async ({ browser, playwright }) => {
       if (!body.pending) break;
     }
     await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  // Prefer a task whose thermal census starts at id 0 (see `thermalsPath`).
+  // The seed warms every task's report, so this only reads them.
+  for (const t of tasks) {
+    const res = await api.get(`/api/comp/${compId}/task/${t.task_id}/analysis`);
+    if (!res.ok()) continue;
+    const body = (await res.json()) as {
+      pending?: boolean;
+      classes?: Array<{ report?: { thermals?: { shapes?: Array<{ id: number }> } } }>;
+    };
+    if (body.pending) continue;
+    const shapes = body.classes?.[0]?.report?.thermals?.shapes ?? [];
+    if (shapes.some((s) => s.id === 0)) {
+      thermalsPath = `/comp/${compId}/task/${t.task_id}/analysis`;
+      break;
+    }
   }
 
   await api.dispose();
@@ -134,7 +169,8 @@ test.beforeEach(async () => {
 let openSlug: string | null = null;
 async function openSection(slug: "strategies" | "thermals" | "metrics") {
   if (openSlug === slug) return;
-  await page.goto(`${analysisPath}/${slug}`, { waitUntil: "domcontentloaded" });
+  const base = slug === "thermals" ? thermalsPath : analysisPath;
+  await page.goto(`${base}/${slug}`, { waitUntil: "domcontentloaded" });
   openSlug = slug;
   if (slug === "strategies") {
     await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();
@@ -426,34 +462,136 @@ test("narrow: the chart can be folded away to read the table", async () => {
   await expect(pane).toBeVisible();
 });
 
-test("narrow: the thermals census drives its own pinned pane", async () => {
+/** The thermal census (the master). The print-only copy of every row is
+ *  aria-hidden, so this never matches two grids. */
+function census() {
+  return page.getByRole("grid", { name: "Reconstructed thermals" });
+}
+
+/** The thermals card, and the detail pane inside it. */
+function thermalsCard() {
+  return page.locator("section", {
+    has: page.getByRole("heading", { name: THERMALS_HEADING }),
+  });
+}
+function thermalPane() {
+  return thermalsCard().locator('[role="region"][aria-labelledby]').first();
+}
+
+/** The thermal the detail pane is showing, per the query. */
+function thermalParam(): string | null {
+  return new URL(page.url()).searchParams.get("thermal");
+}
+
+/** Choose the census's first thermal, from the census. */
+async function chooseFirstThermal(): Promise<string> {
+  const first = census().locator("tbody tr").first();
+  const start = (await first.locator("th, td").first().innerText()).trim();
+  await first.locator("th, td").first().click();
+  return start;
+}
+
+/**
+ * The thermals section is the one MasterDetail in `navigation` mode: its
+ * detail is a page in its own right (rose, readouts, climb profile, two
+ * tables), so stacked it does not pin above the census — it REPLACES it, and
+ * the way back is the browser's own Back. That contract is what this asserts,
+ * because every part of it is a class or a history call that nothing else
+ * would catch: the hiding is a container query, the push is one boolean off a
+ * ResizeObserver, and the selection lives in the URL.
+ */
+test("narrow: choosing a thermal navigates, and Back returns to the census", async () => {
   await openSection("thermals");
   await setViewport(390, 780);
-  const census = page.getByRole("grid", { name: "Reconstructed thermals" });
-  await census.scrollIntoViewIfNeeded();
-  const pane = page
-    .locator("section", { has: page.getByRole("heading", { name: THERMALS_HEADING }) })
-    .locator('[role="region"][aria-labelledby]')
-    .first();
+  await census().scrollIntoViewIfNeeded();
 
-  // The census opens on the ten most-shared thermals; the last stored one is
-  // behind "Show all N". Expand first, so the test keeps meaning what it
-  // says: selecting the LAST thermal swaps a pane that is on screen.
-  const showAll = census
-    .locator("..")
-    .getByRole("button", { name: /^Show all \d+$/ });
-  if ((await showAll.count()) > 0) await showAll.click();
+  // The list alone. Nothing of the detail is on screen until one is chosen.
+  await expect(census()).toBeVisible();
+  await expect(thermalPane()).toBeHidden();
+  expect(thermalParam()).toBeNull();
 
-  // Selecting the LAST thermal must swap a pane that is on screen — the same
-  // contract as the ranking's chart, via the same shared MasterDetail.
-  const rows = census.locator("tbody tr");
-  const last = rows.nth((await rows.count()) - 1);
-  const start = (await last.locator("th, td").first().innerText()).trim();
-  await last.locator("th, td").first().click();
-  await expect(pane.locator("h3").first()).toContainText(start);
-  const box = (await pane.boundingBox())!;
-  expect(box.y).toBeGreaterThanOrEqual(0);
-  expect(box.y + box.height).toBeLessThanOrEqual(781);
+  const start = await chooseFirstThermal();
+
+  // The detail takes the whole view, and the URL names what it is showing —
+  // so the reading is shareable and Back has an entry to return to.
+  await expect(thermalPane()).toBeVisible();
+  await expect(thermalPane().locator("h3").first()).toContainText(start);
+  await expect(census()).toBeHidden();
+  expect(thermalParam()).toBeTruthy();
+
+  await page.goBack();
+  await expect(census()).toBeVisible();
+  await expect(thermalPane()).toBeHidden();
+  expect(thermalParam()).toBeNull();
+
+  // The in-page control is the same way out, for a reader who does not use
+  // the browser's — and it unwinds our push rather than stacking on it.
+  await chooseFirstThermal();
+  await expect(thermalPane()).toBeVisible();
+  const entries = await page.evaluate(() => history.length);
+  await thermalsCard().getByRole("button", { name: "All thermals" }).click();
+  await expect(census()).toBeVisible();
+  expect(thermalParam()).toBeNull();
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+});
+
+test("narrow: arrowing through the census does not navigate; Enter does", async () => {
+  await openSection("thermals");
+  await setViewport(390, 780);
+  await expect(census()).toBeVisible();
+
+  // The census selects on TOGGLE, not on focus: under react-aria's "replace"
+  // behaviour the arrow keys select whatever they focus, which here would
+  // take the list — and the reader's place in it — off the screen on the
+  // first Down press.
+  await census().locator("tbody tr").first().locator("th, td").first().focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
+  await expect(census()).toBeVisible();
+  await expect(thermalPane()).toBeHidden();
+  expect(thermalParam()).toBeNull();
+
+  const focused = await page.evaluate(
+    () => (document.activeElement as HTMLElement)?.closest("tr")?.querySelector("th, td")?.textContent ?? ""
+  );
+  expect(focused.trim()).toBeTruthy();
+
+  await page.keyboard.press("Enter");
+  await expect(thermalPane()).toBeVisible();
+  await expect(thermalPane().locator("h3").first()).toContainText(focused.trim());
+  // Focus follows the view, or a keyboard reader is left on a hidden node.
+  expect(await page.evaluate(() => document.activeElement?.getAttribute("role"))).toBe(
+    "region"
+  );
+
+  await page.goBack();
+  await expect(census()).toBeVisible();
+});
+
+test("wide: the thermals census and its detail sit side by side", async () => {
+  await openSection("thermals");
+  await setViewport(1600, 1000);
+
+  // Both halves on screen, the detail to the right of the census — and the
+  // census's row lit, which needs the query seeded now that the selection
+  // lives there.
+  await expect(census()).toBeVisible();
+  await expect(thermalPane()).toBeVisible();
+  await expect.poll(() => thermalParam()).toBeTruthy();
+  await expect(census().locator("tbody tr[aria-selected='true']")).toHaveCount(1);
+
+  const table = (await census().boundingBox())!;
+  const pane = (await thermalPane().boundingBox())!;
+  expect(pane.x).toBeGreaterThan(table.x + table.width - 1);
+
+  // Side by side nothing navigates: both halves are already on screen, so a
+  // pick may not cost the reader a Back press to leave the page.
+  const rows = census().locator("tbody tr");
+  const other = rows.nth((await rows.count()) - 1);
+  const start = (await other.locator("th, td").first().innerText()).trim();
+  const entries = await page.evaluate(() => history.length);
+  await other.locator("th, td").first().click();
+  await expect(thermalPane().locator("h3").first()).toContainText(start);
+  expect(await page.evaluate(() => history.length)).toBe(entries);
 });
 
 test("the map's maximise control fills the screen, and the same control restores it", async () => {
@@ -463,6 +601,10 @@ test("the map's maximise control fills the screen, and the same control restores
     has: page.getByRole("heading", { name: THERMALS_HEADING }),
   });
   await thermalsCard.scrollIntoViewIfNeeded();
+  // Stacked, the rose is on the DETAIL view — so get to it. (The wide test
+  // above may have left a thermal chosen, in which case it already is.)
+  if (await census().isVisible()) await chooseFirstThermal();
+  await expect(thermalPane()).toBeVisible();
   // The map (and its corner controls) only exist with a Mapbox token.
   const mapToggle = thermalsCard.getByRole("button", { name: "Map", exact: true });
   test.skip((await mapToggle.count()) === 0, "no Mapbox token in this environment");

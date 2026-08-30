@@ -8,7 +8,8 @@
  * pair out its own way, and on a phone three of the four let the detail
  * scroll away — so acting on a row updated something off screen.
  *
- * The behaviour, identical everywhere:
+ * The behaviour, identical everywhere except where a caller opts into
+ * `navigation` (see the bottom of this note):
  *
  * - STACKED (narrow), THE DETAIL IS PINNED. It is first in the DOM, sticks to
  *   the top of the viewport while any of the master is on screen, and
@@ -43,10 +44,37 @@
  * pins to the very top instead. The task-analysis pages used to carry a fixed
  * table-of-contents bar above it and needed their own offset; the report is a
  * page per section now, and small enough to need no rail.
+ *
+ * ## `navigation`: one pane at a time, stacked
+ *
+ * A pinned pane is the right stacked answer when the detail is SMALL — a
+ * chart, a diagram — and the reader is really working the list. It is the
+ * wrong answer when the detail is a page in its own right: the thermal detail
+ * is a rose, five readouts, a climb profile and two tables, and no cap that
+ * leaves the census usable leaves the detail readable.
+ *
+ * So a caller may pass `navigation` and get the phone behaviour people expect
+ * of a master/detail: stacked shows the LIST alone, choosing a row shows the
+ * DETAIL alone with a back control, and — because the caller keeps the
+ * selection in the URL — the browser's own Back returns to the list. Wide is
+ * untouched: both halves side by side, the detail the sticky right column.
+ *
+ * Which of the two is showing is the caller's `showingDetail`, derived from
+ * the URL, so the server and the first client render always agree. The
+ * hiding is done by the same `@5xl` container query as the split, never by a
+ * measured width — the two can then never disagree about the breakpoint.
+ * `onWideChange` reports that same breakpoint back (a ResizeObserver on the
+ * container), for the ONE decision CSS cannot make: whether choosing a row is
+ * a navigation that pushes history (stacked) or just a change of view (side
+ * by side). It must not decide anything that is rendered.
  */
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { ArrowLeftIcon } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { cn } from "@/react/lib/utils";
+
+/** The `@5xl` container query above, in pixels, for `onWideChange`. */
+const WIDE_PX = 64 * 16;
 
 /** What owns the top of the viewport while stacked (see file doc). */
 const STACKED_TOP = {
@@ -79,6 +107,8 @@ export function MasterDetail({
   paneWidthClassName = "mx-auto max-w-[35rem] @5xl:max-w-none",
   paneClassName,
   hideDetailInPrint = false,
+  navigation,
+  onWideChange,
 }: {
   master: ReactNode;
   /** null renders the master alone (no pane, no toggle, no scroll margins). */
@@ -104,6 +134,19 @@ export function MasterDetail({
   paneClassName?: string;
   /** Hide the pane on paper — for callers that print a fuller alternative. */
   hideDetailInPrint?: boolean;
+  /** Opt the STACKED layout out of pinning and into one-pane-at-a-time (see
+   * the file doc). The caller owns which one is showing — in the URL, so
+   * Back is the way out of the detail — and this component only lays it out. */
+  navigation?: {
+    /** Stacked: is the detail the current view? Wide: ignored, both show. */
+    showingDetail: boolean;
+    /** The stacked-only back control's label, e.g. "All thermals". */
+    backLabel: string;
+    onBack: () => void;
+  };
+  /** Told, from a ResizeObserver, whether the layout is currently side by
+   * side. For behaviour only — never for anything rendered (see file doc). */
+  onWideChange?: (wide: boolean) => void;
 }) {
   // Folded away only while stacked — side by side there is no screen to
   // reclaim, and the control that unfolds it is hidden. Owned here so it
@@ -111,21 +154,95 @@ export function MasterDetail({
   const [collapsed, setCollapsed] = useState(false);
   const detailId = useId();
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const paneWrapRef = useRef<HTMLDivElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const masterRef = useRef<HTMLDivElement>(null);
+
+  // The measured breakpoint. Held here as well as reported up because the
+  // focus move below is stacked-only; it renders nothing, so the server and
+  // the first client paint agree whatever it turns out to be.
+  const [wide, setWide] = useState(false);
+  // Latest callback without re-subscribing the observer on every render — a
+  // caller passing an inline arrow must not cost a disconnect per keystroke.
+  const wideCb = useRef(onWideChange);
+  wideCb.current = onWideChange;
+  // Reported separately from the state so the notification is a plain effect
+  // of the observation, not a side effect inside a state updater (which
+  // StrictMode would run twice).
+  const wideRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const next = (entries[0]?.contentRect.width ?? 0) >= WIDE_PX;
+      if (next === wideRef.current) return;
+      wideRef.current = next;
+      setWide(next);
+      wideCb.current?.(next);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Stacked, swapping list for detail is a NAVIGATION: focus has to travel
+  // with it or a keyboard reader is left pointing at a node that is now
+  // `display: none`. Arriving, the page is scrolled to the pane's WRAPPER
+  // rather than the pane — the way back out sits just above it, and landing
+  // with it already off the top of the screen is the one thing this layout
+  // must not do. Going back moves focus without scrolling at all: the
+  // browser has just restored the list's own scroll position on popstate,
+  // and stealing it to the top would undo that.
+  const showingDetail = navigation?.showingDetail ?? false;
+  const prevShowing = useRef(showingDetail);
+  useEffect(() => {
+    if (!navigation) return;
+    if (showingDetail === prevShowing.current) return;
+    prevShowing.current = showingDetail;
+    if (wide) return;
+    if (showingDetail) {
+      paneWrapRef.current?.scrollIntoView({ block: "start" });
+      paneRef.current?.focus({ preventScroll: true });
+    } else masterRef.current?.focus({ preventScroll: true });
+    // `navigation` is a fresh object every render; its showingDetail is the
+    // only part this effect reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showingDetail, wide]);
+
   if (detail === null) return <>{master}</>;
 
   return (
-    <div className="@container">
+    <div ref={containerRef} className="@container">
       <div className={cn("@5xl:grid @5xl:items-start @5xl:gap-6 print:block", wideCols)}>
         <div
+          ref={paneWrapRef}
           className={cn(
-            // Stacked, the pane pins to the top and the master pages beneath
-            // it, covered edge to edge by the bleed surface.
-            "sticky z-10 pb-3",
-            STACKED_TOP[stackedTop],
-            BLEED[bleed],
+            navigation
+              ? cn(
+                  // Stacked there is nothing to pin against: the pane IS the
+                  // view, and the page scrolls it. Hidden while the list is
+                  // the view — by the same container query as the split, so
+                  // the two can never disagree about the breakpoint.
+                  "@5xl:sticky @5xl:z-10",
+                  // Clearing whatever owns the top of the viewport, for the
+                  // scrollIntoView above — the same thing STACKED_TOP names,
+                  // and it is nothing at all on a phone.
+                  "scroll-mt-20 max-sm:scroll-mt-2 [@media(max-height:500px)]:scroll-mt-2",
+                  // `print:block` because paper is not a phone: the page
+                  // prints whole, both halves, whichever one is on screen.
+                  !showingDetail && "hidden @5xl:block print:block"
+                )
+              : cn(
+                  // Stacked, the pane pins to the top and the master pages
+                  // beneath it, covered edge to edge by the bleed surface.
+                  "sticky z-10 pb-3",
+                  STACKED_TOP[stackedTop],
+                  BLEED[bleed],
+                  "@5xl:mx-0 @5xl:bg-transparent @5xl:px-0 @5xl:pb-0"
+                ),
             // Side by side it becomes the sticky right-hand column, where it
             // pins against the Shell's 60px glass header and covers nothing.
-            "@5xl:top-20 @5xl:order-2 @5xl:mx-0 @5xl:bg-transparent @5xl:px-0 @5xl:pb-0",
+            "@5xl:top-20 @5xl:order-2",
             // Paper has no viewport to pin to.
             "print:static print:z-auto print:m-0 print:bg-transparent print:p-0",
             hideDetailInPrint && "print:hidden"
@@ -133,36 +250,51 @@ export function MasterDetail({
         >
           <div
             className={cn(
-              "flex justify-end pb-1 @5xl:hidden print:hidden",
+              "flex pb-1 @5xl:hidden print:hidden",
+              navigation ? "justify-start pb-2" : "justify-end",
               paneWidthClassName
             )}
           >
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-expanded={!collapsed}
-              aria-controls={detailId}
-              onPress={() => setCollapsed(!collapsed)}
-            >
-              {collapsed ? `Show ${detailLabel}` : `Hide ${detailLabel}`}
-            </Button>
+            {navigation ? (
+              <Button variant="outline" size="sm" onPress={navigation.onBack}>
+                <ArrowLeftIcon className="size-4" />
+                {navigation.backLabel}
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-expanded={!collapsed}
+                aria-controls={detailId}
+                onPress={() => setCollapsed(!collapsed)}
+              >
+                {collapsed ? `Show ${detailLabel}` : `Hide ${detailLabel}`}
+              </Button>
+            )}
           </div>
           <div
             id={detailId}
+            ref={paneRef}
             // A region, not a bare div: it is read before the master it
             // belongs to, so it has to say what it is. tabIndex makes the
-            // capped, scrollable box reachable without a mouse (WCAG 2.1.1).
+            // capped, scrollable box reachable without a mouse (WCAG 2.1.1),
+            // and is where focus lands on a stacked navigation.
             role="region"
             aria-labelledby={detailHeadingId}
             aria-label={detailAriaLabel}
             tabIndex={0}
             className={cn(
-              "overflow-y-auto rounded-lg border bg-card outline-none",
+              "rounded-lg border bg-card outline-none",
               paneWidthClassName,
-              "max-h-[19rem] sm:max-h-[23rem] @5xl:max-h-[calc(100vh-7rem)]",
+              navigation
+                ? // Stacked the pane is the whole view, so it takes the page's
+                  // scroll rather than a cap of its own; the cap comes back
+                  // with the side-by-side column.
+                  "@5xl:max-h-[calc(100vh-7rem)] @5xl:overflow-y-auto"
+                : "overflow-y-auto max-h-[19rem] sm:max-h-[23rem] @5xl:max-h-[calc(100vh-7rem)]",
               "focus-visible:ring-2 focus-visible:ring-ring/50",
               "print:max-h-none print:overflow-visible",
-              collapsed && "hidden @5xl:block",
+              !navigation && collapsed && "hidden @5xl:block",
               paneClassName
             )}
           >
@@ -170,20 +302,29 @@ export function MasterDetail({
           </div>
         </div>
         <div
+          ref={masterRef}
+          // Focus target for the way back out of a stacked detail. -1 keeps it
+          // out of the tab order: it is a destination, not a stop.
+          tabIndex={navigation ? -1 : undefined}
           className={cn(
-            "min-w-0 @5xl:order-1",
-            // Focus must not stop behind the pinned pane (WCAG 2.4.11). Its
-            // stacked height is a constant cap, so its bottom edge is a
-            // constant too: 60px sticky offset + the ~2.25rem toggle row +
-            // the pane's 19rem (sm: 23rem) cap + its pb-3. Rows AND cells,
-            // because RAC's grid navigation scrolls whichever it moved focus
-            // to. Folded, only the toggle row is stuck, so the clearance
-            // shrinks with it rather than shoving rows mid-screen.
-            collapsed
-              ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28"
+            "min-w-0 outline-none @5xl:order-1",
+            navigation
+              ? showingDetail && "hidden @5xl:block print:block"
               : cn(
-                  "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem]",
-                  "sm:[&_tr]:scroll-mt-[30rem] sm:[&_td]:scroll-mt-[30rem] sm:[&_th]:scroll-mt-[30rem]"
+                  // Focus must not stop behind the pinned pane (WCAG 2.4.11).
+                  // Its stacked height is a constant cap, so its bottom edge
+                  // is a constant too: 60px sticky offset + the ~2.25rem
+                  // toggle row + the pane's 19rem (sm: 23rem) cap + its pb-3.
+                  // Rows AND cells, because RAC's grid navigation scrolls
+                  // whichever it moved focus to. Folded, only the toggle row
+                  // is stuck, so the clearance shrinks with it rather than
+                  // shoving rows mid-screen.
+                  collapsed
+                    ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28"
+                    : cn(
+                        "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem]",
+                        "sm:[&_tr]:scroll-mt-[30rem] sm:[&_td]:scroll-mt-[30rem] sm:[&_th]:scroll-mt-[30rem]"
+                      )
                 ),
             // Side by side the pane is a column that covers nothing, but a
             // focused row still has to clear the Shell's glass header.
