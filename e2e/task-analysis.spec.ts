@@ -56,6 +56,16 @@ const RANKING_HEADING = /Which behaviours went with better ranks/;
 const THERMALS_HEADING = /The day's thermals/;
 
 let analysisPath: string;
+/**
+ * The task the THERMALS tests load. Deliberately not always `analysisPath`'s:
+ * thermal ids start at ZERO, and the section's selection lives in the query,
+ * so a task whose census carries a thermal with id 0 is the one that catches
+ * an absent parameter being read as a choice of it — which is exactly how
+ * this section shipped broken once (the census could never be the view, and
+ * "All thermals" appeared to do nothing). Falls back to the same task as the
+ * rest of the spec when the seed has no such report.
+ */
+let thermalsPath: string;
 
 // ONE page load PER SECTION for the whole file, and the tests are ordered so
 // each section is loaded once. Every test here asserts CSS/ARIA behaviour of
@@ -103,6 +113,7 @@ test.beforeAll(async ({ browser, playwright }) => {
   const { tasks } = (await detail.json()) as { tasks: Array<{ task_id: string }> };
   const taskId = tasks[0].task_id;
   analysisPath = `/comp/${compId}/task/${taskId}/analysis`;
+  thermalsPath = analysisPath;
 
   // Task analysis never computes on the read path — a cold report answers
   // "pending" and schedules the work. Poll it warm here so the UI tests get a
@@ -115,6 +126,23 @@ test.beforeAll(async ({ browser, playwright }) => {
       if (!body.pending) break;
     }
     await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  // Prefer a task whose thermal census starts at id 0 (see `thermalsPath`).
+  // The seed warms every task's report, so this only reads them.
+  for (const t of tasks) {
+    const res = await api.get(`/api/comp/${compId}/task/${t.task_id}/analysis`);
+    if (!res.ok()) continue;
+    const body = (await res.json()) as {
+      pending?: boolean;
+      classes?: Array<{ report?: { thermals?: { shapes?: Array<{ id: number }> } } }>;
+    };
+    if (body.pending) continue;
+    const shapes = body.classes?.[0]?.report?.thermals?.shapes ?? [];
+    if (shapes.some((s) => s.id === 0)) {
+      thermalsPath = `/comp/${compId}/task/${t.task_id}/analysis`;
+      break;
+    }
   }
 
   await api.dispose();
@@ -141,7 +169,8 @@ test.beforeEach(async () => {
 let openSlug: string | null = null;
 async function openSection(slug: "strategies" | "thermals" | "metrics") {
   if (openSlug === slug) return;
-  await page.goto(`${analysisPath}/${slug}`, { waitUntil: "domcontentloaded" });
+  const base = slug === "thermals" ? thermalsPath : analysisPath;
+  await page.goto(`${base}/${slug}`, { waitUntil: "domcontentloaded" });
   openSlug = slug;
   if (slug === "strategies") {
     await page.getByRole("heading", { name: RANKING_HEADING }).waitFor();

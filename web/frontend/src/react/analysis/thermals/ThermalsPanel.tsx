@@ -177,6 +177,24 @@ const TOP_THERMALS = 10;
 /** The URL parameter the selected thermal round-trips through. */
 const THERMAL_PARAM = "thermal";
 
+/**
+ * The thermal a query value names, or null for "nothing chosen".
+ *
+ * Compares the raw text rather than a parsed number, deliberately. Thermal
+ * ids start at ZERO, and `URLSearchParams.get` answers `null` for a parameter
+ * that is not there — so `Number(...)` turned an absent parameter into a
+ * choice of the thermal with id 0. On every task that had one the census
+ * could never be the view, and "All thermals" (which deletes the parameter)
+ * appeared to do nothing. Absent, empty and junk all mean nothing chosen.
+ */
+export function thermalFromParam<T extends { id: number }>(
+  param: string | null,
+  shapes: readonly T[]
+): T | null {
+  if (param === null || param === "") return null;
+  return shapes.find((s) => String(s.id) === param) ?? null;
+}
+
 // The map backdrop stays a separate lazy chunk: mapbox-gl (and its CSS) load
 // only when someone flips the toggle, and never in the SSR entry.
 const ThermalRoseMap = lazy(() => import("./ThermalRoseMap"));
@@ -774,8 +792,7 @@ export function ThermalsPanel({
   // shared link opens on the thermal it names.
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const paramId = Number(searchParams.get(THERMAL_PARAM));
-  const chosen = shapes.find((s) => s.id === paramId) ?? null;
+  const chosen = thermalFromParam(searchParams.get(THERMAL_PARAM), shapes);
   // Satellite backdrop under the rose — off by default (and in the SSR
   // snapshot), so mapbox-gl only ever loads on an explicit flip. Shared by
   // the inline figure and the full-screen sheet.
