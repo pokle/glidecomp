@@ -4,9 +4,14 @@
  * A list (the MASTER) paired with the one thing it selects, locates or
  * highlights (the DETAIL): the separation ranking and its metric chart, the
  * thermal census and its rose, the waypoint table and its map, the turnpoint
- * list and its route diagram. Before this component each of those laid the
- * pair out its own way, and on a phone three of the four let the detail
- * scroll away — so acting on a row updated something off screen.
+ * list and its route diagram, the report card's explanation and its track
+ * map. Before this component each of those laid the pair out its own way, and
+ * on a phone three of the four let the detail scroll away — so acting on a row
+ * updated something off screen.
+ *
+ * A master need not be a table. The report card's is an explanation whose
+ * anchored steps are buttons, which is why the focus clearance below covers
+ * buttons and links as well as rows and cells.
  *
  * The behaviour, identical everywhere except where a caller opts into
  * `navigation` (see the bottom of this note):
@@ -15,9 +20,13 @@
  *   the top of the viewport while any of the master is on screen, and
  *   releases with the master's last row — so a row picked at the bottom
  *   changes a detail that is right there. A "Hide <noun>" toggle folds the
- *   pane away for readers who only want the list; the page is the one scroll
- *   context (no inner scrollbox on the master — that was tried in #553 and
- *   one ordinary page scroll defeated it).
+ *   pane away for readers who only want the list, and the answer is REMEMBERED
+ *   (per `storageKey`, defaulting to `detailLabel`) — a reader who came for
+ *   the words should not have to dismiss the same pane on every page. The page
+ *   is the one scroll context (no inner scrollbox on the master — that was
+ *   tried in #553 and one ordinary page scroll defeated it, which is also why
+ *   there is no stacked drag handle: sizing the pane was never the problem,
+ *   nesting a second scroll region was).
  * - SIDE BY SIDE (wide), the detail is the sticky right-hand column, pinned
  *   under the Shell's glass header, covering nothing. A drag handle sits in
  *   the gutter between the two — pointer and arrow keys — so the reader can
@@ -94,7 +103,9 @@ import {
   SHARE_STEP,
   clampMasterShare,
   masterShareFromPointer,
+  readStoredCollapsed,
   readStoredMasterShare,
+  writeStoredCollapsed,
   writeStoredMasterShare,
 } from "./master-detail-split";
 
@@ -131,6 +142,8 @@ export function MasterDetail({
   defaultMasterShare = DEFAULT_MASTER_SHARE,
   paneWidthClassName = "mx-auto max-w-[35rem] @5xl:max-w-none",
   paneClassName,
+  paneWrapClassName,
+  storageKey,
   hideDetailInPrint = false,
   navigation,
   onWideChange,
@@ -157,6 +170,25 @@ export function MasterDetail({
   paneWidthClassName?: string;
   /** Extra classes on the pane region (rarely needed). */
   paneClassName?: string;
+  /**
+   * Extra classes on the pane's WRAPPER — the sticky, full-bleed box that
+   * holds the fold toggle and the pane. Rarer still, and really only for a
+   * caller whose detail can take over the viewport: the wrapper's `z-10` and
+   * `position: sticky` make it a stacking context, so a `fixed inset-0`
+   * overlay INSIDE the pane is trapped under anything the page paints higher
+   * (the Shell header is `z-40`). Raising the wrapper is what lets such an
+   * overlay cover the page without moving the pane's DOM — which for a map
+   * matters, because a move is a remount and a remount is a fresh map.
+   */
+  paneWrapClassName?: string;
+  /**
+   * Namespaces the remembered split share and fold. Defaults to
+   * `detailLabel`, which is also the visible noun — so two unrelated panes
+   * that both call their detail a "map" would otherwise share one answer,
+   * and folding one would fold the other. Pass a distinct key when the noun
+   * collides but the preference should not.
+   */
+  storageKey?: string;
   /** Hide the pane on paper — for callers that print a fuller alternative. */
   hideDetailInPrint?: boolean;
   /** Opt the STACKED layout out of pinning and into one-pane-at-a-time (see
@@ -175,13 +207,16 @@ export function MasterDetail({
 }) {
   // Folded away only while stacked — side by side there is no screen to
   // reclaim, and the control that unfolds it is hidden. Owned here so it
-  // survives the caller swapping the detail's content on a new selection.
+  // survives the caller swapping the detail's content on a new selection,
+  // and remembered per `detailLabel` (below) so a reader who does not want
+  // the map is not made to say so again on the next report card.
   const [collapsed, setCollapsed] = useState(false);
   const detailId = useId();
   const masterId = useId();
   const [masterShare, setMasterShare] = useState(() =>
     clampMasterShare(defaultMasterShare)
   );
+  const prefsKey = storageKey ?? detailLabel;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -189,10 +224,19 @@ export function MasterDetail({
   const paneRef = useRef<HTMLDivElement>(null);
   const masterRef = useRef<HTMLDivElement>(null);
 
+  // Both read in an effect rather than a `useState` initialiser: localStorage
+  // does not exist on the server, so seeding the first render from it would
+  // hydrate a different tree than was sent (the SSR'd pages here render the
+  // pane open). The pane opens, then folds on the reader's remembered answer.
   useEffect(() => {
-    const stored = readStoredMasterShare(detailLabel);
+    const stored = readStoredMasterShare(prefsKey);
     if (stored != null) setMasterShare(stored);
-  }, [detailLabel]);
+  }, [prefsKey]);
+
+  useEffect(() => {
+    const stored = readStoredCollapsed(prefsKey);
+    if (stored != null) setCollapsed(stored);
+  }, [prefsKey]);
 
   // The measured breakpoint. Held here as well as reported up because the
   // focus move below is stacked-only; it renders nothing, so the server and
@@ -289,7 +333,8 @@ export function MasterDetail({
             "@5xl:top-20 @5xl:order-3",
             // Paper has no viewport to pin to.
             "print:static print:z-auto print:m-0 print:bg-transparent print:p-0",
-            hideDetailInPrint && "print:hidden"
+            hideDetailInPrint && "print:hidden",
+            paneWrapClassName
           )}
         >
           <div
@@ -310,7 +355,10 @@ export function MasterDetail({
                 size="sm"
                 aria-expanded={!collapsed}
                 aria-controls={detailId}
-                onPress={() => setCollapsed(!collapsed)}
+                onPress={() => {
+                  setCollapsed(!collapsed);
+                  writeStoredCollapsed(prefsKey, !collapsed);
+                }}
               >
                 {collapsed ? `Show ${detailLabel}` : `Hide ${detailLabel}`}
               </Button>
@@ -353,12 +401,12 @@ export function MasterDetail({
           gridRef={gridRef}
           onShareChange={(next) => {
             setMasterShare(next);
-            writeStoredMasterShare(detailLabel, next);
+            writeStoredMasterShare(prefsKey, next);
           }}
           onReset={() => {
             const next = clampMasterShare(defaultMasterShare);
             setMasterShare(next);
-            writeStoredMasterShare(detailLabel, next);
+            writeStoredMasterShare(prefsKey, next);
           }}
         />
         <div
@@ -377,19 +425,24 @@ export function MasterDetail({
                   // is a constant too: 60px sticky offset + the ~2.25rem
                   // toggle row + the pane's 19rem (sm: 23rem) cap + its pb-3.
                   // Rows AND cells, because RAC's grid navigation scrolls
-                  // whichever it moved focus to. Folded, only the toggle row
-                  // is stuck, so the clearance shrinks with it rather than
-                  // shoving rows mid-screen.
+                  // whichever it moved focus to; buttons and links because a
+                  // master need not be a table at all — the report card's is
+                  // an explanation whose steps are buttons, and nothing there
+                  // would otherwise be covered by this. Written out rather
+                  // than composed: Tailwind scans for whole class strings, so
+                  // a selector built from parts compiles to nothing.
+                  // Folded, only the toggle row is stuck, so the clearance
+                  // shrinks with it rather than shoving rows mid-screen.
                   collapsed
-                    ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28"
+                    ? "[&_tr]:scroll-mt-28 [&_td]:scroll-mt-28 [&_th]:scroll-mt-28 [&_button]:scroll-mt-28 [&_a]:scroll-mt-28"
                     : cn(
-                        "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem]",
-                        "sm:[&_tr]:scroll-mt-[30rem] sm:[&_td]:scroll-mt-[30rem] sm:[&_th]:scroll-mt-[30rem]"
+                        "[&_tr]:scroll-mt-[26rem] [&_td]:scroll-mt-[26rem] [&_th]:scroll-mt-[26rem] [&_button]:scroll-mt-[26rem] [&_a]:scroll-mt-[26rem]",
+                        "sm:[&_tr]:scroll-mt-[30rem] sm:[&_td]:scroll-mt-[30rem] sm:[&_th]:scroll-mt-[30rem] sm:[&_button]:scroll-mt-[30rem] sm:[&_a]:scroll-mt-[30rem]"
                       )
                 ),
             // Side by side the pane is a column that covers nothing, but a
             // focused row still has to clear the Shell's glass header.
-            "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24"
+            "@5xl:[&_tr]:scroll-mt-24 @5xl:[&_td]:scroll-mt-24 @5xl:[&_th]:scroll-mt-24 @5xl:[&_button]:scroll-mt-24 @5xl:[&_a]:scroll-mt-24"
           )}
         >
           {master}
