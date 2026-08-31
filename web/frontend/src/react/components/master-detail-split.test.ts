@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_MASTER_SHARE,
   MAX_MASTER_SHARE,
   MIN_MASTER_SHARE,
   clampMasterShare,
+  collapseStorageKey,
   masterShareFromPointer,
+  readStoredCollapsed,
   splitStorageKey,
+  writeStoredCollapsed,
 } from "./master-detail-split";
 
 describe("clampMasterShare", () => {
@@ -43,5 +46,40 @@ describe("masterShareFromPointer", () => {
 describe("splitStorageKey", () => {
   it("is per detail noun, so a chart split cannot steal the map's", () => {
     expect(splitStorageKey("chart")).not.toBe(splitStorageKey("map"));
+  });
+});
+
+describe("collapseStorageKey", () => {
+  it("is per detail noun, so a folded chart does not fold the map", () => {
+    expect(collapseStorageKey("chart")).not.toBe(collapseStorageKey("map"));
+  });
+
+  it("does not collide with the split share for the same noun", () => {
+    expect(collapseStorageKey("map")).not.toBe(splitStorageKey("map"));
+  });
+});
+
+describe("the remembered fold", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("says nothing until the reader has folded or unfolded", () => {
+    expect(readStoredCollapsed("map")).toBeNull();
+  });
+
+  it("round-trips both answers — unfolded is a real answer, not silence", () => {
+    writeStoredCollapsed("map", true);
+    expect(readStoredCollapsed("map")).toBe(true);
+    writeStoredCollapsed("map", false);
+    expect(readStoredCollapsed("map")).toBe(false);
+  });
+
+  it("keeps one pane's answer out of another's", () => {
+    writeStoredCollapsed("map", true);
+    expect(readStoredCollapsed("score-map")).toBeNull();
+  });
+
+  it("reads junk as no answer rather than as folded", () => {
+    window.localStorage.setItem(collapseStorageKey("map"), "yes");
+    expect(readStoredCollapsed("map")).toBeNull();
   });
 });

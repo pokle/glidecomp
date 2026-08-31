@@ -81,6 +81,7 @@ import {
   MinimizeIcon,
 } from "../score-detail/icons";
 import { ScoringGlossary } from "../components/ScoringGlossary";
+import { MasterDetail } from "../components/MasterDetail";
 import { TaskInCompScores } from "../comp/TaskInCompScores";
 import { HistoricalRulesNotice, RulesEditionBadge } from "../comp/RulesEdition";
 import type { MapFocus } from "../comp/ScoreDetailMap";
@@ -892,131 +893,160 @@ export function PilotScoreDetail() {
         ) : null}
       </header>
 
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] lg:gap-6">
-        {/* Map — supporting evidence. Sticky so it stays in view while the
-            explanation scrolls (top of the page on mobile, right column on
-            desktop). The expand toggle fills the viewport and restores on a
-            second tap — done in CSS rather than the Fullscreen API so it
-            works on iOS too. */}
-        <div
-          className={
-            mapExpanded
-              ? "fixed inset-0 z-50 flex flex-col bg-background"
-              : "sticky top-0 z-10 -mx-4 bg-background px-4 pb-2 pt-2 sm:-mx-6 sm:px-6 lg:order-2 lg:top-4 lg:m-0 lg:p-0"
-          }
-        >
-          <div
-            ref={mapRef}
-            className={`relative overflow-hidden ${
-              mapExpanded
-                ? "min-h-0 w-full flex-1"
-                : "h-56 rounded-lg border sm:h-72 lg:h-[calc(100vh-8rem)]"
-            }`}
-          >
-            {!mapInView ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Loading map...
-              </div>
-            ) : (
-            <Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Loading map...
-                </div>
-              }
-            >
-              <ScoreDetailMap
-                task={data.mapTask}
-                fixes={fixes}
-                events={markerEvents}
-                focus={focus}
-                scrubIndex={scrubIndex}
-                openDistanceLine={data.openDistanceLine}
-                bestProgressRoute={data.bestProgressRoute}
-              />
-            </Suspense>
-            )}
-            {/* Map controls, styled like the providers' own controls (white
-                regardless of theme) and kept clear of them: bottom-right, above
-                the attribution line. The analysis link opens this pilot's track
-                and the task in the standalone analysis viewer
-                (`/analysis?compId=…&pilotId=…`), with the deeper glide/thermal
-                tooling. */}
-            <a
-              href={analysisUrl}
-              target="_blank"
-              rel="noopener"
-              title="Open full track in the analysis map"
-              aria-label="Open full track in the analysis map (opens in a new tab)"
-              className="absolute bottom-20 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
-            >
-              <AnalysisMapIcon />
-            </a>
-            <button
-              type="button"
-              onClick={() => setMapExpanded((v) => !v)}
-              title={mapExpanded ? "Restore map (Esc)" : "Expand map"}
-              aria-label={mapExpanded ? "Restore map" : "Expand map"}
-              className="absolute bottom-8 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
-            >
-              {mapExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
-            </button>
-          </div>
-          {fixes && fixes.length > 1 ? (
-            <div className={mapExpanded ? "border-t px-4 py-2" : "mt-1.5"}>
-              <TrackScrubber
-                fixes={fixes}
-                scrubIndex={scrubIndex}
-                timezone={data.comp.timezone}
-                onScrub={setScrubIndex}
-              />
-            </div>
-          ) : null}
-          {mapExpanded ? null : (
-            <p className="mt-1 hidden text-xs text-muted-foreground lg:block">
-              Click any highlighted step in the explanation to see where it
-              happened.
-              {fixes && fixes.length > 1
-                ? " Drag the slider to trace the flight up to any moment."
-                : ""}
-            </p>
-          )}
-        </div>
+      {/* Explanation and map, paired by the shared MasterDetail in its PINNED
+          mode — the map is evidence read ALONGSIDE the explanation, so a step
+          must change a map that is on screen, never navigate to one. What the
+          hand-rolled layout this replaces could not do is get out of the way:
+          on a phone the map held a third of the viewport for the whole read
+          with no way to dismiss it, and a focused step could stop behind it
+          (WCAG 2.4.11). The component brings the "Hide map" fold — remembered,
+          so a reader who reads the words says so once — and the scroll-margin
+          clearance that keeps focus clear of the stuck pane.
 
-        {/* The explanation — the primary content. */}
-        <div className="space-y-4 lg:order-1">
-          <TrackQualityNote
-            quality={data.trackQuality}
-            inExplanation={data.entry.track_excluded != null}
-          />
-          {explanation.sections.map((section) => (
-            <ExplanationSection
-              key={section.id}
-              section={section}
-              selectedItem={selectedItem}
-              hasAnchor={(item) => data.eventsByItem.has(item.id)}
-              onItemClick={onItemClick}
-            />
-          ))}
-          {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
-          {/* Closes the loop from this task back to the competition. Loads
-              after hydration — see TaskInCompScores for why it is not in the
-              SSR payload. */}
-          <TaskInCompScores
-            compId={compId}
-            compName={data.comp.name}
-            taskId={taskId}
-            compPilotId={pilotId}
-          />
-          <TrackDataCleaningNote
-            cleaning={data.altitudeCleaning}
-            timezone={data.comp.timezone}
-            fixes={fixes}
-          />
-          {/* Last on the page: a reader who needed a definition has met every
-              term by now, and one who didn't never has to see it. */}
-          <ScoringGlossary />
-        </div>
+          `storageKey`: the noun is "map" here and on the waypoints page, and
+          those are different decisions on very different pages. */}
+      <div className="mt-4">
+        <MasterDetail
+          detailLabel="map"
+          detailAriaLabel="Track map"
+          storageKey="score-map"
+          bleed="page"
+          // 11fr/9fr, the split this page has always opened on.
+          defaultMasterShare={11 / 20}
+          // A map wants the whole line, not the chart pane's 35rem cap.
+          paneWidthClassName="w-full"
+          // The pane's content is deliberately fixed-height (the map sizes
+          // itself, the scrubber is one row), so it needs neither the pane's
+          // stacked cap nor a scrollbar of its own — exactly as before.
+          paneClassName={
+            mapExpanded
+              ? "fixed inset-0 z-50 flex flex-col rounded-none border-0 bg-background p-0 max-h-none @5xl:max-h-none overflow-y-visible"
+              : // No card chrome: the map div carries its own rounded border,
+                // and a pane border around it would double it. The wrapper's
+                // bleed still paints the background the stuck pane needs.
+                "rounded-none border-0 bg-transparent max-h-none @5xl:max-h-none overflow-y-visible"
+          }
+          // The wrapper is a sticky z-10 stacking context, so the expanded
+          // overlay above would be trapped under the Shell's z-40 header
+          // without this. Raising the wrapper rather than moving the pane
+          // keeps the map mounted — a move would re-initialise Mapbox.
+          paneWrapClassName={mapExpanded ? "z-50" : undefined}
+          detail={
+            <>
+              <div
+                ref={mapRef}
+                className={`relative overflow-hidden ${
+                  mapExpanded
+                    ? "min-h-0 w-full flex-1"
+                    : "h-56 rounded-lg border sm:h-72 @5xl:h-[calc(100vh-8rem)]"
+                }`}
+              >
+                {!mapInView ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Loading map...
+                  </div>
+                ) : (
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      Loading map...
+                    </div>
+                  }
+                >
+                  <ScoreDetailMap
+                    task={data.mapTask}
+                    fixes={fixes}
+                    events={markerEvents}
+                    focus={focus}
+                    scrubIndex={scrubIndex}
+                    openDistanceLine={data.openDistanceLine}
+                    bestProgressRoute={data.bestProgressRoute}
+                  />
+                </Suspense>
+                )}
+                {/* Map controls, styled like the providers' own controls (white
+                    regardless of theme) and kept clear of them: bottom-right, above
+                    the attribution line. The analysis link opens this pilot's track
+                    and the task in the standalone analysis viewer
+                    (`/analysis?compId=…&pilotId=…`), with the deeper glide/thermal
+                    tooling. */}
+                <a
+                  href={analysisUrl}
+                  target="_blank"
+                  rel="noopener"
+                  title="Open full track in the analysis map"
+                  aria-label="Open full track in the analysis map (opens in a new tab)"
+                  className="absolute bottom-20 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
+                >
+                  <AnalysisMapIcon />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setMapExpanded((v) => !v)}
+                  title={mapExpanded ? "Restore map (Esc)" : "Expand map"}
+                  aria-label={mapExpanded ? "Restore map" : "Expand map"}
+                  className="absolute bottom-8 right-2 z-20 flex size-10 items-center justify-center rounded-md border border-black/20 bg-white text-[#333] shadow-md"
+                >
+                  {mapExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
+                </button>
+              </div>
+              {fixes && fixes.length > 1 ? (
+                <div className={mapExpanded ? "border-t px-4 py-2" : "mt-1.5"}>
+                  <TrackScrubber
+                    fixes={fixes}
+                    scrubIndex={scrubIndex}
+                    timezone={data.comp.timezone}
+                    onScrub={setScrubIndex}
+                  />
+                </div>
+              ) : null}
+              {mapExpanded ? null : (
+                <p className="mt-1 hidden text-xs text-muted-foreground @5xl:block">
+                  Click any highlighted step in the explanation to see where it
+                  happened.
+                  {fixes && fixes.length > 1
+                    ? " Drag the slider to trace the flight up to any moment."
+                    : ""}
+                </p>
+              )}
+            </>
+          }
+          master={
+            <div className="space-y-4">
+              <TrackQualityNote
+                quality={data.trackQuality}
+                inExplanation={data.entry.track_excluded != null}
+              />
+              {explanation.sections.map((section) => (
+                <ExplanationSection
+                  key={section.id}
+                  section={section}
+                  selectedItem={selectedItem}
+                  hasAnchor={(item) => data.eventsByItem.has(item.id)}
+                  onItemClick={onItemClick}
+                />
+              ))}
+              {data.entry.track_excluded ? <TrackValidityDocLink /> : null}
+              {/* Closes the loop from this task back to the competition. Loads
+                  after hydration — see TaskInCompScores for why it is not in the
+                  SSR payload. */}
+              <TaskInCompScores
+                compId={compId}
+                compName={data.comp.name}
+                taskId={taskId}
+                compPilotId={pilotId}
+              />
+              <TrackDataCleaningNote
+                cleaning={data.altitudeCleaning}
+                timezone={data.comp.timezone}
+                fixes={fixes}
+              />
+              {/* Last on the page: a reader who needed a definition has met every
+                  term by now, and one who didn't never has to see it. */}
+              <ScoringGlossary />
+            </div>
+          }
+        />
       </div>
     </div>
   );

@@ -208,6 +208,55 @@ test.describe("the pilot report card", () => {
     // chart's controls.
     await expect(page.getByText(/\d+ fix(es)? · up to \d+ m off/).first()).toBeVisible();
   });
+
+  /**
+   * The map folds away, and stays folded.
+   *
+   * The map is evidence read ALONGSIDE the explanation, so it is pinned rather
+   * than navigated to — but on a phone a pinned pane holds a third of the
+   * viewport for the whole read, and the layout this page used to carry gave
+   * no way to dismiss it. `MasterDetail`'s fold is that way out, and it is
+   * remembered per pane: a reader who came for the words should not have to
+   * say so again on the next report card.
+   *
+   * Narrow only. Side by side there is no screen to reclaim, and the control
+   * is hidden — which the last assertion pins down, because a "Hide map" that
+   * leaked onto a desktop would fold a column that covers nothing.
+   */
+  test("the map folds away on a phone, and is still folded next time", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.goto(cardUrl);
+
+    const map = page.getByRole("region", { name: "Track map" });
+    const fold = page.getByRole("button", { name: "Hide map" });
+    await expect(map).toBeVisible({ timeout: 30_000 });
+    await expect(fold).toBeVisible();
+
+    await fold.click();
+    await expect(map).toBeHidden();
+    // The toggle stays — folded away is not gone, and this is the way back.
+    await expect(page.getByRole("button", { name: "Show map" })).toBeVisible();
+
+    // The point of remembering it: the next report card opens folded, with no
+    // flash of a map the reader has already dismissed once.
+    await page.goto(repairedCardUrl);
+    await expect(page.getByRole("heading", { name: "Track data cleaning" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByRole("region", { name: "Track map" })).toBeHidden();
+
+    const unfold = page.getByRole("button", { name: "Show map" });
+    await expect(unfold).toBeVisible();
+    await unfold.click();
+    await expect(page.getByRole("region", { name: "Track map" })).toBeVisible();
+
+    // Side by side the pane is a column of its own: nothing to reclaim, so no
+    // fold control at all.
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await expect(page.getByRole("button", { name: /^(Hide|Show) map$/ })).toBeHidden();
+  });
   /**
    * The anonymous reader (issue #666).
    *

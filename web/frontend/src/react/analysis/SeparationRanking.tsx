@@ -24,19 +24,14 @@
  * the caveat paragraphs — is below it now, because a row and the chart it
  * selects have to be readable without scrolling between them.
  */
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useId, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
 import { MasterDetail } from "@/react/components/MasterDetail";
+import { useMasterDetailSelection } from "@/react/components/use-master-detail-selection";
 import { cn } from "@/react/lib/utils";
 import { Explain } from "@/react/rac/explain";
 import { MetricExplanation } from "./MetricExplanation";
@@ -158,8 +153,7 @@ export function SeparationRanking({
   // is a navigation, and Back is how a reader gets out of the detail. Read
   // from the query on both the server and the first client render, so a
   // shared link opens on the metric it names.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const chosen = metricFromParam(searchParams.get(METRIC_PARAM), rankedIds);
   // What the pane shows. With nothing chosen it is still the top-ranked
   // metric: side by side the pane is on screen from the first paint and must
@@ -174,56 +168,17 @@ export function SeparationRanking({
   const [showAllLabels, setShowAllLabels] = useState(false);
   const detailHeadingId = `${useId()}-heading`;
 
-  // Side by side, told by MasterDetail's ResizeObserver (never by a viewport
-  // media query — the ranking's width is not a function of the viewport, and
-  // a second opinion about the breakpoint would be a second breakpoint).
-  const [wide, setWide] = useState(false);
-  // Whether THIS panel pushed the history entry the detail is showing on, so
-  // its own back control can unwind that entry rather than stack another.
-  const pushed = useRef(false);
-  useEffect(() => {
-    if (!chosen) pushed.current = false;
-  }, [chosen]);
-
-  /** Write the selection to the query. Stacked that is a navigation (push);
-   *  side by side it is only a change of view (replace). */
-  const choose = (id: string, replace: boolean) => {
-    const next = new URLSearchParams(searchParams);
-    next.set(METRIC_PARAM, id);
-    setSearchParams(next, { replace });
-    if (!replace) pushed.current = true;
-  };
-
-  // Side by side the pane always has a subject, so the ranking must always
-  // have the matching row lit — which means the query has to name it. It is
-  // seeded once the layout is known (never on the server, where the width is
-  // not), and `replace`d, so it never costs the reader a Back press. Re-seed
-  // whenever the param is missing while wide: a canonical-URL settle on a
-  // bare-id load can wipe a just-written query, and a class switch can leave
-  // an id this ranking does not carry.
-  useEffect(() => {
-    if (!report || !wide || chosen || defaultId === null) return;
-    choose(defaultId, true);
-    // choose() closes over the current query; re-running on every render of
-    // it would fight the reader's own navigation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wide, chosen, report, defaultId]);
-
-  /** Out of the detail and back to the ranking (stacked only). Unwinding our
-   *  own push keeps the history clean; a deep link that arrived on the detail
-   *  has no entry to unwind, so it drops the parameter in place. */
-  const back = () => {
-    if (pushed.current) {
-      pushed.current = false;
-      navigate(-1);
-      return;
-    }
-    const next = new URLSearchParams(searchParams);
-    next.delete(METRIC_PARAM);
-    setSearchParams(next, { replace: true });
-  };
-
-  const onWideChange = useCallback((next: boolean) => setWide(next), []);
+  // The query parameter, the push-vs-replace decision, the back control and
+  // the side-by-side seed all live in the shared hook — the ranking only says
+  // WHICH metric the URL names and which one stands in for it. `enabled` is
+  // the report: with none there is no chart to seed a selection for.
+  const { showingDetail, wide, choose, back, onWideChange } =
+    useMasterDetailSelection({
+      param: METRIC_PARAM,
+      chosen,
+      defaultId,
+      enabled: report != null,
+    });
 
   if (ranked.length === 0 && outcomeRanked.length === 0) {
     return (
@@ -279,7 +234,7 @@ export function SeparationRanking({
           navigation={
             report
               ? {
-                  showingDetail: chosen !== null,
+                  showingDetail,
                   backLabel: "All behaviours",
                   onBack: back,
                 }
