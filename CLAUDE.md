@@ -396,7 +396,7 @@ These are the standing imperatives. Each links to the reference that explains it
   - What a behaviour change DOES owe is a note in
     `web/engine/scoring-changes/` — one file per change, `NNN-slug.md`, so two
     branches can never collide. Say whether points move, and if they do, by how
-    much and for whom (measure over the 211-comp archive where you can); if
+    much and for whom (measure over the 25-comp archive where you can); if
     nothing observable changes, say that, because the generation still rolls
     and every competition still recomputes. CI enforces it
     (`web/scripts/check-scoring-change-note.ts`, a merge-base diff — deliberately
