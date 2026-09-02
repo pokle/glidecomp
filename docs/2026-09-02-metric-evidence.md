@@ -13,7 +13,7 @@ are swept as one corpus.
 | Excluded | `big-chip`, `kosci-loop` (synthetic) |
 
 Reproduce with `web/scripts/audit-metric-distributions.ts`; the raw output is
-kept in the archive at `reports/2026-09-02-metric-distributions.txt`.
+in [`2026-09-02-metric-distributions.txt`](./2026-09-02-metric-distributions.txt).
 
 This supersedes the bundled-only run (2 comps, 10 tasks, 197 rows) that the
 script shipped with, which was ~25× smaller and could not settle whether a
@@ -80,11 +80,47 @@ splits them three ways.
   This is the shape of noise, not of a weak effect.
 
   Their declared `direction` is consequently unsupported: `climb.time_to_core`
-  says `lower` and `glide.stf_proxy` says `higher`, and neither sign holds. That
-  is not a sign inversion to correct — there is no sign to correct to. Whether
-  three metrics that cannot be shown to separate the field should stay in the
-  registry, or lose their direction and become descriptive, is an open question
-  for the owner; this document only records the measurement.
+  says `lower`, `climb.circle_smoothness` says `lower` and `glide.stf_proxy`
+  says `higher`, and none of those signs holds. That is not a sign inversion to
+  correct — there is no sign to correct to.
+
+## What was decided (TASK_ANALYSIS_VERSION 26)
+
+On this evidence, `glide.stf_proxy` is **removed**, and `climb.time_to_core` and
+`climb.circle_smoothness` become **descriptive** — `direction: 'neutral'`, the
+same treatment v9 gave `day.airtime_quality` and v19 gave
+`decision.altitude_floor`.
+
+**Why a direction is worth removing.** A `direction` is a *prior*: a claim, made
+before anyone looks at the data, that lower (or higher) is better on every task.
+It is read very differently from the ρ the page prints beside it, which is a fact
+about one day. A metric that declares a direction says *this is a skill, practise
+it*, and licenses coaching that transfers to the next comp. Where the declared
+sign is wrong, the page instead tells a pilot to practise something that did not
+pay — and can contradict the ρ printed next to it. Neutral says *the sign is the
+finding*: the `winning` phrasings still name what won on this task, chosen by the
+observed sign, but nothing claims it generalises.
+
+**Why the two climbing metrics stay.** The null result is itself what a learning
+pilot wants to know. Coring speed and circle roundness barely move the result,
+while where you choose to go (`decision.search_fraction`, median |ρ| 0.68) and
+how fast you glide between climbs (`glide.speed`, 0.64) dominate it. That tells a
+pilot where *not* to spend attention — a lesson a deleted metric cannot carry.
+In the style clusters they keep their nicknames ("Quick corers", "Smooth
+circlers") but lose their strength/cost hint, since `hintFor()` returns undefined
+for a neutral direction: a cluster can still be *called* quick-coring without the
+page asserting that is a strength.
+
+**Why `glide.stf_proxy` goes instead.** Unlike those two it names no behaviour a
+pilot can observe or act on. Its own explanation concedes it is "a PROXY, and not
+true speed to fly, because there is no glider polar data". A descriptive metric
+still has to describe something; a proxy that never correlates is a failed
+instrument rather than a fact about the field. Its `STYLE_NICKNAMES` entry goes
+with it, taking the style clusters from 23 signature dimensions to 22.
+
+The registry is now **25 metrics**. The tables below are the sweep as run, before
+these changes — removing a metric and relabelling two directions moves no ρ, so
+every number in them still stands.
 
 ## The `race.leg_time_lost` defect, confirmed at scale
 
@@ -94,9 +130,9 @@ flies the whole speed section slightly slowly accumulates six. Under
 `direction: 'lower'`, landing early therefore scores better. It carries
 `outcome: true` on the grounds that it "follows the result by construction".
 
-Over 144 speed-section tasks (`web/scripts/audit-leg-time-lost.ts`, raw output at
-`reports/2026-09-02-leg-time-lost.txt` in the archive), that construction holds
-only where the field finished:
+Over 144 speed-section tasks (`web/scripts/audit-leg-time-lost.ts`, raw output in
+[`2026-09-02-leg-time-lost.txt`](./2026-09-02-leg-time-lost.txt)), that
+construction holds only where the field finished:
 
 | Share of field that landed out | Tasks | Median ρ vs rank |
 |---|---|---|

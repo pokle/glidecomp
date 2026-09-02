@@ -1,0 +1,38 @@
+race.leg_time_lost — partial-finisher probe
+Generated 2026-09-02 by web/scripts/audit-leg-time-lost.ts
+over the bundled comps AND the pokle/glidecomp-archive comps/ together.
+
+======================================================================
+
+race.leg_time_lost — 144 speed-section tasks over 26 comps
+(/tmp/claude-0/-home-user/aacae447-c652-556b-aec7-91b720bb8c24/scratchpad/all-comps)
+Excluded 2 synthetic comp(s): big-chip, kosci-loop
+
+If the metric followed the result by construction, ρ vs rank would sit near +1
+on every row. It does that only where the field completed the speed section.
+
+partial-finisher band    tasks   med ρ vs rank   med ρ vs legs   ρ≤0
+----------------------------------------------------------------------
+none partial (0%)            9           +0.97               —     0
+few partial (<25%)          25           +0.68           -0.09     1
+some partial (25–50%)       44           +0.41           -0.02     5
+many partial (50–90%)       47           +0.11           +0.09    18
+mostly partial (≥90%)       19           -0.12           +0.04    13
+
+Counterfactual over the 104 task(s) with both partial and full finishers:
+  median ρ vs rank, every pilot with a value : +0.41
+  median ρ vs rank, full finishers only      : +0.93
+  dropping the partial finishers RAISES ρ on 98/104 (94%)
+
+Sign inverted (ρ vs rank significantly negative — a LOWER loss sum went with a WORSE result): 5/144 task(s)
+  forbes-flatlands-2022-sports-t7        n=  3 partial=3/3 ρ=-1.00 floor=1.00
+  corryong-cup-2025-floater-t1           n= 10 partial=7/10 ρ=-0.73 floor=0.63
+  corryong-cup-2021-open-t5              n= 22 partial=15/22 ρ=-0.55 floor=0.42
+  dalby-big-air-2022-open-t5             n= 21 partial=19/21 ρ=-0.55 floor=0.43
+  bright-open-2023-open-t1               n= 88 partial=39/88 ρ=-0.24 floor=0.21
+
+Skipped 2 task(s):
+  dalby-big-air-2022-open-t6: no parseable tracks
+  dalby-big-air-2022-sports-t6: no parseable tracks
+
+Wrote /tmp/claude-0/-home-user/aacae447-c652-556b-aec7-91b720bb8c24/scratchpad/legtimelost-final.json

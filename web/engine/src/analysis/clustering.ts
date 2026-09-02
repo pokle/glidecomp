@@ -185,7 +185,6 @@ export const STYLE_NICKNAMES: Record<string, { high: string; low: string }> = {
   'gaggle.departure_winrate': { high: 'Bold leavers', low: 'Punished leavers' },
   'glide.speed': { high: 'Fast gliders', low: 'Slow gliders' },
   'glide.ld_vs_field': { high: 'Clean gliders', low: 'Glide bleeders' },
-  'glide.stf_proxy': { high: 'Speed-to-fly pilots', low: 'Constant-speed pilots' },
   'glide.extra_distance': { high: 'Wanderers', low: 'Line huggers' },
   'glide.dolphin_fraction': { high: 'Dolphin flyers', low: 'Circle climbers' },
   'race.start_delay': { high: 'Late starters', low: 'Gate chargers' },

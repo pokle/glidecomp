@@ -126,7 +126,7 @@ const timeToCore: MetricComputer = {
   shortLabel: 'Core s',
   unit: 's',
   family: 'climbing',
-  direction: 'lower',
+  direction: 'neutral',
   /** Directional names for a surface that claims a winner — see
    * MetricWinningPhrasings. */
   winning: {
@@ -401,7 +401,7 @@ const circleSmoothness: MetricComputer = {
   shortLabel: 'Round',
   unit: 'ratio',
   family: 'climbing',
-  direction: 'lower',
+  direction: 'neutral',
   /** Directional names for a surface that claims a winner — see
    * MetricWinningPhrasings. */
   winning: {

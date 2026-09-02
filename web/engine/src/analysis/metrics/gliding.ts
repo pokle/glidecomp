@@ -28,10 +28,6 @@ import type {
 const MIN_LEG_GLIDE_LOSS_M = 100;
 /** Legs with a shorter optimized distance are skipped (division-by-~0 guard). */
 const MIN_LEG_OPTIMIZED_M = 500;
-/** A "next climb" must start within this gap after the glide ends (STF proxy). */
-const MAX_NEXT_CLIMB_GAP_MS = 5 * 60 * 1000;
-/** Minimum glide→climb pairs for the STF proxy to be meaningful. */
-const MIN_STF_PAIRS = 4;
 /** Minimum total smoothed altitude gain for the dolphin fraction to apply. */
 const MIN_DOLPHIN_TOTAL_GAIN_M = 200;
 /** Half-width of the "10 s-smoothed" altitude window. */
@@ -239,62 +235,9 @@ const glideLdVsField: MetricComputer = {
   },
 };
 
-// --- Metric 9: glide.stf_proxy ---
-
-const glideStfProxy: MetricComputer = {
-  id: 'glide.stf_proxy',
-  label: 'Gliding faster when the next climb is stronger',
-  shortLabel: 'SpeedToFly',
-  unit: 'km/h',
-  family: 'gliding',
-  direction: 'higher',
-  /** Directional names for a surface that claims a winner — see
-   * MetricWinningPhrasings. */
-  winning: {
-    more: 'Gliding faster to stronger thermals',
-    less: 'Gliding slower towards the stronger thermals',
-  },
-  explanation:
-    'Speed to fly: the pilot flies faster when a good climb is in front of them, and slower '
-    + 'when it is not. We pair each glide after the start with the climb rate of the next '
-    + 'thermal that starts within 5 minutes. The value is the mean glide speed before climbs '
-    + 'stronger than the median, minus the mean glide speed before weaker climbs. +8 km/h means '
-    + 'the pilot flew 8 km/h faster into the good climbs. This is a PROXY, and not true speed '
-    + 'to fly, because there is no glider polar data.',
-  compute(field) {
-    const perPilot: PilotMetricValue[] = field.pilots.map((p) => {
-      if (p.sssMs === null) return na(p);
-      const thermals = [...p.thermals].sort((a, b) => a.startIndex - b.startIndex);
-      const pairs: { speedKmh: number; climb: number }[] = [];
-      for (const g of postSssGlides(p)) {
-        const glideEndMs = fixMsAt(p, g.endIndex);
-        const next = thermals.find((t) => {
-          const startMs = fixMsAt(p, t.startIndex);
-          return startMs >= glideEndMs && startMs - glideEndMs <= MAX_NEXT_CLIMB_GAP_MS;
-        });
-        if (!next) continue;
-        pairs.push({ speedKmh: (g.distance / g.duration) * 3.6, climb: next.avgClimbRate });
-      }
-      if (pairs.length < MIN_STF_PAIRS) return na(p);
-      const med = median(pairs.map((x) => x.climb));
-      const strong = pairs.filter((x) => x.climb > med);
-      const weak = pairs.filter((x) => x.climb < med);
-      if (strong.length === 0 || weak.length === 0) {
-        return {
-          trackFile: p.trackFile,
-          value: null,
-          note: 'next-climb rates too uniform to split',
-        };
-      }
-      return {
-        trackFile: p.trackFile,
-        value: mean(strong.map((x) => x.speedKmh)) - mean(weak.map((x) => x.speedKmh)),
-        note: `${pairs.length} glide→climb pairs`,
-      };
-    });
-    return { perPilot };
-  },
-};
+// Metric 9 was glide.stf_proxy, removed in TASK_ANALYSIS_VERSION 26 — the
+// numbers are a global sequence across the family files, so 9 stays vacant
+// rather than renumbering every metric after it.
 
 // --- Metric 10: glide.extra_distance ---
 
@@ -444,7 +387,6 @@ const glideDolphinFraction: MetricComputer = {
 export const GLIDING_METRICS: MetricComputer[] = [
   glideSpeed,
   glideLdVsField,
-  glideStfProxy,
   glideExtraDistance,
   glideDolphinFraction,
 ];

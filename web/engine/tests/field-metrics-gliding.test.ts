@@ -75,11 +75,10 @@ function indexAtEast(fixes: IGCFix[], eastMeters: number): number {
 // ---------------------------------------------------------------------------
 
 describe('GLIDING_METRICS registry', () => {
-  it('registers the five gliding metrics with valid metadata', () => {
+  it('registers the four gliding metrics with valid metadata', () => {
     expect(GLIDING_METRICS.map((m) => m.id)).toEqual([
       'glide.speed',
       'glide.ld_vs_field',
-      'glide.stf_proxy',
       'glide.extra_distance',
       'glide.dolphin_fraction',
     ]);
@@ -90,7 +89,6 @@ describe('GLIDING_METRICS registry', () => {
     }
     expect(metric('glide.speed').direction).toBe('higher');
     expect(metric('glide.ld_vs_field').direction).toBe('higher');
-    expect(metric('glide.stf_proxy').direction).toBe('higher');
     expect(metric('glide.extra_distance').direction).toBe('lower');
     expect(metric('glide.dolphin_fraction').direction).toBe('neutral');
   });
@@ -161,82 +159,6 @@ describe('glide.ld_vs_field', () => {
 
     expect(valueFor(out, 'flat')).toBeNull();
     expect(valueFor(out, 'nolegs')).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// glide.stf_proxy
-// ---------------------------------------------------------------------------
-
-/**
- * Alternating glide/climb track: fast glides (15 m/s) before strong climbs
- * (2.5 m/s), slow glides (10 m/s) before weak climbs (1 m/s) — a pilot flying
- * textbook speed-to-fly. 5 glide→climb pairs (the takeoff detector may anchor
- * the flight at the first circling climb and drop the opening glide, so at
- * least 4 pairs always survive).
- */
-function stfTrack(): IGCFix[] {
-  const fixes: IGCFix[] = [];
-  let t = 0;
-  let east = 0;
-  let alt = 2500;
-  const glide = (speedMps: number) => {
-    fixes.push(...straightFixes(t, 300, east, alt, speedMps, 0));
-    east += speedMps * 300;
-    t += 310;
-  };
-  const climb = (rateMps: number) => {
-    east += 60; // circle centre just past the glide end
-    fixes.push(...circlingFixes(t, 200, east, alt, rateMps));
-    alt += rateMps * 200;
-    t += 210;
-    east += 60;
-  };
-  glide(15);
-  climb(2.5);
-  glide(10);
-  climb(1.0);
-  glide(15);
-  climb(2.5);
-  glide(10);
-  climb(1.0);
-  glide(15);
-  climb(2.5);
-  return fixes;
-}
-
-describe('glide.stf_proxy', () => {
-  it('is positive for a pilot who glides faster before stronger climbs', () => {
-    const fixes = stfTrack();
-    const shortFixes = [
-      ...straightFixes(0, 300, 0, 2500, 12, 0),
-      ...circlingFixes(310, 200, 3660, 2500, 2),
-    ];
-    const field = makeTestField([
-      {
-        name: 'stf',
-        fixes,
-        turnpointResult: { sssReaching: reachingAt(fixes, 1, 0) },
-      },
-      {
-        // Started but only 1 glide→climb pair (< 4) → null.
-        name: 'fewpairs',
-        fixes: shortFixes,
-        turnpointResult: { sssReaching: reachingAt(shortFixes, 1, 0) },
-      },
-      { name: 'nostart', fixes: straightFixes(0, 900, 0, 2000, 12, -1) },
-    ]);
-    const out = metric('glide.stf_proxy').compute(field);
-    expect(out.perPilot.length).toBe(3);
-
-    // Expected ≈ (15 − 10) m/s × 3.6 = 18 km/h; lenient band for detector edges.
-    const v = valueFor(out, 'stf');
-    expect(v).not.toBeNull();
-    expect(v!).toBeGreaterThan(5);
-    expect(v!).toBeLessThan(32);
-
-    expect(valueFor(out, 'fewpairs')).toBeNull();
-    expect(valueFor(out, 'nostart')).toBeNull();
   });
 });
 
