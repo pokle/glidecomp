@@ -52,6 +52,7 @@
 | 2026-08-12 | [round](security-review/rounds/2026-08-12.md) | S7F 2026 + PathFinder; SEC-41 (stored XSS ×8) + 42/43/44 fixed inline; SEC-45/46 documented |
 | 2026-08-17 | [round](security-review/rounds/2026-08-17.md) | SEC-47 (stored XSS) fixed inline; SEC-46 fixed with oracle tests; sink-pin guard test added |
 | 2026-08-20 | [round](security-review/rounds/2026-08-20.md) | Mobile settings hierarchy + Wing audit rewrite + mobile e2e; no new findings |
+| 2026-09-02 | [round](security-review/rounds/2026-09-02.md) | Comp/task-analysis rename + anonymous report-card deep link; SEC-48 (dependency-audit regression) fixed inline; SEC-49 documented |
 
 ## Findings register
 
@@ -59,7 +60,7 @@ Single source of truth for current status. Severity, evidence, and
 remediation detail live in the introducing round; status movements in the
 rounds linked here.
 
-| ID | Title | Status @ 2026-08-17 | Introduced | Resolved / last movement |
+| ID | Title | Status @ 2026-09-02 | Introduced | Resolved / last movement |
 |----|-------|---------------------|------------|--------------------------|
 | SEC-01 | Reflective CORS w/ credentials | Fixed | [2026-04-20](security-review/rounds/2026-04-20.md) | Fixed same round; allowlist now in `web/workers/shared/src/cors.ts` |
 | SEC-02 | No security response headers (`_headers`) | Fixed | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-05-25](security-review/rounds/2026-05-25.md) |
@@ -108,6 +109,8 @@ rounds linked here.
 | SEC-45 | O(fixes)×O(turnpoints²) PathFinder route-optimiser search, reachable via anonymous upload | **Open (deferred) — top open item** | [2026-08-12](security-review/rounds/2026-08-12.md) | Gap G-10 — needs its own oracle-tested PR (rolls the engine generation) |
 | SEC-46 | Same-timestamp O(n²) scan in `circle-detector.ts` | Fixed | [2026-08-12](security-review/rounds/2026-08-12.md) | [2026-08-17](security-review/rounds/2026-08-17.md) — persistent pointer + budgeted fallback, oracle tests |
 | SEC-47 | `setFlightInfo` renders the pilot name into `innerHTML` unescaped | Fixed | [2026-08-17](security-review/rounds/2026-08-17.md) | Fixed same round |
+| SEC-48 | `bun audit` regression: qs/fast-uri/browserslist via unused `shadcn` devDependency, undercounted by a stale `fast-uri` override | Fixed | [2026-09-02](security-review/rounds/2026-09-02.md) | Fixed same round — overrides added/bumped, `bun audit` back to the SEC-34 residual |
+| SEC-49 | Account display-name write (`/api/auth/set-name`, `/api/auth/set-username`) skips the SEC-22 defence-in-depth text checks applied everywhere else | Open (Info) | [2026-09-02](security-review/rounds/2026-09-02.md) | — |
 
 ## Standing scope gaps
 
@@ -133,13 +136,17 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 - **G-16** — SEC-34 residual: `astro` 6→7 (with `upgrade-deps`).
 - **G-17** — `encodeURIComponent` the ids in `TaskExportButtons.tsx:83-85` and `slugSegment()`'s id half in `lib/slug.ts` (Info-grade); decide whether `fetchWithRetry` should stop retrying non-404 4xx.
 - **G-18** — `rateLimit` row expiry (rows never expire; from SEC-39's fix).
+- **G-19** — SEC-49: route `POST /api/auth/set-name`/`set-username` through
+  the same `nameText()`-shaped control-char/angle-bracket/NFC check
+  `validators.ts` applies to every other user-entered name field.
 
 ## Where to start the next review
 
-1. Commit reviewed up to: **HEAD = `9bc5d1d`** (`9bc5d1d0ddce798df16035a4f3e3a6710cfdd8cc`; base `b5a558f3`). Unshallow before diffing if the clone is shallow (see the [2026-08-12 round](security-review/rounds/2026-08-12.md)'s process note). Note: the sandboxed review session used for the 2026-08-20 round had no `.github/workflows/` in its working tree (checked out repo excludes it) — diff that file with `diff <(git show <rev1>:path) <(git show <rev2>:path)`, not a `git diff` pathspec, which silently returns empty there.
-2. **SEC-45 (G-10) is the only open engine-DoS finding of its class and the top open item — now two rounds running with no fix PR started.** It needs its own PR: oracle tests over the S7F 2026 suite, a bound on `computeBestProgress`'s `exactAt()` evaluations (or a time-based Lipschitz prune), a ~60k-fix adversarial wandering track under a hard timeout, a `scoring-changes/` note, and archive parity measurement. The SEC-46 fix ([2026-08-17](security-review/rounds/2026-08-17.md)) is the template at smaller scale.
-3. Verify the SEC-46 and SEC-47 fixes held (`circle-detector-adversarial.test.ts` and `html-sinks.test.ts` are the tripwires) — both re-confirmed unchanged in the [2026-08-20 round](security-review/rounds/2026-08-20.md).
-4. `bun audit`: check whether `upgrade-deps` has taken astro to 7 (G-16) — still `6.4.8` / 3 dev-time advisories as of 2026-08-20.
-5. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved across the 2026-08-17 or 2026-08-20 rounds.
-6. The CSP flip (G-07) still needs the four-block inline-script inventory first.
-7. Do NOT re-open SEC-03 (accepted by design).
+1. Commit reviewed up to: **HEAD = `2c34721`** (`2c34721183cd8ab8c6a6529997402dbf1e0af7e9`; base `9bc5d1d`). This session's checkout DID include `.github/workflows/`; if a future sandboxed session lacks it again, diff that file with `diff <(git show <rev1>:path) <(git show <rev2>:path)`, not a `git diff` pathspec, which silently returns empty there.
+2. **SEC-45 (G-10) is the only open engine-DoS finding of its class and the top open item — now three rounds running with no fix PR started.** It needs its own PR: oracle tests over the S7F 2026 suite, a bound on `computeBestProgress`'s `exactAt()` evaluations (or a time-based Lipschitz prune), a ~60k-fix adversarial wandering track under a hard timeout, a `scoring-changes/` note, and archive parity measurement. The SEC-46 fix ([2026-08-17](security-review/rounds/2026-08-17.md)) is the template at smaller scale.
+3. **Verify SEC-48 held** — `bun audit` should read exactly 3 advisories (the `astro` residual). If it has grown again, check whether a dependency-upgrade cycle bumped `shadcn` (confirmed unused this round — consider just removing the devDependency rather than chasing its transitive overrides indefinitely) or pulled a fresh `browserslist`/`fast-uri`/`qs` release past the current override ranges.
+4. **SEC-49 (G-19)** — a small, low-risk follow-up: give `set-name`/`set-username` in `web/workers/auth-api/src/index.ts` the same control-char/angle-bracket/NFC treatment `validators.ts` gives every other name field.
+5. `bun audit`: check whether `upgrade-deps` has taken astro to 7 (G-16) — still `6.4.8` as of 2026-09-02.
+6. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved across the last three rounds.
+7. The CSP flip (G-07) still needs the four-block inline-script inventory first.
+8. Do NOT re-open SEC-03 (accepted by design).

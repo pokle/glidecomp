@@ -308,26 +308,90 @@
 //     lie), matching the wind table. The bump rolls stored reports so they gain
 //     the total on their next lazy revalidation; a v24 row renders its hourly
 //     rows alone until it does, so consumers must tolerate `wholeTask` absent.
-// v26: the basis gains `goalCount` — how many of the analysed pilots made
+// v26: glide.stf_proxy removed, and climb.time_to_core and
+//     climb.circle_smoothness become descriptive (direction 'neutral') — the
+//     v9/v19 treatment, on the evidence of the first sweep over every
+//     non-synthetic competition (27 comps, 194 tasks, 4,959 pilot-task rows;
+//     docs/2026-09-02-metric-evidence.md). All three were among the five the
+//     bundled 10-task sample could not settle either way.
+//     Over the archive none of the three carries a stable sign: they clear
+//     their task's noise floor on 12%, 9% and 14% of tasks respectively —
+//     about what the floor admits by construction — and where they do fire the
+//     sign is a coin flip (58%, 56%, 54% of informative tasks taking the
+//     majority sign), with median signed ρ of +0.00, −0.03 and +0.03. A
+//     declared direction there is a claim the data contradicts on nearly half
+//     of all tasks, so it is dropped; the observed sign per task is still
+//     published, and the `winning` phrasings still name what won THAT day,
+//     exactly as for every other neutral metric.
+//     The two climbing metrics are KEPT because the null result is itself the
+//     finding a reader wants: how well you core and how round you circle
+//     separate the field far less than where you choose to go
+//     (decision.search_fraction, median |ρ| 0.68) and how fast you glide
+//     between climbs (glide.speed, 0.64). That tells a pilot where not to
+//     spend attention, which a deleted metric cannot.
+//     glide.stf_proxy is REMOVED rather than neutralised because, unlike those
+//     two, it names no behaviour a pilot can observe or act on: its own
+//     explanation concedes it is "a PROXY, and not true speed to fly, because
+//     there is no glider polar data". A descriptive metric still has to
+//     describe something, and a proxy that never correlates is a failed
+//     instrument rather than a fact about the field. Its STYLE_NICKNAMES entry
+//     ("Speed-to-fly pilots" / "Constant-speed pilots") goes with it, taking
+//     the style clusters from 23 signature dimensions to 22.
+//     The two neutralised metrics keep their nicknames but lose their
+//     strength/cost hint, because hintFor() returns undefined for a neutral
+//     direction — a cluster can still be called "Quick corers", it just no
+//     longer asserts that being one is a strength. That is the point of the
+//     change, not a side effect of it.
+//     The registry is now 25 metrics. Every consumer reads a stored report's
+//     OWN metrics array, and MetricReport carries its label, direction and
+//     explanation on the row, so a v25 report keeps rendering its
+//     glide.stf_proxy entry (and the old directions) until this bump
+//     revalidates it. Registry lookups by id in the UI are all fallback-guarded
+//     (ConsistencyMap's SHORT_LABELS ?? label; CompAnalysis filters the
+//     registry BY the stored ids), so none of them can fault on the orphan.
+// v27: glide.extra_distance drops to direction 'neutral' — it is the one
+//     metric measured to REVERSE with the day rather than merely weaken. Over
+//     123 archived tasks of >= 10 pilots, split at the quartiles of how many
+//     pilots made goal: on the easiest quarter of days flying wide of the line
+//     costs you (18 tasks cleared their noise floor, 100% of them positive —
+//     wide = worse), and on the hardest quarter it goes the other way (12
+//     cleared, 83% negative — wide = better). On a day most of the field lands
+//     out, the pilots who leave the line to hunt for lift are the ones still in
+//     the air, so the deviation marks the survivors rather than a wasted glide.
+//     Its 'lower' prior was therefore wrong on roughly half of all tasks, and
+//     it is why this metric had the weakest sign consistency (75%) of the
+//     eighteen that do separate the field — not unreliability, conditionality.
+//     Three explanations also change, none of them a computation:
+//       · glide.extra_distance says the sign changes with the day and to read
+//         it against how many pilots made goal.
+//       · climb.time_to_core and climb.circle_smoothness drop the closing
+//         claims that faster coring and rounder circles are better. Both went
+//         neutral in v26 while their prose still asserted a direction, which
+//         left them contradicting the section they sit in.
+//       · climb.exit_decay (already neutral) gains what the archive found: it
+//         goes with a better result on days most of the field completes, and
+//         makes no measurable difference on days most of it lands out.
+//     Evidence: docs/2026-09-02-metric-evidence.md and the new
+//     web/scripts/audit-metric-conditions.ts. No metric VALUE moves; the bump
+//     rolls stored reports onto the new direction and prose on their next lazy
+//     revalidation, and a v26 row keeps serving 'lower' until it does.
+// v28: the basis gains `goalCount` — how many of the analysed pilots made
 //     goal — and both surfaces print it as the day's difficulty ("14 of 44
 //     made goal (32%)"), the CLI leading its day line with it and the web
 //     leading the basis box.
-//     It is not a nice statistic beside the others: it is the variable that
-//     decides whether several of the behavioural metrics mean anything at
-//     all. Over 194 archived tasks (123 with ≥ 10 pilots), splitting by goal
-//     rate separates climb.exit_decay cleanly — median ρ against rank runs
-//     +0.04 on the hardest quarter (0–26% in goal, 1 of 30 tasks clearing the
-//     noise floor) to −0.31 on the easiest (61–90%, 13 of 33 clearing it, and
-//     every one of them negative). Leaving lift while it still works pays on
-//     an easy day; on a hard day everyone has to milk every climb and it
-//     makes no measurable difference. glide.extra_distance goes further and
-//     REVERSES: flying wide of the line costs on an easy day and goes with a
-//     better result on a hard one, where the pilots deviating to hunt lift
-//     are the ones still airborne. The same gradient appears against the
-//     day's peak climb rate — a pure weather variable rather than an outcome
-//     — so it is not the result read back into itself. Without the goal share
-//     the page presented all of that with no indication of which kind of day
-//     produced it (#683, evidence from the sweep behind #681).
+//     It is what makes v27 followable. That change told the reader to read
+//     glide.extra_distance "against how many pilots made goal", and the page
+//     did not state it: the number was on the scores page, for the reader to
+//     derive. The same sweep is why it matters beyond that one metric —
+//     climb.exit_decay's median ρ against rank runs +0.04 on the hardest
+//     quarter of tasks (0–26% in goal, 1 of 30 clearing the noise floor) to
+//     −0.31 on the easiest (61–90%, 13 of 33 clearing it, every one of them
+//     negative). Leaving lift while it still works pays on an easy day; on a
+//     hard day everyone has to milk every climb and it makes no measurable
+//     difference. The same gradient appears against the day's peak climb rate
+//     — a pure weather variable rather than an outcome — so it is not the
+//     result read back into itself (#683, evidence from the sweep behind
+//     #681: docs/2026-09-02-metric-evidence.md).
 //     Counted over the ANALYSED field so it and pilotCount describe one
 //     population; ESS rate is deliberately not published beside it (ρ ≈ 0.99
 //     over the archive — the same fact twice, and goal is the one pilots talk
@@ -336,7 +400,7 @@
 //     organisers first.
 //     Purely additive: no metric value moves and no correlation changes. The
 //     bump rolls stored reports so they gain the count on their next lazy
-//     revalidation; a v25 row renders without it until then, and consumers
+//     revalidation; a v27 row renders without it until then, and consumers
 //     must test for `undefined` rather than falsiness — zero in goal is a
 //     real reading, and the hardest one there is.
-export const TASK_ANALYSIS_VERSION = 26;
+export const TASK_ANALYSIS_VERSION = 28;

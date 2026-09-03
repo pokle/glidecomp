@@ -396,7 +396,7 @@ These are the standing imperatives. Each links to the reference that explains it
   - What a behaviour change DOES owe is a note in
     `web/engine/scoring-changes/` — one file per change, `NNN-slug.md`, so two
     branches can never collide. Say whether points move, and if they do, by how
-    much and for whom (measure over the 211-comp archive where you can); if
+    much and for whom (measure over the 25-comp archive where you can); if
     nothing observable changes, say that, because the generation still rolls
     and every competition still recomputes. CI enforces it
     (`web/scripts/check-scoring-change-note.ts`, a merge-base diff — deliberately
@@ -431,7 +431,7 @@ These are the standing imperatives. Each links to the reference that explains it
   §4.4.6). Re-tune thresholds only via `audit-track-quality.ts` over both the
   bundled comps and the archive.
 - **Comp analysis and task analysis are two different things, and are named
-  apart.** Both are built from the same 26 behavioural metrics (climbing,
+  apart.** Both are built from the same 25 behavioural metrics (climbing,
   gliding, decision-making, gaggle, race craft, day profile) ranked by Spearman
   ρ against GAP rank, in `web/engine/src/analysis/`. Both are public and SSR'd.
   They are not interchangeable, and neither is called "field analysis" any more

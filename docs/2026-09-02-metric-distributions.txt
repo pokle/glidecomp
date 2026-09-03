@@ -1,0 +1,58 @@
+Behavioural metric distributions — full non-synthetic sweep
+Generated 2026-09-02 by web/scripts/audit-metric-distributions.ts
+over the bundled comps AND the pokle/glidecomp-archive comps/ together:
+
+  GLIDECOMP_COMPS_DIR=<bundled+archive merged> \
+    bun web/scripts/audit-metric-distributions.ts --json ...
+
+The two comp sets are disjoint (the archive holds every year this
+repo does not bundle), so they are swept as one corpus.
+Synthetic fixtures (big-chip, kosci-loop) are excluded: they carry no
+behavioural truth and their large uniform fields generate artificial
+coefficients that swamp the real ones.
+
+======================================================================
+
+Metric distributions over 27 comps / 194 tasks
+(4959 pilot-task rows; 2 tasks skipped)
+Excluded 2 synthetic comp(s): big-chip, kosci-loop
+
+metric                        fam        med|ρ|  medρ   inform  sign%  cover%  strong  n
+----------------------------------------------------------------------------------------------
+race.time_behind *            racecraft   1.00    1.00   112/113   100%     36%      91    2185
+decision.search_fraction      decision    0.68    0.68   120/181    99%     90%      95    4726
+glide.speed                   gliding     0.64   -0.63   104/171    96%     83%      87    4531
+climb.selectivity             climbing    0.50   -0.43    86/169    97%     80%      52    4469
+gaggle.affinity               gaggle      0.50   -0.48    89/151    98%     90%      62    4721
+race.final_glide_init         racecraft   0.50    0.50    69/148    93%     62%      41    3042
+climb.departure_band          climbing    0.49   -0.47    82/170    96%     83%      47    4526
+glide.dolphin_fraction        gliding     0.44    0.38    73/168   100%     79%      34    4414
+decision.altitude_floor       decision    0.44   -0.40    72/159    94%     72%      38    4203
+race.start_delay              racecraft   0.44    0.42    67/118    99%     90%      37    4727
+decision.km_between_climbs    decision    0.42   -0.32    56/147    95%     65%      33    3900
+glide.extra_distance          gliding     0.42    0.19    64/144    75%     66%      37    4024
+glide.ld_vs_field             gliding     0.41   -0.39    71/143    97%     65%      40    3991
+race.leg_time_lost *          racecraft   0.41    0.37    68/144    93%     66%      52    4024
+gaggle.departure_winrate      gaggle      0.40   -0.38    50/108    96%     34%      30    2872
+race.ess_margin               racecraft   0.34    0.26    32/113    91%     36%      16    2185
+gaggle.marker_usage           gaggle      0.34   -0.21    47/150    89%     78%      25    4396
+day.airtime_quality           day         0.31    0.13    55/184    82%    100%      19    4954
+decision.low_saves            decision    0.30   -0.26    42/149   100%     90%      18    4727
+climb.shared_percentile       climbing    0.27   -0.16    48/171    90%     86%      12    4731
+climb.exit_decay              climbing    0.22   -0.07    30/180    80%     93%       4    4759
+glide.stf_proxy               gliding     0.22    0.00    19/159    58%     71%       2    4162
+climb.circle_smoothness       climbing    0.20    0.03    24/177    54%     89%       3    4675
+climb.time_to_core            climbing    0.20   -0.03    16/181    56%     94%       1    4796
+day.wind                      day            —       —       0/0     —       0%       0       0
+day.climb_by_hour             day            —       —       0/0     —       0%       0       0
+
+* = outcome-derived (ρ is a sanity check, not a finding)
+inform = tasks whose |ρ| cleared that task's noise floor
+sign%  = share of informative tasks taking the majority sign
+cover% = mean share of the field the metric returned a value for
+
+Skipped 2 task(s):
+  dalby-big-air-2022-open-t6: no parseable tracks
+  dalby-big-air-2022-sports-t6: no parseable tracks
+
+Wrote /tmp/claude-0/-home-user/aacae447-c652-556b-aec7-91b720bb8c24/scratchpad/all-real.json

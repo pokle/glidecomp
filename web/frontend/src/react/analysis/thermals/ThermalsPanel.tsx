@@ -28,14 +28,13 @@
 import {
   lazy,
   Suspense,
-  useCallback,
   useEffect,
   useId,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import type { Selection } from "react-aria-components";
 import { InfoIcon } from "lucide-react";
 import { windAtHeight } from "@glidecomp/engine";
@@ -48,6 +47,7 @@ import type {
 import { Button, ToggleButton } from "@/react/rac/button";
 import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { MasterDetail } from "@/react/components/MasterDetail";
+import { useMasterDetailSelection } from "@/react/components/use-master-detail-selection";
 import { ExpandIcon } from "../charts/MetricChartOverlay";
 import { cn } from "@/react/lib/utils";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
@@ -790,8 +790,7 @@ export function ThermalsPanel({
   // is a navigation, and Back is how a reader gets out of the detail. Read
   // from the query on both the server and the first client render, so a
   // shared link opens on the thermal it names.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const chosen = thermalFromParam(searchParams.get(THERMAL_PARAM), shapes);
   // Satellite backdrop under the rose — off by default (and in the SSR
   // snapshot), so mapbox-gl only ever loads on an explicit flip. Shared by
@@ -807,55 +806,15 @@ export function ThermalsPanel({
   // Labels the detail region (it is read before the census it belongs to).
   const headingId = useId();
 
-  // Side by side, told by MasterDetail's ResizeObserver (never by a viewport
-  // media query — the census's width is not a function of the viewport, and a
-  // second opinion about the breakpoint would be a second breakpoint).
-  const [wide, setWide] = useState(false);
-  // Whether THIS panel pushed the history entry the detail is showing on, so
-  // its own back control can unwind that entry rather than stack another.
-  const pushed = useRef(false);
-  useEffect(() => {
-    if (!chosen) pushed.current = false;
-  }, [chosen]);
-
-  /** Write the selection to the query. Stacked that is a navigation (push);
-   *  side by side it is only a change of view (replace). */
-  const choose = (id: number, replace: boolean) => {
-    const next = new URLSearchParams(searchParams);
-    next.set(THERMAL_PARAM, String(id));
-    setSearchParams(next, { replace });
-    if (!replace) pushed.current = true;
-  };
-
-  // Side by side the pane always has a subject, so the census must always
-  // have the matching row lit — which means the query has to name it. It is
-  // seeded once the layout is known (never on the server, where the width is
-  // not), and `replace`d, so it never costs the reader a Back press.
-  const seededWide = useRef(false);
-  useEffect(() => {
-    if (!wide || chosen || seededWide.current) return;
-    seededWide.current = true;
-    choose(selected.id, true);
-    // choose() closes over the current query; re-running on every render of
-    // it would fight the reader's own navigation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wide, chosen]);
-
-  /** Out of the detail and back to the census (stacked only). Unwinding our
-   *  own push keeps the history clean; a deep link that arrived on the detail
-   *  has no entry to unwind, so it drops the parameter in place. */
-  const back = () => {
-    if (pushed.current) {
-      pushed.current = false;
-      navigate(-1);
-      return;
-    }
-    const next = new URLSearchParams(searchParams);
-    next.delete(THERMAL_PARAM);
-    setSearchParams(next, { replace: true });
-  };
-
-  const onWideChange = useCallback((next: boolean) => setWide(next), []);
+  // The query parameter, the push-vs-replace decision, the back control and
+  // the side-by-side seed all live in the shared hook — the census only says
+  // WHICH thermal the URL names and which one stands in for it.
+  const { showingDetail, wide, choose, back, onWideChange } =
+    useMasterDetailSelection({
+      param: THERMAL_PARAM,
+      chosen: chosen?.id ?? null,
+      defaultId,
+    });
 
   const model = useMemo(() => modelWindFor(selected, weather), [selected, weather]);
 
@@ -1029,7 +988,7 @@ export function ThermalsPanel({
         detailLabel="detail"
         detailHeadingId={headingId}
         navigation={{
-          showingDetail: chosen !== null,
+          showingDetail,
           backLabel: "All thermals",
           onBack: back,
         }}
