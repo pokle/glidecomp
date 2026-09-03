@@ -405,8 +405,18 @@ working band — sat together with nothing to say which section each reading
 belonged to; each is now the fact line on the box for the section it describes
 (`analysis/basis-facts.ts`), so the working band reads beside the
 thermals it is the band OF. What was left over belongs to no section and stays
-above the boxes: the airtime split, and the count of pilots the scores hold
-that the analysis could not measure. The percentile heatmap
+above the boxes: how hard the day was, the airtime split, and the count of
+pilots the scores hold that the analysis could not measure.
+
+The day's difficulty leads that box — "12 of 32 made goal (38%)", the count
+over the analysed field so it and the pilot count describe one population
+(#683, `TaskAnalysisBasis.goalCount`). It is context rather than one more
+reading: the archive sweep behind #681 found that several behaviours only
+separate the field on one kind of day, and that gliding wide of the course
+line reverses sign between an easy day and a hard one — so without the goal
+share a reader has no way to know which of those two pages they have open.
+Whether to band it in words ("a hard day") is still open, and worth putting to
+organisers before a label judges their task setting. The percentile heatmap
 went with the split: a wall of every pilot against every behaviour is the same
 "read the whole report at once" the split exists to undo, and the per-family
 tables state the readings exactly. `analysis/sections.ts` is the single list all of it reads —

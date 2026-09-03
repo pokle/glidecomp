@@ -129,14 +129,41 @@ function formatAirtimeSplit(split: FieldAirtimeSplit): string {
 }
 
 /**
- * The basis's second line: "airtime 82 h (13:05–18:40 AEDT) · 38% climbing …".
+ * "14 of 44 made goal (32%)" — the day's difficulty, in the terms pilots use
+ * for it, and the context the whole ranking below has to be read against.
+ *
+ * Null for a stored report from before TASK_ANALYSIS_VERSION 26 (served while
+ * it revalidates), and for a field of no pilots — "0 of 0 made goal" is a
+ * degenerate report, not a difficult day. Same two exits as the web's basis
+ * box, so the two surfaces stay silent about the same days.
+ *
+ * A count of zero over a real field still prints: a day nobody completed is
+ * the hardest kind there is, and dropping the line there would hide the
+ * finding on exactly the tasks that have one. Hence the `undefined` test
+ * rather than a falsiness one.
+ */
+function formatGoalShare(b: TaskAnalysisBasis): string | null {
+  if (b.goalCount === undefined || b.pilotCount <= 0) return null;
+  const share = Math.round((100 * b.goalCount) / b.pilotCount);
+  return `${b.goalCount} of ${b.pilotCount} made goal (${share}%)`;
+}
+
+/**
+ * The basis's second line: "14 of 44 made goal (32%) · airtime 82 h
+ * (13:05–18:40 AEDT) · 38% climbing …".
  *
  * Split off the first line because that one already runs past the 100-column
- * width on its own, and because these facts belong together — the total, the
- * window it was flown in, and how it divided.
+ * width on its own, and because these facts belong together — they describe
+ * the DAY (how hard it was, how long the field was up, how the flying
+ * divided), where the first line describes the measurement.
+ *
+ * The goal share leads: it is the one fact here that changes how the
+ * separation ranking underneath should be read.
  */
-function renderAirtimeLine(b: TaskAnalysisBasis, timeZone?: string): string | null {
+function renderDayLine(b: TaskAnalysisBasis, timeZone?: string): string | null {
   const parts: string[] = [];
+  const goal = formatGoalShare(b);
+  if (goal) parts.push(goal);
   if (b.airtimeSplit) {
     const hours = b.airtimeSplit.airborneSeconds / 3600;
     const window = b.analysisWindow
@@ -174,8 +201,8 @@ export function renderTaskAnalysis(
       `working band ${b.workingBandFloor.toFixed(0)}–${b.workingBandCeiling.toFixed(0)} m` +
       (b.workingBandFallback ? ' (fix-altitude fallback)' : ''),
   );
-  const airtimeLine = renderAirtimeLine(b, timeZone);
-  if (airtimeLine) lines.push(airtimeLine);
+  const dayLine = renderDayLine(b, timeZone);
+  if (dayLine) lines.push(dayLine);
 
   // The separation ranking leads: it tells the reader which strategies
   // actually mattered on this task, and so how to read everything below.

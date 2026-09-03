@@ -308,4 +308,35 @@
 //     lie), matching the wind table. The bump rolls stored reports so they gain
 //     the total on their next lazy revalidation; a v24 row renders its hourly
 //     rows alone until it does, so consumers must tolerate `wholeTask` absent.
-export const TASK_ANALYSIS_VERSION = 25;
+// v26: the basis gains `goalCount` — how many of the analysed pilots made
+//     goal — and both surfaces print it as the day's difficulty ("14 of 44
+//     made goal (32%)"), the CLI leading its day line with it and the web
+//     leading the basis box.
+//     It is not a nice statistic beside the others: it is the variable that
+//     decides whether several of the behavioural metrics mean anything at
+//     all. Over 194 archived tasks (123 with ≥ 10 pilots), splitting by goal
+//     rate separates climb.exit_decay cleanly — median ρ against rank runs
+//     +0.04 on the hardest quarter (0–26% in goal, 1 of 30 tasks clearing the
+//     noise floor) to −0.31 on the easiest (61–90%, 13 of 33 clearing it, and
+//     every one of them negative). Leaving lift while it still works pays on
+//     an easy day; on a hard day everyone has to milk every climb and it
+//     makes no measurable difference. glide.extra_distance goes further and
+//     REVERSES: flying wide of the line costs on an easy day and goes with a
+//     better result on a hard one, where the pilots deviating to hunt lift
+//     are the ones still airborne. The same gradient appears against the
+//     day's peak climb rate — a pure weather variable rather than an outcome
+//     — so it is not the result read back into itself. Without the goal share
+//     the page presented all of that with no indication of which kind of day
+//     produced it (#683, evidence from the sweep behind #681).
+//     Counted over the ANALYSED field so it and pilotCount describe one
+//     population; ESS rate is deliberately not published beside it (ρ ≈ 0.99
+//     over the archive — the same fact twice, and goal is the one pilots talk
+//     in). Whether to band it in words ("a hard day") is left open: a label
+//     that judges an organiser's task setting should be checked with
+//     organisers first.
+//     Purely additive: no metric value moves and no correlation changes. The
+//     bump rolls stored reports so they gain the count on their next lazy
+//     revalidation; a v25 row renders without it until then, and consumers
+//     must test for `undefined` rather than falsiness — zero in goal is a
+//     real reading, and the hardest one there is.
+export const TASK_ANALYSIS_VERSION = 26;

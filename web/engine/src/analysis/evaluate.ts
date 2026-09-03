@@ -250,5 +250,9 @@ function buildBasis(field: FieldContext): TaskAnalysisBasis {
     workingBandFallback: field.workingBand.usedFallback,
     airtimeSplit: buildAirtimeSplit(field),
     ...(analysisWindow ? { analysisWindow } : {}),
+    // Always stated, zero included: "0 of 44 made goal" is the day's loudest
+    // fact, not a missing measurement. See TaskAnalysisBasis.goalCount for why
+    // it is counted over the analysed field rather than the scored one.
+    goalCount: field.pilots.filter((p) => p.score.madeGoal).length,
   };
 }

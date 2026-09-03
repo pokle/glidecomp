@@ -485,6 +485,36 @@ export interface TaskAnalysisBasis {
    * before it are served stale while they revalidate.
    */
   analysisWindow?: { from: string; to: string };
+  /**
+   * How many of the {@link pilotCount} analysed pilots made goal — the day's
+   * difficulty, in the terms pilots themselves use for it.
+   *
+   * It is the context every other reading on the page needs. Several
+   * behaviours only separate the field on one kind of day: leaving a climb
+   * while it still works pays on an easy day and makes no measurable
+   * difference on a hard one, and flying wide of the course line REVERSES
+   * sign — it costs on an easy day and goes with a better result on a hard
+   * one, where the pilots deviating to hunt lift are the ones still airborne.
+   * Without the goal share a reader has no way to know which of those two
+   * pages they have open. (Issue #683; evidence from the archive sweep behind
+   * #681.)
+   *
+   * Counted over the ANALYSED field, not the scored one, so it and
+   * `pilotCount` describe the same population — the population every
+   * correlation on the page was measured over. Pilots the analysis could not
+   * measure are counted out of both halves and named in the basis box's own
+   * exclusion note, so the two numbers are never silently different fields.
+   *
+   * ESS rate is not published beside it: the two run ρ ≈ 0.99 over the
+   * archive, so it would be the same fact twice, and goal is the one pilots
+   * talk in.
+   *
+   * Optional: added in TASK_ANALYSIS_VERSION 26, and stored reports from
+   * before it are served stale while they revalidate. **Zero is a real
+   * reading** — a day nobody completed is the hardest kind there is — so a
+   * consumer must test for `undefined`, never for falsiness.
+   */
+  goalCount?: number;
 }
 
 /**

@@ -8,16 +8,22 @@
  * beside the thermals it is the band OF, which says more than any of them did
  * in a row of four. See analysis/basis-facts.ts.
  *
- * What is left is the pair that belongs to no section: how the field's airtime
- * divided between flight phases, and how many pilots the scores hold that this
- * analysis could not measure. The names and reasons behind that count are
- * reference material a reader consults once — on a task where eight pilots
- * flew without tracklogs the list ran longer than every fact above it put
- * together — so `excludedHref` points at the page that carries them.
+ * What is left belongs to no section: how hard the day was, how the field's
+ * airtime divided between flight phases, and how many pilots the scores hold
+ * that this analysis could not measure. The names and reasons behind that
+ * count are reference material a reader consults once — on a task where eight
+ * pilots flew without tracklogs the list ran longer than every fact above it
+ * put together — so `excludedHref` points at the page that carries them.
  *
- * Renders nothing at all when it has neither: a report stored before the split
- * existed (v12 or earlier, served while it revalidates) can leave this with
- * nothing to say, and an empty card is worse than no card.
+ * The goal share leads, because it is the fact the rest of the page has to be
+ * read against rather than one more reading among them: several of the
+ * behaviours below only separate the field on one kind of day, and one of
+ * them (gliding wide of the course line) reverses sign between an easy day
+ * and a hard one. See TaskAnalysisBasis.goalCount.
+ *
+ * Renders nothing at all when it has none of the three: a stored report from
+ * before one of these fields existed is SERVED while it revalidates, and can
+ * leave this with nothing to say. An empty card is worse than no card.
  */
 import { Card } from "@/react/rac/card";
 import { AirtimeSplitBar } from "./charts/AirtimeSplitBar";
@@ -36,14 +42,43 @@ export function AnalysisBasis({
    * cannot assume it is on the same one. */
   excludedHref?: string;
 }) {
-  if (!basis.airtimeSplit && excluded.length === 0) return null;
+  // `goalCount` is optional (a v25-or-earlier row, served while it
+  // revalidates) and ZERO is a real reading — the hardest day there is — so
+  // this tests for undefined, never for falsiness. A field of no pilots is
+  // the one case with nothing to say: "0 of 0" is a degenerate report, not a
+  // difficult day.
+  const goal =
+    basis.goalCount !== undefined && basis.pilotCount > 0
+      ? {
+          count: basis.goalCount,
+          pct: Math.round((100 * basis.goalCount) / basis.pilotCount),
+        }
+      : null;
+
+  if (!goal && !basis.airtimeSplit && excluded.length === 0) return null;
 
   return (
     <Card aria-label="Analysis basis">
+      {/* How hard the day was, in the terms pilots use for it. Counted over
+          the analysed field, which is the same population every correlation
+          on this page was measured over — and the same one the exclusion note
+          below accounts for. */}
+      {goal ? (
+        <p className="text-sm">
+          <strong className="tabular-nums">
+            {goal.count} of {basis.pilotCount}
+          </strong>{" "}
+          made goal{" "}
+          <span className="tabular-nums text-muted-foreground">
+            ({goal.pct}%)
+          </span>
+        </p>
+      ) : null}
+
       {/* Three shares of one whole, read against each other, so the bars take
           the full width rather than sit in a column beside anything. */}
       {basis.airtimeSplit ? (
-        <dl>
+        <dl className={goal ? "mt-4 border-t pt-3" : undefined}>
           <div>
             <dt className="text-xs text-muted-foreground">Airtime split</dt>
             <dd className="text-sm tabular-nums">
@@ -58,7 +93,9 @@ export function AnalysisBasis({
       {excluded.length > 0 ? (
         <p
           className={
-            basis.airtimeSplit ? "mt-4 border-t pt-3 text-sm" : "text-sm"
+            goal || basis.airtimeSplit
+              ? "mt-4 border-t pt-3 text-sm"
+              : "text-sm"
           }
         >
           <strong>{excluded.length}</strong> pilot
