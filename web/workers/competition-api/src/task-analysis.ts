@@ -1,5 +1,5 @@
 /**
- * Behavioural task analysis across a whole task field — the 26 metrics behind
+ * Behavioural task analysis across a whole task field — the 25 metrics behind
  * the public `/comp/:id/analysis` pages. See
  * docs/2026-07-18-field-analysis-plan.md.
  */
