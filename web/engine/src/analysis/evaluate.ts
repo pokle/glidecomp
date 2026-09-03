@@ -251,8 +251,10 @@ function buildBasis(field: FieldContext): TaskAnalysisBasis {
     airtimeSplit: buildAirtimeSplit(field),
     ...(analysisWindow ? { analysisWindow } : {}),
     // Always stated, zero included: "0 of 44 made goal" is the day's loudest
-    // fact, not a missing measurement. See TaskAnalysisBasis.goalCount for why
-    // it is counted over the analysed field rather than the scored one.
+    // fact, not a missing measurement. Over the ANALYSED field (`pilots`, not
+    // `scoreResult.pilotScores`) so the share stays checkable against this
+    // report's own tables — see TaskAnalysisBasis.goalCount, which also
+    // records where that parts company with the sweep's bands.
     goalCount: field.pilots.filter((p) => p.score.madeGoal).length,
   };
 }

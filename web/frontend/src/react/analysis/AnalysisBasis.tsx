@@ -42,15 +42,20 @@ export function AnalysisBasis({
    * cannot assume it is on the same one. */
   excludedHref?: string;
 }) {
-  // `goalCount` is optional (a v25-or-earlier row, served while it
+  // `goalCount` is optional (a v27-or-earlier row, served while it
   // revalidates) and ZERO is a real reading — the hardest day there is — so
   // this tests for undefined, never for falsiness. A field of no pilots is
   // the one case with nothing to say: "0 of 0" is a degenerate report, not a
   // difficult day.
+  //
+  // Out of `pilotCount`, the analysed field: the same population behind every
+  // correlation on this page, so the share is checkable against the tables
+  // that follow it. See TaskAnalysisBasis.goalCount.
   const goal =
     basis.goalCount !== undefined && basis.pilotCount > 0
       ? {
           count: basis.goalCount,
+          of: basis.pilotCount,
           pct: Math.round((100 * basis.goalCount) / basis.pilotCount),
         }
       : null;
@@ -59,14 +64,13 @@ export function AnalysisBasis({
 
   return (
     <Card aria-label="Analysis basis">
-      {/* How hard the day was, in the terms pilots use for it. Counted over
-          the analysed field, which is the same population every correlation
-          on this page was measured over — and the same one the exclusion note
-          below accounts for. */}
+      {/* How hard the day was, in the terms pilots use for it — and the
+          variable the archive sweep conditions the behaviours on, so it leads
+          the box the behaviours are read from. */}
       {goal ? (
         <p className="text-sm">
           <strong className="tabular-nums">
-            {goal.count} of {basis.pilotCount}
+            {goal.count} of {goal.of}
           </strong>{" "}
           made goal{" "}
           <span className="tabular-nums text-muted-foreground">

@@ -495,21 +495,36 @@ export interface TaskAnalysisBasis {
    * difference on a hard one, and flying wide of the course line REVERSES
    * sign — it costs on an easy day and goes with a better result on a hard
    * one, where the pilots deviating to hunt lift are the ones still airborne.
-   * Without the goal share a reader has no way to know which of those two
-   * pages they have open. (Issue #683; evidence from the archive sweep behind
+   * v27 accordingly tells the reader to read glide.extra_distance "against
+   * how many pilots made goal"; before this field the page could not say what
+   * that number was. (Issue #683; evidence from the archive sweep behind
    * #681.)
    *
-   * Counted over the ANALYSED field, not the scored one, so it and
-   * `pilotCount` describe the same population — the population every
-   * correlation on the page was measured over. Pilots the analysis could not
-   * measure are counted out of both halves and named in the basis box's own
-   * exclusion note, so the two numbers are never silently different fields.
+   * Counted over the ANALYSED field, so the share is CHECKABLE against the
+   * report it sits on: its denominator is the same `pilotCount` behind every
+   * correlation here, and its numerator is countable in the per-pilot tables.
+   * `scoreResult.pilotScores` was the alternative and is rejected — it can
+   * hold pilots `buildFieldContext` dropped for having no usable fixes, so on
+   * the CLI (which has no exclusion note) the report would state a
+   * denominator larger than its own tables with nothing to explain the gap.
+   *
+   * The cost is a known, bounded disagreement with the sweep that produced
+   * the goal-rate bands: audit-metric-conditions.ts measures
+   * `goal / scores.length` over the SCORED field. Across the bundled comps
+   * the goal COUNT is identical under both definitions on every task — only
+   * the denominator moves, and only where tracks were unanalysable:
+   * corryong-2021-open-t1 reads 52% here against the sweep's 47% (the
+   * largest gap, and enough to cross a band edge), corryong-2026-open-t1 38%
+   * against 36%, unungra-2020-open-t3 69% against 64%. In the BACKEND the
+   * two coincide exactly, because task-analysis.ts filters `pilotScores` down
+   * to the analysed set before calling buildFieldContext — so this only ever
+   * bites a sweep run from the CLI.
    *
    * ESS rate is not published beside it: the two run ρ ≈ 0.99 over the
    * archive, so it would be the same fact twice, and goal is the one pilots
    * talk in.
    *
-   * Optional: added in TASK_ANALYSIS_VERSION 26, and stored reports from
+   * Optional: added in TASK_ANALYSIS_VERSION 28, and stored reports from
    * before it are served stale while they revalidate. **Zero is a real
    * reading** — a day nobody completed is the hardest kind there is — so a
    * consumer must test for `undefined`, never for falsiness.

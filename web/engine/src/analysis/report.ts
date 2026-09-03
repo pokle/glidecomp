@@ -132,7 +132,7 @@ function formatAirtimeSplit(split: FieldAirtimeSplit): string {
  * "14 of 44 made goal (32%)" — the day's difficulty, in the terms pilots use
  * for it, and the context the whole ranking below has to be read against.
  *
- * Null for a stored report from before TASK_ANALYSIS_VERSION 26 (served while
+ * Null for a stored report from before TASK_ANALYSIS_VERSION 28 (served while
  * it revalidates), and for a field of no pilots — "0 of 0 made goal" is a
  * degenerate report, not a difficult day. Same two exits as the web's basis
  * box, so the two surfaces stay silent about the same days.

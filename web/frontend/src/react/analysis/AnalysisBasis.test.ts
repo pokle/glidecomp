@@ -131,8 +131,12 @@ describe("AnalysisBasis excluded pilots", () => {
 
 /**
  * How hard the day was — the fact the rest of the page has to be read
- * against, because several of the behaviours below only separate the field on
- * one kind of day and one of them reverses sign between the two (#683).
+ * against. Since v27 the engine's own `glide.extra_distance` explanation tells
+ * the reader to read it "against how many pilots made goal" (#683), and until
+ * this line the page never said what that number was.
+ *
+ * The denominator is the analysed `pilotCount`: see
+ * TaskAnalysisBasis.goalCount.
  */
 describe("AnalysisBasis goal share", () => {
   it("states the count, the field it is out of, and the share", () => {
@@ -140,6 +144,16 @@ describe("AnalysisBasis goal share", () => {
     expect(out).toContain("14 of 32");
     expect(out).toContain("made goal");
     expect(out).toContain("(44%)");
+  });
+
+  /** The denominator is the analysed field — the same population behind
+   * every correlation on the page, so the share stays checkable against the
+   * tables that follow it. */
+  it("counts out of the analysed pilot count", () => {
+    const out = html({ ...OLD_BASIS, goalCount: 14, pilotCount: 29 });
+    expect(out).toContain("14 of 29");
+    // 14/29 = 48%.
+    expect(out).toContain("(48%)");
   });
 
   /**
@@ -164,13 +178,13 @@ describe("AnalysisBasis goal share", () => {
    * while it revalidates — so the box meets bases with no count and must say
    * nothing rather than print "undefined" or invent a 0% day.
    */
-  it("says nothing when a v25-or-earlier row carries no count", () => {
+  it("says nothing when a v27-or-earlier row carries no count", () => {
     const out = html({ ...OLD_BASIS, airtimeSplit: SPLIT });
     expect(out).not.toContain("made goal");
     expect(out).not.toContain("undefined");
   });
 
-  /** With no count, no split and nobody excluded there is still nothing to
+  /** With no counts, no split and nobody excluded there is still nothing to
    * say — the goal share must not resurrect the empty card. */
   it("still renders nothing when the count is all that is missing", () => {
     expect(html(OLD_BASIS)).toBe("");
@@ -183,7 +197,12 @@ describe("AnalysisBasis goal share", () => {
 
   /** It leads: it is context for the rest, not one more reading among them. */
   it("comes before the airtime split", () => {
-    const out = html({ ...OLD_BASIS, goalCount: 14, pilotCount: 32, airtimeSplit: SPLIT });
+    const out = html({
+      ...OLD_BASIS,
+      goalCount: 14,
+      pilotCount: 32,
+      airtimeSplit: SPLIT,
+    });
     expect(out.indexOf("made goal")).toBeLessThan(out.indexOf("Airtime split"));
   });
 

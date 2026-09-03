@@ -408,15 +408,25 @@ thermals it is the band OF. What was left over belongs to no section and stays
 above the boxes: how hard the day was, the airtime split, and the count of
 pilots the scores hold that the analysis could not measure.
 
-The day's difficulty leads that box — "12 of 32 made goal (38%)", the count
-over the analysed field so it and the pilot count describe one population
-(#683, `TaskAnalysisBasis.goalCount`). It is context rather than one more
-reading: the archive sweep behind #681 found that several behaviours only
-separate the field on one kind of day, and that gliding wide of the course
-line reverses sign between an easy day and a hard one — so without the goal
-share a reader has no way to know which of those two pages they have open.
-Whether to band it in words ("a hard day") is still open, and worth putting to
-organisers before a label judges their task setting. The percentile heatmap
+The day's difficulty leads that box — "12 of 32 made goal (38%)" (#683,
+`TaskAnalysisBasis.goalCount`). It is context rather than one more reading:
+the archive sweep behind #681 found that several behaviours only separate the
+field on one kind of day, and that gliding wide of the course line reverses
+sign between an easy day and a hard one. `glide.extra_distance`'s own
+explanation now closes by telling the reader to read it "against how many
+pilots made goal", and before this line the page did not state that number.
+
+It is counted over the ANALYSED field, out of the same `pilotCount` every
+correlation rests on, so a reader can check it against the tables underneath.
+That parts company by a few points with the sweep that produced the goal-rate
+bands, which divides by the scored field (`audit-metric-conditions.ts`): over
+the bundled comps the goal count is identical under both definitions and only
+the denominator moves, worst at corryong-2021-open-t1 (52% here, 47% there).
+The backend never sees the difference — `task-analysis.ts` filters
+`pilotScores` down to the analysed set before building the field context — so
+it can only show up in a CLI sweep. Whether to band it in words ("a hard day")
+is still open, and worth putting to organisers before a label judges their
+task setting. The percentile heatmap
 went with the split: a wall of every pilot against every behaviour is the same
 "read the whole report at once" the split exists to undo, and the per-family
 tables state the readings exactly. `analysis/sections.ts` is the single list all of it reads —
