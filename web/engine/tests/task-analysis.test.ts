@@ -142,9 +142,8 @@ describe('task analysis integration (kosci-loop-t1)', () => {
     // Fixture-exempt on kosci (documented in the plan doc): the synthetic
     // triangle-wave tracks yield zero detected circles (selectivity,
     // circle_smoothness, day.wind samples), sub-20 km flights
-    // (km_between_climbs), uniform climbs (stf_proxy sparse), and no
-    // qualifying gaggle departures or final-glide initiations. No coverage
-    // gate for those — corryong is their exercise.
+    // (km_between_climbs), and no qualifying gaggle departures or final-glide
+    // initiations. No coverage gate for those — corryong is their exercise.
 
     // The day tables exist regardless.
     expect(byId.get('day.climb_by_hour')!.extraTables?.[0]?.rows.length).toBeGreaterThan(0);

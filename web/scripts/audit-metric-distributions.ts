@@ -17,6 +17,12 @@
  *   GLIDECOMP_COMPS_DIR=~/dev/glidecomp-archive/comps \
  *     bun web/scripts/audit-metric-distributions.ts --json out.json
  *
+ * The bundled comps alone are 10 tasks, which can expose a structural defect
+ * but cannot settle whether a metric has explanatory power. The full sweep —
+ * bundled AND archived together, 27 comps / 194 tasks / 4,959 pilot-task rows —
+ * is written up in docs/2026-09-02-metric-evidence.md, which also says how to
+ * point one GLIDECOMP_COMPS_DIR at both repositories at once.
+ *
  * Options:
  *   --json <path>          Write the full distribution report as JSON
  *                          (histograms included). Without it, only the text

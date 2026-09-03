@@ -108,7 +108,11 @@ describe('metric registration', () => {
       expect(m.shortLabel).toBeTruthy();
     }
     expect(metricById.get('climb.shared_percentile')!.direction).toBe('higher');
-    expect(metricById.get('climb.time_to_core')!.direction).toBe('lower');
+    // Descriptive (TASK_ANALYSIS_VERSION 26): over 181 archived tasks the sign
+    // of climb.time_to_core is a coin flip, and climb.circle_smoothness is the
+    // same, so neither declares a direction. See docs/2026-09-02-metric-evidence.md.
+    expect(metricById.get('climb.time_to_core')!.direction).toBe('neutral');
+    expect(metricById.get('climb.circle_smoothness')!.direction).toBe('neutral');
   });
 });
 
