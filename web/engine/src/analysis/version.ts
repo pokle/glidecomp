@@ -349,4 +349,30 @@
 //     revalidates it. Registry lookups by id in the UI are all fallback-guarded
 //     (ConsistencyMap's SHORT_LABELS ?? label; CompAnalysis filters the
 //     registry BY the stored ids), so none of them can fault on the orphan.
-export const TASK_ANALYSIS_VERSION = 26;
+// v27: glide.extra_distance drops to direction 'neutral' — it is the one
+//     metric measured to REVERSE with the day rather than merely weaken. Over
+//     123 archived tasks of >= 10 pilots, split at the quartiles of how many
+//     pilots made goal: on the easiest quarter of days flying wide of the line
+//     costs you (18 tasks cleared their noise floor, 100% of them positive —
+//     wide = worse), and on the hardest quarter it goes the other way (12
+//     cleared, 83% negative — wide = better). On a day most of the field lands
+//     out, the pilots who leave the line to hunt for lift are the ones still in
+//     the air, so the deviation marks the survivors rather than a wasted glide.
+//     Its 'lower' prior was therefore wrong on roughly half of all tasks, and
+//     it is why this metric had the weakest sign consistency (75%) of the
+//     eighteen that do separate the field — not unreliability, conditionality.
+//     Three explanations also change, none of them a computation:
+//       · glide.extra_distance says the sign changes with the day and to read
+//         it against how many pilots made goal.
+//       · climb.time_to_core and climb.circle_smoothness drop the closing
+//         claims that faster coring and rounder circles are better. Both went
+//         neutral in v26 while their prose still asserted a direction, which
+//         left them contradicting the section they sit in.
+//       · climb.exit_decay (already neutral) gains what the archive found: it
+//         goes with a better result on days most of the field completes, and
+//         makes no measurable difference on days most of it lands out.
+//     Evidence: docs/2026-09-02-metric-evidence.md and the new
+//     web/scripts/audit-metric-conditions.ts. No metric VALUE moves; the bump
+//     rolls stored reports onto the new direction and prose on their next lazy
+//     revalidation, and a v26 row keeps serving 'lower' until it does.
+export const TASK_ANALYSIS_VERSION = 27;

@@ -248,7 +248,7 @@ describe('clusterPilotStyles', () => {
     const report = makeReport(ranks, [
       { id: 'gaggle.affinity', direction: 'neutral', values: [...lo, ...hi] },
       { id: 'glide.speed', direction: 'higher', values: [...hi, ...lo] },
-      { id: 'glide.extra_distance', direction: 'lower', values: [...hi, ...lo] },
+      { id: 'race.start_delay', direction: 'lower', values: [...hi, ...lo] },
     ]);
     const sc = clusterPilotStyles(report)!;
     const wolves = sc.clusters.find((c) => c.members.some((m) => m.trackFile === 'p0.igc'))!;
@@ -263,10 +263,10 @@ describe('clusterPilotStyles', () => {
     // 'higher' metric, group runs high → the prior calls it a strength.
     expect(sig(wolves, 'glide.speed').hint).toBe('strength');
     // 'lower' metric, group runs high → usually costly.
-    expect(sig(wolves, 'glide.extra_distance').hint).toBe('cost');
+    expect(sig(wolves, 'race.start_delay').hint).toBe('cost');
     // Mirror group: same metrics, opposite sides, opposite hints.
     expect(sig(flyers, 'glide.speed').hint).toBe('cost');
-    expect(sig(flyers, 'glide.extra_distance').hint).toBe('strength');
+    expect(sig(flyers, 'race.start_delay').hint).toBe('strength');
     // Neutral metrics carry no prior, so no hint.
     expect(sig(wolves, 'gaggle.affinity').hint).toBeUndefined();
   });

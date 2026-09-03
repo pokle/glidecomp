@@ -137,8 +137,9 @@ const timeToCore: MetricComputer = {
     'How long the pilot takes to get into the best lift after they arrive in a thermal. For ' +
     'each thermal of 60 s or more, we measure the seconds from the entry until the 30 s rolling ' +
     'climb rate first reaches 90% of its peak in that thermal. The value is the median across ' +
-    'the thermals of the pilot. Every second here is a second spent climbing slower than the ' +
-    'thermal can carry them.',
+    'the thermals of the pilot. There is no expected direction. Time spent working into the ' +
+    'core is not lost if the pilot ends up in the better lift, so the sign of the correlation ' +
+    'says whether the hunt paid on this day.',
   compute(field) {
     return {
       perPilot: field.pilots.map((p): PilotMetricValue => {
@@ -200,7 +201,10 @@ const exitDecay: MetricComputer = {
     'This is an absolute rate, so read it against the day: compare it with the ' +
     'median climb in "How strong the day’s climbs were". A pilot who leaves at 1.5 m/s leaves a ' +
     'good climb on a 1 m/s day, and takes the worst lift available on a 4 m/s day. There is no ' +
-    'expected direction. The sign of the correlation says which behaviour paid on this task.',
+    'expected direction, but the day decides how much this matters: across the archive, ' +
+    'leaving lift that still works goes with a better result on days when most of the field ' +
+    'completes the course, and makes no measurable difference on days when most of it lands ' +
+    'out. The sign of the correlation says which behaviour paid on this task.',
   compute(field) {
     return {
       perPilot: field.pilots.map((p): PilotMetricValue => {
@@ -412,7 +416,9 @@ const circleSmoothness: MetricComputer = {
     'Whether the pilot flies clean, repeatable circles, or moves around the thermal. We fit ' +
     'each detected circle by least squares. The RMS fit error divided by the fitted radius ' +
     'measures how round the turn was. The value is the median over all of the circles of the ' +
-    'pilot. A lower value means smoother and more consistent turns.',
+    'pilot. A lower value means smoother and more consistent turns. There is no expected ' +
+    'direction: a rough trace can be a pilot chasing a drifting or broken core rather than a ' +
+    'pilot circling badly.',
   compute(field) {
     let fieldLeft = 0;
     let fieldTotal = 0;

@@ -247,7 +247,13 @@ const glideExtraDistance: MetricComputer = {
   shortLabel: 'Wide%',
   unit: 'pct',
   family: 'gliding',
-  direction: 'lower',
+  /**
+   * Neutral since TASK_ANALYSIS_VERSION 27, and the ONE metric measured to
+   * reverse outright with the day: flying wide costs on a day most of the
+   * field completes, and goes with a BETTER result on a day most of it lands
+   * out. See docs/2026-09-02-metric-evidence.md.
+   */
+  direction: 'neutral',
   /** Directional names for a surface that claims a winner — see
    * MetricWinningPhrasings. */
   winning: {
@@ -262,7 +268,11 @@ const glideExtraDistance: MetricComputer = {
     + 'path length. Circling and searching contribute their entry-to-exit displacement instead. '
     + 'A climb or a search for lift therefore never reads as a wide line, because a pilot '
     + 'chooses a line only on glide. 0% is a real value that a pilot can reach: a pilot who '
-    + 'flies the line of the optimiser scores exactly zero.',
+    + 'flies the line of the optimiser scores exactly zero. There is no expected direction, '
+    + 'and this metric changes sides with the day: on a day when most of the field completes '
+    + 'the course, flying wide costs you, but on a day when most of it lands out, the pilots '
+    + 'who leave the line to hunt for lift are the ones still in the air. Read the sign of the '
+    + 'correlation against how many pilots made goal.',
   compute(field) {
     const sssIdx = Math.max(0, getEffectiveSSSIndex(field.task));
     const optimizedByLeg = new Map<number, number>();

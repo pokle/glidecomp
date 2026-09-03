@@ -79,12 +79,19 @@ splits them three ways.
   coin flip (54%, 58%, 56%). Their median signed ρ is +0.03, +0.00 and −0.03.
   This is the shape of noise, not of a weak effect.
 
+  Two refinements from the follow-up conditions sweep (below), which counts the
+  small fields honestly. `climb.circle_smoothness` does clear its floor slightly
+  more often than chance allows (1.57× the exact expected rate, p = 0.019), so
+  something is there — but no condition explains its sign.
+  `climb.time_to_core` shows **no significant excess at all** (1.21×, p = 0.25):
+  of the three it is the one with the best claim to being pure noise.
+
   Their declared `direction` is consequently unsupported: `climb.time_to_core`
   says `lower`, `climb.circle_smoothness` says `lower` and `glide.stf_proxy`
   says `higher`, and none of those signs holds. That is not a sign inversion to
   correct — there is no sign to correct to.
 
-## What was decided (TASK_ANALYSIS_VERSION 26)
+## What was decided (TASK_ANALYSIS_VERSION 26 and 27)
 
 On this evidence, `glide.stf_proxy` is **removed**, and `climb.time_to_core` and
 `climb.circle_smoothness` become **descriptive** — `direction: 'neutral'`, the
@@ -121,6 +128,124 @@ with it, taking the style clusters from 23 signature dimensions to 22.
 The registry is now **25 metrics**. The tables below are the sweep as run, before
 these changes — removing a metric and relabelling two directions moves no ρ, so
 every number in them still stands.
+
+**v27 then made `glide.extra_distance` neutral too**, on the conditions evidence
+in the next section: it is the one metric measured to reverse outright with the
+day. Three explanations changed with it — `extra_distance` gained the
+conditional reading, `climb.time_to_core` and `climb.circle_smoothness` lost the
+closing claims that faster coring and rounder circles are better (v26 had made
+them neutral while their prose still asserted a direction), and
+`climb.exit_decay` gained what the archive found about which days it shows up
+on. No metric value moves in either version.
+
+## Does the DAY decide what a behaviour is worth?
+
+**Swept 2026-09-03**, same corpus, by `web/scripts/audit-metric-conditions.ts`;
+raw output in [`2026-09-03-metric-conditions.txt`](./2026-09-03-metric-conditions.txt).
+
+The sweep above pools every task together, and that cannot tell a metric that
+never matters apart from one that matters enormously on some days and not on
+others: both give a median ρ near zero and a ~50/50 sign split. So this asks a
+different question — is a metric's per-task ρ itself predicted by the day's own
+conditions? Eighteen conditions are derived from the tracks (wind, climb
+strength and spread, working band, thermal counts, airtime split, task
+distance, goal and ESS rate, duration, field size, month).
+
+Two statistical traps had to be handled first, and both produced a confident
+wrong answer before they were:
+
+1. **The noise floor is not 5% at small n.** `spearmanNoiseFloor` is the
+   α = 0.05 critical value, but Spearman is *discrete* at tiny n: with 3 pilots
+   ρ can only be 0, ±0.5 or ±1, so P(|ρ| ≥ floor) is **1/3**, not 1/20. Counting
+   a 3-pilot task as a 5% event overstates the evidence by nearly 7×. Expected
+   counts are now summed from the exact per-n rate, and every condition test
+   drops fields under 10 pilots.
+2. **Multiple comparisons.** 414 (metric, condition) pairs were tested, so at
+   α = 0.05 about 20 "findings" are guaranteed by chance. Every p carries a
+   Benjamini–Hochberg q over the whole family; only q < 0.10 counts.
+
+### The answer is yes, emphatically — for some metrics
+
+**How many pilots made goal is the single most powerful conditioner**, which is
+why it should be on the page: see
+[#683](https://github.com/pokle/glidecomp/issues/683).
+
+| Metric | Condition | ρ | What happens |
+|---|---|---|---|
+| `race.leg_time_lost` | goal rate | **+0.61** | ρ +0.06 on the hardest quarter of days → +0.68 on the easiest |
+| `climb.exit_decay` | ESS rate | **−0.54** | +0.03 (1/30 informative) on hard days → −0.31 (13/33, 100% negative) on easy |
+| `decision.low_saves` | goal rate | **+0.53** | −0.37 (14/30 informative) on hard days → −0.05 (2/30) on easy |
+| `glide.extra_distance` | goal rate | **+0.49** | −0.22 on hard days → **+0.48** on easy — a true reversal |
+| `climb.shared_percentile` | wind | +0.43 | −0.30 (17/30) in calm air → −0.03 (1/31) in wind |
+| `climb.departure_band` | wind | −0.35 | −0.26 in calm air → −0.53 (19/30) in wind |
+
+Read as flying:
+
+- **Leaving lift that still works pays on a day the field completes, and makes
+  no measurable difference on a day it lands out** (`climb.exit_decay`). On a
+  weak day everyone must milk every climb.
+- **Getting low and saving it matters enormously on a hard day and not at all
+  on an easy one** (`decision.low_saves`) — the mirror image, and the two
+  together are the clearest statement in the data that weak days reward
+  survival and strong days reward speed.
+- **Out-climbing the pilots you share a thermal with decides the day in calm
+  air, and stops mattering in wind** (`climb.shared_percentile`), while **where
+  in the band you leave a thermal matters MORE in wind**
+  (`climb.departure_band`). Different skills for different air.
+
+### The one outright reversal
+
+`glide.extra_distance` is the only metric whose sign flips rather than merely
+fading, on both goal rate and ESS rate:
+
+| Goal rate | Median ρ | Informative | Sign |
+|---|---|---|---|
+| 0–29% (hardest) | **−0.22** | 12/29 | 83% negative |
+| 32–48% | +0.34 | 14/29 | 86% positive |
+| 49–64% | +0.31 | 16/29 | 81% positive |
+| 65–90% (easiest) | **+0.48** | 18/29 | 100% positive |
+
+On a day the field gets round, flying wide of the line costs you. On a day most
+of it lands out, the pilots who leave the line to hunt for lift are the ones
+still in the air, so deviation marks the survivors. Its `direction: 'lower'`
+was therefore wrong on roughly half of all tasks — and this is exactly why it
+had the weakest sign consistency (75%) of the eighteen metrics that separate
+the field. Not unreliability: conditionality. It is `neutral` from
+TASK_ANALYSIS_VERSION 27, and its explanation now tells the reader to read the
+sign against how many pilots made goal.
+
+### It also re-finds the `leg_time_lost` defect from the other side
+
+`race.leg_time_lost` has the strongest conditioning of any metric (+0.61 on
+goal rate) — reached with no knowledge of legs, partial finishers or the metric's
+internals, purely from ρ against the day. Goal rate is close to the inverse of
+the partial-finisher share, so this is the same defect documented below,
+confirmed independently. That is a useful check that the method finds real
+structure rather than manufacturing it.
+
+### What it does NOT rescue
+
+Neither `climb.circle_smoothness` nor `climb.time_to_core` has a condition
+surviving FDR (`time_to_core`'s best is wind at q = 0.062, and its quartiles
+are flat and sign-inconsistent). `glide.stf_proxy`, re-measured from the
+pre-removal commit, has two conditions at q = 0.052 — but with 0/28 and 1/31
+tasks informative in the extreme quartiles, that is a drift in the median of a
+distribution that is almost entirely noise, and its direction is *contrary* to
+speed-to-fly theory. Removing it stands.
+
+### Caveats
+
+- These are hypotheses, not conclusions. The conditions are the ones derivable
+  from tracks; the variable that most plausibly decides whether coring technique
+  matters — airmass stability, how broken the lift is — is not among them. "No
+  condition found" is not "no condition exists".
+- Goal rate and ESS rate are ~collinear and are partly a function of task
+  setting rather than the weather. Where a finding matters, the pure-weather
+  conditions agree: `climb.exit_decay` conditions on peak climb rate (−0.49) and
+  climb spread (−0.47) as well as on goal rate.
+- `durationH` reaches 242.9 h on one task — a tracklog whose timestamps survived
+  the quality checks. It only affects the two `durationH` rows, but those should
+  be read with that in mind.
 
 ## The `race.leg_time_lost` defect, confirmed at scale
 
@@ -204,9 +329,10 @@ check rather than a finding.
 | `day.wind` | day | — | — | 0/0 | — | — | 0% |
 | `day.climb_by_hour` | day | — | — | 0/0 | — | — | 0% |
 
-`glide.extra_distance` is worth one note: 75% sign agreement is the lowest of the
-sixteen that separate the field, low enough that the direction it declares
-(`lower`) is real but not dependable day to day.
+`glide.extra_distance`'s 75% sign agreement — the lowest of the eighteen that
+separate the field — is explained by the conditions sweep above: the metric
+reverses with the day rather than being unreliable, and it no longer declares a
+direction.
 
 ## Reproducing
 
@@ -221,8 +347,14 @@ ln -sfn <glidecomp-archive>/comps/*/ .   # corryong-cup-2021-open-t1 is in both,
                                           # byte-identical; either copy will do
 
 GLIDECOMP_COMPS_DIR=/tmp/all-comps bun web/scripts/audit-metric-distributions.ts
+GLIDECOMP_COMPS_DIR=/tmp/all-comps bun web/scripts/audit-metric-conditions.ts
 GLIDECOMP_COMPS_DIR=/tmp/all-comps bun web/scripts/audit-leg-time-lost.ts
 ```
 
-The full sweep takes about eight minutes; the leg-time probe, which needs only
-`scoreTask` and never `buildFieldContext`, about two.
+The two full sweeps take about eight minutes each; the leg-time probe, which
+needs only `scoreTask` and never `buildFieldContext`, about two.
+
+The three answer different questions and none replaces another:
+`audit-metric-distributions.ts` asks whether a metric separates the field at
+all, `audit-metric-conditions.ts` asks whether the day decides what it is worth,
+and `audit-leg-time-lost.ts` dissects one metric's known defect.

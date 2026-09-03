@@ -89,7 +89,10 @@ describe('GLIDING_METRICS registry', () => {
     }
     expect(metric('glide.speed').direction).toBe('higher');
     expect(metric('glide.ld_vs_field').direction).toBe('higher');
-    expect(metric('glide.extra_distance').direction).toBe('lower');
+    // Neutral since TASK_ANALYSIS_VERSION 27: over the archive this metric
+    // REVERSES with the day — wide costs on a day the field completes, and
+    // pays on a day it lands out. See docs/2026-09-02-metric-evidence.md.
+    expect(metric('glide.extra_distance').direction).toBe('neutral');
     expect(metric('glide.dolphin_fraction').direction).toBe('neutral');
   });
 });
