@@ -49,12 +49,18 @@ import {
   type CompAnalysisData,
   type CompMetricAggregate,
 } from "../analysis/types";
+import { useAdminView, useUser } from "../lib/user";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
+import {
+  CompSectionNav,
+  compSectionNavProps,
+} from "../comp/CompSectionNav";
 
 export function CompAnalysis() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useUser();
 
   // SSR seed: the server ran loadCompAnalysis for this URL and embedded
   // the result. Null on client boot / SPA navigations, where the effect fetches.
@@ -215,6 +221,18 @@ export function CompAnalysis() {
   }, [active]);
 
   const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
+  const isAdmin = useAdminView(
+    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
+  );
+  const sectionNav = comp ? (
+    <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
+  ) : (
+    <CompSectionNav
+      compId={compId}
+      compName={canonicalName ?? "Competition"}
+      isAdmin={isAdmin}
+    />
+  );
 
   // Gate on `status` only, never on the user session: the content is public,
   // and useUser().loading is true throughout SSR + the first hydration render,
@@ -237,6 +255,7 @@ export function CompAnalysis() {
       <div className="font-hyperlegible">
         <Breadcrumbs items={crumbs} current={COMP_ANALYSIS_LABEL} />
         <h1 className="mt-3 text-2xl font-bold">{COMP_ANALYSIS_LABEL}</h1>
+        {sectionNav}
         <Alert className="mt-4">
           <AlertTitle>
             {status === "forbidden" ? "Not available" : "Could not load the comp analysis"}
@@ -264,6 +283,8 @@ export function CompAnalysis() {
           the field, task by task.
         </p>
       </div>
+
+      {sectionNav}
 
       {/* The report's masthead: when it was computed, which chapters it has,
           and which class it is showing. These belong together in one panel —

@@ -20,6 +20,10 @@ import { idFromSegment, compPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { PilotsSection } from "../comp/PilotsSection";
+import {
+  CompSectionNav,
+  compSectionNavProps,
+} from "../comp/CompSectionNav";
 import type { CompDetailData } from "../comp/types";
 
 export function CompPilotsPage() {
@@ -56,6 +60,7 @@ export function CompPilotsPage() {
       <div>
         <Breadcrumbs items={underComp(compId, comp.name)} current="Pilots" />
         <h1 className="mt-2 text-2xl font-bold">Pilots</h1>
+        <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
         <p className="mt-2 text-muted-foreground">
           Pilot management is for competition admins. Looking for the pilots?
           They're all in the{" "}
@@ -74,6 +79,7 @@ export function CompPilotsPage() {
   return (
     <div>
       <Breadcrumbs items={underComp(compId, comp.name)} current="Pilots" />
+      <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
       <PilotsSection
         compId={compId}
         compName={comp.name}

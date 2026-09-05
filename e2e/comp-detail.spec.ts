@@ -428,6 +428,54 @@ test("the section bar folds into More rather than wrapping on a phone", async ({
   await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}$`));
 });
 
+/**
+ * The section bar used to live only on the hub, so Scores / Waypoints /
+ * Comp analysis dropped the reader out of the set they had just clicked.
+ * Every destination now carries the same links, with the page being read
+ * marked current, and the in-page pair (Tasks, Activity) still reach the
+ * hub sections from a sibling page.
+ */
+test("the section bar is the same on every competition page", async ({ page }) => {
+  const publicNames = [/Tasks/, "Scores", /Waypoints/, "Comp analysis", "Activity"];
+
+  async function expectBar(current: string | RegExp) {
+    const bar = page.getByRole("navigation", { name: "Sections" });
+    await expect(bar).toBeVisible({ timeout: 15_000 });
+    for (const name of publicNames) {
+      await expect(bar.getByRole("link", { name })).toBeVisible();
+    }
+    await expect(bar.getByRole("link", { name: current })).toHaveAttribute(
+      "aria-current",
+      /^(page|true)$/
+    );
+  }
+
+  await page.goto(`/comp/${compId}`);
+  await expectBar(/Tasks/);
+
+  const bar = () => page.getByRole("navigation", { name: "Sections" });
+  await bar().getByRole("link", { name: "Scores" }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/scores`));
+  await expectBar("Scores");
+
+  await bar().getByRole("link", { name: /Waypoints/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/waypoints`));
+  await expectBar(/Waypoints/);
+
+  await bar().getByRole("link", { name: "Comp analysis" }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}/analysis`));
+  await expectBar("Comp analysis");
+
+  await bar().getByRole("link", { name: "Activity" }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}(?:\\?.*)?#activity`));
+  await expect(page.locator("#activity")).toBeInViewport();
+  await expectBar("Activity");
+
+  await bar().getByRole("link", { name: /Tasks/ }).click();
+  await expect(page.locator("#tasks")).toBeInViewport();
+  await expectBar(/Tasks/);
+});
+
 test("the app header folds into More rather than wrapping on a phone", async ({
   page,
   isMobile,

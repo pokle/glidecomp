@@ -63,11 +63,12 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { fetchWithRetry } from "../comp/types";
+import { fetchWithRetry, type CompDetailData } from "../comp/types";
 import { formatCoords, parseCoords } from "../comp/route-editor";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { TabulatorGrid } from "../comp/TabulatorGrid";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
+import { CompSectionNav } from "../comp/CompSectionNav";
 import { useInitialData } from "../lib/initial-data";
 import { cn } from "@/react/lib/utils";
 import { formatAltitude, formatCylinderRadius, useUnits } from "../lib/units";
@@ -198,6 +199,18 @@ export function CompWaypoints() {
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
   useCanonicalPath(compName ? compWaypointsPath(compId, compName) : null);
   const [realIsAdmin, setRealIsAdmin] = useState(!!initial?.comp.is_admin);
+  const [taskCount, setTaskCount] = useState<number | undefined>(
+    initial?.comp.tasks?.length
+  );
+  const [waypointCount, setWaypointCount] = useState<number | undefined>(
+    initial?.comp.waypoint_count ?? (initial ? initial.waypoints.length : undefined)
+  );
+  const [pilotCount, setPilotCount] = useState<number | undefined>(
+    initial?.comp.pilot_count
+  );
+  const [scoringFormat, setScoringFormat] = useState<
+    CompDetailData["scoring_format"] | undefined
+  >(initial?.comp.scoring_format);
   const [rows, setRows] = useState<WpRow[]>(() =>
     initial ? initial.waypoints.map(toRow) : []
   );
@@ -286,12 +299,15 @@ export function CompWaypoints() {
         }
         // encodeComp is loosely typed, so read the fields we need via unknown.
         // The server already computes is_admin (super-admins included).
-        const comp = (await compRes.json()) as unknown as {
-          name?: string;
+        const comp = (await compRes.json()) as unknown as CompDetailData & {
           is_admin?: boolean;
         };
         setCompName(comp.name ?? "");
         setRealIsAdmin(!!comp.is_admin);
+        setTaskCount(comp.tasks?.length);
+        setWaypointCount(comp.waypoint_count);
+        setPilotCount(comp.pilot_count);
+        setScoringFormat(comp.scoring_format);
         const wpData = wpRes.ok
           ? ((await wpRes.json()) as unknown as { waypoints: WaypointFileRecord[] })
           : { waypoints: [] };
@@ -601,7 +617,17 @@ export function CompWaypoints() {
           bottom of the page — where the work ends. */}
       <h1 className="mt-1 text-2xl font-bold">Waypoints</h1>
 
-      <p className="mb-4 text-sm text-muted-foreground">
+      <CompSectionNav
+        compId={compId}
+        compName={compName}
+        taskCount={taskCount}
+        waypointCount={waypointCount}
+        pilotCount={pilotCount}
+        scoringFormat={scoringFormat}
+        isAdmin={isAdmin}
+      />
+
+      <p className="mb-4 mt-4 text-sm text-muted-foreground">
         The shared waypoints for this competition. Tasks pick their turnpoints
         from this set.{" "}
         {isAdmin
