@@ -128,3 +128,88 @@ describe("AnalysisBasis excluded pilots", () => {
     expect(html(OLD_BASIS, EIGHT.slice(0, 1))).toContain("pilot is in the scores");
   });
 });
+
+/**
+ * How hard the day was — the fact the rest of the page has to be read
+ * against. Since v27 the engine's own `glide.extra_distance` explanation tells
+ * the reader to read it "against how many pilots made goal" (#683), and until
+ * this line the page never said what that number was.
+ *
+ * The denominator is the analysed `pilotCount`: see
+ * TaskAnalysisBasis.goalCount.
+ */
+describe("AnalysisBasis goal share", () => {
+  it("states the count, the field it is out of, and the share", () => {
+    const out = html({ ...OLD_BASIS, goalCount: 14, pilotCount: 32 });
+    expect(out).toContain("14 of 32");
+    expect(out).toContain("made goal");
+    expect(out).toContain("(44%)");
+  });
+
+  /** The denominator is the analysed field — the same population behind
+   * every correlation on the page, so the share stays checkable against the
+   * tables that follow it. */
+  it("counts out of the analysed pilot count", () => {
+    const out = html({ ...OLD_BASIS, goalCount: 14, pilotCount: 29 });
+    expect(out).toContain("14 of 29");
+    // 14/29 = 48%.
+    expect(out).toContain("(48%)");
+  });
+
+  /**
+   * Zero is the loudest reading the basis has — nobody completed the task —
+   * and it is also falsy. A box that tested truthiness would drop the fact on
+   * exactly the days that have one.
+   */
+  it("renders the hardest day of all rather than treating 0 as absent", () => {
+    const out = html({ ...OLD_BASIS, goalCount: 0, pilotCount: 32 });
+    expect(out).toContain("0 of 32");
+    expect(out).toContain("(0%)");
+  });
+
+  it("renders a whole field into goal", () => {
+    const out = html({ ...OLD_BASIS, goalCount: 32, pilotCount: 32 });
+    expect(out).toContain("32 of 32");
+    expect(out).toContain("(100%)");
+  });
+
+  /**
+   * The version bump makes stored reports stale, but a stale row is SERVED
+   * while it revalidates — so the box meets bases with no count and must say
+   * nothing rather than print "undefined" or invent a 0% day.
+   */
+  it("says nothing when a v27-or-earlier row carries no count", () => {
+    const out = html({ ...OLD_BASIS, airtimeSplit: SPLIT });
+    expect(out).not.toContain("made goal");
+    expect(out).not.toContain("undefined");
+  });
+
+  /** With no counts, no split and nobody excluded there is still nothing to
+   * say — the goal share must not resurrect the empty card. */
+  it("still renders nothing when the count is all that is missing", () => {
+    expect(html(OLD_BASIS)).toBe("");
+  });
+
+  /** "0 of 0 made goal" is a degenerate report, not a difficult day. */
+  it("says nothing for a field of no pilots", () => {
+    expect(html({ ...OLD_BASIS, goalCount: 0, pilotCount: 0 })).toBe("");
+  });
+
+  /** It leads: it is context for the rest, not one more reading among them. */
+  it("comes before the airtime split", () => {
+    const out = html({
+      ...OLD_BASIS,
+      goalCount: 14,
+      pilotCount: 32,
+      airtimeSplit: SPLIT,
+    });
+    expect(out.indexOf("made goal")).toBeLessThan(out.indexOf("Airtime split"));
+  });
+
+  /** The share alone is enough to earn the card, on a stale row with no split. */
+  it("carries the card on its own", () => {
+    const out = html({ ...OLD_BASIS, goalCount: 14, pilotCount: 32 });
+    expect(out).not.toBe("");
+    expect(out).not.toContain("Airtime split");
+  });
+});

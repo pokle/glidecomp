@@ -375,4 +375,50 @@
 //     web/scripts/audit-metric-conditions.ts. No metric VALUE moves; the bump
 //     rolls stored reports onto the new direction and prose on their next lazy
 //     revalidation, and a v26 row keeps serving 'lower' until it does.
-export const TASK_ANALYSIS_VERSION = 27;
+// v28: the basis gains `goalCount` — how many of the analysed pilots made
+//     goal — and both surfaces print it as the day's difficulty ("14 of 44
+//     made goal (32%)"), the CLI leading its day line with it and the web
+//     leading the basis box.
+//     It is what makes v27 followable. That change told the reader to read
+//     glide.extra_distance "against how many pilots made goal", and the page
+//     did not state it: the number was on the scores page, for the reader to
+//     derive. The same sweep is why it matters beyond that one metric —
+//     climb.exit_decay's median ρ against rank runs +0.04 on the hardest
+//     quarter of tasks (0–26% in goal, 1 of 30 clearing the noise floor) to
+//     −0.31 on the easiest (61–90%, 13 of 33 clearing it, every one of them
+//     negative). Leaving lift while it still works pays on an easy day; on a
+//     hard day everyone has to milk every climb and it makes no measurable
+//     difference. The same gradient appears against the day's peak climb rate
+//     — a pure weather variable rather than an outcome — so it is not the
+//     result read back into itself (#683, evidence from the sweep behind
+//     #681: docs/2026-09-02-metric-evidence.md).
+//     Counted over the ANALYSED field, out of the existing `pilotCount`, so
+//     the share is CHECKABLE against the report it sits on: same denominator
+//     as every correlation, numerator countable in the per-pilot tables. The
+//     alternative, scoreResult.pilotScores, was rejected because it can hold
+//     pilots buildFieldContext dropped for having no usable fixes — on the
+//     CLI, which has no exclusion note, that prints a denominator larger than
+//     the report's own tables with nothing to explain the gap.
+//     The cost is a bounded disagreement with the sweep that produced the
+//     goal-rate bands, which measures `goal / scores.length` over the scored
+//     field (audit-metric-conditions.ts). Measured over the bundled comps, the
+//     goal COUNT is identical under both definitions on every task — only the
+//     denominator moves, and only where tracks were unanalysable:
+//     corryong-2021-open-t1 reads 52% here against the sweep's 47% (the
+//     largest gap, and enough to cross a band edge), corryong-2026-open-t1 38%
+//     against 36%, unungra-2020-open-t3 69% against 64%, and eleven of the
+//     sixteen agree exactly. In the BACKEND the two coincide by construction:
+//     task-analysis.ts filters pilotScores down to the analysed set before
+//     calling buildFieldContext, so what the web publishes is the analysed
+//     count either way and only a CLI sweep can see the difference.
+//     ESS rate is deliberately not published beside it (ρ ≈ 0.99 over the
+//     archive — the same fact twice, and goal is the one pilots talk in).
+//     Whether to band it in words ("a hard day") is left open: a label that
+//     judges an organiser's task setting should be checked with organisers
+//     first.
+//     Purely additive: no metric value moves and no correlation changes. The
+//     bump rolls stored reports so they gain the count on their next lazy
+//     revalidation; a v27 row renders without it until then, and consumers
+//     must test for `undefined` rather than falsiness — zero in goal is a
+//     real reading, and the hardest one there is.
+export const TASK_ANALYSIS_VERSION = 28;
