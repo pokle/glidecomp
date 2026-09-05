@@ -84,27 +84,26 @@ function defaultBandwidth(n: number): number {
 }
 
 /**
- * LOESS — locally weighted linear regression — sampled across the x range.
+ * LOESS — locally weighted quadratic regression — sampled across the x range.
  * The curve that follows the general trend of a scatter without asserting the
  * trend is a straight line.
  *
  * Why not a plain least-squares line: the relationships here are ranked by
  * *Spearman* ρ, which only claims monotonicity, and several are visibly
  * curved (the leaders and the tail both climb slowly, the middle does not).
- * A straight line would misdescribe those, and a single landed-out pilot at
- * an extreme value would tilt it. LOESS handles both: each sample point is
- * fitted from its q nearest neighbours with tricube distance weights, and
- * `robustIterations` bisquare passes down-weight points the fit keeps missing
- * (Cleveland 1979), so an outlier bends the curve near itself instead of
- * levering the whole thing.
+ * A straight line chords through those, sitting in empty space. Each sample
+ * is a local parabola over its q nearest neighbours with tricube distance
+ * weights, so the fit can bend with the field. Bisquare robust passes are
+ * available (`robustIterations`) but off by default: they down-weight the
+ * leaders and the tail — the points that *are* the bend.
  *
  * Returns null when there is nothing fittable: too few pairs, or every x
  * identical (a vertical stack has no trend, only a value).
  *
- * NOTE: local linear regression EXTRAPOLATES at the edges — with one pilot
- * far out on the right, the curve there is an extension of the field's trend,
- * not evidence about that pilot. Callers plotting against a bounded axis
- * (rank) should clamp the fitted y into the axis domain.
+ * NOTE: local quadratic regression EXTRAPOLATES at the edges — with one
+ * pilot far out on the right, the curve there is an extension of the
+ * field's trend, not evidence about that pilot. Callers plotting against a
+ * bounded axis (rank) should clamp the fitted y into the axis domain.
  */
 export function loessTrend(
   xs: number[],
@@ -112,8 +111,15 @@ export function loessTrend(
   {
     bandwidth,
     steps = 48,
-    robustIterations = 2,
-  }: { bandwidth?: number; steps?: number; robustIterations?: number } = {}
+    robustIterations = 0,
+    degree = 2,
+  }: {
+    bandwidth?: number;
+    steps?: number;
+    robustIterations?: number;
+    /** 2 = local parabola (the published trend). 1 = local line. */
+    degree?: 1 | 2;
+  } = {}
 ): TrendPoint[] | null {
   const pairs: TrendPoint[] = [];
   for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
@@ -126,10 +132,12 @@ export function loessTrend(
   const py = pairs.map((p) => p.y);
   if (!(px[n - 1] > px[0])) return null;
 
-  const q = Math.min(n, Math.max(3, Math.round((bandwidth ?? defaultBandwidth(n)) * n)));
+  const minQ = degree === 2 ? 4 : 3;
+  const q = Math.min(n, Math.max(minQ, Math.round((bandwidth ?? defaultBandwidth(n)) * n)));
+  const fitAt = degree === 2 ? localQuadratic : localLinear;
   const robust = new Array<number>(n).fill(1);
   for (let it = 0; it < robustIterations; it++) {
-    const residuals = px.map((x, i) => Math.abs(py[i] - localLinear(px, py, robust, x, q)));
+    const residuals = px.map((x, i) => Math.abs(py[i] - fitAt(px, py, robust, x, q)));
     // 6 × the median absolute residual is Cleveland's scale: a point off by
     // more than that is treated as an outlier and drops out entirely.
     const scale = 6 * quantileSorted([...residuals].sort((a, b) => a - b), 0.5);
@@ -152,7 +160,44 @@ export function loessTrend(
     distinct.length <= steps
       ? distinct
       : Array.from({ length: steps + 1 }, (_, s) => px[0] + ((px[n - 1] - px[0]) * s) / steps);
-  return at.map((x) => ({ x, y: localLinear(px, py, robust, x, q) }));
+  return at.map((x) => ({ x, y: fitAt(px, py, robust, x, q) }));
+}
+
+/** Slide a q-wide window so x sits as near its centre as the ends allow. */
+function windowBounds(px: number[], x: number, q: number): { lo: number; hi: number; far: number } {
+  const n = px.length;
+  let lo = 0;
+  let hi = q - 1;
+  while (hi < n - 1 && x - px[lo] > px[hi + 1] - x) {
+    lo++;
+    hi++;
+  }
+  return { lo, hi, far: Math.max(x - px[lo], px[hi] - x) };
+}
+
+function tricubeWeights(
+  px: number[],
+  robust: number[],
+  x: number,
+  lo: number,
+  hi: number,
+  far: number
+): { w: number[]; sw: number } {
+  const w: number[] = [];
+  let sw = 0;
+  for (let i = lo; i <= hi; i++) {
+    const t = far > 0 ? Math.abs(px[i] - x) / far : 0;
+    const wi = (t >= 1 ? 0 : (1 - t ** 3) ** 3) * robust[i];
+    w.push(wi);
+    sw += wi;
+  }
+  return { w, sw };
+}
+
+function windowMean(py: number[], lo: number, hi: number): number {
+  let sum = 0;
+  for (let i = lo; i <= hi; i++) sum += py[i];
+  return sum / (hi - lo + 1);
 }
 
 /**
@@ -167,40 +212,23 @@ function localLinear(
   x: number,
   q: number
 ): number {
-  const n = px.length;
-  // Slide the q-wide window right while the point past its right edge is
-  // nearer to x than the one at its left edge.
-  let lo = 0;
-  let hi = q - 1;
-  while (hi < n - 1 && x - px[lo] > px[hi + 1] - x) {
-    lo++;
-    hi++;
-  }
-  const far = Math.max(x - px[lo], px[hi] - x);
-
-  const w: number[] = [];
-  let sw = 0;
-  let swx = 0;
-  let swy = 0;
-  for (let i = lo; i <= hi; i++) {
-    const t = far > 0 ? Math.abs(px[i] - x) / far : 0;
-    const wi = (t >= 1 ? 0 : (1 - t ** 3) ** 3) * robust[i];
-    w.push(wi);
-    sw += wi;
-    swx += wi * px[i];
-    swy += wi * py[i];
-  }
+  const { lo, hi, far } = windowBounds(px, x, q);
+  const { w, sw } = tricubeWeights(px, robust, x, lo, hi, far);
   if (!(sw > 0)) {
     // Every neighbour was zeroed (all robustness weights gone, or a
     // single-point window at its own tricube edge): fall back to the plain
     // mean of the window rather than dividing by zero.
-    let sum = 0;
-    for (let i = lo; i <= hi; i++) sum += py[i];
-    return sum / (hi - lo + 1);
+    return windowMean(py, lo, hi);
   }
 
   // Centred second pass — E[x²] − E[x]² loses precision when the values are
   // large and their spread is small (e.g. altitudes in metres).
+  let swx = 0;
+  let swy = 0;
+  for (let i = lo; i <= hi; i++) {
+    swx += w[i - lo] * px[i];
+    swy += w[i - lo] * py[i];
+  }
   const mx = swx / sw;
   const my = swy / sw;
   let sxx = 0;
@@ -212,6 +240,73 @@ function localLinear(
   }
   const slope = sxx > 1e-12 ? sxy / sxx : 0;
   return my + slope * (x - mx);
+}
+
+/**
+ * Local quadratic: same neighbourhood and tricube weights as {@link localLinear},
+ * but a parabola in each window. ŷ at the evaluation x is β₀ of the weighted
+ * fit in scaled coordinates z = (xᵢ − x) / far, so the constant term is the
+ * value on the curve (Cleveland 1979, degree 2). Falls back to the linear
+ * fit when the 3×3 is singular — a window of two distinct x cannot support
+ * a parabola.
+ */
+function localQuadratic(
+  px: number[],
+  py: number[],
+  robust: number[],
+  x: number,
+  q: number
+): number {
+  const { lo, hi, far } = windowBounds(px, x, q);
+  const { w, sw } = tricubeWeights(px, robust, x, lo, hi, far);
+  if (!(sw > 0)) return windowMean(py, lo, hi);
+  if (!(far > 0)) {
+    let sy = 0;
+    for (let i = lo; i <= hi; i++) sy += w[i - lo] * py[i];
+    return sy / sw;
+  }
+
+  const A = [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+  ];
+  const b = [0, 0, 0];
+  for (let i = lo; i <= hi; i++) {
+    const wi = w[i - lo];
+    if (!(wi > 0)) continue;
+    const z = (px[i] - x) / far;
+    const row = [1, z, z * z];
+    for (let r = 0; r < 3; r++) {
+      b[r] += wi * row[r] * py[i];
+      for (let c = 0; c < 3; c++) A[r][c] += wi * row[r] * row[c];
+    }
+  }
+  const beta = solveLinearSystem(A, b);
+  if (!beta) return localLinear(px, py, robust, x, q);
+  return beta[0];
+}
+
+/** Gaussian elimination with partial pivoting. Null when the matrix is singular. */
+function solveLinearSystem(A: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let k = 0; k < n; k++) {
+    let piv = k;
+    for (let i = k + 1; i < n; i++) {
+      if (Math.abs(M[i][k]) > Math.abs(M[piv][k])) piv = i;
+    }
+    if (!(Math.abs(M[piv][k]) > 1e-12)) return null;
+    [M[k], M[piv]] = [M[piv], M[k]];
+    const diag = M[k][k];
+    for (let j = k; j <= n; j++) M[k][j] /= diag;
+    for (let i = 0; i < n; i++) {
+      if (i === k) continue;
+      const f = M[i][k];
+      for (let j = k; j <= n; j++) M[i][j] -= f * M[k][j];
+    }
+  }
+  return M.map((row) => row[n]);
 }
 
 /**

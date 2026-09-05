@@ -9,12 +9,12 @@
  * Rank 1 renders at the TOP so "up is better" everywhere on the page. Hand-
  * rolled SVG, no chart library: see charts/chart-utils.ts for why.
  *
- * Trend curve: a LOESS fit (chart-utils `loessTrend`) traces the shape the ρ
- * is claiming — but ONLY where ρ clears its noise floor. A curve is a strong
- * claim: the eye follows it and stops reading the dots, so drawing one
- * through scatter that shuffled ranks reproduce would manufacture a finding.
- * Where it is withheld the caption says why, rather than leaving a silent
- * absence.
+ * Trend curve: a local-quadratic LOESS fit (chart-utils `loessTrend`) traces
+ * the shape the ρ is claiming — but ONLY where ρ clears its noise floor. A
+ * curve is a strong claim: the eye follows it and stops reading the dots,
+ * so drawing one through scatter that shuffled ranks reproduce would
+ * manufacture a finding. Where it is withheld the caption says why, rather
+ * than leaving a silent absence.
  *
  * Labelling: the best/worst three pilots and the value extremes are named
  * permanently (selective direct labels); the focused or pinned dot is named
@@ -279,8 +279,8 @@ export function RankScatter({
 
   const excluded = pilots.length - points.length;
   const maxRank = Math.max(...pilots.map((p) => p.rank), 1);
-  // Clamped into the rank axis: local linear regression extrapolates at the
-  // edges, and "rank 0.4" is not a thing that exists.
+  // Clamped into the rank axis: local quadratic regression extrapolates at
+  // the edges, and "rank 0.4" is not a thing that exists.
   const trendRanks = trend?.map((p) => ({
     x: p.x,
     y: Math.min(maxRank, Math.max(1, p.y)),

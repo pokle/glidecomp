@@ -205,15 +205,18 @@ describe("loessTrend", () => {
     expect(at(0).y).toBeLessThan(at(20).y / 2);
   });
 
-  it("is not levered by a lone outlier", () => {
-    // One pilot 100× off the trend must bend the curve near itself, not tilt
-    // the whole line — the case a plain regression gets wrong.
+  it("is not levered by a lone outlier when bisquare is on", () => {
+    // One pilot 100x off the trend must bend the curve near itself, not tilt
+    // the whole line - the case a plain regression gets wrong. The published
+    // trend leaves robust off so the leaders can define the bend; this is
+    // the optional Cleveland pass.
     const xs = seq(30);
-    const clean = loessTrend(xs, xs.map((x) => 2 * x))!;
+    const opts = { robustIterations: 2 } as const;
+    const clean = loessTrend(xs, xs.map((x) => 2 * x), opts)!;
     const ys = xs.map((x) => (x === 15 ? 2000 : 2 * x));
-    const dirty = loessTrend(xs, ys)!;
+    const dirty = loessTrend(xs, ys, opts)!;
     expect(dirty[0].y).toBeCloseTo(clean[0].y, 1);
-    expect(dirty[dirty.length - 1].y).toBeCloseTo(clean[clean.length - 1].y, 1);
+    expect(dirty[dirty.length - 1].y).toBeCloseTo(clean[dirty.length - 1].y, 1);
   });
 
   it("tracks a monotone trend downward as x rises", () => {
@@ -259,5 +262,37 @@ describe("loessTrend", () => {
     expect(fit).toHaveLength(21);
     expect(fit[0].x).toBe(0);
     expect(fit[fit.length - 1].x).toBe(199);
+  });
+
+  it("recovers a parabola the line only approximates", () => {
+    const xs = seq(41).map((i) => i - 20);
+    const ys = xs.map((x) => x * x);
+    const quad = loessTrend(xs, ys)!;
+    for (const p of quad) expect(p.y).toBeCloseTo(p.x * p.x, 6);
+  });
+
+  it("a local line does not recover that parabola", () => {
+    const xs = seq(41).map((i) => i - 20);
+    const ys = xs.map((x) => x * x);
+    const linear = loessTrend(xs, ys, { degree: 1, robustIterations: 2 })!;
+    const at = (x: number) =>
+      linear.reduce((a, b) => (Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a));
+    // Degree 1 still bends (that is why LOESS exists) but cannot sit on
+    // the parabola: at the vertex it is tens of units high, not ~0.
+    expect(at(0).y).toBeGreaterThan(10);
+  });
+
+  it("follows an S more closely than a local line", () => {
+    // The RankScatter complaint: a sigmoid (slow at both ends, steep in the
+    // middle) whose chord sits in empty space.
+    const xs = seq(40);
+    const ys = xs.map((x) => 1 + 38 / (1 + Math.exp(-(x - 19.5) / 3)));
+    const linear = loessTrend(xs, ys, { degree: 1, robustIterations: 2 })!;
+    const quad = loessTrend(xs, ys)!;
+    const mae = (fit: { x: number; y: number }[]) => {
+      const yAt = new Map(fit.map((p) => [p.x, p.y]));
+      return xs.reduce((s, x, i) => s + Math.abs((yAt.get(x) ?? NaN) - ys[i]), 0) / xs.length;
+    };
+    expect(mae(quad)).toBeLessThan(mae(linear) * 0.5);
   });
 });
