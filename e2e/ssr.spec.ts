@@ -137,6 +137,8 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
       new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/pilot/[a-z0-9-]+-${pilotId}`)
     );
     expect(html).toContain(`<title>Scores — ${compName} — GlideComp</title>`);
+    expect(html).toContain('aria-label="Sections"');
+    expect(html).toContain("Comp analysis");
   });
 
   test("/comp/:id/scores.csv serves the scores as long-form CSV", async ({ request }) => {
@@ -195,6 +197,8 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     // The table content is in the raw server HTML.
     expect(html).toContain(waypoints[0].code);
     expect(html).toContain(`<title>Waypoints — ${compName} — GlideComp</title>`);
+    expect(html).toContain('aria-label="Sections"');
+    expect(html).toContain("Comp analysis");
     // The map stays client-only — its Suspense fallback is what the server streams.
     expect(html).not.toContain("mapboxgl-canvas");
   });
@@ -481,6 +485,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
     const html = await res.text();
     expect(html).toContain("window.__SSR_DATA__");
     expect(html).toContain(`Comp analysis — ${compName}`);
+    expect(html).toContain('aria-label="Sections"');
   });
 
   test("comp analysis of an invalid comp is a 404 noindex shell", async ({ request }) => {

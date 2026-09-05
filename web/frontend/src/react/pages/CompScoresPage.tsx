@@ -29,6 +29,10 @@ import {
 } from "../comp/CompScoresSection";
 import { ScoreFreshness } from "../comp/ScoreFreshness";
 import { ScoresDownload } from "../comp/ScoresDownload";
+import {
+  CompSectionNav,
+  compSectionNavProps,
+} from "../comp/CompSectionNav";
 import type { CompDetailData } from "../comp/types";
 import { useInitialData } from "../lib/initial-data";
 import type { CompScoresLoaderData } from "../loaders";
@@ -97,6 +101,8 @@ export function CompScoresPage() {
           </div>
         ) : null}
       </div>
+
+      <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
 
       {/* One card holds the whole scores apparatus: when it was computed, the
           view switcher, the table, and the caption under it. A card owns its
