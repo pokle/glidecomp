@@ -229,7 +229,7 @@ export function CompAnalysis() {
   ) : (
     <CompSectionNav
       compId={compId}
-      compName={canonicalName ?? "Competition"}
+      compName={canonicalName ?? ""}
       isAdmin={isAdmin}
     />
   );
@@ -241,6 +241,7 @@ export function CompAnalysis() {
   if (status === "loading") {
     return (
       <div className="font-hyperlegible">
+        {sectionNav}
         <Loading className="text-sm">Loading the comp analysis…</Loading>
       </div>
     );

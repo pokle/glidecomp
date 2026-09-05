@@ -450,6 +450,11 @@ test("the section bar is the same on every competition page", async ({ page }) =
     );
   }
 
+  // Wide enough that every link stays in the row rather than folding into
+  // More — this spec also runs under the phone project, where the default
+  // width would hide the later links (issue #639).
+  await page.setViewportSize({ width: 1280, height: 812 });
+
   await page.goto(`/comp/${compId}`);
   await expectBar(/Tasks/);
 
