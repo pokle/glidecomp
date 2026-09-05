@@ -19,12 +19,20 @@ import { unitDisplay } from "./units";
 import type { TaskAnalysisBasis, MetricReport } from "./types";
 
 /**
- * "37 pilots · 82h (13:05–18:40 AEDT)" — the size of the field and how much
- * flying the correlations rest on.
+ * "82h" or "5.6h" — the airtime total the basis and the section boxes share.
  *
  * Sub-10-hour totals keep a decimal: a thin day (7 pilots, 5.6 h) is exactly
  * when a reader needs to distrust what the section claims, and "6h" hides
  * that where "5.6h" does not.
+ */
+export function formatAirtimeHours(seconds: number): string {
+  const hours = seconds / 3600;
+  return `${hours < 10 ? hours.toFixed(1) : hours.toFixed(0)}h`;
+}
+
+/**
+ * "37 pilots · 82h (13:05–18:40 AEDT)" — the size of the field and how much
+ * flying the correlations rest on.
  */
 export function fieldFact(
   basis: TaskAnalysisBasis,
@@ -36,8 +44,7 @@ export function fieldFact(
   // Both halves are optional (a v12-or-earlier row, served while it
   // revalidates), so fall back to whichever half is there.
   if (seconds !== undefined) {
-    const hours = seconds / 3600;
-    const total = `${hours < 10 ? hours.toFixed(1) : hours.toFixed(0)}h`;
+    const total = formatAirtimeHours(seconds);
     parts.push(
       window ? `${total} (${formatTimeRange(window.from, window.to, timeZone)})` : total
     );

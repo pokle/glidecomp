@@ -158,14 +158,21 @@ function formatGoalShare(b: TaskAnalysisBasis): string | null {
  * divided), where the first line describes the measurement.
  *
  * The goal share leads: it is the one fact here that changes how the
- * separation ranking underneath should be read.
+ * separation ranking underneath should be read. When both groups flew, the
+ * field-wide percentages move onto the two lines below this one — they are
+ * a weighted average of those groups, and printing them here would hide the
+ * comparison.
  */
+function formatAirtimeHours(seconds: number): string {
+  const hours = seconds / 3600;
+  return hours < 10 ? hours.toFixed(1) : hours.toFixed(0);
+}
+
 function renderDayLine(b: TaskAnalysisBasis, timeZone?: string): string | null {
   const parts: string[] = [];
   const goal = formatGoalShare(b);
   if (goal) parts.push(goal);
   if (b.airtimeSplit) {
-    const hours = b.airtimeSplit.airborneSeconds / 3600;
     const window = b.analysisWindow
       ? ` (${timeRangeWithZone(
           new Date(b.analysisWindow.from).getTime(),
@@ -173,7 +180,11 @@ function renderDayLine(b: TaskAnalysisBasis, timeZone?: string): string | null {
           timeZone,
         )})`
       : '';
-    parts.push(`airtime ${hours.toFixed(0)} h${window}`, formatAirtimeSplit(b.airtimeSplit));
+    parts.push(`airtime ${(b.airtimeSplit.airborneSeconds / 3600).toFixed(0)} h${window}`);
+    // The grouped split, when both groups flew, replaces the field-wide
+    // percentages: those are a weighted average of the two lines below.
+    // A 0% or 100% goal day (or a v28-or-earlier row) keeps the one mix.
+    if (!b.airtimeSplitByGoal) parts.push(formatAirtimeSplit(b.airtimeSplit));
   } else if (b.analysisWindow) {
     parts.push(
       `flying ${timeRangeWithZone(
@@ -184,6 +195,16 @@ function renderDayLine(b: TaskAnalysisBasis, timeZone?: string): string | null {
     );
   }
   return parts.length > 0 ? '       ' + parts.join(' · ') : null;
+}
+
+function renderAirtimeByGoalLines(b: TaskAnalysisBasis): string[] {
+  const by = b.airtimeSplitByGoal;
+  if (!by || b.goalCount === undefined || b.pilotCount <= 0) return [];
+  const outCount = b.pilotCount - b.goalCount;
+  return [
+    `       made goal (${b.goalCount}, ${formatAirtimeHours(by.madeGoal.airborneSeconds)} h): ${formatAirtimeSplit(by.madeGoal)}`,
+    `       didn't make goal (${outCount}, ${formatAirtimeHours(by.didNotMakeGoal.airborneSeconds)} h): ${formatAirtimeSplit(by.didNotMakeGoal)}`,
+  ];
 }
 
 export function renderTaskAnalysis(
@@ -203,6 +224,7 @@ export function renderTaskAnalysis(
   );
   const dayLine = renderDayLine(b, timeZone);
   if (dayLine) lines.push(dayLine);
+  lines.push(...renderAirtimeByGoalLines(b));
 
   // The separation ranking leads: it tells the reader which strategies
   // actually mattered on this task, and so how to read everything below.

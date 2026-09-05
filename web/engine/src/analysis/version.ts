@@ -421,4 +421,19 @@
 //     revalidation; a v27 row renders without it until then, and consumers
 //     must test for `undefined` rather than falsiness — zero in goal is a
 //     real reading, and the hardest one there is.
-export const TASK_ANALYSIS_VERSION = 28;
+// v29: the basis gains `airtimeSplitByGoal` — the field-wide airtime split
+//     divided between pilots who made goal and those who did not. Each side
+//     is pooled over that group (seconds over seconds), so the percentages
+//     are of that group's airborne time, not of the day's. The field-wide
+//     `airtimeSplit` stays: it still feeds the section-box total ("37 pilots
+//     · 88h") and is the fallback on a 0% or 100% goal day, where there is
+//     nothing to compare.
+//     The field mix is a weighted average of the two groups, and on an easy
+//     day it is almost entirely the people who made goal — the rest are
+//     averaged away. Splitting the columns is what would show whether they
+//     flew a different day (more searching, less gliding).
+//     Purely additive: no metric value moves. The bump rolls stored reports
+//     so they gain the pair on their next lazy revalidation; a v28 row
+//     renders the single field-wide split until then. The pair is omitted
+//     when either group is empty, and consumers must tolerate its absence.
+export const TASK_ANALYSIS_VERSION = 29;

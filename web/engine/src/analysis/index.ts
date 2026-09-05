@@ -27,6 +27,7 @@ export type {
   MetricReport,
   TaskAnalysisBasis,
   FieldAirtimeSplit,
+  FieldAirtimeSplitByGoal,
   TaskAnalysisReport,
   FieldThermalsSummary,
   CompTaskResult,

@@ -18,11 +18,13 @@ import type {
   TaskAnalysisReport,
   FieldContext,
   FieldAirtimeSplit,
+  FieldAirtimeSplitByGoal,
   FieldThermalsSummary,
   MetricComputer,
   MetricCorrelation,
   MetricOutput,
   MetricReport,
+  PilotAnalysisContext,
   PilotMetricValue,
 } from './types';
 
@@ -196,16 +198,16 @@ function correlate(
 }
 
 /**
- * Share of the field's airborne time in each phase.
+ * Share of airborne time in each phase, pooled over `pilots`.
  *
- * Pooled over the field (total seconds per phase / total seconds), not a mean
- * of per-pilot shares: the question is what the DAY was like, and a pilot who
- * landed after ten minutes is ten minutes of evidence about it, not an equal
- * vote with someone who flew for three hours.
+ * Pooled (total seconds per phase / total seconds), not a mean of per-pilot
+ * shares: the question is what the DAY — or this group of it — was like, and
+ * a pilot who landed after ten minutes is ten minutes of evidence about it,
+ * not an equal vote with someone who flew for three hours.
  */
-function buildAirtimeSplit(field: FieldContext): FieldAirtimeSplit {
+function accumulateAirtime(pilots: PilotAnalysisContext[]): FieldAirtimeSplit {
   const seconds: Record<FlightPhase, number> = { climb: 0, glide: 0, search: 0 };
-  for (const p of field.pilots) {
+  for (const p of pilots) {
     for (const ph of p.phases) seconds[ph.phase] += ph.durationSeconds;
   }
   const total = seconds.climb + seconds.glide + seconds.search;
@@ -216,6 +218,28 @@ function buildAirtimeSplit(field: FieldContext): FieldAirtimeSplit {
     searchPct: pct(seconds.search),
     airborneSeconds: total,
   };
+}
+
+function buildAirtimeSplit(field: FieldContext): FieldAirtimeSplit {
+  return accumulateAirtime(field.pilots);
+}
+
+/**
+ * The field split, grouped by whether the pilot made goal.
+ *
+ * Absent when either group is empty (a 0% or 100% goal day has nothing to
+ * compare) or when a group contributed no airborne time.
+ */
+function buildAirtimeSplitByGoal(field: FieldContext): FieldAirtimeSplitByGoal | undefined {
+  const made = field.pilots.filter((p) => p.score.madeGoal);
+  const out = field.pilots.filter((p) => !p.score.madeGoal);
+  if (made.length === 0 || out.length === 0) return undefined;
+  const madeGoal = accumulateAirtime(made);
+  const didNotMakeGoal = accumulateAirtime(out);
+  if (madeGoal.airborneSeconds <= 0 || didNotMakeGoal.airborneSeconds <= 0) {
+    return undefined;
+  }
+  return { madeGoal, didNotMakeGoal };
 }
 
 /**
@@ -240,6 +264,7 @@ function buildAnalysisWindow(field: FieldContext): { from: string; to: string } 
 
 function buildBasis(field: FieldContext): TaskAnalysisBasis {
   const analysisWindow = buildAnalysisWindow(field);
+  const airtimeSplitByGoal = buildAirtimeSplitByGoal(field);
   return {
     pilotCount: field.pilots.length,
     gridStepSeconds: field.grid.stepSeconds,
@@ -250,6 +275,7 @@ function buildBasis(field: FieldContext): TaskAnalysisBasis {
     workingBandFallback: field.workingBand.usedFallback,
     airtimeSplit: buildAirtimeSplit(field),
     ...(analysisWindow ? { analysisWindow } : {}),
+    ...(airtimeSplitByGoal ? { airtimeSplitByGoal } : {}),
     // Always stated, zero included: "0 of 44 made goal" is the day's loudest
     // fact, not a missing measurement. Over the ANALYSED field (`pilots`, not
     // `scoreResult.pilotScores`) so the share stays checkable against this
