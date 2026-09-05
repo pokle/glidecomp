@@ -213,3 +213,90 @@ describe("AnalysisBasis goal share", () => {
     expect(out).not.toContain("Airtime split");
   });
 });
+
+/**
+ * The field mix grouped by whether the pilot made goal. Each column is that
+ * group's own airborne time; the field-wide bar is dropped because it is a
+ * weighted average of the two, and on an easy day it duplicates the left one.
+ */
+describe("AnalysisBasis airtime split by goal", () => {
+  const GOAL_SPLIT = {
+    climbPct: 42,
+    glidePct: 31,
+    searchPct: 27,
+    airborneSeconds: 252_000,
+  };
+  const OUT_SPLIT = {
+    climbPct: 38,
+    glidePct: 17,
+    searchPct: 45,
+    airborneSeconds: 64_800,
+  };
+  const GROUPED: TaskAnalysisBasis = {
+    ...OLD_BASIS,
+    goalCount: 28,
+    airtimeSplit: SPLIT,
+    airtimeSplitByGoal: { madeGoal: GOAL_SPLIT, didNotMakeGoal: OUT_SPLIT },
+  };
+
+  it("gives each group a column of the same bars", () => {
+    const out = html(GROUPED);
+    expect(out).toContain("Made goal");
+    expect(out).toContain("Didn&#x27;t make goal");
+    expect(out).toContain("28 pilots · 70h");
+    expect(out).toContain("9 pilots · 18h");
+    expect(out).toContain("27%");
+    expect(out).toContain("45%");
+  });
+
+  it("drops the field-wide mix when both groups flew", () => {
+    const out = html(GROUPED);
+    // The field-wide 38/23/39 must not appear as a third reading beside
+    // the two columns. 23% is only in the field mix.
+    expect(out).not.toContain("23%");
+  });
+
+  it("falls back to the single split when everyone made goal", () => {
+    const out = html({
+      ...OLD_BASIS,
+      goalCount: 37,
+      airtimeSplit: SPLIT,
+      airtimeSplitByGoal: { madeGoal: GOAL_SPLIT, didNotMakeGoal: OUT_SPLIT },
+    });
+    expect(out).not.toContain("Didn&#x27;t make goal");
+    expect(out).toContain("38%");
+  });
+
+  it("falls back to the single split when nobody made goal", () => {
+    const out = html({
+      ...OLD_BASIS,
+      goalCount: 0,
+      airtimeSplit: SPLIT,
+      airtimeSplitByGoal: { madeGoal: GOAL_SPLIT, didNotMakeGoal: OUT_SPLIT },
+    });
+    expect(out).not.toContain("Didn&#x27;t make goal");
+    expect(out).toContain("38%");
+  });
+
+  it("falls back when a stale row has no pair", () => {
+    const out = html({ ...OLD_BASIS, goalCount: 14, airtimeSplit: SPLIT });
+    expect(out).not.toContain("Didn&#x27;t make goal");
+    expect(out).toContain("Airtime split");
+    expect(out).toContain("38%");
+  });
+
+  it("keeps the singular readable for one pilot", () => {
+    const out = html({
+      ...OLD_BASIS,
+      goalCount: 36,
+      airtimeSplit: SPLIT,
+      airtimeSplitByGoal: {
+        madeGoal: { ...GOAL_SPLIT, airborneSeconds: 8_640 },
+        didNotMakeGoal: { ...OUT_SPLIT, airborneSeconds: 8_640 },
+      },
+    });
+    expect(out).toContain("36 pilots");
+    expect(out).toContain("1 pilot · 2.4h");
+    expect(out).not.toContain("1 pilots");
+  });
+});

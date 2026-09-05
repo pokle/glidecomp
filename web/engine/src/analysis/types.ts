@@ -458,6 +458,23 @@ export interface FieldAirtimeSplit {
   airborneSeconds: number;
 }
 
+/**
+ * {@link FieldAirtimeSplit} for the two groups the goal share already names.
+ *
+ * Each side is pooled over that group (seconds over seconds), so the
+ * percentages are of THAT group's airborne time, not of the field's. The
+ * field-wide {@link TaskAnalysisBasis.airtimeSplit} is the seconds-weighted
+ * mix of the two.
+ *
+ * Present only when both groups flew: a 0% or 100% goal day has nothing to
+ * compare. Optional so reports stored before TASK_ANALYSIS_VERSION 29 still
+ * parse — a stale row is served while it revalidates.
+ */
+export interface FieldAirtimeSplitByGoal {
+  madeGoal: FieldAirtimeSplit;
+  didNotMakeGoal: FieldAirtimeSplit;
+}
+
 /** Field-level facts printed in the report header. */
 export interface TaskAnalysisBasis {
   pilotCount: number;
@@ -475,6 +492,14 @@ export interface TaskAnalysisBasis {
    * revalidates, so consumers must render without this.
    */
   airtimeSplit?: FieldAirtimeSplit;
+  /**
+   * {@link airtimeSplit} divided between pilots who made goal and those who
+   * did not. Each side is that group's own mix — see
+   * {@link FieldAirtimeSplitByGoal}. Absent when only one group flew, and on
+   * reports stored before TASK_ANALYSIS_VERSION 29 (served stale while they
+   * revalidate).
+   */
+  airtimeSplitByGoal?: FieldAirtimeSplitByGoal;
   /**
    * When the field was flying: first takeoff → last landing across the
    * analysed pilots, as ISO instants. The CONSUMER renders the zone (comp

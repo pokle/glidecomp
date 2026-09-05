@@ -435,6 +435,7 @@ export {
   type CorrelationVerdict,
   type DayTimingSeries,
   type FieldAirtimeSplit,
+  type FieldAirtimeSplitByGoal,
   type FindSimilarPilotsOptions,
   type TaskAnalysisBasis,
   type TaskAnalysisReport,

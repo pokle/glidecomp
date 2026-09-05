@@ -26,9 +26,15 @@
  * leave this with nothing to say. An empty card is worse than no card.
  */
 import { Card } from "@/react/rac/card";
-import { AirtimeSplitBar } from "./charts/AirtimeSplitBar";
+import { AirtimeSplitBar, AirtimeSplitByGoal } from "./charts/AirtimeSplitBar";
+import { formatAirtimeHours } from "./basis-facts";
 import { EXCLUDED_PILOTS_ID } from "./Footnotes";
 import type { TaskAnalysisBasis } from "./types";
+
+function groupCaption(n: number, seconds: number): string {
+  const who = n === 1 ? "1 pilot" : `${n} pilots`;
+  return `${who} · ${formatAirtimeHours(seconds)}`;
+}
 
 export function AnalysisBasis({
   basis,
@@ -60,6 +66,18 @@ export function AnalysisBasis({
         }
       : null;
 
+  // Both groups must have flown: a 0% or 100% goal day has nothing to
+  // compare, and a v28-or-earlier row is served without the pair. The engine
+  // already omits it in those cases; this is the same gate so a malformed
+  // payload cannot draw an empty column.
+  const byGoal =
+    basis.airtimeSplitByGoal &&
+    goal &&
+    goal.count > 0 &&
+    goal.count < goal.of
+      ? basis.airtimeSplitByGoal
+      : null;
+
   if (!goal && !basis.airtimeSplit && excluded.length === 0) return null;
 
   return (
@@ -79,9 +97,31 @@ export function AnalysisBasis({
         </p>
       ) : null}
 
-      {/* Three shares of one whole, read against each other, so the bars take
-          the full width rather than sit in a column beside anything. */}
-      {basis.airtimeSplit ? (
+      {/* When both groups flew, each gets a column of the same bars. The
+          field-wide mix is a weighted average of those columns, and on an
+          easy day it duplicates the left one — so it is dropped here and
+          kept only as the fallback for a 0% or 100% day (or a stale row). */}
+      {byGoal && goal ? (
+        <dl className={goal ? "mt-4 border-t pt-3" : undefined}>
+          <div>
+            <dt className="text-xs text-muted-foreground">Airtime split</dt>
+            <dd className="mt-1.5 text-sm tabular-nums">
+              <AirtimeSplitByGoal
+                madeGoal={byGoal.madeGoal}
+                didNotMakeGoal={byGoal.didNotMakeGoal}
+                madeGoalCaption={groupCaption(
+                  goal.count,
+                  byGoal.madeGoal.airborneSeconds
+                )}
+                didNotMakeGoalCaption={groupCaption(
+                  goal.of - goal.count,
+                  byGoal.didNotMakeGoal.airborneSeconds
+                )}
+              />
+            </dd>
+          </div>
+        </dl>
+      ) : basis.airtimeSplit ? (
         <dl className={goal ? "mt-4 border-t pt-3" : undefined}>
           <div>
             <dt className="text-xs text-muted-foreground">Airtime split</dt>
