@@ -459,6 +459,12 @@ test("start and goal settings live on the turnpoint they belong to", async ({
   await expect(sheet.getByRole("heading", { name: "Start (SSS)" })).toBeVisible();
   await expect(sheet.getByRole("radio", { name: /^Enter start/ })).toBeVisible();
   await expect(sheet.getByRole("radio", { name: /^Goal line/ })).toHaveCount(0);
+  await expect(
+    sheet.getByRole("radio", { name: "Turnpoint", exact: true })
+  ).toBeVisible();
+  await expect(
+    sheet.getByRole("radio", { name: "Turnpoint (last is goal)" })
+  ).toHaveCount(0);
   await sheet.getByText("Enter start — cross inward").click();
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden();
@@ -470,6 +476,9 @@ test("start and goal settings live on the turnpoint they belong to", async ({
   await expect(sheet.getByRole("heading", { name: "Goal" })).toBeVisible();
   await expect(sheet.getByRole("radio", { name: /^Goal line/ })).toBeVisible();
   await expect(sheet.getByRole("radio", { name: /^Enter start/ })).toHaveCount(0);
+  await expect(
+    sheet.getByRole("radio", { name: "Turnpoint (last is goal)" })
+  ).toBeVisible();
   await sheet.getByText("Goal line — perpendicular to the last leg").click();
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden();

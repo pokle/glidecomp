@@ -25,7 +25,8 @@
  *
  * Start and goal settings are task-level (not a property of this row's
  * draft). They render here when this turnpoint is the SSS or the last
- * (goal) so the cylinder you opened is where you change them.
+ * (goal) so the cylinder you opened is where you change them. Type sits
+ * immediately above those sections, because they depend on it.
  */
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useFilter } from "react-aria-components";
@@ -39,8 +40,8 @@ import { ListBox, ListBoxItem } from "@/react/rac/list-box";
 import { formatCoords, parseCoords, type RouteRow } from "./route-editor";
 import {
   RADIUS_PRESETS,
-  TYPE_OPTIONS,
   radiusChipLabel,
+  typeOptions,
   type TurnpointDraft,
 } from "./turnpoint-draft";
 
@@ -247,15 +248,6 @@ export function TurnpointSheet({
           onChange={(v) => patch({ description: v })}
           placeholder="Bordano Landing"
         />
-        {/* The visible label names it; `aria-labelledby` from that Label
-            would beat an aria-label anyway, and the sheet title plus the Code
-            field above already say which turnpoint. */}
-        <ChoiceList
-          label="Type"
-          value={draft.type}
-          onChange={(v) => patch({ type: v as RouteRow["type"] })}
-          options={TYPE_OPTIONS}
-        />
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Radius (m)</span>
           <div
@@ -309,6 +301,15 @@ export function TurnpointSheet({
           onChange={(m) => patch({ altitude: Number.isFinite(m) ? m : "" })}
         />
 
+        {/* Type sits here, not with the identity fields: Start and Goal
+            settings appear or vanish from this choice, so the switch has to
+            be the thing immediately above them. */}
+        <ChoiceList
+          label="Type"
+          value={draft.type}
+          onChange={(v) => patch({ type: v as RouteRow["type"] })}
+          options={typeOptions({ lastIsGoal: showGoal })}
+        />
         {draft.type === "SSS" && startSettings ? (
           <section className="flex flex-col gap-1 border-t border-border pt-3">
             <h3 className="text-sm font-medium">Start (SSS)</h3>

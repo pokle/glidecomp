@@ -19,6 +19,18 @@ export const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([value, label]) => 
   label,
 }));
 
+/**
+ * The Type list for one turnpoint. Goal is the last turnpoint by position,
+ * not a type you choose, so the untyped option says so when this row is last
+ * — otherwise it reads like any mid-route cylinder.
+ */
+export function typeOptions(opts: { lastIsGoal?: boolean } = {}): typeof TYPE_OPTIONS {
+  if (!opts.lastIsGoal) return TYPE_OPTIONS;
+  return TYPE_OPTIONS.map((o) =>
+    o.value === "" ? { ...o, label: "Turnpoint (last is goal)" } : o
+  );
+}
+
 /** Short radius label for a preset chip: 400 → "400", 1000 → "1 km". */
 export function radiusChipLabel(m: number): string {
   return m >= 1000 ? `${m / 1000} km` : `${m}`;
