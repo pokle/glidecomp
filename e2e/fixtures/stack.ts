@@ -51,6 +51,21 @@ export const SUPER_ADMIN = {
 };
 
 /**
+ * A real competition organiser for fixtures that need one on the public
+ * "Organised by" line / submission-error contact copy.
+ *
+ * Specs often create comps while signed in as `SUPER_ADMIN` (so they can
+ * administer anything). That used to leave the super admin as the sole
+ * `comp_admin` row — and once that allowlist is excluded from organiser
+ * credit, the contact list is empty. Mint this account and set it as the
+ * admin list instead.
+ */
+export const E2E_ORGANISER = {
+  name: "E2E Organiser",
+  email: "e2e-organiser@test.local",
+};
+
+/**
  * Comp names created by the e2e suite. Any comp whose name starts with one of
  * these is fair game for the pre-run sweep — so a new spec that creates a comp
  * MUST name it with one of these prefixes (and still delete it itself; the
