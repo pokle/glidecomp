@@ -22,8 +22,12 @@
  * The draft is applied on the way OUT rather than per keystroke: the editor
  * re-runs `buildRoute` and repaints the map preview on every change to `rows`,
  * which is what draft-on-save exists to avoid.
+ *
+ * Start and goal settings are task-level (not a property of this row's
+ * draft). They render here when this turnpoint is the SSS or the last
+ * (goal) so the cylinder you opened is where you change them.
  */
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useFilter } from "react-aria-components";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
@@ -49,6 +53,9 @@ export function TurnpointSheet({
   onSave,
   onDelete,
   onClose,
+  startSettings,
+  goalSettings,
+  showGoal,
 }: {
   mode: "add" | "edit";
   initial: TurnpointDraft;
@@ -60,6 +67,17 @@ export function TurnpointSheet({
   /** Remove this turnpoint from the route. Absent while adding. */
   onDelete?: () => void;
   onClose: () => void;
+  /**
+   * Task-level start (SSS) controls. Shown when this turnpoint's type is
+   * Start (SSS) — including after the Type list is changed in this sheet.
+   */
+  startSettings?: ReactNode;
+  /**
+   * Task-level goal controls. Shown when {@link showGoal} is set (this
+   * turnpoint is last on the route, or is being appended).
+   */
+  goalSettings?: ReactNode;
+  showGoal?: boolean;
 }) {
   const [draft, setDraft] = useState<TurnpointDraft>(initial);
   // The waypoint search query. Controlled so picking a waypoint can clear it
@@ -290,6 +308,19 @@ export function TurnpointSheet({
           valueM={draftAltitudeM}
           onChange={(m) => patch({ altitude: Number.isFinite(m) ? m : "" })}
         />
+
+        {draft.type === "SSS" && startSettings ? (
+          <section className="flex flex-col gap-1 border-t border-border pt-3">
+            <h3 className="text-sm font-medium">Start (SSS)</h3>
+            {startSettings}
+          </section>
+        ) : null}
+        {showGoal && goalSettings ? (
+          <section className="flex flex-col gap-1 border-t border-border pt-3">
+            <h3 className="text-sm font-medium">Goal</h3>
+            {goalSettings}
+          </section>
+        ) : null}
 
         {/* No confirmation: this removes a turnpoint from a route that is
             still a draft, and the editor's Cancel puts the whole saved route
