@@ -1,0 +1,14 @@
+{
+  "name": "GlideComp",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "export BUN_INSTALL=\"$HOME/.bun\"; export PATH=\"$BUN_INSTALL/bin:$PATH\"; bun run dev"
+    }
+  ],
+  "ports": [
+    { "name": "frontend", "port": 3000 },
+    { "name": "api", "port": 8790 }
+  ]
+}
