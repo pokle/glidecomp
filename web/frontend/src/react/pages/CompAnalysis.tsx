@@ -49,7 +49,7 @@ import {
   type CompAnalysisData,
   type CompMetricAggregate,
 } from "../analysis/types";
-import { useAdminView, useUser } from "../lib/user";
+import { useAdminView } from "../lib/user";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
 import {
   CompSectionNav,
@@ -60,7 +60,6 @@ export function CompAnalysis() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user } = useUser();
 
   // SSR seed: the server ran loadCompAnalysis for this URL and embedded
   // the result. Null on client boot / SPA navigations, where the effect fetches.
@@ -221,9 +220,7 @@ export function CompAnalysis() {
   }, [active]);
 
   const crumbs = underComp(compId, comp?.name ?? data?.comp_name);
-  const isAdmin = useAdminView(
-    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
   const sectionNav = comp ? (
     <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
   ) : (

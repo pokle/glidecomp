@@ -16,7 +16,7 @@
  */
 
 import type { AuthUser } from "./env";
-import { isCompAdmin } from "./super-admin";
+import { isCompAdmin, isSuperAdmin } from "./super-admin";
 
 /**
  * Has the competition closed for submissions?
@@ -73,7 +73,10 @@ export async function organisersOf(
     )
     .bind(compId)
     .all<{ email: string; name: string }>();
-  return rows.results;
+  // Site super admins may hold a row so they can operate the tools, but they
+  // are not the competition's organisers — keep them out of pilot-facing
+  // "contact the organiser" copy.
+  return rows.results.filter((r) => !isSuperAdmin({ email: r.email }));
 }
 
 /** True when the organiser has closed this task for submissions. */

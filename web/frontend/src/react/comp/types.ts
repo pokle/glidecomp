@@ -54,7 +54,15 @@ export interface CompDetailData {
   /** Off means only an admin can add pilots; on means a pilot joins by uploading. */
   open_registration: boolean;
   tasks: TaskSummary[];
+  /** Real `comp_admin` rows only — never includes a site super admin unless
+   *  they also hold a row. Use `is_admin` for "may the viewer administer?". */
   admins: Array<{ email: string; name: string }>;
+  /**
+   * Server-computed: the caller may administer this competition (comp admin
+   * row OR site super admin). Prefer this over scanning `admins` — a super
+   * admin is not listed there.
+   */
+  is_admin?: boolean;
   pilot_count: number;
   /** Size of the comp's shared waypoint set (0 when none uploaded yet). */
   waypoint_count: number;

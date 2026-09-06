@@ -19,7 +19,7 @@ import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "../com
 import { useInitialData } from "../lib/initial-data";
 import { toast } from "../lib/toast";
 import { useUnits } from "../lib/units";
-import { useAdminView, useUser } from "../lib/user";
+import { useAdminView } from "../lib/user";
 import { idFromSegment } from "../lib/slug";
 import { usePollWhile } from "../lib/use-poll-while";
 import type { TaskAnalysisLoaderData } from "../loaders";
@@ -83,7 +83,6 @@ export function useTaskAnalysis(): TaskReportBundle {
   }>();
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
-  const { user } = useUser();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // SSR seed: the server ran loadTaskAnalysis for this URL and embedded
@@ -224,9 +223,7 @@ export function useTaskAnalysis(): TaskReportBundle {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId, taskId]);
 
-  const isAdmin = useAdminView(
-    user != null && (comp?.admins.some((a) => a.email === user.email) ?? false)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   const classes = data?.classes ?? [];
   const classParam = searchParams.get("class");

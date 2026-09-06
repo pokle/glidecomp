@@ -46,7 +46,7 @@ export function ManualFlightPage() {
   const taskId = idFromSegment(taskParam ?? "");
   const compPilotId = idFromSegment(pilotParam ?? "");
   const navigate = useNavigate();
-  const { user, loading } = useUser();
+  const { loading } = useUser();
 
   const { data: comp, notFound: compNotFound } =
     useSeededResource<CompDetailData>({
@@ -132,11 +132,7 @@ export function ManualFlightPage() {
       : null
   );
 
-  const isAdmin = useAdminView(
-    user != null &&
-      comp != null &&
-      comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   if (compNotFound || taskNotFound || !compId || !taskId || !compPilotId) {
     return <NotFound title="Task not found" />;

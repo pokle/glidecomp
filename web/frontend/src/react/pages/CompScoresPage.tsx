@@ -17,7 +17,7 @@ import { Loading } from "@/react/rac/progress";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Card } from "@/react/rac/card";
 import { api } from "../../comp/api";
-import { useAdminView, useUser } from "../lib/user";
+import { useAdminView } from "../lib/user";
 import { underComp } from "../lib/crumbs";
 import { idFromSegment, compPath, compScoresPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -40,7 +40,6 @@ import type { CompScoresLoaderData } from "../loaders";
 export function CompScoresPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
-  const { user } = useUser();
   const [searchParams] = useSearchParams();
   // SSR seed: the server ran loadCompScores for this URL. Null on client
   // boot / SPA navigations, where the effects below fetch instead.
@@ -61,9 +60,7 @@ export function CompScoresPage() {
     initial?.scoresEtag ?? undefined
   );
 
-  const isAdmin = useAdminView(
-    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   if (notFound || !compId) {
     return <NotFound title="Competition not found" />;

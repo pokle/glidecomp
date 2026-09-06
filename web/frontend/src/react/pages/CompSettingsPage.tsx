@@ -39,7 +39,7 @@ export function CompSettingsPage() {
   }>();
   const compId = idFromSegment(compParam ?? "");
   const navigate = useNavigate();
-  const { user, loading } = useUser();
+  const { loading } = useUser();
   // Bumped after a sub-page save so the index re-reads the stored values
   // rather than showing the seed it loaded before the edit.
   const [refresh, setRefresh] = useState(0);
@@ -53,9 +53,7 @@ export function CompSettingsPage() {
   // Settle the address bar on the canonical `${slug}-${id}/settings[/group]`.
   useCanonicalPath(comp ? compSettingsPath(compId, comp.name, group) : null);
 
-  const isAdmin = useAdminView(
-    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   if (notFound || !compId) {
     return <NotFound title="Competition not found" />;

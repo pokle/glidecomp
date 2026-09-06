@@ -29,7 +29,7 @@ import type { CompDetailData } from "../comp/types";
 export function CompPilotsPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
-  const { user, loading } = useUser();
+  const { loading } = useUser();
   const { data: comp, notFound } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
@@ -39,9 +39,7 @@ export function CompPilotsPage() {
   // Settle the address bar on the canonical `${slug}-${id}/pilots` once loaded.
   useCanonicalPath(comp ? `${compPath(compId, comp.name)}/pilots` : null);
 
-  const isAdmin = useAdminView(
-    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   if (notFound || !compId) {
     return <NotFound title="Competition not found" />;
