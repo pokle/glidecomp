@@ -45,7 +45,7 @@ describe("super admin", () => {
     expect(row!.cnt).toBe(0);
   });
 
-  test("GET comp detail reports is_admin and lists the super admin", async () => {
+  test("GET comp detail reports is_admin without listing the super admin as an organiser", async () => {
     const compId = await createComp({ name: "Detail Comp" });
 
     const res = await request("GET", `/api/comp/${compId}`, {
@@ -57,8 +57,10 @@ describe("super admin", () => {
       admins: { email: string }[];
     };
     expect(data.is_admin).toBe(true);
+    // Super admins administer via the allowlist, not a comp_admin row — they
+    // must not appear in the public "Organised by" list.
     expect(data.admins.some((a) => a.email === "tushar.pokle@gmail.com")).toBe(
-      true
+      false
     );
   });
 

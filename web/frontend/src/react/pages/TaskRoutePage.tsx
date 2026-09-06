@@ -38,7 +38,7 @@ export function TaskRoutePage() {
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
   const navigate = useNavigate();
-  const { user, loading } = useUser();
+  const { loading } = useUser();
 
   const { data: comp, notFound: compNotFound } =
     useSeededResource<CompDetailData>({
@@ -61,11 +61,7 @@ export function TaskRoutePage() {
     comp && task ? taskRoutePath(compId, comp.name, taskId, task.name) : null
   );
 
-  const isAdmin = useAdminView(
-    user != null &&
-      comp != null &&
-      comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   if (compNotFound || taskNotFound || !compId || !taskId) {
     return <NotFound title="Task not found" />;
