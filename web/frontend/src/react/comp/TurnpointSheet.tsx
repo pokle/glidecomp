@@ -316,7 +316,7 @@ export function TurnpointSheet({
             {startSettings}
           </section>
         ) : null}
-        {showGoal && goalSettings ? (
+        {(showGoal || draft.type === "GOAL") && goalSettings ? (
           <section className="flex flex-col gap-1 border-t border-border pt-3">
             <h3 className="text-sm font-medium">Goal</h3>
             {goalSettings}

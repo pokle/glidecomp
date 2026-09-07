@@ -79,7 +79,7 @@ import {
   parseCoords,
   startConfigSummary,
   turnpointsToCSV,
-  turnpointToRow,
+  turnpointsToRows,
   xctskForPatch,
   type RouteRow,
 } from "./route-editor";
@@ -97,8 +97,11 @@ const RouteMap = lazy(() => import("./RouteMap"));
 import {
   NEW_ROW_RADIUS,
   blankDraft,
+  demoteOtherGoals,
   draftFromRecord,
+  inferAddedType,
   missingAltitude,
+  moveRowToEnd,
   type TurnpointDraft,
 } from "./turnpoint-draft";
 import { TurnpointSheet } from "./TurnpointSheet";
@@ -159,7 +162,7 @@ export function RouteEditor({
   // THE grid state: turnpoint rows, in route order. Everything else (legs,
   // directions, validation, the map preview) is derived below.
   const [rows, setRows] = useState<RouteRow[]>(() =>
-    (xctsk?.turnpoints ?? []).map((tp) => turnpointToRow(tp, ++rowIdRef.current))
+    turnpointsToRows(xctsk?.turnpoints ?? [], () => ++rowIdRef.current)
   );
   // Latest rows for async flows (fillAltitudes applies its results against the
   // rows as they are *after* the tile downloads, not a stale closure).
@@ -352,19 +355,28 @@ export function RouteEditor({
   /** Append a new turnpoint from a draft (the turnpoint sheet's Add). */
   const appendTurnpoint = useCallback(
     (draft: TurnpointDraft) => {
-      setRows((prev) => [
-        ...prev,
-        { id: nextRowId(), ...draft, leg: null, dir: null } satisfies RouteRow,
-      ]);
+      setRows((prev) => {
+        const id = nextRowId();
+        const row = { id, ...draft, leg: null, dir: null } satisfies RouteRow;
+        const next = draft.type === "GOAL" ? demoteOtherGoals([...prev, row], id) : [...prev, row];
+        return next;
+      });
     },
     [nextRowId]
   );
 
   /** Patch one turnpoint in place (the turnpoint sheet's Done). */
   const updateTurnpoint = useCallback((id: number, draft: TurnpointDraft) => {
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...draft, leg: null, dir: null } : r))
-    );
+    setRows((prev) => {
+      let next = prev.map((r) =>
+        r.id === id ? { ...r, ...draft, leg: null, dir: null } : r
+      );
+      if (draft.type === "GOAL") {
+        next = demoteOtherGoals(next, id);
+        next = moveRowToEnd(next, id);
+      }
+      return next;
+    });
   }, []);
 
   /** Drop one turnpoint (the turnpoint sheet's Delete). */
@@ -418,7 +430,7 @@ export function RouteEditor({
         rows.map((r) => ({
           name: String(r.name),
           radius: Number(r.radius) || NEW_ROW_RADIUS,
-          type: r.type,
+          type: r.type === "GOAL" ? "" : r.type,
         })),
         openDistance
           ? {}
@@ -469,9 +481,14 @@ export function RouteEditor({
   const pickWaypoint = useCallback(
     (wp: MapWaypoint) => {
       const rec = waypointRecords[Number(wp.id)];
-      if (rec) appendTurnpoint(draftFromRecord(rec));
+      if (rec) {
+        appendTurnpoint({
+          ...draftFromRecord(rec),
+          type: inferAddedType(rowsRef.current, { openDistance }),
+        });
+      }
     },
-    [waypointRecords, appendTurnpoint]
+    [waypointRecords, appendTurnpoint, openDistance]
   );
 
   // Open the shared add-waypoint dialog, seeded from a map tap (or blank when
@@ -494,7 +511,10 @@ export function RouteEditor({
     setAdding(false);
     setWaypointRecords((prev) => [...prev, rec]);
     setPendingWaypoints((prev) => [...prev, rec]);
-    appendTurnpoint(draftFromRecord(rec));
+    appendTurnpoint({
+      ...draftFromRecord(rec),
+      type: inferAddedType(rowsRef.current, { openDistance }),
+    });
     toast.success(`Added ${rec.code} to the route — saved to the competition when you save`);
   }
 
@@ -553,7 +573,7 @@ export function RouteEditor({
       if (!ok) return;
     }
     baseRef.current = task;
-    setRows(task.turnpoints.map((tp) => turnpointToRow(tp, nextRowId())));
+    setRows(turnpointsToRows(task.turnpoints, nextRowId));
     setSssType(task.sss?.type ?? "RACE");
     setDirection(task.sss?.direction ?? "EXIT");
     setGates(editableGates(task.sss).map(toDisplayTime));
@@ -1136,7 +1156,7 @@ export function RouteEditor({
         {addingTurnpoint ? (
           <TurnpointSheet
             mode="add"
-            initial={blankDraft()}
+            initial={blankDraft(inferAddedType(rows, { openDistance }))}
             waypointRecords={waypointRecords}
             wpLoading={wpLoading}
             compId={compId}

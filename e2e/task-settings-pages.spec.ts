@@ -479,12 +479,53 @@ test("start and goal settings live on the turnpoint they belong to", async ({
   await expect(
     sheet.getByRole("radio", { name: "Turnpoint (last is goal)" })
   ).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
   await sheet.getByText("Goal line — perpendicular to the last leg").click();
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden();
 
   await page.getByRole("button", { name: /^Goal$/ }).click();
   await expect(page.getByRole("radio", { name: /^Goal line/ })).toBeChecked();
+});
+
+test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page, { withSpeedSection: true });
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+
+  // Seeded last (CHARL) is untyped in the file, so the UI loads it as Goal.
+  await page.getByRole("button", { name: "Add turnpoint" }).click();
+  const add = page.getByRole("dialog", { name: /^Add / });
+  await expect(add.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await add.getByRole("textbox", { name: "Code" }).fill("DELTA");
+  await add.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.8, 148.1");
+  await add.getByRole("button", { name: "Done" }).click();
+  await expect(add).toBeHidden();
+
+  // The new last is Goal; the previous Goal is an ordinary Turnpoint.
+  await page.getByRole("row").filter({ hasText: "CHARL" }).click();
+  const edit = page.getByRole("dialog", { name: /^Edit / });
+  await expect(edit.getByRole("radio", { name: "Turnpoint", exact: true })).toBeChecked();
+  await expect(edit.getByRole("heading", { name: "Goal" })).toHaveCount(0);
+  await edit.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("row").filter({ hasText: "DELTA" }).click();
+  await expect(edit.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await expect(edit.getByRole("heading", { name: "Goal" })).toBeVisible();
+  await edit.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("button", { name: "Clear turnpoints" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Clear" }).click();
+  await page.getByRole("button", { name: "Add turnpoint" }).click();
+  await expect(add.getByRole("radio", { name: "Takeoff" })).toBeChecked();
+  await add.getByRole("textbox", { name: "Code" }).fill("ONE");
+  await add.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 147.8");
+  await add.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("button", { name: "Add turnpoint" }).click();
+  await expect(add.getByRole("radio", { name: "Start", exact: true })).toBeChecked();
 });
 
 test("Quick entry rebuilds the route without losing what the line can't say", async ({

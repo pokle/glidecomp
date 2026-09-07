@@ -22,8 +22,9 @@ export interface RouteRow {
   /** Long descriptive name (e.g. "BORDANO LANDING"); kept separate from the
    *  code so both survive a round-trip to a waypoint file. */
   description: string;
-  /** "" = plain turnpoint. */
-  type: "" | TurnpointType;
+  /** "" = plain turnpoint. GOAL is UI-only (xctsk has no Goal type — the
+   *  last turnpoint is the goal by position) and is stripped on save. */
+  type: "" | TurnpointType | "GOAL";
   /** Google Maps format: "lat, lon" decimal degrees. */
   coords: string;
   radius: string | number;
@@ -40,10 +41,11 @@ export interface RouteRow {
 }
 
 export const TYPE_LABELS: Record<string, string> = {
-  "": "Turnpoint",
   TAKEOFF: "Takeoff",
-  SSS: "Start (SSS)",
+  SSS: "Start",
+  "": "Turnpoint",
   ESS: "ESS",
+  GOAL: "Goal",
 };
 
 export function formatCoords(lat: number, lon: number): string {
@@ -184,6 +186,22 @@ export function turnpointToRow(tp: Turnpoint, id: number): RouteRow {
   };
 }
 
+/**
+ * Rows for the editor from a stored task. Last-untyped becomes the UI Goal
+ * type — xctsk cannot say "goal" except by position, so this is how the Type
+ * list round-trips an explicit Goal.
+ */
+export function turnpointsToRows(
+  tps: Turnpoint[],
+  nextId: () => number
+): RouteRow[] {
+  const rows = tps.map((tp) => turnpointToRow(tp, nextId()));
+  if (rows.length === 0) return rows;
+  const last = rows[rows.length - 1];
+  if (last.type !== "") return rows;
+  return rows.map((r, i) => (i === rows.length - 1 ? { ...r, type: "GOAL" } : r));
+}
+
 // ---------------------------------------------------------------------------
 // Validation / turnpoint building
 // ---------------------------------------------------------------------------
@@ -307,7 +325,7 @@ export function buildRoute(
       // Keep the long name only when it adds something beyond the code.
       const description = String(row.description ?? "").trim();
       turnpoints.push({
-        ...(row.type ? { type: row.type } : {}),
+        ...(row.type && row.type !== "GOAL" ? { type: row.type } : {}),
         radius: Number.isFinite(radius) ? radius : 0,
         waypoint: {
           name: name || "unnamed",

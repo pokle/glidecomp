@@ -14,21 +14,69 @@ export const NEW_ROW_RADIUS = 400;
 
 export const RADIUS_PRESETS = [400, 1000, 2000, 3000, 5000] as const;
 
-export const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([value, label]) => ({
+/** Type list order: Takeoff, Start, Turnpoint, ESS, Goal. */
+const TYPE_ORDER: Array<RouteRow["type"]> = [
+  "TAKEOFF",
+  "SSS",
+  "",
+  "ESS",
+  "GOAL",
+];
+
+export const TYPE_OPTIONS = TYPE_ORDER.map((value) => ({
   value,
-  label,
+  label: TYPE_LABELS[value],
 }));
 
 /**
- * The Type list for one turnpoint. Goal is the last turnpoint by position,
- * not a type you choose, so the untyped option says so when this row is last
- * — otherwise it reads like any mid-route cylinder.
+ * The Type list for one turnpoint. Goal is a UI type (xctsk has none); the
+ * last turnpoint is still the scoring goal even when Type says Turnpoint, so
+ * that option is labelled when this row is last.
  */
 export function typeOptions(opts: { lastIsGoal?: boolean } = {}): typeof TYPE_OPTIONS {
   if (!opts.lastIsGoal) return TYPE_OPTIONS;
   return TYPE_OPTIONS.map((o) =>
     o.value === "" ? { ...o, label: "Turnpoint (last is goal)" } : o
   );
+}
+
+/**
+ * The Type a newly appended turnpoint should start as.
+ *
+ * First is always Takeoff, second always Start. Third onwards is a Turnpoint
+ * unless the current last is an explicit Goal — then the new last takes Goal
+ * and the caller demotes the old one, so last-is-goal stays true. ESS and
+ * Goal are never inferred: the organiser has to pick them.
+ */
+export function inferAddedType(
+  rows: Pick<RouteRow, "type">[],
+  opts: { openDistance?: boolean } = {}
+): RouteRow["type"] {
+  if (opts.openDistance) return rows.length === 0 ? "TAKEOFF" : "";
+  if (rows.length === 0) return "TAKEOFF";
+  if (rows.length === 1) return "SSS";
+  if (rows[rows.length - 1]?.type === "GOAL") return "GOAL";
+  return "";
+}
+
+/** Every Goal except `keepId` becomes an ordinary Turnpoint. */
+export function demoteOtherGoals<T extends { id: number; type: RouteRow["type"] }>(
+  rows: T[],
+  keepId: number
+): T[] {
+  return rows.map((r) =>
+    r.id !== keepId && r.type === "GOAL" ? { ...r, type: "" } : r
+  );
+}
+
+/** Move a row to the end (Goal is last by position). No-op if already last. */
+export function moveRowToEnd<T extends { id: number }>(rows: T[], id: number): T[] {
+  const at = rows.findIndex((r) => r.id === id);
+  if (at < 0 || at === rows.length - 1) return rows;
+  const next = rows.slice();
+  const [row] = next.splice(at, 1);
+  next.push(row);
+  return next;
 }
 
 /** Short radius label for a preset chip: 400 → "400", 1000 → "1 km". */
@@ -53,11 +101,11 @@ export function missingAltitude(altitude: string | number): boolean {
 }
 
 /** A fresh, empty turnpoint draft (for the "Add turnpoint" flow). */
-export function blankDraft(): TurnpointDraft {
+export function blankDraft(type: RouteRow["type"] = ""): TurnpointDraft {
   return {
     name: "",
     description: "",
-    type: "",
+    type,
     coords: "",
     radius: NEW_ROW_RADIUS,
     altitude: "",
