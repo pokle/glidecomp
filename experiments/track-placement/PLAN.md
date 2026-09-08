@@ -1,7 +1,10 @@
 # Can one track predict its own placement?
 
-**Status:** plan, 2026-09-08. Experiment, not product code. Nothing here is
-imported by the app, the engine's scoring closure, or CI.
+**Status:** steps 1–5 and 7 done, 9 September 2026 — the findings are in
+[docs/2026-09-08-track-placement-nn.md](../../docs/2026-09-08-track-placement-nn.md)
+and how to run it is in [README.md](README.md). Step 6, the sequence branch,
+is not built. Experiment, not product code. Nothing here is imported by the
+app, the engine's scoring closure, or CI.
 
 ## The question
 
@@ -272,18 +275,25 @@ gets written up as one.
 
 ## Sequence of work
 
-1. Feature extractor + label builder over all 27 comps; dataset stats.
-   (~95 ms/track measured, so the whole corpus is ~10 min single-threaded.)
-2. Weather fetch, run locally to clear the rate limit; ERA5 first, archived
-   forecast behind it. Commit both trees to the archive.
-3. Baselines. If baseline 4 says placement is nearly all pilot identity, that
-   reframes the rest and gets said before any network is trained.
-4. Retrospective MLP → the reference number.
-5. Prospective MLP → the experiment.
-6. Sequence branch, as a delta on both.
-7. Ablations: track-only / +task / +ERA5 / +archived forecast; and the
-   per-block feature-group ablation.
-8. Write-up, commit, draft PR on each repo.
+1. **Done.** Feature extractor + label builder over all 27 comps; dataset
+   stats. 4 950 rows over 191 task-classes; ~4 min for the whole corpus.
+2. **Done.** Weather fetch, run locally: 348 answers over both datasets, no
+   rate limit reached. Both trees written to the archive.
+3. **Done.** Baselines. Pilot history comes in at rho 0.36 retrospectively and
+   0.31 prospectively — placement is NOT mostly identity, so the track-only
+   question is a fair one to ask.
+4. **Done.** Retrospective MLP → rho 0.89, *below* distance-flown-alone at
+   0.92. The reference number says GAP is mostly distance.
+5. **Done.** Prospective MLP → rho 0.45, and eleven start-crossing features
+   carry all of it.
+6. Sequence branch, as a delta on both. **Not built** — it needs a
+   resampled-track output the feature store does not carry yet.
+7. **Done.** Ablations: the weather arms (none / ERA5 / archived forecast /
+   both) and the per-block feature-group ablation. The forecast earned
+   nothing; `start.` earned everything.
+8. Write-up **done**
+   ([docs/2026-09-08-track-placement-nn.md](../../docs/2026-09-08-track-placement-nn.md));
+   commit and draft PR on each repo.
 
 ## Risks, stated up front
 
