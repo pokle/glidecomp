@@ -312,7 +312,7 @@ export function TurnpointSheet({
         />
         {draft.type === "SSS" && startSettings ? (
           <section className="flex flex-col gap-1 border-t border-border pt-3">
-            <h3 className="text-sm font-medium">Start (SSS)</h3>
+            <h3 className="text-sm font-medium">Start Speed Section (SSS)</h3>
             {startSettings}
           </section>
         ) : null}

@@ -54,7 +54,7 @@ export function StartSettings({
     <>
       {missingSssWarning ? (
         <p className="mt-1 text-sm text-amber-500">
-          ⚠ This task has no Start (SSS) turnpoint — set one in the list
+          ⚠ This task has no Start Speed Section (SSS) turnpoint — set one in the list
           above, otherwise gates have no cylinder to apply to.
         </p>
       ) : null}

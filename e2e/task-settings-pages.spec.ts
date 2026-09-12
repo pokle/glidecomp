@@ -251,7 +251,7 @@ test("the route editor is a route, and guards unsaved work", async ({ page }) =>
   // The Start panel is a Disclosure, collapsed by default — the defaults suit
   // most competitions and the header badge reads the live config back, so
   // this expand is the product's design, not a workaround.
-  await page.getByRole("button", { name: /^Start \(SSS\)/ }).click();
+  await page.getByRole("button", { name: /^Start Speed Section \(SSS\)/ }).click();
 
   // Start type is a list in flow (#638): both options are readable at once,
   // which is the point when each carries its own explanation. A radio, not a
@@ -456,7 +456,9 @@ test("start and goal settings live on the turnpoint they belong to", async ({
   // organiser looking at the SSS row goes.
   await page.getByRole("row").filter({ hasText: "BRAVO" }).click();
   const sheet = page.getByRole("dialog", { name: /^Edit / });
-  await expect(sheet.getByRole("heading", { name: "Start (SSS)" })).toBeVisible();
+  await expect(
+    sheet.getByRole("heading", { name: "Start Speed Section (SSS)" })
+  ).toBeVisible();
   await expect(sheet.getByRole("radio", { name: /^Enter start/ })).toBeVisible();
   await expect(sheet.getByRole("radio", { name: /^Goal line/ })).toHaveCount(0);
   await expect(

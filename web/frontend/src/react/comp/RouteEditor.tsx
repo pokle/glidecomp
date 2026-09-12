@@ -1001,7 +1001,7 @@ export function RouteEditor({
                 sheets, which is where an organiser opening that cylinder
                 looks. */}
             <Disclosure
-              title="Start (SSS)"
+              title="Start Speed Section (SSS)"
               badge={
                 <span className="text-xs font-normal text-muted-foreground">
                   {startConfigSummary(
