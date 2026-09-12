@@ -525,7 +525,9 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await add.getByRole("button", { name: "Done" }).click();
 
   await page.getByRole("button", { name: "Add turnpoint" }).click();
-  await expect(add.getByRole("radio", { name: "Start", exact: true })).toBeChecked();
+  await expect(
+    add.getByRole("radio", { name: "Start Speed Section (SSS)", exact: true })
+  ).toBeChecked();
 });
 
 test("Quick entry rebuilds the route without losing what the line can't say", async ({

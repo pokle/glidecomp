@@ -46,8 +46,8 @@ export interface TaskEditor {
 const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Turnpoint' },
   { value: 'TAKEOFF', label: 'Takeoff' },
-  { value: 'SSS', label: 'Start (SSS)' },
-  { value: 'ESS', label: 'ESS' },
+  { value: 'SSS', label: 'Start Speed Section (SSS)' },
+  { value: 'ESS', label: 'End Speed Section (ESS)' },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
@@ -59,8 +59,8 @@ const DEFAULT_TYPE_COLOR = 'text-blue-600';
 
 const TYPE_LABELS: Record<string, string> = {
   TAKEOFF: 'Takeoff',
-  SSS: 'Start (SSS)',
-  ESS: 'ESS',
+  SSS: 'Start Speed Section (SSS)',
+  ESS: 'End Speed Section (ESS)',
 };
 const DEFAULT_TYPE_LABEL = 'Turnpoint';
 

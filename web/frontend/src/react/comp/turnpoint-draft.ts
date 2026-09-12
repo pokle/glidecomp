@@ -14,7 +14,7 @@ export const NEW_ROW_RADIUS = 400;
 
 export const RADIUS_PRESETS = [400, 1000, 2000, 3000, 5000] as const;
 
-/** Type list order: Takeoff, Start, Turnpoint, ESS, Goal. */
+/** Type list order: Takeoff, SSS, Turnpoint, ESS, Goal. */
 const TYPE_ORDER: Array<RouteRow["type"]> = [
   "TAKEOFF",
   "SSS",

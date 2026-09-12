@@ -8,12 +8,12 @@ import {
 } from "./turnpoint-draft";
 
 describe("typeOptions", () => {
-  it("lists Takeoff, Start, Turnpoint, ESS, Goal in that order", () => {
+  it("lists Takeoff, SSS, Turnpoint, ESS, Goal in that order", () => {
     expect(TYPE_OPTIONS.map((o) => o.label)).toEqual([
       "Takeoff",
-      "Start",
+      "Start Speed Section (SSS)",
       "Turnpoint",
-      "ESS",
+      "End Speed Section (ESS)",
       "Goal",
     ]);
   });

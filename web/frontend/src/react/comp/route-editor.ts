@@ -42,9 +42,9 @@ export interface RouteRow {
 
 export const TYPE_LABELS: Record<string, string> = {
   TAKEOFF: "Takeoff",
-  SSS: "Start",
+  SSS: "Start Speed Section (SSS)",
   "": "Turnpoint",
-  ESS: "ESS",
+  ESS: "End Speed Section (ESS)",
   GOAL: "Goal",
 };
 
