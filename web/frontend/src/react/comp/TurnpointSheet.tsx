@@ -22,8 +22,13 @@
  * The draft is applied on the way OUT rather than per keystroke: the editor
  * re-runs `buildRoute` and repaints the map preview on every change to `rows`,
  * which is what draft-on-save exists to avoid.
+ *
+ * Start and goal settings are task-level (not a property of this row's
+ * draft). They render here when this turnpoint is the SSS or the last
+ * (goal) so the cylinder you opened is where you change them. Type sits
+ * immediately above those sections, because they depend on it.
  */
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useFilter } from "react-aria-components";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
@@ -35,8 +40,8 @@ import { ListBox, ListBoxItem } from "@/react/rac/list-box";
 import { formatCoords, parseCoords, type RouteRow } from "./route-editor";
 import {
   RADIUS_PRESETS,
-  TYPE_OPTIONS,
   radiusChipLabel,
+  typeOptions,
   type TurnpointDraft,
 } from "./turnpoint-draft";
 
@@ -49,6 +54,9 @@ export function TurnpointSheet({
   onSave,
   onDelete,
   onClose,
+  startSettings,
+  goalSettings,
+  showGoal,
 }: {
   mode: "add" | "edit";
   initial: TurnpointDraft;
@@ -60,6 +68,17 @@ export function TurnpointSheet({
   /** Remove this turnpoint from the route. Absent while adding. */
   onDelete?: () => void;
   onClose: () => void;
+  /**
+   * Task-level start (SSS) controls. Shown when this turnpoint's type is
+   * Start (SSS) — including after the Type list is changed in this sheet.
+   */
+  startSettings?: ReactNode;
+  /**
+   * Task-level goal controls. Shown when {@link showGoal} is set (this
+   * turnpoint is last on the route, or is being appended).
+   */
+  goalSettings?: ReactNode;
+  showGoal?: boolean;
 }) {
   const [draft, setDraft] = useState<TurnpointDraft>(initial);
   // The waypoint search query. Controlled so picking a waypoint can clear it
@@ -229,15 +248,6 @@ export function TurnpointSheet({
           onChange={(v) => patch({ description: v })}
           placeholder="Bordano Landing"
         />
-        {/* The visible label names it; `aria-labelledby` from that Label
-            would beat an aria-label anyway, and the sheet title plus the Code
-            field above already say which turnpoint. */}
-        <ChoiceList
-          label="Type"
-          value={draft.type}
-          onChange={(v) => patch({ type: v as RouteRow["type"] })}
-          options={TYPE_OPTIONS}
-        />
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Radius (m)</span>
           <div
@@ -290,6 +300,28 @@ export function TurnpointSheet({
           valueM={draftAltitudeM}
           onChange={(m) => patch({ altitude: Number.isFinite(m) ? m : "" })}
         />
+
+        {/* Type sits here, not with the identity fields: Start and Goal
+            settings appear or vanish from this choice, so the switch has to
+            be the thing immediately above them. */}
+        <ChoiceList
+          label="Type"
+          value={draft.type}
+          onChange={(v) => patch({ type: v as RouteRow["type"] })}
+          options={typeOptions({ lastIsGoal: showGoal })}
+        />
+        {draft.type === "SSS" && startSettings ? (
+          <section className="flex flex-col gap-1 border-t border-border pt-3">
+            <h3 className="text-sm font-medium">Start Speed Section (SSS)</h3>
+            {startSettings}
+          </section>
+        ) : null}
+        {(showGoal || draft.type === "GOAL") && goalSettings ? (
+          <section className="flex flex-col gap-1 border-t border-border pt-3">
+            <h3 className="text-sm font-medium">Goal</h3>
+            {goalSettings}
+          </section>
+        ) : null}
 
         {/* No confirmation: this removes a turnpoint from a route that is
             still a draft, and the editor's Cancel puts the whole saved route

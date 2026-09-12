@@ -17,6 +17,8 @@
  * - the weather-notes round trip, and that the task page links to it rather
  *   than opening a dialog;
  * - the route editor as a real route, with its unsaved-changes guard;
+ * - start and goal settings on the SSS / last-turnpoint sheets (as well as
+ *   the page disclosures);
  * - non-admin fallback, and that a made-up editor segment is a dead URL;
  * - the whole journey with no horizontal overflow, which is the point of the
  *   restructure.
@@ -249,7 +251,7 @@ test("the route editor is a route, and guards unsaved work", async ({ page }) =>
   // The Start panel is a Disclosure, collapsed by default — the defaults suit
   // most competitions and the header badge reads the live config back, so
   // this expand is the product's design, not a workaround.
-  await page.getByRole("button", { name: /^Start \(SSS\)/ }).click();
+  await page.getByRole("button", { name: /^Start Speed Section \(SSS\)/ }).click();
 
   // Start type is a list in flow (#638): both options are readable at once,
   // which is the point when each carries its own explanation. A radio, not a
@@ -346,7 +348,7 @@ const ROUTE_WAYPOINTS = [
 ];
 
 /** A three-turnpoint route on the fixture task, straight through the API. */
-async function seedRoute(page: Page) {
+async function seedRoute(page: Page, opts?: { withSpeedSection?: boolean }) {
   const wp = await page.request.put(`/api/comp/${compId}/waypoints`, {
     data: { waypoints: ROUTE_WAYPOINTS },
   });
@@ -359,6 +361,7 @@ async function seedRoute(page: Page) {
         version: 1,
         turnpoints: ROUTE_WAYPOINTS.map((w, i) => ({
           ...(i === 0 ? { type: "TAKEOFF" as const } : {}),
+          ...(opts?.withSpeedSection && i === 1 ? { type: "SSS" as const } : {}),
           radius: 400,
           waypoint: {
             name: w.code,
@@ -368,6 +371,12 @@ async function seedRoute(page: Page) {
             altSmoothed: w.altitude,
           },
         })),
+        ...(opts?.withSpeedSection
+          ? {
+              sss: { type: "RACE" as const, direction: "EXIT" as const },
+              goal: { type: "CYLINDER" as const },
+            }
+          : {}),
       },
     },
   });
@@ -433,6 +442,94 @@ test("a turnpoint is edited in a sheet, and reordered in a mode", async ({
 
   await page.getByRole("button", { name: "Done reordering" }).click();
   await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+});
+
+test("start and goal settings live on the turnpoint they belong to", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page, { withSpeedSection: true });
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+
+  // Opening the start cylinder is how you change start type, direction and
+  // gates — the page disclosure still has them, but that is not where an
+  // organiser looking at the SSS row goes.
+  await page.getByRole("row").filter({ hasText: "BRAVO" }).click();
+  const sheet = page.getByRole("dialog", { name: /^Edit / });
+  await expect(
+    sheet.getByRole("heading", { name: "Start Speed Section (SSS)" })
+  ).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: /^Enter start/ })).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: /^Goal line/ })).toHaveCount(0);
+  await expect(
+    sheet.getByRole("radio", { name: "Turnpoint", exact: true })
+  ).toBeVisible();
+  await expect(
+    sheet.getByRole("radio", { name: "Turnpoint (last is goal)" })
+  ).toHaveCount(0);
+  await sheet.getByText("Enter start — cross inward").click();
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden();
+  // The Start disclosure badge reads the live config without expanding.
+  await expect(page.getByText(/enter start/)).toBeVisible();
+
+  // The last turnpoint is the goal: its sheet carries type and deadline.
+  await page.getByRole("row").filter({ hasText: "CHARL" }).click();
+  await expect(sheet.getByRole("heading", { name: "Goal" })).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: /^Goal line/ })).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: /^Enter start/ })).toHaveCount(0);
+  await expect(
+    sheet.getByRole("radio", { name: "Turnpoint (last is goal)" })
+  ).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await sheet.getByText("Goal line — perpendicular to the last leg").click();
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden();
+
+  await page.getByRole("button", { name: /^Goal$/ }).click();
+  await expect(page.getByRole("radio", { name: /^Goal line/ })).toBeChecked();
+});
+
+test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page, { withSpeedSection: true });
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+
+  // Seeded last (CHARL) is untyped in the file, so the UI loads it as Goal.
+  await page.getByRole("button", { name: "Add turnpoint" }).click();
+  const add = page.getByRole("dialog", { name: /^Add / });
+  await expect(add.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await add.getByRole("textbox", { name: "Code" }).fill("DELTA");
+  await add.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.8, 148.1");
+  await add.getByRole("button", { name: "Done" }).click();
+  await expect(add).toBeHidden();
+
+  // The new last is Goal; the previous Goal is an ordinary Turnpoint.
+  await page.getByRole("row").filter({ hasText: "CHARL" }).click();
+  const edit = page.getByRole("dialog", { name: /^Edit / });
+  await expect(edit.getByRole("radio", { name: "Turnpoint", exact: true })).toBeChecked();
+  await expect(edit.getByRole("heading", { name: "Goal" })).toHaveCount(0);
+  await edit.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("row").filter({ hasText: "DELTA" }).click();
+  await expect(edit.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await expect(edit.getByRole("heading", { name: "Goal" })).toBeVisible();
+  await edit.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("button", { name: "Clear turnpoints" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Clear" }).click();
+  await page.getByRole("button", { name: "Add turnpoint" }).click();
+  await expect(add.getByRole("radio", { name: "Takeoff" })).toBeChecked();
+  await add.getByRole("textbox", { name: "Code" }).fill("ONE");
+  await add.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 147.8");
+  await add.getByRole("button", { name: "Done" }).click();
+
+  await page.getByRole("button", { name: "Add turnpoint" }).click();
+  await expect(
+    add.getByRole("radio", { name: "Start Speed Section (SSS)", exact: true })
+  ).toBeChecked();
 });
 
 test("Quick entry rebuilds the route without losing what the line can't say", async ({

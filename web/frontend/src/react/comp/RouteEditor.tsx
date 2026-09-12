@@ -29,10 +29,11 @@
  * The rest is unchanged: every derived value (leg distances, crossing
  * direction, the map preview) is a useMemo over `rows` rather than an
  * imperative write-back; Start (SSS) gates and goal configuration are edited
- * in collapsible sections below the list so a whole .xctsk is editable in one
- * place; routes can be imported from a .xctsk file or an XContest task code,
- * and exported to a .xctsk file. Saving PATCHes the task's xctsk (the server
- * validates strictly and audit-logs the change).
+ * on the start and goal turnpoints (and still in collapsible sections below
+ * the list) so a whole .xctsk is editable in one place; routes can be imported
+ * from a .xctsk file or an XContest task code, and exported to a .xctsk file.
+ * Saving PATCHes the task's xctsk (the server validates strictly and
+ * audit-logs the change).
  *
  * AddWaypointDialog stays a plain dialog over this page: it is a short
  * single-purpose form, and it is shared with the competition waypoints page,
@@ -50,7 +51,6 @@ import {
 } from "@glidecomp/engine";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
-import { Explain } from "@/react/rac/explain";
 import {
   Dialog,
   DialogFooter,
@@ -60,9 +60,7 @@ import {
 } from "@/react/rac/dialog";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
-import { NumberField, TextField } from "@/react/rac/field";
-import { ChoiceList } from "@/react/rac/choice-list";
-import { TimePicker } from "@/react/rac/date-picker";
+import { TextField } from "@/react/rac/field";
 import { api } from "../../comp/api";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { toast } from "../lib/toast";
@@ -81,7 +79,7 @@ import {
   parseCoords,
   startConfigSummary,
   turnpointsToCSV,
-  turnpointToRow,
+  turnpointsToRows,
   xctskForPatch,
   type RouteRow,
 } from "./route-editor";
@@ -99,11 +97,16 @@ const RouteMap = lazy(() => import("./RouteMap"));
 import {
   NEW_ROW_RADIUS,
   blankDraft,
+  demoteOtherGoals,
   draftFromRecord,
+  inferAddedType,
   missingAltitude,
+  moveRowToEnd,
   type TurnpointDraft,
 } from "./turnpoint-draft";
 import { TurnpointSheet } from "./TurnpointSheet";
+import { StartSettings } from "./StartSettings";
+import { GoalSettings } from "./GoalSettings";
 
 export function RouteEditor({
   compId,
@@ -159,7 +162,7 @@ export function RouteEditor({
   // THE grid state: turnpoint rows, in route order. Everything else (legs,
   // directions, validation, the map preview) is derived below.
   const [rows, setRows] = useState<RouteRow[]>(() =>
-    (xctsk?.turnpoints ?? []).map((tp) => turnpointToRow(tp, ++rowIdRef.current))
+    turnpointsToRows(xctsk?.turnpoints ?? [], () => ++rowIdRef.current)
   );
   // Latest rows for async flows (fillAltitudes applies its results against the
   // rows as they are *after* the tile downloads, not a stale closure).
@@ -352,19 +355,28 @@ export function RouteEditor({
   /** Append a new turnpoint from a draft (the turnpoint sheet's Add). */
   const appendTurnpoint = useCallback(
     (draft: TurnpointDraft) => {
-      setRows((prev) => [
-        ...prev,
-        { id: nextRowId(), ...draft, leg: null, dir: null } satisfies RouteRow,
-      ]);
+      setRows((prev) => {
+        const id = nextRowId();
+        const row = { id, ...draft, leg: null, dir: null } satisfies RouteRow;
+        const next = draft.type === "GOAL" ? demoteOtherGoals([...prev, row], id) : [...prev, row];
+        return next;
+      });
     },
     [nextRowId]
   );
 
   /** Patch one turnpoint in place (the turnpoint sheet's Done). */
   const updateTurnpoint = useCallback((id: number, draft: TurnpointDraft) => {
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...draft, leg: null, dir: null } : r))
-    );
+    setRows((prev) => {
+      let next = prev.map((r) =>
+        r.id === id ? { ...r, ...draft, leg: null, dir: null } : r
+      );
+      if (draft.type === "GOAL") {
+        next = demoteOtherGoals(next, id);
+        next = moveRowToEnd(next, id);
+      }
+      return next;
+    });
   }, []);
 
   /** Drop one turnpoint (the turnpoint sheet's Delete). */
@@ -418,7 +430,7 @@ export function RouteEditor({
         rows.map((r) => ({
           name: String(r.name),
           radius: Number(r.radius) || NEW_ROW_RADIUS,
-          type: r.type,
+          type: r.type === "GOAL" ? "" : r.type,
         })),
         openDistance
           ? {}
@@ -469,9 +481,14 @@ export function RouteEditor({
   const pickWaypoint = useCallback(
     (wp: MapWaypoint) => {
       const rec = waypointRecords[Number(wp.id)];
-      if (rec) appendTurnpoint(draftFromRecord(rec));
+      if (rec) {
+        appendTurnpoint({
+          ...draftFromRecord(rec),
+          type: inferAddedType(rowsRef.current, { openDistance }),
+        });
+      }
     },
-    [waypointRecords, appendTurnpoint]
+    [waypointRecords, appendTurnpoint, openDistance]
   );
 
   // Open the shared add-waypoint dialog, seeded from a map tap (or blank when
@@ -494,7 +511,10 @@ export function RouteEditor({
     setAdding(false);
     setWaypointRecords((prev) => [...prev, rec]);
     setPendingWaypoints((prev) => [...prev, rec]);
-    appendTurnpoint(draftFromRecord(rec));
+    appendTurnpoint({
+      ...draftFromRecord(rec),
+      type: inferAddedType(rowsRef.current, { openDistance }),
+    });
     toast.success(`Added ${rec.code} to the route — saved to the competition when you save`);
   }
 
@@ -553,7 +573,7 @@ export function RouteEditor({
       if (!ok) return;
     }
     baseRef.current = task;
-    setRows(task.turnpoints.map((tp) => turnpointToRow(tp, nextRowId())));
+    setRows(turnpointsToRows(task.turnpoints, nextRowId));
     setSssType(task.sss?.type ?? "RACE");
     setDirection(task.sss?.direction ?? "EXIT");
     setGates(editableGates(task.sss).map(toDisplayTime));
@@ -810,9 +830,36 @@ export function RouteEditor({
     });
   }
 
-  const isRace = sssType === "RACE";
   const shownErrors = errors.slice(0, 10);
   const extraErrors = errors.length - shownErrors.length;
+
+  const startSettingsProps = {
+    sssType,
+    onSssTypeChange: setSssType,
+    direction,
+    onDirectionChange: setDirection,
+    gates,
+    onGateChange: updateGate,
+    onRemoveGate: removeGate,
+    onAddGate: addGate,
+    genCount,
+    onGenCountChange: setGenCount,
+    genInterval,
+    onGenIntervalChange: setGenInterval,
+    onGenerateSeries: generateSeries,
+    timeZoneLabel,
+    timeZoneKnown: tz != null,
+  };
+  const startSettings = <StartSettings {...startSettingsProps} />;
+  const goalSettings = (
+    <GoalSettings
+      goalType={goalType}
+      onGoalTypeChange={setGoalType}
+      deadline={goalDeadline}
+      onDeadlineChange={setGoalDeadline}
+      timeZoneLabel={timeZoneLabel}
+    />
+  );
 
   return (
     // Wider than a settings form on purpose: the map and the turnpoint grid
@@ -943,6 +990,43 @@ export function RouteEditor({
           </p>
         </div>
 
+        {!openDistance ? (
+          <>
+            {/* Collapsed by default — the defaults suit most competitions. The
+                badge is why that's safe: it reads the live configuration back
+                on the header row, so an exit start (or a gate list) is never
+                something you'd have to expand the panel to discover (#436).
+                Same sentence the task page prints, from the same helper.
+                The same controls also sit on the start and goal turnpoint
+                sheets, which is where an organiser opening that cylinder
+                looks. */}
+            <Disclosure
+              title="Start Speed Section (SSS)"
+              badge={
+                <span className="text-xs font-normal text-muted-foreground">
+                  {startConfigSummary(
+                    {
+                      type: sssType,
+                      direction,
+                      timeGates: gates.flatMap((g) =>
+                        parseTimeToken(g) !== null ? [`${toUtcTime(g)}:00Z`] : []
+                      ),
+                    },
+                    { timeZone: tz, taskDate }
+                  )}
+                </span>
+              }
+            >
+              <StartSettings
+                {...startSettingsProps}
+                missingSssWarning={!derived.hasSSSTurnpoint}
+              />
+            </Disclosure>
+
+            <Disclosure title="Goal">{goalSettings}</Disclosure>
+          </>
+        ) : null}
+
         {/* Map preview — below the list, showing the optimized route as it's
             edited. Tap a waypoint to add it, or tap empty space to create a new
             one (added to the competition when the route is saved). */}
@@ -997,183 +1081,6 @@ export function RouteEditor({
               <li key={i}>⚠ {w}</li>
             ))}
           </ul>
-        ) : null}
-
-        {!openDistance ? (
-          <>
-            {/* Collapsed by default — the defaults suit most competitions. The
-                badge is why that's safe: it reads the live configuration back
-                on the header row, so an exit start (or a gate list) is never
-                something you'd have to expand the panel to discover (#436).
-                Same sentence the task page prints, from the same helper. */}
-            <Disclosure
-              title="Start (SSS)"
-              badge={
-                <span className="text-xs font-normal text-muted-foreground">
-                  {startConfigSummary(
-                    {
-                      type: sssType,
-                      direction,
-                      timeGates: gates.flatMap((g) =>
-                        parseTimeToken(g) !== null ? [`${toUtcTime(g)}:00Z`] : []
-                      ),
-                    },
-                    { timeZone: tz, taskDate }
-                  )}
-                </span>
-              }
-            >
-              {!derived.hasSSSTurnpoint ? (
-                <p className="mt-1 text-sm text-amber-500">
-                  ⚠ This task has no Start (SSS) turnpoint — set one in the list
-                  above, otherwise gates have no cylinder to apply to.
-                </p>
-              ) : null}
-              {/* Lists in flow, not popovers (#638). Both choices are
-                  two-way and each option carries an explanation, which a
-                  collapsed select shows one of and hides the other — here
-                  they are side by side, which is how you choose between
-                  them. */}
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                <ChoiceList
-                  label="Start type"
-                  value={sssType}
-                  onChange={(v) => setSssType(v as SSSConfig["type"])}
-                  options={[
-                    { value: "RACE", label: "Race to goal — timed from a start gate" },
-                    {
-                      value: "ELAPSED-TIME",
-                      label: "Elapsed time — timed from each pilot's crossing",
-                    },
-                  ]}
-                />
-                <ChoiceList
-                  label="Start direction"
-                  value={direction}
-                  onChange={(v) => setDirection(v as SSSConfig["direction"])}
-                  options={[
-                    { value: "EXIT", label: "Exit start — cross outward" },
-                    { value: "ENTER", label: "Enter start — cross inward" },
-                  ]}
-                />
-              </div>
-
-              <h4 className="mt-3 text-sm font-medium">
-                {isRace ? `Start gates — ${timeZoneLabel}` : `Start open — ${timeZoneLabel}`}
-              </h4>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {isRace
-                  ? "A pilot's start time is the last gate at or before their start crossing (FAI S7F §9.2.4.1). Starting before the first gate is an early start."
-                  : "Elapsed-time pilots are timed from their actual start crossing; a gate only sets when the start opens."}{" "}
-                {tz
-                  ? "Times are comp-local (set in Competition Settings)."
-                  : "Times are UTC — save a route (or set a timezone in Competition Settings) to edit in comp-local time."}
-              </p>
-              <ul className="mt-2 flex flex-col gap-2">
-                {gates.map((g, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <TimePicker
-                      className="w-32"
-                      required
-                      aria-label={`Gate ${i + 1} time — ${timeZoneLabel}`}
-                      value={g}
-                      onChange={(v) => updateGate(i, v)}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="ml-auto"
-                      onPress={() => removeGate(i)}
-                    >
-                      Remove
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-              {isRace && gates.length === 0 ? (
-                <p className="mt-2 text-sm text-amber-500">
-                  ⚠ No start gates — every pilot will be timed from their actual
-                  start crossing, like an elapsed-time task.
-                </p>
-              ) : null}
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" onPress={addGate}>
-                  + Add gate
-                </Button>
-                {isRace ? (
-                  <span className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
-                    <NumberField
-                      minValue={1}
-                      maxValue={100}
-                      step={1}
-                      className="w-28"
-                      aria-label="Number of gates"
-                      value={genCount}
-                      onChange={setGenCount}
-                    />
-                    gates every
-                    <NumberField
-                      minValue={1}
-                      maxValue={720}
-                      // step must stay 1: RAC snaps to minValue + k·step, so
-                      // step 5 with min 1 would corrupt 15 → 16.
-                      step={1}
-                      className="w-28"
-                      aria-label="Gate interval (minutes)"
-                      value={genInterval}
-                      onChange={setGenInterval}
-                    />
-                    min
-                    <Button variant="outline" size="sm" onPress={generateSeries}>
-                      Generate from first gate
-                    </Button>
-                  </span>
-                ) : null}
-              </div>
-            </Disclosure>
-
-            <Disclosure title="Goal">
-              <ChoiceList
-                className="mt-2"
-                label="Goal type"
-                value={goalType}
-                onChange={(v) => setGoalType(v as GoalConfig["type"])}
-                options={[
-                  { value: "CYLINDER", label: "Cylinder — the last turnpoint's radius" },
-                  { value: "LINE", label: "Goal line — perpendicular to the last leg" },
-                ]}
-              />
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  Deadline — {timeZoneLabel}
-                  <TimePicker
-                    className="w-32"
-                    clearable
-                    aria-label={`Goal deadline — ${timeZoneLabel}`}
-                    value={goalDeadline}
-                    onChange={setGoalDeadline}
-                  />
-                  {goalDeadline ? null : "(optional)"}
-                </span>
-              </div>
-              {goalType === "LINE" ? (
-                // Geometry an organiser reads once, so it sits on the ⓘ rather
-                // than under the control every time the dialog opens.
-                <p className="mt-2 text-sm text-muted-foreground">
-                  <span className="inline-flex items-baseline gap-1">
-                    <span>Line length is 2 × the turnpoint&apos;s radius.</span>
-                    <Explain label="Goal line geometry" className="self-center">
-                      <p>
-                        The goal line is centred on the last turnpoint,
-                        perpendicular to the final leg, and extends the
-                        turnpoint&apos;s radius to each side.
-                      </p>
-                    </Explain>
-                  </span>
-                </p>
-              ) : null}
-            </Disclosure>
-          </>
         ) : null}
 
       {/* Sticky to the BOTTOM of the viewport, not the end of the document:
@@ -1249,12 +1156,15 @@ export function RouteEditor({
         {addingTurnpoint ? (
           <TurnpointSheet
             mode="add"
-            initial={blankDraft()}
+            initial={blankDraft(inferAddedType(rows, { openDistance }))}
             waypointRecords={waypointRecords}
             wpLoading={wpLoading}
             compId={compId}
             onSave={appendTurnpoint}
             onClose={() => setAddingTurnpoint(false)}
+            startSettings={openDistance ? undefined : startSettings}
+            goalSettings={openDistance ? undefined : goalSettings}
+            showGoal={!openDistance}
           />
         ) : null}
 
@@ -1278,6 +1188,11 @@ export function RouteEditor({
             onSave={(draft) => updateTurnpoint(editingRow.id, draft)}
             onDelete={() => removeTurnpoint(editingRow.id)}
             onClose={() => setEditingRowId(null)}
+            startSettings={openDistance ? undefined : startSettings}
+            goalSettings={openDistance ? undefined : goalSettings}
+            showGoal={
+              !openDistance && rows[rows.length - 1]?.id === editingRow.id
+            }
           />
         ) : null}
 

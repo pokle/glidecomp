@@ -14,6 +14,7 @@ import {
   suggestWaypointCode,
   turnpointsToCSV,
   turnpointToRow,
+  turnpointsToRows,
   xctskForPatch,
   type RouteRow,
 } from "./route-editor";
@@ -85,6 +86,30 @@ describe("turnpointToRow", () => {
   });
 });
 
+describe("turnpointsToRows", () => {
+  it("maps a last untyped turnpoint to the UI Goal type", () => {
+    let id = 0;
+    const rows = turnpointsToRows(
+      [
+        { type: "TAKEOFF", radius: 400, waypoint: { name: "A", lat: -36, lon: 147 } },
+        { type: "SSS", radius: 400, waypoint: { name: "B", lat: -36.1, lon: 147.1 } },
+        { radius: 400, waypoint: { name: "C", lat: -36.2, lon: 147.2 } },
+      ],
+      () => ++id
+    );
+    expect(rows.map((r) => r.type)).toEqual(["TAKEOFF", "SSS", "GOAL"]);
+  });
+
+  it("leaves a typed last turnpoint alone", () => {
+    let id = 0;
+    const rows = turnpointsToRows(
+      [{ type: "ESS", radius: 400, waypoint: { name: "G", lat: -36, lon: 147 } }],
+      () => ++id
+    );
+    expect(rows[0].type).toBe("ESS");
+  });
+});
+
 describe("buildRoute", () => {
   it("builds turnpoints and reports complete geometry", () => {
     const result = buildRoute(
@@ -105,6 +130,19 @@ describe("buildRoute", () => {
     expect(result.turnpoints[1]).toMatchObject({ type: "SSS", radius: 2000 });
     expect(result.turnpoints[3].waypoint.altSmoothed).toBe(300);
     // Plain turnpoints must not carry a type key at all (strict server schema)
+    expect("type" in result.turnpoints[2]).toBe(false);
+  });
+
+  it("strips the UI-only Goal type so the last turnpoint is untyped", () => {
+    const result = buildRoute(
+      [
+        row({ id: 1, name: "Launch", type: "TAKEOFF" }),
+        row({ id: 2, name: "Start", type: "SSS", coords: "-36.6, 147.8" }),
+        row({ id: 3, name: "Goal", type: "GOAL", coords: "-36.7, 147.7" }),
+      ],
+      { openDistance: false }
+    );
+    expect(result.errors).toEqual([]);
     expect("type" in result.turnpoints[2]).toBe(false);
   });
 
