@@ -346,7 +346,10 @@ export function createMapAnnotationLayer(
   }
 
   // --- Map interaction management ---
-  const mapInteractions = ['dragPan', 'scrollZoom', 'doubleClickZoom', 'dragRotate', 'touchZoomRotate', 'keyboard'] as const;
+  // `touchPitch` is listed explicitly: mapbox-gl 3.30.0 made pitch and rotation
+  // independent, so disabling `dragRotate` no longer stops a two-finger pitch
+  // drag from tilting the map out from under an annotation being drawn.
+  const mapInteractions = ['dragPan', 'scrollZoom', 'doubleClickZoom', 'dragRotate', 'touchZoomRotate', 'touchPitch', 'keyboard'] as const;
 
   function disableMapInteractions() {
     for (const name of mapInteractions) {
