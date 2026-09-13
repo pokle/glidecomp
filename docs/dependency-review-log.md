@@ -4,6 +4,204 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-09-13
+
+Three weeks since the last routine entry (2026-08-23); the 2026-09-09 security
+review round did a partial, security-only dependency pass in between
+(commit `b079cb7`) which this entry accounts for where it overlaps.
+
+### Security Vulnerabilities Fixed
+
+No advisory was closed by a version change this cycle. `bun audit` opens **and**
+closes at **5 vulnerabilities (1 critical, 3 moderate, 1 low)**, all of them
+`astro`, all fixed only on the 7.x line — `6.4.8` is the last 6.x release and no
+back-port exists, so the audit cannot go quiet while `astro` 6 is in the tree.
+
+Two of the five are new since the 2026-08-23 baseline of 3, and both were traced
+rather than carried forward on trust:
+
+| Advisory | Severity | Analysis |
+|---|---|---|
+| [GHSA-26w7-cxv4-gfx2](https://github.com/advisories/GHSA-26w7-cxv4-gfx2) — Astro: remote code execution through AVIF image optimisation | **Critical** (CVSS 9.8) | **The vulnerable code is already patched in this tree.** Astro 7.2.8's fix for this advisory is one changelog line — *"Updates the minimum supported version of Sharp to 0.35.4"* — because the out-of-bounds read/write is in `libheif` inside `sharp`, not in astro itself. The 2026-09-09 security round already raised the root override to `sharp: ^0.35.4`, and `bun.lock` resolves exactly one `sharp@0.35.4` (no second `astro/sharp` copy — checked, per the 2026-08-09 lesson). `bun audit` keeps reporting it because the advisory's affected range is written against `astro`'s own version, which cannot move without Vite 8. Reachability is also unchanged from SEC-34's rationale: `<Picture>` appears only in `static/src/pages/index.astro` over hand-authored images checked into the repo, optimised at `bun run build` time, never over a user-supplied image. |
+| [GHSA-376h-93r7-7g6f](https://github.com/advisories/GHSA-376h-93r7-7g6f) — Astro: authorisation bypass from a missing path-segment boundary check when stripping the configured base | Moderate (CVSS 6.3) | Not applicable. It requires a non-root `base` *and* an authorisation check reading `context.url.pathname`. The production build sets `base: undefined` (`ASTRO_BASE` is only ever set, to `/_static`, by the dev script), `output` is `static`, and the content pages carry no Astro middleware and no authorisation of any kind. |
+
+The three pre-existing Astro XSS advisories (GHSA-f48w-9m4c-m7f5,
+GHSA-7pw4-f3q4-r2p2, GHSA-4g3v-8h47-v7g6) are unchanged and still not
+exploitable here — no View Transitions, no dynamic spread attributes, no
+hydrated islands in the static pages.
+
+**Not a vulnerability fix, but security-adjacent:** the four workspaces that
+declare `hono` were still asking for `^4.13.3` and only reaching the patched
+`4.13.7` through the root override added on 2026-09-09. hono 4.13.5 and 4.13.7
+both carry security fixes (query parsing past a URL fragment, `toSSG()` path
+traversal, unbounded `parseBody()` dot-notation parsing; and
+[GHSA-hxh3-vqpv-xpqv](https://github.com/advisories/GHSA-hxh3-vqpv-xpqv), an
+XSS in `hono/jsx` boundary components). The specs now say `^4.13.7` directly, so
+the floor survives the override being removed.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **mapbox-gl** | 3.29.0 | 3.30.0 | root, frontend | **Breaking:** pitch and rotation are now independent states — disabling rotation no longer disables pitch. One code change required, see below. Also: terrain extracted out of the core ESM module (loads as its own chunk), Supercluster 9, client-side overzooming for raster-array sources, new `MapOptions.animationFrameProvider`, max sources per style raised to 64. |
+| **hono** | ^4.13.3 (spec; resolving to 4.13.7 via the root override) | ^4.13.7 | frontend, auth-api, competition-api, airscore-api | Spec catch-up, no resolution change. See the security note above. |
+| **lucide-react** | 1.33.0 | 1.45.0 | frontend | Twelve minor releases of new/updated icons and metadata. Icon renames surface as missing exports; typecheck and the frontend suite are clean. |
+| **react-aria-components** | 1.20.0 | 1.21.1 | frontend | New `NavigationTree` component, async menu loading (`MenuLoadMoreItem`), `renderEmptyState` on Menu. Additive; no breaking changes. |
+| **react-router-dom** (and `react-router`) | 7.18.2 | 7.18.3 | frontend | Patch. Needed the workspace-scoped force again (see Lessons); the range in `web/frontend/package.json` also moved `^7.9.5` → `^7.18.3` as a side effect of `bun update`, which is kept — the declared floor now matches what is actually resolved. |
+| **shadcn** | 4.19.0 | 4.21.0 | frontend | CLI-only tooling (and `bunx shadcn add` is forbidden here by the one-kit rule). 4.20.0 adds `npx shadcn migrate cn`; 4.21.0 installs a `cn` package on init and sources `twMerge` from it. Nothing in the repo is affected. |
+| **tailwind-merge** | 3.6.0 | 3.7.0 | frontend | `fromTheme` getters expose a `themeKey`; seven class-map fixes, of which three can change a merge outcome — axis shorthands (`px`) now override logical sides (`ps`), `columns-auto` conflicts with other column utilities, `max-h-none` joins the max-height group, and deprecated `shadow-inner` is classified as a shadow rather than a shadow colour. No such combination is asserted anywhere in the suite; frontend tests and both e2e suites are clean. |
+| **@internationalized/date** | 3.12.3 | 3.12.4 | frontend | Patch. |
+| **@hono/zod-validator** | 0.9.0 | 0.9.1 | competition-api | Patch. |
+| **@playwright/test** | 1.62.1 | 1.63.0 | root | Test locks, subtree frame locators, `locator.visible()`, `dialogclosed` events, a Perfetto reporter. **Breaking:** drops Ubuntu 20.04 and deprecates the experimental component-testing packages — CI runs `ubuntu-latest` (24.04) and the repo has no component tests, so neither applies. Browser pin moves to Chromium 153.0.8010.12; `bun run test:e2e` handled that on its own, with no manual install step, exactly as `web/scripts/ensure-playwright-browsers.sh` is meant to. |
+| **@types/react-dom** | 19.2.5 | 19.2.7 | frontend | Type definition patches. Spec changed `^` → `~`, see Code Changes. |
+| **@types/react** | 19.2.18 | 19.2.18 | frontend | No version change; spec changed `^` → `~`, see Code Changes. |
+| **@types/bun** | 1.4.0 | 1.4.2 | root | Type definition patches. |
+| **@types/node** | 25.9.5 | 25.9.6 | root | Type definition patch (staying on 25.x). |
+| **sharp** | ^0.35.3 | ^0.35.4 | frontend | Spec catch-up to the root override added on 2026-09-09; no resolution change. |
+
+### Code Changes Required
+
+- **`web/frontend/src/analysis/map-annotations.ts`** — mapbox-gl 3.30.0 made pitch
+  and rotation independent, so the annotation editor's `disableMapInteractions()`
+  no longer stopped a two-finger pitch drag when it disabled `dragRotate`. Added
+  `touchPitch` to the `mapInteractions` list (with a comment naming the release)
+  so the map still cannot tilt out from under an annotation being drawn.
+  `ThermalRoseMap.tsx` needed nothing — it already sets `pitchWithRotate: false`
+  and `touchPitch: false` explicitly beside `dragRotate: false`, rather than
+  relying on the old coupling.
+- **Removed a stray `hono` dependency from the ROOT `package.json`.** It was added
+  to root `dependencies` (not just the override) by the 2026-09-09 security
+  commit `b079cb7` — the exact stray-root-dependency failure mode the 2026-08-09
+  and 2026-08-23 lessons describe, arriving this time through a commit that was
+  not a dependency-routine commit. Nothing outside the workspaces imports hono
+  (grepped `e2e/`, `functions/`, `web/scripts/`); each worker and the frontend
+  declares it itself. Removed; `bun install --frozen-lockfile` still resolves a
+  single `hono@4.13.7`.
+- **Pinned the React type packages to the 19.2 line** (`@types/react: ~19.2.18`,
+  `@types/react-dom: ~19.2.7`). Under the previous carets `bun install` floated
+  `@types/react-dom` to 19.3.0, which then warned `incorrect peer dependency
+  "@types/react@19.2.18"`. The runtime `react`/`react-dom` are pinned exactly at
+  19.2.8 and React 19.3.0 is deferred (below), so types running ahead of the
+  runtime would let code typecheck against 19.3-only APIs — `<ViewTransition>`,
+  Fragment refs, `browser()` — that would fail at run time. The `~` keeps the
+  type definitions on the same minor as the runtime; lift both together when
+  React 19.3 is adopted.
+
+### Overrides Added / Updated
+
+None. The override list is unchanged from the 2026-09-09 security commit:
+`@babel/core`, `@hono/node-server`, `brace-expansion`, `browserslist`, `defu`,
+`esbuild`, `fast-uri`, `form-data`, `hono`, `js-yaml`, `kysely`, `nanoid`,
+`postcss`, `protocol-buffers-schema`, `qs`, `shell-quote`, `sharp`, `smol-toml`,
+`svgo`, `undici`, `vite`, `ws`.
+
+### Packages Not Upgraded (intentional)
+
+Every row below was re-checked against the current `package.json`/`bun.lock` this
+cycle rather than copied forward (2026-08-23 lesson).
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **astro** | 6.4.8 | 7.3.2 | **Major, and now entangled with the deferred Vite 8 major.** Astro 7.0.0's first listed breaking change is "Upgrade to Vite v8": `astro@7.3.2` declares `vite: ^8.0.13`, while the root `overrides` pin `vite: ^7.3.6` for the whole tree because `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. Astro 7 also swaps the default Markdown processor to Sätteri (our KaTeX prerendering runs on `remarkPlugins`/`rehypePlugins`, so it would need `@astrojs/markdown-remark` installed and set as `markdown.processor`), replaces the Go compiler with a stricter Rust one, and changes the `compressHTML` default to `'jsx'` — which alters whitespace in exactly the prerendered content pages the e2e suite asserts against. This is a focused PR with the Vite 8 move, not a routine bump. The critical advisory it carries is separately analysed above and is already mitigated by `sharp@0.35.4`. |
+| @astrojs/mdx | 6.0.3 | 8.0.1 | Pairs with Astro 7 (8.0.1 declares `astro: ^7.2.6`). |
+| vite | 7.3.6 | 8.3.0 | Major. `@cloudflare/vitest-pool-workers` still has known issues with Vite 8. Already at latest within `^7`. |
+| @vitejs/plugin-react | 5.2.0 | 6.1.1 | Major. Pairs with Vite 8. |
+| vitest | 4.1.11 | 5.0.0 | **New major this cycle.** Pairs with the Vite 8 move (`@cloudflare/vitest-pool-workers` gates both). Already at latest within `^4`. |
+| **better-auth** | 1.6.26 | 1.7.4 | Unchanged reasoning from 2026-08-23: 1.7.0 documents its own changes as "Breaking changes" despite the minor bump, most importantly a **required** `Account.issuer` column with an identity key change to `(issuer, accountId)` that the generated migration explicitly cannot backfill. This repo configures `socialProviders` (`web/workers/auth-api/src/auth.ts`), so it applies. Needs a focused PR with a reviewed migration, not a routine bump. |
+| @better-auth/api-key | 1.6.26 | 1.7.4 | Version-locked to better-auth; deferred alongside it. |
+| **react**, **react-dom** | 19.2.8 | 19.3.0 | **New this cycle** — React 19.3.0 shipped 2026-09-09, four days before this run. Additive (`<ViewTransition>`, Fragment refs, `react-dom`'s `browser()`, independent transitions) with no documented breaking changes, but these are pinned *exactly* here and the SPA is server-rendered, so a React minor is a hydration-surface change that deserves its own PR and its own `test:e2e:ssr` read — not a four-day-old bump ridden in on a routine. The type packages are held at 19.2 to match (see Code Changes). |
+| **three**, **@types/three** | 0.185.1 / 0.185.4 | 0.186.0 | **New this cycle.** Pre-1.0 minor bump (equivalent to a major, same treatment as `kysely` and `katex`), and three's minors routinely move renderer APIs. The 3D replay is the only consumer; defer to a focused PR that can actually look at it. |
+| **wrangler** | 4.116.0 | 4.131.1 | **Still capped — 8 cycles now.** `npm view wrangler@<version> dependencies.miniflare` re-run this cycle for 4.117.0, 4.120.0, 4.125.0, 4.128.0 and 4.131.1: every one reports an alpha (`5.20260730.0-alpha` → `5.20260911.0-alpha`). Nothing has appeared on the stable miniflare 4.x line since 4.116.0. Re-check with that same command before ever bumping. |
+| @cloudflare/vitest-pool-workers | 0.19.1 | 0.22.0 | Paired with the wrangler cap above — still bundles the alpha miniflare. Re-evaluate alongside wrangler. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260911.1 | **Major (5.x).** No newer 4.x release available — confirmed again this cycle. Evaluate in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest. |
+| zod | 3.25.76 | 4.6.4 | Major. Standalone task — `@hono/zod-validator` 0.9.1 accepts both. |
+| kysely | 0.28.17 | 0.29.5 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.28`. Defer to a focused PR. |
+| jsdom | 25.0.1 | 30.0.1 | Major version jump. Already at latest within `^25`. Defer. |
+| katex | 0.17.0 | 0.18.7 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.17`. Defer. |
+| concurrently | 9.2.4 | 10.0.5 | Major. ESM-only, drops `--name-separator`. Already at latest within `^9`. Low priority. |
+| @types/node | 25.9.6 | 26.5.1 | Major. Now at latest within `^25`. Stay on 25.x. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine,
+  airscore-api, auth-api, competition-api, dev-router), plus
+  `bun run --filter '@glidecomp/frontend' typecheck` run separately, since
+  `typecheck:all` reaches the frontend only through the root project.
+- `bun run test:all` — 1629 root/engine/airscore-api/dev-router/scripts tests
+  + 787 frontend (56 files) + 108 auth-api (6 todo, 9 files) + 773
+  competition-api (45 files). All pass, 0 fail.
+- `bun run build` — clean, including the Astro static build (9 pages) and its
+  sharp image pipeline, and the mapbox-gl 3.30.0 chunking after terrain moved
+  out of the core ESM module.
+- `bun run test:e2e` — **178 passed, 6 skipped** in 12.1 minutes, exit 0, on the
+  first run, no flakes and no re-runs needed. Teardown logged the usual
+  `Broken pipe` line from the wrangler dev session after the last test; the run
+  had already finished green.
+- `bun run test:e2e:ssr` — **42/42 passed** in 1.8 minutes, exit 0, including all
+  12 "no hydration mismatch" checks. This is the one that would have caught a
+  react-aria-components or tailwind-merge change altering server-rendered markup.
+- `bun audit` — 5 vulnerabilities (1 critical, 3 moderate, 1 low) before and
+  after, all `astro`, analysed above. Re-run fresh rather than trusting the
+  2026-08-23 count of 3, and it had indeed grown by two.
+- `bun run check:scoring-note` — not required; no scoring source changed (the one
+  code change is in the frontend's annotation editor).
+
+### Lessons / Notes for Future Sessions
+
+- **A stray root dependency can arrive from a commit that is not a dependency
+  commit.** The 2026-08-09 and 2026-08-23 lessons both frame the stray-root-dep
+  hazard as something *this routine* causes with a badly-scoped `bun update`. This
+  cycle found `hono` sitting in the root `package.json`'s `dependencies`, added by
+  the 2026-09-09 *security review* commit. So `git diff package.json` immediately
+  after your own `bun update` is not enough — **read the root `dependencies` block
+  at the START of the run and ask whether each entry has a reason to be there.**
+  Today `@fontsource/atkinson-hyperlegible-next`, `mapbox-gl` and
+  `threebox-plugin` are the legitimate root entries.
+- **When `bun audit` names a package you cannot move, read what the fixing
+  release actually changed before accepting the finding as live.** The critical
+  AVIF RCE against `astro` looks unfixable here (the fix is only on 7.x, and 7.x
+  needs Vite 8). But astro 7.2.8's changelog entry for it is *"Updates the minimum
+  supported version of Sharp to 0.35.4"* — the whole fix is a dependency floor on
+  a package this tree already overrides to `^0.35.4`. The advisory is matched on
+  astro's version string, not on the vulnerable code, which we do not have. This
+  is the mirror image of the 2026-08-09 `sharp` lesson: there, a package we had
+  pinned safe was vulnerable through a second nested copy; here, a package we
+  cannot patch is already safe through a dependency we do control. **Both
+  directions mean the same thing — resolve the advisory to the actual vulnerable
+  code in `bun.lock`, never to the name in the audit output.**
+- **`bun outdated` at the repo root reports the ROOT workspace only.** It listed
+  7 rows; running it again inside `web/frontend` listed 23 more, and the
+  `web/workers/*` runs added `@hono/zod-validator`, `zod`, `kysely`,
+  `@better-auth/api-key` and `@cloudflare/vitest-pool-workers` on top of that.
+  Every frontend upgrade in this entry was invisible from the root. Run it once
+  per workspace directory (the routine now says so).
+- **`cd web/frontend && bun update react-router-dom` worked cleanly again** — no
+  stray root additions this time, third cycle running that this is the form that
+  behaves. It does rewrite the workspace's own range to the newly resolved
+  version (`^7.9.5` → `^7.18.3`); that is an improvement, not a surprise, but
+  check the diff so you can say so deliberately rather than discover it in review.
+- **A caret on a `@types/*` package will float it past the runtime it describes.**
+  `@types/react-dom: ^19.2.5` resolved to 19.3.0 the moment 19.3.0 existed, which
+  bun then flagged as a peer mismatch against `@types/react@19.2.18`. With
+  `react`/`react-dom` pinned exactly, the type packages now carry `~` so they
+  track the same minor. Lift all four together, never the types alone.
+- **Astro 7 has stopped being "a major we keep deferring" and become "a major
+  that needs the Vite 8 move first".** They are now one piece of work: astro 7
+  declares `vite: ^8.0.13`, the root override pins `vite: ^7.3.6` tree-wide, and
+  the override exists because `@cloudflare/vitest-pool-workers` is not ready for
+  Vite 8 — which is also what caps `vitest` at 4 and `@vitejs/plugin-react` at 5.
+  Whoever picks this up gets astro 7, `@astrojs/mdx` 8, vite 8, vitest 5,
+  `@vitejs/plugin-react` 6 and a `@cloudflare/vitest-pool-workers` bump in one
+  PR, plus the Sätteri/`@astrojs/markdown-remark` switch for KaTeX and a
+  `compressHTML` whitespace review of the content pages. Sizing it as "the astro
+  bump" will underestimate it.
+- **Playwright 1.63.0 needed no manual browser install**, as the routine promises.
+  The pin moved to Chromium 153.0.8010.12 and `bun run test:e2e` was the only
+  command run — `web/scripts/ensure-playwright-browsers.sh` fetched the build
+  itself. That download is why the first run is slow; it is not a problem, and
+  it is still not worth re-deriving the old workaround.
+
 ## 2026-08-23
 
 ### Security Vulnerabilities Fixed
