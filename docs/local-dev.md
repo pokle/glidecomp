@@ -20,6 +20,28 @@ Vite proxies all of `/api` to it. Nothing addresses `:8788`/`:8789`/`:8787` any
 more, so **a routing change belongs in three places at once**: `functions/api/`,
 `dev-router/src/index.ts` (pinned by its unit test), and the Vite proxy.
 
+## `astro dev` must stay in the foreground
+
+Astro 7's `astro dev` **daemonises itself when it detects it is being run by a
+coding agent** (`am-i-vibing`, via `isRunByAgent()`): it forks a background
+server, prints a JSON blob with a pid, and exits 0. That is fine for a human
+typing `astro dev`, and fatal for us — `bun run dev` runs it under
+`concurrently`, and Playwright's `webServer` waits on the same process, so an
+immediate exit 0 reads as "the dev server died" and every e2e run fails before
+a single test executes.
+
+There is no `--foreground` flag. `--ignore-lock` is the escape hatch that
+suppresses the auto-background (`wantsBackground = flags.background ||
+agentDetected && !ignoreLock`), so the frontend's `dev` script passes it. It
+also skips Astro's own single-server lock file, which we do not want anyway:
+`concurrently` owns the process lifetime here, and the port collision that lock
+guards against is covered by the worktree rules below.
+
+Symptom if it ever regresses: `Dev server failed to start within 30s`, or
+`astro dev … exited with code 1` with no other diagnostic, because in
+background mode the real error goes to a log file — read it with
+`astro dev logs`.
+
 ## The test suites
 
 `bun run test:all` = `test` (the engine/airscore/dev-router/scripts `bun test`
