@@ -54,6 +54,7 @@
 | 2026-08-20 | [round](security-review/rounds/2026-08-20.md) | Mobile settings hierarchy + Wing audit rewrite + mobile e2e; no new findings |
 | 2026-09-02 | [round](security-review/rounds/2026-09-02.md) | Comp/task-analysis rename + anonymous report-card deep link; SEC-48 (dependency-audit regression) fixed inline; SEC-49 documented |
 | 2026-09-09 | [round](security-review/rounds/2026-09-09.md) | Day-difficulty metrics + comp-wide section nav; SEC-50 (dependency-audit regression, 1 critical) + SEC-49 fixed inline |
+| 2026-09-16 | [round](security-review/rounds/2026-09-16.md) | Routine dependency-upgrade window only; SEC-50 confirmed held; no new findings |
 
 ## Findings register
 
@@ -155,39 +156,46 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 
 ## Where to start the next review
 
-1. Commit reviewed up to: **HEAD = `345fa81`** (base `2c34721`). This
-   session's checkout DID include `.github/workflows/`; if a future
-   sandboxed session lacks it again, diff that file with
+1. Commit reviewed up to: **HEAD = `06f7108`** (base `345fa81`). Both
+   `.github/workflows/` and `functions/` were present in this session's
+   checkout; if a future sandboxed session lacks `.github/workflows/`
+   again, diff that file with
    `diff <(git show <rev1>:path) <(git show <rev2>:path)`, not a `git diff`
    pathspec, which silently returns empty there.
 2. **SEC-45 (G-10) is the only open engine-DoS finding of its class and the
-   top open item — now four rounds running with no fix PR started.** It
+   top open item — now five rounds running with no fix PR started.** It
    needs its own PR: oracle tests over the S7F 2026 suite, a bound on
    `computeBestProgress`'s `exactAt()` evaluations (or a time-based
    Lipschitz prune), a ~60k-fix adversarial wandering track under a hard
    timeout, a `scoring-changes/` note, and archive parity measurement. The
    SEC-46 fix ([2026-08-17](security-review/rounds/2026-08-17.md)) is the
    template at smaller scale.
-3. **Verify SEC-50 held** — `bun audit` should read exactly 5 advisories
-   (the `astro` residual, incl. the Critical AVIF-RCE). If `hono`/
-   `js-yaml`/`sharp`/`svgo`/`smol-toml` advisories reappear, this is very
-   possibly the G-20 pattern again (a newly-disclosed CVE against an
-   already-pinned-but-in-range version, not a dependency bump) — check the
-   registry for a newer patch within the current override range before
-   assuming a code change caused it.
-4. **G-16 / astro 6→7** — now carrying a Critical CVE in its residual
+3. **Verify SEC-50 still holds** — `bun audit` should read exactly 5
+   advisories (the `astro` residual, incl. the Critical AVIF-RCE); confirmed
+   held again on [2026-09-16](security-review/rounds/2026-09-16.md) with an
+   identical severity breakdown. If `hono`/`js-yaml`/`sharp`/`svgo`/
+   `smol-toml` advisories reappear, this is very possibly the G-20 pattern
+   again (a newly-disclosed CVE against an already-pinned-but-in-range
+   version, not a dependency bump) — check the registry for a newer patch
+   within the current override range before assuming a code change caused
+   it.
+4. **G-16 / astro 6→7** — still carrying a Critical CVE in its residual
    (confirmed build-time-only via `<Picture>` in `index.astro`, over
    repo-bundled images only, never a user upload — not currently
    exploitable, but the severity floor of the unaddressed residual has
-   risen). Consider prioritising this with `upgrade-deps` sooner than the
-   five-rounds-and-counting pace so far.
+   risen). Two rounds running now recommending this be prioritised with its
+   own `upgrade-deps` pass; the 2026-09-13 dependency cycle bumped ten other
+   packages but did not touch `astro`. Still not started.
 5. **G-20** — decide whether `upgrade-deps` should routinely force
    re-resolution to latest-patch for in-range dependencies (`bun update
    --latest` or equivalent), given this is the second round running
    (SEC-48, SEC-50) where this review's own `bun audit` step caught a
-   residual that `bun install` alone would not have closed.
+   residual that `bun install` alone would not have closed. Not re-triggered
+   on [2026-09-16](security-review/rounds/2026-09-16.md) (no new CVE against
+   an already-pinned version surfaced that week), but still an open
+   process decision.
 6. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved across the last
-   four rounds.
+   five rounds.
 7. The CSP flip (G-07) still needs the four-block inline-script inventory
    first.
 8. Do NOT re-open SEC-03 (accepted by design).
