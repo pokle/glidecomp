@@ -60,6 +60,10 @@ test("the pilot score map mounts when the page is reached by a link, not just di
 
 test("the waypoints map mounts once the waypoints have loaded", async ({ page }) => {
   await page.goto(`${FRONTEND_URL}/comp/${compId}/waypoints`);
-  await expect(page.getByRole("heading", { name: "Waypoints" })).toBeVisible();
+  // `level: 1` disambiguates the page heading from WaypointDeviceExport's
+  // "Get these waypoints on your device", which Playwright's substring name
+  // match also hits once that panel mounts. comp-waypoints.spec.ts already
+  // scopes it this way.
+  await expect(page.getByRole("heading", { level: 1, name: "Waypoints" })).toBeVisible();
   await expect(page.getByText(/^Loading map/)).toHaveCount(0, { timeout: 30_000 });
 });
