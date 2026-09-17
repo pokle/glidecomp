@@ -1,0 +1,13 @@
+diff --git a/src/objects/loaders/GLTFLoader.js b/src/objects/loaders/GLTFLoader.js
+index a3eece6b8ea6a33a4af2a275599ace516362d55b..57d189ecacb99872c677007c31d112b540d91d90 100644
+--- a/src/objects/loaders/GLTFLoader.js
++++ b/src/objects/loaders/GLTFLoader.js
+@@ -2510,7 +2510,7 @@ const THREE = require('../../three.js');
+ 					if (source.mimeType === 'image/png') {
+ 
+ 						// Inspect the PNG 'IHDR' chunk to determine whether the image could have an
+-						// alpha channel. This check is conservative — the image could have an alpha
++						// alpha channel. This check is conservative â€” the image could have an alpha
+ 						// channel with all values == 1, and the indexed type (colorType == 3) only
+ 						// sometimes contains alpha.
+ 						//
