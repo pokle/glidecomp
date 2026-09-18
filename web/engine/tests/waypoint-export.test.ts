@@ -111,6 +111,71 @@ describe('serializers survive swapped / awkward identifiers', () => {
     expect(waypoints[0].code).toBe('MTB');
   });
 
+  // -------------------------------------------------------------------
+  // Altitude units and the absent altitude
+  // -------------------------------------------------------------------
+
+  it('OziExplorer writes field 14 in FEET (the format\'s unit)', () => {
+    const ozi = toOziExplorer([
+      { code: 'CORRY', name: 'CORRY', latitude: -36.185, longitude: 147.8914, altitude: 291, radius: 1000 },
+    ]);
+    const fields = ozi.trim().split(/\r?\n/)[4].split(',');
+    expect(fields[14]).toBe('955'); // 291 m = 955 ft, not "291"
+    // And it comes back as the metres it went in as.
+    expect(parseWaypointFile(ozi, 'wp.wpt').waypoints[0].altitude).toBe(291);
+  });
+
+  it('an unknown altitude round-trips as unknown, never as sea level', () => {
+    const unknown: WaypointFileRecord[] = [
+      { code: 'NOALT', name: 'No altitude', latitude: -36.185, longitude: 147.8914, radius: 400 },
+    ];
+    // Formats with a way to say "nothing here" must use it.
+    const expressive: Array<[(w: WaypointFileRecord[]) => string, string]> = [
+      [toOziExplorer, 'wp.wpt'],
+      [toSeeYouCup, 'wp.cup'],
+      [toGPX, 'wp.gpx'],
+      [toCSV, 'wp.csv'],
+    ];
+    for (const [serialize, filename] of expressive) {
+      const { waypoints } = parseWaypointFile(serialize(unknown), filename);
+      expect(waypoints[0].altitude, filename).toBeUndefined();
+    }
+    // OziExplorer's spelling of it is the -777 sentinel.
+    expect(toOziExplorer(unknown)).toContain(',-777,');
+    // GPX leaves the optional element out rather than claiming 0.
+    expect(toGPX(unknown)).not.toContain('<ele>');
+  });
+
+  it('a genuine sea-level altitude survives as 0 in every format', () => {
+    const sea: WaypointFileRecord[] = [
+      { code: 'BEACH', name: 'Beach', latitude: -36.185, longitude: 147.8914, altitude: 0, radius: 400 },
+    ];
+    const all: Array<[(w: WaypointFileRecord[]) => string, string]> = [
+      [toOziExplorer, 'wp.wpt'],
+      [toSeeYouCup, 'wp.cup'],
+      [toGPX, 'wp.gpx'],
+      [toKML, 'wp.kml'],
+      [toCSV, 'wp.csv'],
+      [toCompeGPS, 'wp.wpt'],
+      [toFsGeo, 'wp.wpt'],
+      [toFsUtm, 'wp.wpt'],
+    ];
+    for (const [serialize, filename] of all) {
+      const { waypoints } = parseWaypointFile(serialize(sea), filename);
+      expect(waypoints[0].altitude, filename).toBe(0);
+    }
+  });
+
+  it('encodeTurnpointZ packs an unknown altitude as 0 (the format has no absent)', () => {
+    const known = encodeTurnpointZ({
+      code: 'X', name: 'X', latitude: -36.185, longitude: 147.8914, altitude: 0, radius: 400,
+    });
+    const unknown = encodeTurnpointZ({
+      code: 'X', name: 'X', latitude: -36.185, longitude: 147.8914, radius: 400,
+    });
+    expect(unknown).toBe(known);
+  });
+
   it('fractional altitude does not produce malformed CUP elevation', () => {
     const frac: WaypointFileRecord[] = [
       { code: 'X', name: 'X', latitude: -36, longitude: 147, altitude: 291.5, radius: 400 },

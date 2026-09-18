@@ -22,6 +22,12 @@
 import { DEFAULT_WAYPOINT_RADIUS_M, parseWaypointsCSV, type WaypointRecord } from './waypoints';
 import { utmToLatLon } from './utm';
 
+/** Feet → metres. Only OziExplorer states its elevation field in feet. */
+const FEET_TO_METRES = 0.3048;
+
+/** OziExplorer's "no altitude recorded" sentinel for field 14. */
+const OZI_NO_ALTITUDE = -777;
+
 /**
  * A waypoint parsed from a file. `code` is the short identifier and `name`
  * the long descriptive name; they are kept separate so both can be shown and
@@ -33,7 +39,18 @@ export interface WaypointFileRecord {
   name: string;
   latitude: number;
   longitude: number;
-  altitude: number;
+  /**
+   * Elevation in metres AMSL, or **undefined when the file carried none**.
+   *
+   * Those are two different facts and 0 is not the second of them: a waypoint
+   * on a beach is at 0 m, and a file with an empty elevation column knows
+   * nothing. Collapsing them cost us a UI that offered to "fill" a sea-level
+   * waypoint forever, so the absence is modelled rather than encoded — every
+   * parser here leaves this undefined rather than defaulting to 0, and the
+   * exporters write their format's own "unknown" token (OziExplorer's -777)
+   * where one exists.
+   */
+  altitude?: number;
   radius: number;
 }
 
@@ -117,18 +134,31 @@ export function parseCoordinateValue(raw: string): number | null {
 }
 
 /** Parse an elevation field like `328.863m`, `310`, or `1000ft` to metres. */
-function parseElevationValue(raw: string): number {
+function parseElevationValue(raw: string): number | undefined {
   const t = raw.trim();
   const v = parseFloat(t);
-  if (!Number.isFinite(v)) return 0;
+  if (!Number.isFinite(v)) return undefined;
   return /ft\s*$/i.test(t) ? Math.round(v * 0.3048) : Math.round(v);
 }
 
 /**
  * Parse an OziExplorer waypoint file (.wpt). Four header lines, then one
  * comma-separated record per waypoint: field 2 = latitude, 3 = longitude,
- * 10 = description/long name, 13 = proximity radius (m), 14 = elevation (m).
- * The short code in field 1 is the fallback name when field 10 is blank.
+ * 10 = description/long name, 13 = proximity radius (m), 14 = elevation
+ * in **FEET**. The short code in field 1 is the fallback name when field 10
+ * is blank.
+ *
+ * Feet, not metres, is the format's own definition, and reading it as metres
+ * inflated every imported altitude by 3.28. The bundled HG Worlds 2026
+ * waypoint set is the proof, because the organiser published the same points
+ * in four formats: BORDANO LANDING is `225` in the FS $FormatGEO file,
+ * `225.000000` in the CompeGPS one and `738` here — and 738 ft is 224.9 m.
+ * LIENZ LANDING reads 2234 (681 m, and Lienz sits at ~673 m); SAURIS LANDING
+ * reads 4567 (1392 m). See scoring-changes/ notes on why nothing already
+ * scored moves: a task freezes its own xctsk when it is built.
+ *
+ * -777 is OziExplorer's "no altitude recorded" sentinel and must come back as
+ * undefined — converted it would read as 237 m below sea level.
  */
 export function parseWaypointsWPT(content: string): WaypointFileRecord[] {
   const lines = content.split(/\r?\n/);
@@ -145,14 +175,18 @@ export function parseWaypointsWPT(content: string): WaypointFileRecord[] {
     const longName = (f[10] ?? '').trim(); // field 10 is the descriptive name
     const code = (f[1] ?? '').trim() || `WP${f[0]}`;
     const radius = f.length > 13 ? parseInt(f[13], 10) : NaN;
-    const altitude = f.length > 14 ? parseInt(f[14], 10) : NaN;
+    // parseFloat, not parseInt: some writers emit "738.0".
+    const altFeet = f.length > 14 ? parseFloat(f[14] ?? '') : NaN;
     waypoints.push({
       code,
       name: longName || code,
       latitude,
       longitude,
       radius: Number.isFinite(radius) && radius > 0 ? radius : DEFAULT_WAYPOINT_RADIUS_M,
-      altitude: Number.isFinite(altitude) ? altitude : 0,
+      altitude:
+        Number.isFinite(altFeet) && altFeet !== OZI_NO_ALTITUDE
+          ? Math.round(altFeet * FEET_TO_METRES)
+          : undefined,
     });
   }
   return waypoints;
@@ -204,7 +238,7 @@ function parseWaypointTable(content: string): WaypointFileRecord[] {
     }
     if (!code) code = `WP${i}`;
     const radius = iRadius >= 0 ? parseInt(f[iRadius], 10) : NaN;
-    const altitude = iElev >= 0 ? parseElevationValue(f[iElev] ?? '') : 0;
+    const altitude = iElev >= 0 ? parseElevationValue(f[iElev] ?? '') : undefined;
     waypoints.push({
       code,
       name: longName || code,
@@ -261,7 +295,7 @@ export function parseWaypointsPCX5(content: string): WaypointFileRecord[] {
     if (lat === null || lon === null) continue;
     // Altitude is the first plain number after the coordinates; anything after
     // that is the long name (CompeGPS carries "BORDANO LANDING" etc.).
-    let altitude = 0;
+    let altitude: number | undefined;
     let altIdx = -1;
     for (let i = coordIdx[1] + 1; i < t.length; i++) {
       if (/^[+-]?\d+(\.\d+)?$/.test(t[i])) {
@@ -321,7 +355,7 @@ export function parseWaypointsGPX(content: string): WaypointFileRecord[] {
       latitude: lat,
       longitude: lon,
       radius: DEFAULT_WAYPOINT_RADIUS_M,
-      altitude: Number.isFinite(ele) ? Math.round(ele) : 0,
+      altitude: Number.isFinite(ele) ? Math.round(ele) : undefined,
     });
   }
   return out;
@@ -353,7 +387,7 @@ export function parseWaypointsKML(content: string): WaypointFileRecord[] {
       latitude: lat,
       longitude: lon,
       radius: DEFAULT_WAYPOINT_RADIUS_M,
-      altitude: Number.isFinite(alt) ? Math.round(alt) : 0,
+      altitude: Number.isFinite(alt) ? Math.round(alt) : undefined,
     });
   }
   return out;
@@ -387,7 +421,7 @@ export function parseWaypointsFsGeo(content: string): WaypointFileRecord[] {
     const lat = dmsToDegrees(t[iLat], t[iLat + 1], t[iLat + 2], t[iLat + 3]);
     const lon = dmsToDegrees(t[iLon], t[iLon + 1], t[iLon + 2], t[iLon + 3]);
     if (lat === null || lon === null) continue;
-    let altitude = 0;
+    let altitude: number | undefined;
     let descStart = iLon + 4;
     if (/^[+-]?\d+(\.\d+)?$/.test(t[iLon + 4] ?? '')) {
       altitude = Math.round(parseFloat(t[iLon + 4]));
@@ -428,7 +462,7 @@ export function parseWaypointsUTM(content: string): WaypointFileRecord[] {
     if (!Number.isFinite(zone) || !Number.isFinite(easting) || !Number.isFinite(northing)) continue;
     // Band letters N–X are the northern hemisphere, C–M the southern.
     const { lat, lon } = utmToLatLon(zone, band >= 'N', easting, northing);
-    let altitude = 0;
+    let altitude: number | undefined;
     let descStart = iZone + 3;
     if (/^[+-]?\d+(\.\d+)?$/.test(t[iZone + 3] ?? '')) {
       altitude = Math.round(parseFloat(t[iZone + 3]));

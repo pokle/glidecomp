@@ -281,6 +281,35 @@ function flatTerrainRgbPng(metres = 0): Buffer {
 /** Built once per process — it is the same bytes for every tile. */
 let flatDemPng: Buffer | null = null;
 
+/**
+ * Answer every Terrain-RGB request with flat ground at `metres`, for a test
+ * that drives `analysis/elevation.ts` over a whole waypoint SET.
+ *
+ * The recorded terrain tiles (dispositionFor: "record") are the right thing
+ * for a handful of known points, but a set of 145 waypoints spans far more
+ * tiles than are worth committing, and in replay mode an unrecorded one is
+ * aborted — so the feature under test would report "could not read terrain"
+ * for reasons that have nothing to do with it. A known flat elevation makes
+ * the comparison arithmetic exact instead: every waypoint's disagreement is
+ * `its altitude - metres`, so a test can say which rows must be flagged.
+ *
+ * Install it INSTEAD of installMapbox (it needs no recordings), or after it
+ * to take the terrain family over.
+ */
+export async function stubTerrainElevations(
+  context: BrowserContext,
+  metres: number
+): Promise<void> {
+  const body = flatTerrainRgbPng(metres);
+  await context.route("**/v4/mapbox.terrain-rgb/**", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "content-type": "image/png", "access-control-allow-origin": "*" },
+      body,
+    })
+  );
+}
+
 // --- the handler -------------------------------------------------------------
 
 export interface MapboxHandle {

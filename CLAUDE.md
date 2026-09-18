@@ -330,7 +330,33 @@ These are the standing imperatives. Each links to the reference that explains it
     (the track HUD's 1000 m averaging window).
   - The waypoints grid on `/comp/:id/waypoints` stays metric throughout — it is
     the waypoint FILE edited in place, cell by cell. Its headers say "Alt (m)" /
-    "Radius (m)" rather than leave anyone guessing.
+    "Radius (m)" rather than leave anyone guessing, and so do the altitude
+    review's "Map (m)" / "Δ (m)".
+- **A zero altitude is never "missing", in any UI**
+  ([docs/waypoint-altitudes.md](docs/waypoint-altitudes.md)). An altitude is
+  either KNOWN — any number, 0 included — or ABSENT, which is why
+  `WaypointFileRecord.altitude` is optional: a waypoint on a beach is at 0 m
+  and a file with no elevation column knows nothing, and collapsing the two
+  made "Fill altitudes from map" offer to fill a sea-level waypoint for ever.
+  Parsers leave an absent one undefined, exporters use their format's own way
+  of saying nothing (OziExplorer's `-777`, a blank `elev`, an omitted `<ele>`),
+  a blank cell is the only "missing" signal, and a 0 that is WRONG is a wrong
+  altitude for `Check altitudes` to report — never something to overwrite
+  unasked.
+  - **Only OziExplorer's `.wpt` states elevation in FEET** (field 14, `-777` =
+    unknown); every other format we read says metres. Reading it as metres
+    inflated every imported altitude by 3.28 — the bundled HG Worlds set
+    publishes the same points in four formats and proves it. The cross-format
+    altitude agreement test in `web/engine/tests/waypoint-files.test.ts` is
+    what keeps a new format honest.
+  - **"Check altitudes" questions values; "Fill altitudes from map" answers
+    blanks.** The fill has no competing value so it applies itself; the check
+    changes nothing on its own and reviews IN THE GRID, which already has the
+    map, the locate pin, the filter and an editable cell — because a large
+    disagreement usually means a wrong COORDINATE, and accepting the terrain
+    there would hide it. Under 50 m is not a finding (a ~10 m DEM pixel against
+    a file rounded to 10 m), past 300 m the coordinates are the likelier fault,
+    and a whole-file ratio or offset is one bulk fix rather than 187 decisions.
 - **Content pages: the rule is SEO, not a JS ban.** Every word and image a
   visitor or crawler needs must be in the prerendered HTML, and the page must stay
   useful with JS off. Interaction that genuinely helps someone understand
@@ -498,6 +524,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
 | Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |
+| Waypoint altitudes (units, zero, the check) | [docs/waypoint-altitudes.md](docs/waypoint-altitudes.md) |
 | Track data quality | [docs/track-quality.md](docs/track-quality.md) |
 | Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
 | CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |

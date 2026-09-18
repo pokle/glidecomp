@@ -31,13 +31,20 @@ export type TurnpointDraft = Pick<
 >;
 
 /**
- * A turnpoint altitude that's still unknown (blank, zero or unparseable —
- * xctsk files without altitudes come through as altSmoothed 0). Only these are
- * touched by "Fill altitudes from map".
+ * A turnpoint altitude that's still unknown: a blank or unparseable one, and
+ * nothing else. Only these are touched by "Fill altitudes from map".
+ *
+ * A zero is NOT missing. It used to be — an xctsk file with no altitudes
+ * comes through as altSmoothed 0, so treating 0 as unknown filled those in —
+ * but it also meant a turnpoint genuinely at sea level could never be left
+ * alone, and the editor disagreed with the waypoints grid beside it about
+ * what a 0 in the same column meant. A 0 that is WRONG is a wrong altitude,
+ * which is what the waypoints page's "Check altitudes" review is for; it is
+ * not a blank, and nothing may overwrite it without being asked.
  */
 export function missingAltitude(altitude: string | number): boolean {
-  const alt = Number(altitude);
-  return !Number.isFinite(alt) || alt === 0;
+  if (typeof altitude === "string" && altitude.trim() === "") return true;
+  return !Number.isFinite(Number(altitude));
 }
 
 /** A fresh, empty turnpoint draft (for the "Add turnpoint" flow). */
@@ -68,6 +75,8 @@ export function draftFromRecord(rec: WaypointFileRecord): TurnpointDraft {
     type: "",
     coords: formatCoords(rec.latitude, rec.longitude),
     radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
-    altitude: rec.altitude ? rec.altitude : "",
+    // A waypoint at sea level carries 0 across; only an absent altitude is
+    // blank (see WaypointFileRecord.altitude).
+    altitude: rec.altitude ?? "",
   };
 }

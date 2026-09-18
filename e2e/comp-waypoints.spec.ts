@@ -12,6 +12,11 @@
  *   after an admin lost a set of added waypoints to a tap on a link.
  * - The map maximises into a full-screen sheet carrying its own Add-from-map
  *   toggle, so several points can be placed from a phone-sized map.
+ * - "Check altitudes" compares the whole set against the map's terrain and
+ *   turns the grid into a review: two derived columns, a per-row accept, a
+ *   snapshot-narrowed list and a live-region banner. Driven against a FLAT
+ *   synthetic DEM (stubTerrainElevations), so every disagreement in the test
+ *   is arithmetic the test chose rather than whatever the real terrain says.
  * - Anonymous visitors get the read-only RAC table instead.
  * - The device-export panel (RAC Menu of download formats, QR toggle, swap
  *   checkbox) and the RAC Add-waypoint dialog.
@@ -33,6 +38,7 @@
 import { execSync } from "node:child_process";
 import { test, expect, type Page, type Locator } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
+import { stubTerrainElevations } from "./fixtures/mapbox";
 
 const BASE_URL = FRONTEND_URL;
 const COMP_NAME = "Corryong Cup 2026";
@@ -382,6 +388,134 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({
     });
     expect(restore.ok()).toBe(true);
   }
+});
+
+/**
+ * The altitude review, over flat ground at a height no Corryong waypoint sits
+ * at — so every waypoint disagrees with the map by a known amount and the
+ * review must find them all.
+ *
+ * 4000 m is chosen to be far above the whole set (the highest Corryong
+ * waypoint is under 1000 m), which puts every row past the
+ * coordinate-suspicion threshold. That is the point: the flagging, the
+ * accept, the narrowing and the way out are what this asserts, and they are
+ * the parts a real DEM cannot make deterministic.
+ */
+test("Check altitudes reviews the set in the grid and accepts one row", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  await stubTerrainElevations(page.context(), 4000);
+
+  await firstGridRow(page);
+  // Before the check the comparison columns are hidden. Tabulator builds them
+  // with the grid (so entering the review costs no rebuild) and keeps their
+  // cells in the DOM, so this is a visibility check rather than a count.
+  const deltaCol = page.locator('.gc-grid .tabulator-col[tabulator-field="delta"]');
+  await expect(deltaCol).toBeHidden();
+
+  await page.getByRole("button", { name: "Check altitudes" }).click();
+
+  // The banner reports the finding, and the whole set is flagged.
+  const banner = page.getByRole("status").filter({ hasText: "to look at" });
+  await expect(banner).toBeVisible({ timeout: 20_000 });
+  await expect(banner).toContainText(`${waypoints.length} waypoints to look at`);
+  await expect(banner).toContainText("check the coordinates first");
+  // Corrections here do not reach into tasks already built — the review says so.
+  await expect(banner).toContainText("Tasks already built keep their own copy");
+
+  // The comparison columns are now in the grid, beside the altitude.
+  await expect(page.locator('.gc-grid .tabulator-col[tabulator-field="mapAlt"]')).toBeVisible();
+  await expect(deltaCol).toBeVisible();
+
+  // Biggest disagreement first. Against flat ground that is the LOWEST
+  // waypoint, whichever of them it is if several share the altitude.
+  const lowest = Math.min(...waypoints.map((w) => w.altitude ?? 0));
+  const firstRow = await firstGridRow(page);
+  await expect(firstRow.locator('[tabulator-field="altitude"]')).toHaveText(String(lowest));
+
+  // Flat 4000 m ground: the map column reads 4000 and every Δ is negative.
+  const mapCell = firstRow.locator('[tabulator-field="mapAlt"]');
+  await expect(mapCell).toHaveText("4000");
+  const deltaCell = firstRow.locator('[tabulator-field="delta"]');
+  // Past the coordinate threshold the delta carries a visible "!", so the
+  // warning does not live in the colour alone.
+  await expect(deltaCell).toContainText("!");
+  await expect(deltaCell.locator(".gc-cell-alert")).toBeVisible();
+
+  // Accepting one row takes the map's value into the editable altitude cell,
+  // which is an ordinary unsaved edit.
+  const saveButton = page.getByRole("button", { name: "Save", exact: true });
+  await expect(saveButton).toBeDisabled();
+  await firstRow.locator('[tabulator-field="accept"] span').click();
+  await expect(firstRow.locator('[tabulator-field="altitude"]')).toHaveText("4000");
+  await expect(saveButton).toBeEnabled();
+  // Its disagreement is gone, and the row STAYS in the list rather than
+  // vanishing under the cursor.
+  await expect(deltaCell).toHaveText("0");
+
+  // Done puts the grid back, and the accepted edit survives as an unsaved
+  // change. Not asserted on `firstRow`: leaving the review clears the sort,
+  // so the first row is a different waypoint again (and the accepted one,
+  // being the lowest, may not even be among the rows Tabulator renders).
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(deltaCol).toBeHidden();
+  await expect(page.locator('.gc-grid .tabulator-col[tabulator-field="mapAlt"]')).toBeHidden();
+  await expect(saveButton).toBeEnabled();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // A review reads the map, never the API.
+  expect(mutated()).toBe(false);
+});
+
+test("the review narrows to the rows worth looking at, and can widen again", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  // Flat ground AT one of the set's own altitudes, so some rows agree and the
+  // rest do not — which is what the narrowing is for.
+  const altitudes = waypoints.map((w) => w.altitude ?? 0);
+  const commonest = [...altitudes]
+    .sort(
+      (a, b) =>
+        altitudes.filter((x) => x === b).length - altitudes.filter((x) => x === a).length
+    )[0];
+  await stubTerrainElevations(page.context(), commonest);
+  const agreeing = altitudes.filter((a) => Math.abs(a - commonest) < 50).length;
+  const toLookAt = waypoints.length - agreeing;
+  // The fixture only makes sense if the set really is mixed.
+  expect(toLookAt).toBeGreaterThan(0);
+  expect(agreeing).toBeGreaterThan(0);
+
+  await firstGridRow(page);
+  await page.getByRole("button", { name: "Check altitudes" }).click();
+
+  const banner = page.getByRole("status").filter({ hasText: "to look at" });
+  await expect(banner).toBeVisible({ timeout: 20_000 });
+  await expect(banner).toContainText(`${toLookAt} waypoints to look at`);
+  await expect(banner).toContainText(`${agreeing} agree`);
+
+  // Narrowed by default: the agreeing rows are counted, not listed.
+  const widen = page.getByRole("button", { name: `Show all ${waypoints.length} waypoints` });
+  await expect(widen).toBeVisible();
+  await widen.click();
+  await expect(
+    page.getByRole("button", { name: `Show only the ${toLookAt} to look at` })
+  ).toBeVisible();
+  // Back to the narrowed list, so "all shown" means the rows to look at.
+  await page.getByRole("button", { name: `Show only the ${toLookAt} to look at` }).click();
+  await expect(widen).toBeVisible();
+
+  // Accept the lot: every disagreement goes, and it is all one unsaved edit.
+  const saveButton = page.getByRole("button", { name: "Save", exact: true });
+  await expect(saveButton).toBeDisabled();
+  await page.getByRole("button", { name: "Use the map’s altitude for all shown" }).click();
+  await expect(saveButton).toBeEnabled();
+  await expect(
+    page.getByRole("status").filter({ hasText: "agrees with the map" })
+  ).toBeVisible();
+
+  expect(mutated()).toBe(false);
 });
 
 test("anonymous visitors get the read-only table, no admin controls", async ({

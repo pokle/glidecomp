@@ -65,6 +65,22 @@ import { idFromSegment, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
 import { formatCoords, parseCoords } from "../comp/route-editor";
+import {
+  COORD_SUSPECT_DELTA_M,
+  SUSPECT_DELTA_M,
+  altitudeDelta,
+  altitudeVerdict,
+  describeAltitudePattern,
+  detectAltitudePattern,
+  feetToMetres,
+  formatAltitudeDelta,
+  needsReview,
+  reviewSortKey,
+  summariseAltitudeCheck,
+  type AltitudeCheckSummary,
+  type AltitudePair,
+  type AltitudePattern,
+} from "../comp/altitude-check";
 import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { TabulatorGrid } from "../comp/TabulatorGrid";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
@@ -84,6 +100,13 @@ interface WpRow {
   coords: string;
   altitude: string;
   radius: string;
+  /**
+   * The terrain elevation under this waypoint, in metres, as the altitude
+   * check last read it — blank until it runs. It is not part of the waypoint
+   * and is never saved; it is the other half of the comparison, parked on the
+   * row so the grid can format and sort by it.
+   */
+  mapAlt: string;
 }
 
 let rowSeq = 0;
@@ -93,8 +116,12 @@ function toRow(w: WaypointFileRecord): WpRow {
     code: w.code,
     name: w.name === w.code ? "" : w.name,
     coords: formatCoords(w.latitude, w.longitude),
-    altitude: w.altitude ? String(w.altitude) : "",
+    // An altitude of 0 is a waypoint at sea level and prints as "0". Only an
+    // absent one is blank — see WaypointFileRecord.altitude, and the
+    // missingAltitude note below.
+    altitude: w.altitude === undefined ? "" : String(w.altitude),
     radius: String(w.radius || 400),
+    mapAlt: "",
   };
 }
 
@@ -105,29 +132,33 @@ function fromRow(r: WpRow): WaypointFileRecord | null {
   const code = r.code.trim() || "WP";
   const alt = Number(r.altitude);
   const radius = Number(r.radius);
+  const known = r.altitude.trim() !== "" && Number.isFinite(alt);
   return {
     code,
     name: r.name.trim() || code,
     latitude: coords.lat,
     longitude: coords.lon,
-    altitude: r.altitude.trim() !== "" && Number.isFinite(alt) ? Math.round(alt) : 0,
+    // Left off entirely when the cell is blank: the set then records that it
+    // does not know this altitude, instead of asserting sea level. A typed 0
+    // IS sea level and is kept.
+    ...(known ? { altitude: Math.round(alt) } : {}),
     radius: Number.isFinite(radius) && radius > 0 ? Math.round(radius) : 400,
   };
 }
 
 /**
- * Rows whose altitude is still unknown. "Unknown" is a *blank* (or
- * unparseable) altitude — NOT a zero. A waypoint genuinely at sea level reads
- * "0", and once "Fill altitudes from map" writes that 0 it must count as
- * filled, or the button would forever claim there are altitudes left to fill
- * (the reported bug). Blank is the only "missing" signal: waypoint files
- * without altitudes arrive as 0 and toRow renders those as "".
+ * Rows whose altitude is still unknown — a *blank* (or unparseable) cell, and
+ * nothing else.
  *
- * Consequence of the ambiguity in the file format: a file that genuinely
- * carries an altitude of 0 also renders as "" (toRow can't tell "no altitude"
- * from "altitude 0"), so such a point is still treated as missing and gets
- * filled from the map — which lands on ~0 anyway. Only an explicit "0" already
- * in a cell (typed, or filled from the map) counts as known.
+ * A zero never means missing. A waypoint genuinely at sea level reads "0",
+ * and the parsers now leave an absent altitude undefined rather than
+ * defaulting it to 0 (see WaypointFileRecord.altitude), so the two facts
+ * arrive here already separated and stay separated through fromRow.
+ *
+ * A zero that is WRONG — a 0 sitting under a 1500 m launch — is not this
+ * function's business either. It is a wrong altitude, not a missing one, and
+ * "Check altitudes" is what finds it: the check reports it as a 1500 m
+ * disagreement instead of silently overwriting it.
  */
 function missingAltitude(r: WpRow): boolean {
   const s = r.altitude.trim();
@@ -147,6 +178,21 @@ function matchesFilter(r: WpRow, query: string): boolean {
     r.name.toLowerCase().includes(query) ||
     r.coords.toLowerCase().includes(query)
   );
+}
+
+/**
+ * One row's two altitudes for the check: what the cell says and what the
+ * terrain said. Both are optional, and both are read out of the row rather
+ * than stored as a third derived value — a delta kept on the row would be one
+ * more thing to keep in step with every cell edit.
+ */
+function altitudePair(r: WpRow): AltitudePair {
+  const file = Number(r.altitude);
+  const map = Number(r.mapAlt);
+  return {
+    ...(r.altitude.trim() !== "" && Number.isFinite(file) ? { fileAlt: file } : {}),
+    ...(r.mapAlt.trim() !== "" && Number.isFinite(map) ? { mapAlt: map } : {}),
+  };
 }
 
 /** Numeric value of an altitude/radius cell, or NaN when blank/unparseable. */
@@ -227,6 +273,13 @@ export function CompWaypoints() {
   const [loading, setLoading] = useState(!initial);
   const [saving, setSaving] = useState(false);
   const [fillingAlts, setFillingAlts] = useState(false);
+  // The altitude review (see checkAltitudes). `reviewing` turns the grid's
+  // two comparison columns and the Accept action on; `suspectsOnly` is the
+  // default view — the rows with something to decide, not all 145 of them.
+  const [checkingAlts, setCheckingAlts] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [suspectsOnly, setSuspectsOnly] = useState(true);
+  const [reviewCount, setReviewCount] = useState(0);
   const [notFound, setNotFound] = useState(false);
   // Mapbox (764 KB) waits until the panel nears the viewport — see use-in-view.
   const [mapRef, mapInView] = useInView<HTMLDivElement>();
@@ -256,6 +309,18 @@ export function CompWaypoints() {
   const [sort, setSort] = useState<SortDescriptor | undefined>(undefined);
   const filterRef = useRef(filter);
   filterRef.current = filter;
+  // Read by the grid filter, which Tabulator calls per row outside React.
+  const reviewFilterRef = useRef(false);
+  reviewFilterRef.current = reviewing && suspectsOnly;
+  /**
+   * The rows the check picked out, as a SNAPSHOT taken when it ran.
+   *
+   * Deliberately not recomputed as the reader works: a live predicate would
+   * make each row vanish the instant its ✓ was pressed, which reads as having
+   * deleted it and leaves nothing to check the result against. The list holds
+   * still, the Δ column goes to 0, and the banner's counts do the counting.
+   */
+  const reviewIdsRef = useRef<Set<number>>(new Set());
 
   const isAdmin = useAdminView(realIsAdmin);
 
@@ -342,18 +407,51 @@ export function CompWaypoints() {
   const syncFromGrid = useCallback(() => {
     const t = tableRef.current;
     if (!t) return;
-    setRows((t.getData() as WpRow[]).map((r) => ({ ...r })));
+    // getData() hands rows back in the grid's CURRENT DISPLAY ORDER, so a
+    // header sort (or the review's sort by disagreement) would otherwise
+    // rewrite the saved waypoint set in that order the next time any cell was
+    // edited. Row ids ascend in file order and a new row always takes the next
+    // one, so sorting by id restores the order the set is meant to keep.
+    setRows(
+      (t.getData() as WpRow[]).map((r) => ({ ...r })).sort((a, b) => a.id - b.id)
+    );
+  }, []);
+
+  /**
+   * The grid's row filter: the search box AND, while reviewing, "only the
+   * rows with something to decide".
+   *
+   * One predicate rather than two filters because Tabulator's `setFilter`
+   * replaces whatever was there — and because "shown" has to mean one thing.
+   * Accept-all works on the rows the grid is showing, so if the suspect
+   * filter and the search box could disagree about what that is, Accept-all
+   * would be a different action from the one the reader can see.
+   */
+  const applyGridFilter = useCallback((t: Tabulator) => {
+    const q = filterRef.current.trim().toLowerCase();
+    const ids = reviewIdsRef.current;
+    // With nothing picked out there is nothing to narrow to, so the whole set
+    // stays visible rather than the grid emptying under a banner that has just
+    // said everything agrees.
+    const narrowToReview = reviewFilterRef.current && ids.size > 0;
+    if (!q && !narrowToReview) {
+      t.clearFilter(true);
+      return;
+    }
+    t.setFilter(
+      (data: WpRow) =>
+        (!q || matchesFilter(data, q)) && (!narrowToReview || ids.has(data.id))
+    );
   }, []);
 
   // Push the filter box into the (already-built) grid. `onReady` seeds the
-  // initial filter, so this handles every subsequent keystroke/clear.
+  // initial filter, so this handles every subsequent keystroke/clear — and
+  // every change to what the review is showing.
   useEffect(() => {
     const t = tableRef.current;
     if (!t) return;
-    const q = filter.trim().toLowerCase();
-    if (q) t.setFilter((data: WpRow) => matchesFilter(data, q));
-    else t.clearFilter(true);
-  }, [filter]);
+    applyGridFilter(t);
+  }, [filter, reviewing, suspectsOnly, applyGridFilter]);
 
   // Current records + validity, derived from the rows.
   const records = useMemo(() => rows.map(fromRow), [rows]);
@@ -394,11 +492,44 @@ export function CompWaypoints() {
     [rows]
   );
 
+  /**
+   * The comparison columns exist from the start and are shown/hidden rather
+   * than added and removed: TabulatorGrid builds its columns exactly once
+   * (`initialColumns`), and rebuilding the grid to gain two columns would
+   * throw away the sort, the scroll position and any edit in progress.
+   */
+  useEffect(() => {
+    const t = tableRef.current;
+    if (!t) return;
+    for (const field of REVIEW_COLUMNS) {
+      if (reviewing) t.showColumn(field);
+      else t.hideColumn(field);
+    }
+    if (reviewing) {
+      // Biggest disagreement first, once the column doing the sorting is on
+      // screen. Which waypoints disagree IS the finding, so it leads.
+      void t.setSort([{ column: "delta", dir: "desc" }]);
+      // And redraw every row. A hidden column's cells are BUILT with the grid
+      // and only display:none'd, so showColumn un-hides DOM that was rendered
+      // back when there was no terrain reading to compare against — and
+      // Tabulator redraws a cell only when its own field changes, which the
+      // derived Δ never has. Without this the review opens showing "—" in
+      // every Δ it has just worked out.
+      t.getRows().forEach((row) => row.reformat());
+    } else {
+      void t.clearSort();
+    }
+  }, [reviewing]);
+
   /** Replace the whole set (file upload): state + grid + map refit. */
   function replaceRows(next: WpRow[]) {
     setRows(next);
     void tableRef.current?.setData(next.map((r) => ({ ...r })));
     setFitNonce((n) => n + 1);
+    // Whatever the review was about is gone; its columns would be empty.
+    setReviewing(false);
+    reviewIdsRef.current = new Set();
+    setReviewCount(0);
   }
 
   async function loadFile(file: File | null) {
@@ -469,6 +600,17 @@ export function CompWaypoints() {
     (r) => missingAltitude(r) && parseCoords(r.coords) === null
   ).length;
 
+  // What the last check found, recomputed from the rows so that accepting a
+  // value or fixing a coordinate moves the counts immediately.
+  const checkSummary: AltitudeCheckSummary | null = useMemo(
+    () => (reviewing ? summariseAltitudeCheck(rows.map(altitudePair)) : null),
+    [reviewing, rows]
+  );
+  const checkPattern: AltitudePattern | null = useMemo(
+    () => (reviewing ? detectAltitudePattern(rows.map(altitudePair)) : null),
+    [reviewing, rows]
+  );
+
   /**
    * Fill blank/zero altitudes with ground elevations from the Mapbox terrain
    * DEM (fetched directly at high zoom — see analysis/elevation.ts for why we
@@ -522,6 +664,142 @@ export function CompWaypoints() {
     } finally {
       setFillingAlts(false);
     }
+  }
+
+  /**
+   * Compare EVERY waypoint's altitude with the terrain under it, then put the
+   * grid into review mode rather than changing anything.
+   *
+   * This is the other half of "Fill altitudes from map": that one answers a
+   * blank and cannot be wrong, this one questions a value that is already
+   * there and therefore must not apply itself. The grid is where the review
+   * happens — it already has the map, the locate pin, the filter box and an
+   * editable altitude cell, so a reader who finds a wrong COORDINATE (the
+   * usual cause of a big disagreement) can fix the actual fault in place
+   * instead of accepting a number that would hide it.
+   */
+  async function checkAltitudes() {
+    const targets = rows.flatMap((r) => {
+      const c = parseCoords(r.coords);
+      return c ? [{ id: r.id, lat: c.lat, lon: c.lon }] : [];
+    });
+    if (targets.length === 0) {
+      toast.error("No waypoints have valid coordinates to check");
+      return;
+    }
+    setCheckingAlts(true);
+    try {
+      // Dynamic import: browser-only module (canvas decoding), loaded on press.
+      const { fetchElevations } = await import("../../analysis/elevation");
+      const elevations = await fetchElevations(targets);
+      const byId = new Map<number, string>();
+      targets.forEach((t, i) => {
+        const e = elevations[i];
+        if (e !== null) byId.set(t.id, String(Math.round(e)));
+      });
+      if (byId.size === 0) {
+        toast.error("Could not read terrain elevations from Mapbox");
+        return;
+      }
+      // Against the CURRENT rows: the grid may have been edited while the
+      // tiles were downloading. Unlike the fill, this only ever writes
+      // mapAlt — no altitude an admin typed is touched by the check itself.
+      const next = rowsRef.current.map((r) => ({ ...r, mapAlt: byId.get(r.id) ?? "" }));
+      setRows(next);
+      // AWAITED, and before the review opens. Tabulator redraws only the
+      // cells whose own field changed, so the Δ column — which is derived
+      // from two other cells — does not redraw when mapAlt lands. Showing
+      // the column is what draws it, and that must happen after the data is
+      // in, or every Δ renders from the blank mapAlt it had a moment ago.
+      await tableRef.current?.updateData(next.map((r) => ({ id: r.id, mapAlt: r.mapAlt })));
+      reviewIdsRef.current = new Set(
+        next.filter((r) => needsReview(altitudePair(r))).map((r) => r.id)
+      );
+      setReviewCount(reviewIdsRef.current.size);
+      setSuspectsOnly(true);
+      // The columns are shown, and the sort applied, by the effect this
+      // triggers — not here: the delta column is still hidden at this point,
+      // one render ahead of being shown.
+      setReviewing(true);
+    } catch {
+      toast.error("Could not read terrain elevations from Mapbox");
+    } finally {
+      setCheckingAlts(false);
+    }
+  }
+
+  /** Leave the review: the comparison columns go, the waypoints stay as they are. */
+  function endReview() {
+    setReviewing(false);
+    setSuspectsOnly(true);
+    reviewIdsRef.current = new Set();
+    setReviewCount(0);
+    const cleared = rowsRef.current.map((r) => ({ ...r, mapAlt: "" }));
+    setRows(cleared);
+    void tableRef.current?.updateData(cleared.map((r) => ({ id: r.id, mapAlt: "" })));
+  }
+
+  /**
+   * Take the map's altitude for these rows. Nothing is saved until Save, so
+   * this is an edit to the grid like any other — which is also the undo: the
+   * page's guard offers to discard on the way out.
+   */
+  function acceptMapAltitudes(ids: number[]) {
+    const wanted = new Set(ids);
+    const accepted: WpRow[] = [];
+    const next = rowsRef.current.map((r) => {
+      if (!wanted.has(r.id) || r.mapAlt.trim() === "") return r;
+      const row = { ...r, altitude: r.mapAlt };
+      accepted.push(row);
+      return row;
+    });
+    if (accepted.length === 0) return;
+    setRows(next);
+    // The Δ column is derived, so it has to be redrawn — but only once the
+    // new altitudes have actually landed. updateData is async; reformatting
+    // before it resolved redrew Δ from the value the accept had replaced.
+    void tableRef.current
+      ?.updateData(accepted.map((r) => ({ id: r.id, altitude: r.altitude })))
+      .then(() => {
+        tableRef.current?.getRows().forEach((row) => {
+          if (wanted.has((row.getData() as WpRow).id)) row.reformat();
+        });
+      });
+    toast.success(
+      `Took the map altitude for ${accepted.length} waypoint${accepted.length === 1 ? "" : "s"}` +
+        " · nothing is saved until you press Save"
+    );
+  }
+
+  /** Accept every row the grid is currently showing (filter and all). */
+  function acceptAllShown() {
+    const shown = tableRef.current?.getRows("active") ?? [];
+    acceptMapAltitudes(shown.map((row) => (row.getData() as WpRow).id));
+  }
+
+  /**
+   * The whole-file fix for a set of feet read as metres: one conversion rather
+   * than the same decision taken 187 times. Only altitudes that exist are
+   * touched, and a blank stays blank.
+   */
+  function convertAltitudesFromFeet() {
+    const converted: WpRow[] = [];
+    const next = rowsRef.current.map((r) => {
+      const alt = Number(r.altitude);
+      if (r.altitude.trim() === "" || !Number.isFinite(alt)) return r;
+      const row = { ...r, altitude: String(feetToMetres(alt)) };
+      converted.push(row);
+      return row;
+    });
+    if (converted.length === 0) return;
+    setRows(next);
+    void tableRef.current
+      ?.updateData(converted.map((r) => ({ id: r.id, altitude: r.altitude })))
+      .then(() => tableRef.current?.getRows().forEach((row) => row.reformat()));
+    toast.success(
+      `Converted ${converted.length} altitude${converted.length === 1 ? "" : "s"} from feet to metres` +
+        " · nothing is saved until you press Save"
+    );
   }
 
   async function save() {
@@ -741,7 +1019,7 @@ export function CompWaypoints() {
                 <Button
                   variant="outline"
                   size="sm"
-                  isDisabled={fillableCount === 0}
+                  isDisabled={fillableCount === 0 || reviewing}
                   isPending={fillingAlts}
                   pendingLabel="Filling altitudes"
                   onPress={() => void fillAltitudes()}
@@ -750,10 +1028,25 @@ export function CompWaypoints() {
                     ? `Fill ${fillableCount} altitude${fillableCount === 1 ? "" : "s"} from map`
                     : "Fill altitudes from map"}
                 </Button>
-                {/* Why the button is dead. Filling every altitude disables the
-                    button that just did it, which reads as the fill having
-                    failed — so the state that means "done" has to say so. */}
-                {rows.length > 0 && fillableCount === 0 && !fillingAlts ? (
+                {/* The other half of the fill: that one answers a blank and
+                    cannot be wrong, this one questions the values already
+                    there and changes nothing on its own. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  isDisabled={rows.length === 0 || reviewing}
+                  isPending={checkingAlts}
+                  pendingLabel="Checking altitudes"
+                  onPress={() => void checkAltitudes()}
+                >
+                  Check altitudes
+                </Button>
+                {/* Why the fill button is dead. Filling every altitude disables
+                    the button that just did it, which reads as the fill having
+                    failed — so the state that means "done" has to say so.
+                    Suppressed during the review, which has its own account of
+                    the same set. */}
+                {rows.length > 0 && fillableCount === 0 && !fillingAlts && !reviewing ? (
                   <span className="text-xs text-muted-foreground">
                     {unfillableCount > 0
                       ? `${unfillableCount} waypoint${unfillableCount === 1 ? "" : "s"} need valid coordinates before an altitude can be filled`
@@ -762,6 +1055,98 @@ export function CompWaypoints() {
                 ) : null}
               </div>
             ) : null}
+            {/* The review's own account of the set: what the check found,
+                the one bulk fix when the whole file is wrong the same way,
+                and the way out. A live region, because pressing Check and
+                accepting rows both change these numbers without moving
+                focus. */}
+            {isAdmin && reviewing && checkSummary ? (
+              <div
+                role="status"
+                className="mb-2 rounded border border-border bg-muted/40 p-3 text-sm"
+              >
+                <p className="font-medium">
+                  {checkSummary.reviewable > 0
+                    ? `${checkSummary.reviewable} waypoint${
+                        checkSummary.reviewable === 1 ? "" : "s"
+                      } to look at.`
+                    : checkSummary.compared === 0
+                      ? "No altitudes could be compared with the map."
+                      : // "Every altitude agrees" would be a claim about rows
+                        // the check never managed to read, so it is only made
+                        // when there are none of those.
+                        `Every altitude that could be checked agrees with the map to within ${SUSPECT_DELTA_M} m.`}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {[
+                    checkSummary.suspect > 0
+                      ? `${checkSummary.suspect} differ by more than ${SUSPECT_DELTA_M} m`
+                      : null,
+                    checkSummary.coords > 0
+                      ? `${checkSummary.coords} by more than ${COORD_SUSPECT_DELTA_M} m (marked “!” — check the coordinates first, a wrong one lands the waypoint in the next valley)`
+                      : null,
+                    checkSummary.missing > 0
+                      ? `${checkSummary.missing} carry no altitude at all`
+                      : null,
+                    checkSummary.ok > 0 ? `${checkSummary.ok} agree` : null,
+                    checkSummary.unreachable > 0
+                      ? `${checkSummary.unreachable} could not be read from the map`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                {/* The whole-file finding comes BEFORE the per-row work: one
+                    conversion beats the same decision taken 187 times. */}
+                {checkPattern ? (
+                  <p className="mt-2 rounded border border-border bg-background p-2">
+                    {describeAltitudePattern(checkPattern)}
+                    {checkPattern.kind === "feet" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2 align-middle"
+                        onPress={convertAltitudesFromFeet}
+                      >
+                        Convert all from feet
+                      </Button>
+                    ) : null}
+                  </p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    isDisabled={checkSummary.reviewable === 0}
+                    onPress={acceptAllShown}
+                  >
+                    Use the map’s altitude for all shown
+                  </Button>
+                  {/* The agreeing rows are counted above, not listed — the
+                      difference between "12 to look at" and "145 differ".
+                      With nothing picked out there is nothing to narrow to. */}
+                  {reviewCount > 0 ? (
+                    <ToggleButton
+                      size="sm"
+                      isSelected={!suspectsOnly}
+                      onChange={(showAll) => setSuspectsOnly(!showAll)}
+                    >
+                      {suspectsOnly
+                        ? `Show all ${rows.length} waypoints`
+                        : `Show only the ${reviewCount} to look at`}
+                    </ToggleButton>
+                  ) : null}
+                  <Button variant="outline" size="sm" onPress={endReview}>
+                    Done
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Nothing is saved until you press Save. Tasks already built
+                    keep their own copy of a waypoint, so corrections here do
+                    not change them.
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
             {/* Filter box — narrows a long set. Drives the Tabulator grid
                 (admins) and the read-only table alike; the admin grid also
                 sorts on header clicks, the read-only table via its columns. */}
@@ -784,7 +1169,9 @@ export function CompWaypoints() {
             {isAdmin ? (
               <TabulatorGrid
                 className="gc-grid h-[420px] rounded border border-border lg:h-[560px]"
-                initialColumns={() => waypointGridColumns(locate)}
+                initialColumns={() =>
+                  waypointGridColumns(locate, (id) => acceptMapAltitudes([id]))
+                }
                 initialData={() => rows}
                 options={{
                   index: "id",
@@ -800,18 +1187,33 @@ export function CompWaypoints() {
                 events={{
                   cellEdited: (cell) => {
                     // Re-run the row's formatters so the locate pin picks up
-                    // the new coordinate validity.
-                    if (cell.getField() === "coords") cell.getRow().reformat();
+                    // the new coordinate validity — and so the review's Δ,
+                    // which is derived from the altitude cell rather than
+                    // stored, redraws with the value just typed.
+                    const field = cell.getField();
+                    const row = cell.getRow();
+                    if (field === "coords" && (row.getData() as WpRow).mapAlt.trim() !== "") {
+                      // The terrain reading belonged to where the waypoint
+                      // USED to be. Fixing a coordinate is the most valuable
+                      // thing the review leads to, so the stale elevation must
+                      // not sit there looking like an answer for the new
+                      // position: drop it, and let the reader check again.
+                      void row.update({ mapAlt: "" }).then(() => {
+                        row.reformat();
+                        syncFromGrid();
+                      });
+                      return;
+                    }
+                    if (field === "coords" || field === "altitude") row.reformat();
                     syncFromGrid();
                   },
                   rowDeleted: syncFromGrid,
                 }}
                 onReady={(table) => {
                   // A remount (admin toggle, reload) starts with no filter —
-                  // re-apply whatever is in the box so the grid agrees with
-                  // the search field.
-                  const q = filterRef.current.trim().toLowerCase();
-                  if (q) table.setFilter((data: WpRow) => matchesFilter(data, q));
+                  // re-apply whatever is in the box, and whatever the review
+                  // is showing, so the grid agrees with both.
+                  applyGridFilter(table);
                 }}
               />
             ) : rows.length === 0 ? (
@@ -869,7 +1271,9 @@ export function CompWaypoints() {
                       <Cell>{r.name || "—"}</Cell>
                       <Cell className="font-mono text-xs">{r.coords}</Cell>
                       <Cell className="text-right font-mono text-xs">
-                        {r.altitude && Number.isFinite(Number(r.altitude))
+                        {/* "0" is sea level and prints as such; only a blank
+                            altitude is unknown, and that is the dash. */}
+                        {r.altitude.trim() !== "" && Number.isFinite(Number(r.altitude))
                           ? formatAltitude(Number(r.altitude), { prefs: units }).withUnit
                           : "—"}
                       </Cell>
@@ -1006,7 +1410,17 @@ function baselineJson(list: WaypointFileRecord[]): string {
  * formatters build DOM nodes with textContent (never HTML strings) — waypoint
  * files are user-supplied, so their values must not reach innerHTML.
  */
-function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
+/**
+ * The fields of the three columns the altitude review adds. They are built
+ * with the grid and hidden until "Check altitudes" runs (see the effect that
+ * shows them), so entering the review costs no rebuild.
+ */
+const REVIEW_COLUMNS = ["mapAlt", "delta", "accept"] as const;
+
+function waypointGridColumns(
+  locate: (r: WpRow) => void,
+  acceptOne: (id: number) => void
+): ColumnDefinition[] {
   const pin: ColumnDefinition = {
     title: "",
     width: 36,
@@ -1067,6 +1481,114 @@ function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
     sorterParams: { alignEmptyValues: "bottom" },
   };
 
+  // --- The altitude review's three columns (hidden until it runs) ---
+
+  /** What the terrain says, read once by the check. Never editable. */
+  const mapAlt: ColumnDefinition = {
+    title: "Map (m)",
+    field: "mapAlt",
+    visible: false,
+    width: 92,
+    hozAlign: "right",
+    headerHozAlign: "right",
+    cssClass: "gc-mono",
+    headerTooltip: "Ground elevation from the map's terrain data",
+    ...numberSort,
+    formatter: (cell) => {
+      const el = document.createElement("span");
+      const value = String(cell.getValue() ?? "").trim();
+      el.textContent = value === "" ? "—" : value;
+      if (value === "") el.title = "No terrain elevation — check the coordinates";
+      return el;
+    },
+  };
+
+  /**
+   * The disagreement, derived rather than stored: nothing has to remember to
+   * recompute it when an altitude is edited or a coordinate is fixed.
+   *
+   * Sorting is by the SIZE of the disagreement (see reviewSortKey), so one
+   * "biggest first" ordering covers a waypoint 300 m too high and one 300 m
+   * too low — which are the same finding.
+   */
+  const delta: ColumnDefinition = {
+    title: "Δ (m)",
+    field: "delta",
+    visible: false,
+    width: 88,
+    hozAlign: "right",
+    headerHozAlign: "right",
+    cssClass: "gc-mono",
+    headerSort: true,
+    headerTooltip: "Waypoint altitude minus the map's — sorted by how big the difference is",
+    sorter: (_a, _b, aRow, bRow) =>
+      reviewSortKey(altitudePair(aRow.getData() as WpRow)) -
+      reviewSortKey(altitudePair(bRow.getData() as WpRow)),
+    formatter: (cell) => {
+      const row = cell.getRow().getData() as WpRow;
+      const pair = altitudePair(row);
+      const verdict = altitudeVerdict(pair);
+      const d = altitudeDelta(pair);
+      const el = document.createElement("span");
+      if (verdict === "missing") {
+        el.textContent = "no altitude";
+        el.className = "text-muted-foreground";
+        return el;
+      }
+      if (d === undefined) {
+        el.textContent = "—";
+        return el;
+      }
+      el.textContent = formatAltitudeDelta(d);
+      if (verdict === "coords") {
+        // Past this much, a mistyped coordinate is likelier than a mistyped
+        // altitude, and accepting the terrain would hide it. The "!" carries
+        // that in the text, so the warning does not live in the colour alone.
+        el.textContent = `${formatAltitudeDelta(d)} !`;
+        el.className = "gc-cell-alert";
+        el.title = `${Math.abs(Math.round(d))} m apart — check the coordinates before taking the map's altitude`;
+      } else if (verdict === "suspect") {
+        el.className = "gc-cell-warn";
+      } else {
+        el.className = "text-muted-foreground";
+      }
+      return el;
+    },
+  };
+
+  /** Take the map's value for this one row. */
+  const accept: ColumnDefinition = {
+    title: "",
+    field: "accept",
+    visible: false,
+    width: 40,
+    hozAlign: "center",
+    formatter: (cell) => {
+      const row = cell.getRow().getData() as WpRow;
+      const el = document.createElement("span");
+      const pair = altitudePair(row);
+      if (!Number.isFinite(pair.mapAlt) || altitudeVerdict(pair) === "ok") {
+        el.className = "gc-cell-button gc-cell-button-disabled";
+        el.title =
+          pair.mapAlt === undefined
+            ? "No terrain elevation to take"
+            : "Already agrees with the map";
+        el.textContent = "✓";
+        return el;
+      }
+      el.className = "gc-cell-button";
+      el.title = `Use the map's ${Math.round(pair.mapAlt as number)} m for this waypoint`;
+      el.textContent = "✓";
+      return el;
+    },
+    cellClick: (_e: UIEvent, cell: CellComponent) => {
+      const row = cell.getRow().getData() as WpRow;
+      const pair = altitudePair(row);
+      if (!Number.isFinite(pair.mapAlt) || altitudeVerdict(pair) === "ok") return;
+      acceptOne(row.id);
+    },
+  };
+
   return [
     pin,
     text("Code", "code", { minWidth: 80, frozen: true, headerSort: true }),
@@ -1078,6 +1600,11 @@ function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
     // (the Add-waypoint dialog, the route editor's turnpoint dialog) do convert
     // into that preference; this grid is the file itself, edited in place.
     text("Alt (m)", "altitude", { width: 84, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
+    // Beside the altitude they are about, so the comparison reads across one
+    // row rather than between a grid and a dialog.
+    mapAlt,
+    delta,
+    accept,
     text("Radius (m)", "radius", { width: 100, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
     remove,
   ];
