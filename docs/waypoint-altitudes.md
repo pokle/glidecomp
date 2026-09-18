@@ -108,7 +108,7 @@ Two derived columns appear beside `Alt (m)`, and an accept action:
 The thresholds and the arithmetic live in
 `web/frontend/src/react/comp/altitude-check.ts`, away from the grid:
 
-- **Under 50 m is not a finding.** The DEM is one pixel of a ~10 m grid
+- **Under 50 m is not a finding.** The DEM is a ~10 m grid
   (`web/frontend/src/analysis/elevation.ts`) and published files are routinely
   rounded to 10 m — the Corryong set encodes the altitude in the code itself
   (`4C-080` is 800 m). Listing every row that differs would list every row, so
@@ -147,6 +147,60 @@ altitude feeds the §13.4.6 stopped-task altitude bonus
 wrong goal altitude has to be corrected in the route editor, which keeps its
 own "Fill altitudes from map" for blanks.
 
+## Reading the terrain: why there is a PNG decoder
+
+`web/frontend/src/analysis/elevation.ts` fetches Mapbox Terrain-RGB tiles at a
+fixed z13 and **decodes the PNG itself** — inflate plus unfilter, no canvas.
+That is not fastidiousness; a canvas gives the wrong answer here.
+
+A Terrain-RGB pixel is a 24-bit *number* spread over three bytes
+(`height = -10000 + (R*65536 + G*256 + B) * 0.1`), and the tiles are **RGBA**:
+Mapbox marks no-data, including the sea beyond a coastline, with partial alpha.
+A canvas stores premultiplied 8-bit RGBA, so drawing such a pixel and reading
+it back does not round-trip — the payload is multiplied by alpha going in and
+divided by it coming out, and only the nearest byte survives.
+`premultiplyAlpha: 'none'` does not help, because the loss is in the canvas,
+not in the decoder.
+
+The red byte carries **6553.6 m per step**, so one step of that error is
+kilometres. Measured, for a real 166 m coastal hill:
+
+| alpha | read back off a canvas |
+|---|---|
+| 255 | 166 m |
+| 200 | 192 m |
+| 128 | 6720 m |
+| 100 | -6413 m |
+| 0 | -10000 m |
+
+This is how `Big_Hill`, a Great Ocean Road waypoint a few metres from the
+water, was read as **13273 m** and offered for writing into the waypoint file.
+
+Two further guards, because a wrong elevation must never be presentable as a
+right one:
+
+- **A plausibility range** (`isPlausibleElevation`): -500 m to 9000 m, which
+  covers the Dead Sea shore and Everest. Anything outside is not an elevation,
+  so the point reads as "could not be read from the map" rather than as a
+  number. It is a backstop, not the fix — 6720 m is also an ordinary Himalayan
+  summit, so no range check could have rejected that one.
+- **A 3x3 median** (`sampleElevation`), counting only plausible pixels. One bad
+  pixel then cannot become the answer, and a waypoint on a cliff edge — where a
+  ~10 m grid is least stable, and where coastal waypoints all sit — is read from
+  its own ground rather than from whichever side of the escarpment the nearest
+  pixel landed on. The neighbourhood is clamped to the tile rather than fetching
+  a second one for two more samples.
+
+Because there is no canvas in the path any more, it is also unit-testable: the
+tests decode the four real Mapbox tiles the e2e suite records and check their
+elevation ranges against an independent (plain `node:zlib`) decode of the same
+files.
+
+The e2e fixture `flatTerrainRgbPng` writes **RGBA**, with a settable alpha, for
+the same reason. It used to write colour type 2 with no alpha at all, which is
+precisely why the suite stayed green while the real site read 13273 m; the
+waypoints spec now drives the review through a partially transparent tile.
+
 ## Coverage
 
 - `web/engine/tests/waypoint-files.test.ts` — the OziExplorer feet conversion,
@@ -156,6 +210,11 @@ own "Fill altitudes from map" for blanks.
   unknown altitude round-tripping as unknown rather than as sea level.
 - `web/frontend/src/react/comp/altitude-check.test.ts` — the verdicts,
   thresholds, sort order and both patterns.
+- `web/frontend/src/analysis/elevation.test.ts` — the PNG decode (including a
+  partially transparent pixel at every alpha, the case a canvas destroys), the
+  plausibility range and its limit, the 3x3 median against a corrupt pixel and
+  a cliff edge, and the four real recorded Mapbox tiles.
 - `e2e/comp-waypoints.spec.ts` — the review in the real grid, over a flat
   synthetic DEM (`stubTerrainElevations` in `e2e/fixtures/mapbox.ts`) so the
-  disagreements are arithmetic the test chose.
+  disagreements are arithmetic the test chose, and at alpha 128 so the coastal
+  no-data case is exercised end to end.

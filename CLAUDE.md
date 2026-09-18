@@ -354,9 +354,18 @@ These are the standing imperatives. Each links to the reference that explains it
     changes nothing on its own and reviews IN THE GRID, which already has the
     map, the locate pin, the filter and an editable cell — because a large
     disagreement usually means a wrong COORDINATE, and accepting the terrain
-    there would hide it. Under 50 m is not a finding (a ~10 m DEM pixel against
+    there would hide it. Under 50 m is not a finding (a ~10 m DEM grid against
     a file rounded to 10 m), past 300 m the coordinates are the likelier fault,
     and a whole-file ratio or offset is one bulk fix rather than 187 decisions.
+  - **Never read a Terrain-RGB pixel through a canvas.** The tiles are RGBA and
+    Mapbox marks no-data — the sea past a coastline included — with partial
+    alpha; a canvas stores premultiplied bytes, so the 24-bit elevation those
+    three bytes carry does not survive the round trip, and the red byte is
+    6553.6 m a step. A coastal waypoint read 13273 m that way.
+    `analysis/elevation.ts` inflates and unfilters the PNG itself (exact by
+    construction, and unit-testable), rejects anything outside -500..9000 m,
+    and takes the 3x3 median of the plausible pixels. Any test fixture standing
+    in for a terrain tile must be RGBA, or it cannot catch this.
 - **Content pages: the rule is SEO, not a JS ban.** Every word and image a
   visitor or crawler needs must be in the prerendered HTML, and the page must stay
   useful with JS off. Interaction that genuinely helps someone understand

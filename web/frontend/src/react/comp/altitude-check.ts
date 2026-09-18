@@ -6,8 +6,8 @@
  * and the judgement calls live here, away from the grid, because what counts
  * as a disagreement worth a human's attention is the whole design:
  *
- *  - **A difference is not an error.** The DEM is sampled at one pixel of a
- *    ~10 m grid (see analysis/elevation.ts), and published waypoint files are
+ *  - **A difference is not an error.** The DEM is a ~10 m grid, sampled as the
+ *    median of a 3x3 (see analysis/elevation.ts), and published waypoint files are
  *    routinely rounded to the nearest 10 m — the bundled Corryong set encodes
  *    the altitude in the code itself ("4C-080" is 800 m). Listing every row
  *    that differs would list every row, so only a difference past

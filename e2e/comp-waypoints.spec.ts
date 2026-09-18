@@ -405,7 +405,10 @@ test("Check altitudes reviews the set in the grid and accepts one row", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
-  await stubTerrainElevations(page.context(), 4000);
+  // alpha 128: the coastal no-data case. Read off a canvas this same pixel
+  // comes back thousands of metres out (a Great Ocean Road waypoint read
+  // 13273 m); the elevation the review shows must be 4000 regardless.
+  await stubTerrainElevations(page.context(), 4000, 128);
 
   await firstGridRow(page);
   // Before the check the comparison columns are hidden. Tabulator builds them
