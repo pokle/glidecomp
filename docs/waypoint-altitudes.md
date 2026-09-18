@@ -176,6 +176,26 @@ kilometres. Measured, for a real 166 m coastal hill:
 This is how `Big_Hill`, a Great Ocean Road waypoint a few metres from the
 water, was read as **13273 m** and offered for writing into the waypoint file.
 
+### Cleaning up what the bug already saved
+
+The fault was in a *read*, but its results were **written**: "Fill altitudes
+from map" and any accepted map altitude saved those numbers into waypoint
+files, and fixing the decoder does not retract them. On the Great Ocean Road
+comp, `Point_Addis_Hill` still held 6660 m over terrain that now reads 80 m —
+and 80 m read through the old canvas path at partial alpha comes out at
+6659.2 m, which is where the stored value came from.
+
+Such an altitude is recognisable rather than merely wrong, so the review says
+which of the two numbers is at fault instead of leaving the organiser to guess.
+`looksLikeCorruptedTerrainRead()` in `altitude-check.ts` asks whether the
+disagreement is a whole number of red-byte steps (6553.6 m) to within 60 m —
+the residual being only the difference between the single pixel the old code
+read and the 3x3 median read now. Nothing a person types is out by 6554 m to
+within 60 m, and a file in feet is out by a *factor*, not a step, so the two
+patterns do not collide. Where it fires, the banner says the number is not
+theirs and that taking the map's altitude corrects it, and the row's Δ tooltip
+stops blaming the coordinates.
+
 Two further guards, because a wrong elevation must never be presentable as a
 right one:
 

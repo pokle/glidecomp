@@ -8,6 +8,7 @@ import {
   detectAltitudePattern,
   feetToMetres,
   formatAltitudeDelta,
+  looksLikeCorruptedTerrainRead,
   needsReview,
   reviewSortKey,
   summariseAltitudeCheck,
@@ -78,6 +79,35 @@ describe("reviewSortKey", () => {
   });
 });
 
+describe("looksLikeCorruptedTerrainRead", () => {
+  it("recognises the real cases from the Great Ocean Road comp", () => {
+    // Point_Addis_Hill: the file holds 6660 m, the terrain is 80 m. 6580 is
+    // one red-byte step (6553.6 m) plus the difference between the single
+    // pixel the old code read and the 3x3 median read now.
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 6660, mapAlt: 80 })).toBe(true);
+    // Big_Hill: 13273 m against a 166 m hill — two steps.
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 13273, mapAlt: 166 })).toBe(true);
+    // And the other direction, which partial alpha also produced.
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: -6413, mapAlt: 140 })).toBe(true);
+  });
+
+  it("does not claim an ordinary mistake", () => {
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 800, mapAlt: 600 })).toBe(false);
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 1500, mapAlt: 200 })).toBe(false);
+    // A file in feet read as metres is 3.28x, not a whole byte step.
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 4567, mapAlt: 1392 })).toBe(false);
+    // Nothing to compare against.
+    expect(looksLikeCorruptedTerrainRead({ mapAlt: 80 })).toBe(false);
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 80 })).toBe(false);
+  });
+
+  it("needs the step to be close, not merely large", () => {
+    // 6553.6 m exactly, and a mistake 200 m away from it.
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 6633.6, mapAlt: 80 })).toBe(true);
+    expect(looksLikeCorruptedTerrainRead({ fileAlt: 6853.6, mapAlt: 80 })).toBe(false);
+  });
+});
+
 describe("summariseAltitudeCheck", () => {
   it("counts each verdict, and reviewable is what the list shows", () => {
     const summary = summariseAltitudeCheck([
@@ -96,7 +126,19 @@ describe("summariseAltitudeCheck", () => {
       missing: 1,
       unreachable: 1,
       reviewable: 3,
+      corruptTerrainRead: 0,
     });
+  });
+
+  it("counts the altitudes the old terrain read wrote", () => {
+    const summary = summariseAltitudeCheck([
+      { fileAlt: 6660, mapAlt: 80 }, // one byte step
+      { fileAlt: 13273, mapAlt: 166 }, // two
+      { fileAlt: 1500, mapAlt: 200 }, // a real mistake, not a step
+      { fileAlt: 160, mapAlt: 158 }, // fine
+    ]);
+    expect(summary.corruptTerrainRead).toBe(2);
+    expect(summary.coords).toBe(3);
   });
 });
 

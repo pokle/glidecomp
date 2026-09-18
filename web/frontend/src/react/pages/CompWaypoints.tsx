@@ -74,6 +74,7 @@ import {
   detectAltitudePattern,
   feetToMetres,
   formatAltitudeDelta,
+  looksLikeCorruptedTerrainRead,
   needsReview,
   reviewSortKey,
   summariseAltitudeCheck,
@@ -1096,6 +1097,21 @@ export function CompWaypoints() {
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                {/* Altitudes the old terrain read wrote into the file. Said
+                    before the per-row work, because "your file is not wrong,
+                    this number is ours" changes what the reader does next. */}
+                {checkSummary.corruptTerrainRead > 0 ? (
+                  <p className="mt-2 rounded border border-border bg-background p-2">
+                    {checkSummary.corruptTerrainRead === 1
+                      ? "1 altitude is out by"
+                      : `${checkSummary.corruptTerrainRead} altitudes are out by`}{" "}
+                    almost exactly 6553.6 m, or a multiple of it. That is not
+                    anything in your waypoint file: it is the signature of a
+                    terrain reading taken before a decoding fault was fixed, and
+                    taking the map’s altitude now corrects it.
+                  </p>
+                ) : null}
+
                 {/* The whole-file finding comes BEFORE the per-row work: one
                     conversion beats the same decision taken 187 times. */}
                 {checkPattern ? (
@@ -1546,7 +1562,11 @@ function waypointGridColumns(
         // that in the text, so the warning does not live in the colour alone.
         el.textContent = `${formatAltitudeDelta(d)} !`;
         el.className = "gc-cell-alert";
-        el.title = `${Math.abs(Math.round(d))} m apart — check the coordinates before taking the map's altitude`;
+        el.title = looksLikeCorruptedTerrainRead(pair)
+          ? // A whole number of red-byte steps: this altitude was written by
+            // the old terrain read, so the coordinates are not the suspect.
+            `${Math.abs(Math.round(d))} m apart, a whole step of a terrain-tile byte — this altitude came from a terrain read that has since been fixed, so the map's value is the correct one`
+          : `${Math.abs(Math.round(d))} m apart — check the coordinates before taking the map's altitude`;
       } else if (verdict === "suspect") {
         el.className = "gc-cell-warn";
       } else {

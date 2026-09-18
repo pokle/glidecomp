@@ -47,6 +47,40 @@ export const COORD_SUSPECT_DELTA_M = 300;
 const FEET_TO_METRES = 0.3048;
 const METRES_PER_FOOT = 1 / FEET_TO_METRES; // ~3.28084
 
+/**
+ * What one step of the red byte is worth in a Terrain-RGB pixel.
+ *
+ * `height = -10000 + (R*65536 + G*256 + B) * 0.1`, so the red byte carries
+ * 65536 * 0.1 metres. It is here because altitudes that are out by a whole
+ * number of these steps are not mistakes anybody made: they are a terrain
+ * reading taken through a canvas, which destroyed the elevation at any pixel
+ * Mapbox marked with partial alpha (see analysis/elevation.ts). That bug is
+ * fixed, but altitudes written by it are SAVED in waypoint files, and an
+ * organiser looking at 6660 m where their file used to say nothing deserves
+ * to be told which of the two is at fault.
+ */
+const TERRAIN_BYTE_STEP_M = 6553.6;
+
+/** How far off an exact step still counts as that step. */
+const STEP_TOLERANCE_M = 60;
+
+/**
+ * Whether a disagreement is a whole number of red-byte steps — the signature
+ * of an altitude written by the terrain-read bug rather than by anyone.
+ *
+ * The residual is the difference between whatever single pixel the old code
+ * read and the 3x3 median read now, at the same place, so it is small. One
+ * step is ~6554 m and nothing a person types is out by that to within 60 m.
+ */
+export function looksLikeCorruptedTerrainRead(pair: AltitudePair): boolean {
+  const delta = altitudeDelta(pair);
+  if (delta === undefined) return false;
+  const size = Math.abs(delta);
+  const steps = Math.round(size / TERRAIN_BYTE_STEP_M);
+  if (steps < 1) return false;
+  return Math.abs(size - steps * TERRAIN_BYTE_STEP_M) <= STEP_TOLERANCE_M;
+}
+
 /** One waypoint's two altitudes, each absent when unknown. */
 export interface AltitudePair {
   /** What the waypoint file (or the admin) says, in metres. */
@@ -129,6 +163,11 @@ export interface AltitudeCheckSummary {
   unreachable: number;
   /** suspect + coords + missing — what the review lists. */
   reviewable: number;
+  /**
+   * Of the above, how many are out by a whole number of Terrain-RGB red-byte
+   * steps — altitudes the old terrain read wrote, not anything in the file.
+   */
+  corruptTerrainRead: number;
 }
 
 /** Count each verdict across a whole set. */
@@ -141,9 +180,13 @@ export function summariseAltitudeCheck(pairs: AltitudePair[]): AltitudeCheckSumm
     missing: 0,
     unreachable: 0,
     reviewable: 0,
+    corruptTerrainRead: 0,
   };
   for (const pair of pairs) {
     const verdict = altitudeVerdict(pair);
+    if (verdict !== "unreachable" && looksLikeCorruptedTerrainRead(pair)) {
+      summary.corruptTerrainRead++;
+    }
     if (verdict === "ok" || verdict === "suspect" || verdict === "coords") summary.compared++;
     if (verdict === "ok") summary.ok++;
     if (verdict === "suspect") summary.suspect++;
