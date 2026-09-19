@@ -15,7 +15,12 @@ import { test, expect, type APIRequestContext, type Page } from "./fixtures/test
 import { resolve, dirname } from "path";
 import { readFile } from "fs/promises";
 import { fileURLToPath } from "url";
-import { FRONTEND_URL, SUPER_ADMIN, e2eCompName } from "./fixtures/stack";
+import {
+  E2E_ORGANISER,
+  FRONTEND_URL,
+  SUPER_ADMIN,
+  e2eCompName,
+} from "./fixtures/stack";
 
 /**
  * A tracklog with REAL fixes, and the route it was flown on.
@@ -104,12 +109,32 @@ interface Fixture {
  * and the shape anonymous submission has to work against.
  */
 async function createFixture(admin: APIRequestContext): Promise<Fixture> {
+  // Mint the organiser account (dev-login upserts), then reclaim the
+  // super-admin session so the rest of the setup can administer every
+  // competition without being named as its organiser.
+  const organiserSignIn = await admin.post("/api/auth/dev-login", {
+    data: E2E_ORGANISER,
+  });
+  expect(organiserSignIn.ok(), "organiser dev-login").toBeTruthy();
+  const superSignIn = await admin.post("/api/auth/dev-login", {
+    data: SUPER_ADMIN,
+  });
+  expect(superSignIn.ok(), "super admin re-login").toBeTruthy();
+
   const compName = e2eCompName("submit");
   const compRes = await admin.post("/api/comp", {
     data: { name: compName, category: "hg", pilot_classes: ["open"] },
   });
   expect(compRes.ok()).toBeTruthy();
   const { comp_id: compId } = (await compRes.json()) as { comp_id: string };
+
+  // Creating as the super admin would leave them as the sole `comp_admin`,
+  // which then vanishes from "Organised by" / submission-error contact copy
+  // once the allowlist is excluded. Name a real organiser instead.
+  const adminsRes = await admin.patch(`/api/comp/${compId}`, {
+    data: { admin_emails: [E2E_ORGANISER.email] },
+  });
+  expect(adminsRes.ok(), "set organiser as sole admin").toBeTruthy();
 
   // Created oldest-first ON PURPOSE, so the picker's most-recent-first order
   // is the endpoint's doing and not the insertion order leaking through.

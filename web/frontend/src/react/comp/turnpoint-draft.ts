@@ -91,13 +91,20 @@ export type TurnpointDraft = Pick<
 >;
 
 /**
- * A turnpoint altitude that's still unknown (blank, zero or unparseable —
- * xctsk files without altitudes come through as altSmoothed 0). Only these are
- * touched by "Fill altitudes from map".
+ * A turnpoint altitude that's still unknown: a blank or unparseable one, and
+ * nothing else. Only these are touched by "Fill altitudes from map".
+ *
+ * A zero is NOT missing. It used to be — an xctsk file with no altitudes
+ * comes through as altSmoothed 0, so treating 0 as unknown filled those in —
+ * but it also meant a turnpoint genuinely at sea level could never be left
+ * alone, and the editor disagreed with the waypoints grid beside it about
+ * what a 0 in the same column meant. A 0 that is WRONG is a wrong altitude,
+ * which is what the waypoints page's "Check altitudes" review is for; it is
+ * not a blank, and nothing may overwrite it without being asked.
  */
 export function missingAltitude(altitude: string | number): boolean {
-  const alt = Number(altitude);
-  return !Number.isFinite(alt) || alt === 0;
+  if (typeof altitude === "string" && altitude.trim() === "") return true;
+  return !Number.isFinite(Number(altitude));
 }
 
 /** A fresh, empty turnpoint draft (for the "Add turnpoint" flow). */
@@ -119,7 +126,10 @@ export function blankDraft(type: RouteRow["type"] = ""): TurnpointDraft {
  * The waypoint's values are COPIED in, so a later edit to the competition's
  * waypoint never changes a task that was set from it. Shared by every route
  * that turns a waypoint into a turnpoint — the map pick, the details sheet's
- * "Load from a waypoint", and the Quick entry reconcile.
+ * "Load from a waypoint" (through {@link draftWithRecord}), and the Quick entry
+ * reconcile. **The conversion lives here only.** TurnpointSheet used to keep
+ * its own copy of it, which is how a waypoint at sea level went on losing its
+ * 0 to "unknown" after this function had been fixed not to.
  */
 export function draftFromRecord(rec: WaypointFileRecord): TurnpointDraft {
   return {
@@ -128,6 +138,33 @@ export function draftFromRecord(rec: WaypointFileRecord): TurnpointDraft {
     type: "",
     coords: formatCoords(rec.latitude, rec.longitude),
     radius: rec.radius > 0 ? rec.radius : NEW_ROW_RADIUS,
-    altitude: rec.altitude ? rec.altitude : "",
+    // A waypoint at sea level carries 0 across; only an absent altitude is
+    // blank (see WaypointFileRecord.altitude).
+    altitude: rec.altitude ?? "",
+  };
+}
+
+/**
+ * A waypoint loaded INTO a draft that already exists — the details sheet's
+ * "Load from a waypoint", where the turnpoint is half filled in already.
+ *
+ * Everything the waypoint knows comes from {@link draftFromRecord}; the two
+ * things it does NOT know are left as they were. A waypoint carries no
+ * turnpoint TYPE, and a waypoint with no radius of its own should not reset a
+ * radius the organiser has already chosen — whereas a brand-new turnpoint has
+ * nothing to keep and takes the default.
+ *
+ * It delegates rather than restating the conversion, because restating it is
+ * how the sea-level 0 survived here after being fixed there.
+ */
+export function draftWithRecord(
+  current: TurnpointDraft,
+  rec: WaypointFileRecord
+): TurnpointDraft {
+  const fresh = draftFromRecord(rec);
+  return {
+    ...fresh,
+    type: current.type,
+    radius: rec.radius > 0 ? fresh.radius : current.radius,
   };
 }

@@ -2,8 +2,6 @@
 import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import tailwindcss from "@tailwindcss/vite";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
 
 // The static content pages (home, about, legal, scoring/*) are prerendered to
 // plain HTML and merged into the frontend's dist/ alongside the Vite SPA. See
@@ -23,11 +21,11 @@ export default defineConfig({
   // The dev toolbar's entrypoint loads from a root-level Vite URL that would
   // collide with the SPA's dev server when proxied; we don't need it here.
   devToolbar: { enabled: false },
-  // KaTeX is prerendered at build so the scoring pages ship zero client JS.
-  markdown: {
-    remarkPlugins: [remarkMath],
-    rehypePlugins: [rehypeKatex],
-  },
+  // There is no markdown content here: every page is a .astro file, and the
+  // KaTeX on scoring/gap is prerendered by calling katex.renderToString() in
+  // that page's frontmatter. So Astro's markdown pipeline is never entered,
+  // and configuring remark/rehype plugins for it did nothing (Astro 7
+  // deprecates that config outright).
   integrations: [mdx()],
   vite: {
     // Don't inherit the sibling SPA's vite.config.ts (its html rollup input
@@ -35,8 +33,9 @@ export default defineConfig({
     configFile: false,
     plugins: [tailwindcss()],
     // Browser connects the HMR socket directly to the Astro dev server so we
-    // don't have to proxy websockets through the SPA's Vite server.
-    server: { hmr: { clientPort: 4321 } },
+    // don't have to proxy websockets through the SPA's Vite server. (Vite 8
+    // renamed this from `server.hmr.*`, which now warns.)
+    server: { ws: { clientPort: 4321 } },
   },
   server: { port: 4321 },
 });

@@ -22,7 +22,11 @@
 import { useMemo, useState } from "react";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
-import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
+import {
+  FullScreenSheet,
+  SheetBody,
+  SheetHeader,
+} from "@/react/rac/full-screen-sheet";
 import { useConfirm } from "../lib/confirm";
 import { quickTaskApply, type QuickTaskApply } from "./quick-task";
 import { QuickTaskField } from "./QuickTaskField";
@@ -87,29 +91,30 @@ export function QuickEntrySheet({
       onClose={() => void dismiss()}
       className="flex flex-col"
     >
-      {/* Both ways out live in the title bar, not a footer: a phone keyboard
-          covers the bottom of the viewport whenever this sheet is doing its
-          job, and an action you have to dismiss the keyboard to reach is one
-          you have to discover twice. */}
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <Button variant="outline" onPress={() => void dismiss()}>
-          Cancel
-        </Button>
-        <h2 className="min-w-0 flex-1 truncate text-center text-base font-semibold">
-          Quick entry
-        </h2>
-        <Button
-          isDisabled={parsed.picks.length === 0}
-          onPress={() => {
-            onUse(parsed);
-            onClose();
-          }}
-        >
-          Use this route
-        </Button>
-      </div>
+      {/* Cancel and the commit sit on either side of the title, so the title
+          is centred between them (SheetHeader's `align`). */}
+      <SheetHeader
+        title="Quick entry"
+        align="center"
+        leading={
+          <Button variant="outline" onPress={() => void dismiss()}>
+            Cancel
+          </Button>
+        }
+        action={
+          <Button
+            isDisabled={parsed.picks.length === 0}
+            onPress={() => {
+              onUse(parsed);
+              onClose();
+            }}
+          >
+            Use this route
+          </Button>
+        }
+      />
 
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 overflow-y-auto p-4 pb-gutter-safe">
+      <SheetBody className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
           Type the route the way you&apos;d say it — waypoint names in order,
           each with a radius (<span className="font-medium">400m</span>,{" "}
@@ -150,7 +155,7 @@ export function QuickEntrySheet({
           Coordinates, altitude and full names stay as they are — this sets the
           order, waypoints, radii, types and the start.
         </p>
-      </div>
+      </SheetBody>
     </FullScreenSheet>
   );
 }

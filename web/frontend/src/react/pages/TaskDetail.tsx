@@ -154,9 +154,7 @@ export function TaskDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId, refresh]);
 
-  const isAdmin = useAdminView(
-    user != null && comp != null && comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   // `#edit-route` deep link (the comp page's featured-task card used to point
   // here; a bookmarked or shared link still can). The editor is its own route

@@ -656,7 +656,11 @@ export const compRoutes = new Hono<AuthedEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
-      // Get admin list (emails)
+      // Real organisers only (`comp_admin` rows). A site super admin can
+      // administer without a row — that is `is_admin` below, not this list.
+      // The public "Organised by" credit and the Access settings editor both
+      // read `admins`, so injecting the super admin here used to name them as
+      // an organiser of competitions they do not run.
       const admins = await c.env.DB.prepare(
         `SELECT u.email, u.name FROM comp_admin ca
          JOIN "user" u ON ca.user_id = u.id
@@ -664,18 +668,6 @@ export const compRoutes = new Hono<AuthedEnv>()
       )
         .bind(compId)
         .all<{ email: string; name: string }>();
-
-      // A super admin administers every comp without a comp_admin row. Surface
-      // that to *their own* response (not other viewers) so the admin UI, which
-      // keys off the caller's email appearing in `admins`, activates for them.
-      const adminList = admins.results;
-      if (
-        isSuperAdmin(user) &&
-        user &&
-        !adminList.some((a) => a.email === user.email)
-      ) {
-        adminList.push({ email: user.email, name: user.name });
-      }
 
       // Get tasks summary (xctsk is fetched only to derive the speed-section
       // warnings below; it is not echoed back in the response)
@@ -729,7 +721,7 @@ export const compRoutes = new Hono<AuthedEnv>()
 
       return c.json({
         ...serializeComp(alphabet, comp),
-        admins: adminList,
+        admins: admins.results,
         is_admin: isAdmin,
         tasks: tasks.results.map((t) => {
           // Task-definition warnings only apply to GAP race tasks —

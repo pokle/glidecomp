@@ -12,6 +12,10 @@
     "./rate-limit": {
       "types": "./src/rate-limit.ts",
       "default": "./src/rate-limit.ts"
+    },
+    "./name-text": {
+      "types": "./src/name-text.ts",
+      "default": "./src/name-text.ts"
     }
   },
   "devDependencies": {

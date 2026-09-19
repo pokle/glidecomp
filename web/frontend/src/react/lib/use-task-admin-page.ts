@@ -42,7 +42,7 @@ export function useTaskAdminPage(
   /** Bumped by a save so the page re-reads what was stored. */
   refresh?: number
 ): TaskAdminPage {
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
 
   const { data: comp, notFound: compNotFound } =
     useSeededResource<CompDetailData>({
@@ -64,11 +64,7 @@ export function useTaskAdminPage(
       refresh,
     });
 
-  const isAdmin = useAdminView(
-    user != null &&
-      comp != null &&
-      comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp?.is_admin);
 
   return {
     comp,

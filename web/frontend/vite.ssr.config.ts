@@ -48,7 +48,13 @@ export default defineConfig({
         // chunks the server never imports, so mapbox/three/tabulator —
         // which touch `window` at module scope — stay out of the entry the
         // Pages Function executes.
-        inlineDynamicImports: false,
+        //
+        // Vite 8 (rolldown) turns code splitting OFF by default for SSR builds
+        // and then IGNORES `inlineDynamicImports: false`, which silently folded
+        // all of mapbox/three/tabulator back into entry-server.js (2.9MB → 8.6MB).
+        // `codeSplitting: true` is the option that survives; it is the rolldown
+        // successor to `inlineDynamicImports` and must be set explicitly here.
+        codeSplitting: true,
         entryFileNames: "entry-server.js",
         chunkFileNames: "chunks/[name]-[hash].js",
       },

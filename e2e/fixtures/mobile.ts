@@ -38,6 +38,12 @@ export const MOBILE_SPEC_FILES = [
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
   "task-settings-pages.spec.ts",
+  // The waypoints page, whose editor is a list of waypoints opening
+  // full-screen sheets, at every width — the Tabulator grid it replaced did
+  // not work at this one. This project is what holds that: the page is
+  // asserted never to scroll sideways, and a sheet to be dismissable with the
+  // back gesture.
+  "comp-waypoints.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */

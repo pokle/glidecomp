@@ -92,7 +92,10 @@ const waypointSchema = z.object({
   name: noControlChars.max(MAX_TEXT),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  altitude: z.number().min(-2000).max(30000),
+  // Optional: a waypoint file with no elevation column says nothing about
+  // altitude, and that is not the same as a waypoint at sea level. Stored
+  // absent, it comes back absent (see WaypointFileRecord.altitude).
+  altitude: z.number().min(-2000).max(30000).optional(),
   radius: z.number().min(0).max(1_000_000),
 });
 

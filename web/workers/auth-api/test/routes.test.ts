@@ -150,6 +150,30 @@ describe("POST /api/auth/set-username — display name", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  // SEC-49: the same control-char/angle-bracket check competition-api's
+  // `nameText` applies to every other user-entered name field (issue #232).
+  test("rejects a name containing < or > rather than clearing the account's", async () => {
+    const cookie = await loginAs("set-name-5@test.local", "Bounded Pilot");
+    const res = await request("POST", "/api/auth/set-username", {
+      cookie,
+      body: { username: "bounded-pilot", name: "<script>alert(1)</script>" },
+    });
+    expect(res.status).toBe(400);
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("Bounded Pilot");
+  });
+
+  test("rejects a name containing a control character", async () => {
+    const cookie = await loginAs("set-name-6@test.local", "Clean Pilot");
+    const res = await request("POST", "/api/auth/set-username", {
+      cookie,
+      body: { username: "clean-pilot", name: "Evil\x01Name" },
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 // ── POST /api/auth/set-name ─────────────────────────────────────────────────
@@ -216,6 +240,31 @@ describe("POST /api/auth/set-name", () => {
     const res = await request("POST", "/api/auth/set-name", {
       cookie,
       body: { name: "x".repeat(129) },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  // SEC-49: this column feeds the public audit log's actor_name — same
+  // control-char/angle-bracket check competition-api's `nameText` applies
+  // to every other user-entered name field (issue #232).
+  test("refuses a name containing < or > rather than clearing the account's", async () => {
+    const cookie = await loginAs("set-name-route-7@test.local", "Guarded");
+    const res = await request("POST", "/api/auth/set-name", {
+      cookie,
+      body: { name: "<img src=x onerror=alert(1)>" },
+    });
+    expect(res.status).toBe(400);
+
+    const me = await request("GET", "/api/auth/me", { cookie });
+    const { user } = (await me.json()) as { user: { name: string } };
+    expect(user.name).toBe("Guarded");
+  });
+
+  test("refuses a name containing a control character", async () => {
+    const cookie = await loginAs("set-name-route-8@test.local", "Also Guarded");
+    const res = await request("POST", "/api/auth/set-name", {
+      cookie,
+      body: { name: "Evil\x01Name" },
     });
     expect(res.status).toBe(400);
   });

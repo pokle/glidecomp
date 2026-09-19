@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 // credentials:true means we MUST NOT reflect arbitrary origins — the
 // allowlist is shared with the other Workers so it cannot drift.
 import { allowedOrigin } from "@glidecomp/worker-kit/cors";
+import { isValidNameText, normaliseNameText, NAME_TEXT_ERROR } from "@glidecomp/worker-kit/name-text";
 import { bodyLimit } from "hono/body-limit";
 import { APIError } from "better-auth/api";
 import { createAuth, getDevOtp, isLocalDev, type AuthEnv } from "./auth";
@@ -120,7 +121,7 @@ app.post("/api/auth/set-username", async (c) => {
 
   const body = await c.req.json<{ username: string; name?: string }>();
   const username = body.username?.trim();
-  const name = typeof body.name === "string" ? body.name.trim() : undefined;
+  let name = typeof body.name === "string" ? body.name.trim() : undefined;
 
   // Absent name = "leave it alone" (the pre-existing callers send no name);
   // present but empty is a caller trying to clear it, which would put the
@@ -130,6 +131,15 @@ app.post("/api/auth/set-username", async (c) => {
       { error: `Name must be 1-${MAX_NAME_LENGTH} characters` },
       400
     );
+  }
+  // SEC-49: same control-char/angle-bracket check + NFC normalisation every
+  // other user-entered name field gets (competition-api's `nameText`, issue
+  // #232) — this column feeds the public audit log's `actor_name`.
+  if (name !== undefined) {
+    if (!isValidNameText(name)) {
+      return c.json({ error: `Name ${NAME_TEXT_ERROR}` }, 400);
+    }
+    name = normaliseNameText(name);
   }
 
   // Validate username format. Two rules, and each is checked once: the length,
@@ -205,13 +215,20 @@ app.post("/api/auth/set-name", async (c) => {
   const body = await c.req
     .json<{ name?: unknown }>()
     .catch(() => ({ name: undefined }));
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (name.length === 0 || name.length > MAX_NAME_LENGTH) {
+  const trimmed = typeof body.name === "string" ? body.name.trim() : "";
+  if (trimmed.length === 0 || trimmed.length > MAX_NAME_LENGTH) {
     return c.json(
       { error: `Name must be 1-${MAX_NAME_LENGTH} characters` },
       400
     );
   }
+  // SEC-49: same control-char/angle-bracket check + NFC normalisation every
+  // other user-entered name field gets (competition-api's `nameText`, issue
+  // #232) — this column feeds the public audit log's `actor_name`.
+  if (!isValidNameText(trimmed)) {
+    return c.json({ error: `Name ${NAME_TEXT_ERROR}` }, 400);
+  }
+  const name = normaliseNameText(trimmed);
 
   await c.env.glidecomp_auth.prepare(
     'UPDATE "user" SET name = ?, "updatedAt" = ? WHERE id = ?'

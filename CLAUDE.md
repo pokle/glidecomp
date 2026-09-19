@@ -278,6 +278,53 @@ These are the standing imperatives. Each links to the reference that explains it
 
 ### Frontend
 
+- **Mobile first, and that is a change of stance (2026-09-19).** A competition
+  is run from a hill, and nobody wants to carry a laptop up it: less and less
+  of this app's work happens on a laptop, so a phone is the shape a surface is
+  designed FOR, not a width it has to survive. Where the two conflict, the
+  phone wins.
+  - The worked example is `/comp/:id/waypoints`. It was a 145-row,
+    eight-column Tabulator grid, which is the better tool on a desktop and
+    unusable on a phone: it scrolled sideways inside a page that scrolled down,
+    under a map pane that stuck, and its frozen Code column hid whichever
+    column sat beside it — which is how a reader came to see a waypoint's map
+    altitude without its file altitude. It is now a LIST whose rows open
+    full-screen sheets (`comp/WaypointList.tsx`, `comp/WaypointSheet.tsx`), at
+    every width. The grid is gone, not hidden behind a breakpoint: two editors
+    meant two code paths and a reviewer on a desktop seeing something the
+    author never tested on a phone.
+  - **And the read-only view is the same list.** It was a six-column RAC
+    `Table` in an `overflow-x-auto` scroll region, so the shape the editor had
+    just stopped using survived for the anonymous PILOT — the one actually
+    standing on the hill — while the organiser more likely to be at a desk got
+    the list. `WaypointList` with no `onOpen` IS the read-only mode: no
+    chevron, because nothing opens. When a surface has an admin view and a
+    visitor view, fixing one is half the job.
+  - **A tap target is the whole area doing nothing beside it.** The waypoints
+    list's locate pin was a 28x28 px icon with 300 px of inert row next to
+    it. It is now the row's entire left-hand strip (48x44 px, flush to the
+    card's edge), and read-only — where no sheet opens — the WHOLE ROW flies
+    the map. The pin stays there because it is what NAMES the action for a
+    reader who cannot see the map move; one action with a big target is not
+    two ways to do a thing. Measure a target in the e2e rather than asserting
+    about classes: tailwind-merge does NOT resolve `size-*` against
+    `h-*`/`w-*`, so a `size="icon-sm"` added later leaves two competing rules
+    and a 28 px box with every class-level check still green.
+  - **One way to do a thing.** The same pass deleted a "Fill altitudes from
+    map" button that duplicated what `Check altitudes` does better, a
+    "Show on the map" button in the waypoint sheet that duplicated the list
+    row's pin, and a status line that pre-judged a set nobody had asked about.
+    A second way to do something is a thing to keep working, explain and test.
+  - **A sheet is dismissable with Back.** A sheet lives in React state, not in
+    the URL, so the history stack cannot see it and Back would skip past it to
+    the previous page — from a waypoint's details, one press left the whole
+    editor and its unsaved work. `lib/use-back-dismiss.ts` gives every
+    `FullScreenSheet` a history entry while it is open and pops it again on the
+    way out; nested sheets stack, so Back walks out one layer at a time. Read
+    its note before touching it: a popstate reaches every listener, popping our
+    own entry looks like a user Back to the layer underneath, and StrictMode
+    runs the effect twice — all three broke it, and all three were caught by
+    the e2e rather than by review.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
@@ -289,9 +336,26 @@ These are the standing imperatives. Each links to the reference that explains it
   instead (a static styled element is fine: see `rac/badge.tsx`, `rac/alert.tsx`).
   - Thin wrappers over non-RAC third-party widgets live in `src/react/vendor/` —
     today the `input-otp` sign-in field and the `sonner` toaster.
-  - **Editable tables/grids are Tabulator by policy** (owner preference — don't
-    rebuild spreadsheet editing in RAC). Lazy-load the grid, RAC chrome around it,
-    shared theme in `comp/tabulator-grid.css`.
+  - **A sheet's chrome and a list row's body are kit components, not things
+    each surface writes out.** `rac/full-screen-sheet.tsx` carries
+    `SheetHeader` / `SheetBody` / `SheetFooter`, and `rac/grid-list.tsx`
+    carries `RowContent`. Four sheets and three lists had each grown their
+    own, in vocabularies that disagreed about the gutter, the title's weight,
+    the readable-width cap and the chevron — none of it decided, all of it
+    copied. Two consequences worth knowing before adding padding of your own:
+    a `FullScreenSheet` already spends the safe-area inset on its `p-safe`, so
+    `px-gutter-safe` INSIDE one counts the notch twice; and `variant="rows"`
+    already makes a row `flex items-center gap-3`, so restating that says
+    nothing.
+  - **Tabulator is for a grid that is genuinely spreadsheet-shaped** — many
+    rows, many columns, edited cell by cell on a wide screen, like the pilots
+    grid. Lazy-load it, RAC chrome around it, shared theme in
+    `comp/tabulator-grid.css`; and still don't rebuild spreadsheet editing in
+    RAC. It is no longer the default answer for "an editable collection": that
+    it was is how the waypoints page ended up with a grid nobody could use from
+    a hill (see the mobile-first rule above). A list of rows that open sheets
+    is usually the better shape, and `rac/grid-list.tsx` is what it is built
+    from.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
@@ -328,9 +392,60 @@ These are the standing imperatives. Each links to the reference that explains it
     `formatCylinderRadius()`, which takes no preferences at all;
     `formatRadius(m, { prefs })` is only for a radius that IS a measured length
     (the track HUD's 1000 m averaging window).
-  - The waypoints grid on `/comp/:id/waypoints` stays metric throughout — it is
-    the waypoint FILE edited in place, cell by cell. Its headers say "Alt (m)" /
-    "Radius (m)" rather than leave anyone guessing.
+  - The waypoints editor on `/comp/:id/waypoints` stays metric throughout — it
+    is the waypoint FILE edited in place. Its fields say "Altitude (m)" /
+    "Radius (m)" rather than leave anyone guessing, and the altitude review
+    prints both altitudes with the unit on each. A READ-ONLY waypoint row on
+    the same page is the other way round: nobody is editing the file there, it
+    is simply an altitude printed to a reader, so it honours the preference.
+- **A zero altitude is never "missing", in any UI**
+  ([docs/waypoint-altitudes.md](docs/waypoint-altitudes.md)). An altitude is
+  either KNOWN — any number, 0 included — or ABSENT, which is why
+  `WaypointFileRecord.altitude` is optional: a waypoint on a beach is at 0 m
+  and a file with no elevation column knows nothing. Collapsing the two meant
+  a sea-level waypoint could never be left alone: the fill-blanks action of the
+  day kept offering to fill it, and filling it wrote 0 again. Parsers leave an
+  absent one undefined, exporters use their format's own way of saying nothing
+  (OziExplorer's `-777`, a blank `elev`, an omitted `<ele>`), an empty field is
+  the only "missing" signal, and a 0 that is WRONG is a wrong altitude for
+  `Check altitudes` to report — never something to overwrite unasked.
+  - **Only OziExplorer's `.wpt` states elevation in FEET** (field 14, `-777` =
+    unknown); every other format we read says metres. Reading it as metres
+    inflated every imported altitude by 3.28 — the bundled HG Worlds set
+    publishes the same points in four formats and proves it. The cross-format
+    altitude agreement test in `web/engine/tests/waypoint-files.test.ts` is
+    what keeps a new format honest.
+  - **`Check altitudes` is the ONLY altitude action on the waypoints page**,
+    and it reports nothing until it is pressed. A "Fill altitudes from map"
+    that answered blanks without asking, and a status line that pre-judged the
+    set, were both deleted: the check does the fill's job better because it
+    shows what it would write before writing it. (The route editor keeps a
+    fill for its turnpoint blanks, where there is no list to review.) It
+    changes nothing on its own and reviews in a SHEET
+    (`comp/AltitudeReviewSheet.tsx`) whose every row states BOTH altitudes —
+    the grid columns it replaced put the file's altitude behind the frozen Code
+    column, so a disagreement was reported with half of itself off screen.
+    Under 50 m is not a finding (a ~10 m DEM grid against a file rounded to
+    10 m), past 300 m a wrong COORDINATE is the likelier fault, and a
+    whole-file ratio or offset is one bulk fix rather than 187 decisions. The
+    review's list is a snapshot in BOTH membership and order: sorting by the
+    size of the disagreement live sends each row to the bottom the moment it is
+    accepted. A difference of exactly zero prints nothing — the absence of a
+    finding is not a finding — and inside a waypoint both Back and Done return
+    to the LIST, never out of the review.
+  - **The waypoints page is a list of sheets, at every width** — see the
+    mobile-first rule above for what it replaced. `comp-waypoints.spec.ts` runs
+    in both Playwright projects, and asserts that the page never scrolls
+    sideways.
+  - **Never read a Terrain-RGB pixel through a canvas.** The tiles are RGBA and
+    Mapbox marks no-data — the sea past a coastline included — with partial
+    alpha; a canvas stores premultiplied bytes, so the 24-bit elevation those
+    three bytes carry does not survive the round trip, and the red byte is
+    6553.6 m a step. A coastal waypoint read 13273 m that way.
+    `analysis/elevation.ts` inflates and unfilters the PNG itself (exact by
+    construction, and unit-testable), rejects anything outside -500..9000 m,
+    and takes the 3x3 median of the plausible pixels. Any test fixture standing
+    in for a terrain tile must be RGBA, or it cannot catch this.
 - **Content pages: the rule is SEO, not a JS ban.** Every word and image a
   visitor or crawler needs must be in the prerendered HTML, and the page must stay
   useful with JS off. Interaction that genuinely helps someone understand
@@ -498,6 +613,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
 | Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |
+| Waypoint altitudes (units, zero, the check) | [docs/waypoint-altitudes.md](docs/waypoint-altitudes.md) |
 | Track data quality | [docs/track-quality.md](docs/track-quality.md) |
 | Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
 | CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |

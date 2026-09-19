@@ -32,14 +32,19 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useFilter } from "react-aria-components";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
-import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
+import {
+  FullScreenSheet,
+  SheetBody,
+  SheetHeader,
+} from "@/react/rac/full-screen-sheet";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
 import { AltitudeField } from "./fields";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { ListBox, ListBoxItem } from "@/react/rac/list-box";
-import { formatCoords, parseCoords, type RouteRow } from "./route-editor";
+import { parseCoords, type RouteRow } from "./route-editor";
 import {
   RADIUS_PRESETS,
+  draftWithRecord,
   radiusChipLabel,
   typeOptions,
   type TurnpointDraft,
@@ -115,17 +120,12 @@ export function TurnpointSheet({
     onClose();
   }
 
-  // Load a competition waypoint's details into the draft (keep the type — a
-  // waypoint doesn't carry one), and clear the search so the list collapses.
+  // Load a competition waypoint's details into the draft, and clear the search
+  // so the list collapses. The conversion itself lives in turnpoint-draft.ts —
+  // this used to restate it, and so went on turning a sea-level 0 into
+  // "unknown" long after the shared one had been fixed not to.
   const applyWaypoint = (rec: WaypointFileRecord) => {
-    setDraft((d) => ({
-      ...d,
-      name: rec.code,
-      description: rec.name !== rec.code ? rec.name : "",
-      coords: formatCoords(rec.latitude, rec.longitude),
-      radius: rec.radius > 0 ? rec.radius : d.radius,
-      altitude: rec.altitude ? rec.altitude : "",
-    }));
+    setDraft((d) => draftWithRecord(d, rec));
     setWpQuery("");
   };
 
@@ -149,17 +149,12 @@ export function TurnpointSheet({
       onClose={leave}
       className="flex flex-col"
     >
-      {/* Title bar: the sheet's identity on the left, the way out on the
-          right, where a phone's thumb already expects it. It stays put while
-          the form scrolls, so Done is never something you scroll to find. */}
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
-          {mode === "add" ? "Add turnpoint" : "Edit turnpoint"}
-        </h2>
-        <Button onPress={leave}>Done</Button>
-      </div>
+      <SheetHeader
+        title={mode === "add" ? "Add turnpoint" : "Edit turnpoint"}
+        action={<Button onPress={leave}>Done</Button>}
+      />
 
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 overflow-y-auto p-4 pb-gutter-safe">
+      <SheetBody className="flex flex-col gap-3">
         {/* Load from a preset competition waypoint. */}
         {wpLoading ? (
           <p className="text-xs text-muted-foreground">
@@ -339,7 +334,7 @@ export function TurnpointSheet({
             Delete turnpoint
           </Button>
         ) : null}
-      </div>
+      </SheetBody>
     </FullScreenSheet>
   );
 }

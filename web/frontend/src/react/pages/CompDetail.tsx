@@ -27,7 +27,8 @@ import { DatePicker } from "@/react/rac/date-picker";
 import { CheckList } from "@/react/rac/choice-list";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
-import { useAdminView, useUser } from "../lib/user";
+import { useAdminView } from "../lib/user";
+import { isSuperAdminEmail } from "../lib/super-admin";
 import {
   categoryLabel,
   formatTaskDate,
@@ -68,7 +69,6 @@ export function CompDetail() {
   const { compId: compParam } = useParams<{ compId: string }>();
   // The route param may be a `${slug}-${id}` — the id is what the API needs.
   const compId = idFromSegment(compParam ?? "");
-  const { user } = useUser();
   const location = useLocation();
   // SSR seed: the server ran loadCompDetail for this URL, so render the comp in
   // the first paint and hydrate the same markup. Null on client boot / SPA nav.
@@ -111,7 +111,6 @@ export function CompDetail() {
     <CompDetailView
       compId={compId}
       comp={comp}
-      user={user}
       createOpen={createOpen}
       setCreateOpen={setCreateOpen}
       setRefresh={setRefresh}
@@ -125,7 +124,6 @@ export function CompDetail() {
 function CompDetailView({
   compId,
   comp,
-  user,
   createOpen,
   setCreateOpen,
   setRefresh,
@@ -135,7 +133,6 @@ function CompDetailView({
 }: {
   compId: string;
   comp: CompDetailData;
-  user: ReturnType<typeof useUser>["user"];
   createOpen: boolean;
   setCreateOpen: (open: boolean) => void;
   setRefresh: React.Dispatch<React.SetStateAction<number>>;
@@ -146,13 +143,15 @@ function CompDetailView({
   initialScores?: CompScores;
   initialScoresEtag?: string | null;
 }) {
-  const isAdmin = useAdminView(
-    user != null && comp.admins.some((a) => a.email === user.email)
-  );
+  const isAdmin = useAdminView(!!comp.is_admin);
   // This page is server-rendered, so anything clock-dependent has to settle
   // after hydration rather than differ from the server's markup.
   const mounted = useMounted();
   const isClosed = isPastCloseDate(comp.close_date);
+
+  // Credit the people who run THIS competition — real `comp_admin` rows,
+  // never the site super admin (who can administer without organising).
+  const organisers = comp.admins.filter((a) => !isSuperAdminEmail(a.email));
 
   const facts = [
     categoryLabel(comp.category),
@@ -216,6 +215,30 @@ function CompDetailView({
             {facts.join(" · ")}
             {comp.test ? " · Hidden" : null}
           </p>
+          {/* Organiser credit sits with the facts: who runs the day is a
+              companion to what kind of day it is. The scores page's "Ask the
+              comp admins" links to #admins here. Names are the mailto — no
+              separate address, so the line stays one compact sentence. */}
+          {organisers.length > 0 ? (
+            <p id="admins" className="scroll-mt-24 text-sm text-muted-foreground">
+              Organised by{" "}
+              {organisers.map((admin, i) => (
+                <Fragment key={admin.email}>
+                  {i > 0
+                    ? i === organisers.length - 1
+                      ? " and "
+                      : ", "
+                    : null}
+                  <a
+                    className="text-foreground underline underline-offset-4"
+                    href={`mailto:${admin.email}`}
+                  >
+                    {admin.name}
+                  </a>
+                </Fragment>
+              ))}
+            </p>
+          ) : null}
         </div>
         {/* Submitting is the one thing a pilot comes to a live comp to DO, so
             it leads. It goes to /submit with the comp prefilled rather than
@@ -277,24 +300,6 @@ function CompDetailView({
           <ActivitySection compId={compId} collapsible />
         </Card>
       </div>
-
-      {/* Organizer credit + contact — a footnote, not a section. The scores
-          page's "Ask the comp admins" links to #admins here. */}
-      <p id="admins" className="mt-10 scroll-mt-24 text-sm text-muted-foreground">
-        Organized by{" "}
-        {comp.admins.map((admin, i) => (
-          <Fragment key={admin.email}>
-            {i > 0 ? (i === comp.admins.length - 1 ? " and " : ", ") : null}
-            <span className="text-foreground">{admin.name}</span>{" "}
-            (
-            <a className="underline underline-offset-4" href={`mailto:${admin.email}`}>
-              {admin.email}
-            </a>
-            )
-          </Fragment>
-        ))}
-        .
-      </p>
 
       {isAdmin && createOpen ? (
         <CreateTaskDialog

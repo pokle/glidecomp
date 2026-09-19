@@ -53,8 +53,8 @@ const SEEYOU_CUP_TITLE = `Title,Code,Country,Latitude,Longitude,Elevation,Style,
 `;
 
 const GLIDECOMP_CSV = `Name,Latitude,Longitude,Description,Proximity Distance,Altitude
-CORRY,-36.185000,147.891400,Corryong Airport,1000,954
-ELLIOT,-36.185833,147.976667,,5000,3067
+CORRY,-36.185000,147.891400,Corryong Airport,1000,291
+ELLIOT,-36.185833,147.976667,,5000,935
 `;
 
 // Look up by the short code (or long name) — tests reference points by code.
@@ -98,6 +98,99 @@ describe('parseWaypointsWPT (OziExplorer)', () => {
   });
   it('defaults radius to 400 when the field is zero/absent', () => {
     expect(byName(parseWaypointsWPT(OZI_WPT), 'CORRY').radius).toBe(400);
+  });
+
+  // Field 14 is FEET — the format's own unit. Read as metres it inflated
+  // every imported altitude by 3.28, which is what the altitude check on the
+  // waypoints page now exists to catch. CORRY is Corryong Airport at ~291 m,
+  // the figure the SeeYou fixture states outright.
+  it('reads elevation from field 14 as FEET, converted to metres', () => {
+    const wps = parseWaypointsWPT(OZI_WPT);
+    expect(byName(wps, 'CORRY').altitude).toBe(291); // 955 ft
+    expect(byName(wps, 'ELLIOT').altitude).toBe(935); // 3068 ft
+    expect(byName(wps, 'BIGARA').altitude).toBe(310); // 1017 ft
+  });
+
+  it('treats -777 (no altitude recorded) as unknown, not -237 m', () => {
+    const wps = parseWaypointsWPT(`OziExplorer Waypoint File Version 1.1
+WGS 84
+Reserved 2
+Reserved 3
+1,NOALT,-36.185,147.8914,,0,1,3,0,65535,NOALT,0,0,0,-777,6,0,17
+2,BLANK,-36.186,147.8915,,0,1,3,0,65535,BLANK,0,0,0,,6,0,17
+3,SEALEVEL,-36.187,147.8916,,0,1,3,0,65535,SEALEVEL,0,0,0,0,6,0,17
+`);
+    expect(byName(wps, 'NOALT').altitude).toBeUndefined();
+    expect(byName(wps, 'BLANK').altitude).toBeUndefined();
+    // Zero is a real altitude, not a missing one.
+    expect(byName(wps, 'SEALEVEL').altitude).toBe(0);
+  });
+});
+
+/**
+ * An absent altitude stays absent in every format.
+ *
+ * 0 is a waypoint on a beach and undefined is a file that said nothing; the
+ * editor offers to fill only the second, so a parser that defaults to 0 makes
+ * "fill the missing altitudes" either a lie or a no-op for good.
+ */
+/**
+ * The test that would have caught the feet-as-metres bug.
+ *
+ * The four Corryong fixtures are the same two points published in four
+ * formats, so they must agree on altitude exactly as they already agree on
+ * coordinates. They did not: the OziExplorer file states 955 and the SeeYou
+ * one 291.0m, and both are Corryong Airport.
+ */
+describe('every format agrees on the same point altitude', () => {
+  it('CORRY is 291 m and ELLIOT 935 m whichever file the organiser uploads', () => {
+    const sets: Array<[string, WaypointFileRecord[]]> = [
+      ['ozi', parseWaypointsWPT(OZI_WPT)],
+      ['cup', parseWaypointsCUP(SEEYOU_CUP)],
+      ['cup-title', parseWaypointsCUP(SEEYOU_CUP_TITLE)],
+      ['csv', parseWaypointsCUP(GLIDECOMP_CSV)],
+    ];
+    for (const [label, wps] of sets) {
+      expect(byName(wps, 'CORRY').altitude, label).toBe(291);
+      expect(byName(wps, 'ELLIOT').altitude, label).toBe(935);
+    }
+  });
+});
+
+describe('a missing elevation reads as undefined, never 0', () => {
+  it('SeeYou .cup with an empty elev column', () => {
+    const wps = parseWaypointsCUP(`name,code,country,lat,lon,elev,style,rwdir,rwlen,freq,desc
+"CORRY",CORRY,,3611.100S,14753.484E,,1,,,,"CORRY"
+"SEA",SEA,,3611.150S,14758.600E,0.0m,1,,,,"SEA"
+`);
+    expect(byName(wps, 'CORRY').altitude).toBeUndefined();
+    expect(byName(wps, 'SEA').altitude).toBe(0);
+  });
+
+  it('GPX with no <ele> element', () => {
+    const wps = parseWaypointsGPX(
+      '<gpx><wpt lat="-36.185" lon="147.8914"><name>NOELE</name></wpt>' +
+        '<wpt lat="-36.186" lon="147.8915"><name>SEA</name><ele>0</ele></wpt></gpx>'
+    );
+    expect(byName(wps, 'NOELE').altitude).toBeUndefined();
+    expect(byName(wps, 'SEA').altitude).toBe(0);
+  });
+
+  it('CompeGPS/PCX5 with no altitude token', () => {
+    const wps = parseWaypointsPCX5(`G  WGS 84
+U  1
+W  NOALT A 36.1850000S 147.8914000E 2-JAN-23 14:30:23
+W  SEA A 36.1860000S 147.8915000E 2-JAN-23 14:30:23 0.000000 SEA LEVEL
+`);
+    expect(byName(wps, 'NOALT').altitude).toBeUndefined();
+    expect(byName(wps, 'SEA').altitude).toBe(0);
+  });
+
+  it('a table with no elevation column at all', () => {
+    const wps = parseWaypointsCUP(`name,code,lat,lon
+"CORRY",CORRY,3611.100S,14753.484E
+`);
+    expect(byName(wps, 'CORRY').altitude).toBeUndefined();
   });
 });
 
