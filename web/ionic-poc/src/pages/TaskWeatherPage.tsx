@@ -1,7 +1,5 @@
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
-  IonButtons,
   IonContent,
   IonHeader,
   IonItem,
@@ -14,6 +12,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/react";
+import { BackLink } from "@/components/ui";
 
 const TaskWeatherPage: React.FC = () => {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
@@ -22,9 +21,7 @@ const TaskWeatherPage: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}/task/${taskId}`} text="Task" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}/task/${taskId}`}>Task</BackLink>
           <IonTitle>Weather</IonTitle>
         </IonToolbar>
       </IonHeader>

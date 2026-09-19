@@ -2,10 +2,8 @@ import { useState } from "react";
 import {
   IonAccordion,
   IonAccordionGroup,
-  IonBackButton,
   IonBadge,
   IonButton,
-  IonButtons,
   IonCard,
   IonCardContent,
   IonCardHeader,
@@ -40,6 +38,7 @@ import {
   useIonAlert,
   useIonToast,
 } from "@ionic/react";
+import { BackLink } from "@/components/ui";
 import { checkmarkCircle, warningOutline } from "ionicons/icons";
 
 const KitGalleryPage: React.FC = () => {
@@ -52,9 +51,7 @@ const KitGalleryPage: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref="/tabs/me" text="Me" />
-          </IonButtons>
+          <BackLink href="/tabs/me">Me</BackLink>
           <IonTitle>Ionic kit</IonTitle>
         </IonToolbar>
       </IonHeader>

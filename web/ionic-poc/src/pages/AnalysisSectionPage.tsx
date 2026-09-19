@@ -1,8 +1,6 @@
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
   IonBadge,
-  IonButtons,
   IonContent,
   IonHeader,
   IonItem,
@@ -14,7 +12,7 @@ import {
   IonToolbar,
 } from "@ionic/react";
 import { ANALYSIS } from "@/data/mock";
-import { DistanceChart } from "@/components/ui";
+import { BackLink, DistanceChart } from "@/components/ui";
 
 const METRIC_ROWS = [
   { name: "Jon Durand", value: "2.4 m/s", rank: 1 },
@@ -31,9 +29,7 @@ const AnalysisSectionPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}/analysis`} text="Analysis" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}/analysis`}>Analysis</BackLink>
           <IonTitle>{def?.label ?? "Section"}</IonTitle>
         </IonToolbar>
       </IonHeader>

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  IonBackButton,
   IonButton,
   IonButtons,
   IonContent,
@@ -18,6 +17,7 @@ import {
   useIonAlert,
   useIonToast,
 } from "@ionic/react";
+import { BackLink } from "@/components/ui";
 import { usePrefs, type ThemePref, type Units } from "@/state/prefs";
 
 const SettingsPage: React.FC = () => {
@@ -35,9 +35,7 @@ const SettingsPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref="/tabs/me" text="Me" />
-          </IonButtons>
+          <BackLink href="/tabs/me">Me</BackLink>
           <IonTitle>Settings</IonTitle>
           <IonButtons slot="end">
             <IonNote>{saved}</IonNote>

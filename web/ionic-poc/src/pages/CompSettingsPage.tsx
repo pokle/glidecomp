@@ -1,6 +1,5 @@
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
   IonButton,
   IonButtons,
   IonCheckbox,
@@ -20,6 +19,7 @@ import {
   IonToolbar,
   useIonToast,
 } from "@ionic/react";
+import { BackLink } from "@/components/ui";
 import { getComp } from "@/data/mock";
 
 const CompSettingsPage: React.FC = () => {
@@ -31,9 +31,7 @@ const CompSettingsPage: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}`} text="Comp" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}`}>Comp</BackLink>
           <IonTitle>Competition settings</IonTitle>
           <IonButtons slot="end">
             <IonButton

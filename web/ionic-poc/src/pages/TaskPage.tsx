@@ -1,6 +1,5 @@
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
   IonBadge,
   IonButton,
   IonButtons,
@@ -28,7 +27,7 @@ import {
   sunnyOutline,
 } from "ionicons/icons";
 import { TURNPOINTS, formatRadius, getComp, getTask } from "@/data/mock";
-import { MapPlaceholder } from "@/components/ui";
+import { BackLink, MapPlaceholder } from "@/components/ui";
 import { usePrefs } from "@/state/prefs";
 
 const WIND_COLOUR = {
@@ -50,9 +49,7 @@ const TaskPage: React.FC = () => {
       <IonPage>
         <IonHeader>
           <IonToolbar>
-            <IonButtons slot="start">
-              <IonBackButton defaultHref="/tabs/comps" />
-            </IonButtons>
+          <BackLink href="/tabs/comps">Back</BackLink>
             <IonTitle>Task not found</IonTitle>
           </IonToolbar>
         </IonHeader>
@@ -65,9 +62,7 @@ const TaskPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${comp.id}`} text="Comp" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${comp.id}`}>Comp</BackLink>
           <IonTitle>{task.name}</IonTitle>
           <IonButtons slot="end">
             <IonButton

@@ -1,9 +1,7 @@
 import {
   IonAccordion,
   IonAccordionGroup,
-  IonBackButton,
   IonBadge,
-  IonButtons,
   IonContent,
   IonHeader,
   IonItem,
@@ -16,7 +14,7 @@ import {
 } from "@ionic/react";
 import { useParams } from "react-router-dom";
 import { REPORT } from "@/data/mock";
-import { CleaningChart, DistanceChart, MapPlaceholder } from "@/components/ui";
+import { BackLink, CleaningChart, DistanceChart, MapPlaceholder } from "@/components/ui";
 
 const ReportCardPage: React.FC = () => {
   const { compId } = useParams<{ compId: string }>();
@@ -25,9 +23,7 @@ const ReportCardPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}/scores`} text="Scores" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}/scores`}>Scores</BackLink>
           <IonTitle>Report card</IonTitle>
         </IonToolbar>
       </IonHeader>

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
   IonButton,
   IonButtons,
   IonContent,
@@ -21,7 +20,7 @@ import {
 } from "@ionic/react";
 import { locateOutline } from "ionicons/icons";
 import { WAYPOINTS, formatRadius, getComp, type Waypoint } from "@/data/mock";
-import { MapPlaceholder } from "@/components/ui";
+import { BackLink, MapPlaceholder } from "@/components/ui";
 import { usePrefs } from "@/state/prefs";
 
 const WaypointsPage: React.FC = () => {
@@ -50,9 +49,7 @@ const WaypointsPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}`} text="Comp" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}`}>Comp</BackLink>
           <IonTitle>Waypoints</IonTitle>
           {role === "organiser" ? (
             <IonButtons slot="end">

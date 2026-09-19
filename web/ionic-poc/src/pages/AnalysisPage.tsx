@@ -1,7 +1,5 @@
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
-  IonButtons,
   IonContent,
   IonHeader,
   IonItem,
@@ -12,6 +10,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/react";
+import { BackLink } from "@/components/ui";
 import { ANALYSIS, getComp } from "@/data/mock";
 
 const AnalysisPage: React.FC = () => {
@@ -22,9 +21,7 @@ const AnalysisPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}`} text="Comp" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}`}>Comp</BackLink>
           <IonTitle>Task analysis</IonTitle>
         </IonToolbar>
       </IonHeader>

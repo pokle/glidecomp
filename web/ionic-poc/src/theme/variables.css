@@ -390,8 +390,22 @@ html.ion-palette-dark .hero-map {
   margin: 0 4px 8px;
 }
 
-ion-item.gc-row::part(native) {
-  min-height: 52px;
+.poc-phone ion-item ion-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.poc-phone ion-item ion-label h2,
+.poc-phone ion-item ion-label p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poc-phone ion-item ion-note[slot="end"] {
+  flex-shrink: 0;
+  max-width: 5.5rem;
+  text-align: right;
 }
 
 ion-fab-button {

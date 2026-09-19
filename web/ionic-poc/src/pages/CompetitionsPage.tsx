@@ -14,7 +14,6 @@ import {
   IonLabel,
   IonList,
   IonModal,
-  IonNote,
   IonPage,
   IonRefresher,
   IonRefresherContent,
@@ -125,10 +124,8 @@ const CompetitionsPage: React.FC = () => {
                   {categoryLabel(comp.category)} · {scoringLabel(comp.scoringFormat)} ·{" "}
                   {comp.classes.join(", ")}
                 </p>
+                <p>{formatDateRange(comp.firstDate, comp.lastDate)}</p>
               </IonLabel>
-              <IonNote slot="end" className="tabular">
-                {formatDateRange(comp.firstDate, comp.lastDate)}
-              </IonNote>
             </IonItem>
           ))}
         </IonList>

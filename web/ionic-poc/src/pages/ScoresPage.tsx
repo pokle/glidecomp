@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
   IonBadge,
   IonButton,
   IonButtons,
@@ -21,7 +20,7 @@ import {
   useIonToast,
 } from "@ionic/react";
 import { getComp, scoresFor, type PilotClass } from "@/data/mock";
-import { Podium } from "@/components/ui";
+import { BackLink, Podium } from "@/components/ui";
 import { usePrefs } from "@/state/prefs";
 
 const ScoresPage: React.FC = () => {
@@ -45,9 +44,7 @@ const ScoresPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}`} text="Comp" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}`}>Comp</BackLink>
           <IonTitle>Scores</IonTitle>
           <IonButtons slot="end">
             <IonButton

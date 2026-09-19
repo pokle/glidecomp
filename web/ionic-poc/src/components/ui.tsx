@@ -1,15 +1,29 @@
 import type { ReactNode } from "react";
 import {
-  IonBackButton,
+  IonButton,
   IonButtons,
   IonContent,
   IonHeader,
+  IonIcon,
   IonPage,
   IonTitle,
   IonToolbar,
 } from "@ionic/react";
+import { chevronBackOutline } from "ionicons/icons";
 import { TURNPOINTS } from "@/data/mock";
 import { usePrefs } from "@/state/prefs";
+
+/** Explicit back link. IonBackButton is unreliable with nested tab routes. */
+export function BackLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <IonButtons slot="start">
+      <IonButton routerLink={href} routerDirection="back">
+        <IonIcon slot="start" icon={chevronBackOutline} />
+        {children}
+      </IonButton>
+    </IonButtons>
+  );
+}
 
 export function Page({
   title,
@@ -28,11 +42,7 @@ export function Page({
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          {backHref ? (
-            <IonButtons slot="start">
-              <IonBackButton defaultHref={backHref} text="Back" />
-            </IonButtons>
-          ) : null}
+          {backHref ? <BackLink href={backHref}>Back</BackLink> : null}
           <IonTitle>{title}</IonTitle>
           {buttons}
         </IonToolbar>

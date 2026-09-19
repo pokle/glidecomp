@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
   IonButton,
   IonButtons,
   IonContent,
@@ -18,7 +17,7 @@ import {
   type ReorderEndEventDetail,
 } from "@ionic/react";
 import { TURNPOINTS } from "@/data/mock";
-import { MapPlaceholder } from "@/components/ui";
+import { BackLink, MapPlaceholder } from "@/components/ui";
 
 const RouteEditorPage: React.FC = () => {
   const { compId, taskId } = useParams<{ compId: string; taskId: string }>();
@@ -32,9 +31,7 @@ const RouteEditorPage: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}/task/${taskId}`} text="Task" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}/task/${taskId}`}>Task</BackLink>
           <IonTitle>Edit route</IonTitle>
           <IonButtons slot="end">
             <IonButton strong>Save</IonButton>

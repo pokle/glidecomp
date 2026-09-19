@@ -1,9 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  IonBackButton,
   IonBadge,
-  IonButtons,
   IonContent,
   IonFab,
   IonFabButton,
@@ -25,6 +23,7 @@ import {
   useIonAlert,
   useIonToast,
 } from "@ionic/react";
+import { BackLink } from "@/components/ui";
 import { addOutline } from "ionicons/icons";
 import { PILOTS } from "@/data/mock";
 
@@ -44,9 +43,7 @@ const PilotsPage: React.FC = () => {
     <IonPage>
       <IonHeader translucent>
         <IonToolbar>
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={`/tabs/comps/${compId}`} text="Comp" />
-          </IonButtons>
+          <BackLink href={`/tabs/comps/${compId}`}>Comp</BackLink>
           <IonTitle>Pilots</IonTitle>
         </IonToolbar>
       </IonHeader>
