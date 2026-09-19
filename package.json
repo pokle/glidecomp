@@ -30,6 +30,7 @@
     "kill-state": "bash web/scripts/kill-state.sh",
     "fresh-dev": "bash web/scripts/fresh-dev.sh",
     "dev:frontend": "bun run engine:fingerprint --quiet && bun run --filter '@glidecomp/frontend' dev",
+    "dev:ionic-poc": "[ -d web/ionic-poc/node_modules ] || bun install --cwd web/ionic-poc; bun run --cwd web/ionic-poc dev",
     "build": "bun run engine:fingerprint --quiet && bun run --filter '@glidecomp/frontend' build",
     "deploy": "bun run engine:fingerprint --quiet && bun run --filter '@glidecomp/frontend' deploy",
     "deploy:worker": "bun run engine:fingerprint --quiet && bun run --filter airscore-api deploy",
