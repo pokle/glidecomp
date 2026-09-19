@@ -59,7 +59,11 @@ import {
 import type { MapCamera, MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
 import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
-import { MasterDetail } from "@/react/components/MasterDetail";
+import {
+  DetailFoldButton,
+  MasterDetail,
+  useDetailFold,
+} from "@/react/components/MasterDetail";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
 import { api } from "../../comp/api";
@@ -85,6 +89,15 @@ import { cn } from "@/react/lib/utils";
 import type { CompWaypointsLoaderData } from "../loaders";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
+
+/**
+ * The map pane's noun — on its fold toggle ("Hide map" / "Show map") and, as
+ * MasterDetail's default `storageKey`, the name the reader's answer is
+ * remembered under. One constant because the toggle is rendered by this page
+ * and the pane by MasterDetail: two literals could drift apart, and the fold
+ * would then be remembered under a name nothing reads back.
+ */
+const MAP_LABEL = "map";
 
 /** One editable row. Coordinates are edited as text (Google "lat, lon"). */
 interface WpRow {
@@ -158,6 +171,9 @@ export function CompWaypoints() {
   const compId = idFromSegment(compParam ?? "");
   const { user } = useUser();
   const confirm = useConfirm();
+  // The map's fold, owned here rather than by MasterDetail so its toggle can
+  // ride the toolbar above instead of taking a row of its own (see the row).
+  const mapFold = useDetailFold(MAP_LABEL);
 
   // SSR seed (null on client boot / SPA navigations, where the effect below
   // fetches instead). Seeding the same states the fetch would set makes the
@@ -603,6 +619,16 @@ export function CompWaypoints() {
    * Maximise would open on wherever the map was before the pan; passing the
    * live camera makes the hand-over exact in both directions.
    */
+  /**
+   * The map's fold toggle. Rides the END of the device-export row rather than
+   * sitting beside it: an expanded QR makes that block tall and wide, and a
+   * sibling would be pushed under the QR, floating above the map as though it
+   * belonged to something else.
+   */
+  const mapFoldButton = (
+    <DetailFoldButton fold={mapFold} detailLabel={MAP_LABEL} className="ms-auto" />
+  );
+
   const mapElement = (
     <Suspense fallback={mapFallback}>
       <RouteMap
@@ -648,28 +674,43 @@ export function CompWaypoints() {
         isAdmin={isAdmin}
       />
 
-      {/* Pilot download + QR (issue #312 stage 2) — visible to everyone, and
-          keyed off the SAVED set rather than the editor's rows. A comp with
-          nothing published yet has nothing to put on a device, and the
-          scorer setting one up for the first time has one job: upload a file
-          or add points from the map. It used to appear the moment a file was
-          parsed, offering hosted links to a set the server did not have.
+      {/* ONE row of buttons above the list. On the left, the pilot's
+          download + QR (issue #312 stage 2) — visible to everyone, and keyed
+          off the SAVED set rather than the editor's rows: a comp with nothing
+          published has nothing to put on a device, and the scorer setting one
+          up for the first time has one job, upload a file or add points from
+          the map. (It used to appear the moment a file was parsed, offering
+          hosted links to a set the server did not have.) On the right, the
+          map's own fold toggle, which MasterDetail would otherwise give a
+          whole row to for one right-aligned button.
 
-          Two buttons, where a titled card with a heading and two sentences
-          of prose used to sit — with a sentence describing the page above it,
-          a phone spent its whole first screen on words and started the list
-          below the fold. A page whose job is to show the waypoints has to
-          show them. */}
-      {!loading && savedRecords.length > 0 ? (
-        <div className="mb-4 mt-4">
-          <WaypointDeviceExport
-            records={savedRecords}
-            baseName={compName}
-            noun="waypoint"
-            hostedUrl={(fmt, swap) =>
-              `/api/comp/${compId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`
-            }
-          />
+          Two buttons and a toggle, where a sentence describing the page and a
+          titled card of prose used to sit — a phone spent its whole first
+          screen on words and began the list below the fold. A page whose job
+          is to show the waypoints has to show them.
+
+          `@container` because DetailFoldButton hides itself side by side with
+          the same `@5xl:` query MasterDetail splits on, and a container query
+          with no container ancestor never matches. This row is a sibling of
+          MasterDetail inside the same page main, so the two containers are
+          the same width and cannot disagree about the breakpoint. */}
+      {!loading ? (
+        <div className="@container mb-4 mt-4">
+          {savedRecords.length > 0 ? (
+            <WaypointDeviceExport
+              records={savedRecords}
+              baseName={compName}
+              noun="waypoint"
+              hostedUrl={(fmt, swap) =>
+                `/api/comp/${compId}/waypoints/${fmt}${swap ? "?swap=1" : ""}`
+              }
+              trailing={mapFoldButton}
+            />
+          ) : (
+            // Nothing published yet, so no device buttons to share the row
+            // with — the toggle keeps the right-hand end it would have had.
+            <div className="flex">{mapFoldButton}</div>
+          )}
         </div>
       ) : null}
 
@@ -677,7 +718,8 @@ export function CompWaypoints() {
         <Loading className="text-sm">Loading waypoints…</Loading>
       ) : (
         <MasterDetail
-          detailLabel="map"
+          detailLabel={MAP_LABEL}
+          fold={mapFold}
           detailAriaLabel="Waypoint map"
           bleed="page"
           defaultMasterShare={0.5}

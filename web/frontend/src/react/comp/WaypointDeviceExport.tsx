@@ -28,7 +28,7 @@
  * the SSR/main entry bundle, and nothing here touches window/document at
  * module scope.
  */
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   encodeXctskQR,
   swapCodeName,
@@ -58,6 +58,7 @@ export function WaypointDeviceExport({
   records,
   baseName,
   hostedUrl,
+  trailing,
   noun = "waypoint",
 }: {
   records: WaypointFileRecord[];
@@ -70,6 +71,14 @@ export function WaypointDeviceExport({
    * copy. When omitted, every device just downloads.
    */
   hostedUrl?: (formatId: string, swap: boolean) => string;
+  /**
+   * One more control for the END of the button row — the waypoints page's map
+   * fold. It belongs in the row rather than beside this component because an
+   * expanded QR makes this block tall AND wide: as a sibling it would be
+   * pushed onto a line of its own, under the QR, and read as belonging to
+   * whatever came next instead of to the toolbar.
+   */
+  trailing?: ReactNode;
   /** Singular noun for the count, e.g. "waypoint" or "turnpoint". */
   noun?: string;
 }) {
@@ -168,6 +177,7 @@ export function WaypointDeviceExport({
           <QrCodeIcon className="size-4" aria-hidden />
           {showQR ? "Hide QR" : "QR code"}
         </ToggleButton>
+        {trailing}
       </div>
 
       {qrTooBig ? (

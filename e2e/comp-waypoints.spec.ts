@@ -510,6 +510,50 @@ test("device export: the QR section carries the swap toggle", async ({ page }) =
   expect(mutated()).toBe(false);
 });
 
+test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobile }) => {
+  // Stacked only: side by side the pane is a column that costs the list
+  // nothing, so there is no fold and DetailFoldButton hides itself. It does
+  // that with the same `@5xl:` container query MasterDetail splits on, which
+  // needs a container ancestor — a page that forgot the `@container` wrapper
+  // would leak the button into the wide layout, and this is what would catch
+  // it.
+  const mutated = trackMutations(page);
+  const fold = page.getByRole("button", { name: "Hide map" });
+
+  if (!isMobile) {
+    await expect(fold).toBeHidden();
+    expect(mutated()).toBe(false);
+    return;
+  }
+
+  // One row: the toggle sits level with the two device buttons, not under
+  // them — a second row for one right-aligned button is the space this move
+  // was meant to give back.
+  const qr = page.getByRole("button", { name: "QR code" });
+  const rowTop = async (l: Locator) => (await l.boundingBox())!.y;
+  expect(Math.abs((await rowTop(fold)) - (await rowTop(qr)))).toBeLessThan(8);
+
+  // And it still folds the pane it names, both ways, saying so to AT.
+  await expect(fold).toHaveAttribute("aria-expanded", "true");
+  await fold.click();
+  const unfold = page.getByRole("button", { name: "Show map" });
+  await expect(unfold).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeHidden();
+  await expectNoSidewaysScroll(page);
+
+  await unfold.click();
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
+
+  // An expanded QR makes the device block tall AND wide. The toggle must keep
+  // its place in the button row rather than being pushed under the QR, which
+  // is what a plain sibling did.
+  await qr.click();
+  await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toBeVisible();
+  expect(Math.abs((await rowTop(fold)) - (await rowTop(page.getByRole("button", { name: "Hide QR" }))))).toBeLessThan(8);
+
+  expect(mutated()).toBe(false);
+});
+
 test("device export: download menu lists every format", async ({ page, isMobile }) => {
   // A coarse pointer gets "Open in app" with hosted links instead of the
   // client-side download menu (WaypointDeviceExport), so the menu this
