@@ -351,12 +351,24 @@ These are the standing imperatives. Each links to the reference that explains it
     what keeps a new format honest.
   - **"Check altitudes" questions values; "Fill altitudes from map" answers
     blanks.** The fill has no competing value so it applies itself; the check
-    changes nothing on its own and reviews IN THE GRID, which already has the
-    map, the locate pin, the filter and an editable cell — because a large
-    disagreement usually means a wrong COORDINATE, and accepting the terrain
-    there would hide it. Under 50 m is not a finding (a ~10 m DEM grid against
-    a file rounded to 10 m), past 300 m the coordinates are the likelier fault,
-    and a whole-file ratio or offset is one bulk fix rather than 187 decisions.
+    changes nothing on its own and reviews in a SHEET
+    (`comp/AltitudeReviewSheet.tsx`) whose every row states BOTH altitudes —
+    the grid columns it replaced put the file's altitude behind the frozen Code
+    column, so a disagreement was reported with half of itself off screen.
+    Under 50 m is not a finding (a ~10 m DEM grid against a file rounded to
+    10 m), past 300 m a wrong COORDINATE is the likelier fault, and a
+    whole-file ratio or offset is one bulk fix rather than 187 decisions. The
+    review's list is a snapshot in BOTH membership and order: sorting by the
+    size of the disagreement live sends each row to the bottom the moment it is
+    accepted.
+  - **The waypoints page has two editors, chosen by width.** The Tabulator grid
+    at 64rem and up (editable tables are Tabulator by policy), and a list of
+    waypoints opening full-screen sheets below it — the grid scrolls sideways
+    on a phone under a sticky map pane, and its frozen column hides the one
+    beside it. `lib/use-media-query.ts` picks, rather than CSS, because the
+    grid must not be BUILT when it is not the editor. `comp-waypoints.spec.ts`
+    runs in both Playwright projects through a driver that speaks to whichever
+    editor is up.
   - **Never read a Terrain-RGB pixel through a canvas.** The tiles are RGBA and
     Mapbox marks no-data — the sea past a coastline included — with partial
     alpha; a canvas stores premultiplied bytes, so the 24-bit elevation those

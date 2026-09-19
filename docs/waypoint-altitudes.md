@@ -85,25 +85,40 @@ is the whole design:
   changes nothing on its own: it reads the terrain under every waypoint and
   turns the grid into a review.
 
-The review happens **in the grid**, not in a dialog, because the grid already
-has everything the decision needs: the map beside it, the locate pin, the
-filter box and an editable altitude cell. A reader who finds a wrong
-*coordinate* — the usual cause of a large disagreement — can fix the actual
-fault in place instead of accepting a number that would hide it.
+The review is a **full-screen sheet** (`comp/AltitudeReviewSheet.tsx`), at
+every width. It began as three extra columns in the grid, which is the right
+shape on a desktop and a poor one on a phone — see "Two editors" below for what
+that cost, and why the columns are gone.
 
 ### What the review shows
 
-Two derived columns appear beside `Alt (m)`, and an accept action:
+**A list view**, narrowed to the rows with something to decide. Each row states
+both altitudes, labelled, and their difference:
 
-- `Map (m)` — the ground elevation the check read.
-- `Δ (m)` — the waypoint's altitude minus the map's, signed. It is **derived
-  from the two cells on every redraw, never stored**, so nothing has to
-  remember to recompute it when an altitude is edited or a coordinate fixed.
-  Sorting is by the *size* of the disagreement, so one "biggest first" ordering
-  covers a waypoint 300 m too high and one 300 m too low.
-- `✓` — take the map's value for this row. It is an ordinary unsaved grid edit,
-  so the page's existing Save and its discard-on-leave guard are the commit and
-  the undo.
+```
+Point_Addis_Hill
+file 6660 m  →  map 80 m      +6580 m
+Not your file: an old terrain-read fault
+                              [ Use 80 m ]
+```
+
+Both numbers on the row is the whole point. The grid version put the file's
+altitude in a column the reader had to scroll away from to see the map's, so a
+disagreement was reported with one of its two halves off screen.
+
+A trailing button takes the map's value without leaving the list; tapping the
+row body opens **a detail view** for that one waypoint — the two altitudes
+side by side, a sentence saying which of them to doubt, the accept, and both
+the altitude and the coordinates editable in place. Back returns to the list,
+and back IS "leave it as it is", so no third button says so.
+
+There is deliberately **no map in the detail view**: the page owns a single
+Mapbox instance and hands it between the inline pane and the full-screen map
+via one camera ref, so a third claimant would be a second instance. Editing
+the coordinates as text is what a pasted correction needs anyway.
+
+Accepting is an ordinary unsaved edit to the page's rows, so the page's Save
+and its discard-on-leave guard stay the commit and the undo.
 
 The thresholds and the arithmetic live in
 `web/frontend/src/react/comp/altitude-check.ts`, away from the grid:
@@ -123,17 +138,44 @@ The thresholds and the arithmetic live in
   before the reader starts working down the list. Near-sea-level rows are
   excluded from that test, where a ratio of two altitudes means nothing.
 
-### Two deliberate behaviours
+### The list holds still — membership AND order
 
-- **The list holds still.** The rows the check picked out are a *snapshot*
-  taken when it ran. A live predicate would make each row vanish the instant
-  its `✓` was pressed, which reads as having deleted it and leaves nothing to
-  check the result against. The banner's counts do the counting instead.
-- **The saved order is the file's order, not the grid's.** Tabulator's
-  `getData()` returns rows in display order, so a header sort (or the review's
-  sort by disagreement) would otherwise rewrite the stored waypoint set in that
-  order the next time any cell was edited. `syncFromGrid` sorts by row id,
-  which ascends in file order.
+The rows the check picked out are a snapshot taken when the sheet opens, and so
+is **the order they are in**. Both halves matter, and the second was learned the
+hard way: with only the membership frozen, accepting a row sent it to the bottom
+of the list the instant its disagreement became zero, because the sort is by the
+size of the disagreement. Every row stayed on screen and the one under the
+reader's thumb still moved. An e2e assertion caught it.
+
+So a row never moves while a reader works down the list. Its Δ goes to 0 where
+it sits, and the counts in the header do the counting.
+
+### Two editors, and why
+
+- **64rem and up: the Tabulator grid** (`gc-grid`), unchanged. Editable tables
+  are Tabulator by policy, and for editing 145 rows cell by cell it is the right
+  tool.
+- **Below that: a list of waypoints** (`comp/WaypointList.tsx`) whose rows open
+  `comp/WaypointSheet.tsx` — every field of one waypoint, plus locate-on-map,
+  the radius chips and Remove. The draft applies on the way OUT, like the route
+  editor's turnpoint sheet, because the page repaints its map markers from
+  `rows` on every change.
+
+`lib/use-media-query.ts` chooses between them, rather than CSS, because the grid
+must not be *built* when it is not the editor: it is lazily imported and owns its
+own row state.
+
+Number fields commit on blur rather than per keystroke, which is RAC's
+behaviour; tapping Done blurs first, and `comp-waypoints.spec.ts` asserts that
+path specifically (type an altitude, tap Done, expect the value on the row)
+because losing it would be silent.
+
+### One ordering rule the grid still needs
+
+**The saved order is the file's order, not the grid's.** Tabulator's `getData()`
+returns rows in display order, so a header sort would otherwise rewrite the
+stored waypoint set in that order the next time any cell was edited.
+`syncFromGrid` sorts by row id, which ascends in file order.
 
 ### What it does not reach
 
@@ -234,7 +276,10 @@ waypoints spec now drives the review through a partially transparent tile.
   partially transparent pixel at every alpha, the case a canvas destroys), the
   plausibility range and its limit, the 3x3 median against a corrupt pixel and
   a cliff edge, and the four real recorded Mapbox tiles.
-- `e2e/comp-waypoints.spec.ts` — the review in the real grid, over a flat
+- `e2e/comp-waypoints.spec.ts` — the review sheet and both editors, over a flat
   synthetic DEM (`stubTerrainElevations` in `e2e/fixtures/mapbox.ts`) so the
   disagreements are arithmetic the test chose, and at alpha 128 so the coastal
-  no-data case is exercised end to end.
+  no-data case is exercised end to end. The spec runs in **both** Playwright
+  projects (it is in `MOBILE_SPEC_FILES`): its tests go through a driver that
+  speaks to whichever editor is on screen, and a test that is ABOUT one editor
+  skips in the other project and says why.
