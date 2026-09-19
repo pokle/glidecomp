@@ -188,9 +188,21 @@ read-only view was a six-column RAC `Table` in its own `overflow-x-auto` scroll
 region — so the sideways-scrolling shape the editor had just stopped using
 survived for the PILOT, who is the one standing on the hill, while the organiser
 more likely to be at a desk got the list. `WaypointList` with no `onOpen` is the
-read-only mode: no chevron, no row action, the locate pin kept (a visitor gets
-the map too). It cost the table's sortable columns, which can come back as a
-sort control over the list; the filter box above it did not move.
+read-only mode: no chevron, because nothing opens. It cost the table's sortable
+columns, which can come back as a sort control over the list; the filter box
+above it did not move.
+
+**The locate pin is the row's whole left-hand strip**, and read-only the whole
+ROW flies the map. The pin began as a 28x28 px icon with 300 px of inert row
+beside it, which is a poor thing to ask a thumb to find on a hill. In the editor
+the row opens the waypoint's sheet, so the pin is a separate action and keeps
+its own target — 48x44 px, flush to the card's edge, and RAC does not fire a
+row's action when a focusable child of it is pressed. Read-only there is no
+sheet, so the row does the pin's job too; the pin stays because it is what names
+the action ("Show BEACH on the map") for a reader who cannot see the map move.
+The e2e measures the rendered box, because tailwind-merge does not resolve
+`size-*` against `h-*`/`w-*` and a `size` prop added later would leave the
+target at 28 px with every class-level assertion still passing.
 
 The one thing the two modes do not share is the altitude's unit. The editor is
 the waypoint FILE edited in place, so it is metric throughout and its rows and

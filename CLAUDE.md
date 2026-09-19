@@ -298,8 +298,18 @@ These are the standing imperatives. Each links to the reference that explains it
     just stopped using survived for the anonymous PILOT — the one actually
     standing on the hill — while the organiser more likely to be at a desk got
     the list. `WaypointList` with no `onOpen` IS the read-only mode: no
-    chevron, no row action, the locate pin kept. When a surface has an
-    admin view and a visitor view, fixing one is half the job.
+    chevron, because nothing opens. When a surface has an admin view and a
+    visitor view, fixing one is half the job.
+  - **A tap target is the whole area doing nothing beside it.** The waypoints
+    list's locate pin was a 28x28 px icon with 300 px of inert row next to
+    it. It is now the row's entire left-hand strip (48x44 px, flush to the
+    card's edge), and read-only — where no sheet opens — the WHOLE ROW flies
+    the map. The pin stays there because it is what NAMES the action for a
+    reader who cannot see the map move; one action with a big target is not
+    two ways to do a thing. Measure a target in the e2e rather than asserting
+    about classes: tailwind-merge does NOT resolve `size-*` against
+    `h-*`/`w-*`, so a `size="icon-sm"` added later leaves two competing rules
+    and a 28 px box with every class-level check still green.
   - **One way to do a thing.** The same pass deleted a "Fill altitudes from
     map" button that duplicated what `Check altitudes` does better, a
     "Show on the map" button in the waypoint sheet that duplicated the list

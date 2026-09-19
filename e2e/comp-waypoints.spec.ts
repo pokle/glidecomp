@@ -173,6 +173,23 @@ async function expectNoSidewaysScroll(page: Page): Promise<void> {
   expect(scrolls, "the page must not scroll sideways").toBe(false);
 }
 
+/**
+ * A target a thumb can actually hit.
+ *
+ * 44 px is the figure both platform guidelines use, and comfortably clears
+ * WCAG 2.5.8's 24 px minimum. Measured on the RENDERED box rather than
+ * asserted about classes: the locate pin's strip overrides a variant's sizing,
+ * and tailwind-merge does NOT resolve `size-*` against `h-*`/`w-*` — so a
+ * `size` prop added in good faith later would leave two competing rules and a
+ * 28 px target, with every class-level assertion still passing.
+ */
+async function expectBigEnoughToTap(target: Locator): Promise<void> {
+  const box = await target.boundingBox();
+  expect(box, "the target must be rendered to be measured").not.toBeNull();
+  expect(box!.width, "tap target width").toBeGreaterThanOrEqual(44);
+  expect(box!.height, "tap target height").toBeGreaterThanOrEqual(44);
+}
+
 async function firstWaypointRow(page: Page): Promise<Locator> {
   const row = editorRows(page).first();
   await expect(row).toBeVisible({ timeout: 15_000 });
@@ -227,6 +244,17 @@ test("the editor lists waypoints, edits in a sheet, and blocks bad coords", asyn
     waypoints[0].altitude === undefined ? "no altitude" : `${waypoints[0].altitude} m`
   );
   await expectNoSidewaysScroll(page);
+
+  // The locate pin is the row's whole left-hand strip. In the editor the row
+  // itself opens the sheet, so the pin is a genuinely separate action and
+  // needs a target of its own — it was 28x28 px beside 300 px of row.
+  const pin = firstRow.getByRole("button", { name: /Show .* on the map/ });
+  await expectBigEnoughToTap(pin);
+  // And pressing it must NOT open the sheet: RAC does not fire a row's action
+  // when a focusable child of it is pressed, and that is what keeps the two
+  // apart.
+  await pin.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // React state drives the count line and the pristine Save button.
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
@@ -792,13 +820,21 @@ test("anonymous visitors get the same list, read-only, no admin controls", async
   await expect(row).toBeVisible();
   // Everything a waypoint has is on its row here too.
   await expect(row).toContainText(`${waypoints[0].altitude} m`);
-  // The locate pin stays — a visitor gets the map as well.
+  // The locate pin stays — a visitor gets the map as well, and the pin is what
+  // NAMES the action for a reader who cannot see the map move.
   await expect(row.getByRole("button", { name: /Show .* on the map/ })).toBeVisible();
+  await expectBigEnoughToTap(row.getByRole("button", { name: /Show .* on the map/ }));
 
-  // Nothing opens: a row has no sheet behind it, so it carries no chevron and
-  // clicking it changes nothing.
+  // The whole row flies the map, not just the pin. The pan is imperative on
+  // the Mapbox instance and leaves no DOM trace, so what is asserted here is
+  // that the row presents itself as actionable and that pressing it opens
+  // nothing and goes nowhere — there is no sheet behind a read-only row,
+  // which is why it carries no chevron either.
+  const here = page.url();
+  await expect(row).toHaveCSS("cursor", "pointer");
   await row.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).toHaveURL(here);
 
   await expectNoSidewaysScroll(page);
 
