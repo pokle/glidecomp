@@ -648,22 +648,20 @@ export function CompWaypoints() {
         isAdmin={isAdmin}
       />
 
-      <p className="mb-4 mt-4 text-sm text-muted-foreground">
-        The shared waypoints for this competition. Tasks pick their turnpoints
-        from this set.{" "}
-        {isAdmin
-          ? "Upload a file (OziExplorer, SeeYou, CompeGPS, FS, GPX, KML or CSV), edit details, or add points from the map."
-          : null}
-      </p>
-
       {/* Pilot download + QR (issue #312 stage 2) — visible to everyone, and
           keyed off the SAVED set rather than the editor's rows. A comp with
           nothing published yet has nothing to put on a device, and the
           scorer setting one up for the first time has one job: upload a file
           or add points from the map. It used to appear the moment a file was
-          parsed, offering hosted links to a set the server did not have. */}
+          parsed, offering hosted links to a set the server did not have.
+
+          Two buttons, where a titled card with a heading and two sentences
+          of prose used to sit — with a sentence describing the page above it,
+          a phone spent its whole first screen on words and started the list
+          below the fold. A page whose job is to show the waypoints has to
+          show them. */}
       {!loading && savedRecords.length > 0 ? (
-        <div className="mb-6">
+        <div className="mb-4 mt-4">
           <WaypointDeviceExport
             records={savedRecords}
             baseName={compName}

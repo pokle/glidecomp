@@ -203,10 +203,10 @@ const waypointRow = (page: Page, code: string) =>
   editorRows(page).filter({ hasText: code }).first();
 
 /**
- * The device-export panel's trigger. Its LABEL depends on the pointer: a
- * coarse pointer gets hosted links to open in a flight app, a fine one gets a
- * client-side download menu (WaypointDeviceExport). Tests that only care that
- * the panel is there match either.
+ * The device-export toolbar's first button. Its LABEL depends on the pointer:
+ * a coarse pointer gets hosted links to open in a flight app, a fine one gets
+ * a client-side download menu (WaypointDeviceExport). Tests that only care
+ * that the toolbar is there match either.
  */
 const deviceExportButton = (page: Page) =>
   page.getByRole("button", {
@@ -481,37 +481,83 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
   }
 });
 
-test("device export: download menu lists every format, QR + swap toggle", async ({
-  page,
-  isMobile,
-}) => {
+test("device export: the QR section carries the swap toggle", async ({ page }) => {
+  // Runs in BOTH projects. The pointer decides what the first toolbar button
+  // does, but the QR half is the same everywhere — and a phone is the width
+  // this toolbar exists for, so it is the width the toggle has to work at.
+  const mutated = trackMutations(page);
+
+  // Shut, the section is not on the page at all: two buttons and nothing else.
+  await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toHaveCount(0);
+
+  // QR toggles on (caption + code render).
+  await page.getByRole("button", { name: "QR code" }).click();
+  await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toBeVisible();
+
+  // Swap lives INSIDE the expanded section — it is not page chrome standing
+  // above both outputs any more. Click the label text, read state by role
+  // (gotcha #13).
+  const swap = page.getByRole("checkbox", { name: /Swap code & name/ });
+  await expect(swap).not.toBeChecked();
+  await page.getByText(/Swap code & name/).click();
+  await expect(swap).toBeChecked();
+
+  // Collapsed, the section takes its checkbox with it.
+  await page.getByRole("button", { name: "Hide QR" }).click();
+  await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toHaveCount(0);
+  await expect(swap).toHaveCount(0);
+
+  expect(mutated()).toBe(false);
+});
+
+test("device export: download menu lists every format", async ({ page, isMobile }) => {
   // A coarse pointer gets "Open in app" with hosted links instead of the
   // client-side download menu (WaypointDeviceExport), so the menu this
   // asserts on is the fine-pointer one.
   test.skip(!!isMobile, "a coarse pointer gets Open in app, not the download menu");
   const mutated = trackMutations(page);
 
-  // Desktop (fine pointer) shows the client-side "Download" menu.
   await page.getByRole("button", { name: "Download waypoints" }).click();
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
-  // All 8 engine export formats (WAYPOINT_EXPORT_FORMATS).
+  // All 8 engine export formats (WAYPOINT_EXPORT_FORMATS). The swap item is a
+  // menuitemCHECKBOX, so it is deliberately not one of them.
   await expect(menu.getByRole("menuitem")).toHaveCount(8);
   await expect(menu.getByRole("menuitem", { name: "SeeYou (.cup)" })).toBeVisible();
+
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
 
-  // QR toggles on (caption + code render) and off again.
-  await page.getByRole("button", { name: "QR code" }).click();
-  await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toBeVisible();
-  await page.getByRole("button", { name: "Hide QR" }).click();
-  await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toHaveCount(0);
+  expect(mutated()).toBe(false);
+});
 
-  // Swap checkbox: click the label text, read state by role (gotcha #13).
-  const swap = page.getByRole("checkbox", { name: /Swap code & name/ });
-  await expect(swap).not.toBeChecked();
-  await page.getByText(/Swap code & name/).click();
-  await expect(swap).toBeChecked();
+test("device export: the download menu carries its own swap toggle", async ({
+  page,
+  isMobile,
+}) => {
+  // Fine pointer only, for the same reason as the test above.
+  test.skip(!!isMobile, "a coarse pointer gets Open in app, not the download menu");
+  const mutated = trackMutations(page);
+
+  // The QR section is shut, so the menu's own item is the only way to swap.
+  await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Download waypoints" }).click();
+  const item = page.getByRole("menuitemcheckbox", { name: /Swap code & name/ });
+  await expect(item).toBeVisible();
+  await expect(item).not.toBeChecked();
+
+  // Selecting it must NOT close the menu — the formats under it are the point,
+  // and on a touch device their hrefs are rebuilt against the new swap state.
+  await item.click();
+  await expect(item).toBeChecked();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "SeeYou (.cup)" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  // One piece of state behind both: the QR section opens already swapped.
+  await page.getByRole("button", { name: "QR code" }).click();
+  await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toBeChecked();
 
   expect(mutated()).toBe(false);
 });
@@ -659,9 +705,9 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({
       timeout: 15_000,
     });
 
-    // Nothing published: no panel, and the editor's own job is what's left.
+    // Nothing published: no toolbar, and the editor's own job is what's left.
     await expect(deviceExportButton(page)).toHaveCount(0);
-    await expect(page.getByText("Get these waypoints on your device")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "QR code" })).toHaveCount(0);
 
     // Adding a waypoint in the editor does NOT bring it back — only a save does.
     await page.getByRole("button", { name: "Add waypoint" }).click();

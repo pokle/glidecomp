@@ -1,20 +1,32 @@
 /**
- * "Get these on your device" panel (issue #312, stage 2). Shared by the comp
- * waypoints page (the full shared set) and the task page (a task's turnpoints):
- * a Download menu covering every supported file format plus a scannable
- * XCTrack `XCTSK:` QR that Flyskyhy, XCTrack and most flight apps import.
+ * "Get these on your device" controls (issue #312, stage 2). Used by the comp
+ * waypoints page for the full shared set: a Download menu covering every
+ * supported file format plus a scannable XCTrack `XCTSK:` QR that Flyskyhy,
+ * XCTrack and most flight apps import.
+ *
+ * It is a TOOLBAR — two buttons and nothing else — not the titled card it was
+ * until 2026-09-19. The card spent a heading and two sentences of prose
+ * explaining what the two buttons already say, and on a phone that pushed the
+ * waypoints themselves below the fold on the page whose whole job is to list
+ * them. The words went; the buttons stayed exactly where they were.
  *
  * A "swap code / name" toggle flips which identifier the device shows as the
- * waypoint label — applied uniformly to the files and the QR.
+ * waypoint label — applied uniformly to the files and the QR, from ONE piece
+ * of state. It is offered where each output is chosen rather than standing
+ * permanently above both: as a checkbox item at the head of the download menu,
+ * and as a checkbox inside the expanded QR section.
  *
  * RAC (see docs/2026-07-18-rac-adoption-guide.md): kit Button/ToggleButton/
  * Checkbox/Menu. On touch devices the menu items are real links to the hosted
  * file (so the OS hands it to a flight app); on desktop they serialize and
- * download client-side via onAction.
+ * download client-side via onAction. The swap item is a one-item
+ * `MenuSection` with `selectionMode="multiple"`, so it is a real
+ * `menuitemcheckbox` with `shouldCloseOnSelect={false}` — the menu stays open,
+ * and the format hrefs beneath it re-render against the new swap state.
  *
- * SSR-safe: the task page is server-rendered, so the QR (which pulls in
- * qrcode.react) is lazy-loaded to stay out of the SSR/main entry bundle, and
- * nothing here touches window/document at module scope.
+ * SSR-safe: the QR (which pulls in qrcode.react) is lazy-loaded to stay out of
+ * the SSR/main entry bundle, and nothing here touches window/document at
+ * module scope.
  */
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
@@ -26,19 +38,26 @@ import {
 } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
 import { Checkbox } from "@/react/rac/checkbox";
-import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
+import { Menu, MenuItem, MenuSection, MenuSeparator, MenuTrigger } from "@/react/rac/menu";
+import { cn } from "@/react/lib/utils";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
-import { DownloadIcon, QrCodeIcon, ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
+import {
+  CheckIcon,
+  DownloadIcon,
+  QrCodeIcon,
+  ChevronDownIcon,
+  ExternalLinkIcon,
+} from "lucide-react";
 
 const WaypointQR = lazy(() => import("./WaypointQR"));
+
+const SWAP_LABEL = "Swap code & name — use the full name as the waypoint label on your device";
 
 export function WaypointDeviceExport({
   records,
   baseName,
   hostedUrl,
-  title = "Get these waypoints on your device",
-  subtitle = "Open or download a file for your instrument, or scan the QR into your flight app (XCTrack, Flyskyhy, SeeYou Navigator and most others).",
   noun = "waypoint",
 }: {
   records: WaypointFileRecord[];
@@ -51,8 +70,6 @@ export function WaypointDeviceExport({
    * copy. When omitted, every device just downloads.
    */
   hostedUrl?: (formatId: string, swap: boolean) => string;
-  title?: string;
-  subtitle?: string;
   /** Singular noun for the count, e.g. "waypoint" or "turnpoint". */
   noun?: string;
 }) {
@@ -89,69 +106,69 @@ export function WaypointDeviceExport({
   if (!records.length) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-muted/30 p-4">
-      {/* Stacked until there is room for a second column. `flex-1` alone was
-          not enough: the buttons beside it have a min-content width of most
-          of a phone, so the heading and its sentence were squeezed into a
-          two-word-wide column running down the card. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="min-w-0 sm:flex-1">
-          <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <MenuTrigger>
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label={openInApp ? "Open waypoints in a flight app" : "Download waypoints"}
-            >
-              {openInApp ? (
-                <ExternalLinkIcon className="size-4" aria-hidden />
-              ) : (
-                <DownloadIcon className="size-4" aria-hidden />
-              )}
-              {openInApp ? "Open in app" : "Download"}
-              <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
-            </Button>
-            <Menu>
-              {WAYPOINT_EXPORT_FORMATS.map((fmt) =>
-                openInApp && hostedUrl ? (
-                  <MenuItem
-                    key={fmt.id}
-                    href={hostedUrl(fmt.id, swap)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {fmt.label}
-                  </MenuItem>
-                ) : (
-                  <MenuItem key={fmt.id} onAction={() => download(fmt)}>
-                    {fmt.label}
-                  </MenuItem>
-                )
-              )}
-            </Menu>
-          </MenuTrigger>
-          <ToggleButton
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <MenuTrigger>
+          <Button
+            variant="outline"
             size="sm"
-            isSelected={showQR}
-            onChange={setShowQR}
-            isDisabled={qrTooBig}
+            aria-label={openInApp ? "Open waypoints in a flight app" : "Download waypoints"}
           >
-            <QrCodeIcon className="size-4" aria-hidden />
-            {showQR ? "Hide QR" : "QR code"}
-          </ToggleButton>
-        </div>
+            {openInApp ? (
+              <ExternalLinkIcon className="size-4" aria-hidden />
+            ) : (
+              <DownloadIcon className="size-4" aria-hidden />
+            )}
+            {openInApp ? "Open in app" : "Download"}
+            <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
+          </Button>
+          <Menu>
+            {/* Swap rides with the format choice: picking a file and deciding
+                what the device will call each point is one decision, made in
+                one place. `shouldCloseOnSelect={false}` keeps the menu open so
+                the hrefs below re-render against the new state. */}
+            <MenuSection
+              selectionMode="multiple"
+              selectedKeys={swap ? ["swap"] : []}
+              onSelectionChange={(keys) => setSwap(keys !== "all" && new Set(keys).has("swap"))}
+              shouldCloseOnSelect={false}
+            >
+              <MenuItem id="swap" textValue={SWAP_LABEL}>
+                {({ isSelected }) => (
+                  <>
+                    <CheckIcon
+                      className={cn("size-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")}
+                      aria-hidden
+                    />
+                    Swap code &amp; name
+                  </>
+                )}
+              </MenuItem>
+            </MenuSection>
+            <MenuSeparator />
+            {WAYPOINT_EXPORT_FORMATS.map((fmt) =>
+              openInApp && hostedUrl ? (
+                <MenuItem
+                  key={fmt.id}
+                  href={hostedUrl(fmt.id, swap)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {fmt.label}
+                </MenuItem>
+              ) : (
+                <MenuItem key={fmt.id} onAction={() => download(fmt)}>
+                  {fmt.label}
+                </MenuItem>
+              )
+            )}
+          </Menu>
+        </MenuTrigger>
+        <ToggleButton size="sm" isSelected={showQR} onChange={setShowQR} isDisabled={qrTooBig}>
+          <QrCodeIcon className="size-4" aria-hidden />
+          {showQR ? "Hide QR" : "QR code"}
+        </ToggleButton>
       </div>
-
-      <Checkbox
-        isSelected={swap}
-        onChange={setSwap}
-        className="mt-3 text-xs text-muted-foreground"
-      >
-        Swap code &amp; name — use the full name as the waypoint label on your device
-      </Checkbox>
 
       {qrTooBig ? (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -161,6 +178,9 @@ export function WaypointDeviceExport({
 
       {showQR && !qrTooBig ? (
         <div className="mt-4 flex flex-col items-center gap-2">
+          <Checkbox isSelected={swap} onChange={setSwap} className="text-xs text-muted-foreground">
+            {SWAP_LABEL}
+          </Checkbox>
           <Suspense
             fallback={
               <div className="flex size-[280px] items-center justify-center text-sm text-muted-foreground">

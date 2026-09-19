@@ -766,6 +766,25 @@ Points worth knowing before you reach for one:
       on top of its own, refused to pop it, and left an entry wearing the
       page's URL that a Back would otherwise land on and appear to do nothing.
 
+28. **A checkbox item in a Menu is a one-item `MenuSection`, not a `MenuItem`
+    with an `onAction` that toggles state.** `selectionMode` is a prop on
+    `MenuSection` as well as on `Menu` (RAC's section-level selection), so a
+    menu can hold a checkable option ABOVE a list of plain action items
+    without making the actions selectable too. That is what the waypoints
+    page's "Swap code & name" is (`comp/WaypointDeviceExport.tsx`): the
+    section gives it `role="menuitemcheckbox"` and `aria-checked` for free,
+    which an `onAction` item cannot have. Two things it needs from you:
+    - **`shouldCloseOnSelect={false}`**, or picking the option dismisses the
+      menu you were about to choose a format from. Kept open, the items below
+      re-render — which matters, because on a touch device each format item is
+      a real `href` to the hosted file and the swap state is in that URL.
+    - **The tick is yours to draw.** The kit's `MenuItem` styles a row and
+      nothing more, so render the item's children as a function and key an
+      icon off `isSelected` (`opacity-0` when it is off, so the label does not
+      shift as it toggles). Give the item a `textValue` too: the visible label
+      can be the short one while AT hears the whole sentence, and WCAG 2.5.3
+      is satisfied as long as the visible words are inside it.
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash
