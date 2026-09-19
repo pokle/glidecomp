@@ -313,6 +313,41 @@ test("the browser back button closes a sheet, not the page", async ({ page }) =>
   expect(mutated()).toBe(false);
 });
 
+test("back closes a dialog too, and leaves the history as it found it", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  const url = page.url();
+
+  // Back used to be wired into FullScreenSheet and nothing else, so on a phone
+  // it closed a sheet and left the PAGE from a dialog. Both kinds now register
+  // in the one layer stack (lib/use-back-dismiss), which is also what makes a
+  // dialog opened over a sheet — the Add-waypoint dialog opens `elevated` over
+  // the maximised map — take the Back that was aimed at it, rather than the
+  // sheet underneath closing and leaving the dialog floating.
+  await page.getByRole("button", { name: "Add waypoint" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add waypoint" });
+  await expect(dialog).toBeVisible();
+  await page.goBack();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(url);
+  await expect(await firstWaypointRow(page)).toBeVisible();
+
+  // Closing from the UI consumes the entry it pushed, so the stack is left
+  // exactly as it was found — the next Back goes where a reader expects
+  // instead of appearing to do nothing.
+  await page.getByRole("button", { name: "Add waypoint" }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.goBack();
+  await expect(page).not.toHaveURL(url);
+  await page.goForward();
+  await expect(page).toHaveURL(url);
+
+  expect(mutated()).toBe(false);
+});
+
 test("remove a row and add one via the RAC dialog (nothing saved)", async ({
   page,
 }) => {
