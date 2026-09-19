@@ -4,28 +4,34 @@
  * A comp's shared waypoint database, edited here once and picked from when
  * building task routes. Admins upload a file (any of the supported formats),
  * fix up details a waypoint at a time, add points from the map or pasted
- * coordinates, and save. Non-admins see a read-only list. The set is stored
- * per-comp (JSON blob) via GET/PUT /api/comp/:id/waypoints.
+ * coordinates, and save. The set is stored per-comp (JSON blob) via
+ * GET/PUT /api/comp/:id/waypoints.
  *
- * **The editor is a list of sheets, at every width** — comp/WaypointList.tsx
- * and comp/WaypointSheet.tsx — and the altitude review is another
- * (comp/AltitudeReviewSheet.tsx). It was a Tabulator grid until 2026-09-19,
- * and the grid was the app's standard for an editable table; what settled it
- * is that GlideComp is used from a hill with a phone, and on a phone the grid
- * scrolled sideways inside a page that scrolled down, under a map pane that
- * stuck, with its frozen Code column hiding whichever column sat beside it.
- * See the mobile-first rule in CLAUDE.md.
+ * **It is ONE list of waypoints, at every width, for everyone** —
+ * comp/WaypointList.tsx, with comp/WaypointSheet.tsx behind an admin's rows
+ * and the altitude review in another sheet (comp/AltitudeReviewSheet.tsx).
+ * Admin and visitor differ by what a row opens, not by what the page is.
+ *
+ * It was a Tabulator grid for admins until 2026-09-19, and the grid was the
+ * app's standard for an editable table; what settled it is that GlideComp is
+ * used from a hill with a phone, and on a phone the grid scrolled sideways
+ * inside a page that scrolled down, under a map pane that stuck, with its
+ * frozen Code column hiding whichever column sat beside it. See the
+ * mobile-first rule in CLAUDE.md. A visitor's six-column RAC Table went the
+ * same way and for the same reason, a little later: it sat in its own
+ * sideways-scrolling region, so the shape the editor had stopped using
+ * survived for the PILOT, who is the one actually on the hill.
  *
  * React `rows` state is the single source of truth for the map markers, the
  * dirty check and the save; every edit goes through `updateRow`/`deleteRow`,
  * so nothing has a second copy to keep in step.
  *
- * The read-only content (heading, table, download links) is server-rendered
+ * The read-only content (heading, list, download links) is server-rendered
  * via loadCompWaypoints so the page has real content for crawlers; the map
  * (mapbox) stays client-only — the server streams its "Loading map…"
  * fallback.
  *
- * Table and map are laid out by the shared {@link MasterDetail}: the map is
+ * List and map are laid out by the shared {@link MasterDetail}: the map is
  * the pinned pane on a phone (so a row's locate pin flies a map that is on
  * screen) and the sticky right-hand column on a wide screen. The pane is a
  * few centimetres tall there, so the map also MAXIMISES into a full-screen
@@ -42,8 +48,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useInView } from "../lib/use-in-view";
 import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
-import { FileTrigger, type SortDescriptor } from "react-aria-components";
-import { Maximize2Icon, MapPinIcon, Minimize2Icon } from "lucide-react";
+import { FileTrigger } from "react-aria-components";
+import { Maximize2Icon, Minimize2Icon } from "lucide-react";
 import {
   cleanWaypointCodes,
   describeCodeChanges,
@@ -56,7 +62,6 @@ import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { MasterDetail } from "@/react/components/MasterDetail";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
-import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -77,7 +82,6 @@ import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { CompSectionNav } from "../comp/CompSectionNav";
 import { useInitialData } from "../lib/initial-data";
 import { cn } from "@/react/lib/utils";
-import { formatAltitude, formatCylinderRadius, useUnits } from "../lib/units";
 import type { CompWaypointsLoaderData } from "../loaders";
 
 const RouteMap = lazy(() => import("../comp/RouteMap"));
@@ -149,43 +153,11 @@ function rowAltitude(r: WpRow): number | undefined {
   return r.altitude.trim() !== "" && Number.isFinite(n) ? n : undefined;
 }
 
-/** Numeric value of an altitude/radius cell, or NaN when blank/unparseable. */
-function numField(r: WpRow, field: "altitude" | "radius"): number {
-  const s = r[field].trim();
-  return s === "" ? NaN : Number(s);
-}
-
-/**
- * Sort a copy of the rows for the read-only table by the RAC sort descriptor.
- * Alt/Radius sort numerically with blanks pinned last (in both directions);
- * everything else sorts as locale strings.
- */
-function sortRows(rows: WpRow[], sort: SortDescriptor): WpRow[] {
-  const dir = sort.direction === "descending" ? -1 : 1;
-  const col = String(sort.column);
-  return [...rows].sort((a, b) => {
-    if (col === "altitude" || col === "radius") {
-      const an = numField(a, col);
-      const bn = numField(b, col);
-      const aNan = Number.isNaN(an);
-      const bNan = Number.isNaN(bn);
-      if (aNan && bNan) return 0;
-      if (aNan) return 1; // blanks always last, regardless of direction
-      if (bNan) return -1;
-      return (an - bn) * dir;
-    }
-    const av = String((a as unknown as Record<string, string>)[col] ?? "");
-    const bv = String((b as unknown as Record<string, string>)[col] ?? "");
-    return av.localeCompare(bv) * dir;
-  });
-}
-
 export function CompWaypoints() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { user } = useUser();
   const confirm = useConfirm();
-  const units = useUnits();
 
   // SSR seed (null on client boot / SPA navigations, where the effect below
   // fetches instead). Seeding the same states the fetch would set makes the
@@ -259,11 +231,11 @@ export function CompWaypoints() {
   const [seedCoords, setSeedCoords] = useState("");
   const [seedDetails, setSeedDetails] = useState<MapPickDetails | undefined>(undefined);
 
-  // Filter box (narrows a long list) and the read-only table's sort. The admin
-  // `sort` drives the RAC read-only table only; the editor list keeps the
-  // file's own order.
+  // The filter box, which narrows a long list. Nothing re-orders the list:
+  // the file's own order is the order, for a visitor as for an organiser. The
+  // read-only table's sortable columns went with the table — a sort control
+  // over the list can come back if anyone misses them.
   const [filter, setFilter] = useState("");
-  const [sort, setSort] = useState<SortDescriptor | undefined>(undefined);
   const filterRef = useRef(filter);
   filterRef.current = filter;
 
@@ -396,13 +368,12 @@ export function CompWaypoints() {
     message: "This page has unsaved changes. Leaving will discard them.",
   });
 
-  // Rows for the read-only table: filter, then sort (a copy — `rows` stays the
-  // canonical order). The editor list takes the same filtered rows.
+  // The rows on screen: everything, or whatever the filter box matches.
   const query = filter.trim().toLowerCase();
-  const visibleRows = useMemo(() => {
-    const filtered = query ? rows.filter((r) => matchesFilter(r, query)) : rows;
-    return sort ? sortRows(filtered, sort) : filtered;
-  }, [rows, query, sort]);
+  const visibleRows = useMemo(
+    () => (query ? rows.filter((r) => matchesFilter(r, query)) : rows),
+    [rows, query]
+  );
 
   /** The row the phone editor's sheet is open on, if it still exists. */
   const editingRow = editingId === null ? null : rows.find((r) => r.id === editingId) ?? null;
@@ -806,9 +777,8 @@ export function CompWaypoints() {
                 </Button>
               </div>
             ) : null}
-            {/* Filter box — narrows a long set. Drives the editor list and the
-                read-only table alike; the read-only table also sorts via its
-                columns. */}
+            {/* Filter box — narrows a long set, for an admin and a visitor
+                alike. Nothing re-orders: the file's own order is the order. */}
             {rows.length > 0 ? (
               <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <SearchField
@@ -825,93 +795,22 @@ export function CompWaypoints() {
                 ) : null}
               </div>
             ) : null}
-            {isAdmin ? (
-              /* The editor, at every width: a row per waypoint, opening a
-                 sheet. */
-              <WaypointList
-                rows={visibleRows}
-                emptyMessage={
-                  rows.length > 0 && query
-                    ? `No waypoints match “${filter.trim()}”.`
-                    : undefined
-                }
-                onOpen={setEditingId}
-                onLocate={locate}
-              />
-            ) : rows.length === 0 ? (
-              <p className="rounded border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                No waypoints yet.
-              </p>
-            ) : visibleRows.length === 0 ? (
-              <p className="rounded border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                No waypoints match “{filter.trim()}”.
-              </p>
-            ) : (
-              <Table
-                aria-label="Waypoints"
-                scrollLabel="Waypoints"
-                sortDescriptor={sort}
-                onSortChange={setSort}
-              >
-                <TableHeader>
-                  <Column className="w-8">
-                    <span className="sr-only">Show on map</span>
-                  </Column>
-                  <Column id="code" isRowHeader allowsSorting>
-                    Code
-                  </Column>
-                  <Column id="name" allowsSorting>
-                    Name
-                  </Column>
-                  <Column id="coords" allowsSorting>
-                    Coordinates
-                  </Column>
-                  {/* Alt and Radius are plain quantities, so they read right-
-                      aligned. Coordinates stays left: it is a "lat, lon"
-                      pair, not a single number to compare down the column. */}
-                  <Column id="altitude" className="text-right" allowsSorting>
-                    Alt
-                  </Column>
-                  <Column id="radius" className="text-right" allowsSorting>
-                    Radius
-                  </Column>
-                </TableHeader>
-                <TableBody>
-                  {visibleRows.map((r) => (
-                    <Row key={r.id} id={r.id}>
-                      <Cell className="p-1 text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Show ${r.code || "waypoint"} on the map`}
-                          onPress={() => locate(r)}
-                        >
-                          <MapPinIcon className="size-4" aria-hidden="true" />
-                        </Button>
-                      </Cell>
-                      <Cell className="font-medium">{r.code}</Cell>
-                      <Cell>{r.name || "—"}</Cell>
-                      <Cell className="font-mono text-xs">{r.coords}</Cell>
-                      <Cell className="text-right font-mono text-xs">
-                        {/* "0" is sea level and prints as such; only a blank
-                            altitude is unknown, and that is the dash. */}
-                        {r.altitude.trim() !== "" && Number.isFinite(Number(r.altitude))
-                          ? formatAltitude(Number(r.altitude), { prefs: units }).withUnit
-                          : "—"}
-                      </Cell>
-                      <Cell className="text-right font-mono text-xs">
-                        {/* Metric whatever the reader's distance unit: the FAI
-                            states a cylinder radius in metres, and so does the
-                            grid that edits it. */}
-                        {Number.isFinite(Number(r.radius))
-                          ? formatCylinderRadius(Number(r.radius)).withUnit
-                          : r.radius}
-                      </Cell>
-                    </Row>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            {/* One list, at every width, for everyone. An admin's rows open
+                the editing sheet; a visitor's do not, and that is the only
+                difference (see WaypointList). The six-column RAC Table this
+                replaced sat in a sideways-scrolling region, which handed the
+                pilot on the hill exactly the shape the editor had just
+                stopped using. */}
+            <WaypointList
+              rows={visibleRows}
+              emptyMessage={
+                rows.length > 0 && query
+                  ? `No waypoints match “${filter.trim()}”.`
+                  : undefined
+              }
+              onOpen={isAdmin ? setEditingId : undefined}
+              onLocate={locate}
+            />
           </div>
           }
         />

@@ -52,7 +52,6 @@ function getServerSnapshot(): UnitPreferences {
   return DEFAULT_UNITS;
 }
 
-/** The current unit preferences, re-rendering on any change. */
 /**
  * A cylinder radius as a list row writes it: "400 m", "5 km".
  *
@@ -68,6 +67,7 @@ export function radiusLabel(radius: string): string {
   return Number.isFinite(n) ? formatCylinderRadius(n).withUnit : radius;
 }
 
+/** The current unit preferences, re-rendering on any change. */
 export function useUnits(): UnitPreferences {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

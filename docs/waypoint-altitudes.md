@@ -183,6 +183,20 @@ frozen Code column hiding whichever column sat beside it. The grid is **gone**,
 not hidden behind a breakpoint: two editors would mean two code paths and a
 reviewer on a desktop seeing something the author never tested on a phone.
 
+An anonymous visitor gets the same list, and that took a second pass. The
+read-only view was a six-column RAC `Table` in its own `overflow-x-auto` scroll
+region — so the sideways-scrolling shape the editor had just stopped using
+survived for the PILOT, who is the one standing on the hill, while the organiser
+more likely to be at a desk got the list. `WaypointList` with no `onOpen` is the
+read-only mode: no chevron, no row action, the locate pin kept (a visitor gets
+the map too). It cost the table's sortable columns, which can come back as a
+sort control over the list; the filter box above it did not move.
+
+The one thing the two modes do not share is the altitude's unit. The editor is
+the waypoint FILE edited in place, so it is metric throughout and its rows and
+fields say so. A read-only row is an altitude PRINTED to a reader, so it honours
+the unit preference like every other altitude in the app (issue #662).
+
 ### Back closes one sheet, not the page
 
 The sheets are React state rather than routes — the page behind them is unsaved

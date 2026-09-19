@@ -160,6 +160,19 @@ const editorRows = (page: Page) =>
 const reviewRows = (page: Page) =>
   page.getByRole("grid", { name: "Waypoints to look at" }).getByRole("row");
 
+/**
+ * The page must never scroll sideways, at either project's width. That is the
+ * failure the list replaced the grid over, so it is asserted rather than
+ * assumed — for an admin and for a visitor, who used to get a table in its own
+ * horizontal scroll region.
+ */
+async function expectNoSidewaysScroll(page: Page): Promise<void> {
+  const scrolls = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+  );
+  expect(scrolls, "the page must not scroll sideways").toBe(false);
+}
+
 async function firstWaypointRow(page: Page): Promise<Locator> {
   const row = editorRows(page).first();
   await expect(row).toBeVisible({ timeout: 15_000 });
@@ -202,7 +215,8 @@ test("the editor lists waypoints, edits in a sheet, and blocks bad coords", asyn
   const mutated = trackMutations(page);
 
   // The editor is a LIST at every width — no Tabulator, and nothing scrolls
-  // sideways. The read-only RAC table is the anonymous view and is gone here.
+  // sideways. An admin's list is named apart from a visitor's, which is the
+  // same component with nothing behind its rows.
   await expect(page.locator(".tabulator")).toHaveCount(0);
   await expect(page.getByRole("grid", { name: "Waypoints", exact: true })).toHaveCount(0);
   const firstRow = await firstWaypointRow(page);
@@ -212,10 +226,7 @@ test("the editor lists waypoints, edits in a sheet, and blocks bad coords", asyn
   await expect(firstRow).toContainText(
     waypoints[0].altitude === undefined ? "no altitude" : `${waypoints[0].altitude} m`
   );
-  const scrolls = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-  );
-  expect(scrolls, "the page must not scroll sideways").toBe(false);
+  await expectNoSidewaysScroll(page);
 
   // React state drives the count line and the pristine Save button.
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
@@ -730,22 +741,35 @@ test("the review narrows to the rows worth looking at, and can widen again", asy
   expect(mutated()).toBe(false);
 });
 
-test("anonymous visitors get the read-only table, no admin controls", async ({
+test("anonymous visitors get the same list, read-only, no admin controls", async ({
   page,
 }) => {
   await page.context().clearCookies();
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: "Waypoints" })).toBeVisible();
 
-  // The read-only RAC table, with real content.
-  const table = page.getByRole("grid", { name: "Waypoints", exact: true });
-  await expect(table).toBeVisible({ timeout: 15_000 });
-  await expect(
-    table.getByRole("rowheader", { name: waypoints[0].code }).first()
-  ).toBeVisible();
+  // The SAME list an admin gets, named apart and with nothing behind a row.
+  // It used to be a six-column table in a sideways-scrolling region, which
+  // left the pilot on the hill with the shape the editor had stopped using.
+  const list = page.getByRole("grid", { name: "Waypoints", exact: true });
+  await expect(list).toBeVisible({ timeout: 15_000 });
+  const row = list.getByRole("row").filter({ hasText: waypoints[0].code }).first();
+  await expect(row).toBeVisible();
+  // Everything a waypoint has is on its row here too.
+  await expect(row).toContainText(`${waypoints[0].altitude} m`);
+  // The locate pin stays — a visitor gets the map as well.
+  await expect(row.getByRole("button", { name: /Show .* on the map/ })).toBeVisible();
+
+  // Nothing opens: a row has no sheet behind it, so it carries no chevron and
+  // clicking it changes nothing.
+  await row.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await expectNoSidewaysScroll(page);
 
   // No admin chrome, no Tabulator.
   await expect(page.getByRole("button", { name: "Upload file" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Check altitudes" })).toHaveCount(0);
   await expect(page.locator(".tabulator")).toHaveCount(0);
 
   // The device-export panel is for everyone.

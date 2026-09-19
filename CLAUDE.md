@@ -293,6 +293,13 @@ These are the standing imperatives. Each links to the reference that explains it
     every width. The grid is gone, not hidden behind a breakpoint: two editors
     meant two code paths and a reviewer on a desktop seeing something the
     author never tested on a phone.
+  - **And the read-only view is the same list.** It was a six-column RAC
+    `Table` in an `overflow-x-auto` scroll region, so the shape the editor had
+    just stopped using survived for the anonymous PILOT — the one actually
+    standing on the hill — while the organiser more likely to be at a desk got
+    the list. `WaypointList` with no `onOpen` IS the read-only mode: no
+    chevron, no row action, the locate pin kept. When a surface has an
+    admin view and a visitor view, fixing one is half the job.
   - **One way to do a thing.** The same pass deleted a "Fill altitudes from
     map" button that duplicated what `Check altitudes` does better, a
     "Show on the map" button in the waypoint sheet that duplicated the list
@@ -367,7 +374,9 @@ These are the standing imperatives. Each links to the reference that explains it
   - The waypoints editor on `/comp/:id/waypoints` stays metric throughout — it
     is the waypoint FILE edited in place. Its fields say "Altitude (m)" /
     "Radius (m)" rather than leave anyone guessing, and the altitude review
-    prints both altitudes with the unit on each.
+    prints both altitudes with the unit on each. A READ-ONLY waypoint row on
+    the same page is the other way round: nobody is editing the file there, it
+    is simply an altitude printed to a reader, so it honours the preference.
 - **A zero altitude is never "missing", in any UI**
   ([docs/waypoint-altitudes.md](docs/waypoint-altitudes.md)). An altitude is
   either KNOWN — any number, 0 included — or ABSENT, which is why
