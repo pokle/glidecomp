@@ -152,9 +152,98 @@ async function editCell(cell: Locator, value: string) {
   await editor.press("Enter");
 }
 
+/**
+ * The page has TWO editors, chosen by width: the Tabulator grid at 64rem and
+ * up, a list of waypoints opening full-screen sheets below it (the grid scrolls
+ * sideways on a phone and hides its own altitude column behind the frozen Code
+ * column — see comp/WaypointList.tsx). Tests that are about editing a waypoint
+ * rather than about either editor go through these, so they mean the same thing
+ * in both projects.
+ */
+/** The editor list's rows, and the review sheet's. Both are RAC GridLists. */
+const editorRows = (page: Page) =>
+  page.getByRole("grid", { name: "Edit waypoints" }).getByRole("row");
+const reviewRows = (page: Page) =>
+  page.getByRole("grid", { name: "Waypoints to look at" }).getByRole("row");
+
+/**
+ * The device-export panel's trigger. Its LABEL depends on the pointer, not on
+ * the editor: a coarse pointer gets hosted links to open in a flight app, a
+ * fine one gets a client-side download menu (WaypointDeviceExport). Tests that
+ * only care that the panel is there match either.
+ */
+const deviceExportButton = (page: Page) =>
+  page.getByRole("button", {
+    name: /Download waypoints|Open waypoints in a flight app/,
+  });
+
+/**
+ * Which editor is on screen — after WAITING for one to arrive.
+ *
+ * Not a bare count(): the grid is lazily imported and builds a tick or two
+ * after mount, so an instant check races it and reports "no grid" on a wide
+ * screen. Waiting on the union of the two selectors settles either way.
+ */
+async function usingGrid(page: Page): Promise<boolean> {
+  const anyRow = page.locator(
+    ".gc-grid .tabulator-row, [aria-label='Edit waypoints'] [role='row']"
+  );
+  await expect(anyRow.first()).toBeVisible({ timeout: 15_000 });
+  return (await page.locator(".gc-grid .tabulator-row").count()) > 0;
+}
+
+async function firstWaypointRow(page: Page): Promise<Locator> {
+  if (await usingGrid(page)) return firstGridRow(page);
+  return editorRows(page).first();
+}
+
+/** The row for one waypoint code, in whichever editor. */
+async function waypointRow(page: Page, code: string): Promise<Locator> {
+  return (await usingGrid(page))
+    ? page.locator('.gc-grid .tabulator-row', { hasText: code }).first()
+    : editorRows(page).filter({ hasText: code }).first();
+}
+
+/** Set one field of the first waypoint, whichever editor is on screen. */
+async function editFirstWaypoint(
+  page: Page,
+  field: "code" | "name" | "coords" | "altitude" | "radius",
+  value: string
+) {
+  if (await usingGrid(page)) {
+    const row = await firstGridRow(page);
+    await editCell(row.locator(`[tabulator-field="${field}"]`), value);
+    return;
+  }
+  const row = await firstWaypointRow(page);
+  await row.click();
+  const sheet = page.getByRole("dialog");
+  const label = {
+    code: "Code",
+    name: "Name",
+    coords: "Coordinates",
+    altitude: "Altitude (m)",
+    radius: "Radius (m)",
+  }[field];
+  await expect(sheet.getByRole("heading", { level: 2 })).toBeVisible();
+  await sheet.getByRole("textbox", { name: label, exact: true }).fill(value);
+  await sheet.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+
+/** What the first waypoint's row shows for a field, in either editor. */
+async function firstWaypointText(page: Page): Promise<string> {
+  const row = await firstWaypointRow(page);
+  return (await row.innerText()).replace(/\s+/g, " ").trim();
+}
+
 test("admin grid: Tabulator builds, edits mirror to state, bad coords block save", async ({
   page,
+  isMobile,
 }) => {
+  // This one is ABOUT the Tabulator grid, which is the wide-screen editor.
+  // The phone's list-and-sheet editor has its own test below.
+  test.skip(!!isMobile, "the Tabulator grid is the wide-screen editor");
   const mutated = trackMutations(page);
 
   const firstRow = await firstGridRow(page);
@@ -192,17 +281,23 @@ test("remove a row and add one via the RAC dialog (nothing saved)", async ({
 }) => {
   const mutated = trackMutations(page);
 
-  const firstRow = await firstGridRow(page);
-  const firstCode = (
-    await firstRow.locator('[tabulator-field="code"]').innerText()
-  ).trim();
+  const firstRow = await firstWaypointRow(page);
+  const firstCode = waypoints[0].code;
+  await expect(firstRow).toContainText(firstCode);
 
-  // Remove the first row: the count line (React state) drops by one.
-  await firstRow.locator('span[title="Remove waypoint"]').click();
+  // Remove the first waypoint: the count line (React state) drops by one.
+  // The grid has a ✕ on the row; the phone editor removes from the sheet,
+  // which is where every other field of that waypoint lives too.
+  if (await usingGrid(page)) {
+    await firstRow.locator('span[title="Remove waypoint"]').click();
+  } else {
+    await firstRow.click();
+    const sheet = page.getByRole("dialog");
+    await sheet.getByRole("button", { name: "Remove this waypoint" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
   await expect(page.getByText(`${waypoints.length - 1} waypoints`)).toBeVisible();
-  await expect(
-    page.locator('.gc-grid .tabulator-row [tabulator-field="code"]').first()
-  ).not.toHaveText(firstCode);
+  await expect(await firstWaypointRow(page)).not.toContainText(firstCode);
 
   // Add a waypoint through the shared RAC dialog. Nothing joins the API until
   // Save — this stays a client-side row.
@@ -218,11 +313,7 @@ test("remove a row and add one via the RAC dialog (nothing saved)", async ({
 
   // Back to the original count, and the grid scrolled the new row into view.
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
-  await expect(
-    page.locator('.gc-grid .tabulator-row [tabulator-field="code"]', {
-      hasText: "E2E1",
-    })
-  ).toBeVisible();
+  await expect(await waypointRow(page, "E2E1")).toBeVisible();
 
   expect(mutated()).toBe(false);
 });
@@ -236,8 +327,7 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
   const original = (await origRes.json()) as { waypoints: Waypoint[] };
 
   try {
-    const firstRow = await firstGridRow(page);
-    await editCell(firstRow.locator('[tabulator-field="name"]'), "E2E Renamed");
+    await editFirstWaypoint(page, "name", "E2E Renamed");
 
     const putDone = page.waitForResponse(
       (r) => r.url().includes("/waypoints") && r.request().method() === "PUT"
@@ -248,12 +338,9 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
     await expect(page.getByText("Unsaved changes")).toBeHidden();
 
-    // A reload proves it persisted (the grid rebuilds from the API).
+    // A reload proves it persisted (the editor rebuilds from the API).
     await page.reload();
-    const reloadedRow = await firstGridRow(page);
-    await expect(reloadedRow.locator('[tabulator-field="name"]')).toHaveText(
-      "E2E Renamed"
-    );
+    await expect(await firstWaypointRow(page)).toContainText("E2E Renamed");
   } finally {
     const restore = await page.request.put(`/api/comp/${compId}/waypoints`, {
       data: { waypoints: original.waypoints },
@@ -264,7 +351,12 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
 
 test("device export: download menu lists every format, QR + swap toggle", async ({
   page,
+  isMobile,
 }) => {
+  // A coarse pointer gets "Open in app" with hosted links instead of the
+  // client-side download menu (WaypointDeviceExport), so the menu this
+  // asserts on is the fine-pointer one.
+  test.skip(!!isMobile, "a coarse pointer gets Open in app, not the download menu");
   const mutated = trackMutations(page);
 
   // Desktop (fine pointer) shows the client-side "Download" menu.
@@ -294,9 +386,7 @@ test("device export: download menu lists every format, QR + swap toggle", async 
 
 test("navigating away from unsaved waypoints is guarded", async ({ page }) => {
   const mutated = trackMutations(page);
-  const firstRow = await firstGridRow(page);
-
-  await editCell(firstRow.locator('[tabulator-field="name"]'), "E2E Unsaved");
+  await editFirstWaypoint(page, "name", "E2E Unsaved");
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
   // Keep editing: the navigation is cancelled and the edit survives.
@@ -309,7 +399,7 @@ test("navigating away from unsaved waypoints is guarded", async ({ page }) => {
   await dialog.getByRole("button", { name: "Keep editing" }).click();
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(/waypoints$/);
-  await expect(firstRow.locator('[tabulator-field="name"]')).toHaveText("E2E Unsaved");
+  await expect(await firstWaypointRow(page)).toContainText("E2E Unsaved");
 
   // Discard: the navigation proceeds and nothing was ever sent to the API.
   await page.getByRole("link", { name: "Competitions" }).first().click();
@@ -365,7 +455,7 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({
     });
 
     // Nothing published: no panel, and the editor's own job is what's left.
-    await expect(page.getByRole("button", { name: "Download waypoints" })).toHaveCount(0);
+    await expect(deviceExportButton(page)).toHaveCount(0);
     await expect(page.getByText("Get these waypoints on your device")).toHaveCount(0);
 
     // Adding a waypoint in the editor does NOT bring it back — only a save does.
@@ -378,10 +468,10 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({
     await dialog.getByRole("button", { name: "Add", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByText("Unsaved changes")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Download waypoints" })).toHaveCount(0);
+    await expect(deviceExportButton(page)).toHaveCount(0);
 
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Download waypoints" })).toBeVisible();
+    await expect(deviceExportButton(page)).toBeVisible();
   } finally {
     const restore = await page.request.put(`/api/comp/${compId}/waypoints`, {
       data: { waypoints: original.waypoints },
@@ -398,10 +488,12 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({
  * 4000 m is chosen to be far above the whole set (the highest Corryong
  * waypoint is under 1000 m), which puts every row past the
  * coordinate-suspicion threshold. That is the point: the flagging, the
- * accept, the narrowing and the way out are what this asserts, and they are
- * the parts a real DEM cannot make deterministic.
+ * accept and the way out are what this asserts, and they are the parts a real
+ * DEM cannot make deterministic.
+ *
+ * The review is a SHEET at every width now, so this runs in both projects.
  */
-test("Check altitudes reviews the set in the grid and accepts one row", async ({
+test("Check altitudes reviews the set in a sheet and accepts one row", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
@@ -410,64 +502,87 @@ test("Check altitudes reviews the set in the grid and accepts one row", async ({
   // 13273 m); the elevation the review shows must be 4000 regardless.
   await stubTerrainElevations(page.context(), 4000, 128);
 
-  await firstGridRow(page);
-  // Before the check the comparison columns are hidden. Tabulator builds them
-  // with the grid (so entering the review costs no rebuild) and keeps their
-  // cells in the DOM, so this is a visibility check rather than a count.
-  const deltaCol = page.locator('.gc-grid .tabulator-col[tabulator-field="delta"]');
-  await expect(deltaCol).toBeHidden();
+  await firstWaypointRow(page);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Check altitudes" }).click();
 
-  // The banner reports the finding, and the whole set is flagged.
-  const banner = page.getByRole("status").filter({ hasText: "to look at" });
-  await expect(banner).toBeVisible({ timeout: 20_000 });
-  await expect(banner).toContainText(`${waypoints.length} waypoints to look at`);
-  await expect(banner).toContainText("check the coordinates first");
-  // Corrections here do not reach into tasks already built — the review says so.
-  await expect(banner).toContainText("Tasks already built keep their own copy");
-
-  // The comparison columns are now in the grid, beside the altitude.
-  await expect(page.locator('.gc-grid .tabulator-col[tabulator-field="mapAlt"]')).toBeVisible();
-  await expect(deltaCol).toBeVisible();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(sheet.getByRole("status")).toContainText(
+    `${waypoints.length} of ${waypoints.length} waypoints to look at`
+  );
+  await expect(sheet).toContainText("check the coordinates");
+  // Corrections here do not reach into tasks already built — the sheet says so.
+  await expect(sheet).toContainText("Tasks already built keep their own copy");
 
   // Biggest disagreement first. Against flat ground that is the LOWEST
-  // waypoint, whichever of them it is if several share the altitude.
+  // waypoint, and its row states BOTH altitudes — the failure this design
+  // replaces was a reader who could only see one of them.
   const lowest = Math.min(...waypoints.map((w) => w.altitude ?? 0));
-  const firstRow = await firstGridRow(page);
-  await expect(firstRow.locator('[tabulator-field="altitude"]')).toHaveText(String(lowest));
+  const topRow = reviewRows(page).first();
+  await expect(topRow).toContainText(`file ${lowest} m`);
+  await expect(topRow).toContainText("map 4000 m");
 
-  // Flat 4000 m ground: the map column reads 4000 and every Δ is negative.
-  const mapCell = firstRow.locator('[tabulator-field="mapAlt"]');
-  await expect(mapCell).toHaveText("4000");
-  const deltaCell = firstRow.locator('[tabulator-field="delta"]');
-  // Past the coordinate threshold the delta carries a visible "!", so the
-  // warning does not live in the colour alone.
-  await expect(deltaCell).toContainText("!");
-  await expect(deltaCell.locator(".gc-cell-alert")).toBeVisible();
-
-  // Accepting one row takes the map's value into the editable altitude cell,
-  // which is an ordinary unsaved edit.
+  // Accepting one row takes the map's value, as an ordinary unsaved edit.
   const saveButton = page.getByRole("button", { name: "Save", exact: true });
   await expect(saveButton).toBeDisabled();
-  await firstRow.locator('[tabulator-field="accept"] span').click();
-  await expect(firstRow.locator('[tabulator-field="altitude"]')).toHaveText("4000");
+  await topRow.getByRole("button", { name: "Use 4000 m" }).click();
+  // The row STAYS in the list rather than vanishing under the thumb, and now
+  // agrees with the map.
+  await expect(topRow).toContainText("file 4000 m");
   await expect(saveButton).toBeEnabled();
-  // Its disagreement is gone, and the row STAYS in the list rather than
-  // vanishing under the cursor.
-  await expect(deltaCell).toHaveText("0");
 
-  // Done puts the grid back, and the accepted edit survives as an unsaved
-  // change. Not asserted on `firstRow`: leaving the review clears the sort,
-  // so the first row is a different waypoint again (and the accepted one,
-  // being the lowest, may not even be among the rows Tabulator renders).
-  await page.getByRole("button", { name: "Done" }).click();
-  await expect(deltaCol).toBeHidden();
-  await expect(page.locator('.gc-grid .tabulator-col[tabulator-field="mapAlt"]')).toBeHidden();
+  // Done closes the sheet and the edit survives as an unsaved change.
+  await sheet.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(saveButton).toBeEnabled();
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
   // A review reads the map, never the API.
+  expect(mutated()).toBe(false);
+});
+
+test("a review row opens one waypoint, with both altitudes and no map", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  await stubTerrainElevations(page.context(), 4000, 128);
+
+  await firstWaypointRow(page);
+  await page.getByRole("button", { name: "Check altitudes" }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const lowest = Math.min(...waypoints.map((w) => w.altitude ?? 0));
+  await reviewRows(page).first().click();
+
+  // One waypoint: both numbers, labelled, and the difference between them.
+  await expect(sheet.getByText("In the file")).toBeVisible();
+  await expect(sheet.getByText("From the map")).toBeVisible();
+  await expect(sheet).toContainText(`${lowest} m`);
+  await expect(sheet).toContainText("4000 m");
+  await expect(sheet).toContainText("apart");
+  // No map in this view (decided deliberately: the page owns one Mapbox
+  // instance and hands it between the pane and the full-screen map).
+  await expect(sheet.locator(".mapboxgl-canvas")).toHaveCount(0);
+
+  // The altitude is editable here, which is the alternative to accepting.
+  // A NumberField commits on blur rather than per keystroke, which is what
+  // tapping anything else in the sheet does anyway.
+  const altInput = sheet.getByRole("textbox", { name: "Altitude (m)" });
+  await altInput.fill("123");
+  await altInput.blur();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+
+  // Back returns to the list, which is the "leave it as it is" path.
+  await sheet.getByRole("button", { name: /^All \d+$/ }).click();
+  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible();
+
   expect(mutated()).toBe(false);
 });
 
@@ -490,33 +605,101 @@ test("the review narrows to the rows worth looking at, and can widen again", asy
   expect(toLookAt).toBeGreaterThan(0);
   expect(agreeing).toBeGreaterThan(0);
 
-  await firstGridRow(page);
+  await firstWaypointRow(page);
   await page.getByRole("button", { name: "Check altitudes" }).click();
 
-  const banner = page.getByRole("status").filter({ hasText: "to look at" });
-  await expect(banner).toBeVisible({ timeout: 20_000 });
-  await expect(banner).toContainText(`${toLookAt} waypoints to look at`);
-  await expect(banner).toContainText(`${agreeing} agree`);
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByRole("status")).toContainText(
+    `${toLookAt} of ${waypoints.length} waypoints to look at`,
+    { timeout: 20_000 }
+  );
+  await expect(sheet).toContainText(`${agreeing} agree`);
 
   // Narrowed by default: the agreeing rows are counted, not listed.
-  const widen = page.getByRole("button", { name: `Show all ${waypoints.length} waypoints` });
+  await expect(reviewRows(page)).toHaveCount(toLookAt);
+  const widen = sheet.getByRole("button", { name: `Show all ${waypoints.length} waypoints` });
   await expect(widen).toBeVisible();
   await widen.click();
-  await expect(
-    page.getByRole("button", { name: `Show only the ${toLookAt} to look at` })
-  ).toBeVisible();
-  // Back to the narrowed list, so "all shown" means the rows to look at.
-  await page.getByRole("button", { name: `Show only the ${toLookAt} to look at` }).click();
-  await expect(widen).toBeVisible();
+  await expect(reviewRows(page)).toHaveCount(waypoints.length);
+  await sheet
+    .getByRole("button", { name: `Show only the ${toLookAt} to look at` })
+    .click();
+  await expect(reviewRows(page)).toHaveCount(toLookAt);
 
   // Accept the lot: every disagreement goes, and it is all one unsaved edit.
   const saveButton = page.getByRole("button", { name: "Save", exact: true });
   await expect(saveButton).toBeDisabled();
-  await page.getByRole("button", { name: "Use the map’s altitude for all shown" }).click();
+  await sheet
+    .getByRole("button", { name: `Use the map’s altitude for all ${toLookAt}` })
+    .click();
   await expect(saveButton).toBeEnabled();
-  await expect(
-    page.getByRole("status").filter({ hasText: "agrees with the map" })
-  ).toBeVisible();
+  await expect(sheet.getByRole("status")).toContainText("agrees with the map");
+
+  expect(mutated()).toBe(false);
+});
+
+/**
+ * The phone editor. Not a variant of the grid test: the whole point is that
+ * there is no grid here, nothing scrolls sideways, and a waypoint's own
+ * altitude is on its row rather than behind a frozen column.
+ */
+test("the phone editor lists waypoints and edits one in a sheet", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "the list-and-sheet editor is the narrow-screen editor");
+  const mutated = trackMutations(page);
+
+  // No Tabulator at this width, and no sideways scrolling anywhere.
+  await expect(page.locator(".tabulator")).toHaveCount(0);
+  const row = await firstWaypointRow(page);
+  await expect(row).toContainText(waypoints[0].code);
+  // The altitude is ON the row — this is the thing the grid could not do.
+  await expect(row).toContainText(
+    waypoints[0].altitude === undefined ? "no altitude" : `${waypoints[0].altitude} m`
+  );
+  const scrolls = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+  );
+  expect(scrolls, "the page must not scroll sideways on a phone").toBe(false);
+
+  // A row opens one waypoint, with every field it has.
+  await row.click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByRole("heading", { name: waypoints[0].code })).toBeVisible();
+  for (const label of ["Code", "Name", "Coordinates"]) {
+    await expect(sheet.getByRole("textbox", { name: label, exact: true })).toBeVisible();
+  }
+  await expect(sheet.getByRole("textbox", { name: "Altitude (m)" })).toBeVisible();
+  await expect(sheet.getByRole("textbox", { name: "Radius (m)" })).toBeVisible();
+
+  // The draft applies on the way out, and the page turns dirty.
+  const saveButton = page.getByRole("button", { name: "Save", exact: true });
+  await expect(saveButton).toBeDisabled();
+  await sheet.getByRole("textbox", { name: "Name", exact: true }).fill("E2E Phone Edit");
+  await sheet.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Phone Edit");
+  await expect(saveButton).toBeEnabled();
+
+  // A radius chip is a one-tap answer to the field beside it.
+  await (await firstWaypointRow(page)).click();
+  await page.getByRole("dialog").getByRole("button", { name: "5 km" }).click();
+  await expect(page.getByRole("dialog").getByRole("textbox", { name: "Radius (m)" })).toHaveValue(
+    "5000"
+  );
+  await page.getByRole("dialog").getByRole("button", { name: "Done", exact: true }).click();
+  // formatCylinderRadius's own spelling, the same one the read-only table uses.
+  await expect(await firstWaypointRow(page)).toContainText("5km");
+
+  // And the risky path: type an altitude, then tap Done WITHOUT blurring
+  // first. The number field commits on the way out or the value is lost.
+  await (await firstWaypointRow(page)).click();
+  const sheet2 = page.getByRole("dialog");
+  await sheet2.getByRole("textbox", { name: "Altitude (m)" }).fill("321");
+  await sheet2.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(await firstWaypointRow(page)).toContainText("321 m");
 
   expect(mutated()).toBe(false);
 });
@@ -540,5 +723,5 @@ test("anonymous visitors get the read-only table, no admin controls", async ({
   await expect(page.locator(".tabulator")).toHaveCount(0);
 
   // The device-export panel is for everyone.
-  await expect(page.getByRole("button", { name: "Download waypoints" })).toBeVisible();
+  await expect(deviceExportButton(page)).toBeVisible();
 });
