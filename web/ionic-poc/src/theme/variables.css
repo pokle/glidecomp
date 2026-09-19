@@ -1,0 +1,467 @@
+/*
+ * GlideComp tokens, mapped onto Ionic's CSS variable contract.
+ * Colours, type and elevation come from web/frontend/src/react/globals.css
+ * so this POC sits next to the RAC kit rather than inventing a new look.
+ */
+
+:root {
+  --gc-background: #f2f2f7;
+  --gc-foreground: #1d1d1f;
+  --gc-card: #ffffff;
+  --gc-muted: #e9e9ee;
+  --gc-muted-foreground: #5f5f65;
+  --gc-primary: #007aff;
+  --gc-primary-foreground: #ffffff;
+  --gc-destructive: #ff3b30;
+  --gc-success: #34c759;
+  --gc-warning: #ff9500;
+  --gc-purple: #af52de;
+  --gc-pink: #ff2d55;
+  --gc-border: rgba(0, 0, 0, 0.12);
+  --gc-elevation-card: 0 1px 2px rgba(0, 0, 0, 0.04),
+    0 6px 16px -4px rgba(0, 0, 0, 0.06);
+  --gc-elevation-raised: 0 2px 4px rgba(0, 0, 0, 0.05),
+    0 12px 28px -8px rgba(0, 0, 0, 0.1);
+  --gc-font:
+    "Atkinson Hyperlegible Next Variable",
+    "Atkinson Hyperlegible Next",
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Display",
+    "SF Pro Text",
+    "Helvetica Neue",
+    Helvetica,
+    Arial,
+    sans-serif;
+  --gc-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  --ion-font-family: var(--gc-font);
+  --ion-background-color: var(--gc-background);
+  --ion-background-color-rgb: 242, 242, 247;
+  --ion-text-color: var(--gc-foreground);
+  --ion-text-color-rgb: 29, 29, 31;
+  --ion-item-background: var(--gc-card);
+  --ion-card-background: var(--gc-card);
+  --ion-toolbar-background: rgba(242, 242, 247, 0.86);
+  --ion-toolbar-color: var(--gc-foreground);
+  --ion-tab-bar-background: rgba(255, 255, 255, 0.86);
+  --ion-tab-bar-color: var(--gc-muted-foreground);
+  --ion-tab-bar-color-selected: var(--gc-primary);
+  --ion-border-color: var(--gc-border);
+
+  --ion-color-primary: #007aff;
+  --ion-color-primary-rgb: 0, 122, 255;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #006ce0;
+  --ion-color-primary-tint: #1a87ff;
+
+  --ion-color-secondary: #5f5f65;
+  --ion-color-secondary-rgb: 95, 95, 101;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #545459;
+  --ion-color-secondary-tint: #6f6f75;
+
+  --ion-color-success: #34c759;
+  --ion-color-success-rgb: 52, 199, 89;
+  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #2eaf4e;
+  --ion-color-success-tint: #48cd6a;
+
+  --ion-color-warning: #ff9500;
+  --ion-color-warning-rgb: 255, 149, 0;
+  --ion-color-warning-contrast: #1d1d1f;
+  --ion-color-warning-contrast-rgb: 29, 29, 31;
+  --ion-color-warning-shade: #e08300;
+  --ion-color-warning-tint: #ffa01a;
+
+  --ion-color-danger: #ff3b30;
+  --ion-color-danger-rgb: 255, 59, 48;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #e0342a;
+  --ion-color-danger-tint: #ff4f45;
+
+  --ion-color-medium: #5f5f65;
+  --ion-color-medium-rgb: 95, 95, 101;
+  --ion-color-medium-contrast: #ffffff;
+  --ion-color-medium-shade: #545459;
+  --ion-color-medium-tint: #6f6f75;
+
+  --ion-color-light: #e9e9ee;
+  --ion-color-light-rgb: 233, 233, 238;
+  --ion-color-light-contrast: #1d1d1f;
+  --ion-color-light-shade: #cdcdce;
+  --ion-color-light-tint: #ebebf0;
+}
+
+html.ion-palette-dark {
+  --gc-background: #000000;
+  --gc-foreground: #f5f5f7;
+  --gc-card: #1c1c1e;
+  --gc-muted: #2c2c2e;
+  --gc-muted-foreground: #a1a1a6;
+  --gc-primary: #0a84ff;
+  --gc-destructive: #ff453a;
+  --gc-success: #30d158;
+  --gc-warning: #ff9f0a;
+  --gc-purple: #bf5af2;
+  --gc-pink: #ff375f;
+  --gc-border: rgba(255, 255, 255, 0.14);
+  --gc-elevation-card: 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 8px 24px -6px rgba(0, 0, 0, 0.4);
+  --gc-elevation-raised: 0 2px 6px rgba(0, 0, 0, 0.55),
+    0 16px 40px -10px rgba(0, 0, 0, 0.5);
+
+  --ion-background-color: #000000;
+  --ion-background-color-rgb: 0, 0, 0;
+  --ion-text-color: #f5f5f7;
+  --ion-text-color-rgb: 245, 245, 247;
+  --ion-item-background: #1c1c1e;
+  --ion-card-background: #1c1c1e;
+  --ion-toolbar-background: rgba(0, 0, 0, 0.72);
+  --ion-toolbar-color: #f5f5f7;
+  --ion-tab-bar-background: rgba(28, 28, 30, 0.92);
+  --ion-tab-bar-color: #a1a1a6;
+  --ion-tab-bar-color-selected: #0a84ff;
+  --ion-border-color: rgba(255, 255, 255, 0.14);
+
+  --ion-color-primary: #0a84ff;
+  --ion-color-primary-rgb: 10, 132, 255;
+  --ion-color-primary-shade: #0974e0;
+  --ion-color-primary-tint: #2390ff;
+
+  --ion-color-danger: #ff453a;
+  --ion-color-success: #30d158;
+  --ion-color-warning: #ff9f0a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--gc-font);
+  background: #1c1c1e;
+  color: var(--gc-foreground);
+}
+
+/* Desktop: sit the app in a phone frame so a laptop still evaluates the
+   mobile-first chrome. Real phones go full-bleed. */
+.poc-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #3a3a40 0%, transparent 55%),
+    #111113;
+}
+
+.poc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 16px;
+  color: #f5f5f7;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.poc-controls strong {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-right: 4px;
+}
+
+.poc-controls .poc-note {
+  color: #a1a1a6;
+  margin-left: auto;
+}
+
+.poc-seg {
+  display: inline-flex;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.poc-seg button {
+  appearance: none;
+  background: transparent;
+  color: #d2d2d7;
+  border: 0;
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.poc-seg button[aria-pressed="true"] {
+  background: #007aff;
+  color: #fff;
+}
+
+.poc-stage {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  min-height: 0;
+}
+
+.poc-phone {
+  position: relative;
+  width: min(390px, 100%);
+  height: min(844px, calc(100dvh - 72px));
+  border-radius: 36px;
+  overflow: hidden;
+  background: var(--gc-background);
+  box-shadow:
+    0 0 0 10px #2c2c2e,
+    0 0 0 12px #000,
+    var(--gc-elevation-raised);
+}
+
+.poc-phone ion-app {
+  position: absolute;
+  inset: 0;
+}
+
+@media (max-width: 520px) {
+  body {
+    background: var(--gc-background);
+  }
+  .poc-shell {
+    background: var(--gc-background);
+  }
+  .poc-controls {
+    color: var(--gc-foreground);
+    border-bottom-color: var(--gc-border);
+  }
+  .poc-controls .poc-note {
+    color: var(--gc-muted-foreground);
+  }
+  .poc-seg {
+    border-color: var(--gc-border);
+  }
+  .poc-seg button {
+    color: var(--gc-foreground);
+  }
+  .poc-stage {
+    padding: 0;
+  }
+  .poc-phone {
+    width: 100%;
+    height: calc(100dvh - 56px);
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--gc-mono);
+}
+
+.muted {
+  color: var(--gc-muted-foreground);
+}
+
+.section-label {
+  font-family: var(--gc-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-muted-foreground);
+  padding: 18px 16px 8px;
+}
+
+.hero-map {
+  height: 220px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.18)),
+    repeating-linear-gradient(
+      45deg,
+      #cfd8c4 0 12px,
+      #c4d0b6 12px 24px
+    );
+}
+
+html.ion-palette-dark .hero-map {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.5)),
+    repeating-linear-gradient(
+      45deg,
+      #2a3324 0 12px,
+      #232b1e 12px 24px
+    );
+}
+
+.hero-map svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.podium {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.podium-slot {
+  background: var(--gc-card);
+  border-radius: 12px;
+  padding: 10px 8px;
+  text-align: center;
+  box-shadow: var(--gc-elevation-card);
+}
+
+.podium-slot.first {
+  outline: 2px solid var(--gc-primary);
+}
+
+.podium-rank {
+  font-size: 12px;
+  color: var(--gc-muted-foreground);
+}
+
+.podium-name {
+  font-weight: 600;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.podium-pts {
+  font-family: var(--gc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+.fact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0 8px;
+}
+
+.explain-arith {
+  font-family: var(--gc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  background: var(--gc-muted);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+
+.chart-frame {
+  background: var(--gc-card);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: var(--gc-elevation-card);
+}
+
+.chart-caption {
+  font-size: 12px;
+  color: var(--gc-muted-foreground);
+  margin-top: 6px;
+}
+
+.kit-block {
+  margin: 0 12px 16px;
+}
+
+.kit-block h2 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 4px 8px;
+}
+
+.poc-phone ion-item ion-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.poc-phone ion-item ion-label h2,
+.poc-phone ion-item ion-label p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poc-phone ion-item ion-note[slot="end"] {
+  flex-shrink: 0;
+  max-width: 5.5rem;
+  text-align: right;
+}
+
+ion-fab-button {
+  --box-shadow: var(--gc-elevation-raised);
+}
+
+.otp-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 0 16px;
+}
+
+.otp-row input {
+  width: 42px;
+  height: 52px;
+  text-align: center;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 10px;
+  border: 1px solid var(--gc-border);
+  background: var(--gc-card);
+  color: var(--gc-foreground);
+}
+
+.drop-zone {
+  border: 2px dashed var(--gc-border);
+  border-radius: 14px;
+  padding: 28px 16px;
+  text-align: center;
+  background: var(--gc-card);
+}
+
+.drop-zone.over {
+  border-color: var(--gc-primary);
+  background: color-mix(in srgb, var(--gc-primary) 8%, var(--gc-card));
+}
+
+.storage-meter {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--gc-muted);
+  overflow: hidden;
+}
+
+.storage-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--gc-primary);
+}
+
+.accent-dot {
+  fill: var(--gc-primary);
+}
+
+.muted-dot {
+  fill: var(--gc-muted-foreground);
+  opacity: 0.35;
+}
