@@ -60,10 +60,10 @@ test("the pilot score map mounts when the page is reached by a link, not just di
 
 test("the waypoints map mounts once the waypoints have loaded", async ({ page }) => {
   await page.goto(`${FRONTEND_URL}/comp/${compId}/waypoints`);
-  // `level: 1` disambiguates the page heading from WaypointDeviceExport's
-  // "Get these waypoints on your device", which Playwright's substring name
-  // match also hits once that panel mounts. comp-waypoints.spec.ts already
-  // scopes it this way.
+  // `level: 1` pins the page heading. The device-export panel's "Get these
+  // waypoints on your device" h2 used to collide with the substring name
+  // match; the panel is a bare toolbar now, but comp-waypoints.spec.ts still
+  // scopes it this way and staying exact costs nothing.
   await expect(page.getByRole("heading", { level: 1, name: "Waypoints" })).toBeVisible();
   await expect(page.getByText(/^Loading map/)).toHaveCount(0, { timeout: 30_000 });
 });
