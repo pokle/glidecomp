@@ -7,20 +7,56 @@
  * inside the Dialog closes it — no context wiring needed. Controlled usage
  * passes isOpen/onOpenChange to Modal, mirroring the Base UI open/onOpenChange
  * pattern the app already uses.
+ *
+ * **Back closes a dialog, exactly as Escape does.** A dialog is React state
+ * rather than a route, so the history stack cannot see it and a back gesture
+ * would skip past it and leave the PAGE — which on a phone is how people
+ * close things. This was wired into {@link ./full-screen-sheet.tsx
+ * FullScreenSheet} first and nowhere else, and the gap had teeth: the
+ * waypoints page's Add-waypoint dialog opens `elevated` over the maximised
+ * map sheet, and because a dialog registered no layer, a Back press there
+ * reached the SHEET's listener as the topmost one — closing the map
+ * underneath and leaving the dialog floating over the page.
+ *
+ * `lib/use-back-dismiss.ts` is shared by both, so layers interleave in the
+ * order they opened whichever kind they are.
  */
+import { useContext } from "react";
 import {
   Dialog as AriaDialog,
   Modal as AriaModal,
   DialogTrigger,
   Heading,
   ModalOverlay,
+  OverlayTriggerStateContext,
   type DialogProps as AriaDialogProps,
   type ModalOverlayProps,
 } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
+import { useBackDismiss } from "@/react/lib/use-back-dismiss";
 import { Button } from "./button";
 import { XIcon } from "lucide-react";
+
+/**
+ * One history entry for as long as this dialog is open.
+ *
+ * A component rather than a hook call in {@link Modal}, because it has to
+ * mount and unmount WITH the dialog: `Modal` itself stays mounted across
+ * open and closed (callers drive `isOpen`), while RAC's `ModalOverlay`
+ * renders its children only while open. Sitting inside the overlay is
+ * therefore what makes "while it is open" true.
+ *
+ * It closes through `OverlayTriggerStateContext`, which the overlay provides
+ * and which resolves to the same state whether the dialog is controlled by
+ * `isOpen`/`onOpenChange` or opened by a `DialogTrigger` — so neither kind of
+ * caller has to pass anything.
+ */
+function BackDismissLayer() {
+  const state = useContext(OverlayTriggerStateContext);
+  useBackDismiss(() => state?.close());
+  return null;
+}
 
 /**
  * Overlay + centered panel. `className` styles the panel (width/height
@@ -63,6 +99,9 @@ export function Modal({
       )}
       {...props}
     >
+      {/* Back behaves as Escape does, so a dialog that has turned the keyboard
+          dismissal off (a must-decide alertdialog) opts out of both. */}
+      {props.isKeyboardDismissDisabled ? null : <BackDismissLayer />}
       <AriaModal
         data-slot="dialog-content"
         className={cn(

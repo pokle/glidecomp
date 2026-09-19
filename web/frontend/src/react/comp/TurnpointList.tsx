@@ -29,10 +29,11 @@ import {
   getOptimizedSegmentDistances,
   type XCTask,
 } from "@glidecomp/engine";
-import { ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronUpIcon, ChevronDownIcon } from "lucide-react";
 import { Badge } from "@/react/rac/badge";
 import { Button } from "@/react/rac/button";
-import { GridList, GridListItem } from "@/react/rac/grid-list";
+import { GridList, GridListItem, RowContent } from "@/react/rac/grid-list";
+import { cn } from "@/react/lib/utils";
 import { rowProblem, type RouteRow } from "./route-editor";
 import {
   formatAltitude,
@@ -163,100 +164,103 @@ export function TurnpointList({
               onAction={reordering ? undefined : () => onOpen(row.id)}
               className={reordering ? "cursor-default" : "cursor-pointer"}
             >
-              {/* The role column, or the position while reordering — the same
-                  16 units of width either way, so rows don't jump when the
-                  mode turns on. */}
-              <div className="flex w-14 shrink-0 flex-col gap-1">
-                {reordering ? (
-                  <span className="text-xs font-medium text-muted-foreground tabular-nums">
-                    {at + 1}.
-                  </span>
-                ) : (
-                  <>
-                    {geo?.role ? (
-                      <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-                        {geo.role}
+              <RowContent
+                leading={
+                  /* The role column, or the position while reordering — the
+                     same 14 units of width either way, so rows don't jump when
+                     the mode turns on. */
+                  <div className="flex w-14 shrink-0 flex-col gap-1">
+                    {reordering ? (
+                      <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                        {at + 1}.
                       </span>
-                    ) : null}
-                    {geo?.isExit ? (
-                      <span title="Crossed flying outward — the route reaches this cylinder from inside, so pilots fly out across it">
-                        <Badge variant="outline">Exit</Badge>
-                      </span>
-                    ) : null}
-                  </>
-                )}
-              </div>
-
-              <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                <span className="truncate font-medium">{name}</span>
-                {problem ? (
-                  <span className="text-xs text-destructive">{problem}</span>
-                ) : (
-                  // Cylinder radius (always) · the waypoint's ground elevation
-                  // (only when the route carries one — a file without an
-                  // altitude reads 0, which is a sea-level claim it never
-                  // made). Both labelled, abbreviated for sighted readers and
-                  // in full for assistive tech, which would otherwise read
-                  // "r." and "amsl" as words.
-                  <span className="truncate text-xs text-muted-foreground tabular-nums">
-                    <span className="sr-only">radius </span>
-                    <span aria-hidden="true">r. </span>
-                    {r.formatted} {r.unit}
-                    {alt ? (
-                      <>
-                        <span aria-hidden="true"> · </span>
-                        <span className="sr-only">, elevation </span>
-                        {alt}
-                        <span className="sr-only"> above sea level</span>
-                        <span aria-hidden="true"> amsl</span>
-                      </>
-                    ) : null}
-                  </span>
-                )}
-              </div>
-
-              {/* The leg stands down while reordering: it is about to change,
-                  and its width is what the two buttons need on a phone. */}
-              {reordering ? (
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    aria-label={`Move ${name} up`}
-                    data-move-row={row.id}
-                    data-move-dir={-1}
-                    isDisabled={at === 0}
-                    onPress={() => onMove(row.id, -1)}
-                  >
-                    <ChevronUpIcon aria-hidden />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    aria-label={`Move ${name} down`}
-                    data-move-row={row.id}
-                    data-move-dir={1}
-                    isDisabled={at === lastRow}
-                    onPress={() => onMove(row.id, 1)}
-                  >
-                    <ChevronDownIcon aria-hidden />
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <span className="shrink-0 text-sm tabular-nums">
-                    {geo?.legM !== undefined ? (
-                      formatDistance(geo.legM, { decimals: 1, prefs: units }).withUnit
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <>
+                        {geo?.role ? (
+                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
+                            {geo.role}
+                          </span>
+                        ) : null}
+                        {geo?.isExit ? (
+                          <span title="Crossed flying outward — the route reaches this cylinder from inside, so pilots fly out across it">
+                            <Badge variant="outline">Exit</Badge>
+                          </span>
+                        ) : null}
+                      </>
                     )}
-                  </span>
-                  <ChevronRightIcon
-                    aria-hidden
-                    className="size-4 shrink-0 text-muted-foreground"
-                  />
-                </>
-              )}
+                  </div>
+                }
+                title={name}
+                detailClassName={cn(
+                  "tabular-nums",
+                  problem && "text-destructive"
+                )}
+                detail={
+                  problem ?? (
+                    // Cylinder radius (always) · the waypoint's ground
+                    // elevation (only when the route carries one — a file
+                    // without an altitude reads 0, which is a sea-level claim
+                    // it never made). Both labelled, abbreviated for sighted
+                    // readers and in full for assistive tech, which would
+                    // otherwise read "r." and "amsl" as words.
+                    <>
+                      <span className="sr-only">radius </span>
+                      <span aria-hidden="true">r. </span>
+                      {r.formatted} {r.unit}
+                      {alt ? (
+                        <>
+                          <span aria-hidden="true"> · </span>
+                          <span className="sr-only">, elevation </span>
+                          {alt}
+                          <span className="sr-only"> above sea level</span>
+                          <span aria-hidden="true"> amsl</span>
+                        </>
+                      ) : null}
+                    </>
+                  )
+                }
+                action={
+                  /* The leg stands down while reordering: it is about to
+                     change, and its width is what the two buttons need on a
+                     phone. */
+                  reordering ? (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        aria-label={`Move ${name} up`}
+                        data-move-row={row.id}
+                        data-move-dir={-1}
+                        isDisabled={at === 0}
+                        onPress={() => onMove(row.id, -1)}
+                      >
+                        <ChevronUpIcon aria-hidden />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        aria-label={`Move ${name} down`}
+                        data-move-row={row.id}
+                        data-move-dir={1}
+                        isDisabled={at === lastRow}
+                        onPress={() => onMove(row.id, 1)}
+                      >
+                        <ChevronDownIcon aria-hidden />
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="shrink-0 text-sm tabular-nums">
+                      {geo?.legM !== undefined ? (
+                        formatDistance(geo.legM, { decimals: 1, prefs: units }).withUnit
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </span>
+                  )
+                }
+                // In reorder mode the row opens nothing, so it says nothing.
+                chevron={!reordering}
+              />
             </GridListItem>
           );
         }}

@@ -100,14 +100,53 @@ function xmlEscape(s: string): string {
     .replace(/'/g, '&apos;');
 }
 
+/** Feet → metres, and OziExplorer's "no altitude recorded" sentinel. */
+const FEET_TO_METRES = 0.3048;
+const OZI_NO_ALTITUDE = -777;
+
 /** Quote a CSV field if it contains a comma, quote or newline. */
 function csvField(s: string): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Altitude as whole metres — the file formats all carry integer elevation. */
+/**
+ * Altitude as whole metres, with 0 standing in for an unknown one.
+ *
+ * For the formats whose elevation field is POSITIONAL — FS $FormatGEO and
+ * $FormatUTM (the long name follows the number) and KML (the third value of
+ * a coordinate triple) — there is no way to say "unknown", so 0 is the only
+ * available answer. Every other writer here uses {@link altMetersOrBlank},
+ * {@link altFeetOrSentinel} or omits the element, so the absence survives a
+ * round-trip rather than becoming a waypoint at sea level.
+ */
 function altMeters(w: WaypointFileRecord): number {
-  return Math.round(Number.isFinite(w.altitude) ? w.altitude : 0);
+  return Math.round(Number.isFinite(w.altitude) ? (w.altitude as number) : 0);
+}
+
+/** Known altitude in whole metres, or undefined when the record has none. */
+function knownAltMeters(w: WaypointFileRecord): number | undefined {
+  return Number.isFinite(w.altitude) ? Math.round(w.altitude as number) : undefined;
+}
+
+/**
+ * Whole metres, or an EMPTY field when the altitude is unknown — for the
+ * delimited formats whose elevation column may legitimately be blank (SeeYou
+ * .cup, our own CSV). Both read back as undefined, so nothing is invented.
+ */
+function altMetersOrBlank(w: WaypointFileRecord): string {
+  const m = knownAltMeters(w);
+  return m === undefined ? '' : String(m);
+}
+
+/**
+ * OziExplorer field 14 in FEET — the unit the format defines — or its -777
+ * "no altitude recorded" sentinel when we have none. Writing metres here is
+ * the bug that made every re-imported altitude 3.28x too high; see
+ * parseWaypointsWPT in ./waypoint-files.
+ */
+function altFeetOrSentinel(w: WaypointFileRecord): string {
+  const m = knownAltMeters(w);
+  return m === undefined ? String(OZI_NO_ALTITUDE) : String(Math.round(m / FEET_TO_METRES));
 }
 
 /** Radius in metres, defaulting to 400 only when absent/non-finite (0 is kept). */
@@ -147,7 +186,9 @@ export function toSeeYouCup(waypoints: WaypointFileRecord[]): string {
         '',
         lat,
         lon,
-        `${altMeters(w)}.0m`,
+        // A blank elev column is legal and reads back as "unknown"; 0.0m
+        // would read back as a waypoint at sea level.
+        altMetersOrBlank(w) === '' ? '' : `${altMetersOrBlank(w)}.0m`,
         '1',
         '',
         '',
@@ -163,9 +204,11 @@ export function toSeeYouCup(waypoints: WaypointFileRecord[]): string {
 export function toGPX(waypoints: WaypointFileRecord[]): string {
   const pts = waypoints
     .map((w) => {
+      const ele = altMetersOrBlank(w);
       const parts = [
         `  <wpt lat="${dec(w.latitude)}" lon="${dec(w.longitude)}">`,
-        `    <ele>${altMeters(w)}</ele>`,
+        // <ele> is optional in GPX 1.1 — leave it out rather than claim 0.
+        ...(ele === '' ? [] : [`    <ele>${ele}</ele>`]),
         `    <name>${xmlEscape(w.code)}</name>`,
         `    <cmt>${xmlEscape(w.name || w.code)}</cmt>`,
         `    <desc>${xmlEscape(w.name || w.code)}</desc>`,
@@ -227,7 +270,8 @@ export function toCompeGPS(waypoints: WaypointFileRecord[]): string {
 export function toOziExplorer(waypoints: WaypointFileRecord[]): string {
   const lines = ['OziExplorer Waypoint File Version 1.1', 'WGS 84', 'Reserved 2', 'Reserved 3'];
   waypoints.forEach((w, i) => {
-    // field: num,code,lat,lon,date,sym,...,longName(10),...,radius(13),elev(14)...
+    // field: num,code,lat,lon,date,sym,...,longName(10),...,radius(13),
+    // elev(14) — and elev is in FEET, per the format.
     lines.push(
       [
         i + 1,
@@ -246,7 +290,7 @@ export function toOziExplorer(waypoints: WaypointFileRecord[]): string {
         '0',
         '0',
         String(radiusMeters(w)),
-        String(altMeters(w)),
+        altFeetOrSentinel(w),
         '6',
         '0',
         '17',
@@ -298,7 +342,8 @@ export function toCSV(waypoints: WaypointFileRecord[]): string {
         csvField(w.name || w.code),
         w.latitude.toFixed(6),
         w.longitude.toFixed(6),
-        String(altMeters(w)),
+        // Header-driven, so an empty altitude reads back as unknown.
+        altMetersOrBlank(w),
         String(radiusMeters(w)),
       ].join(',')
     );
@@ -398,7 +443,9 @@ export function encodeTurnpointZ(w: WaypointFileRecord): string {
   // Preserve an explicit radius of 0 (real waypoint QRs use it for points with
   // no cylinder); only fall back to 400 when the value is missing/non-finite.
   const radius = Number.isFinite(w.radius) ? w.radius : DEFAULT_WAYPOINT_RADIUS_M;
-  const altitude = Number.isFinite(w.altitude) ? w.altitude : 0;
+  // The packed z string has a fixed shape, so an unknown altitude can only
+  // be encoded as 0 — there is no absent value in the format.
+  const altitude = knownAltMeters(w) ?? 0;
   return (
     encodePolylineValue(Math.round(w.longitude * 1e5)) +
     encodePolylineValue(Math.round(w.latitude * 1e5)) +

@@ -159,10 +159,8 @@ function FullScreenChart({
     <>
       <div className="flex items-start justify-between gap-3">
         <h2 className="min-w-0 truncate text-base font-semibold">{metric.label}</h2>
-        {/* autoFocus so a keyboard user lands on the way out rather than on
-            the dialog container, which is what RAC would focus otherwise.
-            Escape works too, but it is not a discoverable affordance (§4.1)
-            and this sheet has no tap-anywhere target to fall back on. */}
+        {/* The way out, autoFocused — see the note on FullScreenSheet. This
+            sheet has no tap-anywhere target to fall back on either. */}
         <Button autoFocus variant="outline" size="sm" onPress={onClose}>
           Close
         </Button>

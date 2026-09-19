@@ -1207,9 +1207,7 @@ export function ThermalsPanel({
               {formatTimeOfDay(new Date(selected.startMs).toISOString(), tz)} —{" "}
               {selected.pilotCount} pilots
             </h2>
-            {/* autoFocus so a keyboard user lands on the way out rather than
-                on the dialog container (same reasoning as the metric chart's
-                sheet — Escape alone is not discoverable, §4.1). */}
+            {/* The way out, autoFocused — see the note on FullScreenSheet. */}
             <Button
               autoFocus
               variant="outline"

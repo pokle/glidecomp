@@ -244,20 +244,30 @@ function pngChunk(type: string, data: Buffer): Buffer {
  * 0 m is the 24-bit value 100000 — RGB(1, 134, 160). Built rather than
  * committed because a solid 512x512 PNG deflates to well under a kilobyte and
  * a generated one can never drift from the comment explaining it.
+ *
+ * **RGBA, with a settable alpha, because the real tiles are RGBA** and that is
+ * not a detail: Mapbox marks no-data — including the sea past a coastline —
+ * with partial alpha, and reading such a pixel back off a canvas destroys the
+ * RGB payload it carries (the red channel is 6553.6 m a step, so the error is
+ * kilometres). This fixture used to write colour type 2, with no alpha at all,
+ * which is exactly why the suite was green while a coastal waypoint on the
+ * real site read 13273 m. Leave the default opaque; pass an alpha to reproduce
+ * the coastal case.
  */
-function flatTerrainRgbPng(metres = 0): Buffer {
+function flatTerrainRgbPng(metres = 0, alpha = 255): Buffer {
   const size = 512;
   const v = Math.round((metres + 10000) / 0.1);
   const r = (v >> 16) & 0xff;
   const g = (v >> 8) & 0xff;
   const b = v & 0xff;
 
-  // Each scanline is a filter byte (0 = none) followed by RGB triples.
-  const row = Buffer.alloc(1 + size * 3);
+  // Each scanline is a filter byte (0 = none) followed by RGBA quadruples.
+  const row = Buffer.alloc(1 + size * 4);
   for (let x = 0; x < size; x++) {
-    row[1 + x * 3] = r;
-    row[2 + x * 3] = g;
-    row[3 + x * 3] = b;
+    row[1 + x * 4] = r;
+    row[2 + x * 4] = g;
+    row[3 + x * 4] = b;
+    row[4 + x * 4] = alpha;
   }
   const raw = Buffer.concat(Array.from({ length: size }, () => row));
 
@@ -265,7 +275,7 @@ function flatTerrainRgbPng(metres = 0): Buffer {
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // colour type: truecolour RGB
+  ihdr[9] = 6; // colour type: truecolour RGB + alpha, as Mapbox ships
   ihdr[10] = 0; // deflate
   ihdr[11] = 0; // adaptive filtering
   ihdr[12] = 0; // no interlace
@@ -280,6 +290,40 @@ function flatTerrainRgbPng(metres = 0): Buffer {
 
 /** Built once per process — it is the same bytes for every tile. */
 let flatDemPng: Buffer | null = null;
+
+/**
+ * Answer every Terrain-RGB request with flat ground at `metres`, for a test
+ * that drives `analysis/elevation.ts` over a whole waypoint SET.
+ *
+ * The recorded terrain tiles (dispositionFor: "record") are the right thing
+ * for a handful of known points, but a set of 145 waypoints spans far more
+ * tiles than are worth committing, and in replay mode an unrecorded one is
+ * aborted — so the feature under test would report "could not read terrain"
+ * for reasons that have nothing to do with it. A known flat elevation makes
+ * the comparison arithmetic exact instead: every waypoint's disagreement is
+ * `its altitude - metres`, so a test can say which rows must be flagged.
+ *
+ * Install it INSTEAD of installMapbox (it needs no recordings), or after it
+ * to take the terrain family over.
+ *
+ * `alpha` below 255 is the coastal case: Mapbox marks no-data that way, and a
+ * tile read through a canvas loses the elevation there. The elevation a test
+ * asserts must not change with it — that is the point of passing it.
+ */
+export async function stubTerrainElevations(
+  context: BrowserContext,
+  metres: number,
+  alpha = 255
+): Promise<void> {
+  const body = flatTerrainRgbPng(metres, alpha);
+  await context.route("**/v4/mapbox.terrain-rgb/**", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "content-type": "image/png", "access-control-allow-origin": "*" },
+      body,
+    })
+  );
+}
 
 // --- the handler -------------------------------------------------------------
 
