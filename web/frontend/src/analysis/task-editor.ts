@@ -44,9 +44,9 @@ export interface TaskEditor {
 // ---------------------------------------------------------------------------
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Turnpoint' },
   { value: 'TAKEOFF', label: 'Takeoff' },
   { value: 'SSS', label: 'Start Speed Section (SSS)' },
+  { value: '', label: 'Turnpoint' },
   { value: 'ESS', label: 'End Speed Section (ESS)' },
 ];
 

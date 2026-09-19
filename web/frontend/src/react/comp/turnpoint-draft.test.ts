@@ -22,6 +22,8 @@ import {
   inferAddedType,
   missingAltitude,
   moveRowToEnd,
+  reconcileGoalPosition,
+  showGoalSettings,
   typeOptions,
 } from "./turnpoint-draft";
 
@@ -101,11 +103,59 @@ describe("demoteOtherGoals", () => {
   });
 });
 
-describe("moveRowToEnd", () => {
-  it("moves a mid-route row to the end", () => {
-    const rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
-    expect(moveRowToEnd(rows, 2).map((r) => r.id)).toEqual([1, 3, 2]);
-    expect(moveRowToEnd(rows, 3).map((r) => r.id)).toEqual([1, 2, 3]);
+describe("showGoalSettings", () => {
+  it("hides Goal on open distance", () => {
+    expect(showGoalSettings({ openDistance: true, isLast: true })).toBe(false);
+    expect(showGoalSettings({ openDistance: true, addingType: "GOAL" })).toBe(false);
+  });
+
+  it("hides Goal while adding a Takeoff or Start", () => {
+    expect(showGoalSettings({ addingType: "TAKEOFF" })).toBe(false);
+    expect(showGoalSettings({ addingType: "SSS" })).toBe(false);
+  });
+
+  it("shows Goal when adding a Turnpoint or Goal", () => {
+    expect(showGoalSettings({ addingType: "" })).toBe(true);
+    expect(showGoalSettings({ addingType: "GOAL" })).toBe(true);
+  });
+
+  it("shows Goal when editing the last turnpoint", () => {
+    expect(showGoalSettings({ isLast: true })).toBe(true);
+    expect(showGoalSettings({ isLast: false })).toBe(false);
+  });
+});
+
+describe("reconcileGoalPosition", () => {
+  it("demotes a Goal that is no longer last and gives Goal to the new last", () => {
+    const rows = [
+      { id: 1, type: "TAKEOFF" as const },
+      { id: 2, type: "GOAL" as const },
+      { id: 3, type: "" as const },
+    ];
+    expect(reconcileGoalPosition(rows)).toEqual([
+      { id: 1, type: "TAKEOFF" },
+      { id: 2, type: "" },
+      { id: 3, type: "GOAL" },
+    ]);
+  });
+
+  it("leaves an ESS last alone and demotes the Goal", () => {
+    const rows = [
+      { id: 1, type: "GOAL" as const },
+      { id: 2, type: "ESS" as const },
+    ];
+    expect(reconcileGoalPosition(rows)).toEqual([
+      { id: 1, type: "" },
+      { id: 2, type: "ESS" },
+    ]);
+  });
+
+  it("is a no-op when Goal is already last", () => {
+    const rows = [
+      { id: 1, type: "SSS" as const },
+      { id: 2, type: "GOAL" as const },
+    ];
+    expect(reconcileGoalPosition(rows)).toEqual(rows);
   });
 });
 

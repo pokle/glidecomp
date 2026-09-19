@@ -522,6 +522,7 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await page.getByRole("alertdialog").getByRole("button", { name: "Clear" }).click();
   await page.getByRole("button", { name: "Add turnpoint" }).click();
   await expect(add.getByRole("radio", { name: "Takeoff" })).toBeChecked();
+  await expect(add.getByRole("heading", { name: "Goal" })).toHaveCount(0);
   await add.getByRole("textbox", { name: "Code" }).fill("ONE");
   await add.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 147.8");
   await add.getByRole("button", { name: "Done" }).click();
@@ -530,6 +531,10 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await expect(
     add.getByRole("radio", { name: "Start Speed Section (SSS)", exact: true })
   ).toBeChecked();
+  await expect(add.getByRole("heading", { name: "Goal" })).toHaveCount(0);
+  await expect(
+    add.getByRole("heading", { name: "Start Speed Section (SSS)" })
+  ).toBeVisible();
 });
 
 test("Quick entry rebuilds the route without losing what the line can't say", async ({

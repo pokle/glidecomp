@@ -79,6 +79,53 @@ export function moveRowToEnd<T extends { id: number }>(rows: T[], id: number): T
   return next;
 }
 
+/**
+ * Whether the turnpoint sheet shows Goal settings (and the Type option
+ * "Turnpoint (last is goal)").
+ *
+ * The last turnpoint of a race is the scoring goal. A brand-new Takeoff or
+ * Start being appended is not treated as that yet — those sheets are about
+ * launch and start, and Goal is picked later (or appears once that row is
+ * last and you open it again).
+ */
+export function showGoalSettings(opts: {
+  openDistance?: boolean;
+  /** Add flow: the Type this new row starts as. */
+  addingType?: RouteRow["type"];
+  /** Edit flow: this row is currently last. */
+  isLast?: boolean;
+}): boolean {
+  if (opts.openDistance) return false;
+  if (opts.addingType !== undefined) {
+    return opts.addingType === "" || opts.addingType === "GOAL";
+  }
+  return !!opts.isLast;
+}
+
+/**
+ * After a reorder: Goal stays last.
+ *
+ * A Goal that is no longer last becomes a Turnpoint. If the new last is an
+ * ordinary turnpoint, it takes Goal — the same as appending after a Goal.
+ * TAKEOFF / SSS / ESS keep their type; those are not promoted into Goal.
+ */
+export function reconcileGoalPosition<T extends { id: number; type: RouteRow["type"] }>(
+  rows: T[]
+): T[] {
+  if (rows.length === 0) return rows;
+  const last = rows[rows.length - 1];
+  const goal = rows.find((r) => r.type === "GOAL");
+  if (!goal) return rows;
+  if (goal.id === last.id) return demoteOtherGoals(rows, last.id);
+  if (last.type === "") {
+    return demoteOtherGoals(
+      rows.map((r) => (r.id === last.id ? { ...r, type: "GOAL" as T["type"] } : r)),
+      last.id
+    );
+  }
+  return demoteOtherGoals(rows, -1);
+}
+
 /** Short radius label for a preset chip: 400 → "400", 1000 → "1 km". */
 export function radiusChipLabel(m: number): string {
   return m >= 1000 ? `${m / 1000} km` : `${m}`;
@@ -118,7 +165,6 @@ export function blankDraft(type: RouteRow["type"] = ""): TurnpointDraft {
     altitude: "",
   };
 }
-
 
 /**
  * A competition waypoint's details as a turnpoint draft.

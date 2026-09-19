@@ -74,13 +74,13 @@ export function TurnpointSheet({
   onDelete?: () => void;
   onClose: () => void;
   /**
-   * Task-level start (SSS) controls. Shown when this turnpoint's type is
-   * Start (SSS) — including after the Type list is changed in this sheet.
+   * Task-level start controls. Shown when this turnpoint's type is SSS —
+   * including after the Type list is changed in this sheet.
    */
   startSettings?: ReactNode;
   /**
    * Task-level goal controls. Shown when {@link showGoal} is set (this
-   * turnpoint is last on the route, or is being appended).
+   * turnpoint is last, or is being appended as the new last after a Goal).
    */
   goalSettings?: ReactNode;
   showGoal?: boolean;

@@ -28,12 +28,12 @@
  *
  * The rest is unchanged: every derived value (leg distances, crossing
  * direction, the map preview) is a useMemo over `rows` rather than an
- * imperative write-back; Start (SSS) gates and goal configuration are edited
- * on the start and goal turnpoints (and still in collapsible sections below
- * the list) so a whole .xctsk is editable in one place; routes can be imported
- * from a .xctsk file or an XContest task code, and exported to a .xctsk file.
- * Saving PATCHes the task's xctsk (the server validates strictly and
- * audit-logs the change).
+ * imperative write-back; Start Speed Section gates and goal configuration are
+ * edited on the start and goal turnpoints (and still in collapsible sections
+ * below the list) so a whole .xctsk is editable in one place; routes can be
+ * imported from a .xctsk file or an XContest task code, and exported to a
+ * .xctsk file. Saving PATCHes the task's xctsk (the server validates strictly
+ * and audit-logs the change).
  *
  * AddWaypointDialog stays a plain dialog over this page: it is a short
  * single-purpose form, and it is shared with the competition waypoints page,
@@ -88,12 +88,6 @@ import { QuickEntrySheet } from "./QuickEntrySheet";
 import { TurnpointList } from "./TurnpointList";
 import { parseTimeToken, quickTaskText, type QuickTaskApply } from "./quick-task";
 import { reconcileRoute } from "./route-reconcile";
-
-// Lazy so the map library (mapbox) and its CSS load only when the editor
-// opens and never enter the SSR'd task-detail bundle.
-const RouteMap = lazy(() => import("./RouteMap"));
-
-
 import {
   NEW_ROW_RADIUS,
   blankDraft,
@@ -102,11 +96,17 @@ import {
   inferAddedType,
   missingAltitude,
   moveRowToEnd,
+  reconcileGoalPosition,
+  showGoalSettings,
   type TurnpointDraft,
 } from "./turnpoint-draft";
 import { TurnpointSheet } from "./TurnpointSheet";
 import { StartSettings } from "./StartSettings";
 import { GoalSettings } from "./GoalSettings";
+
+// Lazy so the map library (mapbox) and its CSS load only when the editor
+// opens and never enter the SSR'd task-detail bundle.
+const RouteMap = lazy(() => import("./RouteMap"));
 
 export function RouteEditor({
   compId,
@@ -367,16 +367,20 @@ export function RouteEditor({
 
   /** Patch one turnpoint in place (the turnpoint sheet's Done). */
   const updateTurnpoint = useCallback((id: number, draft: TurnpointDraft) => {
-    setRows((prev) => {
-      let next = prev.map((r) =>
-        r.id === id ? { ...r, ...draft, leg: null, dir: null } : r
-      );
-      if (draft.type === "GOAL") {
-        next = demoteOtherGoals(next, id);
-        next = moveRowToEnd(next, id);
+    const prev = rowsRef.current;
+    const wasLast = prev[prev.length - 1]?.id === id;
+    let next = prev.map((r) =>
+      r.id === id ? { ...r, ...draft, leg: null, dir: null } : r
+    );
+    if (draft.type === "GOAL") {
+      next = demoteOtherGoals(next, id);
+      next = moveRowToEnd(next, id);
+      if (!wasLast) {
+        const name = String(draft.name).trim() || "Turnpoint";
+        setMoveNote(`${name} is now last — the goal`);
       }
-      return next;
-    });
+    }
+    setRows(next);
   }, []);
 
   /** Drop one turnpoint (the turnpoint sheet's Delete). */
@@ -401,8 +405,9 @@ export function RouteEditor({
     if (at < 0 || to < 0 || to >= prev.length) return;
     const next = [...prev];
     [next[at], next[to]] = [next[to], next[at]];
-    setRows(next);
-    const name = String(next[to].name).trim() || "Turnpoint";
+    const reconciled = reconcileGoalPosition(next);
+    setRows(reconciled);
+    const name = String(reconciled[to].name).trim() || "Turnpoint";
     setMoveNote(`${name} moved to ${to + 1} of ${next.length}`);
     setMoved((m) => ({ rowId: id, delta, nonce: (m?.nonce ?? 0) + 1 }));
   }, []);
@@ -860,6 +865,7 @@ export function RouteEditor({
       timeZoneLabel={timeZoneLabel}
     />
   );
+  const addedType = inferAddedType(rows, { openDistance });
 
   return (
     // Wider than a settings form on purpose: the map and the turnpoint grid
@@ -1002,6 +1008,7 @@ export function RouteEditor({
                 looks. */}
             <Disclosure
               title="Start Speed Section (SSS)"
+              headingLevel={2}
               badge={
                 <span className="text-xs font-normal text-muted-foreground">
                   {startConfigSummary(
@@ -1023,7 +1030,9 @@ export function RouteEditor({
               />
             </Disclosure>
 
-            <Disclosure title="Goal">{goalSettings}</Disclosure>
+            <Disclosure title="Goal" headingLevel={2}>
+              {goalSettings}
+            </Disclosure>
           </>
         ) : null}
 
@@ -1156,7 +1165,7 @@ export function RouteEditor({
         {addingTurnpoint ? (
           <TurnpointSheet
             mode="add"
-            initial={blankDraft(inferAddedType(rows, { openDistance }))}
+            initial={blankDraft(addedType)}
             waypointRecords={waypointRecords}
             wpLoading={wpLoading}
             compId={compId}
@@ -1164,7 +1173,10 @@ export function RouteEditor({
             onClose={() => setAddingTurnpoint(false)}
             startSettings={openDistance ? undefined : startSettings}
             goalSettings={openDistance ? undefined : goalSettings}
-            showGoal={!openDistance}
+            showGoal={showGoalSettings({
+              openDistance,
+              addingType: addedType,
+            })}
           />
         ) : null}
 
@@ -1190,9 +1202,10 @@ export function RouteEditor({
             onClose={() => setEditingRowId(null)}
             startSettings={openDistance ? undefined : startSettings}
             goalSettings={openDistance ? undefined : goalSettings}
-            showGoal={
-              !openDistance && rows[rows.length - 1]?.id === editingRow.id
-            }
+            showGoal={showGoalSettings({
+              openDistance,
+              isLast: rows[rows.length - 1]?.id === editingRow.id,
+            })}
           />
         ) : null}
 
