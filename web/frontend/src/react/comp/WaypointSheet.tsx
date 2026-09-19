@@ -22,7 +22,6 @@ import { Trash2Icon } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { NumberField, TextField } from "@/react/rac/field";
-import { formatCylinderRadius } from "../lib/units";
 import { parseCoords } from "./route-editor";
 import { RADIUS_PRESETS, radiusChipLabel } from "./turnpoint-draft";
 
@@ -142,10 +141,4 @@ export function WaypointSheet({
       </div>
     </FullScreenSheet>
   );
-}
-
-/** One waypoint's radius for a list row — always metric, never a preference. */
-export function radiusLabel(radius: string): string {
-  const n = Number(radius);
-  return Number.isFinite(n) ? formatCylinderRadius(n).withUnit : radius;
 }

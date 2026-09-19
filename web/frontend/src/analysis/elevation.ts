@@ -207,36 +207,42 @@ export async function decodeTerrainPng(bytes: Uint8Array): Promise<TerrainPixels
 
   // Undo the per-row filters (PNG spec §9.2). Each row is prefixed with its
   // filter type and predicted from the bytes to its left (a) and above (b).
+  //
+  // The filter is chosen once per ROW rather than per byte: a `switch` inside
+  // the inner loop would re-decide it a million times a tile, and reads as
+  // though it could change mid-row.
   const stride = width * channels;
   if (raw.length < height * (stride + 1)) throw new Error('PNG data is short');
   const out = new Uint8Array(height * stride);
   let src = 0;
   for (let y = 0; y < height; y++) {
     const filter = raw[src++];
+    if (filter > 4) throw new Error(`Unknown PNG row filter ${filter}`);
     const rowStart = y * stride;
     const prevStart = rowStart - stride;
     for (let x = 0; x < stride; x++) {
       const value = raw[src + x];
+      if (filter === 0) {
+        out[rowStart + x] = value & 0xff;
+        continue;
+      }
       const a = x >= channels ? out[rowStart + x - channels] : 0;
       const b = y > 0 ? out[prevStart + x] : 0;
-      const c = x >= channels && y > 0 ? out[prevStart + x - channels] : 0;
-      let restored: number;
-      switch (filter) {
-        case 0: restored = value; break;
-        case 1: restored = value + a; break;
-        case 2: restored = value + b; break;
-        case 3: restored = value + ((a + b) >> 1); break;
-        case 4: {
-          const p = a + b - c;
-          const pa = Math.abs(p - a);
-          const pb = Math.abs(p - b);
-          const pc = Math.abs(p - c);
-          restored = value + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c);
-          break;
-        }
-        default: throw new Error(`Unknown PNG row filter ${filter}`);
+      let predicted: number;
+      if (filter === 1) predicted = a;
+      else if (filter === 2) predicted = b;
+      else if (filter === 3) predicted = (a + b) >> 1;
+      else {
+        // Paeth: whichever of the three neighbours the linear prediction
+        // a + b - c lands nearest to.
+        const c = x >= channels && y > 0 ? out[prevStart + x - channels] : 0;
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        predicted = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
       }
-      out[rowStart + x] = restored & 0xff;
+      out[rowStart + x] = (value + predicted) & 0xff;
     }
     src += stride;
   }

@@ -254,6 +254,105 @@ describe("decodeTerrainPng", () => {
     }
   });
 
+  /**
+   * Every PNG row filter, in one image.
+   *
+   * The recorded Mapbox tiles below already exercise all five — a real encoder
+   * picks a filter per row — but they prove it only in aggregate, as a range
+   * that would move. This one names the filter that broke: each row of a 5-row
+   * image is encoded with a different type over a known pattern, so a fault in
+   * Paeth alone fails as Paeth alone.
+   */
+  it("unfilters all five PNG row filter types", async () => {
+    const width = 6;
+    const channels = 4;
+    const stride = width * channels;
+    const height = 5;
+
+    // The image, before filtering: a pattern that varies both ways, so a
+    // filter predicting from the left and one predicting from above cannot
+    // accidentally agree.
+    const want = new Uint8Array(height * stride);
+    for (let y = 0; y < height; y++) {
+      for (let i = 0; i < stride; i++) want[y * stride + i] = (y * 37 + i * 11 + 5) & 0xff;
+    }
+
+    // Filter it: row y uses type y (0..4), per PNG spec §9.2.
+    const raw = new Uint8Array(height * (stride + 1));
+    for (let y = 0; y < height; y++) {
+      const filter = y;
+      const rowStart = y * (stride + 1);
+      raw[rowStart] = filter;
+      for (let i = 0; i < stride; i++) {
+        const a = i >= channels ? want[y * stride + i - channels] : 0;
+        const b = y > 0 ? want[(y - 1) * stride + i] : 0;
+        const c = i >= channels && y > 0 ? want[(y - 1) * stride + i - channels] : 0;
+        let predicted = 0;
+        if (filter === 1) predicted = a;
+        else if (filter === 2) predicted = b;
+        else if (filter === 3) predicted = (a + b) >> 1;
+        else if (filter === 4) {
+          const p = a + b - c;
+          const pa = Math.abs(p - a);
+          const pb = Math.abs(p - b);
+          const pc = Math.abs(p - c);
+          predicted = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+        }
+        raw[rowStart + 1 + i] = (want[y * stride + i] - predicted) & 0xff;
+      }
+    }
+
+    const ihdr = new Uint8Array(13);
+    new DataView(ihdr.buffer).setUint32(0, width);
+    new DataView(ihdr.buffer).setUint32(4, height);
+    ihdr[8] = 8;
+    ihdr[9] = 6; // RGBA
+    const parts = [
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", ihdr),
+      chunk("IDAT", await deflate(raw)),
+      chunk("IEND", new Uint8Array(0)),
+    ];
+    const png = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+    let at = 0;
+    for (const part of parts) {
+      png.set(part, at);
+      at += part.length;
+    }
+
+    const pixels = await decodeTerrainPng(png);
+    expect(pixels.width).toBe(width);
+    expect(pixels.height).toBe(height);
+    for (let y = 0; y < height; y++) {
+      expect(
+        Array.from(pixels.data.slice(y * stride, (y + 1) * stride)),
+        `row ${y}, filter ${y}`
+      ).toEqual(Array.from(want.slice(y * stride, (y + 1) * stride)));
+    }
+  });
+
+  it("rejects a row filter type that is not one of the five", async () => {
+    const raw = new Uint8Array([9, 0, 0, 0, 0]); // filter 9 does not exist
+    const ihdr = new Uint8Array(13);
+    new DataView(ihdr.buffer).setUint32(0, 1);
+    new DataView(ihdr.buffer).setUint32(4, 1);
+    ihdr[8] = 8;
+    ihdr[9] = 6;
+    const parts = [
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", ihdr),
+      chunk("IDAT", await deflate(raw)),
+      chunk("IEND", new Uint8Array(0)),
+    ];
+    const png = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+    let at = 0;
+    for (const part of parts) {
+      png.set(part, at);
+      at += part.length;
+    }
+    await expect(decodeTerrainPng(png)).rejects.toThrow(/Unknown PNG row filter 9/);
+  });
+
   it("rejects anything that is not the tile shape we asked for", async () => {
     await expect(decodeTerrainPng(new Uint8Array([1, 2, 3]))).rejects.toThrow(/Not a PNG/);
     // An HTML or JSON error body served with a 200 must not decode to terrain.

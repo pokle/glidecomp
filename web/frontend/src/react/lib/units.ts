@@ -13,7 +13,12 @@
  * units gets a repaint right after hydration.
  */
 import { useSyncExternalStore } from "react";
-import { DEFAULT_UNITS, TO_SI, type UnitPreferences } from "@glidecomp/engine";
+import {
+  DEFAULT_UNITS,
+  TO_SI,
+  formatCylinderRadius,
+  type UnitPreferences,
+} from "@glidecomp/engine";
 import { config } from "../../analysis/config";
 
 export {
@@ -48,6 +53,21 @@ function getServerSnapshot(): UnitPreferences {
 }
 
 /** The current unit preferences, re-rendering on any change. */
+/**
+ * A cylinder radius as a list row writes it: "400 m", "5 km".
+ *
+ * Takes what a form field holds (a string) and gives back whatever it was
+ * handed when that is not a number, so a half-typed radius shows as typed
+ * rather than as NaN. Metric whatever the reader prefers, like
+ * {@link formatCylinderRadius} it wraps and for the same reason: a cylinder
+ * radius is the task's own number, stated in metres by the FAI, the `.xctsk`
+ * and the briefing alike (see the altitude rule in CLAUDE.md).
+ */
+export function radiusLabel(radius: string): string {
+  const n = Number(radius);
+  return Number.isFinite(n) ? formatCylinderRadius(n).withUnit : radius;
+}
+
 export function useUnits(): UnitPreferences {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

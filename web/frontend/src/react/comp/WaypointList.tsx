@@ -19,7 +19,7 @@
 import { ChevronRightIcon, MapPinIcon } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { GridList, GridListItem } from "@/react/rac/grid-list";
-import { radiusLabel } from "./WaypointSheet";
+import { radiusLabel } from "@/react/lib/units";
 import { parseCoords } from "./route-editor";
 import { cn } from "@/react/lib/utils";
 
