@@ -36,6 +36,7 @@ import { formatCoords, parseCoords, type RouteRow } from "./route-editor";
 import {
   RADIUS_PRESETS,
   TYPE_OPTIONS,
+  draftWithRecord,
   radiusChipLabel,
   type TurnpointDraft,
 } from "./turnpoint-draft";
@@ -96,17 +97,12 @@ export function TurnpointSheet({
     onClose();
   }
 
-  // Load a competition waypoint's details into the draft (keep the type — a
-  // waypoint doesn't carry one), and clear the search so the list collapses.
+  // Load a competition waypoint's details into the draft, and clear the search
+  // so the list collapses. The conversion itself lives in turnpoint-draft.ts —
+  // this used to restate it, and so went on turning a sea-level 0 into
+  // "unknown" long after the shared one had been fixed not to.
   const applyWaypoint = (rec: WaypointFileRecord) => {
-    setDraft((d) => ({
-      ...d,
-      name: rec.code,
-      description: rec.name !== rec.code ? rec.name : "",
-      coords: formatCoords(rec.latitude, rec.longitude),
-      radius: rec.radius > 0 ? rec.radius : d.radius,
-      altitude: rec.altitude ? rec.altitude : "",
-    }));
+    setDraft((d) => draftWithRecord(d, rec));
     setWpQuery("");
   };
 

@@ -117,25 +117,6 @@
   cursor: default;
 }
 
-/* The altitude review's delta column (see CompWaypoints "Check altitudes").
-   Emphasis is never the message: the number and its sign are the finding, a
-   coordinate-sized disagreement also carries a visible "!", and the counts are
-   spelled out in the review's own live region.
-
-   A waypoint worth a look is WEIGHT rather than colour on purpose. The theme's
-   only amber (--chart-3, #ff9500) is a chart ink that does not reach 4.5:1
-   against the grid background, and the accessibility standard applies to this
-   text like any other — so the one coloured state is the destructive red the
-   app already uses for cell text. */
-.gc-grid.tabulator .tabulator-cell .gc-cell-warn {
-  font-weight: 600;
-}
-
-.gc-grid.tabulator .tabulator-cell .gc-cell-alert {
-  color: var(--destructive);
-  font-weight: 600;
-}
-
 /* Rich empty-state hint (see EMPTY_GRID_PLACEHOLDER in PilotsSection.tsx) */
 .gc-grid.tabulator .tabulator-placeholder .pilots-empty-hint {
   max-width: 44rem;

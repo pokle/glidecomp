@@ -38,10 +38,11 @@ export const MOBILE_SPEC_FILES = [
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
   "task-settings-pages.spec.ts",
-  // The waypoints page, which has TWO editors chosen by width: the Tabulator
-  // grid on a wide screen, and a list of waypoints opening full-screen sheets
-  // below it. Only this project exercises the second one — and the grid is
-  // there precisely because it did not work at this width.
+  // The waypoints page, whose editor is a list of waypoints opening
+  // full-screen sheets, at every width — the Tabulator grid it replaced did
+  // not work at this one. This project is what holds that: the page is
+  // asserted never to scroll sideways, and a sheet to be dismissable with the
+  // back gesture.
   "comp-waypoints.spec.ts",
 ] as const;
 

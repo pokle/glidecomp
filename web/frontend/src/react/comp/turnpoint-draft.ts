@@ -66,7 +66,10 @@ export function blankDraft(): TurnpointDraft {
  * The waypoint's values are COPIED in, so a later edit to the competition's
  * waypoint never changes a task that was set from it. Shared by every route
  * that turns a waypoint into a turnpoint — the map pick, the details sheet's
- * "Load from a waypoint", and the Quick entry reconcile.
+ * "Load from a waypoint" (through {@link draftWithRecord}), and the Quick entry
+ * reconcile. **The conversion lives here only.** TurnpointSheet used to keep
+ * its own copy of it, which is how a waypoint at sea level went on losing its
+ * 0 to "unknown" after this function had been fixed not to.
  */
 export function draftFromRecord(rec: WaypointFileRecord): TurnpointDraft {
   return {
@@ -78,5 +81,30 @@ export function draftFromRecord(rec: WaypointFileRecord): TurnpointDraft {
     // A waypoint at sea level carries 0 across; only an absent altitude is
     // blank (see WaypointFileRecord.altitude).
     altitude: rec.altitude ?? "",
+  };
+}
+
+/**
+ * A waypoint loaded INTO a draft that already exists — the details sheet's
+ * "Load from a waypoint", where the turnpoint is half filled in already.
+ *
+ * Everything the waypoint knows comes from {@link draftFromRecord}; the two
+ * things it does NOT know are left as they were. A waypoint carries no
+ * turnpoint TYPE, and a waypoint with no radius of its own should not reset a
+ * radius the organiser has already chosen — whereas a brand-new turnpoint has
+ * nothing to keep and takes the default.
+ *
+ * It delegates rather than restating the conversion, because restating it is
+ * how the sea-level 0 survived here after being fixed there.
+ */
+export function draftWithRecord(
+  current: TurnpointDraft,
+  rec: WaypointFileRecord
+): TurnpointDraft {
+  const fresh = draftFromRecord(rec);
+  return {
+    ...fresh,
+    type: current.type,
+    radius: rec.radius > 0 ? fresh.radius : current.radius,
   };
 }

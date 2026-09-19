@@ -99,9 +99,10 @@ function toRow(w: WaypointFileRecord): WpRow {
     code: w.code,
     name: w.name === w.code ? "" : w.name,
     coords: formatCoords(w.latitude, w.longitude),
-    // An altitude of 0 is a waypoint at sea level and prints as "0". Only an
-    // absent one is blank — see WaypointFileRecord.altitude, and the
-    // missingAltitude note below.
+    // An altitude of 0 is a waypoint at sea level and prints as "0"; only an
+    // absent one is blank (see WaypointFileRecord.altitude). A 0 that is WRONG
+    // is a wrong altitude for "Check altitudes" to report, never a missing one
+    // for anything to overwrite unasked.
     altitude: w.altitude === undefined ? "" : String(w.altitude),
     radius: String(w.radius || 400),
   };
@@ -126,26 +127,6 @@ function fromRow(r: WpRow): WaypointFileRecord | null {
     ...(known ? { altitude: Math.round(alt) } : {}),
     radius: Number.isFinite(radius) && radius > 0 ? Math.round(radius) : 400,
   };
-}
-
-/**
- * Rows whose altitude is still unknown — a *blank* (or unparseable) cell, and
- * nothing else.
- *
- * A zero never means missing. A waypoint genuinely at sea level reads "0",
- * and the parsers now leave an absent altitude undefined rather than
- * defaulting it to 0 (see WaypointFileRecord.altitude), so the two facts
- * arrive here already separated and stay separated through fromRow.
- *
- * A zero that is WRONG — a 0 sitting under a 1500 m launch — is not this
- * function's business either. It is a wrong altitude, not a missing one, and
- * "Check altitudes" is what finds it: the check reports it as a 1500 m
- * disagreement instead of silently overwriting it.
- */
-function missingAltitude(r: WpRow): boolean {
-  const s = r.altitude.trim();
-  if (s === "") return true;
-  return !Number.isFinite(Number(s));
 }
 
 /**
@@ -199,7 +180,6 @@ function sortRows(rows: WpRow[], sort: SortDescriptor): WpRow[] {
   });
 }
 
-// Lucide's map-pin, inlined for Tabulator cell formatters (static markup only).
 export function CompWaypoints() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
@@ -365,23 +345,12 @@ export function CompWaypoints() {
   }, []);
 
   /**
-   * Change one row, in React state and — when the wide editor is up — in the
-   * grid. The phone's sheet and the review's accept both come through here,
-   * so neither has to know whether a Tabulator instance exists.
+   * Change one row. Every edit comes through here — the waypoint sheet, the
+   * review's accept, the review's own fields — so `rows` stays the only copy
+   * of the set.
    */
   const updateRow = useCallback((id: number, patch: Partial<WpRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }, []);
-
-  /** Remove one row from both. */
-  const deleteRow = useCallback((id: number) => {
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    setMapAltById((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Map(prev);
-      next.delete(id);
-      return next;
-    });
   }, []);
 
   /**
@@ -398,6 +367,15 @@ export function CompWaypoints() {
       return next;
     });
   }, []);
+
+  /** Remove one row, and the reading that belonged to it. */
+  const deleteRow = useCallback(
+    (id: number) => {
+      setRows((prev) => prev.filter((r) => r.id !== id));
+      forgetReading(id);
+    },
+    [forgetReading]
+  );
 
   // Current records + validity, derived from the rows.
   const records = useMemo(() => rows.map(fromRow), [rows]);

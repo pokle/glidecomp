@@ -1,22 +1,30 @@
 /**
- * Comp waypoints page (/comp/:id/waypoints) — interaction coverage for its
- * RAC + Tabulator surfaces (converted 2026-07-21, see
- * docs/2026-07-18-rac-adoption-guide.md):
+ * Comp waypoints page (/comp/:id/waypoints) — interaction coverage for its RAC
+ * surfaces. Runs in BOTH Playwright projects (see e2e/fixtures/mobile.ts):
  *
- * - Admins get an inline **Tabulator** editable grid (the app's standard for
- *   editable tables — Tabulator policy). Cell edits mirror into React state
- *   (the "N waypoints" count, dirty Save button, coordinate validation).
+ * - Admins get a LIST of waypoints, each row opening a full-screen sheet, at
+ *   every width. The Tabulator grid this replaced on 2026-09-19 is gone rather
+ *   than hidden behind a breakpoint (the mobile-first rule in CLAUDE.md), so
+ *   the tests assert `.tabulator` is absent and that the page never scrolls
+ *   sideways. A sheet's edits are a draft applied on the way out, and mirror
+ *   into React state then (the "N waypoints" count, the dirty Save button,
+ *   coordinate validation).
  * - Save lives in the page's fixed bottom bar beside an "Unsaved changes"
  *   hint, and while dirty a navigation guard offers Discard/Keep editing —
  *   the comp-settings behaviour (settings-save-ux.spec.ts), brought here
  *   after an admin lost a set of added waypoints to a tap on a link.
  * - The map maximises into a full-screen sheet carrying its own Add-from-map
  *   toggle, so several points can be placed from a phone-sized map.
- * - "Check altitudes" compares the whole set against the map's terrain and
- *   turns the grid into a review: two derived columns, a per-row accept, a
- *   snapshot-narrowed list and a live-region banner. Driven against a FLAT
- *   synthetic DEM (stubTerrainElevations), so every disagreement in the test
- *   is arithmetic the test chose rather than whatever the real terrain says.
+ * - "Check altitudes" is the page's only altitude action and reports nothing
+ *   until pressed. It compares the whole set against the map's terrain in a
+ *   sheet of its own: a snapshot-narrowed list (frozen in membership AND
+ *   order), a per-row accept, a per-waypoint detail view, and a live-region
+ *   banner. Driven against a FLAT synthetic DEM (stubTerrainElevations), so
+ *   every disagreement in the test is arithmetic the test chose rather than
+ *   whatever the real terrain says.
+ * - Every sheet is dismissable with the browser's Back (lib/use-back-dismiss),
+ *   one layer per press — the review's detail view back to its list, not out
+ *   of the page.
  * - Anonymous visitors get the read-only RAC table instead.
  * - The device-export panel (RAC Menu of download formats, QR toggle, swap
  *   checkbox) and the RAC Add-waypoint dialog.
@@ -27,13 +35,15 @@
  * save round-trip is mutation-free (trackMutations pattern from
  * comp-detail.spec.ts); the round-trip restores via API in a finally block.
  *
- * RAC/Tabulator testing gotchas honoured here (rac-adoption-guide):
+ * RAC testing gotchas honoured here (rac-adoption-guide):
  * - Never wait on "networkidle" (freshness pollers elsewhere; DOM waits only).
  * - RAC checkboxes can't be *clicked* by role — the real input is visually
  *   hidden. Click the label text, assert by role (gotcha #13).
- * - The Tabulator grid renders rows virtually: only visible rows exist in the
- *   DOM, so counts are asserted via the page's "N waypoints" line (React
- *   state), not by counting .tabulator-row elements.
+ * - `getByRole` matches an accessible name as a SUBSTRING: "Waypoints" also
+ *   matches "Edit waypoints", so exact names are passed `exact: true`.
+ * - The rows rebuild when the page's fetch lands, which detaches a node
+ *   mid-click; `beforeEach` waits for the full row count before any test
+ *   touches one.
  */
 import { execSync } from "node:child_process";
 import { test, expect, type Page, type Locator } from "./fixtures/test";
@@ -615,6 +625,55 @@ test("a review row opens one waypoint, with both altitudes and no map", async ({
   await page.goBack();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(await firstWaypointRow(page)).toBeVisible();
+
+  expect(mutated()).toBe(false);
+});
+
+test("typing a coordinate in the review keeps the comparison on screen", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  await stubTerrainElevations(page.context(), 4000, 128);
+
+  await firstWaypointRow(page);
+  await page.getByRole("button", { name: "Check altitudes" }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  await reviewRows(page).first().click();
+  // Which waypoint that is depends on the disagreements, so read it off the
+  // heading rather than assuming the editor's first row.
+  const code = (await sheet.getByRole("heading", { level: 2 }).textContent()) ?? "";
+  const accept = sheet.getByRole("button", { name: /^Use the map’s altitude/ });
+  await expect(accept).toBeVisible();
+
+  // Moving the waypoint makes its terrain reading stale, so the page forgets
+  // the reading whenever the coordinates change — which per keystroke used to
+  // destroy the comparison this view exists to show. The first character
+  // typed took the map's altitude away, so "From the map" fell to "—", the
+  // difference line vanished and the accept button unmounted, mid-paste. The
+  // field is a draft now, so type a character at a time and none of that
+  // moves.
+  const coords = sheet.getByRole("textbox", { name: "Coordinates" });
+  await coords.fill("");
+  await coords.pressSequentially("-36.61234, 146.61234", { delay: 10 });
+  await expect(sheet).toContainText("4000 m");
+  await expect(sheet).toContainText("apart");
+  await expect(accept).toBeVisible();
+  await expect(sheet.getByText("Enter coordinates as")).toHaveCount(0);
+
+  // Applied on the way out, once — and the stale reading goes with it, which
+  // is what the row underneath now says.
+  await sheet.getByRole("button", { name: /^All \d+$/ }).click();
+  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible();
+  await expect(reviewRows(page).first()).toContainText("no map reading");
+
+  await sheet.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await expect(waypointRow(page, code)).toContainText("-36.61234");
 
   expect(mutated()).toBe(false);
 });

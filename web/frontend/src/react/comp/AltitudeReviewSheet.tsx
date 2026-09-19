@@ -27,7 +27,7 @@
  * edit to the page's rows, so the page's Save and its discard-on-leave guard
  * stay the commit and the undo.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button, ToggleButton } from "@/react/rac/button";
 import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
@@ -173,6 +173,10 @@ export function AltitudeReviewSheet({
     >
       {open ? (
         <AltitudeReviewDetail
+          // Keyed, so moving to another waypoint remounts the view rather
+          // than re-labelling it — which is also what commits its coordinates
+          // draft (see below).
+          key={open.id}
           entry={open}
           onBack={() => setOpenId(null)}
           listedCount={reviewIds.size}
@@ -364,6 +368,23 @@ export function AltitudeReviewSheet({
  * Back and Done both return to the LIST — "done with this waypoint", never
  * "done with the check" — and going back IS "leave it as it is", so no third
  * button says so. Only the list's own Done closes the review.
+ *
+ * ## The coordinates are a DRAFT; the altitude is live
+ *
+ * Moving a waypoint makes its terrain reading an answer to a question nobody
+ * asked, so the page forgets the reading whenever the coordinates change. Held
+ * per keystroke that destroyed the very comparison this view exists to show:
+ * the first character typed took `mapAlt` away, so "From the map" fell to
+ * "—", the difference line vanished and the accept button unmounted — mid-edit,
+ * before the reader had finished pasting a correction. So the field edits a
+ * draft, committed once on the way out (which is every way out: Back, Done,
+ * the accept button, a browser Back, Escape, or the sheet closing — they all
+ * unmount this view, and the commit hangs off that rather than off any one
+ * button).
+ *
+ * The altitude field is deliberately NOT drafted. It is one of the two numbers
+ * being compared, so editing it live is the feedback: the difference recounts
+ * as you type and blanks the moment the two agree.
  */
 function AltitudeReviewDetail({
   entry,
@@ -385,9 +406,27 @@ function AltitudeReviewDetail({
   // phone is for. FullScreenSheet does the same for the sheet itself.
   useBackDismiss(onBack);
 
+  // The coordinates draft, and what it started as. Through refs as well, so
+  // the commit can hang off unmount with no dependencies and still see the
+  // last thing typed.
+  const [coords, setCoords] = useState(entry.coords);
+  const latest = useRef(coords);
+  latest.current = coords;
+  const committed = useRef({ id: entry.id, coords: entry.coords });
+  const commit = useRef(onEditCoords);
+  commit.current = onEditCoords;
+
+  useEffect(
+    () => () => {
+      const { id, coords: was } = committed.current;
+      if (latest.current !== was) commit.current(id, latest.current);
+    },
+    []
+  );
+
   const pair = pairOf(entry);
   const delta = altitudeDelta(pair);
-  const coordsValid = parseCoords(entry.coords) !== null;
+  const coordsValid = parseCoords(coords) !== null;
 
   return (
     <>
@@ -474,10 +513,11 @@ function AltitudeReviewDetail({
             onChange={(v) => onEditAltitude(entry.id, Number.isNaN(v) ? undefined : v)}
             formatOptions={{ maximumFractionDigits: 0, useGrouping: false }}
           />
+          {/* A draft — see the note above this component. */}
           <TextField
             label="Coordinates"
-            value={entry.coords}
-            onChange={(v) => onEditCoords(entry.id, v)}
+            value={coords}
+            onChange={setCoords}
             className="font-mono"
             isInvalid={!coordsValid}
             errorMessage={coordsValid ? undefined : "Enter coordinates as “lat, lon”"}

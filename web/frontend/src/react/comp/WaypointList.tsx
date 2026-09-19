@@ -1,11 +1,14 @@
 /**
- * The waypoint set as a LIST — the phone editor for /comp/:id/waypoints.
+ * The waypoint set as a LIST — the editor for /comp/:id/waypoints, at every
+ * width.
  *
- * The page's wide-screen editor is the Tabulator grid (editable tables are
- * Tabulator by policy). This is what stands in for it below that width, where
- * the grid does not work: eight columns do not fit, so it scrolls sideways
- * inside a page that scrolls down, under a map pane that sticks — and the
- * frozen Code column hides whichever column is next to it, which is how a
+ * It replaced a 145-row, eight-column Tabulator grid, and replaced it
+ * everywhere rather than below a breakpoint: two editors meant two code paths
+ * and a reviewer on a desktop seeing something the author never tested on a
+ * phone (see the mobile-first rule in CLAUDE.md). The grid did not work at a
+ * phone's width at all — eight columns do not fit, so it scrolled sideways
+ * inside a page that scrolled down, under a map pane that stuck, and the
+ * frozen Code column hid whichever column sat next to it, which is how a
  * reader came to see a waypoint's map altitude without its file altitude.
  *
  * A row shows everything a waypoint has, on two lines, with no sideways
