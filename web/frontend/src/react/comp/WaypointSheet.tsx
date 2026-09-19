@@ -1,11 +1,11 @@
 /**
  * The one-waypoint editor — every field of a single waypoint, at full screen.
  *
- * The phone half of the waypoints page. A 145-row spreadsheet with eight
- * columns is the right tool on a desktop and the wrong one on a phone: the
- * grid scrolls sideways inside a page that scrolls down, beneath a map pane
- * that sticks, and the frozen Code column hides the columns next to it. So a
- * phone gets a LIST of waypoints (WaypointList) whose rows open this.
+ * The waypoints page's editor, with WaypointList: a row per waypoint, and this
+ * behind each row. It replaced a 145-row, eight-column Tabulator grid, which
+ * scrolled sideways inside a page that scrolled down, beneath a map pane that
+ * stuck, with its frozen Code column hiding whichever column sat beside it —
+ * fine on a desktop, and GlideComp is used from a hill with a phone.
  *
  * Deliberately the same shape as comp/TurnpointSheet: a draft applied on the
  * way OUT, no Cancel, and Remove as the only way to lose the waypoint. The
@@ -13,12 +13,12 @@
  * map markers from `rows` on every change, which per-keystroke editing would
  * do on every letter of a name.
  *
- * Metric throughout, like the grid it stands in for: this is the waypoint FILE
- * edited in place, so altitude and radius are both the file's own metres and
- * the labels say so (see the altitude rule in CLAUDE.md).
+ * Metric throughout: this is the waypoint FILE edited in place, so altitude and
+ * radius are both the file's own metres and the labels say so (see the altitude
+ * rule in CLAUDE.md).
  */
 import { useState } from "react";
-import { MapPinIcon, Trash2Icon } from "lucide-react";
+import { Trash2Icon } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { NumberField, TextField } from "@/react/rac/field";
@@ -26,7 +26,7 @@ import { formatCylinderRadius } from "../lib/units";
 import { parseCoords } from "./route-editor";
 import { RADIUS_PRESETS, radiusChipLabel } from "./turnpoint-draft";
 
-/** The editable fields of one waypoint, as strings — the grid's row shape. */
+/** The editable fields of one waypoint, as strings — the page's row shape. */
 export interface WaypointDraft {
   code: string;
   name: string;
@@ -41,14 +41,11 @@ export function WaypointSheet({
   initial,
   onDone,
   onRemove,
-  onLocate,
 }: {
   initial: WaypointDraft;
   /** Apply the draft and close. */
   onDone: (draft: WaypointDraft) => void;
   onRemove: () => void;
-  /** Fly the page's map to these coordinates, if they parse. */
-  onLocate: (coords: string) => void;
 }) {
   const [draft, setDraft] = useState<WaypointDraft>(initial);
   const set = <K extends keyof WaypointDraft>(key: K, value: WaypointDraft[K]) =>
@@ -90,28 +87,18 @@ export function WaypointSheet({
             onChange={(v) => set("name", v)}
             description="Optional. The longer description."
           />
-          <div>
-            <TextField
-              label="Coordinates"
-              value={draft.coords}
-              onChange={(v) => set("coords", v)}
-              className="font-mono"
-              isInvalid={!coordsValid}
-              errorMessage={coordsValid ? undefined : "Enter coordinates as “lat, lon”"}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              isDisabled={!coordsValid}
-              onPress={() => onLocate(draft.coords)}
-            >
-              <MapPinIcon className="size-4" aria-hidden="true" />
-              Show on the map
-            </Button>
-          </div>
-          {/* Metres, stated: the grid's header says "Alt (m)" for the same
-              reason, and this is the same number. */}
+          {/* No "show on the map" button here: the list row this sheet opens
+              from has a pin that does it, and one waypoint does not need two
+              ways to be looked at. */}
+          <TextField
+            label="Coordinates"
+            value={draft.coords}
+            onChange={(v) => set("coords", v)}
+            className="font-mono"
+            isInvalid={!coordsValid}
+            errorMessage={coordsValid ? undefined : "Enter coordinates as “lat, lon”"}
+          />
+          {/* Metres, stated — the file's own unit, not the reader's. */}
           <NumberField
             label="Altitude (m)"
             value={draft.altitude.trim() === "" || !Number.isFinite(altNumber) ? Number.NaN : altNumber}

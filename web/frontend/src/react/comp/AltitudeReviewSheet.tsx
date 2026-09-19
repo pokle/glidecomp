@@ -34,6 +34,7 @@ import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { GridList, GridListItem } from "@/react/rac/grid-list";
 import { NumberField, TextField } from "@/react/rac/field";
 import { cn } from "@/react/lib/utils";
+import { useBackDismiss } from "@/react/lib/use-back-dismiss";
 import { parseCoords } from "./route-editor";
 import {
   COORD_SUSPECT_DELTA_M,
@@ -174,7 +175,6 @@ export function AltitudeReviewSheet({
         <AltitudeReviewDetail
           entry={open}
           onBack={() => setOpenId(null)}
-          onClose={onClose}
           listedCount={reviewIds.size}
           onAccept={onAccept}
           onEditAltitude={onEditAltitude}
@@ -289,7 +289,12 @@ export function AltitudeReviewSheet({
                         {entry.mapAlt === undefined
                           ? "no map reading"
                           : `map ${metres(entry.mapAlt)}`}
-                        {delta === undefined ? null : (
+                        {/* A difference of exactly zero is not a finding, it
+                            is the absence of one — printing "0 m" beside a row
+                            the reader has just fixed is noise where the
+                            interesting thing is that there is nothing left to
+                            say. */}
+                        {delta === undefined || Math.round(delta) === 0 ? null : (
                           <span
                             className={cn(
                               "ml-2 font-semibold",
@@ -356,14 +361,14 @@ export function AltitudeReviewSheet({
  * wanting it would be a second instance. The coordinates are editable as text
  * instead, which is what a pasted correction needs anyway.
  *
- * Back is the only way out other than Done, and back IS "leave it as it is" —
- * so there is no third button saying so.
+ * Back and Done both return to the LIST — "done with this waypoint", never
+ * "done with the check" — and going back IS "leave it as it is", so no third
+ * button says so. Only the list's own Done closes the review.
  */
 function AltitudeReviewDetail({
   entry,
   listedCount,
   onBack,
-  onClose,
   onAccept,
   onEditAltitude,
   onEditCoords,
@@ -371,23 +376,32 @@ function AltitudeReviewDetail({
   entry: AltitudeReviewEntry;
   listedCount: number;
   onBack: () => void;
-  onClose: () => void;
   onAccept: (ids: number[]) => void;
   onEditAltitude: (id: number, altitude: number | undefined) => void;
   onEditCoords: (id: number, coords: string) => void;
 }) {
+  // Its own history entry, on top of the sheet's: Back walks this view → the
+  // list → the page, one layer per press, which is what a back gesture on a
+  // phone is for. FullScreenSheet does the same for the sheet itself.
+  useBackDismiss(onBack);
+
   const pair = pairOf(entry);
   const delta = altitudeDelta(pair);
   const coordsValid = parseCoords(entry.coords) !== null;
 
   return (
     <>
+      {/* BOTH of these go back to the list, and neither leaves the review.
+          Done used to close the whole sheet from here, which dropped the
+          reader out to the waypoints page mid-way down a list of twelve —
+          nobody expects "done with this waypoint" to mean "done with the
+          check". Leaving the review is the list's own Done. */}
       <div className="flex items-center gap-3 border-b border-border px-gutter-safe pt-3 pb-2">
         <Button autoFocus variant="ghost" size="sm" onPress={onBack}>
           <ChevronLeftIcon className="size-4" aria-hidden="true" />
           {listedCount > 0 ? `All ${listedCount}` : "Back"}
         </Button>
-        <Button variant="outline" size="sm" className="ml-auto" onPress={onClose}>
+        <Button variant="outline" size="sm" className="ml-auto" onPress={onBack}>
           Done
         </Button>
       </div>
@@ -413,7 +427,7 @@ function AltitudeReviewDetail({
             </p>
           </div>
         </div>
-        {delta === undefined ? null : (
+        {delta === undefined || Math.round(delta) === 0 ? null : (
           <p className="mt-2 text-center font-mono text-sm">
             {formatAltitudeDelta(delta)} m apart
           </p>

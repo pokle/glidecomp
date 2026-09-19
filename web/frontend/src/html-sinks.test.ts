@@ -14,8 +14,10 @@
  * no ESLint, so like one-kit.test.ts it is a test instead. It pins:
  *
  *  1. ZERO `dangerouslySetInnerHTML` under src/react/ — the React tree
- *     renders untrusted strings as JSX text, which auto-escapes. (The one
- *     `innerHTML` allowed there assigns a module-constant SVG.)
+ *     renders untrusted strings as JSX text, which auto-escapes. There is now
+ *     no `innerHTML` under src/react/ at all: the last one assigned a
+ *     module-constant SVG into a Tabulator cell, and that grid went when the
+ *     waypoints editor became a list of sheets (2026-09-19).
  *  2. An exact per-file count of HTML sinks (`innerHTML`/`outerHTML`
  *     assignment, `insertAdjacentHTML`, mapbox's `setHTML`) across all of
  *     src/.
@@ -46,7 +48,6 @@ const BASELINE: Record<string, number> = {
   "analysis/mapbox-provider.ts": 14,
   "analysis/storage-menu.ts": 4,
   "analysis/task-editor.ts": 19,
-  "react/pages/CompWaypoints.tsx": 1, // constant PIN_SVG only
   "replay/gaggle-ui.ts": 6,
   "replay/main.ts": 2,
 };

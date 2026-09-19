@@ -13,7 +13,7 @@
  * it flies the page's map instead, which is why this is a GridList rather than
  * a NavList — a row here holds a button (see rac/grid-list.tsx).
  */
-import { MapPinIcon } from "lucide-react";
+import { ChevronRightIcon, MapPinIcon } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { GridList, GridListItem } from "@/react/rac/grid-list";
 import { radiusLabel } from "./WaypointSheet";
@@ -101,6 +101,12 @@ export function WaypointList({
                 {radiusLabel(row.radius)}
               </p>
             </div>
+            {/* There IS more behind this row, and the list should say so —
+                the same chevron the altitude review's rows carry. */}
+            <ChevronRightIcon
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
           </GridListItem>
         );
       }}

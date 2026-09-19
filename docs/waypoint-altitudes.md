@@ -12,9 +12,10 @@ parsers, not in the grid, not in the route editor.
 
 The two used to be collapsed into `0`, and every symptom traced back to that:
 
-- A waypoint genuinely at sea level could not be left alone. "Fill altitudes
-  from map" kept offering to fill it, and filling it wrote 0 again, so the
-  button never went quiet.
+- A waypoint genuinely at sea level could not be left alone. The fill-blanks
+  action of the day kept offering to fill it, and filling it wrote 0 again, so
+  the button never went quiet. (That button is gone now — see "Check
+  altitudes" below — but the ambiguity it tripped over was the real fault.)
 - A file with no elevation column and a file full of beaches were
   indistinguishable after parsing.
 - The waypoints grid and the route editor's turnpoint sheet disagreed about
@@ -33,8 +34,9 @@ So:
   KML, where it is the third value of a coordinate triple) have no way to
   express it, so they write `0`; the same is true of the packed `z` string in
   an XCTrack waypoint QR.
-- **The editor** shows a blank cell for absent and `0` for zero. Only a blank
-  is "missing", and only blanks are touched by "Fill altitudes from map".
+- **The editor** shows an empty altitude field for absent and `0` for zero, and
+  says so: "Leave it empty if the altitude is unknown. Zero means sea level."
+  A list row prints "no altitude" rather than a `0` it does not have.
 - **A zero that is wrong** — a `0` sitting under a 1500 m launch — is a *wrong
   altitude*, not a missing one. Nothing silently overwrites it; "Check
   altitudes" reports it as a 1500 m disagreement.
@@ -76,19 +78,20 @@ and state metres, so no seeded comp's altitudes changed.
 
 ## Finding a wrong altitude: "Check altitudes"
 
-`/comp/:id/waypoints` has two altitude actions, and the difference between them
-is the whole design:
+`/comp/:id/waypoints` has **one** altitude action: `Check altitudes`. It reads
+the terrain under every waypoint and opens a review — it changes nothing on its
+own, and it reports nothing until it is pressed.
 
-- **Fill altitudes from map** answers *blanks*. There is no competing value, so
-  it cannot be wrong and it applies itself in one press.
-- **Check altitudes** questions the values that are already there. It therefore
-  changes nothing on its own: it reads the terrain under every waypoint and
-  turns the grid into a review.
+There used to be two. "Fill altitudes from map" answered *blanks* without
+asking, and a status line beside it said whether any blanks were left. Both are
+gone: the check does the fill's job better, because it shows what it would
+write before writing it, and the status line was a verdict on a question nobody
+had put yet — standing clutter on the page. One way to do a thing.
 
-The review is a **full-screen sheet** (`comp/AltitudeReviewSheet.tsx`), at
-every width. It began as three extra columns in the grid, which is the right
-shape on a desktop and a poor one on a phone — see "Two editors" below for what
-that cost, and why the columns are gone.
+The review is a **full-screen sheet** (`comp/AltitudeReviewSheet.tsx`). It began
+as three extra columns in the Tabulator grid the page used to be, which is the
+right shape on a desktop and a poor one on a phone — see the editor section
+below for what that cost.
 
 ### What the review shows
 
@@ -109,8 +112,13 @@ disagreement was reported with one of its two halves off screen.
 A trailing button takes the map's value without leaving the list; tapping the
 row body opens **a detail view** for that one waypoint — the two altitudes
 side by side, a sentence saying which of them to doubt, the accept, and both
-the altitude and the coordinates editable in place. Back returns to the list,
-and back IS "leave it as it is", so no third button says so.
+the altitude and the coordinates editable in place.
+
+Inside a waypoint, **Back and Done both return to the LIST**. Done used to close
+the whole sheet from there, which dropped the reader out to the waypoints page
+half way down a list of twelve: "done with this waypoint" is not "done with the
+check". Only the list's own Done leaves the review, and going back IS "leave it
+as it is", so no third button says so.
 
 There is deliberately **no map in the detail view**: the page owns a single
 Mapbox instance and hands it between the inline pane and the full-screen map
@@ -119,6 +127,10 @@ the coordinates as text is what a pasted correction needs anyway.
 
 Accepting is an ordinary unsaved edit to the page's rows, so the page's Save
 and its discard-on-leave guard stay the commit and the undo.
+
+A difference of exactly zero prints **nothing**. The absence of a finding is not
+a finding, and "0 m" beside a row the reader has just fixed is noise where the
+interesting thing is that there is nothing left to say.
 
 The thresholds and the arithmetic live in
 `web/frontend/src/react/comp/altitude-check.ts`, away from the grid:
@@ -150,32 +162,54 @@ reader's thumb still moved. An e2e assertion caught it.
 So a row never moves while a reader works down the list. Its Δ goes to 0 where
 it sits, and the counts in the header do the counting.
 
-### Two editors, and why
+### The editor: a list of sheets
 
-- **64rem and up: the Tabulator grid** (`gc-grid`), unchanged. Editable tables
-  are Tabulator by policy, and for editing 145 rows cell by cell it is the right
-  tool.
-- **Below that: a list of waypoints** (`comp/WaypointList.tsx`) whose rows open
-  `comp/WaypointSheet.tsx` — every field of one waypoint, plus locate-on-map,
-  the radius chips and Remove. The draft applies on the way OUT, like the route
-  editor's turnpoint sheet, because the page repaints its map markers from
-  `rows` on every change.
+`comp/WaypointList.tsx` is a row per waypoint — code, name, coordinates,
+altitude and radius, on two lines, with a chevron saying there is more behind it
+and a pin that flies the page's map. Tapping the row opens
+`comp/WaypointSheet.tsx`: every field of that one waypoint, the radius chips,
+and Remove. The draft applies on the way OUT, like the route editor's turnpoint
+sheet, because the page repaints its map markers from `rows` on every change.
 
-`lib/use-media-query.ts` chooses between them, rather than CSS, because the grid
-must not be *built* when it is not the editor: it is lazily imported and owns its
-own row state.
+There is no "show on the map" button in the sheet: the row it opened from has a
+pin that does exactly that, and one waypoint does not need two ways to be looked
+at.
+
+It was a Tabulator grid until 2026-09-19, and Tabulator was the app's standard
+for an editable table. What settled it is that GlideComp is used from a hill
+with a phone — see the mobile-first rule in CLAUDE.md. The grid scrolled
+sideways inside a page that scrolled down, under a map pane that stuck, with its
+frozen Code column hiding whichever column sat beside it. The grid is **gone**,
+not hidden behind a breakpoint: two editors would mean two code paths and a
+reviewer on a desktop seeing something the author never tested on a phone.
+
+### Back closes one sheet, not the page
+
+The sheets are React state rather than routes — the page behind them is unsaved
+work, so a sibling route would unmount it and `use-unsaved-changes-guard` would
+prompt on the way in. That left them invisible to the history stack, and one
+Back from a waypoint's details left the whole editor.
+
+`lib/use-back-dismiss.ts` gives each sheet a history entry while it is open and
+pops it again on the way out, so Back walks a detail view → its list → the page,
+one press per layer, and closing from the UI leaves the stack as it was found.
+Read its note before touching it: a popstate reaches every listener, popping our
+own entry looks like a user Back to the layer underneath, and StrictMode runs
+the effect twice. All three broke it, and all three were caught by the e2e
+rather than by review.
 
 Number fields commit on blur rather than per keystroke, which is RAC's
 behaviour; tapping Done blurs first, and `comp-waypoints.spec.ts` asserts that
 path specifically (type an altitude, tap Done, expect the value on the row)
 because losing it would be silent.
 
-### One ordering rule the grid still needs
+### The saved order is the file's order
 
-**The saved order is the file's order, not the grid's.** Tabulator's `getData()`
-returns rows in display order, so a header sort would otherwise rewrite the
-stored waypoint set in that order the next time any cell was edited.
-`syncFromGrid` sorts by row id, which ascends in file order.
+Worth recording because it used to be a live hazard: Tabulator's `getData()`
+returned rows in *display* order, so a header sort rewrote the stored waypoint
+set in that order the next time any cell was edited. With the grid gone, React
+`rows` state is the only copy and it keeps the file's order by construction —
+there is nothing left to mirror back.
 
 ### What it does not reach
 
@@ -280,6 +314,5 @@ waypoints spec now drives the review through a partially transparent tile.
   synthetic DEM (`stubTerrainElevations` in `e2e/fixtures/mapbox.ts`) so the
   disagreements are arithmetic the test chose, and at alpha 128 so the coastal
   no-data case is exercised end to end. The spec runs in **both** Playwright
-  projects (it is in `MOBILE_SPEC_FILES`): its tests go through a driver that
-  speaks to whichever editor is on screen, and a test that is ABOUT one editor
-  skips in the other project and says why.
+  projects (it is in `MOBILE_SPEC_FILES`), asserts that the page never scrolls
+  sideways, and covers Back closing one layer at a time.

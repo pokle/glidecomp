@@ -3,23 +3,27 @@
  *
  * A comp's shared waypoint database, edited here once and picked from when
  * building task routes. Admins upload a file (any of the supported formats),
- * fix up details in the grid, add points from the map or pasted coordinates,
- * and save. Non-admins see a read-only list. The set is stored per-comp
- * (JSON blob) via GET/PUT /api/comp/:id/waypoints.
+ * fix up details a waypoint at a time, add points from the map or pasted
+ * coordinates, and save. Non-admins see a read-only list. The set is stored
+ * per-comp (JSON blob) via GET/PUT /api/comp/:id/waypoints.
  *
- * RAC chrome (buttons, file trigger, read-only table, dialogs) around a
- * **Tabulator** editable grid — the app's standard for editable tables (see
- * the Tabulator policy in docs/2026-07-18-rac-adoption-guide.md), declared
- * through the shared `TabulatorGrid` wrapper — which owns the lazy load and
- * lifecycle. The grid is admin-only; React `rows` state stays the source of truth
- * for the map markers, dirty check and save — grid edits mirror back into it
- * via cellEdited/rowDeleted, and external changes (file upload, the add
- * dialog) are pushed into the grid imperatively.
+ * **The editor is a list of sheets, at every width** — comp/WaypointList.tsx
+ * and comp/WaypointSheet.tsx — and the altitude review is another
+ * (comp/AltitudeReviewSheet.tsx). It was a Tabulator grid until 2026-09-19,
+ * and the grid was the app's standard for an editable table; what settled it
+ * is that GlideComp is used from a hill with a phone, and on a phone the grid
+ * scrolled sideways inside a page that scrolled down, under a map pane that
+ * stuck, with its frozen Code column hiding whichever column sat beside it.
+ * See the mobile-first rule in CLAUDE.md.
+ *
+ * React `rows` state is the single source of truth for the map markers, the
+ * dirty check and the save; every edit goes through `updateRow`/`deleteRow`,
+ * so nothing has a second copy to keep in step.
  *
  * The read-only content (heading, table, download links) is server-rendered
  * via loadCompWaypoints so the page has real content for crawlers; the map
- * (mapbox) and the admin grid (tabulator) stay client-only — the server
- * streams the map's "Loading map…" fallback and an empty grid container.
+ * (mapbox) stays client-only — the server streams its "Loading map…"
+ * fallback.
  *
  * Table and map are laid out by the shared {@link MasterDetail}: the map is
  * the pinned pane on a phone (so a row's locate pin flies a map that is on
@@ -39,14 +43,13 @@ import { useInView } from "../lib/use-in-view";
 import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { FileTrigger, type SortDescriptor } from "react-aria-components";
-import { MapPinIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
+import { Maximize2Icon, MapPinIcon, Minimize2Icon } from "lucide-react";
 import {
   cleanWaypointCodes,
   describeCodeChanges,
   parseWaypointFile,
   type WaypointFileRecord,
 } from "@glidecomp/engine";
-import type { CellComponent, ColumnDefinition, Tabulator } from "tabulator-tables";
 import type { MapCamera, MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
 import { Button, ToggleButton } from "@/react/rac/button";
 import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
@@ -70,8 +73,6 @@ import { AddWaypointDialog } from "../comp/AddWaypointDialog";
 import { AltitudeReviewSheet } from "../comp/AltitudeReviewSheet";
 import { WaypointList } from "../comp/WaypointList";
 import { WaypointSheet } from "../comp/WaypointSheet";
-import { useMediaQuery } from "../lib/use-media-query";
-import { TabulatorGrid } from "../comp/TabulatorGrid";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { CompSectionNav } from "../comp/CompSectionNav";
 import { useInitialData } from "../lib/initial-data";
@@ -199,9 +200,6 @@ function sortRows(rows: WpRow[], sort: SortDescriptor): WpRow[] {
 }
 
 // Lucide's map-pin, inlined for Tabulator cell formatters (static markup only).
-const PIN_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>';
-
 export function CompWaypoints() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
@@ -244,7 +242,6 @@ export function CompWaypoints() {
   );
   const [loading, setLoading] = useState(!initial);
   const [saving, setSaving] = useState(false);
-  const [fillingAlts, setFillingAlts] = useState(false);
   // The altitude review (see checkAltitudes), which is a SHEET rather than
   // columns in the grid — see comp/AltitudeReviewSheet.tsx for why.
   const [checkingAlts, setCheckingAlts] = useState(false);
@@ -254,7 +251,7 @@ export function CompWaypoints() {
    *
    * Beside the rows rather than on them: it is not part of a waypoint, it is
    * never saved, and keeping it out of the row means the grid needs no column
-   * for it and `syncFromGrid` cannot lose it. A reading is dropped when the
+   * for it and a row edit cannot lose it. A reading is dropped when the
    * row's coordinates change, because it belonged to where the waypoint was.
    */
   const [mapAltById, setMapAltById] = useState<Map<number, number>>(() => new Map());
@@ -283,30 +280,18 @@ export function CompWaypoints() {
   const [seedDetails, setSeedDetails] = useState<MapPickDetails | undefined>(undefined);
 
   // Filter box (narrows a long list) and the read-only table's sort. The admin
-  // grid does its own sorting via Tabulator header clicks; `sort` here only
-  // drives the RAC read-only table.
+  // `sort` drives the RAC read-only table only; the editor list keeps the
+  // file's own order.
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<SortDescriptor | undefined>(undefined);
   const filterRef = useRef(filter);
   filterRef.current = filter;
 
-  /**
-   * Which editor is on screen. The Tabulator grid is the app's standard for an
-   * editable table and the right tool for 145 rows and eight columns — on a
-   * wide screen. Below that the same grid scrolls sideways inside a page that
-   * scrolls down, under a map pane that sticks, and its frozen Code column
-   * hides the column next to it; so a phone gets comp/WaypointList.tsx and its
-   * sheet instead. A media query rather than CSS because the grid must not be
-   * BUILT when it is not the editor: it is lazily imported and owns its rows.
-   */
-  const wideEditor = useMediaQuery("(min-width: 64rem)");
-
   const isAdmin = useAdminView(realIsAdmin);
 
-  // The Tabulator grid (admin-only). rowsRef always holds the latest rows so
-  // async work (filling altitudes) can apply its results against whatever is
-  // in the grid by the time it finishes.
-  const tableRef = useRef<Tabulator | null>(null);
+  // rowsRef always holds the latest rows, so async work (the altitude
+  // check) applies its results against whatever is on screen by the time it
+  // finishes rather than against the rows it started with.
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
 
@@ -379,45 +364,6 @@ export function CompWaypoints() {
     if (c) setFocus({ lat: c.lat, lon: c.lon, key: ++focusSeq.current });
   }, []);
 
-  // Mirror the grid's rows back into React state (the source of truth for the
-  // map, dirty check and save). getData() returns the master row list in
-  // insertion order, unaffected by an active sort or filter, so mirroring it
-  // back never reorders state or drops filtered-out rows.
-  const syncFromGrid = useCallback(() => {
-    const t = tableRef.current;
-    if (!t) return;
-    // getData() hands rows back in the grid's CURRENT DISPLAY ORDER, so a
-    // header sort (or the review's sort by disagreement) would otherwise
-    // rewrite the saved waypoint set in that order the next time any cell was
-    // edited. Row ids ascend in file order and a new row always takes the next
-    // one, so sorting by id restores the order the set is meant to keep.
-    setRows(
-      (t.getData() as WpRow[]).map((r) => ({ ...r })).sort((a, b) => a.id - b.id)
-    );
-  }, []);
-
-  /**
-   * Push the search box into the grid. The review no longer has a hand in
-   * this: it narrows its own list inside its own sheet, so "what is shown"
-   * means one thing in each place rather than two things in one.
-   */
-  const applyGridFilter = useCallback((t: Tabulator) => {
-    const q = filterRef.current.trim().toLowerCase();
-    if (!q) {
-      t.clearFilter(true);
-      return;
-    }
-    t.setFilter((data: WpRow) => matchesFilter(data, q));
-  }, []);
-
-  // `onReady` seeds the initial filter, so this handles every subsequent
-  // keystroke and clear.
-  useEffect(() => {
-    const t = tableRef.current;
-    if (!t) return;
-    applyGridFilter(t);
-  }, [filter, applyGridFilter]);
-
   /**
    * Change one row, in React state and — when the wide editor is up — in the
    * grid. The phone's sheet and the review's accept both come through here,
@@ -425,14 +371,11 @@ export function CompWaypoints() {
    */
   const updateRow = useCallback((id: number, patch: Partial<WpRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-    void tableRef.current?.updateData([{ id, ...patch }]);
   }, []);
 
   /** Remove one row from both. */
   const deleteRow = useCallback((id: number) => {
     setRows((prev) => prev.filter((r) => r.id !== id));
-    const row = tableRef.current?.getRow(id);
-    if (row) void row.delete();
     setMapAltById((prev) => {
       if (!prev.has(id)) return prev;
       const next = new Map(prev);
@@ -476,7 +419,7 @@ export function CompWaypoints() {
   });
 
   // Rows for the read-only table: filter, then sort (a copy — `rows` stays the
-  // canonical order). The admin grid handles its own filter/sort in Tabulator.
+  // canonical order). The editor list takes the same filtered rows.
   const query = filter.trim().toLowerCase();
   const visibleRows = useMemo(() => {
     const filtered = query ? rows.filter((r) => matchesFilter(r, query)) : rows;
@@ -501,7 +444,6 @@ export function CompWaypoints() {
   /** Replace the whole set (file upload): state + grid + map refit. */
   function replaceRows(next: WpRow[]) {
     setRows(next);
-    void tableRef.current?.setData(next.map((r) => ({ ...r })));
     setFitNonce((n) => n + 1);
     // Whatever the review was about is gone, and so is every reading.
     setReviewing(false);
@@ -560,76 +502,8 @@ export function CompWaypoints() {
   // grid — nothing is saved until Save). The grid scrolls to the new row so
   // it's visible even when the set is longer than the viewport.
   function addWaypoint(rec: WaypointFileRecord) {
-    const row = toRow(rec);
-    setRows((prev) => [...prev, row]);
-    void tableRef.current?.addRow({ ...row }).then((r) => r.scrollTo());
+    setRows((prev) => [...prev, toRow(rec)]);
     setAdding(false);
-  }
-
-  // Waypoints that would get an altitude from "Fill altitudes from map", and
-  // the ones it CANNOT reach because their coordinates don't parse — so a
-  // disabled button can say which of the two it is (an admin who had just
-  // filled every altitude read the dead button as the fill having failed).
-  const fillableCount = rows.filter(
-    (r) => missingAltitude(r) && parseCoords(r.coords) !== null
-  ).length;
-  const unfillableCount = rows.filter(
-    (r) => missingAltitude(r) && parseCoords(r.coords) === null
-  ).length;
-
-  /**
-   * Fill blank/zero altitudes with ground elevations from the Mapbox terrain
-   * DEM (fetched directly at high zoom — see analysis/elevation.ts for why we
-   * don't read them off the live map). Only missing altitudes are touched;
-   * values the file (or the admin) already set stay as they are, and nothing
-   * is saved until Save.
-   */
-  async function fillAltitudes() {
-    const targets = rows.flatMap((r) => {
-      const c = parseCoords(r.coords);
-      return missingAltitude(r) && c ? [{ id: r.id, lat: c.lat, lon: c.lon }] : [];
-    });
-    if (targets.length === 0) return;
-    setFillingAlts(true);
-    try {
-      // Dynamic import: browser-only module (canvas decoding), keep it out of
-      // the SSR bundle and the page chunk until the button is pressed.
-      const { fetchElevations } = await import("../../analysis/elevation");
-      const elevations = await fetchElevations(targets);
-      const byId = new Map<number, string>();
-      targets.forEach((t, i) => {
-        const e = elevations[i];
-        if (e !== null) byId.set(t.id, String(Math.round(e)));
-      });
-      if (byId.size === 0) {
-        toast.error("Could not read terrain elevations from Mapbox");
-        return;
-      }
-      // Apply against the *current* rows (the grid may have been edited while
-      // the tiles were downloading), and only where the altitude is still
-      // missing so we never clobber a value typed in the meantime.
-      const filled: WpRow[] = [];
-      const next = rowsRef.current.map((r) => {
-        const alt = byId.get(r.id);
-        if (alt === undefined || !missingAltitude(r)) return r;
-        const row = { ...r, altitude: alt };
-        filled.push(row);
-        return row;
-      });
-      setRows(next);
-      void tableRef.current?.updateData(
-        filled.map((r) => ({ id: r.id, altitude: r.altitude }))
-      );
-      const missed = targets.length - filled.length;
-      toast.success(
-        `Filled ${filled.length} altitude${filled.length === 1 ? "" : "s"} from the map terrain` +
-          (missed > 0 ? ` (${missed} unavailable)` : "")
-      );
-    } catch {
-      toast.error("Could not read terrain elevations from Mapbox");
-    } finally {
-      setFillingAlts(false);
-    }
   }
 
   /**
@@ -694,9 +568,6 @@ export function CompWaypoints() {
         byId.has(r.id) ? { ...r, altitude: String(mapAltById.get(r.id)) } : r
       )
     );
-    void tableRef.current?.updateData(
-      accepted.map((id) => ({ id, altitude: String(mapAltById.get(id)) }))
-    );
     toast.success(
       `Took the map altitude for ${accepted.length} waypoint${accepted.length === 1 ? "" : "s"}` +
         " · nothing is saved until you press Save"
@@ -719,9 +590,6 @@ export function CompWaypoints() {
     });
     if (converted.length === 0) return;
     setRows(next);
-    void tableRef.current?.updateData(
-      converted.map((r) => ({ id: r.id, altitude: r.altitude }))
-    );
     toast.success(
       `Converted ${converted.length} altitude${converted.length === 1 ? "" : "s"} from feet to metres` +
         " · nothing is saved until you press Save"
@@ -940,23 +808,14 @@ export function CompWaypoints() {
                 <Button variant="outline" size="sm" onPress={() => openAdd()}>
                   Add waypoint
                 </Button>
-                {/* Always visible so the capability is discoverable; disabled
-                    when every waypoint already has an altitude. */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  isDisabled={fillableCount === 0 || reviewing}
-                  isPending={fillingAlts}
-                  pendingLabel="Filling altitudes"
-                  onPress={() => void fillAltitudes()}
-                >
-                  {fillableCount > 0
-                    ? `Fill ${fillableCount} altitude${fillableCount === 1 ? "" : "s"} from map`
-                    : "Fill altitudes from map"}
-                </Button>
-                {/* The other half of the fill: that one answers a blank and
-                    cannot be wrong, this one questions the values already
-                    there and changes nothing on its own. */}
+                {/* ONE altitude action, and it reports nothing until it is
+                    pressed. There used to be a "Fill altitudes from map"
+                    beside it — an action that answered blanks without asking —
+                    and a status line saying whether any blanks were left. The
+                    check does the fill's job better (it shows what it would
+                    write before writing it), and the status line was a verdict
+                    on a set nobody had asked about yet: standing clutter on
+                    the page for a question that had not been put. */}
                 <Button
                   variant="outline"
                   size="sm"
@@ -967,23 +826,11 @@ export function CompWaypoints() {
                 >
                   Check altitudes
                 </Button>
-                {/* Why the fill button is dead. Filling every altitude disables
-                    the button that just did it, which reads as the fill having
-                    failed — so the state that means "done" has to say so.
-                    Suppressed during the review, which has its own account of
-                    the same set. */}
-                {rows.length > 0 && fillableCount === 0 && !fillingAlts && !reviewing ? (
-                  <span className="text-xs text-muted-foreground">
-                    {unfillableCount > 0
-                      ? `${unfillableCount} waypoint${unfillableCount === 1 ? "" : "s"} need valid coordinates before an altitude can be filled`
-                      : "Every waypoint has an altitude"}
-                  </span>
-                ) : null}
               </div>
             ) : null}
-            {/* Filter box — narrows a long set. Drives the Tabulator grid
-                (admins) and the read-only table alike; the admin grid also
-                sorts on header clicks, the read-only table via its columns. */}
+            {/* Filter box — narrows a long set. Drives the editor list and the
+                read-only table alike; the read-only table also sorts via its
+                columns. */}
             {rows.length > 0 ? (
               <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <SearchField
@@ -1000,10 +847,9 @@ export function CompWaypoints() {
                 ) : null}
               </div>
             ) : null}
-            {isAdmin && !wideEditor ? (
-              /* The phone editor: a row per waypoint, opening a sheet. No
-                 sideways scrolling, and the altitude is on the row rather
-                 than behind a frozen column. */
+            {isAdmin ? (
+              /* The editor, at every width: a row per waypoint, opening a
+                 sheet. */
               <WaypointList
                 rows={visibleRows}
                 emptyMessage={
@@ -1013,46 +859,6 @@ export function CompWaypoints() {
                 }
                 onOpen={setEditingId}
                 onLocate={locate}
-              />
-            ) : isAdmin ? (
-              <TabulatorGrid
-                className="gc-grid h-[420px] rounded border border-border lg:h-[560px]"
-                initialColumns={() => waypointGridColumns(locate)}
-                initialData={() => rows}
-                options={{
-                  index: "id",
-                  // Header-sort defaults off (the pin/remove action columns
-                  // must stay unsortable); data columns opt in individually.
-                  columnDefaults: { headerSort: false },
-                  layout: "fitDataStretch",
-                  height: "100%",
-                  placeholder:
-                    "No waypoints yet. Upload a file or add points from the map to get started.",
-                }}
-                tableRef={tableRef}
-                events={{
-                  cellEdited: (cell) => {
-                    // Re-run the row's formatters so the locate pin picks up
-                    // the new coordinate validity.
-                    const field = cell.getField();
-                    const row = cell.getRow();
-                    if (field === "coords") {
-                      row.reformat();
-                      // The terrain reading belonged to where the waypoint
-                      // USED to be, so it is no longer an answer about this
-                      // one.
-                      forgetReading((row.getData() as WpRow).id);
-                    }
-                    syncFromGrid();
-                  },
-                  rowDeleted: syncFromGrid,
-                }}
-                onReady={(table) => {
-                  // A remount (admin toggle, reload) starts with no filter —
-                  // re-apply whatever is in the box, and whatever the review
-                  // is showing, so the grid agrees with both.
-                  applyGridFilter(table);
-                }}
               />
             ) : rows.length === 0 ? (
               <p className="rounded border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -1220,7 +1026,6 @@ export function CompWaypoints() {
             setEditingId(null);
             deleteRow(id);
           }}
-          onLocate={(coords) => locate({ ...editingRow, coords })}
         />
       ) : null}
 
@@ -1293,87 +1098,4 @@ function baselineJson(list: WaypointFileRecord[]): string {
       .map((w) => fromRow(toRow(w)))
       .filter((w): w is WaypointFileRecord => w !== null)
   );
-}
-
-/**
- * Tabulator column definitions for the waypoints grid: a frozen locate-on-map
- * pin, one editable column per waypoint field, and a remove button. Cell
- * formatters build DOM nodes with textContent (never HTML strings) — waypoint
- * files are user-supplied, so their values must not reach innerHTML.
- */
-function waypointGridColumns(locate: (r: WpRow) => void): ColumnDefinition[] {
-  const pin: ColumnDefinition = {
-    title: "",
-    width: 36,
-    hozAlign: "center",
-    frozen: true,
-    formatter: (cell) => {
-      const row = cell.getRow().getData() as WpRow;
-      const valid = parseCoords(row.coords) !== null;
-      const el = document.createElement("span");
-      el.className = valid ? "gc-cell-button" : "gc-cell-button gc-cell-button-disabled";
-      el.title = valid
-        ? `Show ${row.code || "waypoint"} on the map`
-        : "Enter valid coordinates first";
-      el.innerHTML = PIN_SVG;
-      return el;
-    },
-    cellClick: (_e: UIEvent, cell: CellComponent) => {
-      locate(cell.getRow().getData() as WpRow);
-    },
-  };
-
-  const text = (title: string, field: string, extra: Partial<ColumnDefinition> = {}): ColumnDefinition => ({
-    title,
-    field,
-    editor: "input",
-    // Select the existing value on edit so typing replaces it (matches
-    // spreadsheet behaviour; without this, mobile taps append text).
-    editorParams: { selectContents: true },
-    ...extra,
-  });
-
-  const coords: ColumnDefinition = {
-    ...text("Coordinates", "coords", { minWidth: 150, cssClass: "gc-mono", headerSort: true }),
-    formatter: (cell) => {
-      const value = String(cell.getValue() ?? "");
-      cell.getElement().classList.toggle("gc-cell-invalid", parseCoords(value) === null);
-      const el = document.createElement("span");
-      el.textContent = value;
-      return el;
-    },
-  };
-
-  const remove: ColumnDefinition = {
-    title: "",
-    width: 36,
-    hozAlign: "center",
-    formatter: () => '<span class="gc-cell-button" title="Remove waypoint">✕</span>',
-    cellClick: (_e: UIEvent, cell: CellComponent) => {
-      void cell.getRow().delete();
-    },
-  };
-
-  // Numeric header-sort for the quantity columns, with blank altitudes/radii
-  // pinned to the bottom whichever way the sort runs.
-  const numberSort: Partial<ColumnDefinition> = {
-    headerSort: true,
-    sorter: "number",
-    sorterParams: { alignEmptyValues: "bottom" },
-  };
-
-  return [
-    pin,
-    text("Code", "code", { minWidth: 80, frozen: true, headerSort: true }),
-    text("Name", "name", { minWidth: 130, headerSort: true }),
-    coords,
-    // Both quantities are the waypoint FILE's own unit — metres — whatever the
-    // reader's display preference, so the headers say so rather than leave a
-    // reader who thinks in feet to guess (issue #662). The single-value inputs
-    // (the Add-waypoint dialog, the route editor's turnpoint dialog) do convert
-    // into that preference; this grid is the file itself, edited in place.
-    text("Alt (m)", "altitude", { width: 84, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
-    text("Radius (m)", "radius", { width: 100, hozAlign: "right", headerHozAlign: "right", cssClass: "gc-mono", ...numberSort }),
-    remove,
-  ];
 }

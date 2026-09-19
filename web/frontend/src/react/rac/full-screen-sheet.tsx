@@ -9,6 +9,14 @@
  * hand-rolled listeners — the reason the pattern was worth having in the first
  * place (issue #312), and the reason not to reach for a bare `fixed inset-0`.
  *
+ * **Back closes it.** The sheet is React state rather than a route, so the
+ * history stack cannot see it and Back would otherwise skip past it to the
+ * previous page — from a waypoint's details, one Back left the whole editor
+ * with its unsaved edits. `lib/use-back-dismiss.ts` gives it a history entry
+ * of its own while it is open and pops that entry again on the way out; the
+ * URL never changes, and nested sheets stack so Back walks out one layer at a
+ * time.
+ *
  * There is no `isOpen`: render the sheet when it is open and not when it is
  * not. Every caller already owns that state (or, for a lazily-imported sheet,
  * needs the component to not exist until then), and a sheet that is mounted
@@ -32,6 +40,7 @@ import {
 } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
+import { useBackDismiss } from "@/react/lib/use-back-dismiss";
 
 const BACKDROPS = {
   /** The app's own surface — for themed content. A chart or a diagram drawn
@@ -69,6 +78,8 @@ export function FullScreenSheet({
   className?: string;
   children: ReactNode;
 }) {
+  useBackDismiss(onClose);
+
   return (
     <ModalOverlay
       isOpen

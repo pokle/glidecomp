@@ -278,6 +278,36 @@ These are the standing imperatives. Each links to the reference that explains it
 
 ### Frontend
 
+- **Mobile first, and that is a change of stance (2026-09-19).** A competition
+  is run from a hill, and nobody wants to carry a laptop up it: less and less
+  of this app's work happens on a laptop, so a phone is the shape a surface is
+  designed FOR, not a width it has to survive. Where the two conflict, the
+  phone wins.
+  - The worked example is `/comp/:id/waypoints`. It was a 145-row,
+    eight-column Tabulator grid, which is the better tool on a desktop and
+    unusable on a phone: it scrolled sideways inside a page that scrolled down,
+    under a map pane that stuck, and its frozen Code column hid whichever
+    column sat beside it — which is how a reader came to see a waypoint's map
+    altitude without its file altitude. It is now a LIST whose rows open
+    full-screen sheets (`comp/WaypointList.tsx`, `comp/WaypointSheet.tsx`), at
+    every width. The grid is gone, not hidden behind a breakpoint: two editors
+    meant two code paths and a reviewer on a desktop seeing something the
+    author never tested on a phone.
+  - **One way to do a thing.** The same pass deleted a "Fill altitudes from
+    map" button that duplicated what `Check altitudes` does better, a
+    "Show on the map" button in the waypoint sheet that duplicated the list
+    row's pin, and a status line that pre-judged a set nobody had asked about.
+    A second way to do something is a thing to keep working, explain and test.
+  - **A sheet is dismissable with Back.** A sheet lives in React state, not in
+    the URL, so the history stack cannot see it and Back would skip past it to
+    the previous page — from a waypoint's details, one press left the whole
+    editor and its unsaved work. `lib/use-back-dismiss.ts` gives every
+    `FullScreenSheet` a history entry while it is open and pops it again on the
+    way out; nested sheets stack, so Back walks out one layer at a time. Read
+    its note before touching it: a popstate reaches every listener, popping our
+    own entry looks like a user Back to the layer underneath, and StrictMode
+    runs the effect twice — all three broke it, and all three were caught by
+    the e2e rather than by review.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
@@ -289,9 +319,15 @@ These are the standing imperatives. Each links to the reference that explains it
   instead (a static styled element is fine: see `rac/badge.tsx`, `rac/alert.tsx`).
   - Thin wrappers over non-RAC third-party widgets live in `src/react/vendor/` —
     today the `input-otp` sign-in field and the `sonner` toaster.
-  - **Editable tables/grids are Tabulator by policy** (owner preference — don't
-    rebuild spreadsheet editing in RAC). Lazy-load the grid, RAC chrome around it,
-    shared theme in `comp/tabulator-grid.css`.
+  - **Tabulator is for a grid that is genuinely spreadsheet-shaped** — many
+    rows, many columns, edited cell by cell on a wide screen, like the pilots
+    grid. Lazy-load it, RAC chrome around it, shared theme in
+    `comp/tabulator-grid.css`; and still don't rebuild spreadsheet editing in
+    RAC. It is no longer the default answer for "an editable collection": that
+    it was is how the waypoints page ended up with a grid nobody could use from
+    a hill (see the mobile-first rule above). A list of rows that open sheets
+    is usually the better shape, and `rac/grid-list.tsx` is what it is built
+    from.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
@@ -328,29 +364,33 @@ These are the standing imperatives. Each links to the reference that explains it
     `formatCylinderRadius()`, which takes no preferences at all;
     `formatRadius(m, { prefs })` is only for a radius that IS a measured length
     (the track HUD's 1000 m averaging window).
-  - The waypoints grid on `/comp/:id/waypoints` stays metric throughout — it is
-    the waypoint FILE edited in place, cell by cell. Its headers say "Alt (m)" /
-    "Radius (m)" rather than leave anyone guessing, and so do the altitude
-    review's "Map (m)" / "Δ (m)".
+  - The waypoints editor on `/comp/:id/waypoints` stays metric throughout — it
+    is the waypoint FILE edited in place. Its fields say "Altitude (m)" /
+    "Radius (m)" rather than leave anyone guessing, and the altitude review
+    prints both altitudes with the unit on each.
 - **A zero altitude is never "missing", in any UI**
   ([docs/waypoint-altitudes.md](docs/waypoint-altitudes.md)). An altitude is
   either KNOWN — any number, 0 included — or ABSENT, which is why
   `WaypointFileRecord.altitude` is optional: a waypoint on a beach is at 0 m
-  and a file with no elevation column knows nothing, and collapsing the two
-  made "Fill altitudes from map" offer to fill a sea-level waypoint for ever.
-  Parsers leave an absent one undefined, exporters use their format's own way
-  of saying nothing (OziExplorer's `-777`, a blank `elev`, an omitted `<ele>`),
-  a blank cell is the only "missing" signal, and a 0 that is WRONG is a wrong
-  altitude for `Check altitudes` to report — never something to overwrite
-  unasked.
+  and a file with no elevation column knows nothing. Collapsing the two meant
+  a sea-level waypoint could never be left alone: the fill-blanks action of the
+  day kept offering to fill it, and filling it wrote 0 again. Parsers leave an
+  absent one undefined, exporters use their format's own way of saying nothing
+  (OziExplorer's `-777`, a blank `elev`, an omitted `<ele>`), an empty field is
+  the only "missing" signal, and a 0 that is WRONG is a wrong altitude for
+  `Check altitudes` to report — never something to overwrite unasked.
   - **Only OziExplorer's `.wpt` states elevation in FEET** (field 14, `-777` =
     unknown); every other format we read says metres. Reading it as metres
     inflated every imported altitude by 3.28 — the bundled HG Worlds set
     publishes the same points in four formats and proves it. The cross-format
     altitude agreement test in `web/engine/tests/waypoint-files.test.ts` is
     what keeps a new format honest.
-  - **"Check altitudes" questions values; "Fill altitudes from map" answers
-    blanks.** The fill has no competing value so it applies itself; the check
+  - **`Check altitudes` is the ONLY altitude action on the waypoints page**,
+    and it reports nothing until it is pressed. A "Fill altitudes from map"
+    that answered blanks without asking, and a status line that pre-judged the
+    set, were both deleted: the check does the fill's job better because it
+    shows what it would write before writing it. (The route editor keeps a
+    fill for its turnpoint blanks, where there is no list to review.) It
     changes nothing on its own and reviews in a SHEET
     (`comp/AltitudeReviewSheet.tsx`) whose every row states BOTH altitudes —
     the grid columns it replaced put the file's altitude behind the frozen Code
@@ -360,15 +400,13 @@ These are the standing imperatives. Each links to the reference that explains it
     whole-file ratio or offset is one bulk fix rather than 187 decisions. The
     review's list is a snapshot in BOTH membership and order: sorting by the
     size of the disagreement live sends each row to the bottom the moment it is
-    accepted.
-  - **The waypoints page has two editors, chosen by width.** The Tabulator grid
-    at 64rem and up (editable tables are Tabulator by policy), and a list of
-    waypoints opening full-screen sheets below it — the grid scrolls sideways
-    on a phone under a sticky map pane, and its frozen column hides the one
-    beside it. `lib/use-media-query.ts` picks, rather than CSS, because the
-    grid must not be BUILT when it is not the editor. `comp-waypoints.spec.ts`
-    runs in both Playwright projects through a driver that speaks to whichever
-    editor is up.
+    accepted. A difference of exactly zero prints nothing — the absence of a
+    finding is not a finding — and inside a waypoint both Back and Done return
+    to the LIST, never out of the review.
+  - **The waypoints page is a list of sheets, at every width** — see the
+    mobile-first rule above for what it replaced. `comp-waypoints.spec.ts` runs
+    in both Playwright projects, and asserts that the page never scrolls
+    sideways.
   - **Never read a Terrain-RGB pixel through a canvas.** The tiles are RGBA and
     Mapbox marks no-data — the sea past a coastline included — with partial
     alpha; a canvas stores premultiplied bytes, so the 24-bit elevation those
