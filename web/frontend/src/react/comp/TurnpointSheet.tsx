@@ -27,7 +27,11 @@ import { useMemo, useRef, useState } from "react";
 import { useFilter } from "react-aria-components";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button, ToggleButton } from "@/react/rac/button";
-import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
+import {
+  FullScreenSheet,
+  SheetBody,
+  SheetHeader,
+} from "@/react/rac/full-screen-sheet";
 import { NumberField, SearchField, TextField } from "@/react/rac/field";
 import { AltitudeField } from "./fields";
 import { ChoiceList } from "@/react/rac/choice-list";
@@ -126,17 +130,12 @@ export function TurnpointSheet({
       onClose={leave}
       className="flex flex-col"
     >
-      {/* Title bar: the sheet's identity on the left, the way out on the
-          right, where a phone's thumb already expects it. It stays put while
-          the form scrolls, so Done is never something you scroll to find. */}
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
-          {mode === "add" ? "Add turnpoint" : "Edit turnpoint"}
-        </h2>
-        <Button onPress={leave}>Done</Button>
-      </div>
+      <SheetHeader
+        title={mode === "add" ? "Add turnpoint" : "Edit turnpoint"}
+        action={<Button onPress={leave}>Done</Button>}
+      />
 
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-3 overflow-y-auto p-4 pb-gutter-safe">
+      <SheetBody className="flex flex-col gap-3">
         {/* Load from a preset competition waypoint. */}
         {wpLoading ? (
           <p className="text-xs text-muted-foreground">
@@ -303,7 +302,7 @@ export function TurnpointSheet({
             Delete turnpoint
           </Button>
         ) : null}
-      </div>
+      </SheetBody>
     </FullScreenSheet>
   );
 }

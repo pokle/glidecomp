@@ -326,6 +326,17 @@ These are the standing imperatives. Each links to the reference that explains it
   instead (a static styled element is fine: see `rac/badge.tsx`, `rac/alert.tsx`).
   - Thin wrappers over non-RAC third-party widgets live in `src/react/vendor/` —
     today the `input-otp` sign-in field and the `sonner` toaster.
+  - **A sheet's chrome and a list row's body are kit components, not things
+    each surface writes out.** `rac/full-screen-sheet.tsx` carries
+    `SheetHeader` / `SheetBody` / `SheetFooter`, and `rac/grid-list.tsx`
+    carries `RowContent`. Four sheets and three lists had each grown their
+    own, in vocabularies that disagreed about the gutter, the title's weight,
+    the readable-width cap and the chevron — none of it decided, all of it
+    copied. Two consequences worth knowing before adding padding of your own:
+    a `FullScreenSheet` already spends the safe-area inset on its `p-safe`, so
+    `px-gutter-safe` INSIDE one counts the notch twice; and `variant="rows"`
+    already makes a row `flex items-center gap-3`, so restating that says
+    nothing.
   - **Tabulator is for a grid that is genuinely spreadsheet-shaped** — many
     rows, many columns, edited cell by cell on a wide screen, like the pilots
     grid. Lazy-load it, RAC chrome around it, shared theme in

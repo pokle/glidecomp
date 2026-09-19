@@ -20,7 +20,11 @@
 import { useState } from "react";
 import { Trash2Icon } from "lucide-react";
 import { Button } from "@/react/rac/button";
-import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
+import {
+  FullScreenSheet,
+  SheetBody,
+  SheetHeader,
+} from "@/react/rac/full-screen-sheet";
 import { NumberField, TextField } from "@/react/rac/field";
 import { parseCoords } from "./route-editor";
 import { RADIUS_PRESETS, radiusChipLabel } from "./turnpoint-draft";
@@ -60,19 +64,16 @@ export function WaypointSheet({
       onClose={() => onDone(draft)}
       className="flex flex-col"
     >
-      <div className="flex items-center gap-3 border-b border-border px-gutter-safe pt-3 pb-2">
-        <h2 className="min-w-0 flex-1 truncate text-lg font-bold">
-          {draft.code || "Waypoint"}
-        </h2>
-        {/* autoFocus so a keyboard user lands on the way out rather than on
-            the dialog container — Escape alone is not a discoverable
-            affordance (accessibility standard §4.1). */}
-        <Button autoFocus onPress={() => onDone(draft)}>
-          Done
-        </Button>
-      </div>
+      <SheetHeader
+        title={draft.code || "Waypoint"}
+        action={
+          <Button autoFocus onPress={() => onDone(draft)}>
+            Done
+          </Button>
+        }
+      />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-gutter-safe py-4">
+      <SheetBody>
         <div className="flex flex-col gap-4">
           <TextField
             label="Code"
@@ -138,7 +139,7 @@ export function WaypointSheet({
             Nothing is saved until you press Save on the waypoints page.
           </p>
         </div>
-      </div>
+      </SheetBody>
     </FullScreenSheet>
   );
 }

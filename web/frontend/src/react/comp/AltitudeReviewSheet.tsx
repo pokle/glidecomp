@@ -28,10 +28,15 @@
  * stay the commit and the undo.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ChevronLeftIcon } from "lucide-react";
 import { Button, ToggleButton } from "@/react/rac/button";
-import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
-import { GridList, GridListItem } from "@/react/rac/grid-list";
+import {
+  FullScreenSheet,
+  SheetBody,
+  SheetFooter,
+  SheetHeader,
+} from "@/react/rac/full-screen-sheet";
+import { GridList, GridListItem, RowContent } from "@/react/rac/grid-list";
 import { NumberField, TextField } from "@/react/rac/field";
 import { cn } from "@/react/lib/utils";
 import { useBackDismiss } from "@/react/lib/use-back-dismiss";
@@ -186,12 +191,12 @@ export function AltitudeReviewSheet({
         />
       ) : (
         <>
-          {/* Header: what the check found, and the way out. */}
-          <div className="flex items-start gap-3 border-b border-border px-gutter-safe pt-3 pb-2">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold">Check altitudes</h2>
-              {/* A live region: accepting rows changes these numbers without
-                  moving focus. */}
+          {/* What the check found, and the way out. The line under the title
+              is a live region: accepting rows changes those numbers without
+              moving focus. */}
+          <SheetHeader
+            title="Check altitudes"
+            description={
               <p role="status" className="text-sm text-muted-foreground">
                 {summary.reviewable > 0
                   ? `${summary.reviewable} of ${entries.length} waypoint${
@@ -201,13 +206,15 @@ export function AltitudeReviewSheet({
                     ? "No altitudes could be compared with the map"
                     : `Every altitude that could be checked agrees with the map to within ${SUSPECT_DELTA_M} m`}
               </p>
-            </div>
-            <Button autoFocus variant="outline" size="sm" onPress={onClose}>
-              Done
-            </Button>
-          </div>
+            }
+            action={
+              <Button autoFocus variant="outline" size="sm" onPress={onClose}>
+                Done
+              </Button>
+            }
+          />
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-gutter-safe py-3">
+          <SheetBody>
             {/* The breakdown, including the rows deliberately NOT listed. */}
             <p className="text-xs text-muted-foreground">
               {[
@@ -279,59 +286,65 @@ export function AltitudeReviewSheet({
                     variant="rows"
                     id={entry.id}
                     textValue={entry.code || "waypoint"}
-                    className="flex items-center gap-3"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{entry.code || "—"}</p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {/* Both numbers, both labelled. The failure this
-                            replaces was a reader who could only see one. */}
-                        {entry.fileAlt === undefined
-                          ? "no altitude in the file"
-                          : `file ${metres(entry.fileAlt)}`}
-                        {" → "}
-                        {entry.mapAlt === undefined
-                          ? "no map reading"
-                          : `map ${metres(entry.mapAlt)}`}
-                        {/* A difference of exactly zero is not a finding, it
-                            is the absence of one — printing "0 m" beside a row
-                            the reader has just fixed is noise where the
-                            interesting thing is that there is nothing left to
-                            say. */}
-                        {delta === undefined || Math.round(delta) === 0 ? null : (
-                          <span
-                            className={cn(
-                              "ml-2 font-semibold",
-                              altitudeVerdict(pair) === "coords" && "text-destructive"
-                            )}
+                    <RowContent
+                      title={entry.code || "—"}
+                      detailClassName="font-mono"
+                      detail={
+                        <>
+                          {/* Both numbers, both labelled. The failure this
+                              replaces was a reader who could only see one. */}
+                          {entry.fileAlt === undefined
+                            ? "no altitude in the file"
+                            : `file ${metres(entry.fileAlt)}`}
+                          {" → "}
+                          {entry.mapAlt === undefined
+                            ? "no map reading"
+                            : `map ${metres(entry.mapAlt)}`}
+                          {/* A difference of exactly zero is not a finding, it
+                              is the absence of one — printing "0 m" beside a
+                              row the reader has just fixed is noise where the
+                              interesting thing is that there is nothing left
+                              to say. */}
+                          {delta === undefined || Math.round(delta) === 0 ? null : (
+                            <span
+                              className={cn(
+                                "ml-2 font-semibold",
+                                altitudeVerdict(pair) === "coords" && "text-destructive"
+                              )}
+                            >
+                              {formatAltitudeDelta(delta)} m
+                            </span>
+                          )}
+                        </>
+                      }
+                      action={
+                        entry.mapAlt === undefined ? undefined : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onPress={() => onAccept([entry.id])}
                           >
-                            {formatAltitudeDelta(delta)} m
-                          </span>
-                        )}
-                      </p>
+                            Use {metres(entry.mapAlt)}
+                          </Button>
+                        )
+                      }
+                      chevron
+                    >
+                      {/* Why the row is in the list, in words — never a repeat
+                          of the numbers above it, and never truncated. */}
                       {line ? <p className="mt-0.5 text-xs">{line}</p> : null}
-                    </div>
-                    {entry.mapAlt === undefined ? null : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onPress={() => onAccept([entry.id])}
-                      >
-                        Use {metres(entry.mapAlt)}
-                      </Button>
-                    )}
-                    <ChevronRightIcon
-                      className="size-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
+                    </RowContent>
                   </GridListItem>
                 );
               }}
             </GridList>
-          </div>
+          </SheetBody>
 
-          {/* The bulk action and the widen toggle, in reach of a thumb. */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-border px-gutter-safe pt-3 pb-gutter-safe">
+          {/* The bulk action and the widen toggle. Down here rather than in
+              the header because nothing on this view is typed into, so the
+              keyboard is never over them. */}
+          <SheetFooter>
             <Button
               isDisabled={acceptable.length === 0}
               onPress={() => onAccept(acceptable.map((e) => e.id))}
@@ -350,7 +363,7 @@ export function AltitudeReviewSheet({
               their own copy of a waypoint, so corrections here do not change
               them.
             </p>
-          </div>
+          </SheetFooter>
         </>
       )}
     </FullScreenSheet>
@@ -434,19 +447,27 @@ function AltitudeReviewDetail({
           Done used to close the whole sheet from here, which dropped the
           reader out to the waypoints page mid-way down a list of twelve —
           nobody expects "done with this waypoint" to mean "done with the
-          check". Leaving the review is the list's own Done. */}
-      <div className="flex items-center gap-3 border-b border-border px-gutter-safe pt-3 pb-2">
-        <Button autoFocus variant="ghost" size="sm" onPress={onBack}>
-          <ChevronLeftIcon className="size-4" aria-hidden="true" />
-          {listedCount > 0 ? `All ${listedCount}` : "Back"}
-        </Button>
-        <Button variant="outline" size="sm" className="ml-auto" onPress={onBack}>
-          Done
-        </Button>
-      </div>
+          check". Leaving the review is the list's own Done.
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-gutter-safe py-4">
-        <h2 className="text-lg font-bold">{entry.code || "Waypoint"}</h2>
+          No `title`: the waypoint's own name is the body's heading, right
+          under this bar, and saying it twice in two sizes reads as two
+          different things. */}
+      <SheetHeader
+        leading={
+          <Button autoFocus variant="ghost" size="sm" onPress={onBack}>
+            <ChevronLeftIcon className="size-4" aria-hidden="true" />
+            {listedCount > 0 ? `All ${listedCount}` : "Back"}
+          </Button>
+        }
+        action={
+          <Button variant="outline" size="sm" onPress={onBack}>
+            Done
+          </Button>
+        }
+      />
+
+      <SheetBody>
+        <h2 className="text-base font-semibold">{entry.code || "Waypoint"}</h2>
         {entry.name && entry.name !== entry.code ? (
           <p className="text-sm text-muted-foreground">{entry.name}</p>
         ) : null}
@@ -523,7 +544,7 @@ function AltitudeReviewDetail({
             errorMessage={coordsValid ? undefined : "Enter coordinates as “lat, lon”"}
           />
         </div>
-      </div>
+      </SheetBody>
     </>
   );
 }

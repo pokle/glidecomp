@@ -34,9 +34,9 @@
  * so; a read-only row is an altitude PRINTED to a reader, so it honours their
  * unit preference like every other altitude in the app (issue #662).
  */
-import { ChevronRightIcon, MapPinIcon } from "lucide-react";
+import { MapPinIcon } from "lucide-react";
 import { Button } from "@/react/rac/button";
-import { GridList, GridListItem } from "@/react/rac/grid-list";
+import { GridList, GridListItem, RowContent } from "@/react/rac/grid-list";
 import { formatAltitude, radiusLabel, useUnits } from "@/react/lib/units";
 import { parseCoords } from "./route-editor";
 import { cn } from "@/react/lib/utils";
@@ -92,59 +92,49 @@ export function WaypointList({
         const altitude = row.altitude.trim();
         const altNumber = Number(altitude);
         return (
-          <GridListItem
-            variant="rows"
-            id={row.id}
-            textValue={row.code || "waypoint"}
-            className="flex items-center gap-3"
-          >
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Show ${row.code || "waypoint"} on the map`}
-              isDisabled={!valid}
-              onPress={() => onLocate(row)}
-            >
-              <MapPinIcon className="size-4" aria-hidden="true" />
-            </Button>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">
-                {row.code || "—"}
-                {row.name ? (
-                  <span className="ml-2 font-normal text-muted-foreground">
-                    {row.name}
-                  </span>
-                ) : null}
-              </p>
-              {/* Everything else on one mono line: the altitude is HERE, not
-                  behind a frozen column. A blank altitude reads as unknown and
-                  a zero reads as zero — they are different facts. */}
-              <p
-                className={cn(
-                  "truncate font-mono text-xs",
-                  valid ? "text-muted-foreground" : "text-destructive"
-                )}
-              >
-                {valid ? row.coords : `${row.coords || "no coordinates"} — invalid`}
-                {" · "}
-                {altitude === ""
-                  ? "no altitude"
-                  : readOnly && Number.isFinite(altNumber)
-                    ? formatAltitude(altNumber, { prefs: units }).withUnit
-                    : `${row.altitude} m`}
-                {" · "}
-                {radiusLabel(row.radius)}
-              </p>
-            </div>
-            {/* There IS more behind this row, and the list should say so —
-                the same chevron the altitude review's rows carry. Nothing is
-                behind a read-only one, so it gets none. */}
-            {readOnly ? null : (
-              <ChevronRightIcon
-                className="size-4 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-            )}
+          <GridListItem variant="rows" id={row.id} textValue={row.code || "waypoint"}>
+            <RowContent
+              leading={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Show ${row.code || "waypoint"} on the map`}
+                  isDisabled={!valid}
+                  onPress={() => onLocate(row)}
+                >
+                  <MapPinIcon className="size-4" aria-hidden="true" />
+                </Button>
+              }
+              title={
+                <>
+                  {row.code || "—"}
+                  {row.name ? (
+                    <span className="ml-2 font-normal text-muted-foreground">
+                      {row.name}
+                    </span>
+                  ) : null}
+                </>
+              }
+              // Everything else on one mono line: the altitude is HERE, not
+              // behind a frozen column. A blank altitude reads as unknown and
+              // a zero reads as zero — they are different facts.
+              detailClassName={cn("font-mono", !valid && "text-destructive")}
+              detail={
+                <>
+                  {valid ? row.coords : `${row.coords || "no coordinates"} — invalid`}
+                  {" · "}
+                  {altitude === ""
+                    ? "no altitude"
+                    : readOnly && Number.isFinite(altNumber)
+                      ? formatAltitude(altNumber, { prefs: units }).withUnit
+                      : `${row.altitude} m`}
+                  {" · "}
+                  {radiusLabel(row.radius)}
+                </>
+              }
+              // Nothing is behind a read-only row, so it claims nothing.
+              chevron={!readOnly}
+            />
           </GridListItem>
         );
       }}

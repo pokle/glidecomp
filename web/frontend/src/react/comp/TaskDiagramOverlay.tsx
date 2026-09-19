@@ -84,8 +84,7 @@ export function TaskDiagramOverlay({
           <div style={{ width: "min(92vw, 110vh, 1100px)" }}>
             <TaskDiagram task={task} size="lg" className="h-auto w-full" />
           </div>
-          {/* autoFocus so a keyboard user lands on the way out rather than on
-              the dialog container, which is what RAC would focus otherwise. */}
+          {/* The way out, autoFocused — see the note on FullScreenSheet. */}
           <Button autoFocus variant="outline" size="sm" onPress={() => setOpen(false)}>
             Close
           </Button>

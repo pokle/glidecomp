@@ -119,11 +119,15 @@ instance only exists a tick after mount, so gate anything that drives it on
   full-width 44px rows in flow, replacing a Select or RadioGroup wherever the
   value is part of a form that gets Saved; see the Conventions section for
   which control to reach for), `table` (Table/TableHeader/Column/Row/
-  Cell/CellEditZone), `grid-list` (GridList/GridListItem — vertical card list
-  with `keyboardNavigationBehavior="tab"`, the editable-list alternative to
-  Table. **No current consumer**: its one caller, the route editor, is a RAC
-  Table again. Kept as the kit's answer for *card-shaped* editable
-  collections), `combo-box` (ComboBox/ComboBoxItem — text input
+  Cell/CellEditZone), `grid-list` (GridList/GridListItem/RowContent — a
+  vertical list with `keyboardNavigationBehavior="tab"`, and since the
+  mobile-first pass the kit's default answer for an editable collection that
+  is not genuinely spreadsheet-shaped. `variant="cards"` is the bordered-card
+  look; `variant="rows"` is the NavList row, for a list whose rows hold
+  buttons — the waypoints editor and its read-only view, the altitude review
+  and the route editor's turnpoints are all that. `RowContent` is the row
+  body those four share: a leading slot, a name with one truncating line of
+  detail under it, a trailing slot and an optional chevron), `combo-box` (ComboBox/ComboBoxItem — text input
   + floating filtered suggestions; **use this, not SearchField + list-box**,
   whenever typing filters a list: it owns the ARIA combobox contract that a
   searchbox beside a detached listbox doesn't provide — see gotcha #12),
@@ -176,8 +180,14 @@ instance only exists a tick after mount, so gate anything that drives it on
   MenuSection/MenuHeader/MenuSeparator — a Header must sit inside a
   MenuSection to name the group, and `placement` forwards to the popover),
   `router` (RacRouterProvider — bridges RAC `href` links to react-router;
-  SSR-safe), `full-screen-sheet` (FullScreenSheet — the **full-bleed** modal,
-  `dialog`'s Modal being a centered panel whose overlay
+  SSR-safe), `full-screen-sheet` (FullScreenSheet + SheetHeader/
+  SheetBody/SheetFooter — the **full-bleed** modal and the chrome for a
+  header-plus-scrolling-body sheet: the header's title, its optional
+  `leading` and `action` slots and the `autoFocus` way out, the body's
+  `max-w-2xl` readable width and `min-h-0` scroll, and the footer for a
+  whole-sheet action. Four sheets had each written their own before it, in
+  two vocabularies that disagreed about all three. Full-bleed matters because
+  `dialog`'s Modal is a centered panel whose overlay
   padding/background/centering are not overridable. Render it when open and
   not when closed: there is no `isOpen`, so a closed sheet costs nothing and a
   lazily-imported one stays unimported. `dismissOnPress` makes the whole sheet
@@ -712,6 +722,24 @@ Points worth knowing before you reach for one:
     editor's map is maximised). Nothing else about the overlay is
     overridable, deliberately — the same reasoning as the thermal rose's
     legend popover, which carries `z-[110]` for exactly this reason.
+
+25. **A safe-area utility INSIDE a `FullScreenSheet` counts the inset
+    twice.** The sheet already spends it, once, on its own `p-safe` (see the
+    edge-to-edge convention above). A caller that then adds `px-gutter-safe`
+    gets `max(1rem, inset) + inset`, and `pb-gutter-safe` gets
+    `1rem + 2·inset` — visibly wider gutters in landscape, and only on the
+    sheets that did it, which is how two of the four sheets came to have a
+    different gutter from the other two. Inside a sheet, padding is plain
+    Tailwind: `px-4`, `p-4`, `pb-4`. `SheetHeader` / `SheetBody` /
+    `SheetFooter` do that for you.
+
+26. **`variant="rows"` already lays a GridList row out.** `navRowClass` is
+    `flex min-h-11 w-full items-center gap-3 px-4 py-2.5 …`, so a row
+    restating `className="flex items-center gap-3"` is saying nothing — and
+    two lists doing so is what made three different row bodies look like the
+    same shape. Put `RowContent` inside the item instead; it owns the
+    `min-w-0 flex-1` middle block, the truncating detail line and the
+    chevron.
 
 ## Verification playbook (all part of "done" for RAC work)
 

@@ -832,9 +832,7 @@ export function CompWaypoints() {
             <ToggleButton size="sm" isSelected={addMode} onChange={setAddMode}>
               {addMode ? "Tap the map to place…" : "Add from map"}
             </ToggleButton>
-            {/* autoFocus so a keyboard user lands on the way out rather than
-                on the dialog container — Escape alone is not a discoverable
-                affordance (accessibility standard §4.1). */}
+            {/* The way out, autoFocused — see the note on FullScreenSheet. */}
             <Button
               autoFocus
               variant="outline"
