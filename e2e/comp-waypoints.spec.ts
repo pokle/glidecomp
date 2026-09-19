@@ -12,7 +12,9 @@
  * - Save lives in the page's fixed bottom bar beside an "Unsaved changes"
  *   hint, and while dirty a navigation guard offers Discard/Keep editing —
  *   the comp-settings behaviour (settings-save-ux.spec.ts), brought here
- *   after an admin lost a set of added waypoints to a tap on a link.
+ *   after an admin lost a set of added waypoints to a tap on a link. The
+ *   browser's Back gets the same question, and answering "Keep editing"
+ *   leaves the history stack exactly as it was found.
  * - The map maximises into a full-screen sheet carrying its own Add-from-map
  *   toggle, so several points can be placed from a phone-sized map.
  * - "Check altitudes" is the page's only altitude action and reports nothing
@@ -226,6 +228,32 @@ async function editWaypoint(
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
+/**
+ * Re-enter the waypoints page through the comp's section nav, and answer with
+ * the comp page's URL.
+ *
+ * `beforeEach` arrives by `goto`, which makes the page the first entry of its
+ * own document — Back from there leaves for the blank page Playwright started
+ * on, unloading the document and raising a `beforeunload` prompt the guard's
+ * own dialog would then be hiding behind. Coming in through a link instead
+ * puts a real in-app route underneath, which is also what a reader has.
+ */
+async function reachWaypointsFromCompPage(page: Page): Promise<string> {
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: COMP_NAME })
+    .click();
+  await expect(page.getByRole("heading", { level: 1, name: COMP_NAME })).toBeVisible();
+  const compUrl = page.url();
+
+  await page
+    .getByRole("navigation", { name: "Sections" })
+    .getByRole("link", { name: /^Waypoints/ })
+    .click();
+  await expect(editorRows(page)).toHaveCount(waypoints.length, { timeout: 15_000 });
+  return compUrl;
+}
+
 test("the editor lists waypoints, edits in a sheet, and blocks bad coords", async ({
   page,
 }) => {
@@ -434,6 +462,14 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
     await expect(page.getByText("Unsaved changes")).toBeHidden();
 
+    // Saving disarms the back guard, and its history entry goes with it: one
+    // press leaves the page rather than landing on a stray entry wearing the
+    // same URL and appearing to do nothing.
+    await page.goBack();
+    await expect(page).not.toHaveURL(/waypoints$/);
+    await page.goForward();
+    await expect(await firstWaypointRow(page)).toContainText("E2E Renamed");
+
     // A reload proves it persisted (the editor rebuilds from the API).
     await page.reload();
     await expect(await firstWaypointRow(page)).toContainText("E2E Renamed");
@@ -504,6 +540,79 @@ test("navigating away from unsaved waypoints is guarded", async ({ page }) => {
     .getByRole("button", { name: "Discard changes" })
     .click();
   await expect(page).toHaveURL(/\/comp$/);
+
+  expect(mutated()).toBe(false);
+});
+
+/**
+ * Back is guarded too.
+ *
+ * Neither of the guard's older layers ever sees a back gesture: a `popstate`
+ * is not a click, and a same-document history step is not an unload. So the
+ * one gesture this page treats as first-class navigation — Back walks out of
+ * one sheet per press — used to end by dropping the work without a word.
+ */
+test("the back gesture on unsaved waypoints is guarded", async ({ page }) => {
+  const mutated = trackMutations(page);
+  const compUrl = await reachWaypointsFromCompPage(page);
+  const waypointsUrl = page.url();
+
+  await editWaypoint(page, await firstWaypointRow(page), "Name", "E2E Back Guard");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // The guard armed when the form went dirty, so it sits UNDER every overlay
+  // opened afterwards: a sheet still takes the first press for itself.
+  await (await firstWaypointRow(page)).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).toHaveURL(waypointsUrl);
+
+  // With the overlays gone the next press reaches the guard, which asks
+  // instead of leaving. Keep editing: the reader has not moved and the edit
+  // is still there.
+  await page.goBack();
+  const dialog = page.getByRole("alertdialog");
+  await expect(
+    dialog.getByText("This page has unsaved changes. Leaving will discard them.")
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(waypointsUrl);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Back Guard");
+
+  // Keep editing left the stack exactly as it found it, so the NEXT press
+  // asks again rather than appearing to do nothing.
+  await page.goBack();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Discard changes" })
+    .click();
+
+  // Discard finishes the press: one step back, to where the reader came from.
+  await expect(page).toHaveURL(compUrl);
+  expect(mutated()).toBe(false);
+});
+
+test("a reverted edit disarms the back guard and leaves no stray entry", async ({
+  page,
+}) => {
+  const mutated = trackMutations(page);
+  const compUrl = await reachWaypointsFromCompPage(page);
+
+  // Dirty, then clean again by hand — the same transition a Save makes, minus
+  // the round trip. The guard's history entry has to go with it.
+  const original = waypoints[0].name;
+  await editWaypoint(page, await firstWaypointRow(page), "Name", "E2E Reverted");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await editWaypoint(page, await firstWaypointRow(page), "Name", original);
+  await expect(page.getByText("Unsaved changes")).toBeHidden();
+
+  // ONE press leaves, with nothing asked and no dead entry to walk through.
+  await page.goBack();
+  await expect(page).toHaveURL(compUrl);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
 
   expect(mutated()).toBe(false);
 });

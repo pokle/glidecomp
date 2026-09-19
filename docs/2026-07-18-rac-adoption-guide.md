@@ -741,6 +741,31 @@ Points worth knowing before you reach for one:
     `min-w-0 flex-1` middle block, the truncating detail line and the
     chevron.
 
+27. **Anything that pushes a history entry has to say where it belongs in the
+    stack.** `lib/use-back-dismiss.ts` is no longer only for overlays: the
+    unsaved-changes guard holds an entry too, so Back on a dirty form asks
+    before it discards. Three rules came out of wiring it up, and all three
+    were caught by the e2e rather than by review.
+    - **A guard is a GROUND-FLOOR layer** (`useBackDismiss`'s third
+      argument). It does not arm in the order the reader would expect: on the
+      waypoints page it is editing an altitude *inside* the review sheet that
+      turns the form dirty, two layers deep, and an entry pushed there takes
+      the Back that was aimed at the sheet. History is linear and an entry
+      cannot be inserted underneath one, so a ground-floor layer waits for the
+      stack to empty and takes the ground floor when it is free.
+    - **Never start a second traversal while one is in flight.**
+      `history.back()` does not take effect until its popstate lands, so a
+      second walk reads the entry the first has already left and pops for it
+      as well — two pages back in one press. Walks run one at a time and
+      re-read the stack when their turn comes.
+    - **Do not count entries; read them.** The confirm dialog is itself a
+      layer (Back behaves as Escape does), so "Discard changes" has to leave
+      through an entry that may or may not have been released yet. Each step
+      reads the marker off the entry it is standing on, which also lets it pop
+      straight through a DEAD one — a release that found somebody else's entry
+      on top of its own, refused to pop it, and left an entry wearing the
+      page's URL that a Back would otherwise land on and appear to do nothing.
+
 ## Verification playbook (all part of "done" for RAC work)
 
 ```bash

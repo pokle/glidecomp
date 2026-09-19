@@ -8,7 +8,8 @@
  * - the index rows and their current-value summaries, and that a group save
  *   PATCHes ONLY that group's fields (the server diffs per field, so a page
  *   sending another group's values would silently widen every save);
- * - the Discard/Keep navigation guard on a dirty sub-page;
+ * - the Discard/Keep navigation guard on a dirty sub-page, reached both by a
+ *   link click and by the browser's Back;
  * - the whole journey with no horizontal overflow — the point of the
  *   restructure;
  * - non-admin fallback and the unknown-group 404.
@@ -201,6 +202,55 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
     .getByRole("button", { name: "Discard changes" })
     .click();
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("main").getByRole("link", { name: /^General/ })
+  ).toContainText(COMP_NAME);
+});
+
+/**
+ * The same guard, reached with the back gesture instead of a link.
+ *
+ * Neither `beforeunload` nor the capture-phase click interceptor sees a
+ * `popstate`, so Back used to discard a sub-page's edits in silence. The guard
+ * holds a history entry of its own while the form is dirty
+ * (`lib/use-back-dismiss.ts`), which is what gives it a press to answer.
+ */
+test("Back on a dirty sub-page is guarded: Keep stays put, Discard leaves", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  // Arrive through the index rather than by `goto`, so the press has a real
+  // route to return to instead of unloading the document.
+  await page.goto(`/comp/${compId}/settings`);
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  await page.getByRole("main").getByRole("link", { name: /^General/ }).click();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+
+  const name = page.getByLabel("Name");
+  await name.fill(`${COMP_NAME} (back)`);
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // Keep editing: the reader is left where they were, still editing.
+  await page.goBack();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByText("Discard changes?")).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+  await expect(name).toHaveValue(`${COMP_NAME} (back)`);
+
+  // …and the stack is as it was found, so the next press asks again rather
+  // than appearing to do nothing.
+  await page.goBack();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Discard changes" })
+    .click();
+
+  // Discard finishes the press, and nothing was saved.
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
   await expect(
     page.getByRole("main").getByRole("link", { name: /^General/ })
   ).toContainText(COMP_NAME);
