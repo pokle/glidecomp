@@ -72,7 +72,9 @@ export function CompScoresSummary({
                   {state.scores.class_scores.length > 1 ? (
                     <h3 className="mt-2 font-semibold">{cls.pilot_class}</h3>
                   ) : null}
-                  <ol className="mt-1.5 space-y-1 text-sm">
+                  {/* No `text-sm`: the podium is the card's primary
+                      content, so it takes the card's body size (issue #704). */}
+                  <ol className="mt-1.5 space-y-1">
                     {top.map((p) => (
                       <li
                         key={p.comp_pilot_id}

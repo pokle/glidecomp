@@ -31,13 +31,30 @@ import type { ScoreDistributionChart } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
 import { linearScale, niceTicks } from "./scale";
 import { XAxisTitle } from "./AxisTitle";
+import { CHART_LABEL_PX, useChartLabelSize } from "./use-chart-label-size";
 
 const W = 520;
-const H = 108;
 const MARGIN = { right: 14, left: 14 };
+
+/**
+ * The size every vertical measurement below was originally tuned against.
+ *
+ * This strip is almost entirely TYPE and the gaps between rows of it — two
+ * rows of marker labels, the lane, a row of ticks, an axis title — so rather
+ * than re-derive each one, the whole vertical layout is scaled by however far
+ * the real label size has moved from this. On a desktop the ratio is 1 and
+ * nothing budges; on a phone, where `use-chart-label-size.ts` asks for 21
+ * units so the labels paint at 13px instead of 5.8px, the strip grows with
+ * them — which is the point. A strip that kept its 108-unit height while its
+ * type doubled would just print the two on top of each other.
+ */
+const TUNED_AT = 10;
+
 /** The lane the dots sit on. */
 const LANE_Y = 58;
-/** Dot radius, matching the day profile's takeoff lane. */
+/** Dot radius, matching the day profile's takeoff lane — at {@link TUNED_AT}.
+ *  It scales with everything else, so the field stays the same weight beside
+ *  its labels rather than shrinking to specks next to phone-sized type. */
 const DOT_R = 3;
 /**
  * Baselines for marker labels, nearest the lane first.
@@ -49,13 +66,14 @@ const DOT_R = 3;
  * worse than a second row.
  */
 const LABEL_ROWS = [26, 12];
-/** Rough label width for collision testing, at the 10px label size. */
-const labelWidth = (t: string) => t.length * 5.4;
+/** Rough label width for collision testing: 0.54em per character. */
+const labelWidth = (t: string, fontSize: number) => t.length * 0.54 * fontSize;
 /** Tick labels sit on their own row, clear of the axis title below them —
  *  with several ticks across the axis, a centred title on the same row
  *  collides with whichever tick lands mid-scale. */
 const TICK_LABEL_Y = 76;
 const AXIS_TITLE_Y = 94;
+const TUNED_H = 108;
 /** How many round ticks to aim for. The field spans tens of kilometres, so
  *  the two ends alone leave a reader with no way to place a dot between
  *  them; niceTicks turns that span into round numbers they can count on. */
@@ -63,14 +81,24 @@ const TICK_TARGET = 5;
 
 export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) {
   const { points, markers, xLabel, caption } = chart;
+  const { svgRef, fontSize } = useChartLabelSize(W, CHART_LABEL_PX.footnote);
   if (points.length === 0) return null;
+
+  // One ratio drives the whole vertical layout — see TUNED_AT.
+  const k = fontSize / TUNED_AT;
+  const laneY = LANE_Y * k;
+  const dotR = DOT_R * k;
+  const labelRows = LABEL_ROWS.map((y) => y * k);
+  const tickLabelY = TICK_LABEL_Y * k;
+  const axisTitleY = AXIS_TITLE_Y * k;
+  const H = TUNED_H * k;
 
   const plot = { left: MARGIN.left, right: W - MARGIN.right };
   const xMax = Math.max(...points.map((p) => p.x), ...markers.map((m) => m.x));
   // From zero, always: distance is a magnitude, and a strip that started at
   // the shortest flight of the day would exaggerate the spread and put the
   // minimum-distance threshold off the left edge.
-  const x = linearScale([0, xMax || 1], [plot.left + DOT_R, plot.right - DOT_R]);
+  const x = linearScale([0, xMax || 1], [plot.left + dotR, plot.right - dotR]);
 
   // Round kilometre ticks across the whole axis. niceTicks clamps inside the
   // domain, so the rightmost tick sits at or below the best distance flown —
@@ -90,17 +118,18 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
   }> = [];
   const rowEnds: number[] = LABEL_ROWS.map(() => -Infinity);
   for (const m of [...markers].sort((a, b) => (b.you ? 1 : 0) - (a.you ? 1 : 0))) {
-    const half = labelWidth(m.label) / 2;
+    const half = labelWidth(m.label, fontSize) / 2;
     const labelX = Math.min(W - half - 2, Math.max(half + 2, x(m.x)));
-    let row = LABEL_ROWS.findIndex((_, i) => labelX - half > rowEnds[i] + 4);
-    if (row < 0) row = LABEL_ROWS.length - 1;
+    let row = labelRows.findIndex((_, i) => labelX - half > rowEnds[i] + 4);
+    if (row < 0) row = labelRows.length - 1;
     rowEnds[row] = Math.max(rowEnds[row], labelX + half);
-    placedMarkers.push({ ...m, labelX, labelY: LABEL_ROWS[row] });
+    placedMarkers.push({ ...m, labelX, labelY: labelRows[row] });
   }
 
   return (
     <figure className="mt-3 space-y-1">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"
         role="img"
@@ -110,8 +139,8 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
         <line
           x1={plot.left}
           x2={plot.right}
-          y1={LANE_Y}
-          y2={LANE_Y}
+          y1={laneY}
+          y2={laneY}
           className="stroke-border"
           strokeWidth={1}
         />
@@ -127,8 +156,8 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
             <line
               x1={x(m.x)}
               x2={x(m.x)}
-              y1={m.labelY + 4}
-              y2={LANE_Y + 12}
+              y1={m.labelY + fontSize * 0.4}
+              y2={laneY + fontSize * 1.2}
               strokeWidth={m.you ? 2 : 1}
               strokeDasharray={m.you ? undefined : "3 3"}
               className={cn(
@@ -139,9 +168,10 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
               aria-hidden
               x={m.labelX}
               y={m.labelY}
+              fontSize={fontSize}
               textAnchor="middle"
               className={cn(
-                "fill-current stroke-background text-[10px] [paint-order:stroke] [stroke-width:3px]",
+                "fill-current stroke-background [paint-order:stroke] [stroke-width:3px]",
                 m.you ? "font-medium text-foreground" : "text-muted-foreground"
               )}
             >
@@ -158,8 +188,8 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
               <circle
                 key={p.key}
                 cx={x(p.x)}
-                cy={LANE_Y}
-                r={DOT_R}
+                cy={laneY}
+                r={dotR}
                 className="fill-foreground/30"
               />
             )
@@ -174,8 +204,8 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
             <circle
               key={p.key}
               cx={x(p.x)}
-              cy={LANE_Y}
-              r={DOT_R + 2}
+              cy={laneY}
+              r={dotR + 2 * k}
               className="fill-chart-1 stroke-background stroke-2"
             />
           ))}
@@ -184,20 +214,20 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
             wants to measure against, and 0-and-max alone gives them nothing
             to place a dot by. The unit goes in the title rather than on every
             tick, which would repeat "km" five times across a 520-wide strip. */}
-        <g aria-hidden className="text-[10px] text-muted-foreground">
+        <g aria-hidden fontSize={fontSize} className="text-muted-foreground">
           {ticks.map((t) => (
             <g key={t}>
               <line
                 x1={x(t)}
                 x2={x(t)}
-                y1={LANE_Y + 8}
-                y2={LANE_Y + 12}
+                y1={laneY + fontSize * 0.8}
+                y2={laneY + fontSize * 1.2}
                 className="stroke-border"
                 strokeWidth={1}
               />
               <text
                 x={x(t)}
-                y={TICK_LABEL_Y}
+                y={tickLabelY}
                 textAnchor="middle"
                 className="fill-current"
               >
@@ -205,7 +235,12 @@ export function DistributionStrip({ chart }: { chart: ScoreDistributionChart }) 
               </text>
             </g>
           ))}
-          <XAxisTitle left={plot.left} right={plot.right} y={AXIS_TITLE_Y}>
+          <XAxisTitle
+            left={plot.left}
+            right={plot.right}
+            y={axisTitleY}
+            fontSize={fontSize}
+          >
             {`${xLabel} (km)`}
           </XAxisTitle>
         </g>

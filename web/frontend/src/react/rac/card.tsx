@@ -38,7 +38,14 @@ export function Card({
   return (
     <section
       data-slot="card"
-      className={cn(cardSurface, "flex flex-col gap-4 p-5 text-sm", className)}
+      // `text-base`, not `text-sm`: this one word set the body size for 60
+      // cards, which is most of what the app prints, and 14px is iOS Footnote
+      // — a caption size doing a body's job. A phone measurement of the comp
+      // detail page found 85 text nodes at 14px and not one at 17 (issue
+      // #704). A card that genuinely IS dense — a grid of figures — opts back
+      // down with `text-sm` in its own className; that is a per-surface
+      // decision, which is exactly what it was not before.
+      className={cn(cardSurface, "flex flex-col gap-4 p-5 text-base", className)}
       {...props}
     />
   );

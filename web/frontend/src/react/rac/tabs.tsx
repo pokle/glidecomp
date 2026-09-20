@@ -181,7 +181,11 @@ export function TabPanel({
   return (
     <AriaTabPanel
       className={cn(
-        "flex-1 text-sm outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50",
+        // `text-base`: a panel holds the page's content, so it carries the
+        // page's body size (issue #704). The Tab LABELS above stay `text-sm` —
+        // a segmented control's label is a control label, not body, and the
+        // strip is only h-8 tall.
+        "flex-1 text-base outline-none data-focus-visible:ring-2 data-focus-visible:ring-ring/50",
         className as string
       )}
       {...props}

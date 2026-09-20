@@ -176,7 +176,9 @@ export function CompSetupProgress({
           }
           valueText={`${done} of ${requiredSteps.length} steps`}
         />
-        <ol className="mt-3 space-y-1.5 text-sm">
+        {/* No `text-sm`: the checklist is the card's content, not a note
+            beside it (issue #704). */}
+        <ol className="mt-3 space-y-1.5">
           {steps.map((step) => (
             <li key={step.key} className="flex items-center gap-2">
               {step.complete ? (

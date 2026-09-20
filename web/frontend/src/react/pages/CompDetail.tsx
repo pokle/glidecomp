@@ -492,7 +492,9 @@ function TasksList({
           // border; px/py put the trigger and its panel on one inset.
           className="border-t-0 px-3 py-2.5"
         >
-          <ul className="mt-1 space-y-0.5 text-sm">
+          {/* No `text-sm`: the task list is what this card is FOR, so it
+              reads at the card's body size (issue #704). */}
+          <ul className="mt-1 space-y-0.5">
             {day.rows.map((row) => (
               <li key={row.key} className="flex items-center gap-4">
                 <Link

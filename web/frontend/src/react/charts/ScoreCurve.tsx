@@ -39,10 +39,41 @@ import type { ScoreCurveChart, ScoreChartPilot } from "@glidecomp/engine";
 import { cn } from "@/react/lib/utils";
 import { extent, linearScale, niceTicks } from "./scale";
 import { AxisUnit, XAxisTitle } from "./AxisTitle";
+import { CHART_LABEL_PX, useChartLabelSize } from "./use-chart-label-size";
 
 const W = 520;
-const H = 210;
-const MARGIN = { top: 14, right: 14, bottom: 28, left: 44 };
+/** The plot area's own height. The viewBox's total height is this plus the
+ *  margins, which grow with the type — see {@link chartMargins}. */
+const PLOT_H = 168;
+
+/**
+ * Margins sized for the type that will actually be painted.
+ *
+ * Every number below was originally a constant tuned for 10-unit labels, which
+ * is why a phone — where the same chart paints its labels at 21 units, see
+ * `use-chart-label-size.ts` — clipped the "pts" stamp off the top of the frame
+ * and sliced the last x tick in half against the right edge. Margins hold
+ * TYPE, so they have to be measured in it:
+ *
+ *  - `top` holds the unit stamp's line, which sits above the plot.
+ *  - `right` holds the half of the last x tick that overhangs the plot's right
+ *    edge ("80 km" is centred on its gridline, so half of it is outside).
+ *  - `bottom` holds the tick baseline (1.5em below the plot), the tick's own
+ *    descender, and the axis title's line beneath it.
+ *  - `left` holds the widest y tick — these are points, so four digits — plus
+ *    its 0.6em gap from the plot.
+ *
+ * All four keep a floor at the old constant, so nothing on a desktop, where
+ * the type is near 10 units anyway, moves at all.
+ */
+function chartMargins(fontSize: number) {
+  return {
+    top: Math.max(14, Math.round(fontSize * 1.15 + 3)),
+    right: Math.max(14, Math.round(fontSize * 1.6)),
+    bottom: Math.max(28, Math.round(fontSize * 2.95 + 2)),
+    left: Math.max(44, Math.round(fontSize * 0.54 * 4 + fontSize * 0.6 + 8)),
+  };
+}
 
 /**
  * Below this many plotted pilots the median is not worth naming: with a small
@@ -52,14 +83,20 @@ const MARGIN = { top: 14, right: 14, bottom: 28, left: 44 };
 const MEDIAN_MIN_FIELD = 7;
 
 /** Rough width of a label, for collision testing. The names are proportional
- *  text at 10px; 5.4px per character over-estimates slightly, which is the
- *  safe direction — it drops a marginal label rather than overlapping one. */
-function labelWidth(name: string): number {
-  return name.length * 5.4;
+ *  text; 0.54em per character over-estimates slightly, which is the safe
+ *  direction — it drops a marginal label rather than overlapping one. Taking
+ *  the size as an argument is what keeps the estimate honest once the type
+ *  grows on a narrow screen: measured against a fixed 10-unit assumption,
+ *  every phone-sized name would be judged less than half its drawn width and
+ *  the collision test would pass five labels that land on top of each other. */
+function labelWidth(name: string, fontSize: number): number {
+  return name.length * 0.54 * fontSize;
 }
 
 /**
- * Vertical offsets from a dot to try for its label, in order.
+ * Vertical offsets from a dot to try for its label, in order — as multiples
+ * of the label's own size, because that is what "far enough to clear the line
+ * above" actually means.
  *
  * These curves are steep at one end, which is exactly where the best pilots
  * bunch — on a real task the three fastest sat within four minutes and twenty
@@ -67,11 +104,12 @@ function labelWidth(name: string): number {
  * Rather than drop two of the three, walk outwards until one fits and draw a
  * leader line back to the dot.
  */
-const LABEL_OFFSETS = [-12, 19, -27, 34, -42, 49];
+const LABEL_OFFSETS_EM = [-1.2, 1.9, -2.7, 3.4, -4.2, 4.9];
 
 /** Beyond this displacement a label no longer obviously belongs to the dot
- *  under it, so it earns a leader line. */
-const LEADER_THRESHOLD = 22;
+ *  under it, so it earns a leader line. In ems for the same reason as
+ *  {@link LABEL_OFFSETS_EM}. */
+const LEADER_THRESHOLD_EM = 2.2;
 
 /**
  * Two dots closer than this are one dot to the eye, so only the first of them
@@ -137,14 +175,21 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   );
   const [readout, setReadout] = useState<ScoreChartPilot | null>(null);
   const dotRefs = useRef<(SVGGElement | null)[]>([]);
+  // Footnote rather than body: this chart is small and sits INSIDE the section
+  // it explains, under prose that has already stated the arithmetic, and the
+  // item list below carries the exact numbers. Its labels are a sighted
+  // reader's orientation, not the reading itself.
+  const { svgRef, fontSize } = useChartLabelSize(W, CHART_LABEL_PX.footnote);
 
   if (points.length === 0 || curve.length === 0) return null;
 
+  const margin = chartMargins(fontSize);
+  const H = PLOT_H + margin.top + margin.bottom;
   const plot = {
-    left: MARGIN.left,
-    right: W - MARGIN.right,
-    top: MARGIN.top,
-    bottom: H - MARGIN.bottom,
+    left: margin.left,
+    right: W - margin.right,
+    top: margin.top,
+    bottom: H - margin.bottom,
   };
 
   // The curve sets the domain, not the dots: it is the subject, and letting
@@ -208,19 +253,24 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
     ) {
       continue;
     }
-    const half = labelWidth(p.name) / 2;
+    const half = labelWidth(p.name, fontSize) / 2;
     // Clamp by the label's OWN width — a fixed inset lets a long name run off
     // the right edge, which is where the best pilots sit on a rising curve.
     // Asymmetric on purpose: the right margin is empty so a label may use it,
     // but the LEFT margin holds the y-axis numbers, and a name pushed into it
     // sits on top of them. Displacement is what the leader lines are for.
     const cx = Math.min(W - half - 2, Math.max(plot.left + half + 2, dotX));
-    for (const dy of LABEL_OFFSETS) {
-      const ly = dotY + dy;
+    for (const em of LABEL_OFFSETS_EM) {
+      const ly = dotY + em * fontSize;
       // Keep it inside the plot: a label pushed off the top or bottom is as
       // lost as one that collided.
-      if (ly < plot.top + 9 || ly > plot.bottom - 2) continue;
-      const box = { x0: cx - half, x1: cx + half, y0: ly - 9, y1: ly + 3 };
+      if (ly < plot.top + fontSize * 0.9 || ly > plot.bottom - fontSize * 0.2) continue;
+      const box = {
+        x0: cx - half,
+        x1: cx + half,
+        y0: ly - fontSize * 0.9,
+        y1: ly + fontSize * 0.3,
+      };
       if (labels.some((l) => overlaps(l.box, box))) continue;
       labels.push({ key: p.key, name: p.name, x: cx, y: ly, dotX, dotY, you: p.you, box });
       break;
@@ -247,6 +297,7 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   return (
     <figure className="mt-3 space-y-1">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"
         role="group"
@@ -268,14 +319,26 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
 
         {/* aria-hidden: the caption carries the reading; loose axis numbers
             only add noise to a screen reader. */}
-        <g aria-hidden className="text-[10px] text-muted-foreground">
+        <g aria-hidden fontSize={fontSize} className="text-muted-foreground">
           {xTicks.map((t) => (
-            <text key={`tx${t}`} x={x(t)} y={plot.bottom + 15} textAnchor="middle" className="fill-current">
+            <text
+              key={`tx${t}`}
+              x={x(t)}
+              y={plot.bottom + fontSize * 1.5}
+              textAnchor="middle"
+              className="fill-current"
+            >
               {formatX(xUnit, t)}
             </text>
           ))}
           {yTicks.map((t) => (
-            <text key={`ty${t}`} x={plot.left - 6} y={y(t) + 3} textAnchor="end" className="fill-current">
+            <text
+              key={`ty${t}`}
+              x={plot.left - fontSize * 0.6}
+              y={y(t) + fontSize * 0.35}
+              textAnchor="end"
+              className="fill-current"
+            >
               {Math.round(t)}
             </text>
           ))}
@@ -283,10 +346,15 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
               the two are different things. The y axis here is points and
               nothing else, and the section heading above already names the
               component being scored. */}
-          <AxisUnit left={plot.left} top={plot.top}>
+          <AxisUnit left={plot.left} top={plot.top} fontSize={fontSize}>
             pts
           </AxisUnit>
-          <XAxisTitle left={plot.left} right={plot.right} y={H - 2}>
+          <XAxisTitle
+            left={plot.left}
+            right={plot.right}
+            y={H - fontSize * 0.35}
+            fontSize={fontSize}
+          >
             {xLabel}
           </XAxisTitle>
         </g>
@@ -384,12 +452,12 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
             plumbing, and must not read as a second data series. */}
         <g aria-hidden>
           {labels
-            .filter((l) => Math.abs(l.y - l.dotY) > LEADER_THRESHOLD)
+            .filter((l) => Math.abs(l.y - l.dotY) > LEADER_THRESHOLD_EM * fontSize)
             .map((l) => (
               <line
                 key={`lead-${l.key}`}
                 x1={l.x}
-                y1={l.y + (l.y < l.dotY ? 3 : -8)}
+                y1={l.y + (l.y < l.dotY ? fontSize * 0.3 : fontSize * -0.8)}
                 x2={l.dotX}
                 y2={l.dotY + (l.y < l.dotY ? -7 : 7)}
                 className="stroke-muted-foreground/40"
@@ -399,7 +467,8 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
         </g>
         <g
           aria-hidden
-          className="stroke-background text-[10px] [paint-order:stroke] [stroke-width:3px]"
+          fontSize={fontSize}
+          className="stroke-background [paint-order:stroke] [stroke-width:3px]"
         >
           {labels.map((l) => (
             <text
