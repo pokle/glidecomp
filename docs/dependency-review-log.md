@@ -4,6 +4,173 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-09-20
+
+The first cycle since the Astro 6 → 7 / Vite 7 → 8 move landed on master
+(`4b48aba`, PR #699, 2026-09-16). That PR did the work the last three entries
+kept sizing and deferring, and it takes five advisories out of the audit with
+it — so this cycle closes the one remaining finding and ends at **zero**.
+
+### Security Vulnerabilities Fixed
+
+| Advisory | Severity | What was patched |
+|---|---|---|
+| [GHSA-9rgm-9g3h-6x36](https://github.com/advisories/GHSA-9rgm-9g3h-6x36) / CVE-2026-81176 — `devalue`: denial of service via malformed input | Moderate (CVSS 5.3, availability only) | `devalue.parse` did not validate array indices, so a payload with out-of-bounds indices could make the parser flip between array representations and do work quadratic in the payload size. Fixed by a new root `overrides` entry, `devalue: ^5.9.2`, resolving `5.8.1` → `5.9.4` as a single copy. |
+
+Two details worth keeping:
+
+- **The advisory's patched floor is 5.9.2, not the 5.9.1 `bun audit` prints.**
+  GitHub's own record says "prior to 5.9.2"; bun's output said `devalue <5.9.1`.
+  The override is written to the advisory's floor.
+- **An override is the right shape here, not a version bump.** `devalue` is
+  transitive through `astro@7.3.3`, which declares `devalue: ^5.8.1` and is
+  already the latest astro release — there is nothing to bump. `^5.9.2` sits
+  inside astro's own range, and `bun.lock` carries exactly one `devalue` key
+  (checked for a nested second copy, per the 2026-08-09 lesson).
+
+**`bun audit` ends this cycle at 0 vulnerabilities — the first clean audit since
+2026-07-19**, eight cycles ago. The five Astro advisories that dominated every
+entry since (the critical AVIF RCE GHSA-26w7-cxv4-gfx2, GHSA-376h-93r7-7g6f, and
+the three XSS advisories) are gone because astro moved to 7.3.3 on master, not
+because of anything this cycle did.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **devalue** (override) | 5.8.1 | 5.9.4 | root override (transitive via astro) | Security. See above. |
+| **mapbox-gl** | 3.30.0 | 3.31.0 | root, frontend | No breaking changes. Significantly smaller GeoJSON memory footprint, reduced landmark model memory, `raster-allow-draping` out of experimental, emissive MRT support for custom layers. Fixes: `transformRequest` headers/credentials were being discarded when loading GLTF model resources, and a `removeSource` error under globe projection. |
+| **hono** | 4.13.7 | 4.13.8 | frontend, auth-api, competition-api, airscore-api (+ root override) | No security fixes and no breaking changes this time — a rare quiet hono release. Respects backpressure when streaming an AWS Lambda response body; `Accept`/`Accept-Language` matching now skips `q=0` entries, treats the quality parameter case-insensitively and clamps a negative quality to 0 rather than 1; preserves the request media type when reusing a cached body; JSX/DOM reconciliation speedups. |
+| **lucide-react** | 1.45.0 | 1.47.0 | frontend | New icons only (`clef-g`/`clef-f`/`clef-c`, `monitor-pc`, `lambda`, `faucet`, `door-closed-package`, `nepali-rupee`, `tube-lotion`, `cupcake`, `square-dashed-x`, `rotate-cw-clock`, `square-dashed-plus`) plus artwork edits to `save-off`, `calendar-chevrons-right` and `broccoli`. **Nothing renamed, removed or deprecated**, which is the failure mode to watch for here — a renamed export surfaces as a frontend-only typecheck error, and the frontend's own `typecheck` is clean. |
+| **react-router-dom** (and `react-router`) | 7.18.3 | 7.18.4 | frontend | Two patches: escaping of streamed RSC redirect locations in meta tag attributes, and no more unintended `document.startViewTransition` calls during initial hydration and `router.revalidate()`. The second one touches the SSR'd pages' hydration path in principle; `test:e2e:ssr` is clean, including all the no-hydration-mismatch checks. |
+| **tabulator-tables** | 6.5.2 | 6.5.3 | frontend | Patch. Frozen-row layout, textarea editor under a percentage table height, scroll position restored on re-render in the basic vertical renderer, tree indentation, `selectableRows` limit enforcement in `selectRows`, editor focus loss across Edit/SelectRange, duplicate selections in the multiselect list editor, virtual-renderer stack overflow, and identical row ids generated across two table instances. The pilots grid is the only consumer. |
+| **@types/node** | 25.9.6 | 25.9.8 | root | Type definition patches, staying on 25.x. |
+
+### Code Changes Required
+
+**None.** Every upgrade this cycle is a drop-in patch or additive minor. The one
+change to a tracked file outside `package.json`/`bun.lock` is the new `devalue`
+override itself.
+
+Checked and not needed: mapbox-gl 3.31.0 documents no removed or renamed API
+(unlike 3.29.0's `Map.addSourceType` removal and 3.30.0's pitch/rotation split,
+both of which did need code), and no upgraded package raised its runtime floor
+past what CI installs — the highest `engines.node` among them is
+`react-router-dom`'s `>=20.0.0`, and `.github/workflows/*.yml` install Node 22
+at all four `setup-node` sites.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `devalue` (new, `^5.9.2`) | **Added** | GHSA-9rgm-9g3h-6x36. See above. |
+| `hono` (`^4.13.7` → `^4.13.8`) | **Updated** | Keeps the override aligned with the four workspaces' own specs. |
+
+Full list after this cycle: `@babel/core`, `@hono/node-server`,
+`brace-expansion`, `defu`, `devalue`, `browserslist`, `esbuild`, `fast-uri`,
+`form-data`, `hono`, `js-yaml`, `kysely`, `nanoid`, `postcss`,
+`protocol-buffers-schema`, `qs`, `shell-quote`, `sharp`, `smol-toml`, `svgo`,
+`undici`, `vite`, `ws`.
+
+### Packages Not Upgraded (intentional)
+
+Every row re-checked against the current `package.json`/`bun.lock` this cycle
+rather than copied forward (2026-08-23 lesson). **Astro, `@vitejs/plugin-react`
+and Vite have left this table** — they are current on master now.
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.135.0 | **Still capped — 9 cycles.** `npm view wrangler@<version> dependencies.miniflare` re-run this cycle for 4.125.0, 4.130.0 and 4.135.0: every one reports an alpha (`5.20260820.0-alpha` → `5.20260918.0-alpha`). Nothing has appeared on the stable miniflare 4.x line since 4.116.0. Re-check with that same command before ever bumping. |
+| @cloudflare/vitest-pool-workers | 0.19.1 | 0.22.0 | Paired with the wrangler cap. `npm view @cloudflare/vitest-pool-workers@0.22.0 dependencies` this cycle: `wrangler 4.124.0` + `miniflare 5.20260815.0-alpha`. Re-evaluate alongside wrangler. |
+| **vitest** | 4.1.11 | 5.0.1 | **The Vite 8 half of this deferral is gone — the wrangler half is not.** vitest 5 needs a `@cloudflare/vitest-pool-workers` that supports it, and every such release bundles the alpha miniflare above. Already at latest within `^4`. This is now purely wrangler-gated. |
+| **better-auth** | 1.6.26 | 1.7.5 | Unchanged reasoning from 2026-08-23 and 2026-09-13: 1.7.0 documents its own changes as "Breaking changes" despite the minor bump, most importantly a **required** `Account.issuer` column with an identity key change to `(issuer, accountId)` that the generated migration explicitly cannot backfill. This repo configures `socialProviders` (`web/workers/auth-api/src/auth.ts`), so it applies. Needs a focused PR with a reviewed migration, not a routine bump. |
+| @better-auth/api-key | 1.6.26 | 1.7.5 | Version-locked to better-auth; deferred alongside it. |
+| **react**, **react-dom** | 19.2.8 | 19.3.0 | **Second cycle deferred.** Additive (`<ViewTransition>`, Fragment refs, `react-dom`'s `browser()`, independent transitions) with no documented breaking changes, but these are pinned *exactly* and the SPA is server-rendered, so a React minor is a hydration-surface change deserving its own PR and its own `test:e2e:ssr` read. Two cycles is about as long as this should sit — whoever picks it up lifts `@types/react`/`@types/react-dom` to `~19.3.x` in the same PR. |
+| @types/react, @types/react-dom | 19.2.18 / 19.2.7 | 19.3.0 | Held at `~19.2.x` deliberately so the types cannot run ahead of the pinned runtime (2026-09-13 lesson). Lift with react/react-dom, never alone. |
+| **@astrojs/mdx** | 7.0.8 | 8.0.1 | Major, and **the more interesting question is whether it should be here at all** — see Lessons. 8.0.1's peers (`astro: ^7.2.6`) are satisfied by astro 7.3.3, so this is no longer astro-gated; it is only being held because removing the integration is the likelier correct answer and that is its own PR. |
+| **three**, **@types/three** | 0.185.1 / 0.185.4 | 0.186.0 | Pre-1.0 minor bump (equivalent to a major, same treatment as `kysely` and `katex`), and three's minors routinely move renderer APIs. The 3D replay is the only consumer; defer to a focused PR that can actually look at it. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260920.1 | **Major (5.x).** `npm view @cloudflare/workers-types dist-tags` re-run this cycle: `latest: 5.20260920.1`, no 4.x dist-tag at all. The 4.x line has ended; evaluate 5.x in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest. |
+| zod | 3.25.76 | 4.6.5 | Major. Standalone task — `@hono/zod-validator` 0.9.1 accepts both. |
+| kysely | 0.28.17 | 0.29.6 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.28`. Defer to a focused PR. |
+| jsdom | 25.0.1 | 30.1.0 | Major version jump. Already at latest within `^25`. Defer. |
+| katex | 0.17.0 | 0.18.7 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.17`. Defer. |
+| concurrently | 9.2.4 | 10.0.5 | Major. ESM-only, drops `--name-separator`. Already at latest within `^9`. Low priority. |
+| @types/node | 25.9.8 | 26.6.2 | Major. Now at latest within `^25`. Stay on 25.x. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine,
+  airscore-api, auth-api, competition-api, dev-router), plus
+  `bun run --filter '@glidecomp/frontend' typecheck` run separately, since
+  `typecheck:all` reaches the frontend only through the root project. This is
+  the check that would have caught a lucide-react icon rename.
+- `bun run test:all` — **1641** root/engine/airscore-api/dev-router/scripts
+  tests + **854** frontend (58 files) + **108** auth-api (6 todo, 9 files) +
+  **773** competition-api (45 files). All pass, 0 fail.
+- `bun run build` — clean, including the Astro static build (9 pages) and its
+  sharp image pipeline, and the frontend's production chunking.
+- `bun run test:e2e` — **212 passed, 8 skipped** in 14.0 minutes, exit 0, on the
+  first run, no flakes and no re-runs needed. (The suite has grown from 178+6 on
+  2026-09-13; `comp-waypoints.spec.ts` now runs in both Playwright projects.)
+- `bun run test:e2e:ssr` — **42/42 passed** in 55 seconds, exit 0, including all
+  12 "no hydration mismatch" checks. This is the one that covers the
+  react-router 7.18.4 `startViewTransition` change on the server-rendered pages.
+- `bun audit` — **1 moderate before, 0 after.** Re-run fresh rather than
+  trusting the 2026-09-13 count of 5 (2026-08-09 lesson), and it had indeed
+  changed in both directions: five astro findings gone, one new `devalue`
+  finding indexed against a version already installed.
+- `bun run check:scoring-note` — not required; no scoring source changed. No
+  code outside `package.json`/`bun.lock`/this log changed at all.
+- Root `package.json` `dependencies` read at the start of the run and
+  `git diff package.json` checked after every `bun update`: the three legitimate
+  root entries (`@fontsource/atkinson-hyperlegible-next`, `mapbox-gl`,
+  `threebox-plugin`) are all that is there, and no stray arrived this cycle.
+
+### Lessons / Notes for Future Sessions
+
+- **The astro/vite deferral is over, and the table it leaves behind is smaller
+  than the one it entered.** The 2026-09-13 entry sized astro 7 as one piece of
+  work with vite 8, vitest 5, `@vitejs/plugin-react` 6, `@astrojs/mdx` 8 and a
+  `@cloudflare/vitest-pool-workers` bump. PR #699 landed astro 7.3.3, vite 8.3.0
+  and `@vitejs/plugin-react` 6.1.1 **without** vitest 5 or the pool-workers bump,
+  because the root `vite` override lifts the whole tree to 8 and
+  `@cloudflare/vitest-pool-workers@0.19.1` runs against it fine. So the
+  prediction that those six move together was wrong in a useful way: **vitest 5
+  was never Vite-gated, it was wrangler-gated**, and it stays deferred for the
+  same reason wrangler has stayed capped for nine cycles.
+- **`@astrojs/mdx` looks like a dependency with nothing to do, and the next
+  cycle should check rather than bump it.** `find web/frontend/static -name
+  '*.mdx'` returns nothing, and the Astro config's own comment says so out loud:
+  *"There is no markdown content here: every page is a .astro file, and the
+  KaTeX on scoring/gap is prerendered by calling katex.renderToString()... So
+  Astro's markdown pipeline is never entered."* The config nonetheless registers
+  `integrations: [mdx()]`, which drags `@mdx-js/mdx`, `@astrojs/markdown-remark`
+  and the remark/rehype/unified chain into the build. It also pins
+  `@astrojs/markdown-remark@7.2.4` while astro 7.3.3 declares that package as an
+  optional peer at `^7.3.0` — a mismatch bun does not warn about. **Deleting the
+  integration is the likelier right answer than upgrading it to 8**, but it is a
+  change to the Astro build config rather than a version bump, so it wants its
+  own PR with a `bun run build` and both e2e suites behind it. Not done here to
+  keep this cycle a clean dependency bump.
+- **`bun audit`'s patched floor can be a version lower than the advisory's.**
+  bun printed `devalue <5.9.1`; GHSA-9rgm-9g3h-6x36 itself says "prior to
+  5.9.2", and 5.9.1 is a published version. Taking bun's number at face value
+  would have written an override that silences the audit while still resolving
+  vulnerable code. **Read the advisory page for the floor; use the audit only to
+  find which package to read about.**
+- **`cd <workspace> && bun update <pkgs>` behaved again — fourth cycle running.**
+  No stray root additions from any of the four workspace-scoped runs, and
+  `git diff package.json` after each confirmed it. It rewrites the workspace's
+  own ranges to the newly-resolved versions, which is the intended outcome.
+- **The root `dependencies` block was clean this cycle** — the `hono` stray the
+  2026-09-13 cycle found (left by the 2026-09-09 security commit) is still
+  removed and nothing new has appeared. The start-of-run read costs nothing;
+  keep doing it.
+- **Playwright needed no manual browser install**, as the routine promises —
+  no Playwright bump this cycle, and `web/scripts/ensure-playwright-browsers.sh`
+  had nothing to fetch. Still not worth re-deriving the old workaround.
+
 ## 2026-09-13
 
 Three weeks since the last routine entry (2026-08-23); the 2026-09-09 security
