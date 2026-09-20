@@ -14,7 +14,7 @@
     "@glidecomp/engine": "workspace:*",
     "@glidecomp/worker-kit": "workspace:*",
     "@hono/zod-validator": "^0.9.1",
-    "hono": "^4.13.7",
+    "hono": "^4.13.8",
     "sqids": "^0.3.0",
     "zod": "^3.25.76"
   },
