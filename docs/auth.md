@@ -140,6 +140,42 @@ their own buckets.
 sessions expire after 60 days. This applies to Google and email-OTP sign-ins
 alike.
 
+### The schema, and who checks it
+
+The `user`, `session`, `account`, `verification`, `apikey` and `rateLimit`
+tables are Better Auth's, but they are **ours to migrate**: they are
+hand-written in `web/db/migrations/` and applied by wrangler. Better Auth's
+CLI (`auth migrate` / `auth generate`) is never run against this database.
+
+Since **1.7.3**, Better Auth also validates that schema itself — comparing the
+live tables against the ones its configuration writes, before every
+`auth.api.*` call and every request through `auth.handler`. **That check
+cannot run on D1.** It reads the table list through Kysely's SQLite
+introspector, which queries `sqlite_master`; D1 refuses that with `not
+authorized: SQLITE_AUTH`. Left enabled, the check throws on the first query of
+every request and nobody can sign in at all — and because only a *clean*
+verdict is cached, the failure repeats on every request forever. So
+`advanced.database.validateSchema` is `false` in `src/auth.ts`.
+
+This is in no changelog and, as of this writing, unreported upstream. Don't
+mistake it for the two D1 `SQLITE_AUTH` bugs better-auth *has* fixed
+([#10551](https://github.com/better-auth/better-auth/issues/10551),
+[#10976](https://github.com/better-auth/better-auth/issues/10976), August
+2026): those were the *migration* path. The per-request check arrived after
+them ([#11168](https://github.com/better-auth/better-auth/issues/11168),
+[#11178](https://github.com/better-auth/better-auth/issues/11178), September)
+and reintroduced the same incompatibility somewhere else. **Do not delete this
+line as dead config on a later upgrade** — a release that "fixes D1" may well
+have fixed only the other path.
+
+`test/schema.test.ts` does the same job in a way D1 permits: it reads the
+expectation from `getAuthTables(auth.options)` — the very function the
+library's own check uses, over the real config, so the plugin list and
+`additionalFields` cannot drift out of a hand-copied list — and reads the live
+side with `PRAGMA table_info`, which D1 does allow. **When a Better Auth
+upgrade adds a column or a table, that test is what fails**, and the fix is a
+new migration in `web/db/migrations/`.
+
 ## Components
 
 ### Auth Worker (`web/workers/auth-api/`)
