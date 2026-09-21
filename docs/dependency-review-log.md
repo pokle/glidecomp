@@ -4,6 +4,131 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-09-20 — better-auth 1.6.26 → 1.7.5 (focused PR, not a weekly cycle)
+
+**The blocker that deferred this for four cycles no longer exists — and 1.7.3
+replaced it with an undocumented one.** Every entry since 2026-08-23 held
+better-auth back on the same reasoning: 1.7.0 added a **required**
+`Account.issuer` column and re-keyed account identity to `(issuer,
+accountId)`, with a backfill the generated migration explicitly could not do.
+**Better Auth 1.7.3 withdrew that change** and restored the 1.6 account
+schema. The *same release* added the per-request schema validation that D1
+cannot answer (see below), so the upgrade was never actually unblocked: the
+obstacle swapped for one that appears in no changelog. From 1.7.3 on, accounts are keyed by `(providerId, accountId)`
+exactly as before, the upgrade guide says "The account schema is unchanged from
+1.6. No column needs to be added", and the backfill steps apply only to
+databases that actually ran 1.7.0–1.7.2. This one never did.
+
+Verified rather than taken on trust: `getAuthTables()` was run over this
+repo's exact options on both 1.6.26 and 1.7.5 and the two dumps are
+**byte-identical** — same six tables (`user`, `session`, `account`,
+`verification`, `apikey`, `rateLimit`), same columns, same constraints. **No
+migration was needed and none was written.**
+
+### What actually needed doing
+
+| Package | From | To | Workspaces |
+|---------|------|----|------------|
+| **better-auth** | 1.6.26 | 1.7.5 | frontend, auth-api |
+| **@better-auth/api-key** | 1.6.26 | 1.7.5 | auth-api |
+
+1. **`advanced.database.validateSchema: false` (required, not optional).**
+   1.7.3 validates the live schema against the configured one before every
+   `auth.api.*` call and every request through `auth.handler`. It cannot run on
+   D1: it reads the table list through Kysely's SQLite introspector, which
+   queries `sqlite_master`, and D1 answers `not authorized: SQLITE_AUTH`. Left
+   on, **every auth request 500s** — this is what the first post-upgrade test
+   run showed, 59 failures all reading `D1_ERROR: not authorized: SQLITE_AUTH`.
+   Worse, only a *clean* verdict is cached, so the failing check would repeat
+   on every request forever. `web/workers/auth-api/test/schema.test.ts` now
+   does the same job the way D1 permits (`getAuthTables(auth.options)` vs
+   `PRAGMA table_info`), and it was confirmed to fail on an injected column.
+   Reported upstream this cycle:
+   [better-auth#11346](https://github.com/better-auth/better-auth/issues/11346).
+   Written up in [auth.md](auth.md#the-schema-and-who-checks-it).
+2. **An upstream floating-rejection bug, filtered in the vitest config.**
+   Every `APIError` an endpoint throws (a wrong OTP, a duplicate sign-up) is
+   caught and rethrown through three layers, each leaving an unawaited
+   rejected promise. The awaited path is unaffected — the router still answers
+   400/422 and all 108 pre-existing tests pass — but vitest 4 fails any run
+   reporting an unhandled error. `onUnhandledError` in
+   `web/workers/auth-api/vitest.config.ts` ignores exactly that shape (a
+   better-auth `APIError` with a **4xx**); a 5xx and every other unhandled
+   error still fail the run. Reported upstream and still open:
+   [#10658](https://github.com/better-auth/better-auth/issues/10658), which
+   lands on this same workaround and says it does not address the root cause.
+   The leak predates 1.7 (that report is on 1.6.23, under a newer
+   `@cloudflare/vitest-pool-workers` than ours); it simply did not fire here
+   on 1.6.26.
+
+### Checked and not needed
+
+Every other 1.7.0 breaking change was grepped and confirmed unused: the
+generic-OAuth rewrite (`signIn.oauth2`, `oauth2.link`, `genericOAuthClient`),
+the account selectors (`listAccounts`, `unlinkAccount`, `getAccessToken`,
+`accountInfo`, `refreshToken`), `getIp` → `getIP`, `generateState()`,
+`email_doesn't_match` → `email_does_not_match`, Google One Tap, MCP's move to
+`@better-auth/mcp`, the `oidcProvider` removal, `validAudiences` → `resources`,
+SAML/SCIM/Stripe/Expo/Electron, captcha path matching, and Device
+Authorization's new unique indexes. The custom-storage contract changes
+(`consume`, `increment`, `getAndDelete`) don't apply either: this worker uses
+the built-in `rateLimit.storage: "database"` and no secondary storage.
+`experimental: { joins }` was never set. The `microsoftEntraId` migration is
+moot — the only social provider here is Google.
+
+The "check for duplicate `(providerId, accountId)` pairs" step in the 1.7
+upgrade guide is a production-data check, not a code one; it is worth running
+against the live `taskscore-auth` D1 before deploy, though nothing in this
+repo can create such a duplicate.
+
+### Verification
+
+- `bun run typecheck:all` + the frontend's own `typecheck` — all clean, with
+  **no source changes needed** beyond the two above.
+- `bun run test:all` — clean, including auth-api at 115 (the 7 new schema
+  tests on top of the existing 108) and competition-api at 773.
+- `bun run build` — clean, Astro's 9 pages included.
+- `bun run test:e2e` — **212 passed, 8 skipped** in 13.9 minutes, exit 0 on
+  the first run, no flakes.
+- `bun run test:e2e:ssr` — **42/42 passed** in 55 seconds, exit 0, including
+  all 12 "no hydration mismatch" checks. The session cookie is what the
+  server-rendered pages forward to resolve the visitor, so this is the run
+  that proves 1.7 did not move the cookie or its signing.
+- `bun audit` — **0 vulnerabilities**, unchanged from the cycle below.
+
+### Lessons / Notes for Future Sessions
+
+- **A deferral can expire without anyone noticing.** This one was copied
+  forward through four cycles on reasoning that a patch release had already
+  made obsolete — 1.7.3 withdrew the `Account.issuer` requirement, and no
+  cycle re-read the changelog past 1.7.0 to find out. **Re-read the upgrade
+  guide at the version you would install now, not the one that first raised
+  the objection**; the guide's own wording ("Better Auth 1.7.3 removes that
+  requirement") is what settled this.
+- **Better Auth on D1 cannot self-validate its schema.** `sqlite_master` is
+  denied, so `advanced.database.validateSchema` must stay `false` here. Don't
+  delete it as dead config on a later upgrade; `test/schema.test.ts` is what
+  replaces it, and that is the test that will fail when a release adds a
+  column. Track
+  [better-auth#11346](https://github.com/better-auth/better-auth/issues/11346)
+  for the fix, and note especially that better-auth HAS fixed two D1
+  `SQLITE_AUTH` bugs already
+  ([#10551](https://github.com/better-auth/better-auth/issues/10551),
+  [#10976](https://github.com/better-auth/better-auth/issues/10976)) — those
+  were the migration path, not this one, so a future release note saying "fixes
+  D1" is not on its own a reason to turn validation back on. Try it and read
+  the test.
+- **The most expensive finding this time was not in any changelog.** The
+  `Account.issuer` story was in the release notes, the changelog and the
+  upgrade guide, in bold, under "Breaking changes" — and it cost nothing,
+  because it had been withdrawn. The one that would have taken production down
+  was found only by running the suite against a real D1: `typecheck:all` was
+  clean before a single line of source changed. **For an auth library on a
+  non-mainstream datastore, a green typecheck is not evidence of anything.**
+- **The `account` table is the one to watch across upgrades.** 1.7.0 tried to
+  re-key it and backed the change out three patches later. A future release
+  may try again; the schema test above is the tripwire.
+
 ## 2026-09-20
 
 The first cycle since the Astro 6 → 7 / Vite 7 → 8 move landed on master
