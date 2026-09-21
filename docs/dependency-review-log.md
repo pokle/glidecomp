@@ -43,6 +43,8 @@ migration was needed and none was written.**
    on every request forever. `web/workers/auth-api/test/schema.test.ts` now
    does the same job the way D1 permits (`getAuthTables(auth.options)` vs
    `PRAGMA table_info`), and it was confirmed to fail on an injected column.
+   Reported upstream this cycle:
+   [better-auth#11346](https://github.com/better-auth/better-auth/issues/11346).
    Written up in [auth.md](auth.md#the-schema-and-who-checks-it).
 2. **An upstream floating-rejection bug, filtered in the vitest config.**
    Every `APIError` an endpoint throws (a wrong OTP, a duplicate sign-up) is
@@ -107,8 +109,11 @@ repo can create such a duplicate.
   denied, so `advanced.database.validateSchema` must stay `false` here. Don't
   delete it as dead config on a later upgrade; `test/schema.test.ts` is what
   replaces it, and that is the test that will fail when a release adds a
-  column. Note especially that better-auth HAS fixed two D1 `SQLITE_AUTH`
-  bugs already ([#10551](https://github.com/better-auth/better-auth/issues/10551),
+  column. Track
+  [better-auth#11346](https://github.com/better-auth/better-auth/issues/11346)
+  for the fix, and note especially that better-auth HAS fixed two D1
+  `SQLITE_AUTH` bugs already
+  ([#10551](https://github.com/better-auth/better-auth/issues/10551),
   [#10976](https://github.com/better-auth/better-auth/issues/10976)) — those
   were the migration path, not this one, so a future release note saying "fixes
   D1" is not on its own a reason to turn validation back on. Try it and read
