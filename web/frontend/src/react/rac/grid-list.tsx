@@ -161,7 +161,14 @@ export function RowContent({
         <p className="truncate font-medium">{title}</p>
         {/* One line, clipped: coordinates, a radius, an altitude. A row that
             wrapped would make the list's rows different heights, which is
-            what a reader scans down. */}
+            what a reader scans down.
+
+            Deliberately `text-xs`, and NOT raised with the rest of the type
+            floor (issue #704): this line is CLIPPED rather than wrapped, and
+            it carries data. At `text-sm` the same 250px of phone row truncated
+            "−36.185833, 147.976669 · 640 m · r=400 m" down to the coordinates
+            and an ellipsis — a legible line that no longer says the thing.
+            Bigger type is not worth less information. */}
         {detail === undefined ? null : (
           <p className={cn("truncate text-xs text-muted-foreground", detailClassName)}>
             {detail}

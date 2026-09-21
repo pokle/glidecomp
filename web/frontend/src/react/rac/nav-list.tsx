@@ -25,8 +25,11 @@ import { cardSurface, CardTitle } from "./card";
  * needs a collection, and rows that hold buttons), but a reader should not be
  * able to tell it apart from the settings rows it sits beside.
  */
+// `text-base`: these rows are the iOS grouped-list pattern, and the pattern's
+// label is Body. At `text-sm` the app's most native-feeling surface was still
+// setting its row labels at Footnote size (issue #704).
 export const navRowClass =
-  "flex min-h-11 w-full items-center gap-3 px-4 py-2.5 text-left text-sm outline-none " +
+  "flex min-h-11 w-full items-center gap-3 px-4 py-2.5 text-left text-base outline-none " +
   "data-hovered:bg-muted/50 data-pressed:bg-muted " +
   "data-focus-visible:ring-2 data-focus-visible:ring-ring/50 data-focus-visible:ring-inset";
 
@@ -74,8 +77,12 @@ function RowBody({
       ) : null}
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-medium">{label}</span>
+        {/* A step down from the label, the way a subtitle is on iOS. The
+            right-hand `value` stays at the row's own size and separates by
+            colour alone — also the platform's habit, and what the comp
+            settings list already looked like. */}
         {description ? (
-          <span className="text-muted-foreground">{description}</span>
+          <span className="text-sm text-muted-foreground">{description}</span>
         ) : null}
       </span>
       {value != null ? (

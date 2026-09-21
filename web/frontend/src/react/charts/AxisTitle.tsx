@@ -133,20 +133,32 @@ export function YAxisTitle({
 export function AxisUnit({
   left,
   top,
+  fontSize,
   children,
 }: {
   /** The plot's left edge and top, in viewBox units. */
   left: number;
   top: number;
+  /** ViewBox font-size. Omit to keep the furniture's default 10. */
+  fontSize?: number;
   children: string;
 }) {
+  // The gap and the lift are type-relative when a size is given: at the 26
+  // units a phone asks for, a fixed 6-unit gap puts the stamp on top of the
+  // tick numbers it is supposed to caption.
+  const size = fontSize ?? 10;
   return (
     <text
       aria-hidden
-      x={left - 6}
-      y={top - 2}
+      x={left - size * 0.6}
+      y={top - size * 0.2}
       textAnchor="end"
-      className="fill-current text-[10px] text-muted-foreground"
+      fontSize={fontSize}
+      className={
+        fontSize == null
+          ? "fill-current text-[10px] text-muted-foreground"
+          : "fill-current text-muted-foreground"
+      }
     >
       {children}
     </text>

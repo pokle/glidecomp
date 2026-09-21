@@ -49,12 +49,37 @@ import type { AltitudeCleaningData } from "../comp/types";
 import { formatTimeInZone } from "../lib/time";
 import { extent, linearScale, niceTicks } from "./scale";
 import { AxisUnit } from "./AxisTitle";
+import { CHART_LABEL_PX, useChartLabelSize } from "./use-chart-label-size";
 
 export type CleaningRange = AltitudeCleaningData["ranges"][number];
 
 const W = 560;
-const H = 210;
-const MARGIN = { top: 12, right: 10, bottom: 26, left: 48 };
+/** The plot's own height; the viewBox's is this plus margins that grow with
+ *  the type — see {@link chartMargins}. */
+const PLOT_H = 172;
+
+/**
+ * Margins sized for the type actually painted, not for the 10-unit labels
+ * these numbers were first tuned against. See `use-chart-label-size.ts`: on a
+ * phone this chart's labels are 21 units, and a 26-unit bottom margin cut the
+ * timestamps in half.
+ *
+ *  - `left` holds the widest altitude tick (metres, up to five digits) and its
+ *    gap from the plot.
+ *  - `bottom` holds the timestamp row.
+ *  - `top` holds the "m" unit stamp, which sits above the plot.
+ *
+ * `right` stays constant: the last x tick is `text-anchor="end"`, so it grows
+ * leftwards into the plot and can never overhang the frame.
+ */
+function chartMargins(fontSize: number) {
+  return {
+    top: Math.max(12, Math.round(fontSize * 1.15 + 3)),
+    right: 10,
+    bottom: Math.max(26, Math.round(fontSize * 2.0 + 4)),
+    left: Math.max(48, Math.round(fontSize * 0.54 * 5 + fontSize * 0.6 + 6)),
+  };
+}
 
 /** Half-width of the shading around a repaired stretch, so a single repaired
  *  fix is still a visible mark rather than a zero-width rectangle. */
@@ -77,7 +102,7 @@ const DEAD_CHANNEL_ZERO_FRACTION = 0.5;
 
 /** Roughly one bucket per horizontal viewBox unit of plot — finer than the
  *  rendered pixel grid on any phone, so decimation is invisible. */
-const PLOT_UNITS = W - MARGIN.left - MARGIN.right;
+const PLOT_UNITS = W - chartMargins(10).left - chartMargins(10).right;
 
 type Point = [timeMs: number, metres: number];
 
@@ -217,6 +242,10 @@ export function TrackCleaningChart({
   onSelectRange: (index: number | null) => void;
 }) {
   const { gnssAlive, baroAlive } = useMemo(() => channelHealth(fixes), [fixes]);
+  // Footnote: the repairs' exact numbers are in the list beside the chart,
+  // which doubles as its controls — these labels orient, they are not the
+  // reading. (This chart is client-only; see the report-card rules.)
+  const { svgRef, fontSize } = useChartLabelSize(W, CHART_LABEL_PX.footnote);
 
   const view = useMemo(() => {
     if (fixes.length < 2) return null;
@@ -263,11 +292,13 @@ export function TrackCleaningChart({
 
   if (!view) return null;
 
+  const margin = chartMargins(fontSize);
+  const H = PLOT_H + margin.top + margin.bottom;
   const plot = {
-    left: MARGIN.left,
-    right: W - MARGIN.right,
-    top: MARGIN.top,
-    bottom: H - MARGIN.bottom,
+    left: margin.left,
+    right: W - margin.right,
+    top: margin.top,
+    bottom: H - margin.bottom,
   };
   const x = linearScale([view.t0, view.t1], [plot.left, plot.right]);
   const y = linearScale(view.yDomain, [plot.bottom, plot.top]);
@@ -292,6 +323,7 @@ export function TrackCleaningChart({
   return (
     <figure className="mt-3">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"
         role="img"
@@ -349,12 +381,12 @@ export function TrackCleaningChart({
 
         {/* aria-hidden: the caption carries the reading, and loose axis
             numbers only add noise to a screen reader. */}
-        <g aria-hidden className="text-[10px] text-muted-foreground">
+        <g aria-hidden fontSize={fontSize} className="text-muted-foreground">
           {yTicks.map((t) => (
             <text
               key={`ty${t}`}
-              x={plot.left - 6}
-              y={y(t) + 3}
+              x={plot.left - fontSize * 0.6}
+              y={y(t) + fontSize * 0.35}
               textAnchor="end"
               className="fill-current"
             >
@@ -363,14 +395,14 @@ export function TrackCleaningChart({
           ))}
           {/* A unit stamp, not an axis title: the y axis is altitude and the
               three lines' legend already says whose. See AxisTitle.tsx. */}
-          <AxisUnit left={plot.left} top={plot.top}>
+          <AxisUnit left={plot.left} top={plot.top} fontSize={fontSize}>
             m
           </AxisUnit>
           {xTicks.map((t, i) => (
             <text
               key={`tx${t}`}
               x={x(t)}
-              y={plot.bottom + 15}
+              y={plot.bottom + fontSize * 1.5}
               textAnchor={i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle"}
               className="fill-current"
             >

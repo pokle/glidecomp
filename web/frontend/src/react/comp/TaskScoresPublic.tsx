@@ -362,7 +362,9 @@ function ClassPodium({
   return (
     <div className="mt-3">
       {showClassName ? <h3 className="font-semibold">{cls.pilot_class}</h3> : null}
-      <ol className="mt-1.5 space-y-1 text-sm">
+      {/* No `text-sm`: the podium is primary content and takes the card's
+          body size (issue #704). */}
+      <ol className="mt-1.5 space-y-1">
         {top.map((p) => (
           <li key={p.comp_pilot_id} className="flex flex-wrap items-baseline gap-x-2">
             <span className="w-8 text-right tabular-nums text-muted-foreground">
