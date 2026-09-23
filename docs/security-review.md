@@ -55,6 +55,7 @@
 | 2026-09-02 | [round](security-review/rounds/2026-09-02.md) | Comp/task-analysis rename + anonymous report-card deep link; SEC-48 (dependency-audit regression) fixed inline; SEC-49 documented |
 | 2026-09-09 | [round](security-review/rounds/2026-09-09.md) | Day-difficulty metrics + comp-wide section nav; SEC-50 (dependency-audit regression, 1 critical) + SEC-49 fixed inline |
 | 2026-09-16 | [round](security-review/rounds/2026-09-16.md) | Routine dependency-upgrade window only; SEC-50 confirmed held; no new findings |
+| 2026-09-23 | [round](security-review/rounds/2026-09-23.md) | Astro 6→7 closes SEC-34/G-16 (`bun audit` now clean); SEC-51 (public waypoint-CSV formula injection) fixed inline |
 
 ## Findings register
 
@@ -97,7 +98,7 @@ rounds linked here.
 | SEC-31 | Task-analysis field cap by track count, not bytes | Open (deferred) | [2026-07-19](security-review/rounds/2026-07-19.md) | Gap G-13 |
 | SEC-32 | Quadratic-time altitude cleaning on crafted IGC timestamps | Fixed | [2026-07-26](security-review/rounds/2026-07-26.md) | Fixed 2026-08-03 (`SlidingMedian`), verified [2026-08-05](security-review/rounds/2026-08-05.md) |
 | SEC-33 | Quadratic-time track-quality glide window | Fixed | [2026-07-26](security-review/rounds/2026-07-26.md) | Fixed 2026-08-03 (monotone deque), verified [2026-08-05](security-review/rounds/2026-08-05.md) |
-| SEC-34 | Dirty `bun audit` — dev/build-time advisories | Open — 5 residual (`astro` ×5, incl. 1 critical) | [2026-07-26](security-review/rounds/2026-07-26.md) | [2026-09-09](security-review/rounds/2026-09-09.md) — composition changed (now includes a critical AVIF-RCE advisory), confirmed build-time-only/not exploitable; gap G-16 |
+| SEC-34 | Dirty `bun audit` — dev/build-time advisories | Fixed | [2026-07-26](security-review/rounds/2026-07-26.md) | [2026-09-23](security-review/rounds/2026-09-23.md) — astro 6→7/vite 7→8 (commit `4b48aba`) closed the residual; `bun audit` now reads 0 vulnerabilities; gap G-16 closed |
 | SEC-35 | 3D-replay bundle served `Cache-Control: public` to signed-in viewers | Fixed | [2026-07-28](security-review/rounds/2026-07-28.md) | Fixed same round + regression test |
 | SEC-36 | CSV formula injection in `civl-rankings.csv` route | Fixed | [2026-07-29](security-review/rounds/2026-07-29.md) | Fixed same round |
 | SEC-37 | `registration.ts` missing `test`-comp visibility gate | Fixed | [2026-08-05](security-review/rounds/2026-08-05.md) | Fixed in-window commit `64821cb`, verified [2026-08-12](security-review/rounds/2026-08-12.md) |
@@ -114,6 +115,7 @@ rounds linked here.
 | SEC-48 | `bun audit` regression: qs/fast-uri/browserslist via unused `shadcn` devDependency, undercounted by a stale `fast-uri` override | Fixed | [2026-09-02](security-review/rounds/2026-09-02.md) | Fixed same round — overrides added/bumped, `bun audit` back to the SEC-34 residual |
 | SEC-49 | Account display-name write (`/api/auth/set-name`, `/api/auth/set-username`) skips the SEC-22 defence-in-depth text checks applied everywhere else | Fixed | [2026-09-02](security-review/rounds/2026-09-02.md) | [2026-09-09](security-review/rounds/2026-09-09.md) — `@glidecomp/worker-kit/name-text`, both routes |
 | SEC-50 | `bun audit` regression: hono/js-yaml/sharp/svgo/smol-toml advisories (13 vulnerabilities, 1 critical) via newly-disclosed CVEs against already-locked, range-satisfying versions | Fixed | [2026-09-09](security-review/rounds/2026-09-09.md) | Fixed same round — five overrides bumped/added, `bun audit` back to the SEC-34 residual (now 5, incl. a Critical) |
+| SEC-51 | Public waypoint-CSV export (`GET /api/comp/:comp_id/waypoints/csv` + per-task equivalent, both unauthenticated) missing the shared CSV/DDE formula-injection guard | Fixed | [2026-09-23](security-review/rounds/2026-09-23.md) | Fixed same round — `csvFieldGuarded()` in `web/engine/src/waypoint-export.ts`, scoped to the one format actually served as `text/csv`; regression test added |
 
 ## Standing scope gaps
 
@@ -136,7 +138,9 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 - **G-13** — SEC-31: byte/fix-based task-analysis cap.
 - **G-14** — Turnpoint-count cap in the engine's own `xctsk-parser.ts`/`route-optimizer.ts`, independent of the API-layer Zod schema.
 - **G-15** — Email SPF/DKIM/DMARC on a live deploy.
-- **G-16** — SEC-34 residual: `astro` 6→7 (with `upgrade-deps`).
+- ~~**G-16** — SEC-34 residual: `astro` 6→7 (with `upgrade-deps`).~~ Closed
+  [2026-09-23](security-review/rounds/2026-09-23.md) — commit `4b48aba`;
+  `bun audit` now reads 0 vulnerabilities.
 - **G-17** — `encodeURIComponent` the ids in `TaskExportButtons.tsx:83-85` and `slugSegment()`'s id half in `lib/slug.ts` (Info-grade); decide whether `fetchWithRetry` should stop retrying non-404 4xx.
 - **G-18** — `rateLimit` row expiry (rows never expire; from SEC-39's fix).
 - ~~**G-19** — SEC-49: route `POST /api/auth/set-name`/`set-username` through
@@ -153,49 +157,47 @@ list; earlier rounds' per-round gap numbers do not correspond.)
   re-resolve in-range dependencies to latest-patch, or whether relying on
   this review's own `bun audit` step to catch it (twice running now:
   SEC-48, SEC-50) is an accepted tradeoff.
+- **G-21** — SEC-51's sibling formats (SeeYou `.cup`, CompeGPS, OziExplorer,
+  FS $FormatGEO/$FormatUTM) are deliberately left without the
+  formula-injection guard because they are served `application/octet-stream`
+  and read literally by flight-instrument software, not opened in a
+  spreadsheet app. Re-check that reasoning if any of them ever gains a
+  spreadsheet-facing `Content-Type` or a new consumer that hands the file to
+  a browser as `text/*`.
 
 ## Where to start the next review
 
-1. Commit reviewed up to: **HEAD = `06f7108`** (base `345fa81`). Both
+1. Commit reviewed up to: **HEAD = `f1477ca`** (base `06f7108`). Both
    `.github/workflows/` and `functions/` were present in this session's
    checkout; if a future sandboxed session lacks `.github/workflows/`
    again, diff that file with
    `diff <(git show <rev1>:path) <(git show <rev2>:path)`, not a `git diff`
    pathspec, which silently returns empty there.
 2. **SEC-45 (G-10) is the only open engine-DoS finding of its class and the
-   top open item — now five rounds running with no fix PR started.** It
+   top open item — now six rounds running with no fix PR started.** It
    needs its own PR: oracle tests over the S7F 2026 suite, a bound on
    `computeBestProgress`'s `exactAt()` evaluations (or a time-based
    Lipschitz prune), a ~60k-fix adversarial wandering track under a hard
    timeout, a `scoring-changes/` note, and archive parity measurement. The
    SEC-46 fix ([2026-08-17](security-review/rounds/2026-08-17.md)) is the
    template at smaller scale.
-3. **Verify SEC-50 still holds** — `bun audit` should read exactly 5
-   advisories (the `astro` residual, incl. the Critical AVIF-RCE); confirmed
-   held again on [2026-09-16](security-review/rounds/2026-09-16.md) with an
-   identical severity breakdown. If `hono`/`js-yaml`/`sharp`/`svgo`/
-   `smol-toml` advisories reappear, this is very possibly the G-20 pattern
-   again (a newly-disclosed CVE against an already-pinned-but-in-range
-   version, not a dependency bump) — check the registry for a newer patch
-   within the current override range before assuming a code change caused
-   it.
-4. **G-16 / astro 6→7** — still carrying a Critical CVE in its residual
-   (confirmed build-time-only via `<Picture>` in `index.astro`, over
-   repo-bundled images only, never a user upload — not currently
-   exploitable, but the severity floor of the unaddressed residual has
-   risen). Two rounds running now recommending this be prioritised with its
-   own `upgrade-deps` pass; the 2026-09-13 dependency cycle bumped ten other
-   packages but did not touch `astro`. Still not started.
+3. **`bun audit` reads 0 vulnerabilities for the first time this log has
+   recorded** (astro 6→7 closed the last residual, SEC-34/G-16, this round).
+   Confirm it holds next round — the G-20 pattern (a newly-disclosed CVE
+   against an already-pinned, range-satisfying version) has bitten twice
+   already (SEC-48, SEC-50) and could reappear on any of the five packages
+   those rounds pinned via `overrides`.
+4. **G-21** — SEC-51's sibling waypoint-export formats (SeeYou `.cup`,
+   CompeGPS, OziExplorer, FS) were deliberately left unguarded against
+   formula injection because they're served `application/octet-stream` and
+   read literally by flight-instrument software; re-check that reasoning if
+   any of them gains a spreadsheet-facing `Content-Type` or a browser-facing
+   `text/*` consumer.
 5. **G-20** — decide whether `upgrade-deps` should routinely force
    re-resolution to latest-patch for in-range dependencies (`bun update
-   --latest` or equivalent), given this is the second round running
-   (SEC-48, SEC-50) where this review's own `bun audit` step caught a
-   residual that `bun install` alone would not have closed. Not re-triggered
-   on [2026-09-16](security-review/rounds/2026-09-16.md) (no new CVE against
-   an already-pinned version surfaced that week), but still an open
-   process decision.
+   --latest` or equivalent). Not re-triggered this round.
 6. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved across the last
-   five rounds.
+   six rounds.
 7. The CSP flip (G-07) still needs the four-block inline-script inventory
    first.
 8. Do NOT re-open SEC-03 (accepted by design).
