@@ -36,7 +36,7 @@ in `submit-track.ts`. Two things render it:
 
 - `pages/SubmitTrack.tsx` — as page content.
 - `comp/SubmitTrackDialog.tsx` — a `Modal` wrapper, for the **task page**
-  (`pages/TaskDetail.tsx` and, inside it, `comp/TaskResults.tsx`), where comp
+  (`pages/TaskDetail.tsx` and, inside it, `comp/TaskScoresPublic.tsx`), where comp
   and task are already known and those steps collapse to a line with a
   **Change** button.
 
@@ -58,7 +58,7 @@ and the page has nothing to close.
 
 ### The admin grid, and the size rule
 
-`comp/TaskScores.tsx` — the admin manage grid — deliberately does **not**
+`comp/TaskScoresAdmin.tsx` — the admin manage grid — deliberately does **not**
 open the form. The pilot is already known from the row, so a dialog that asked
 which pilot would be worse than the `FileTrigger` it has. What it must share is
 the *rules*, and it did not: it carried an invented `file.size > 5 MB` check on
@@ -653,7 +653,7 @@ everyone else's bundle.
 | The flow | `src/react/comp/SubmitTrackForm.tsx` |
 | Its DOM-free logic + tests | `src/react/comp/submit-track.ts` |
 | Dialog wrapper | `src/react/comp/SubmitTrackDialog.tsx` |
-| Admin per-row upload | `src/react/comp/TaskScores.tsx` |
+| Admin per-row upload | `src/react/comp/TaskScoresAdmin.tsx` |
 | The page | `src/react/pages/SubmitTrack.tsx` |
 | Anonymous route | `web/workers/competition-api/src/routes/igc-anon.ts` |
 | Shared upload half | `web/workers/competition-api/src/track-upload.ts` |

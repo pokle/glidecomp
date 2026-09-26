@@ -104,7 +104,7 @@ export type MetricDirection = 'higher' | 'lower' | 'neutral';
  *
  * A metric's own label is deliberately neutral, because which direction wins
  * is not a property of the metric — it is the sign of ρ on that task, and for
- * the twelve metrics whose {@link MetricDirection} is 'neutral' the engine
+ * the metrics whose {@link MetricDirection} is 'neutral' the engine
  * holds no prior at all. "Gliding wide of the optimal course line" separated
  * the field on Corryong 2026 open T2 at ρ = +0.80, meaning the pilots who
  * held the line won; a surface that presents that row as a winning behaviour

@@ -48,7 +48,7 @@ For each accepted glide:
 |-----------|-------------|
 | `startIndex` / `endIndex` | Fix indices defining the segment |
 | `startAltitude` / `endAltitude` | GNSS altitude at boundary fixes |
-| `distance` | Sum of WGS84 ellipsoid distances (Andoyer-Lambert) between consecutive fixes (path distance, not straight line) |
+| `distance` | Sum of WGS84 ellipsoid distances (`ellipsoidDistance`, Vincenty inverse) between consecutive fixes (path distance, not straight line) |
 | `glideRatio` | `distance / altitudeLoss` where `altitudeLoss = startAltitude - endAltitude`. Set to `undefined` if the pilot gained altitude or stayed level (`Infinity` would leak into display text and become `null` through `JSON.stringify`). |
 | `duration` | Time from start to end fix (seconds) |
 
@@ -63,7 +63,7 @@ Both events share the same `segment` object, enabling segment highlighting on th
 
 ## Downstream: Sink Classification
 
-Sinks are not separately detected — they are glides filtered by poor glide ratio, by `extractSinks()` in `segment-extractors.ts` (the counterpart to `extractGlides()`), which the panel calls when rendering the Sinks tab.
+Sinks are not separately detected — they are glides filtered by poor glide ratio, by `sinksFromGlides()` in `segment-extractors.ts` (which builds each glide with `glideDataFromSegment()`), and the panel calls it when rendering the Sinks tab.
 
 **Criteria:** A glide qualifies as a sink if `glideRatio <= 5` (L/D of 5:1 or worse).
 
@@ -134,8 +134,8 @@ If no thermals are detected (e.g., a sled ride), `prevEnd` remains at 0 and the 
 ### Ascending Glides
 
 If the pilot gains altitude during a "glide" (flying through lift without circling), `altitudeLoss` is zero or negative, and `glideRatio` is `undefined`. These segments:
-- Appear in the Glides tab with "∞:1" displayed for L/D (`extractGlides` maps the missing ratio to `0`, which the panel renders as ∞)
-- Never appear in the Sinks tab (`extractSinks` skips glides without a ratio)
+- Appear in the Glides tab with "∞:1" displayed for L/D (`GlideData.glideRatio` stays `undefined`, which the panel renders as ∞)
+- Never appear in the Sinks tab (`sinksFromGlides` skips glides without a ratio)
 - Have valid distance and duration stats
 
 ### Short Gaps Between Thermals

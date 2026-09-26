@@ -1,7 +1,7 @@
 /**
  * The load every SSR'd comp page does.
  *
- * The eight server-rendered comp pages all open the same way: the server ran
+ * The server-rendered comp pages all open the same way: the server ran
  * the route's loader and embedded the result, so the first render has its data
  * already; a client boot or an SPA navigation has nothing and must fetch. Each
  * page had written that out by hand — the seed check, the `cancelled` flag, the

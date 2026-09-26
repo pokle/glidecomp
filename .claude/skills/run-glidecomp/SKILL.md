@@ -110,7 +110,7 @@ screenshots them. Paths below are relative to the repo root.
    LABEL=after  bun .claude/skills/run-glidecomp/shoot-contact-sheet.mjs
    open .claude/skills/run-glidecomp/shots/sheet/index.html
    ```
-   19 pages x 2 widths x 2 themes = 76 shots a pass, ~90s. Use it for any token
+   About 20 pages x 2 widths x 2 themes, so roughly 80 shots a pass, ~90s. Use it for any token
    or kit change: those land on dozens of surfaces at once and are **not**
    reviewable as a diff. `ONLY=settings` filters to one page while iterating;
    `THEMES` / `WIDTHS` narrow the matrix. Ids are resolved at runtime (the comp

@@ -1,5 +1,5 @@
 /**
- * Pure logic for the task route editor dialog (RouteEditorDialog.tsx):
+ * Pure logic for the task route editor page (RouteEditor.tsx):
  * grid-row <-> turnpoint conversion, coordinate parsing (Google Maps
  * "lat, lon" format), live validation, and xctsk (de)serialization helpers
  * shared with the task detail page. Kept DOM-free so it's unit-testable.

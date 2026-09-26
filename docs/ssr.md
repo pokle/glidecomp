@@ -1,6 +1,6 @@
 # SSR for the public competition pages
 
-The eight public comp pages are server-rendered. This is the SEO strategy:
+The public comp pages (the `ROUTES` table below) are server-rendered. This is the SEO strategy:
 crawlers and link-preview bots must see the text, not an empty `#root`.
 
 Current-state reference. For the original design reasoning see

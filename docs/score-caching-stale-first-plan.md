@@ -22,7 +22,7 @@ re-score is in flight.
 ## Current state (what this replaces)
 
 Both score endpoints (`web/workers/competition-api/src/routes/score.ts`)
-compute a deterministic state hash (`computeScoreCacheKey`: engine version +
+compute a deterministic state hash (`computeScoreStateKey`: engine version +
 xctsk + roster + uploads + penalties — re-reading every track row of every
 task on every request), look up KV under that exact key, and on a miss
 compute synchronously — seconds of R2 fan-out + CPU — before responding.
@@ -65,7 +65,7 @@ CREATE TABLE task_scores (
   task_id            INTEGER PRIMARY KEY
                      REFERENCES task(task_id) ON DELETE CASCADE,
   response_json      TEXT    NOT NULL,
-  state_key          TEXT    NOT NULL,  -- computeScoreCacheKey at write time; the ETag
+  state_key          TEXT    NOT NULL,  -- computeScoreStateKey at write time; the ETag
   computed_at        TEXT    NOT NULL,  -- ISO, stamped when the compute finished
   inputs_rev         INTEGER NOT NULL DEFAULT 0,  -- bumped by every score-affecting mutation
   computed_rev       INTEGER NOT NULL DEFAULT -1, -- inputs_rev the blob was computed from
@@ -187,7 +187,7 @@ ETag makes must-revalidate cheap).
 - Every scores surface (the `/comp/:id/scores` page and the comp hub's
   scores summary via `CompScoresSection.tsx`'s shared hook, the task
   page's scores podium `TaskScoresPublic.tsx`, and the admin manage grid
-  `TaskScores.tsx`) renders the timestamp next to the tables — e.g.
+  `TaskScoresAdmin.tsx`) renders the timestamp next to the tables — e.g.
   "Scores computed 7 Jul 2026, 14:32 UTC" (absolute, in the comp timezone,
   so SSR output is deterministic — no relative "2 min ago" on the
   server-rendered path, per the SSR plan's hydration-mismatch rule).

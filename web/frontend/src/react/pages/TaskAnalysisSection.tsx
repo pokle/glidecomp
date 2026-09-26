@@ -1,10 +1,10 @@
 /**
  * One section of a task's analysis, on its own page.
  *
- * /comp/:compId/task/:taskId/analysis/:section — five sections, one route, one
- * component. They are five views of ONE report (see analysis/sections.ts
- * and use-task-report.ts), so five page components would have been five copies
- * of the same fetch, the same class select and the same freshness poll; what
+ * /comp/:compId/task/:taskId/analysis/:section — several sections, one route,
+ * one component. They are views of ONE report (see analysis/sections.ts
+ * and use-task-report.ts), so a page component each would have been a copy
+ * per section of the same fetch, the same class select and the same freshness poll; what
  * actually differs between them is the body, which is the switch below.
  *
  * PUBLIC and SSR'd, like the chapter that summarises them: each has a ROUTES

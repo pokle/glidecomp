@@ -28,7 +28,7 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
     and the `404`) — prerendered static HTML from a small Astro app in
     `web/frontend/static/`, reusing the SPA's `globals.css` tokens/fonts. KaTeX
     on the GAP page is prerendered at build via `katex.renderToString`.
-  - The **eight public comp pages**, which are **server-rendered** — see
+  - The **public comp pages**, which are **server-rendered** — see
     [docs/ssr.md](docs/ssr.md) and the SSR-safety rule below.
 
   The analysis page and 3D replay are separate vanilla-TS Vite entries.
@@ -335,7 +335,7 @@ These are the standing imperatives. Each links to the reference that explains it
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
-  before touching kit code — it carries the conventions and eighteen hard-won
+  before touching kit code — it carries the conventions and more than 25 hard-won
   gotchas. The shadcn/Base UI kit is **gone** (migration finished 2026-07-27,
   [#483](https://github.com/pokle/glidecomp/issues/483)); `src/react/one-kit.test.ts`
   fails the build if it comes back, and there is no `components.json`, so
@@ -484,7 +484,7 @@ These are the standing imperatives. Each links to the reference that explains it
     loaders) is marked `data-requires-account` in the markup and hidden for an
     anonymous reader, rather than left to bounce them out of the page.
   - Coverage: the "signed out" block in `e2e/report-card.spec.ts`.
-- **SSR-safety.** When you touch anything the eight server-rendered comp pages
+- **SSR-safety.** When you touch anything the server-rendered comp pages
   import ([docs/ssr.md](docs/ssr.md)):
   - No `window`/`document`/`localStorage` at **module scope** — it runs in
     workerd; guard with `typeof window`.
@@ -518,7 +518,7 @@ These are the standing imperatives. Each links to the reference that explains it
   - What a behaviour change DOES owe is a note in
     `web/engine/scoring-changes/` — one file per change, `NNN-slug.md`, so two
     branches can never collide. Say whether points move, and if they do, by how
-    much and for whom (measure over the 25-comp archive where you can); if
+    much and for whom (measure over the 200-plus-comp archive where you can); if
     nothing observable changes, say that, because the generation still rolls
     and every competition still recomputes. CI enforces it
     (`web/scripts/check-scoring-change-note.ts`, a merge-base diff — deliberately
@@ -541,8 +541,9 @@ These are the standing imperatives. Each links to the reference that explains it
   `scoring-changes/050-monotonic-fix-timestamps.md`.
 - **Never implement inline geo math** (distance, bearing, etc.) — always use
   `web/engine/src/geo.ts`, which provides WGS84 ellipsoid formulas
-  (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for
-  bearing/bbox.
+  (`ellipsoidDistance` — the Vincenty inverse that S7F 2026 §7.1.5 requires,
+  with Andoyer-Lambert only as its non-convergence fallback — and Vincenty
+  direct for destination) and Turf.js for bearing/bbox.
 - **Single source of truth for map visuals/interactions**:
   [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) — the map
   provider must match this spec.
@@ -553,7 +554,7 @@ These are the standing imperatives. Each links to the reference that explains it
   §4.4.6). Re-tune thresholds only via `audit-track-quality.ts` over both the
   bundled comps and the archive.
 - **Comp analysis and task analysis are two different things, and are named
-  apart.** Both are built from the same 25 behavioural metrics (climbing,
+  apart.** Both are built from the same set of about 25 behavioural metrics (climbing,
   gliding, decision-making, gaggle, race craft, day profile) ranked by Spearman
   ρ against GAP rank, in `web/engine/src/analysis/`. Both are public and SSR'd.
   They are not interchangeable, and neither is called "field analysis" any more

@@ -25,7 +25,7 @@ import { Shell } from "./components/Shell";
 import { NotFound } from "./components/NotFound";
 
 /*
- * The eight server-rendered public routes are STATIC imports and must stay
+ * The server-rendered public routes are STATIC imports and must stay
  * that way: entry-server renders them, and a lazy boundary the server resolved
  * but the client hasn't fetched yet is exactly what makes hydration fall back
  * to a client render — discarding the SSR markup this architecture exists to

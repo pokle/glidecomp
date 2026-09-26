@@ -368,7 +368,7 @@ function padLeft(s: string, n: number): string {
 
 /**
  * Score one task exactly like the web app. Mirrors computeTaskScore in
- * web/workers/competition-api/src/scoring.ts: start from the official
+ * web/workers/competition-api/src/scoring/task-score.ts: start from the official
  * per-category FAI defaults (defaultsFor — leading/arrival/difficulty/nominal
  * goal as the S7F formula actually uses them), then overlay only the flags the
  * user explicitly passed. resolveCompGapParams also keeps the pre-#258

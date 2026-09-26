@@ -32,7 +32,9 @@ encoded for *that output's* grammar:
 
 The safest form is not to build HTML strings at all: set `.textContent` or build
 nodes with `createElement`, which makes injection structurally impossible. The
-`scores.ts` refactor and much of `comp-detail.ts` already do this.
+React pages get this by default — JSX text children are escaped — so the
+string-building helpers above are for the places that still write markup or
+files by hand (the replay HUD, the SSR Function, emails, CSV exports).
 
 **Input HTML-sanitisation (what we avoid).** The value is transformed *once* on
 write — e.g. `<` becomes `&lt;`, or tags are stripped — and the mangled version
