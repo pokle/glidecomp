@@ -18,7 +18,7 @@ export async function request(
   };
 
   if (options.user) {
-    headers["Cookie"] = `test-user=${options.user}`;
+    headers["Cookie"] = `better-auth.test-user=${options.user}`;
   }
 
   return SELF.fetch(`https://test${path}`, {
@@ -87,7 +87,7 @@ export async function uploadRequest(
 ): Promise<Response> {
   const headers: Record<string, string> = { ...options.headers };
   if (options.user) {
-    headers["Cookie"] = `test-user=${options.user}`;
+    headers["Cookie"] = `better-auth.test-user=${options.user}`;
   }
   return SELF.fetch(`https://test${path}`, {
     method: "POST",

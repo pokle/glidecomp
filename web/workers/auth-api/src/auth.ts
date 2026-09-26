@@ -1,5 +1,6 @@
 import { betterAuth, type BetterAuthPlugin } from "better-auth";
-import { emailOTP, oAuthProxy } from "better-auth/plugins";
+import { emailOTP, jwt, oAuthProxy } from "better-auth/plugins";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { apiKey } from "@better-auth/api-key";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
@@ -50,10 +51,133 @@ export function getDevOtp(email: string): string | undefined {
 
 // Structural type: Hono's ExecutionContext and workers-types' disagree on
 // newer optional members (e.g. tracing); waitUntil is all we use.
-export function createAuth(
-  env: AuthEnv,
-  executionCtx?: { waitUntil(promise: Promise<unknown>): void }
-) {
+type WaitUntil = { waitUntil(promise: Promise<unknown>): void };
+
+/**
+ * The current request's ExecutionContext, for the two hooks that hand work to
+ * `waitUntil` (the OTP email send and the pilot bootstrap).
+ *
+ * The Better Auth instance is built once per isolate (see createAuth), so it
+ * cannot capture a request's context at construction the way it used to: that
+ * would hand one request's work to another's lifetime. Async local storage
+ * carries it to the hook instead. Outside runWithExecutionCtx() there is none,
+ * and the hooks await their work inline — which is what dev-login, and the
+ * tests that sign in through it, rely on.
+ */
+const executionCtxStore = new AsyncLocalStorage<WaitUntil>();
+
+export function runWithExecutionCtx<T>(ctx: WaitUntil, fn: () => T): T {
+  return executionCtxStore.run(ctx, fn);
+}
+
+async function inBackground(work: Promise<unknown>): Promise<void> {
+  const ctx = executionCtxStore.getStore();
+  if (ctx) ctx.waitUntil(work);
+  else await work;
+}
+
+/**
+ * How long a signed-in browser's `session_data` cookie vouches for it before
+ * someone reads D1 again. It is also how long a revoked session, or a sign-out
+ * on another device, keeps working — the price of not asking D1 on every
+ * request. Five minutes is Better Auth's own default.
+ */
+export const SESSION_CACHE_MAX_AGE_S = 5 * 60;
+
+/** How long an isolate trusts its copy of the `jwks` table. */
+const JWKS_CACHE_MS = 5 * 60 * 1000;
+
+type JwkRow = {
+  id: string;
+  publicKey: string;
+  privateKey: string;
+  createdAt: Date;
+  expiresAt?: Date;
+  alg?: "EdDSA" | "ES256" | "ES512" | "PS256" | "RS256";
+  crv?: "Ed25519" | "P-256" | "P-521";
+};
+
+/**
+ * The jwt plugin reads the whole `jwks` table every time it signs or checks a
+ * session-cache cookie — one D1 query per `/me`, which is the very cost the
+ * cookie cache is here to remove. The keys change only when one is minted, so
+ * each isolate keeps a copy for a few minutes and drops it when it mints one
+ * itself. An empty table is never cached: the first request after it fills
+ * must see the key rather than mint a second.
+ *
+ * Another isolate's freshly minted key is at worst unknown here for
+ * JWKS_CACHE_MS; a cookie signed with it then fails the cache check and falls
+ * through to the D1 session read, which is where every request went before.
+ */
+function cachedJwksAdapter(db: D1Database) {
+  let cached: { rows: JwkRow[]; at: number } | null = null;
+  return {
+    async getJwks(): Promise<JwkRow[]> {
+      if (cached && Date.now() - cached.at < JWKS_CACHE_MS) return cached.rows;
+      const { results } = await db
+        .prepare('SELECT id, "publicKey", "privateKey", "createdAt", "expiresAt", alg, crv FROM jwks')
+        .all<{
+          id: string;
+          publicKey: string;
+          privateKey: string;
+          createdAt: string;
+          expiresAt: string | null;
+          alg: string | null;
+          crv: string | null;
+        }>();
+      const rows = results.map((r) => ({
+        id: r.id,
+        publicKey: r.publicKey,
+        privateKey: r.privateKey,
+        createdAt: new Date(r.createdAt),
+        ...(r.expiresAt ? { expiresAt: new Date(r.expiresAt) } : {}),
+        ...(r.alg ? { alg: r.alg as JwkRow["alg"] } : {}),
+        ...(r.crv ? { crv: r.crv as JwkRow["crv"] } : {}),
+      }));
+      cached = rows.length > 0 ? { rows, at: Date.now() } : null;
+      return rows;
+    },
+    async createJwk(data: Omit<JwkRow, "id">): Promise<JwkRow> {
+      const row: JwkRow = { ...data, id: crypto.randomUUID() };
+      await db
+        .prepare(
+          'INSERT INTO jwks (id, "publicKey", "privateKey", "createdAt", "expiresAt", alg, crv) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )
+        .bind(
+          row.id,
+          row.publicKey,
+          row.privateKey,
+          row.createdAt.toISOString(),
+          row.expiresAt?.toISOString() ?? null,
+          row.alg ?? null,
+          row.crv ?? null
+        )
+        .run();
+      cached = null;
+      return row;
+    },
+  };
+}
+
+/**
+ * One Better Auth instance per isolate. Building it cost about 1 ms of CPU on
+ * every request (0.34 ms to construct, the rest in its lazy init), for an
+ * object that depends on nothing but `env` — which is the same object for
+ * every request an isolate serves. Per-request state reaches it through its
+ * arguments, and the ExecutionContext through runWithExecutionCtx().
+ */
+const instances = new WeakMap<AuthEnv, ReturnType<typeof buildAuth>>();
+
+export function createAuth(env: AuthEnv) {
+  let auth = instances.get(env);
+  if (!auth) {
+    auth = buildAuth(env);
+    instances.set(env, auth);
+  }
+  return auth;
+}
+
+function buildAuth(env: AuthEnv) {
   const db = new Kysely({ dialect: new D1Dialect({ database: env.glidecomp_auth }) });
 
   return betterAuth({
@@ -104,8 +228,7 @@ export function createAuth(
           // Don't block the response on delivery (per the plugin's own
           // guidance: awaiting leaks a timing signal and slows the endpoint);
           // waitUntil keeps the send alive after the response is returned.
-          if (executionCtx) executionCtx.waitUntil(send);
-          else await send;
+          await inBackground(send);
         },
       }),
       // Cast needed: @better-auth/api-key resolves a separate copy of
@@ -119,6 +242,19 @@ export function createAuth(
           maxRequests: API_KEY_RATE_LIMIT.maxRequests,
         },
       }) as unknown as BetterAuthPlugin,
+      // Signs the session-cache cookie (session.cookieCache below) with an
+      // asymmetric key instead of BETTER_AUTH_SECRET, so competition-api and
+      // the SSR Function can check it with the PUBLIC key from
+      // /api/auth/jwks and never hold anything that can sign a session.
+      // The private key lives in the `jwks` table, encrypted with the secret.
+      jwt({
+        sessionCookieCache: true,
+        // The plugin's other product — a JS-readable JWT on every
+        // get-session response, and at /api/auth/token — has no caller here.
+        // Nothing mints one (index.ts 404s /token); nothing would verify one.
+        disableSettingJwtHeader: true,
+        adapter: cachedJwksAdapter(env.glidecomp_auth),
+      }),
       ...(isLocalDev(env)
         ? []
         : [
@@ -134,9 +270,23 @@ export function createAuth(
     // 60-day rolling sessions (refreshed at most daily): active users stay
     // signed in indefinitely, idle sessions die after 60 days. Applies to
     // Google and email-OTP sign-ins alike.
+    //
+    // cookieCache: every D1 session read also sets a `session_data` cookie —
+    // a JWT of the session and user, signed by the jwt plugin above — that
+    // vouches for the browser for SESSION_CACHE_MAX_AGE_S. /me answers from
+    // it without touching D1, and competition-api and the SSR Function check
+    // it themselves (@glidecomp/worker-kit/session-cookie) without calling
+    // /me at all. Anything that writes "user" directly must re-issue it, or
+    // the old values are served until it expires (see refreshSessionCache in
+    // index.ts).
     session: {
       expiresIn: 60 * 60 * 24 * 60,
       updateAge: 60 * 60 * 24,
+      cookieCache: {
+        enabled: true,
+        maxAge: SESSION_CACHE_MAX_AGE_S,
+        strategy: "jwt",
+      },
     },
     // Per-IP request limits (layer 2), persisted in D1 (0017_rate_limit.sql)
     // because in-memory counters reset with every workerd isolate. Enabled
@@ -246,15 +396,12 @@ export function createAuth(
           // `pilot` row exists and claim any email-matching unlinked
           // pre-registrations (see pilot-bootstrap.ts). waitUntil keeps it
           // off the sign-in latency path when an ExecutionContext exists
-          // (the main auth handler); dev-login constructs auth without one,
-          // so tests get the bootstrap synchronously.
+          // (the main auth handler); dev-login runs outside one, so tests
+          // get the bootstrap synchronously.
           after: async (session) => {
-            const run = bootstrapPilotForUser(
-              env.glidecomp_auth,
-              session.userId
+            await inBackground(
+              bootstrapPilotForUser(env.glidecomp_auth, session.userId)
             );
-            if (executionCtx) executionCtx.waitUntil(run);
-            else await run;
           },
         },
       },

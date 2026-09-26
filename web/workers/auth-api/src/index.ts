@@ -1,6 +1,6 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 // credentials:true means we MUST NOT reflect arbitrary origins — the
 // allowlist is shared with the other Workers so it cannot drift.
@@ -8,7 +8,13 @@ import { allowedOrigin } from "@glidecomp/worker-kit/cors";
 import { isValidNameText, normaliseNameText, NAME_TEXT_ERROR } from "@glidecomp/worker-kit/name-text";
 import { bodyLimit } from "hono/body-limit";
 import { APIError } from "better-auth/api";
-import { createAuth, getDevOtp, isLocalDev, type AuthEnv } from "./auth";
+import {
+  createAuth,
+  getDevOtp,
+  isLocalDev,
+  runWithExecutionCtx,
+  type AuthEnv,
+} from "./auth";
 import { mountPreferencesRoutes } from "./routes/preferences";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
@@ -62,14 +68,60 @@ app.onError((err, c) => {
   return c.json({ error: message }, 500);
 });
 
+/**
+ * Copy the Set-Cookie headers Better Auth produced onto this response.
+ *
+ * `auth.api.*` calls return data, not a response, so the cookies Better Auth
+ * sets along the way are dropped unless asked for with `returnHeaders` and
+ * passed on. For /me that includes the `session_data` cookie cache: without
+ * it the browser would never be handed one after sign-in, and every request
+ * would fall back to reading D1.
+ */
+function passSetCookies(c: Context, headers: Headers | null | undefined): void {
+  // An API-key session comes back with no headers at all.
+  if (!headers) return;
+  // workerd has getSetCookie(); the pinned workers-types baseline predates it.
+  const setCookies = (headers as Headers & { getSetCookie(): string[] }).getSetCookie();
+  for (const cookie of setCookies) {
+    c.header("Set-Cookie", cookie, { append: true });
+  }
+}
+
+/**
+ * Re-read the session from D1, skipping the cookie cache, and pass on the
+ * fresh `session_data` cookie it issues.
+ *
+ * For routes that write `"user"` directly rather than through Better Auth:
+ * the cached cookie still carries the old values, and /me — and every worker
+ * that checks the cookie itself — would serve them until it expired. The
+ * onboarding gate reads the name and username, so a stale copy would bounce
+ * a user who had just finished onboarding straight back into it.
+ */
+async function refreshSessionCache(c: Context<{ Bindings: AuthEnv }>): Promise<void> {
+  const { headers } = await createAuth(c.env).api.getSession({
+    headers: c.req.raw.headers,
+    query: { disableCookieCache: true },
+    returnHeaders: true,
+  });
+  passSetCookies(c, headers);
+}
+
 // GET /api/auth/me — return current user or null
+//
+// Answered from the `session_data` cookie cache when it is fresh (no D1 at
+// all), otherwise from D1 — which also re-issues that cookie, so the
+// browser's next few minutes of requests, here and at competition-api, need
+// no D1 read for identity.
 app.get("/api/auth/me", async (c) => {
   const auth = createAuth(c.env);
   let session;
   try {
-    session = await auth.api.getSession({
+    const result = await auth.api.getSession({
       headers: c.req.raw.headers,
+      returnHeaders: true,
     });
+    session = result.response;
+    passSetCookies(c, result.headers);
   } catch (err) {
     // The apiKey plugin's enableSessionForAPIKeys hook throws (rather than
     // resolving a null session) when an x-api-key credential is rate-limited,
@@ -182,6 +234,7 @@ app.post("/api/auth/set-username", async (c) => {
     )
     .run();
 
+  await refreshSessionCache(c);
   return c.json({ username, name: name ?? session.user.name });
 });
 
@@ -236,14 +289,20 @@ app.post("/api/auth/set-name", async (c) => {
     .bind(name, new Date().toISOString(), session.user.id)
     .run();
 
+  // The caller is competition-api, which passes these Set-Cookie headers
+  // back to the browser with its own response.
+  await refreshSessionCache(c);
   return c.json({ name });
 });
 
 // POST /api/auth/delete-account — delete user and all associated data
 app.post("/api/auth/delete-account", async (c) => {
   const auth = createAuth(c.env);
+  // From D1, not the cookie cache: an irreversible action should not be
+  // taken on the word of a session that may have been revoked minutes ago.
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
+    query: { disableCookieCache: true },
   });
   if (!session) {
     return c.json({ error: "Not authenticated" }, 401);
@@ -291,6 +350,17 @@ app.post("/api/auth/delete-account", async (c) => {
   // user_task, user_annotation. Run it all as one batch (a single implicit
   // transaction) so the user row and its de-links commit together.
   const userId = session.user.id;
+
+  // Sign out first: it deletes this session and expires the browser's
+  // session_token AND session_data cookies. The cascade below would delete
+  // the session row anyway, but not the cached cookie, which would otherwise
+  // keep vouching for a deleted account at competition-api until it expired.
+  const signedOut = await auth.api.signOut({
+    headers: c.req.raw.headers,
+    returnHeaders: true,
+  });
+  passSetCookies(c, signedOut.headers);
+
   await c.env.glidecomp_auth.batch([
     c.env.glidecomp_auth
       .prepare("UPDATE task_track SET uploaded_by_user_id = NULL WHERE uploaded_by_user_id = ?")
@@ -370,11 +440,16 @@ app.get("/api/auth/dev-last-otp", (c) => {
 // so /api/auth/preferences resolves here, not to better-auth's handler).
 mountPreferencesRoutes(app);
 
-// Better Auth catch-all handler. executionCtx lets sendVerificationOTP hand
-// the outbound email to waitUntil instead of blocking the response on it.
+// The jwt plugin's bearer-token endpoint. Nothing here uses its tokens, and
+// it would hand page scripts a JWT signed with the session-cache key — the
+// httpOnly session cookie exists precisely so they never hold a credential.
+app.get("/api/auth/token", (c) => c.notFound());
+
+// Better Auth catch-all handler. The ExecutionContext lets sendVerificationOTP
+// hand the outbound email to waitUntil instead of blocking the response on it.
 app.all("/api/auth/*", async (c) => {
-  const auth = createAuth(c.env, c.executionCtx);
-  return auth.handler(c.req.raw);
+  const auth = createAuth(c.env);
+  return runWithExecutionCtx(c.executionCtx, () => auth.handler(c.req.raw));
 });
 
 export default app;

@@ -9,7 +9,7 @@
 
 import { env } from "cloudflare:test";
 import { describe, expect, test } from "vitest";
-import { loginAs, request } from "./helpers";
+import { applySetCookies, loginAs, request } from "./helpers";
 import {
   OTP_EMAIL_SEND_THROTTLE,
   OTP_SEND_RATE_LIMIT,
@@ -84,7 +84,7 @@ describe("email OTP sign-in", () => {
       await fetchDevOtp(email),
       "203.0.113.9"
     );
-    const cookie = cookieHeader(signInRes);
+    let cookie = cookieHeader(signInRes);
 
     const me = (await (
       await request("GET", "/api/auth/me", { cookie })
@@ -98,6 +98,7 @@ describe("email OTP sign-in", () => {
       body: { username: "nogales", name: "Jean Nogales" },
     });
     expect(fix.status).toBe(200);
+    cookie = applySetCookies(cookie, fix);
     const after = (await (
       await request("GET", "/api/auth/me", { cookie })
     ).json()) as { user: { name: string; username: string } };

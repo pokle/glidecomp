@@ -136,6 +136,12 @@ trips. The July investigation measured ~250 ms each from a US edge.
 
 ### 2.2 Recommendations
 
+> **Status (2026-09-26):** done, and taken one step further: the cache cookie
+> is signed with an asymmetric key, so competition-api and the SSR Function
+> verify it themselves with the public key and skip the hop entirely, without
+> holding `BETTER_AUTH_SECRET`. See
+> [auth.md](auth.md#cross-worker-auth-verification).
+
 - **Turn on `session.cookieCache`** (for example `{ enabled: true, maxAge: 300 }`).
   Better Auth then signs a `session_data` cookie and `getSession` validates it
   without touching D1. `/me` drops from 2 D1 queries to 0 for five minutes at a

@@ -146,7 +146,9 @@ async function setAccountName(
   env: Env,
   headers: Headers,
   name: string
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+): Promise<
+  { ok: true; setCookies: string[] } | { ok: false; status: number; error: string }
+> {
   const forward = forwardAuthHeaders(headers);
   forward.set("Content-Type", "application/json");
 
@@ -173,7 +175,13 @@ async function setAccountName(
           error: body.error ?? "Could not update your account name",
         };
       }
-      return { ok: true };
+      // auth-api re-issues the session-cache cookie with the new name.
+      // The browser only sees it if it rides back on OUR response. Without
+      // it, the old name is served (here, and by /me) until the cache expires.
+      const setCookies = (
+        res.headers as Headers & { getSetCookie(): string[] }
+      ).getSetCookie();
+      return { ok: true, setCookies };
     } catch (err) {
       lastErr = err;
       if (attempt < SET_NAME_ATTEMPTS - 1) {
@@ -350,6 +358,9 @@ export const pilotProfileRoutes = new Hono<AuthedEnv>()
             // 1-128 characters this route does, so in practice this is the
             // session having gone away between requireAuth and now.
             return c.json({ error: synced.error }, synced.status === 401 ? 401 : 400);
+          }
+          for (const cookie of synced.setCookies) {
+            c.header("Set-Cookie", cookie, { append: true });
           }
         }
       }

@@ -1,4 +1,8 @@
 import { createMiddleware } from "hono/factory";
+import {
+  authCookieHeader,
+  verifySessionCookie,
+} from "@glidecomp/worker-kit/session-cookie";
 import type { Env, AuthUser } from "../env";
 import { isCompAdmin } from "../super-admin";
 
@@ -18,7 +22,12 @@ export function forwardAuthHeaders(headers: Headers): Headers {
   // to say why — the failure mode issue #481 is about, arriving by a different
   // road.
   const forward = new Headers();
-  for (const name of ["cookie", "x-api-key", "authorization"]) {
+  // Only Better Auth's own cookies: nothing else can identify anyone, and a
+  // visitor carrying only an analytics or `__cf_bm` cookie is anonymous, not
+  // someone to spend an auth hop on.
+  const cookie = authCookieHeader(headers.get("cookie"));
+  if (cookie) forward.set("cookie", cookie);
+  for (const name of ["x-api-key", "authorization"]) {
     const value = headers.get(name);
     if (value) forward.set(name, value);
   }
@@ -26,7 +35,8 @@ export function forwardAuthHeaders(headers: Headers): Headers {
 }
 
 /**
- * Resolve the caller via auth-api. Forward whichever inbound credential
+ * Resolve the caller — from the session cookie cache when it verifies, or via
+ * auth-api. Forward whichever inbound credential
  * the client sent: a Better Auth session cookie (browser), or an API key
  * via `x-api-key` / `Authorization: Bearer` (programmatic / direct API
  * clients). Better Auth's apiKey plugin with `enableSessionForAPIKeys`
@@ -58,6 +68,19 @@ async function resolveUser(
 
   if (![...forward.keys()].length) return null;
 
+  // A browser's session usually answers for itself: auth-api's signed
+  // `session_data` cookie, checked here with the PUBLIC key it publishes, so
+  // no hop and no D1 read (@glidecomp/worker-kit/session-cookie). Only a
+  // verified user is an answer. A missing, expired or unverifiable cookie
+  // falls through to the hop below, which is the authority. API keys always
+  // take the hop: they have no cookie, and auth-api owns their rate limit.
+  if (!forward.has("x-api-key") && !forward.has("authorization")) {
+    const cached = await verifySessionCookie(forward.get("cookie"), () =>
+      env.AUTH_API.fetch(new Request("https://auth/api/auth/jwks"))
+    );
+    if (cached) return cached;
+  }
+
   let lastErr: unknown;
   for (let attempt = 0; attempt < AUTH_ATTEMPTS; attempt++) {
     try {
@@ -84,7 +107,8 @@ async function resolveUser(
 }
 
 /**
- * Middleware that verifies authentication via service binding to auth-api.
+ * Middleware that verifies authentication — from the session cookie cache, or
+ * via service binding to auth-api.
  * Sets c.var.user to the authenticated user.
  * Returns 401 if not authenticated.
  */
