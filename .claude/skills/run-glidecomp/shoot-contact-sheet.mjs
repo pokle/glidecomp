@@ -112,7 +112,7 @@ const ROUTES = [
   ["comp-waypoints", `/comp/${compId}/waypoints`],
   ["comp-analysis", `/comp/${compId}/analysis`],
   ["task-detail", taskHref],
-  ["task-analysis", `${taskHref.split("?")[0]}/analysis`],
+  ["task-analysis", `/comp/${compId}/analysis/task/${taskHref.split("/task/")[1]}`],
   ...(pilotHref ? [["report-card", pilotHref]] : []),
   ["dashboard", "/u/me"],
   ["submit", "/submit"],
