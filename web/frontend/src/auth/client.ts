@@ -1,5 +1,6 @@
 import { createAuthClient } from "better-auth/client";
 import { emailOTPClient } from "better-auth/client/plugins";
+import { confirmPendingSignIn, markPendingSignIn, writeLastSignInMethod } from "./last-sign-in";
 
 export const authClient = createAuthClient({
   basePath: "/api/auth",
@@ -7,6 +8,8 @@ export const authClient = createAuthClient({
 });
 
 export function signInWithGoogle(callbackURL = "/comp") {
+  // Promoted to "last used" only once /api/auth/me confirms the session.
+  markPendingSignIn("google");
   return authClient.signIn.social({ provider: "google", callbackURL });
 }
 
@@ -16,8 +19,10 @@ export function sendSignInOtp(email: string) {
 }
 
 /** Exchange an emailed code for a session. Returns { data, error }. */
-export function signInWithOtp(email: string, otp: string) {
-  return authClient.signIn.emailOtp({ email, otp });
+export async function signInWithOtp(email: string, otp: string) {
+  const result = await authClient.signIn.emailOtp({ email, otp });
+  if (!result.error) writeLastSignInMethod("email");
+  return result;
 }
 
 export async function signOut() {
@@ -105,6 +110,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       const data: { user: AuthUser | null } = await res.json();
       const user = data.user ?? null;
       writeAccountHint(user);
+      if (user) confirmPendingSignIn();
       return user;
     } catch {
       // A network blip is not evidence of being signed out — leave the hint
