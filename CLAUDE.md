@@ -62,6 +62,13 @@ For dev servers, the e2e suite and its failure modes, the isolated container
 preview, and the dev tunnel: **[docs/local-dev.md](docs/local-dev.md)**. Read its
 "Before you trust an e2e failure" section before debugging one.
 
+**A new e2e spec must be added to a CI shard.** CI runs the e2e suite as
+explicit per-shard file lists in `e2e/fixtures/shards.ts`, so a spec in no list
+would never run in CI. `e2e/fixtures/shards.test.ts` fails the `test` job when
+that happens. When you add `e2e/*.spec.ts`, put it in the shard that matches its
+subject, beside related specs, in the same commit. A spec that should also run
+on the phone pass goes in `MOBILE_SPEC_FILES` too (`e2e/fixtures/mobile.ts`).
+
 **Working in a git worktree? Give the e2e its own ports.** `reuseExistingServer`
 is on outside CI, so `bun run test:e2e` in one worktree silently REUSES another
 worktree's dev server on :3000 and asserts every expectation against the wrong
