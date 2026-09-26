@@ -30,10 +30,18 @@ import { safeNext } from "../lib/safe-next";
 
 const RESEND_COOLDOWN_S = 60;
 
-/** Tags the method this browser last signed in with (auth/last-sign-in.ts). */
+/**
+ * Tags the method this browser last signed in with (auth/last-sign-in.ts).
+ * Highlighter yellow so it stands out against both the primary and the grey
+ * outline button; the text is pinned near-black because yellow stays light
+ * in dark mode too (yellow-950 on yellow-300 is well past 4.5:1).
+ */
 function LastUsedPill() {
   return (
-    <Badge variant="secondary" className="ml-1" data-testid="last-used-pill">
+    <Badge
+      className="ml-1 border-yellow-400 bg-yellow-300 text-yellow-950"
+      data-testid="last-used-pill"
+    >
       Last used
     </Badge>
   );
