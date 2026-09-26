@@ -18,15 +18,26 @@ import { TextField } from "@/react/rac/field";
 // thin wrapper over the `input-otp` package (hence react/vendor/, not rac/).
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/react/vendor/input-otp";
 import { Card } from "@/react/rac/card";
+import { Badge } from "@/react/rac/badge";
 import {
   sendSignInOtp,
   signInWithGoogle,
   signInWithOtp,
 } from "../../auth/client";
+import { readLastSignInMethod } from "../../auth/last-sign-in";
 import { DEV_SIGN_IN_ENABLED, signInAsDev, useUser } from "../lib/user";
 import { safeNext } from "../lib/safe-next";
 
 const RESEND_COOLDOWN_S = 60;
+
+/** Tags the method this browser last signed in with (auth/last-sign-in.ts). */
+function LastUsedPill() {
+  return (
+    <Badge variant="secondary" className="ml-1" data-testid="last-used-pill">
+      Last used
+    </Badge>
+  );
+}
 
 function parseOtpHash(hash: string): { otp: string; email: string } | null {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
@@ -52,6 +63,10 @@ export function SignIn() {
   // The emailed deep link is single-shot: consume it once, then behave like
   // a normal manual visit (a failed link degrades to the code form).
   const consumedHash = useRef(false);
+  // Read once on mount; this page renders client-side only (behind `loading`).
+  const [lastMethod] = useState(() =>
+    typeof window === "undefined" ? null : readLastSignInMethod()
+  );
 
   useEffect(() => {
     document.title = "GlideComp - Sign in";
@@ -149,7 +164,10 @@ export function SignIn() {
         </p>
 
         <div className="mt-6 flex flex-col gap-2">
-          <Button onPress={() => void signInWithGoogle(next)}>Continue with Google</Button>
+          <Button onPress={() => void signInWithGoogle(next)}>
+            Continue with Google
+            {lastMethod === "google" ? <LastUsedPill /> : null}
+          </Button>
           {DEV_SIGN_IN_ENABLED ? (
             <Button variant="outline" onPress={() => void signInAsDev()}>
               Sign in (dev)
@@ -199,6 +217,7 @@ export function SignIn() {
               pendingLabel="Sending your code"
             >
               Email me a sign-in code
+              {lastMethod === "email" ? <LastUsedPill /> : null}
             </Button>
             <p className="text-xs text-muted-foreground">
               No password needed — we'll email you a 6-digit code.
