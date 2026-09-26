@@ -5,11 +5,15 @@
  *
  * Browser-only and a hint: it grants nothing and never leaves the device.
  *
- * Recorded on SUCCESS, never on a click. An email code succeeds on this page,
- * so it is written directly. Google succeeds on the far side of a redirect,
- * so the click only parks a *pending* marker in sessionStorage (same tab,
- * survives the round trip) and the first signed-in /api/auth/me promotes it.
- * A cancelled Google attempt therefore never relabels the page.
+ * Written only by the two sign-in ACTIONS, on success — never by the readers
+ * of "who is signed in" (getCurrentUser / seedCurrentUser), which stay free of
+ * this concern:
+ * - an email code succeeds on the sign-in page, so `signInWithOtp` writes it;
+ * - Google succeeds on the far side of a redirect, so `signInWithGoogle`
+ *   returns through `/signin?via=google`, and the page writes it on arrival.
+ *   better-auth sends a pilot to the callback URL only once the session
+ *   exists — a cancel or an error goes to its error URL instead — so an
+ *   abandoned Google attempt never relabels the page.
  *
  * SSR-safe: no storage access at module scope, and every access is guarded
  * (Safari private mode throws on write).
@@ -17,16 +21,21 @@
 export type SignInMethod = "google" | "email";
 
 export const LAST_SIGN_IN_KEY = "glidecomp:last-sign-in";
-export const PENDING_SIGN_IN_KEY = "glidecomp:pending-sign-in";
+
+/** The `/signin` query param a completed OAuth sign-in returns with. */
+export const SIGNED_IN_VIA_PARAM = "via";
 
 function isMethod(v: unknown): v is SignInMethod {
   return v === "google" || v === "email";
 }
 
+export function parseSignInMethod(v: string | null): SignInMethod | null {
+  return isMethod(v) ? v : null;
+}
+
 export function readLastSignInMethod(): SignInMethod | null {
   try {
-    const v = localStorage.getItem(LAST_SIGN_IN_KEY);
-    return isMethod(v) ? v : null;
+    return parseSignInMethod(localStorage.getItem(LAST_SIGN_IN_KEY));
   } catch {
     return null;
   }
@@ -37,26 +46,5 @@ export function writeLastSignInMethod(method: SignInMethod): void {
     localStorage.setItem(LAST_SIGN_IN_KEY, method);
   } catch {
     // Storage blocked — the page just shows no pill.
-  }
-}
-
-/** Called just before leaving for an OAuth provider. */
-export function markPendingSignIn(method: SignInMethod): void {
-  try {
-    sessionStorage.setItem(PENDING_SIGN_IN_KEY, method);
-  } catch {
-    // Storage blocked — nothing to promote later.
-  }
-}
-
-/** Called once a session is confirmed: a pending attempt becomes the answer. */
-export function confirmPendingSignIn(): void {
-  try {
-    const pending = sessionStorage.getItem(PENDING_SIGN_IN_KEY);
-    if (pending === null) return;
-    sessionStorage.removeItem(PENDING_SIGN_IN_KEY);
-    if (isMethod(pending)) writeLastSignInMethod(pending);
-  } catch {
-    // Storage blocked.
   }
 }

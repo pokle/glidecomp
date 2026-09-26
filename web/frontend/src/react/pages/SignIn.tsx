@@ -24,7 +24,12 @@ import {
   signInWithGoogle,
   signInWithOtp,
 } from "../../auth/client";
-import { readLastSignInMethod } from "../../auth/last-sign-in";
+import {
+  parseSignInMethod,
+  readLastSignInMethod,
+  SIGNED_IN_VIA_PARAM,
+  writeLastSignInMethod,
+} from "../../auth/last-sign-in";
 import { DEV_SIGN_IN_ENABLED, signInAsDev, useUser } from "../lib/user";
 import { safeNext } from "../lib/safe-next";
 
@@ -80,11 +85,17 @@ export function SignIn() {
     document.title = "GlideComp - Sign in";
   }, []);
 
-  // Already signed in (including arriving via an already-used email link a
-  // second time) — nothing to do here.
+  // Already signed in — nothing to do here but forward. That covers arriving
+  // via an already-used email link a second time, and Google returning as
+  // `?via=google` (see signInWithGoogle): the Google sign-in completing, so
+  // record it first. Only with a real session — a hand-typed `?via=` while
+  // signed out records nothing.
+  const via = parseSignInMethod(searchParams.get(SIGNED_IN_VIA_PARAM));
   useEffect(() => {
-    if (!loading && user) window.location.replace(next);
-  }, [user, loading, next]);
+    if (loading || !user) return;
+    if (via) writeLastSignInMethod(via);
+    window.location.replace(next);
+  }, [user, loading, next, via]);
 
   async function verify(targetEmail: string, otp: string) {
     setBusy(true);

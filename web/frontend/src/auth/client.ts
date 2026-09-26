@@ -1,15 +1,23 @@
 import { createAuthClient } from "better-auth/client";
 import { emailOTPClient } from "better-auth/client/plugins";
-import { confirmPendingSignIn, markPendingSignIn, writeLastSignInMethod } from "./last-sign-in";
+import { SIGNED_IN_VIA_PARAM, writeLastSignInMethod } from "./last-sign-in";
 
 export const authClient = createAuthClient({
   basePath: "/api/auth",
   plugins: [emailOTPClient()],
 });
 
-export function signInWithGoogle(callbackURL = "/comp") {
-  // Promoted to "last used" only once /api/auth/me confirms the session.
-  markPendingSignIn("google");
+/**
+ * Start Google OAuth; `next` is where the pilot ends up afterwards.
+ *
+ * Google comes back through `/signin?via=google` rather than straight to
+ * `next`, so the sign-in page can record Google as the "Last used" method
+ * (auth/last-sign-in.ts) and then forward on. better-auth only redirects to
+ * this URL once the session exists, so arriving there IS the success signal.
+ */
+export function signInWithGoogle(next = "/comp") {
+  const callbackURL =
+    `/signin?${SIGNED_IN_VIA_PARAM}=google&next=${encodeURIComponent(next)}`;
   return authClient.signIn.social({ provider: "google", callbackURL });
 }
 
@@ -110,7 +118,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       const data: { user: AuthUser | null } = await res.json();
       const user = data.user ?? null;
       writeAccountHint(user);
-      if (user) confirmPendingSignIn();
       return user;
     } catch {
       // A network blip is not evidence of being signed out — leave the hint

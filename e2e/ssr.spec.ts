@@ -654,3 +654,49 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     });
   }
 });
+
+/**
+ * The sign-in page's "Last used" pill after a Google sign-in
+ * (web/frontend/src/auth/last-sign-in.ts), against the built output. The
+ * first version recorded Google when "who is signed in" was next answered;
+ * production answers that from the SSR'd /comp's payload, the dev server
+ * never does, and so last-used-sign-in.spec.ts passed while production never
+ * once moved the pill. This runs the same flow where /comp really is SSR'd.
+ */
+test.describe("SSR — the sign-in page's Last used pill", () => {
+  test("a Google sign-in landing on the SSR'd /comp moves the pill to Google", async ({
+    page,
+  }) => {
+    await page.goto("/signin");
+    await page.evaluate(() => localStorage.setItem("glidecomp:last-sign-in", "email"));
+    await page.reload();
+    const pill = (name: RegExp) =>
+      page.getByRole("button", { name }).getByTestId("last-used-pill");
+    await expect(pill(/Email me a sign-in code/)).toBeVisible();
+
+    // Stand in for the OAuth round trip: a real session, then the requested
+    // callbackURL, as better-auth does on success.
+    await page.route("**/api/auth/sign-in/social", async (route) => {
+      const { callbackURL } = route.request().postDataJSON() as { callbackURL: string };
+      const res = await page.request.post("/api/auth/dev-login", {
+        data: { name: "SSR Last Used", email: "ssr-last-used@test.local" },
+      });
+      expect(res.ok(), `dev-login failed: ${res.status()}`).toBeTruthy();
+      await route.fulfill({ json: { url: callbackURL, redirect: true } });
+    });
+    await page.getByRole("button", { name: /Continue with Google/ }).click();
+    await expect(page).toHaveURL(/\/comp$/);
+
+    // The production shape: the destination arrived with the user already in
+    // its SSR payload.
+    const seeded = await page.evaluate(
+      () => (window as { __SSR_DATA__?: { user?: unknown } }).__SSR_DATA__?.user ?? null
+    );
+    expect(seeded, "expected /comp to seed a signed-in user from SSR").not.toBeNull();
+
+    await page.context().clearCookies();
+    await page.goto("/signin");
+    await expect(pill(/Continue with Google/)).toHaveText("Last used");
+    await expect(pill(/Email me a sign-in code/)).toHaveCount(0);
+  });
+});
