@@ -4,10 +4,11 @@
  *
  * Local dev has no Google, so the OAuth round trip is stood in for: the
  * social sign-in request is intercepted, a real session is made with
- * dev-login, and the client is sent back to the app on the SAME origin —
- * which is what production does. (A branch preview cannot show this: its
- * auth worker's BETTER_AUTH_URL is production, so Google hands the session
- * to glidecomp.com, not to the preview.)
+ * dev-login, and the client is sent to the callbackURL it asked for — which
+ * is what better-auth does on success. (A branch preview cannot show this:
+ * its auth worker's BETTER_AUTH_URL is production, so Google hands the
+ * session to glidecomp.com, not to the preview.) ssr.spec.ts repeats the
+ * success case against the built, server-rendered output.
  */
 import { test, expect, type Page } from "./fixtures/test";
 
@@ -42,12 +43,16 @@ const emailPill = (page: Page) =>
 test("a completed Google sign-in moves the pill to Google", async ({ page }) => {
   await openSignInLastUsedEmail(page);
 
+  // better-auth sends the pilot to the requested callbackURL once the session
+  // exists — so do exactly that, with whatever URL the page asked for.
   await page.route("**/api/auth/sign-in/social", async (route) => {
+    const { callbackURL } = route.request().postDataJSON() as { callbackURL: string };
     await devLogin(page);
-    await route.fulfill({ json: { url: "/comp", redirect: true } });
+    await route.fulfill({ json: { url: callbackURL, redirect: true } });
   });
   await page.getByRole("button", { name: /Continue with Google/ }).click();
-  await page.waitForURL("**/comp");
+  // Through /signin?via=google, and on to the destination.
+  await expect(page).toHaveURL(/\/comp$/);
   await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
 
   await page.context().clearCookies();
@@ -59,9 +64,10 @@ test("a completed Google sign-in moves the pill to Google", async ({ page }) => 
 test("a cancelled Google sign-in leaves the pill where it was", async ({ page }) => {
   await openSignInLastUsedEmail(page);
 
-  // Back from Google without a session (the pilot pressed Cancel).
+  // Back from Google without a session (the pilot pressed Cancel):
+  // better-auth sends a failure to its error URL, never the callbackURL.
   await page.route("**/api/auth/sign-in/social", (route) =>
-    route.fulfill({ json: { url: "/signin", redirect: true } })
+    route.fulfill({ json: { url: "/signin?error=access_denied", redirect: true } })
   );
   await page.getByRole("button", { name: /Continue with Google/ }).click();
   await page.waitForLoadState("networkidle");

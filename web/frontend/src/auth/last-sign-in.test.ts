@@ -1,25 +1,26 @@
 /**
- * The sign-in page's "Last used" pill must reflect a SUCCESSFUL sign-in:
- * a Google attempt the pilot cancelled must not relabel the page.
+ * The sign-in page's "Last used" pill. Only the sign-in actions write it; the
+ * readers of "who is signed in" must stay free of it.
  */
-import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, test, expect, beforeEach, vi } from "vitest";
 import {
-  confirmPendingSignIn,
-  markPendingSignIn,
+  parseSignInMethod,
   readLastSignInMethod,
   writeLastSignInMethod,
   LAST_SIGN_IN_KEY,
-  PENDING_SIGN_IN_KEY,
 } from "./last-sign-in";
-import { getCurrentUser } from "./client";
+import { getCurrentUser, seedCurrentUser, signInWithGoogle } from "./client";
+
+// better-auth's client is a Proxy that captures `fetch` when it is created, so
+// neither a spy nor a fetch stub reaches it: stand the client itself in.
+const social = vi.hoisted(() => vi.fn());
+vi.mock("better-auth/client", () => ({
+  createAuthClient: () => ({ signIn: { social } }),
+}));
 
 beforeEach(() => {
   localStorage.clear();
-  sessionStorage.clear();
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
+  social.mockReset().mockResolvedValue({ data: null, error: null });
 });
 
 describe("last sign-in method", () => {
@@ -32,47 +33,50 @@ describe("last sign-in method", () => {
     expect(readLastSignInMethod()).toBeNull();
   });
 
-  test("a direct write is read back", () => {
+  test("a write is read back", () => {
     writeLastSignInMethod("email");
     expect(readLastSignInMethod()).toBe("email");
   });
 
-  test("a pending attempt changes nothing until confirmed", () => {
-    writeLastSignInMethod("email");
-    markPendingSignIn("google");
-    expect(readLastSignInMethod()).toBe("email");
-    confirmPendingSignIn();
-    expect(readLastSignInMethod()).toBe("google");
-    expect(sessionStorage.getItem(PENDING_SIGN_IN_KEY)).toBeNull();
+  test("only known methods parse from a query param", () => {
+    expect(parseSignInMethod("google")).toBe("google");
+    expect(parseSignInMethod("email")).toBe("email");
+    expect(parseSignInMethod("GOOGLE")).toBeNull();
+    expect(parseSignInMethod(null)).toBeNull();
+  });
+});
+
+describe("signInWithGoogle", () => {
+  test("returns through /signin?via=google, carrying the destination", async () => {
+    await signInWithGoogle("/comp/abc-1?task=2");
+    const { callbackURL } = social.mock.calls[0][0] as { callbackURL: string };
+    const url = new URL(callbackURL, "https://glidecomp.invalid");
+    expect(url.pathname).toBe("/signin");
+    expect(url.searchParams.get("via")).toBe("google");
+    expect(url.searchParams.get("next")).toBe("/comp/abc-1?task=2");
   });
 
-  test("confirming with nothing pending leaves the record alone", () => {
+  test("records nothing when clicked — only a completed sign-in does", async () => {
     writeLastSignInMethod("email");
-    confirmPendingSignIn();
+    await signInWithGoogle("/comp");
     expect(readLastSignInMethod()).toBe("email");
   });
 });
 
-describe("getCurrentUser promotes a pending sign-in", () => {
-  function mockMe(user: unknown) {
+describe("the readers of the current user don't touch it", () => {
+  test("seedCurrentUser (the SSR'd pages)", () => {
+    writeLastSignInMethod("email");
+    seedCurrentUser({ id: "u1", name: "Pilot", email: "p@test.com" } as never);
+    expect(readLastSignInMethod()).toBe("email");
+  });
+
+  test("getCurrentUser (/api/auth/me)", async () => {
+    writeLastSignInMethod("email");
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ user }),
+      json: async () => ({ user: { id: "u1", name: "Pilot", email: "p@test.com" } }),
     } as Response) as unknown as typeof fetch;
-  }
-
-  test("signed in: the pending Google attempt becomes last used", async () => {
-    markPendingSignIn("google");
-    mockMe({ id: "u1", name: "Pilot", email: "p@test.com" });
-    await getCurrentUser();
-    expect(readLastSignInMethod()).toBe("google");
-  });
-
-  test("signed out (cancelled OAuth): nothing is promoted", async () => {
-    writeLastSignInMethod("email");
-    markPendingSignIn("google");
-    mockMe(null);
     await getCurrentUser();
     expect(readLastSignInMethod()).toBe("email");
   });
