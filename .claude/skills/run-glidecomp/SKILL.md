@@ -73,15 +73,18 @@ screenshots them. Paths below are relative to the repo root.
    Override target with env vars: `BASE_URL`, `COMP_MATCH` (e.g.
    `COMP_MATCH=Corryong bun .claude/skills/run-glidecomp/driver.mjs`).
 
-4. **Drive the admin-only Task Analysis pages** — signs in as the super-admin,
-   follows the task page's "Task analysis" link, waits out the background
-   compute, expands a metric family, then checks the comp-level aggregate and
-   that an anonymous visitor is gated:
+4. **Drive the Task Analysis pages** — anonymously, because both analyses
+   are public for a normal comp. Follows the task page's "Task analysis" link,
+   waits out the background compute, checks the contents list has a box for
+   every section in `analysis/sections.ts`, then reads the separation ranking
+   on Winning strategies, the per-pilot tables on Metric details, and the
+   comp-level aggregate:
    ```bash
    bun .claude/skills/run-glidecomp/drive-task-analysis.mjs
    ```
    Ends with `✓ drove task analysis end-to-end`; shots land in `shots/`
-   (`ta-task.png`, `ta-task-family.png`, `ta-comp.png`, `ta-anon.png`).
+   (`ta-task-pending.png`, `ta-task.png`, `ta-strategies.png`,
+   `ta-metrics.png`, `ta-comp.png`).
    **Breadcrumbs / navigation hierarchy** have their own driver — it asserts
    the trail text on every `/comp` page and walks the analysis journey
    (comp detail → Comp analysis → one task's Task analysis → up one level to
