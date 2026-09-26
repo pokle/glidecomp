@@ -11,7 +11,7 @@
  * controls; on a `test` comp the same blip produced a flat 404,
  * "Competition not found". Nothing self-healed, because nothing knew.
  *
- * The mock AUTH_API honours a `test-auth-fail=<key>:<n>` cookie that makes
+ * The mock AUTH_API honours a `better-auth.test-auth-fail=<key>:<n>` cookie that makes
  * the first n calls answer 500 (see vitest.config.ts). Each test uses its own
  * key so the countdowns don't bleed into each other.
  */
@@ -29,7 +29,7 @@ function flakyRequest(
     method,
     headers: {
       "Content-Type": "application/json",
-      Cookie: `test-user=${user}; test-auth-fail=${key}:${failures}`,
+      Cookie: `better-auth.test-user=${user}; better-auth.test-auth-fail=${key}:${failures}`,
     },
   });
 }
@@ -75,7 +75,7 @@ describe("transient auth-hop failures (issue #481)", () => {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Cookie: "test-user=user-1; test-auth-fail=mutation-blip:1",
+        Cookie: "better-auth.test-user=user-1; better-auth.test-auth-fail=mutation-blip:1",
       },
       body: JSON.stringify({ name: "Renamed Through A Blip" }),
     });
@@ -99,7 +99,7 @@ describe("transient auth-hop failures (issue #481)", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: "test-user=user-1; test-auth-fail=all-down:99",
+        Cookie: "better-auth.test-user=user-1; better-auth.test-auth-fail=all-down:99",
       },
       body: JSON.stringify({ name: "Never Created", category: "hg" }),
     });

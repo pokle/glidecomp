@@ -700,3 +700,58 @@ test.describe("SSR — the sign-in page's Last used pill", () => {
     await expect(pill(/Email me a sign-in code/)).toHaveCount(0);
   });
 });
+
+/**
+ * Who the visitor is, as the SSR Function works it out
+ * (functions/comp/[[path]].ts → fetchVisitor). Usually from auth-api's signed
+ * `session_data` cookie, checked with the public key and with no auth hop.
+ * When that cookie has expired it falls back to /api/auth/me, and the fresh
+ * cookie /me issues must reach the browser on the PAGE's response, or every
+ * later page (and its competition-api calls) would pay the hop again.
+ */
+test.describe("SSR — the visitor from the session cookie cache", () => {
+  const seededUser = (page: import("@playwright/test").Page) =>
+    page.evaluate(
+      () =>
+        (window as { __SSR_DATA__?: { user?: { email?: string } | null } }).__SSR_DATA__
+          ?.user ?? null
+    );
+
+  test("an expired cache cookie is re-issued on the SSR'd page", async ({ page }) => {
+    const res = await page.request.post("/api/auth/dev-login", {
+      data: { name: "SSR Cache", email: "ssr-cache@test.local" },
+    });
+    expect(res.ok(), `dev-login failed: ${res.status()}`).toBeTruthy();
+
+    // With the cache cookie: answered from it.
+    await page.goto("/comp");
+    expect(await seededUser(page)).toMatchObject({ email: "ssr-cache@test.local" });
+
+    // Without it (as after its five minutes are up): /me decides, and the
+    // page hands the browser a fresh one.
+    const context = page.context();
+    const withoutCache = (await context.cookies()).filter(
+      (c) => !c.name.endsWith("session_data")
+    );
+    await context.clearCookies();
+    await context.addCookies(withoutCache);
+
+    const pageRes = await page.goto("/comp");
+    expect(pageRes?.headers()["cache-control"]).toBe("private, no-store");
+    expect(await seededUser(page)).toMatchObject({ email: "ssr-cache@test.local" });
+    const names = (await context.cookies()).map((c) => c.name);
+    expect(names.some((n) => n.endsWith("session_data"))).toBe(true);
+  });
+
+  test("a visitor with only non-auth cookies is anonymous and cacheable", async ({
+    page,
+  }) => {
+    const url = new URL(test.info().project.use.baseURL ?? "http://localhost:3100");
+    await page.context().addCookies([
+      { name: "_ga", value: "GA1.1.123", domain: url.hostname, path: "/" },
+    ]);
+    const res = await page.goto("/comp");
+    expect(res?.headers()["cache-control"]).not.toContain("private");
+    expect(await seededUser(page)).toBeNull();
+  });
+});

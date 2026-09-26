@@ -140,10 +140,19 @@ their own buckets.
 sessions expire after 60 days. This applies to Google and email-OTP sign-ins
 alike.
 
+Each D1 session read also sets a 5-minute `session_data` cookie cache, which
+other workers verify without calling auth-api — see
+[Cross-worker auth verification](#cross-worker-auth-verification).
+
+The Better Auth instance is built once per isolate (`createAuth()` memoises it
+per `env`). The two hooks that hand work to `waitUntil` read the request's
+ExecutionContext from async local storage (`runWithExecutionCtx()`), not from
+the constructor.
+
 ### The schema, and who checks it
 
-The `user`, `session`, `account`, `verification`, `apikey` and `rateLimit`
-tables are Better Auth's, but they are **ours to migrate**: they are
+The `user`, `session`, `account`, `verification`, `apikey`, `rateLimit` and
+`jwks` tables are Better Auth's, but they are **ours to migrate**: they are
 hand-written in `web/db/migrations/` and applied by wrangler. Better Auth's
 CLI (`auth migrate` / `auth generate`) is never run against this database.
 
@@ -185,13 +194,13 @@ new migration in `web/db/migrations/`.
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, `/set-name`, `/delete-account`, the dev-only endpoints, and the Better Auth catch-all |
-| `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, `emailOTP` + `apiKey` plugins, rate limits, 60-day rolling sessions, username field, auto-derive-username create hook, pilot bootstrap on sign-in |
+| `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, `emailOTP` + `apiKey` + `jwt` plugins, session cookie cache, rate limits, 60-day rolling sessions, username field, auto-derive-username create hook, pilot bootstrap on sign-in |
 | `src/otp-email.ts` | Builds the sign-in OTP email (subject/HTML/text) for the Cloudflare Email Sending binding |
 | `src/rate-limit.ts` | Single source of truth for the API-key and email-OTP limits; per-email send throttle over the `rateLimit` table |
 | `src/pilot-bootstrap.ts` | On every sign-in, ensures the account's `pilot` row exists and claims email-matching unlinked pre-registrations |
 | `src/username.ts` | Slugify + derive a unique, format-valid username at sign-up |
 | `src/routes/preferences.ts` | `GET`/`PUT /api/auth/preferences` (per-user UI preferences) |
-| `web/db/migrations/` | D1 schema (shared with competition-api — see `migrations_dir` in `wrangler.toml`): `user`, `session`, `account`, `verification`, `apikey`, `rateLimit`, … |
+| `web/db/migrations/` | D1 schema (shared with competition-api — see `migrations_dir` in `wrangler.toml`): `user`, `session`, `account`, `verification`, `apikey`, `rateLimit`, `jwks`, … |
 | `wrangler.toml` | D1 binding + `migrations_dir`, R2 binding, `send_email` binding, route config, env vars |
 
 ### Frontend Auth (`web/frontend/src/auth/`)
@@ -219,6 +228,8 @@ new migration in `web/db/migrations/`.
 | POST | `/api/auth/delete-account` | Yes | Purges every R2 object under `u/{userId}/`, then deletes the `user` row (cascades to sessions, accounts, preferences, user tracks/tasks/annotations — see [database.md](database.md)) |
 | POST | `/api/auth/dev-login` | No | **Local dev only** (404s unless `isLocalDev()`). Signs up-or-in an email+password identity so e2e specs don't need Google |
 | GET | `/api/auth/dev-last-otp` | No | **Local dev only.** Returns the last sign-in OTP issued for an email, so local/e2e flows can complete OTP sign-in without a mailbox |
+| GET | `/api/auth/jwks` | No | Public keys that verify the `session_data` cookie cache (Better Auth's `jwt` plugin) |
+| GET | `/api/auth/token` | — | **Always 404.** The `jwt` plugin's bearer-token endpoint, deliberately not served |
 | ALL | `/api/auth/*` | — | Better Auth handles OAuth sign-in/callback, email-OTP send + verify, sign-out, session, and API-key management |
 
 **API keys.** The Better Auth [`apiKey`](https://www.better-auth.com/docs/plugins/api-key)
@@ -389,11 +400,61 @@ The unified `deploy.yml` workflow runs on every branch, but for non-master branc
 
 ## Cross-worker auth verification
 
-Other workers (e.g. competition-api) need to verify authentication status for incoming requests. There are three approaches, in order of complexity:
+Other callers — competition-api's auth middleware and the SSR Pages Function
+(`functions/comp/[[path]].ts`) — need to know who a request is from. They
+answer it in two tiers.
 
-### Option A: Service binding to auth-api (current approach)
+### 1. The session cookie cache, checked with a public key (the common case)
 
-Add a service binding in the worker's `wrangler.toml` and forward the session cookie to `/api/auth/me`:
+auth-api runs Better Auth with `session.cookieCache` on the `"jwt"` strategy
+(`maxAge` 5 minutes), and the `jwt` plugin with `sessionCookieCache: true`.
+Every time auth-api reads a session from D1 it also sets a
+`better-auth.session_data` cookie: a JWT of the session and user, signed with
+an **Ed25519 private key** from the `jwks` table (migration 0034; the private
+half stored encrypted with `BETTER_AUTH_SECRET`). The public half is published
+at `GET /api/auth/jwks`.
+
+`verifySessionCookie()` in `@glidecomp/worker-kit/session-cookie` checks that
+cookie with the public key alone: the `typ`, the audience, the algorithm
+pinned to the published key's, the expiry, and that the cached session
+belongs to the `session_token` cookie beside it. The key set is fetched over
+the service binding once per isolate per hour (early only for an unknown
+`kid`). No hop, no D1 read — and the caller holds nothing that can sign a
+session, so a bug there cannot leak a way to forge one.
+
+- **A miss is "ask auth-api", never "signed out".** Only a verified user is an
+  answer; anything else falls through to tier 2.
+- **API keys always take tier 2** (`x-api-key` / `Authorization`): they carry
+  no cookie, and auth-api owns their rate limit.
+- **Only Better Auth's own cookies are forwarded** (`authCookieHeader()`). A
+  visitor with only analytics cookies is anonymous: no hop, and the SSR page
+  stays publicly cacheable.
+- **The trade-off:** a revoked session, or a sign-out on another device, keeps
+  working for up to 5 minutes. `delete-account` reads D1 (not the cache) and
+  signs out, which expires both cookies.
+- **Anything that writes `"user"` directly must re-issue the cookie**, or the
+  old values are served until it expires. `set-username` and `set-name` call
+  `refreshSessionCache()`; competition-api's `PATCH /api/comp/pilot` passes
+  set-name's `Set-Cookie` back to the browser.
+- **The cookie reaches the browser only on a response the browser gets.** So
+  `/api/auth/me` passes Better Auth's `Set-Cookie` headers through
+  (`returnHeaders`), and the SSR Function forwards those from its own `/me`
+  fallback onto the page. A call over a service binding from competition-api
+  cannot refresh it.
+- **Rotating `BETTER_AUTH_SECRET` also means clearing the `jwks` table**
+  (`DELETE FROM jwks`). The private keys there are encrypted with the old
+  secret, so auth-api could no longer sign a cache cookie, and every session
+  read would fail. With the table empty, auth-api mints a new key on first use.
+  Every browser's cache cookie then fails to verify once and falls back to /me
+  for a single request. Nobody is signed out; the secret rotation itself is
+  what invalidates sessions.
+- The jwt plugin's other product — a JS-readable JWT on `get-session` and at
+  `/api/auth/token` — is switched off (`disableSettingJwtHeader`, and index.ts
+  404s `/token`).
+
+### 2. The `/api/auth/me` hop (the authority)
+
+Forward the caller's credential over the `AUTH_API` service binding:
 
 ```toml
 [[services]]
@@ -403,41 +464,20 @@ service = "auth-api"
 
 ```ts
 const res = await env.AUTH_API.fetch(new Request("https://auth/api/auth/me", {
-  headers: { cookie: request.headers.get("cookie") || "" }
+  headers: forwardAuthHeaders(request.headers),
 }));
 const { user } = await res.json();
-if (!user) return new Response("Unauthorized", { status: 401 });
 ```
 
-- No shared secrets or new dependencies
-- All auth logic stays centralised in auth-api
-- ~5-10ms subrequest per authed call (hits D1 each time)
-- Pages already uses this pattern (see `functions/api/auth/[[path]].ts`)
+`/me` itself answers from the cookie cache when it is fresh, and from D1
+(two sequential queries) otherwise. See `resolveUser()` in
+`web/workers/competition-api/src/middleware/auth.ts` for the retry rules
+(issue #481: a 5xx is not "signed out").
 
-### Option B: Shared D1 binding (verify session directly)
-
-Give the worker its own D1 binding to `taskscore-auth` plus `BETTER_AUTH_SECRET`. Parse the signed `better-auth.session_token` cookie, unsign it, and query the session table directly.
-
-- No inter-worker subrequest
-- Duplicates auth logic and must exactly match Better Auth's cookie signing (HMAC-SHA256 via `better-call`)
-- Breaks if Better Auth changes its cookie format
-
-### Option C: Cookie caching with JWT (stateless)
-
-Enable Better Auth's cookie caching with JWT strategy in auth-api, then verify the signed `better-auth.session_data` cookie in the calling worker without any DB or network call:
-
-```ts
-// In auth-api config:
-session: { cookieCache: { enabled: true, maxAge: 5 * 60, strategy: "jwt" } }
-
-// In competition-api:
-import { getCookieCache } from "better-auth/cookies";
-const session = await getCookieCache(request, { secret: env.BETTER_AUTH_SECRET, strategy: "jwt" });
-```
-
-- Zero latency — truly stateless verification
-- Requires `better-auth` as a dependency and sharing `BETTER_AUTH_SECRET`
-- Revoked sessions remain valid until `maxAge` expires (e.g. 5 min window)
+Sharing `BETTER_AUTH_SECRET` with another worker (Better Auth's default
+`compact` or `jwt` strategies, or reading the session table directly) was
+considered and rejected: whoever holds the secret can mint a session for
+anyone.
 
 ## Deployment
 

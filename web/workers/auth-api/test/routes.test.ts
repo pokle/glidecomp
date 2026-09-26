@@ -7,7 +7,7 @@
 // test files don't yet cover.
 
 import { describe, expect, test } from "vitest";
-import { loginAs, request } from "./helpers";
+import { applySetCookies, loginAs, request } from "./helpers";
 
 // ── GET /api/auth/me ─────────────────────────────────────────────────────────
 
@@ -89,7 +89,7 @@ describe("POST /api/auth/set-username — auth gate", () => {
 
 describe("POST /api/auth/set-username — display name", () => {
   test("writes the name alongside the username", async () => {
-    const cookie = await loginAs("set-name-1@test.local", "Placeholder");
+    let cookie = await loginAs("set-name-1@test.local", "Placeholder");
     const res = await request("POST", "/api/auth/set-username", {
       cookie,
       body: { username: "amelia-earhart", name: "Amelia Earhart" },
@@ -100,7 +100,9 @@ describe("POST /api/auth/set-username — display name", () => {
       name: "Amelia Earhart",
     });
 
-    // /api/auth/me is what the gate reads — it must see both.
+    // /api/auth/me is what the gate reads — it must see both, through the
+    // session_data cookie the route re-issued.
+    cookie = applySetCookies(cookie, res);
     const me = await request("GET", "/api/auth/me", { cookie });
     const { user } = (await me.json()) as {
       user: { username: string; name: string };
@@ -192,7 +194,7 @@ describe("POST /api/auth/set-name", () => {
   });
 
   test("renames the account, and /api/auth/me says so", async () => {
-    const cookie = await loginAs("set-name-route-1@test.local", "Old Name");
+    let cookie = await loginAs("set-name-route-1@test.local", "Old Name");
     const res = await request("POST", "/api/auth/set-name", {
       cookie,
       body: { name: "New Name" },
@@ -200,19 +202,21 @@ describe("POST /api/auth/set-name", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ name: "New Name" });
 
+    cookie = applySetCookies(cookie, res);
     const me = await request("GET", "/api/auth/me", { cookie });
     const { user } = (await me.json()) as { user: { name: string } };
     expect(user.name).toBe("New Name");
   });
 
   test("stores the trimmed name", async () => {
-    const cookie = await loginAs("set-name-route-2@test.local", "Before");
+    let cookie = await loginAs("set-name-route-2@test.local", "Before");
     const res = await request("POST", "/api/auth/set-name", {
       cookie,
       body: { name: "  Padded Name  " },
     });
     expect(res.status).toBe(200);
 
+    cookie = applySetCookies(cookie, res);
     const me = await request("GET", "/api/auth/me", { cookie });
     const { user } = (await me.json()) as { user: { name: string } };
     expect(user.name).toBe("Padded Name");

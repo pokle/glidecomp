@@ -46,6 +46,10 @@ import {
 } from "../../web/frontend/src/react/lib/slug";
 
 import type { AuthUser } from "../../web/frontend/src/auth/client";
+import {
+  authCookieHeader,
+  verifySessionCookie,
+} from "../../web/workers/shared/src/session-cookie";
 
 interface Env {
   COMPETITION_API: Fetcher;
@@ -53,26 +57,42 @@ interface Env {
   ASSETS: Fetcher;
 }
 
+/** Who the visitor is, plus any cookies auth-api re-issued while finding out. */
+interface Visitor {
+  user: AuthUser | null | undefined;
+  setCookies: string[];
+}
+
 /**
  * Resolve the visitor from the forwarded cookie so the rendered page already
  * knows who they are and the client can skip /api/auth/me entirely — it was
  * two round trips on every page load, ~30% of all requests on a public page.
  *
- * Only called when a cookie is present: an anonymous visitor is signed out by
- * definition, so the cacheable path stays free of an extra hop. `undefined`
- * on failure means "unknown" and the client falls back to asking, so an auth
- * blip can never render a signed-in visitor as signed out.
+ * Usually answered here, from auth-api's signed `session_data` cookie checked
+ * with its PUBLIC key (@glidecomp/worker-kit/session-cookie) — no hop. When
+ * that cookie has expired, /me reads D1 and issues a fresh one, which rides
+ * back to the browser on this page's response so that its next few minutes of
+ * pages, and their competition-api calls, need no hop either.
+ *
+ * Only called when an auth cookie is present: an anonymous visitor is signed
+ * out by definition, so the cacheable path stays free of an extra hop.
+ * `undefined` on failure means "unknown" and the client falls back to asking,
+ * so an auth blip can never render a signed-in visitor as signed out.
  */
-async function fetchVisitor(env: Env, cookie: string): Promise<AuthUser | null | undefined> {
+async function fetchVisitor(env: Env, cookie: string): Promise<Visitor> {
+  const cached = await verifySessionCookie(cookie, () =>
+    env.AUTH_API.fetch(new Request("https://auth.internal/api/auth/jwks"))
+  );
+  if (cached) return { user: cached, setCookies: [] };
   try {
     const res = await env.AUTH_API.fetch(
       new Request("https://auth.internal/api/auth/me", { headers: { Cookie: cookie } })
     );
-    if (!res.ok) return undefined;
+    if (!res.ok) return { user: undefined, setCookies: [] };
     const body = (await res.json()) as { user: AuthUser | null };
-    return body.user ?? null;
+    return { user: body.user ?? null, setCookies: res.headers.getSetCookie() };
   } catch {
-    return undefined;
+    return { user: undefined, setCookies: [] };
   }
 }
 
@@ -455,7 +475,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
   const path = url.pathname;
-  const cookie = request.headers.get("Cookie");
+  // Better Auth's cookies only. Nothing else identifies anyone, and treating
+  // an analytics or `__cf_bm` cookie as a visitor would spend an auth hop on
+  // an anonymous reader and mark their page `private, no-store`.
+  const cookie = authCookieHeader(request.headers.get("Cookie"));
 
   // The per-task analysis moved back under the task it is about. Its
   // July–August 2026 URL (/comp/:c/analysis/task/:t, and /similar below it)
@@ -502,9 +525,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // In flight alongside the loader — the render needs both, and neither
   // depends on the other. An anonymous visitor resolves to null for free.
-  const visitorPromise: Promise<AuthUser | null | undefined> = cookie
+  const visitorPromise: Promise<Visitor> = cookie
     ? fetchVisitor(env, cookie)
-    : Promise.resolve(null);
+    : Promise.resolve({ user: null, setCookies: [] });
 
   let rendered: Rendered;
   try {
@@ -524,8 +547,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return canonicalRedirect(url.origin + rendered.canonicalPath + url.search, cookie);
   }
 
-  const user = await visitorPromise;
-  const ssrData = { path, data: rendered.data, user };
+  const visitor = await visitorPromise;
+  const ssrData = { path, data: rendered.data, user: visitor.user };
 
   let bodyHtml: string;
   try {
@@ -543,13 +566,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const template = await (await fetchShell(env, url)).text();
   const html = injectSsr(template, path, bodyHtml, rendered.head, ssrData);
 
-  return new Response(html, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": pageCacheControl(cookie, rendered.cache),
-    },
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": pageCacheControl(cookie, rendered.cache),
   });
+  // Only ever present on a cookie-forwarded (so `private, no-store`) render.
+  for (const setCookie of visitor.setCookies) headers.append("Set-Cookie", setCookie);
+  return new Response(html, { status: 200, headers });
 };
 
 // ── scores CSV ───────────────────────────────────────────────────────────────
