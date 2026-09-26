@@ -441,6 +441,13 @@ session, so a bug there cannot leak a way to forge one.
   (`returnHeaders`), and the SSR Function forwards those from its own `/me`
   fallback onto the page. A call over a service binding from competition-api
   cannot refresh it.
+- **Rotating `BETTER_AUTH_SECRET` also means clearing the `jwks` table**
+  (`DELETE FROM jwks`). The private keys there are encrypted with the old
+  secret, so auth-api could no longer sign a cache cookie, and every session
+  read would fail. With the table empty, auth-api mints a new key on first use.
+  Every browser's cache cookie then fails to verify once and falls back to /me
+  for a single request. Nobody is signed out; the secret rotation itself is
+  what invalidates sessions.
 - The jwt plugin's other product — a JS-readable JWT on `get-session` and at
   `/api/auth/token` — is switched off (`disableSettingJwtHeader`, and index.ts
   404s `/token`).
