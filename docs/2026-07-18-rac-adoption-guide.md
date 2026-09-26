@@ -21,7 +21,7 @@ live in `src/react/vendor/`: today the `input-otp` sign-in field and the
 still does `@import "shadcn/tailwind.css"` for the token layer. So "the kit is
 gone" is true of the *code* and not yet of the *manifest*.
 
-Read the **gotchas** section before touching kit code — twenty-eight of them, each
+Read the **gotchas** section before touching kit code — more than 25 of them, each
 one something that cost real debugging. The rest of this doc is history: how
 the migration went, what was decided and why. It is worth keeping because the
 reasoning still applies to new UI.
