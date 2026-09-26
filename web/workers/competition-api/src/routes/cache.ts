@@ -5,7 +5,7 @@
  * the KV namespace (`glidecomp_scores_cache` — now only 3dvis replay bundles
  * plus any legacy score keys from the pre-D1 design), and the AirScore proxy
  * cache in the airscore-api worker, reached over the AIRSCORE_API service
- * binding. Gated by the same hardcoded allowlist as ../admin.ts.
+ * binding. Gated by the same hardcoded allowlist as ./admin.ts.
  *
  * "Clear" marks every task_scores row stale (inputs_rev + 1) so organic
  * traffic recomputes in the background — nothing goes slow. Pass ?hard=true

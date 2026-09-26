@@ -335,7 +335,7 @@ These are the standing imperatives. Each links to the reference that explains it
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
-  before touching kit code — it carries the conventions and eighteen hard-won
+  before touching kit code — it carries the conventions and twenty-eight hard-won
   gotchas. The shadcn/Base UI kit is **gone** (migration finished 2026-07-27,
   [#483](https://github.com/pokle/glidecomp/issues/483)); `src/react/one-kit.test.ts`
   fails the build if it comes back, and there is no `components.json`, so
@@ -541,8 +541,9 @@ These are the standing imperatives. Each links to the reference that explains it
   `scoring-changes/050-monotonic-fix-timestamps.md`.
 - **Never implement inline geo math** (distance, bearing, etc.) — always use
   `web/engine/src/geo.ts`, which provides WGS84 ellipsoid formulas
-  (Andoyer-Lambert distance, Vincenty direct destination) and Turf.js for
-  bearing/bbox.
+  (`ellipsoidDistance` — the Vincenty inverse that S7F 2026 §7.1.5 requires,
+  with Andoyer-Lambert only as its non-convergence fallback — and Vincenty
+  direct for destination) and Turf.js for bearing/bbox.
 - **Single source of truth for map visuals/interactions**:
   [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) — the map
   provider must match this spec.

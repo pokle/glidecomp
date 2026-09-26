@@ -12,7 +12,7 @@
  *     track on disk.
  *
  * Superseded rows are retained (`active = 0`) so they stay viewable and
- * restorable. Scoring reads only active records (see scoring.ts).
+ * restorable. Scoring reads only active records (see scoring/config.ts).
  *
  * The made-good geometry all runs through the engine (web/engine/src/
  * manual-flight.ts) — no inline geo here.

@@ -16,12 +16,12 @@ live in `src/react/vendor/`: today the `input-otp` sign-in field and the
 `sonner` toaster.
 
 *Loose end, stated neutrally because nobody has decided anything about it:*
-`web/frontend/package.json` still declares `@base-ui/react` and `shadcn` as
-dependencies even though no app code imports Base UI at all, and `globals.css`
+`web/frontend/package.json` still declares `shadcn` as a dependency (the
+`@base-ui/react` entry beside it has since been dropped), and `globals.css`
 still does `@import "shadcn/tailwind.css"` for the token layer. So "the kit is
 gone" is true of the *code* and not yet of the *manifest*.
 
-Read the **gotchas** section before touching kit code — twenty-one of them, each
+Read the **gotchas** section before touching kit code — twenty-eight of them, each
 one something that cost real debugging. The rest of this doc is history: how
 the migration went, what was decided and why. It is worth keeping because the
 reasoning still applies to new UI.
