@@ -755,3 +755,39 @@ test.describe("SSR — the visitor from the session cookie cache", () => {
     expect(await seededUser(page)).toBeNull();
   });
 });
+
+/**
+ * A tab that outlived a deploy (lib/stale-deploy.ts, AppErrorBoundary). Every
+ * deploy renames the hashed chunks, so the old app asks for files that no
+ * longer exist. It must reload itself onto the new deploy ONCE, and if the
+ * chunk is still missing after that, apologise rather than show a blank page.
+ * Against the built output, because the dev server has no hashed chunks.
+ */
+test.describe("SSR — a tab that outlived a deploy", () => {
+  test("reloads once for a missing chunk, then apologises", async ({ page }) => {
+    await page.goto("/comp");
+    await expect(page.getByRole("link", { name: /Corryong Cup/ })).toBeVisible();
+
+    // The Settings page's chunk is gone, as after a deploy.
+    await page.route(/\/assets\/Settings-[\w-]+\.js$/, (route) =>
+      route.fulfill({ status: 404, body: "Not found" })
+    );
+    let loads = 0;
+    page.on("load", () => loads++);
+
+    // A client-side navigation to a lazy route, as a click in the old app would.
+    await page.evaluate(() => {
+      history.pushState({}, "", "/settings");
+      dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await expect(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible();
+    // The one automatic reload happened; the loop guard stopped a second.
+    expect(loads).toBe(1);
+    await expect(page.getByRole("button", { name: "Reload page" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Go to the home page" })).toHaveAttribute(
+      "href",
+      "/"
+    );
+  });
+});

@@ -15,6 +15,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { Suspense, lazy } from "react";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { ConfirmProvider } from "./rac/confirm";
 import { UserProvider } from "./lib/user";
 import type { AuthUser } from "../auth/client";
@@ -146,121 +147,126 @@ function TaskAnalysisRedirect({ similar = false }: { similar?: boolean }) {
 
 export function AppRoutes() {
   return (
-    // The lazy routes above need a boundary. It wraps everything so there is
-    // one, but it can only ever be hit by a split route: the server-rendered
-    // pages are static imports and never suspend, so hydration of an SSR'd
-    // page never sees this fallback.
-    <Suspense fallback={<Loading>Loading…</Loading>}>
-      <Routes>
-        {/* Home, about, legal and the scoring guides are static pages built by
-            ./static (Astro) — served outside the SPA. */}
-        {/* /app is the SPA shell's own URL. Browsers that cached the old broken
-            308 (SPA route -> /app) before the _redirects fix land here; bounce
-            them to the dashboard. This is a client-side (pushState) nav, so it
-            doesn't re-trigger the cached redirect. */}
-        <Route path="/app" element={<Navigate to="/u/me" replace />} />
-        <Route path="/onboarding" element={<Onboarding />} />
-        <Route path="/signin" element={<SignIn />} />
-        <Route element={<Shell />}>
-          <Route path="/u/:username" element={<Dashboard />} />
-          {/* Inside Shell: /submit is a destination with somewhere to go
-              afterwards, not a dead end like /signin. */}
-          <Route path="/submit" element={<SubmitTrack />} />
-          <Route path="/comp" element={<Competitions />} />
-          <Route path="/comp/:compId" element={<CompDetail />} />
-          <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
-          {/* Admin-only roster editor — noindex shell in the SSR Function. */}
-          <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
-          {/* Admin-only settings pages (index + one sub-page per group) —
-              noindex shell in the SSR Function, like /pilots. */}
-          <Route path="/comp/:compId/settings" element={<CompSettingsPage />} />
-          <Route
-            path="/comp/:compId/settings/:group"
-            element={<CompSettingsPage />}
-          />
-          <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
-          {/* Analysis (behavioural metrics). One COMP analysis per competition
-              at /analysis, and one chapter per task UNDER THAT TASK — see the
-              task routes below. The comp report collects the chapters; it does
-              not own their URLs, and the breadcrumbs agree (lib/crumbs.ts).
-              PUBLIC and server-rendered since July 2026 — both have ROUTES
-              entries in functions/comp/[[path]].ts, and a cold report renders
-              its pending notice server-side (noindex) while the client polls.
-              A hidden `test` comp still 404s for non-admins. */}
-          <Route path="/comp/:compId/analysis" element={<CompAnalysis />} />
-          <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
-          {/* The task's three admin-only editors, all SIBLINGS: each is
-              reached from the part of the task page it edits, so none nests
-              under another. Noindex shells in the SSR Function, like /pilots.
+    // An error thrown by any route lands here rather than blanking the page.
+    // A chunk that no longer exists (a tab that outlived a deploy) reloads
+    // once; anything else gets an apology with a way out.
+    <AppErrorBoundary>
+      {/* The lazy routes above need a boundary. It wraps everything so there is
+          one, but it can only ever be hit by a split route: the server-rendered
+          pages are static imports and never suspend, so hydration of an SSR'd
+          page never sees this fallback. */}
+      <Suspense fallback={<Loading>Loading…</Loading>}>
+        <Routes>
+          {/* Home, about, legal and the scoring guides are static pages built by
+              ./static (Astro) — served outside the SPA. */}
+          {/* /app is the SPA shell's own URL. Browsers that cached the old broken
+              308 (SPA route -> /app) before the _redirects fix land here; bounce
+              them to the dashboard. This is a client-side (pushState) nav, so it
+              doesn't re-trigger the cached redirect. */}
+          <Route path="/app" element={<Navigate to="/u/me" replace />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/signin" element={<SignIn />} />
+          <Route element={<Shell />}>
+            <Route path="/u/:username" element={<Dashboard />} />
+            {/* Inside Shell: /submit is a destination with somewhere to go
+                afterwards, not a dead end like /signin. */}
+            <Route path="/submit" element={<SubmitTrack />} />
+            <Route path="/comp" element={<Competitions />} />
+            <Route path="/comp/:compId" element={<CompDetail />} />
+            <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
+            {/* Admin-only roster editor — noindex shell in the SSR Function. */}
+            <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
+            {/* Admin-only settings pages (index + one sub-page per group) —
+                noindex shell in the SSR Function, like /pilots. */}
+            <Route path="/comp/:compId/settings" element={<CompSettingsPage />} />
+            <Route
+              path="/comp/:compId/settings/:group"
+              element={<CompSettingsPage />}
+            />
+            <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
+            {/* Analysis (behavioural metrics). One COMP analysis per competition
+                at /analysis, and one chapter per task UNDER THAT TASK — see the
+                task routes below. The comp report collects the chapters; it does
+                not own their URLs, and the breadcrumbs agree (lib/crumbs.ts).
+                PUBLIC and server-rendered since July 2026 — both have ROUTES
+                entries in functions/comp/[[path]].ts, and a cold report renders
+                its pending notice server-side (noindex) while the client polls.
+                A hidden `test` comp still 404s for non-admins. */}
+            <Route path="/comp/:compId/analysis" element={<CompAnalysis />} />
+            <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+            {/* The task's three admin-only editors, all SIBLINGS: each is
+                reached from the part of the task page it edits, so none nests
+                under another. Noindex shells in the SSR Function, like /pilots.
 
-              Settings is flat where the comp's is an index — a task has five
-              settings, which is a form and not a hierarchy. The route editor
-              is the surface a phone needed most: a map, a turnpoint grid and
-              two config panels used to share one 100dvh modal. */}
-          <Route
-            path="/comp/:compId/task/:taskId/settings"
-            element={<TaskSettingsPage />}
-          />
-          <Route
-            path="/comp/:compId/task/:taskId/route"
-            element={<TaskRoutePage />}
-          />
-          <Route
-            path="/comp/:compId/task/:taskId/weather"
-            element={<TaskWeatherPage />}
-          />
-          {/* This task's own TASK analysis, collected by the comp analysis: a summary, with
-              a box per section linking to the section's own page. */}
-          <Route
-            path="/comp/:compId/task/:taskId/analysis"
-            element={<TaskAnalysis />}
-          />
-          {/* Pilot-to-pilot behavioural similarity, a leaf of the chapter it
-              derives from. Client-only, so it needs a NOINDEX_SHELL_ROUTES
-              entry in functions/comp/[[path]].ts rather than a loader. It is
-              a STATIC segment, so it out-ranks the :section route below
-              whichever order they are declared in. */}
-          <Route
-            path="/comp/:compId/task/:taskId/analysis/similar"
-            element={<TaskPilotSimilarity />}
-          />
-          {/* One section of the chapter, each showing that one thing. Five
-              slugs, listed in analysis/sections.ts and matched by the
-              SSR Function's own pattern; anything else renders NotFound. */}
-          <Route
-            path="/comp/:compId/task/:taskId/analysis/:section"
-            element={<TaskAnalysisSection />}
-          />
-          {/* Where the per-task analysis lived while it was nested under the
-              comp report (July–August 2026). */}
-          <Route
-            path="/comp/:compId/analysis/task/:taskId"
-            element={<TaskAnalysisRedirect />}
-          />
-          <Route
-            path="/comp/:compId/analysis/task/:taskId/similar"
-            element={<TaskAnalysisRedirect similar />}
-          />
-          <Route
-            path="/comp/:compId/task/:taskId/pilot/:pilotId"
-            element={<PilotScoreDetail />}
-          />
-          {/* Recording a flight for a pilot with no tracklog (S7F §9.2.2) —
-              admin-only, and a child of the report card because that is the
-              page it is about. */}
-          <Route
-            path="/comp/:compId/task/:taskId/pilot/:pilotId/manual-flight"
-            element={<ManualFlightPage />}
-          />
-          <Route path="/scores" element={<Scores />} />
-          {/* "My Profile" merged into Settings; keep the old path working. */}
-          <Route path="/profile" element={<Navigate to="/settings" replace />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/admin/users" element={<AdminUsers />} />
-          <Route path="/admin/cache" element={<AdminCache />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
-    </Suspense>
+                Settings is flat where the comp's is an index — a task has five
+                settings, which is a form and not a hierarchy. The route editor
+                is the surface a phone needed most: a map, a turnpoint grid and
+                two config panels used to share one 100dvh modal. */}
+            <Route
+              path="/comp/:compId/task/:taskId/settings"
+              element={<TaskSettingsPage />}
+            />
+            <Route
+              path="/comp/:compId/task/:taskId/route"
+              element={<TaskRoutePage />}
+            />
+            <Route
+              path="/comp/:compId/task/:taskId/weather"
+              element={<TaskWeatherPage />}
+            />
+            {/* This task's own TASK analysis, collected by the comp analysis: a summary, with
+                a box per section linking to the section's own page. */}
+            <Route
+              path="/comp/:compId/task/:taskId/analysis"
+              element={<TaskAnalysis />}
+            />
+            {/* Pilot-to-pilot behavioural similarity, a leaf of the chapter it
+                derives from. Client-only, so it needs a NOINDEX_SHELL_ROUTES
+                entry in functions/comp/[[path]].ts rather than a loader. It is
+                a STATIC segment, so it out-ranks the :section route below
+                whichever order they are declared in. */}
+            <Route
+              path="/comp/:compId/task/:taskId/analysis/similar"
+              element={<TaskPilotSimilarity />}
+            />
+            {/* One section of the chapter, each showing that one thing. Five
+                slugs, listed in analysis/sections.ts and matched by the
+                SSR Function's own pattern; anything else renders NotFound. */}
+            <Route
+              path="/comp/:compId/task/:taskId/analysis/:section"
+              element={<TaskAnalysisSection />}
+            />
+            {/* Where the per-task analysis lived while it was nested under the
+                comp report (July–August 2026). */}
+            <Route
+              path="/comp/:compId/analysis/task/:taskId"
+              element={<TaskAnalysisRedirect />}
+            />
+            <Route
+              path="/comp/:compId/analysis/task/:taskId/similar"
+              element={<TaskAnalysisRedirect similar />}
+            />
+            <Route
+              path="/comp/:compId/task/:taskId/pilot/:pilotId"
+              element={<PilotScoreDetail />}
+            />
+            {/* Recording a flight for a pilot with no tracklog (S7F §9.2.2) —
+                admin-only, and a child of the report card because that is the
+                page it is about. */}
+            <Route
+              path="/comp/:compId/task/:taskId/pilot/:pilotId/manual-flight"
+              element={<ManualFlightPage />}
+            />
+            <Route path="/scores" element={<Scores />} />
+            {/* "My Profile" merged into Settings; keep the old path working. */}
+            <Route path="/profile" element={<Navigate to="/settings" replace />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/cache" element={<AdminCache />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </AppErrorBoundary>
   );
 }
