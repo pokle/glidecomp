@@ -1,6 +1,7 @@
 import { createAuthClient } from "better-auth/client";
 import { emailOTPClient } from "better-auth/client/plugins";
 import { SIGNED_IN_VIA_PARAM, writeLastSignInMethod } from "./last-sign-in";
+import { readSsrData } from "../ssr-data";
 
 export const authClient = createAuthClient({
   basePath: "/api/auth",
@@ -188,7 +189,7 @@ export function patchCurrentUser(patch: Partial<AuthUser>): void {
 // and must NOT be read as "signed out". Window-guarded because the SSR comp
 // pages import this module and it has to stay inert in workerd.
 if (typeof window !== "undefined") {
-  const ssr = (window as { __SSR_DATA__?: { user?: AuthUser | null } }).__SSR_DATA__;
+  const ssr = readSsrData<{ user?: AuthUser | null }>();
   if (ssr && "user" in ssr) seedCurrentUser(ssr.user ?? null);
 }
 

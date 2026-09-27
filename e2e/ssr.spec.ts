@@ -5,6 +5,11 @@ import {
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
 import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
+import { CONTENT_SECURITY_POLICY } from "../web/frontend/src/security-headers";
+import { findInlineScripts } from "../web/frontend/src/inline-script-scan";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
 /**
@@ -178,7 +183,7 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     const res = await request.get(`/comp/${compId}/task/${taskId}`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
-    expect(html).toContain('window.__SSR_DATA__');
+    expect(html).toContain('id="__SSR_DATA__"');
     // Turnpoints table / route content renders server-side.
     expect(html.toLowerCase()).toMatch(/turnpoint|start|goal/);
   });
@@ -265,7 +270,7 @@ test.describe("SSR — isolation and fallback", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain('name="robots" content="noindex"');
-    expect(html).not.toContain("window.__SSR_DATA__");
+    expect(html).not.toContain('id="__SSR_DATA__"');
     // The bare URL is unaffected — still the real server-rendered list.
     const bare = await request.get("/comp");
     expect(await bare.text()).not.toContain('name="robots" content="noindex"');
@@ -282,7 +287,7 @@ test.describe("SSR — isolation and fallback", () => {
       expect(res.ok()).toBeTruthy();
       const html = await res.text();
       expect(html).toContain('<div id="root"></div>');
-      expect(html).not.toContain("window.__SSR_DATA__");
+      expect(html).not.toContain('id="__SSR_DATA__"');
     });
   }
 
@@ -309,7 +314,7 @@ test.describe("SSR — isolation and fallback", () => {
       const html = await res.text();
       expect(html).toContain('<div id="root"></div>');
       expect(html).toContain('name="robots" content="noindex"');
-      expect(html).not.toContain("window.__SSR_DATA__");
+      expect(html).not.toContain('id="__SSR_DATA__"');
     });
   }
 });
@@ -423,7 +428,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     // The defining SSR property: the loader data is embedded in the raw HTML.
-    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain("Task analysis —");
     // Branch on the actual server HTML (race-free): warm renders the summary's
     // section boxes and is indexable; cold renders the pending notice and is
@@ -459,7 +464,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
       const res = await request.get(`/comp/${compId}/task/${taskId}/analysis/${slug}`);
       expect(res.ok(), slug).toBeTruthy();
       const html = await res.text();
-      expect(html, slug).toContain("window.__SSR_DATA__");
+      expect(html, slug).toContain('id="__SSR_DATA__"');
       expect(html, slug).toContain(`${heading} —`);
     }
   });
@@ -483,7 +488,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
     const res = await request.get(`/comp/${compId}/analysis`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
-    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain(`Comp analysis — ${compName}`);
     expect(html).toContain('aria-label="Sections"');
   });
@@ -690,7 +695,10 @@ test.describe("SSR — the sign-in page's Last used pill", () => {
     // The production shape: the destination arrived with the user already in
     // its SSR payload.
     const seeded = await page.evaluate(
-      () => (window as { __SSR_DATA__?: { user?: unknown } }).__SSR_DATA__?.user ?? null
+      () =>
+        (JSON.parse(document.getElementById("__SSR_DATA__")?.textContent ?? "null") as {
+          user?: unknown;
+        } | null)?.user ?? null
     );
     expect(seeded, "expected /comp to seed a signed-in user from SSR").not.toBeNull();
 
@@ -713,8 +721,9 @@ test.describe("SSR — the visitor from the session cookie cache", () => {
   const seededUser = (page: import("@playwright/test").Page) =>
     page.evaluate(
       () =>
-        (window as { __SSR_DATA__?: { user?: { email?: string } | null } }).__SSR_DATA__
-          ?.user ?? null
+        (JSON.parse(document.getElementById("__SSR_DATA__")?.textContent ?? "null") as {
+          user?: { email?: string } | null;
+        } | null)?.user ?? null
     );
 
   test("an expired cache cookie is re-issued on the SSR'd page", async ({ page }) => {
@@ -754,6 +763,104 @@ test.describe("SSR — the visitor from the session cookie cache", () => {
     expect(res?.headers()["cache-control"]).not.toContain("private");
     expect(await seededUser(page)).toBeNull();
   });
+});
+
+/**
+ * The Content-Security-Policy is ENFORCED (web/frontend/src/security-headers.ts),
+ * so a violation is a broken page, not a log line. This is the one suite that
+ * can see it: it serves the built dist/ through the real Pages runtime, which
+ * applies public/_headers to static pages, and the SSR Function's pages get the
+ * same headers from functions/_middleware.ts. The dev server behind
+ * `test:e2e` sends no CSP at all.
+ *
+ * Two checks: the built HTML carries no inline script (fast, names the file),
+ * and a real browser loading each kind of page reports no violation — which
+ * also catches what a scan can't, like a new third-party host or eval().
+ */
+test.describe("Content-Security-Policy", () => {
+  const DIST = join(dirname(fileURLToPath(import.meta.url)), "..", "web", "frontend", "dist");
+
+  function htmlFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return htmlFiles(p);
+      return e.name.endsWith(".html") ? [p] : [];
+    });
+  }
+
+  test("no built page carries an inline script or on*= handler", () => {
+    const files = htmlFiles(DIST);
+    // The static pages are built too, not just the SPA shell.
+    expect(files.map((f) => f.slice(DIST.length))).toContain("/scoring/gap/index.html");
+    const found = files.flatMap((f) =>
+      findInlineScripts(readFileSync(f, "utf8")).map((x) => `${f.slice(DIST.length)}: ${x.snippet}`)
+    );
+    expect(found, found.join("\n")).toEqual([]);
+  });
+
+  const PAGES = [
+    // Static pages (Astro), served with public/_headers.
+    "/",
+    "/about",
+    "/legal",
+    "/scoring",
+    "/scoring/gap",
+    "/scoring/open-distance",
+    "/scoring/data-cleaning",
+    "/scoring/track-validity",
+    "/no-such-page",
+    // The SPA shell via a _redirects rewrite.
+    "/submit",
+    // The SSR Function's pages, which get the headers from the middleware.
+    "/comp",
+    ":compHub",
+    ":scores",
+    ":waypoints",
+    ":task",
+    ":pilot",
+    ":taskAnalysis",
+    ":compAnalysis",
+    // The analysis page's one anonymous URL shape (issue #666).
+    ":analysis",
+  ] as const;
+
+  for (const path of PAGES) {
+    test(`${path} is served the policy and violates nothing`, async ({ page, request }) => {
+      let url: string = path;
+      if (path.startsWith(":")) {
+        const d = await discover(request);
+        url = {
+          ":compHub": `/comp/${d.compId}`,
+          ":scores": `/comp/${d.compId}/scores`,
+          ":waypoints": `/comp/${d.compId}/waypoints`,
+          ":task": `/comp/${d.compId}/task/${d.taskId}`,
+          ":pilot": `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`,
+          ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,
+          ":compAnalysis": `/comp/${d.compId}/analysis`,
+          ":analysis": `/analysis?compId=${d.compId}&taskId=${d.taskId}&pilotId=${d.pilotId}`,
+        }[path];
+      }
+
+      // Registered before any page script runs, so nothing escapes it.
+      await page.addInitScript(() => {
+        const seen: string[] = [];
+        (window as unknown as { __cspViolations: string[] }).__cspViolations = seen;
+        document.addEventListener("securitypolicyviolation", (e) => {
+          seen.push(`${e.effectiveDirective} blocked ${e.blockedURI || "(inline)"} at ${e.sourceFile}:${e.lineNumber}`);
+        });
+      });
+
+      const res = await page.goto(url);
+      expect(res, url).not.toBeNull();
+      expect(res!.headers()["content-security-policy"], url).toBe(CONTENT_SECURITY_POLICY);
+      await page.waitForLoadState("networkidle");
+
+      const violations = await page.evaluate(
+        () => (window as unknown as { __cspViolations: string[] }).__cspViolations
+      );
+      expect(violations, `${url}:\n${violations.join("\n")}`).toEqual([]);
+    });
+  }
 });
 
 /**

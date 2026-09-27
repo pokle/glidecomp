@@ -129,7 +129,7 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 - **G-04** — Verify the SEC-10 fix on a deployed comp-api endpoint.
 - **G-05** — Confirm no legacy `Cookie: test-user=…` acceptance in production (source-level check only so far).
 - **G-06** — TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (needs a live concurrency test).
-- **G-07** — Flip CSP from Report-Only to enforced (nonce/hash the four inline-script blocks first).
+- **G-07** — CLOSED 2026-09-27: CSP enforced on every page, SSR'd `/comp*` included (`functions/_middleware.ts`). One definition in `web/frontend/src/security-headers.ts`; `security-headers.test.ts` pins `_headers` to it and scans page sources for inline script; the SSR e2e suite fails on any browser-reported violation; reports reach `functions/api/csp-report.ts`.
 - **G-08** — SEC-26: packer/task-analysis decompression cap + test.
 - **G-09** — Extend `html-sinks.test.ts` from count-pinning towards content (statement-level escapeHtml check) if a tenth SEC-41-class instance ever appears.
 - **G-10** — SEC-45: bound the PathFinder branch-and-bound search; oracle tests + ~60k-fix adversarial regression, in its own PR (`scoring-changes/` note + archive parity measurement owed).
@@ -198,6 +198,6 @@ list; earlier rounds' per-round gap numbers do not correspond.)
    --latest` or equivalent). Not re-triggered this round.
 6. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved across the last
    six rounds.
-7. The CSP flip (G-07) still needs the four-block inline-script inventory
-   first.
+7. The CSP (G-07) is enforced; check the `csp-violation` log lines for
+   anything the tests missed.
 8. Do NOT re-open SEC-03 (accepted by design).
