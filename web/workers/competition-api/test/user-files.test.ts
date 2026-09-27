@@ -62,7 +62,7 @@ async function uploadTrack(
     "Content-Encoding": "gzip",
   };
   if (filename) headers["x-filename"] = filename;
-  if (user) headers["Cookie"] = `test-user=${user}`;
+  if (user) headers["Cookie"] = `better-auth.test-user=${user}`;
   return SELF.fetch("https://test/api/user/tracks", {
     method: "POST",
     headers,
@@ -162,7 +162,7 @@ describe("POST /api/user/tracks", () => {
       headers: {
         "Content-Type": "application/octet-stream",
         "Content-Encoding": "gzip",
-        "Cookie": "test-user=user-1",
+        "Cookie": "better-auth.test-user=user-1",
       },
       body: new Uint8Array([1, 2, 3, 4]),
     });
@@ -234,7 +234,7 @@ describe("GET /api/user/tracks/:track_id", () => {
 
     const res = await SELF.fetch(
       `https://test/api/user/tracks/${track_id}`,
-      { headers: { Cookie: "test-user=user-1" } }
+      { headers: { Cookie: "better-auth.test-user=user-1" } }
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("X-Filename")).toBe("flight.igc");

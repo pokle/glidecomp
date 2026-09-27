@@ -168,7 +168,7 @@ function adminGet(path: string): Promise<Response> {
 
 function conditionalAdminGet(path: string, etag: string): Promise<Response> {
   return SELF.fetch(`https://test${path}`, {
-    headers: { "If-None-Match": etag, Cookie: "test-user=user-1" },
+    headers: { "If-None-Match": etag, Cookie: "better-auth.test-user=user-1" },
   });
 }
 
@@ -184,7 +184,7 @@ describe("superseded /field-analysis paths", () => {
     const t = await seedTask();
     const res = await SELF.fetch(
       `https://test/api/comp/${t.compId}/task/${t.taskId}/field-analysis?class=open`,
-      { headers: { Cookie: "test-user=user-1" }, redirect: "manual" }
+      { headers: { Cookie: "better-auth.test-user=user-1" }, redirect: "manual" }
     );
     expect(res.status).toBe(308);
     // `?class=` is the shareable half of these URLs; dropping it would land the
@@ -197,7 +197,7 @@ describe("superseded /field-analysis paths", () => {
   test("the comp-level path redirects too", async () => {
     const t = await seedTask();
     const res = await SELF.fetch(`https://test/api/comp/${t.compId}/field-analysis`, {
-      headers: { Cookie: "test-user=user-1" },
+      headers: { Cookie: "better-auth.test-user=user-1" },
       redirect: "manual",
     });
     expect(res.status).toBe(308);
@@ -208,7 +208,7 @@ describe("superseded /field-analysis paths", () => {
     const t = await seedTask();
     const res = await SELF.fetch(
       `https://test/api/comp/${t.compId}/task/${t.taskId}/field-analysis/refresh`,
-      { method: "POST", headers: { Cookie: "test-user=user-1" }, redirect: "manual" }
+      { method: "POST", headers: { Cookie: "better-auth.test-user=user-1" }, redirect: "manual" }
     );
     // 301/302 would let a client downgrade the POST to GET and silently skip
     // the recompute; 308 forbids that.
@@ -222,7 +222,7 @@ describe("superseded /field-analysis paths", () => {
     const t = await seedTask();
     const res = await SELF.fetch(
       `https://test/api/comp/${t.compId}/task/${t.taskId}/field-analysis`,
-      { headers: { Cookie: "test-user=user-1" } }
+      { headers: { Cookie: "better-auth.test-user=user-1" } }
     );
     expect(res.status).toBe(200);
     expect(((await res.json()) as ServedAnalysis).pending).toBe(true);

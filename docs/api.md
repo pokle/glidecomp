@@ -382,7 +382,8 @@ It's what the "did you mean…" repair on a dead `/comp` URL runs on. Accepts
 | `POST` | `/api/auth/delete-account` | Delete your account |
 | `GET` | `/api/auth/preferences` | Units, timezone and display preferences |
 | `PUT` | `/api/auth/preferences` | Update them |
-| `ALL` | `/api/auth/*` | Everything else Better Auth serves: sessions, email OTP, API-key management |
+| `GET` | `/api/auth/token` | **Always 404.** Better Auth's bearer-JWT endpoint, deliberately not served |
+| `ALL` | `/api/auth/*` | Everything else Better Auth serves: sessions, email OTP, API-key management, and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)) |
 | `GET` | `/api/comp/pilot` | Your pilot profile (CIVL id, wing, nationality) |
 | `PATCH` | `/api/comp/pilot` | Update it |
 | `GET` | `/api/comp/pilot/flights` | Every comp flight of yours, across competitions |

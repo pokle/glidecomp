@@ -16,9 +16,16 @@
     "./name-text": {
       "types": "./src/name-text.ts",
       "default": "./src/name-text.ts"
+    },
+    "./session-cookie": {
+      "types": "./src/session-cookie.ts",
+      "default": "./src/session-cookie.ts"
     }
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
   }
 }

@@ -1,3 +1,4 @@
+import type { SessionUser } from "@glidecomp/worker-kit/session-cookie";
 import type { EmailSendBinding } from "./track-notice-email";
 
 export type Env = {
@@ -17,13 +18,9 @@ export type Env = {
   SITE_ORIGIN?: string;
 };
 
-export type AuthUser = {
-  id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  username: string | null;
-};
+/** Who is signed in — the same shape whether the session cookie cache or the
+ * `/me` hop answered (see toSessionUser). */
+export type AuthUser = SessionUser;
 
 /**
  * The route-parameter ids `sqidsMiddleware` decodes off the path.

@@ -80,7 +80,11 @@ SPA.
 
 1. Run the route's loader (`src/react/loaders.ts`, one per route, parameterized
    by a `FetchFn`) over the `COMPETITION_API` service binding, **forwarding the
-   visitor's cookie** so admins still get their `test` comps.
+   visitor's Better Auth cookies** so admins still get their `test` comps. Only
+   those (`authCookieHeader()`): a visitor with nothing but analytics cookies is
+   anonymous, and their page stays publicly cacheable. The visitor is resolved
+   alongside, from the signed `session_data` cookie with no auth hop when it
+   verifies — see [auth.md](auth.md#cross-worker-auth-verification).
 2. Render the *same* React components the SPA uses — shared tree in
    `src/react/routes.tsx`, rendered server-side by `entry-server.tsx`.
 3. Splice the markup into the `/app` shell with per-route `<title>`, description

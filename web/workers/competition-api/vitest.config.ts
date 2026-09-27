@@ -5,6 +5,7 @@ import {
   readD1Migrations,
 } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+import { exportJWK, generateKeyPair } from "jose";
 
 // Test users — the AUTH_API mock returns these based on the cookie value.
 const TEST_USERS: Record<string, object> = {
@@ -64,6 +65,11 @@ const SAMPLE_IGC_FILES = JSON.stringify(
 /** Remaining forced auth-hop failures, per "test-auth-fail" key. */
 const authFailures = new Map<string, number>();
 
+/** /api/auth/me calls, per "test-hop-key" cookie — so a test can prove a
+ * request was answered from the session cookie cache WITHOUT the hop. Keyed,
+ * because test files share this Node-side Map. */
+const meCalls = new Map<string, number>();
+
 /**
  * Account names rewritten by POST /api/auth/set-name, keyed by user id.
  *
@@ -78,19 +84,38 @@ const accountNames = new Map<string, string>();
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(path.join(__dirname, "../../db/migrations"));
 
+  // Stands in for auth-api's jwt-plugin key pair. The mock publishes the
+  // public half at /api/auth/jwks, as auth-api does; the private half goes to
+  // the tests (TEST_SESSION_SIGNING_JWK) so they can mint the session_data
+  // cookies auth-api would set — the worker itself never sees it.
+  const { publicKey, privateKey } = await generateKeyPair("EdDSA", {
+    crv: "Ed25519",
+    extractable: true,
+  });
+  const publicJwk = { ...(await exportJWK(publicKey)), kid: "test-kid", alg: "EdDSA" };
+  const privateJwk = { ...(await exportJWK(privateKey)), kid: "test-kid", alg: "EdDSA" };
+
   return {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: "./wrangler.toml" },
         miniflare: {
-          bindings: { TEST_MIGRATIONS: migrations, SAMPLE_TASK_XCTSK, SAMPLE_IGC_FILES },
+          bindings: {
+            TEST_MIGRATIONS: migrations,
+            SAMPLE_TASK_XCTSK,
+            SAMPLE_IGC_FILES,
+            TEST_SESSION_SIGNING_JWK: JSON.stringify(privateJwk),
+          },
           r2Buckets: ["R2"],
           kvNamespaces: ["glidecomp_scores_cache"],
           // Allow access to the root directory for samples
           unsafeNodeModules: ["node:fs", "node:path"],
           serviceBindings: {
-            // Mock AUTH_API: reads a "test-user" cookie to determine which user
-            // is authenticated. No cookie or "test-user=none" → unauthenticated.
+            // Mock AUTH_API: reads a "better-auth.test-user" cookie to
+            // determine which user is authenticated. No cookie or
+            // "…test-user=none" → unauthenticated. Every mock cookie carries
+            // the `better-auth.` prefix because competition-api forwards
+            // Better Auth's cookies and no others (forwardAuthHeaders).
             //
             // A "test-auth-fail=<key>:<n>" cookie makes the first n calls
             // bearing that key answer 500 instead, so a test can prove the
@@ -100,6 +125,21 @@ export default defineConfig(async () => {
             // Node host, so the Map survives across calls within a run.
             async AUTH_API(request: Request): Promise<Response> {
               const cookie = request.headers.get("cookie") ?? "";
+              const pathname = new URL(request.url).pathname;
+
+              if (pathname === "/api/auth/jwks") {
+                return Response.json({ keys: [publicJwk] });
+              }
+              // Test-only read of the hop counter below.
+              if (pathname === "/__test/me-calls") {
+                const key = new URL(request.url).searchParams.get("key") ?? "";
+                return Response.json({ calls: meCalls.get(key) ?? 0 });
+              }
+              const hopKey = cookie.match(/test-hop-key=([^;]+)/)?.[1];
+              if (hopKey && pathname === "/api/auth/me") {
+                meCalls.set(hopKey, (meCalls.get(hopKey) ?? 0) + 1);
+              }
+
               const fail = cookie.match(/test-auth-fail=([^;:]+):(\d+)/);
               if (fail) {
                 const [, key, count] = fail;
@@ -125,7 +165,7 @@ export default defineConfig(async () => {
               // `test-setname-fail=1` cookie makes it 500 instead, so a test
               // can prove the caller reports a failed hop rather than saving
               // half of the rename.
-              if (new URL(request.url).pathname === "/api/auth/set-name") {
+              if (pathname === "/api/auth/set-name") {
                 if (!base) {
                   return Response.json(
                     { error: "Not authenticated" },

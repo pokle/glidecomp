@@ -14,8 +14,8 @@
  * The PATCH now writes both, in that order, so no caller can save one half.
  *
  * The AUTH_API mock (vitest.config.ts) mirrors the real set-name route: it
- * remembers the rename when the request carries `test-account-sync=1`, and
- * answers 500 instead when it carries `test-setname-fail=1`.
+ * remembers the rename when the request carries `better-auth.test-account-sync=1`, and
+ * answers 500 instead when it carries `better-auth.test-setname-fail=1`.
  */
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -31,9 +31,9 @@ function patchProfile(
   flags: { sync?: boolean; failSetName?: boolean } = {}
 ): Promise<Response> {
   const cookie = [
-    `test-user=${USER}`,
-    flags.sync ? "test-account-sync=1" : null,
-    flags.failSetName ? "test-setname-fail=1" : null,
+    `better-auth.test-user=${USER}`,
+    flags.sync ? "better-auth.test-account-sync=1" : null,
+    flags.failSetName ? "better-auth.test-setname-fail=1" : null,
   ]
     .filter(Boolean)
     .join("; ");
