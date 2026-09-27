@@ -1,6 +1,6 @@
 # Information architecture for a native iOS / iPadOS GlideComp app
 
-Date: 2026-09-22
+Date: 2026-09-22\
 Status: draft for discussion. No code committed to it.
 
 Builds on the partial IA sketched in conversation (comps view → comp view,
@@ -58,7 +58,7 @@ by first entering a competition they may not be in.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  UINavigationController per tab; each is a disclosure stack  │
+│  UINavigationController per tab; each is a disclosure stack │
 ├─────────────┬─────────────┬─────────────┬───────────────────┤
 │   Comps     │   Submit    │  My flights │        Me         │
 │  (default)  │  (action)   │             │                   │
@@ -287,12 +287,12 @@ rescues it: the task view states the day and then offers four doors.
 ```
   ◀ Canungra Classic              Task 3              [Share]
 
-  ┌───────────────────────────────────────────────┐
-  │ Task 3                                        │
-  │ Wednesday 14 January 2026                     │
-  │ Open, Floater · 88.4 km · Race to goal        │
-  │ ⚠ Task stopped 14:35 — scored as stopped (S7F §13.4)
-  └───────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────┐
+  │ Task 3                                               │
+  │ Wednesday 14 January 2026                            │
+  │ Open, Floater · 88.4 km · Race to goal               │
+  │ ⚠ Task stopped 14:35 — scored as stopped (S7F §13.4) │
+  └──────────────────────────────────────────────────────┘
 
   [ Submit track ]                        ← one filled button, nothing else
 
