@@ -30,6 +30,11 @@ import { GaggleUI } from './gaggle-ui';
 import { parseThermalParam } from './thermal-link';
 import type { GaggleResult } from './gaggles';
 import { requiredGlideToTarget, type TrackManifest, type ThermalShapeSummary } from '@glidecomp/engine';
+import { installStaleDeployReload } from '../react/lib/stale-deploy';
+
+// A tab that outlived a deploy asks for chunks that no longer exist (the map
+// and terrain code load on demand): reload it onto the new deploy, once.
+installStaleDeployReload();
 
 /**
  * The replay data now comes from the competition-api Worker as a single packed
