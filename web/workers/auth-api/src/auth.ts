@@ -4,6 +4,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { apiKey } from "@better-auth/api-key";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
+import { AUTH_COOKIE_PREFIX } from "@glidecomp/worker-kit/session-cookie";
 import {
   API_KEY_RATE_LIMIT,
   OTP_SEND_RATE_LIMIT,
@@ -63,6 +64,10 @@ type WaitUntil = { waitUntil(promise: Promise<unknown>): void };
  * carries it to the hook instead. Outside runWithExecutionCtx() there is none,
  * and the hooks await their work inline — which is what dev-login, and the
  * tests that sign in through it, rely on.
+ *
+ * Only the Better Auth catch-all (index.ts) runs inside it today. A custom
+ * route that can send an OTP or create a session would block its response
+ * on that work unless it is wrapped too.
  */
 const executionCtxStore = new AsyncLocalStorage<WaitUntil>();
 
@@ -104,6 +109,10 @@ type JwkRow = {
  * each isolate keeps a copy for a few minutes and drops it when it mints one
  * itself. An empty table is never cached: the first request after it fills
  * must see the key rather than mint a second.
+ *
+ * The SQL restates the plugin's own `jwks` schema (migration 0034). A Better
+ * Auth upgrade that adds a column to it must add it here too, or the column
+ * is silently dropped — re-read the plugin's schema when bumping it.
  *
  * Another isolate's freshly minted key is at worst unknown here for
  * JWKS_CACHE_MS; a cookie signed with it then fails the cache check and falls
@@ -293,6 +302,10 @@ function buildAuth(env: AuthEnv) {
     // in dev too so the e2e suite can assert the 429 behavior; server-side
     // auth.api calls (dev-login) bypass rate limiting by design.
     advanced: {
+      // Better Auth's default, stated so it is shared: competition-api and
+      // the SSR Function forward only cookies carrying this prefix, and read
+      // the session cache under it. Change it in the kit, never here.
+      cookiePrefix: AUTH_COOKIE_PREFIX,
       ipAddress: {
         // Rate-limit keying. Better Auth's default is x-forwarded-for, whose
         // first entry is client-supplied (spoofable) behind Cloudflare;

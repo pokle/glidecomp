@@ -29,11 +29,26 @@
  * The checks mirror Better Auth's own `getCookieCache()` with a JWKS, plus the
  * one its `getSession` makes and that helper does not: the cached session must
  * belong to the `session_token` cookie beside it.
+ *
+ * That last check is about CONSISTENCY, not forgery. The JWT signature is the
+ * whole of the security here: the signed payload carries the session token
+ * itself, and we cannot check the `session_token` cookie's HMAC without the
+ * secret, so whoever holds a `session_data` cookie can build a matching
+ * `session_token`. What the check does catch is a browser whose two cookies
+ * disagree — a sign-out that cleared one, or a stale cache from another
+ * session.
  */
 import { decodeProtectedHeader, importJWK, jwtVerify, type JWK } from "jose";
 
-/** Better Auth's default cookie prefix; auth-api does not change it. */
-const COOKIE_PREFIX = "better-auth.";
+/**
+ * The prefix on every cookie auth-api's Better Auth sets. auth-api passes this
+ * very constant as its `advanced.cookiePrefix`, so the two cannot drift: the
+ * verifier AND authCookieHeader() key off it, and a prefix the filter did not
+ * know would strip every session cookie before the `/me` fallback saw it —
+ * signing everyone out of competition-api and the SSR pages at once.
+ */
+export const AUTH_COOKIE_PREFIX = "better-auth";
+const COOKIE_PREFIX = `${AUTH_COOKIE_PREFIX}.`;
 /** Better Auth prefixes every cookie with this when served over https. */
 const SECURE_PREFIX = "__Secure-";
 
@@ -42,7 +57,14 @@ const SESSION_DATA = `${COOKIE_PREFIX}session_data`;
 
 /** The `typ` and `aud` Better Auth's jwt plugin stamps on a session-cache JWT
  * (better-auth/dist/cookies/jwt.mjs). A JWT signed by the same key for any
- * other purpose carries neither, so cannot be replayed as a session. */
+ * other purpose carries neither, so cannot be replayed as a session.
+ *
+ * These, the cookie names and the chunk format below are Better Auth
+ * internals copied here, since the kit does not depend on better-auth. The
+ * contract is pinned by auth-api's `test/session-cache.test.ts`, which runs
+ * this verifier against real cookies: an upgrade that changed any of them
+ * would otherwise go unnoticed, because a miss only quietly brings back the
+ * `/me` hop. */
 const SESSION_JWT_TYP = "better-auth.session-cache+jwt";
 const SESSION_JWT_AUD = "better-auth:session-cache";
 
@@ -69,6 +91,31 @@ export interface SessionUser {
   email: string;
   image: string | null;
   username: string | null;
+}
+
+/**
+ * The SessionUser fields of a Better Auth user, and nothing else.
+ *
+ * Both ways of learning who is signed in go through this — the cookie
+ * verified here, and the `/api/auth/me` fallback, which answers with Better
+ * Auth's whole user row (`emailVerified`, `createdAt`, …). Without it, which
+ * shape a caller held (in `c.var.user`, or in an SSR page's initial data)
+ * would depend on whether the cache cookie happened to be fresh.
+ */
+export function toSessionUser(user: {
+  id: string;
+  name: string;
+  email: string;
+  image?: unknown;
+  username?: unknown;
+}): SessionUser {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    image: typeof user.image === "string" ? user.image : null,
+    username: typeof user.username === "string" ? user.username : null,
+  };
 }
 
 /**
@@ -153,7 +200,18 @@ interface KeySet {
   fetchedAt: number;
 }
 
-/** Per isolate. Keys are public, so sharing them across requests is safe. */
+/** Per isolate. Keys are public, so sharing them across requests is safe.
+ *
+ * Module state rather than an instance, so every caller in an isolate shares
+ * one copy; tests start clean with resetSessionKeyCache(). Each caller hands
+ * in its own `fetchJwks`, since the service binding is the caller's.
+ *
+ * `inflight` is awaited by every request that arrives while a fetch is under
+ * way, not just the one that started it. workerd tolerates a promise settled
+ * in another request's context, but warns about it, and if the starting
+ * request is cancelled first the others can wait on a fetch that never
+ * settles. Were that ever seen, fetching per request on a cold cache would be
+ * the cheap way out: it happens once an hour. */
 let keySet: KeySet | null = null;
 let inflight: Promise<KeySet | null> | null = null;
 
@@ -265,13 +323,7 @@ export async function verifySessionCookie(
     if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return undefined;
     if (typeof user.email !== "string" || typeof user.name !== "string") return undefined;
 
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      image: typeof user.image === "string" ? user.image : null,
-      username: typeof user.username === "string" ? user.username : null,
-    };
+    return toSessionUser({ ...user, id: user.id, name: user.name, email: user.email });
   } catch {
     return undefined;
   }

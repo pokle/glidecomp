@@ -46,8 +46,13 @@ import {
 } from "../../web/frontend/src/react/lib/slug";
 
 import type { AuthUser } from "../../web/frontend/src/auth/client";
+// By relative path: functions/ is not a workspace package, so it cannot name
+// @glidecomp/worker-kit. The kit's own `jose` import still resolves, from
+// web/workers/shared/node_modules — resolution starts at the imported file,
+// so that package.json must keep listing it.
 import {
   authCookieHeader,
+  toSessionUser,
   verifySessionCookie,
 } from "../../web/workers/shared/src/session-cookie";
 
@@ -90,7 +95,12 @@ async function fetchVisitor(env: Env, cookie: string): Promise<Visitor> {
     );
     if (!res.ok) return { user: undefined, setCookies: [] };
     const body = (await res.json()) as { user: AuthUser | null };
-    return { user: body.user ?? null, setCookies: res.headers.getSetCookie() };
+    // The same fields the cookie path yields, so the page's initial data has
+    // one shape whichever path answered.
+    return {
+      user: body.user ? toSessionUser(body.user) : null,
+      setCookies: res.headers.getSetCookie(),
+    };
   } catch {
     return { user: undefined, setCookies: [] };
   }

@@ -96,6 +96,11 @@ function passSetCookies(c: Context, headers: Headers | null | undefined): void {
  * that checks the cookie itself — would serve them until it expired. The
  * onboarding gate reads the name and username, so a stale copy would bounce
  * a user who had just finished onboarding straight back into it.
+ *
+ * Called AFTER the write, so if it throws the caller sees a 500 for a change
+ * that was saved. Both callers' writes are idempotent (set-username's
+ * uniqueness check excludes the user's own row, and competition-api retries
+ * set-name), so a retry puts things right.
  */
 async function refreshSessionCache(c: Context<{ Bindings: AuthEnv }>): Promise<void> {
   const { headers } = await createAuth(c.env).api.getSession({

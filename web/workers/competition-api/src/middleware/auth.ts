@@ -1,6 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import {
   authCookieHeader,
+  toSessionUser,
   verifySessionCookie,
 } from "@glidecomp/worker-kit/session-cookie";
 import type { Env, AuthUser } from "../env";
@@ -93,7 +94,9 @@ async function resolveUser(
         throw new Error(`auth-api /me responded ${res.status}`);
       }
       const data = (await res.json()) as { user?: AuthUser | null };
-      return data.user ?? null;
+      // Projected to the fields the cookie path yields too, so c.var.user
+      // has one shape whichever path answered.
+      return data.user ? toSessionUser(data.user) : null;
     } catch (err) {
       lastErr = err;
       if (attempt < AUTH_ATTEMPTS - 1) {

@@ -428,10 +428,17 @@ session, so a bug there cannot leak a way to forge one.
   no cookie, and auth-api owns their rate limit.
 - **Only Better Auth's own cookies are forwarded** (`authCookieHeader()`). A
   visitor with only analytics cookies is anonymous: no hop, and the SSR page
-  stays publicly cacheable.
+  stays publicly cacheable. The filter keys off `AUTH_COOKIE_PREFIX` in the
+  worker kit, which auth-api also passes as `advanced.cookiePrefix`. Change
+  the prefix there and nowhere else: a prefix the filter did not know would
+  strip every session cookie before the `/me` fallback saw it, and sign
+  everyone out.
 - **The trade-off:** a revoked session, or a sign-out on another device, keeps
   working for up to 5 minutes. `delete-account` reads D1 (not the cache) and
-  signs out, which expires both cookies.
+  signs out, which expires both cookies — but only on the device that asked.
+  Another device's cache cookie still verifies at competition-api for up to
+  5 minutes after the account is gone, so a write made in that window can
+  name a user id that no longer exists.
 - **Anything that writes `"user"` directly must re-issue the cookie**, or the
   old values are served until it expires. `set-username` and `set-name` call
   `refreshSessionCache()`; competition-api's `PATCH /api/comp/pilot` passes

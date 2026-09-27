@@ -1,7 +1,9 @@
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
 import {
+  authCookieHeader,
   resetSessionKeyCache,
+  toSessionUser,
   verifySessionCookie,
 } from "@glidecomp/worker-kit/session-cookie";
 import { applySetCookies, loginAs, request } from "./helpers";
@@ -61,6 +63,35 @@ describe("session cookie cache", () => {
     const user = await verifySessionCookie(cookie, fetchJwks);
     expect(user).toMatchObject({ email: "cache-2@test.local", name: "Cache Two" });
     expect(typeof user?.id).toBe("string");
+  });
+
+  test("every cookie sign-in sets survives the auth-cookie filter", async () => {
+    // competition-api and the SSR Function forward ONLY what authCookieHeader
+    // keeps. A cookie it dropped would never reach the /me fallback either,
+    // so a prefix drift here would sign everyone out of both, not merely
+    // cost them the cache.
+    const res = await SELF.fetch("https://test/api/auth/dev-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "cache-prefix@test.local", name: "Prefix" }),
+    });
+    expect(res.ok).toBe(true);
+    const pairs = res.headers.getSetCookie().map((sc) => sc.split(";")[0].trim());
+    expect(pairs.map((p) => p.split("=")[0])).toEqual(
+      expect.arrayContaining(["better-auth.session_token", "better-auth.session_data"])
+    );
+    for (const pair of pairs) expect(authCookieHeader(pair)).toBe(pair);
+  });
+
+  test("the verifier and /me name the user identically", async () => {
+    // Whichever path answers — the cache cookie or the /me hop — a caller
+    // must hold the same user, field for field.
+    const cookie = await loginAs("cache-same@test.local", "Same Both Ways");
+    const cached = await verifySessionCookie(cookie, fetchJwks);
+    const me = (await (await request("GET", "/api/auth/me", { cookie })).json()) as {
+      user: Parameters<typeof toSessionUser>[0];
+    };
+    expect(cached).toEqual(toSessionUser(me.user));
   });
 
   test("/me answers from the cookie without reading D1", async () => {
