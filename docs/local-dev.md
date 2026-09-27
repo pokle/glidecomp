@@ -66,7 +66,7 @@ they need different servers:
 
 CI runs both, as the parallel `E2E Tests (…)` and `E2E Tests (SSR)` jobs in
 `.github/workflows/deploy.yml`. Run both locally before a PR that touches
-anything the eight server-rendered comp pages import — the dev server never
+anything the server-rendered comp pages import — the dev server never
 server-renders, so `test:e2e` alone cannot fail when SSR breaks.
 
 ## The e2e suite is sharded in CI

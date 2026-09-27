@@ -7,5 +7,6 @@ declare module "cloudflare:test" {
     TEST_MIGRATIONS: D1Migration[];
     SAMPLE_TASK_XCTSK: string;
     SAMPLE_IGC_FILES: string; // JSON: { [filename: string]: string }
+    TEST_SESSION_SIGNING_JWK: string; // JSON private JWK — see vitest.config.ts
   }
 }

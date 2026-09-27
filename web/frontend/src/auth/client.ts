@@ -1,12 +1,24 @@
 import { createAuthClient } from "better-auth/client";
 import { emailOTPClient } from "better-auth/client/plugins";
+import { SIGNED_IN_VIA_PARAM, writeLastSignInMethod } from "./last-sign-in";
+import { readSsrData } from "../ssr-data";
 
 export const authClient = createAuthClient({
   basePath: "/api/auth",
   plugins: [emailOTPClient()],
 });
 
-export function signInWithGoogle(callbackURL = "/comp") {
+/**
+ * Start Google OAuth; `next` is where the pilot ends up afterwards.
+ *
+ * Google comes back through `/signin?via=google` rather than straight to
+ * `next`, so the sign-in page can record Google as the "Last used" method
+ * (auth/last-sign-in.ts) and then forward on. better-auth only redirects to
+ * this URL once the session exists, so arriving there IS the success signal.
+ */
+export function signInWithGoogle(next = "/comp") {
+  const callbackURL =
+    `/signin?${SIGNED_IN_VIA_PARAM}=google&next=${encodeURIComponent(next)}`;
   return authClient.signIn.social({ provider: "google", callbackURL });
 }
 
@@ -16,8 +28,10 @@ export function sendSignInOtp(email: string) {
 }
 
 /** Exchange an emailed code for a session. Returns { data, error }. */
-export function signInWithOtp(email: string, otp: string) {
-  return authClient.signIn.emailOtp({ email, otp });
+export async function signInWithOtp(email: string, otp: string) {
+  const result = await authClient.signIn.emailOtp({ email, otp });
+  if (!result.error) writeLastSignInMethod("email");
+  return result;
 }
 
 export async function signOut() {
@@ -175,7 +189,7 @@ export function patchCurrentUser(patch: Partial<AuthUser>): void {
 // and must NOT be read as "signed out". Window-guarded because the SSR comp
 // pages import this module and it has to stay inert in workerd.
 if (typeof window !== "undefined") {
-  const ssr = (window as { __SSR_DATA__?: { user?: AuthUser | null } }).__SSR_DATA__;
+  const ssr = readSsrData<{ user?: AuthUser | null }>();
   if (ssr && "user" in ssr) seedCurrentUser(ssr.user ?? null);
 }
 

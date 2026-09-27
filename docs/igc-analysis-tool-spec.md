@@ -158,7 +158,7 @@ Leaving multi-track mode restores the single row and falls back to Events.
 
 **Sinks Tab Features:**
 - Header: "Glides with L/D ≤ N:1, sorted by altitude lost" — N is interpolated from `config.getThresholds().glide.maxGlideRatioForSink`, so the header follows the Glide Detection setting rather than stating a fixed 5
-- Only shows glides at or under that ratio (indicating strong sink). The same threshold is passed to `extractSinks()`; its default is 5 (`DEFAULT_THRESHOLDS.glide.maxGlideRatioForSink` in `web/engine/src/thresholds.ts`)
+- Only shows glides at or under that ratio (indicating strong sink). The same threshold is passed to `sinksFromGlides()`; its default is 5 (`DEFAULT_THRESHOLDS.glide.maxGlideRatioForSink` in `web/engine/src/thresholds.ts`)
 - Each sink shows: rank (#1, #2...), altitude lost (m), time range, and stats:
   - **L/D** - Glide ratio (always at or under the threshold)
   - **Avg** - Average sink rate (m/s)
@@ -203,7 +203,7 @@ When an event is selected from the panel, the map highlights the event location 
 │                                # (see docs/2026-07-18-field-analysis-plan.md)
 ├── segment-extractors.ts        # Data extraction for glides, climbs, sinks
 ├── event-styles.ts              # Event type colors and visual styles
-├── geo.ts                       # Geographic calculations (WGS84: Andoyer-Lambert distance, Vincenty destination, Turf.js bearing/bbox)
+├── geo.ts                       # Geographic calculations (WGS84: Vincenty inverse distance, Vincenty destination, Turf.js bearing/bbox)
 ├── glide-speed.ts               # Glide segment speed calculations
 ├── units.ts                     # Unit conversion
 ├── sanitize.ts                  # Text sanitization (HTML escaping)
@@ -260,7 +260,7 @@ Supports both v1 (full JSON) and v2 (compact QR code) formats:
 - **Glides**: Segments between thermals with calculated L/D ratio (see `event-detection/glide-detection-spec.md` for detailed algorithm documentation)
 - **Circle detection**: Cumulative heading change to detect individual thermal circles, with wind estimation from circle drift (see `event-detection/circling-flight-and-thermal-analysis-research.md`)
 - **Turnpoint sequencing**: Cylinder crossing detection and CIVL GAP-compliant turnpoint sequence resolution, including SSS direction validation and best-progress scoring
-- **Cylinder crossings**: WGS84 ellipsoid distance checks (Andoyer-Lambert) against turnpoint radii
+- **Cylinder crossings**: WGS84 ellipsoid distance checks (Vincenty inverse) against turnpoint radii
 - **Vario extremes**: Smoothed vertical speed analysis
 - **GAP scoring**: Multi-track task scoring implementing the CIVL GAP formula (FAI Sporting Code Section 7F). Calculates task validity, weight distribution, distance/time/leading/arrival points. Supports both PG and HG scoring with configurable competition parameters (nominal distance/goal/time, minimum distance, leading/arrival toggles).
 
@@ -309,7 +309,7 @@ ext     - Optional extensions
 - **mapbox-gl**: Map rendering with 3D terrain and sky atmosphere
 - **threebox-plugin**: 3D track rendering on MapBox
 - **tailwindcss**: Utility-first CSS framework
-- **@turf/***: Geographic utilities (bearing, bounding box). Distance and destination use custom WGS84 implementations (Andoyer-Lambert, Vincenty direct)
+- **@turf/***: Geographic utilities (bearing, bounding box). Distance and destination use custom WGS84 implementations (Vincenty inverse, Vincenty direct)
 - **vite**: TypeScript bundling and dev server with HMR
 
 ## URL

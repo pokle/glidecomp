@@ -131,6 +131,7 @@
       "devDependencies": {
         "@cloudflare/vitest-pool-workers": "^0.19.1",
         "@cloudflare/workers-types": "^4.20260702.1",
+        "jose": "^6.2.12",
         "typescript": "^7.0.2",
         "vitest": "^4.1.11",
         "wrangler": "4.116.0",
@@ -148,6 +149,9 @@
     "web/workers/shared": {
       "name": "@glidecomp/worker-kit",
       "version": "0.1.0",
+      "dependencies": {
+        "jose": "^6.2.12",
+      },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260702.1",
       },

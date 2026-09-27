@@ -3,7 +3,7 @@
  * bench-task CLI — Time the two compute-heavy Worker paths for one bundled
  * sample task, with every file local (no D1/R2/KV). Mirrors:
  *
- *   Scoring   (competition-api scoring.ts computeTaskScore):
+ *   Scoring   (competition-api scoring/task-score.ts computeTaskScore):
  *     gunzip → parseIGC → resolveTurnpointSequence → toFlightScoringData
  *     → scoreFlights   (open distance: gunzip → parseIGC → openDistanceForFlight
  *     → scoreOpenDistanceFlights)

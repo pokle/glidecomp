@@ -197,6 +197,25 @@ describe('serializers survive swapped / awkward identifiers', () => {
     const { waypoints } = parseWaypointFile(cup, 'wp.cup');
     expect(waypoints[0].latitude).toBeCloseTo(-36, 3);
   });
+
+  it('toCSV guards a formula-triggering waypoint name against CSV/DDE injection', () => {
+    // GET /api/comp/:comp_id/waypoints/csv is public and served as
+    // text/csv, so a browser hands it straight to a spreadsheet app —
+    // a waypoint name starting with =/+/-/@ must not reach the cell raw.
+    const evil: WaypointFileRecord[] = [
+      { code: '=1+1', name: '=cmd|\'/c calc\'!A0', latitude: -36, longitude: 147, altitude: 0, radius: 400 },
+      { code: '+X', name: '@X', latitude: -36, longitude: 147, altitude: 0, radius: 400 },
+      { code: '-X', name: '-X', latitude: -36, longitude: 147, altitude: 0, radius: 400 },
+    ];
+    const csv = toCSV(evil);
+    const rows = csv.trim().split('\r\n').slice(1);
+    expect(rows[0].startsWith("'=1+1,'=cmd|'/c calc'!A0,")).toBe(true);
+    expect(rows[1].startsWith("'+X,'@X,")).toBe(true);
+    expect(rows[2].startsWith("'-X,'-X,")).toBe(true);
+    // A device format read literally by flight-instrument software is left
+    // alone: prefixing would corrupt a legitimate dash-leading code there.
+    expect(toSeeYouCup([evil[2]])).not.toContain("'-X");
+  });
 });
 
 describe('XCTrack QR encoding matches real app output', () => {

@@ -2,7 +2,7 @@
 
 /**
  * Track packer — turns parsed IGC tracks into a compact binary asset for the
- * 3D flight-replay viewer (see docs/flight-replay-3d-brief.md).
+ * 3D flight-replay viewer (see docs/3d-flight-replay-notes.md).
  *
  * This module is **pure** (no fs, no DOM, no gzip) so the exact same code can run
  * in an offline build step *or* inside a Cloudflare Worker. The caller is

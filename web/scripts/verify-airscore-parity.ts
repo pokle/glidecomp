@@ -109,7 +109,7 @@ function verifyTask(
   const xctsk = parseXCTask(readFileSync(join(dir, 'task.xctsk'), 'utf-8'));
 
   // Mirror the worker's read path: a track a HARD data-quality check withholds
-  // is not scored at all (see competition-api scoring.ts). Without this the
+  // is not scored at all (see competition-api scoring/track-store.ts). Without this the
   // parity run would score a file the production path refuses, and diverge
   // from both AirScore and our own app — the New Zealand track in Corryong
   // Cup 2025 task 4 is the case that matters, and AirScore also gives it 0.

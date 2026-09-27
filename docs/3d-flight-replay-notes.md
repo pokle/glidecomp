@@ -179,8 +179,8 @@ transparently gunzip.)
   AirScore order at the top.
 - **Pilot colours hash the name** (`colorForName` in `track-packer.ts`), not the
   roster index, so a pilot keeps the same colour across rebuilds even if the
-  field changes. FNV-1a → hue, reusing `buildPalette`'s saturation/lightness
-  bands so it stays visually consistent. Trade-off: hashing can occasionally put
+  field changes. FNV-1a → hue, with the saturation/lightness bands the old
+  roster palette used so it stays visually consistent. Trade-off: hashing can occasionally put
   two pilots on near-identical hues (the golden-angle palette guaranteed maximal
   separation) — name-stability was judged worth it. Re-run `bun run build-3dvis`
   to regenerate the manifest after touching the colour logic.
@@ -706,7 +706,7 @@ file, so any user can view it and the same path serves any comp task.
   comp SET name=…` on any already-seeded database, or the seeder inserts a
   duplicate under a new comp_id and `sample-3dvis` 404s.
 - **Endpoint:** `web/workers/competition-api/src/visualization.ts`
-  (`buildTask3dvisBundle`) + `routes/visualization.ts`. Mirrors `scoring.ts`:
+  (`buildTask3dvisBundle`) + `routes/visualization.ts`. Mirrors `scoring/`:
   fetch `task_track` rows → drop the tracks a HARD quality check withheld
   (§5.16) → R2 `get` → gunzip → `packTracksFromIgc` → gzip data → frame the
   bundle → cache in KV under `3dvis:v4:<taskId>:<hash>`.

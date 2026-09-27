@@ -1,9 +1,9 @@
 /**
  * Client entry for the GlideComp UI (React + react-aria-components SPA), served from
  * /app.html and mapped to /comp, /u/*, /scores, /settings, /onboarding and the
- * /admin routes. The eight public comp routes (the `ROUTES` array in
+ * /admin routes. The public comp routes (the `ROUTES` array in
  * functions/comp/[[path]].ts is the list) are additionally server-rendered
- * there; when the server embedded `window.__SSR_DATA__`
+ * there; when the server embedded its `__SSR_DATA__` JSON block
  * this entry hydrates that markup instead of creating a fresh root, seeding the
  * matching page from the same loader data so the first render matches.
  *
@@ -15,21 +15,21 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 import "./globals.css";
 import { BrowserRouter } from "react-router-dom";
 import { initTheme } from "./lib/theme";
+import { installStaleDeployReload } from "./lib/stale-deploy";
 import { AppToaster } from "./lib/toast";
 import { InitialDataProvider, type InitialData } from "./lib/initial-data";
 import { AppProviders, AppRoutes } from "./routes";
+import { readSsrData } from "../ssr-data";
 
-declare global {
-  interface Window {
-    __SSR_DATA__?: InitialData;
-  }
-}
+// A tab that outlived a deploy asks for chunks that no longer exist: reload it
+// onto the new deploy, once (./lib/stale-deploy).
+installStaleDeployReload();
 
 // shadcn theming keys dark mode off a `.dark` class on <html>; apply the user's
 // Light/Dark/Auto preference (Auto follows the OS). See ./lib/theme.
 initTheme();
 
-const initialData = window.__SSR_DATA__ ?? null;
+const initialData = readSsrData<InitialData>() ?? null;
 
 // The app tree MUST match entry-server.tsx exactly for hydration. The toaster
 // is intentionally NOT here: it renders a body-level portal and can't run on

@@ -1,6 +1,6 @@
 # SSR for the public competition pages
 
-The eight public comp pages are server-rendered. This is the SEO strategy:
+The public comp pages (the `ROUTES` table below) are server-rendered. This is the SEO strategy:
 crawlers and link-preview bots must see the text, not an empty `#root`.
 
 Current-state reference. For the original design reasoning see
@@ -80,12 +80,16 @@ SPA.
 
 1. Run the route's loader (`src/react/loaders.ts`, one per route, parameterized
    by a `FetchFn`) over the `COMPETITION_API` service binding, **forwarding the
-   visitor's cookie** so admins still get their `test` comps.
+   visitor's Better Auth cookies** so admins still get their `test` comps. Only
+   those (`authCookieHeader()`): a visitor with nothing but analytics cookies is
+   anonymous, and their page stays publicly cacheable. The visitor is resolved
+   alongside, from the signed `session_data` cookie with no auth hop when it
+   verifies — see [auth.md](auth.md#cross-worker-auth-verification).
 2. Render the *same* React components the SPA uses — shared tree in
    `src/react/routes.tsx`, rendered server-side by `entry-server.tsx`.
 3. Splice the markup into the `/app` shell with per-route `<title>`, description
    and JSON-LD.
-4. Embed `window.__SSR_DATA__` for the client to hydrate from
+4. Embed a `<script type="application/json" id="__SSR_DATA__">` block for the client to hydrate from (read by `src/ssr-data.ts`; a data block, so the CSP runs no inline script)
    (`entry-client.tsx` → `hydrateRoot`; `src/react/lib/initial-data.tsx` seeds
    each page's state so the first render matches).
 

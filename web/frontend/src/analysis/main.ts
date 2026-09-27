@@ -30,6 +30,11 @@ import '../analysis.css';
 
 // Command palette behavior (vanilla, local)
 import { initCommandMenus } from './command-menu';
+import { installStaleDeployReload } from '../react/lib/stale-deploy';
+
+// A tab that outlived a deploy asks for chunks that no longer exist (the map
+// and terrain code load on demand): reload it onto the new deploy, once.
+installStaleDeployReload();
 
 interface AppState {
   igcFile: IGCFile | null;
@@ -165,6 +170,7 @@ async function init(): Promise<void> {
 
   // Wire the command palette (filtering, keyboard nav) on its static markup
   initCommandMenus();
+  wireCloseControls();
 
   /**
    * Hide the controls that would bounce an anonymous reader straight back out.
@@ -2487,6 +2493,34 @@ async function loadFromQueryParams(
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch((err) => {
     console.warn('Service worker registration failed:', err);
+  });
+}
+
+/**
+ * The markup's close controls, declared with data attributes rather than
+ * inline `onclick=` handlers, which the CSP's `script-src 'self'`
+ * (public/_headers) refuses:
+ * - `data-dismiss-alert` hides its enclosing `.alert`;
+ * - `data-close-dialog` closes its enclosing `<dialog>`;
+ * - `data-backdrop-close` on a `<dialog>` closes it on a click on the
+ *   backdrop (the dialog element itself, not its content).
+ */
+function wireCloseControls(): void {
+  document.addEventListener('click', (e) => {
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    if (target instanceof HTMLDialogElement && target.hasAttribute('data-backdrop-close')) {
+      target.close();
+      return;
+    }
+    const alertButton = target.closest('[data-dismiss-alert]');
+    if (alertButton) {
+      alertButton.closest('.alert')?.classList.add('hidden');
+      return;
+    }
+    if (target.closest('[data-close-dialog]')) {
+      target.closest('dialog')?.close();
+    }
   });
 }
 

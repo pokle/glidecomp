@@ -21,7 +21,7 @@
  *
  * Editing happens on a routed page, not here (issue #637): the section owns
  * the READING of the notes and links to
- * comp/settings/WeatherNotesSettings.tsx for the writing. An eight-row
+ * comp/TaskWeatherNotes.tsx for the writing. An eight-row
  * textarea in a centred modal was the shape that conversion exists to remove.
  */
 import { LinkButton } from "@/react/rac/button";

@@ -11,6 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0f172a">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -87,7 +88,7 @@
                     </div>
                     <button
                         class="btn btn-ghost btn-icon -mr-2"
-                        onclick="this.closest('.alert').classList.add('hidden')"
+                        data-dismiss-alert
                         aria-label="Close alert"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -101,7 +102,7 @@
     </main>
 
     <!-- Command Menu Dialog -->
-    <dialog id="command-dialog" class="command-dialog" onclick="if (event.target === this) this.close()">
+    <dialog id="command-dialog" class="command-dialog" data-backdrop-close>
         <div class="command">
             <header>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -312,7 +313,7 @@
     </dialog>
 
     <!-- Import Task Dialog (input-only, no command menu) -->
-    <dialog id="import-task-dialog" class="command-dialog" onclick="if (event.target === this) this.close()">
+    <dialog id="import-task-dialog" class="command-dialog" data-backdrop-close>
         <div class="command" data-command-skip>
             <header>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -333,7 +334,7 @@
     </dialog>
 
     <!-- Import AirScore Dialog (input-only, no command menu) -->
-    <dialog id="import-airscore-dialog" class="command-dialog" onclick="if (event.target === this) this.close()">
+    <dialog id="import-airscore-dialog" class="command-dialog" data-backdrop-close>
         <div class="command" data-command-skip>
             <header>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -355,11 +356,11 @@
     </dialog>
 
     <!-- Settings Dialog -->
-    <dialog id="settings-dialog" class="fixed inset-0 m-auto max-h-[100dvh] sm:max-h-[80vh] h-fit w-full sm:max-w-lg rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50 overflow-y-auto" onclick="if (event.target === this) this.close()">
+    <dialog id="settings-dialog" class="fixed inset-0 m-auto max-h-[100dvh] sm:max-h-[80vh] h-fit w-full sm:max-w-lg rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50 overflow-y-auto" data-backdrop-close>
         <div class="p-4 sm:p-6">
             <div class="mb-4 flex items-center justify-between sticky top-0 bg-card pt-0 pb-2 z-10">
                 <h2 class="text-lg font-semibold">Settings</h2>
-                <button class="btn btn-ghost btn-icon -mr-2" onclick="this.closest('dialog').close()" aria-label="Close">
+                <button class="btn btn-ghost btn-icon -mr-2" data-close-dialog aria-label="Close">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 6 6 18"/>
                         <path d="m6 6 12 12"/>
@@ -618,11 +619,11 @@
     </dialog>
 
     <!-- Competition Settings Dialog -->
-    <dialog id="competition-settings-dialog" class="fixed inset-0 m-auto max-h-[100dvh] sm:max-h-[80vh] h-fit w-full sm:max-w-lg rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50 overflow-y-auto" onclick="if (event.target === this) this.close()">
+    <dialog id="competition-settings-dialog" class="fixed inset-0 m-auto max-h-[100dvh] sm:max-h-[80vh] h-fit w-full sm:max-w-lg rounded-lg border border-border bg-card p-0 shadow-lg backdrop:bg-black/50 overflow-y-auto" data-backdrop-close>
         <div class="p-4 sm:p-6">
             <div class="mb-4 flex items-center justify-between sticky top-0 bg-card pt-0 pb-2 z-10">
                 <h2 class="text-lg font-semibold">Competition Settings</h2>
-                <button class="btn btn-ghost btn-icon -mr-2" onclick="this.closest('dialog').close()" aria-label="Close">
+                <button class="btn btn-ghost btn-icon -mr-2" data-close-dialog aria-label="Close">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 6 6 18"/>
                         <path d="m6 6 12 12"/>

@@ -207,9 +207,15 @@ export function SheetHeader({
  * flex item's implicit `min-height: auto` lets its content push it past the
  * viewport, taking the header with it.
  *
+ * **The scroller is full width; only the content is capped.** Capping the
+ * scroller itself left the margins either side of the column inert: on a wide
+ * desktop window, a wheel over them scrolled nothing, and most of the sheet
+ * was margin.
+ *
  * Content layout stays the caller's (`flex flex-col gap-3` for a stack of
- * fields, nothing for a list) — this owns the width, the padding and the
- * scroll, which are the things that were drifting.
+ * fields, nothing for a list) — `className` lands on the capped column, and
+ * this owns the width, the padding and the scroll, which are the things that
+ * were drifting.
  */
 export function SheetBody({
   className,
@@ -219,13 +225,10 @@ export function SheetBody({
   children: ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-y-auto p-4",
-        className
-      )}
-    >
-      {children}
+    <div className="min-h-0 w-full flex-1 overflow-y-auto">
+      <div className={cn("mx-auto w-full max-w-2xl p-4", className)}>
+        {children}
+      </div>
     </div>
   );
 }

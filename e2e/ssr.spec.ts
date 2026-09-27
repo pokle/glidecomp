@@ -5,6 +5,11 @@ import {
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
 import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
+import { CONTENT_SECURITY_POLICY } from "../web/frontend/src/security-headers";
+import { findInlineScripts } from "../web/frontend/src/inline-script-scan";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
 /**
@@ -178,7 +183,7 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     const res = await request.get(`/comp/${compId}/task/${taskId}`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
-    expect(html).toContain('window.__SSR_DATA__');
+    expect(html).toContain('id="__SSR_DATA__"');
     // Turnpoints table / route content renders server-side.
     expect(html.toLowerCase()).toMatch(/turnpoint|start|goal/);
   });
@@ -265,7 +270,7 @@ test.describe("SSR — isolation and fallback", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain('name="robots" content="noindex"');
-    expect(html).not.toContain("window.__SSR_DATA__");
+    expect(html).not.toContain('id="__SSR_DATA__"');
     // The bare URL is unaffected — still the real server-rendered list.
     const bare = await request.get("/comp");
     expect(await bare.text()).not.toContain('name="robots" content="noindex"');
@@ -282,7 +287,7 @@ test.describe("SSR — isolation and fallback", () => {
       expect(res.ok()).toBeTruthy();
       const html = await res.text();
       expect(html).toContain('<div id="root"></div>');
-      expect(html).not.toContain("window.__SSR_DATA__");
+      expect(html).not.toContain('id="__SSR_DATA__"');
     });
   }
 
@@ -309,7 +314,7 @@ test.describe("SSR — isolation and fallback", () => {
       const html = await res.text();
       expect(html).toContain('<div id="root"></div>');
       expect(html).toContain('name="robots" content="noindex"');
-      expect(html).not.toContain("window.__SSR_DATA__");
+      expect(html).not.toContain('id="__SSR_DATA__"');
     });
   }
 });
@@ -423,7 +428,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     // The defining SSR property: the loader data is embedded in the raw HTML.
-    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain("Task analysis —");
     // Branch on the actual server HTML (race-free): warm renders the summary's
     // section boxes and is indexable; cold renders the pending notice and is
@@ -459,7 +464,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
       const res = await request.get(`/comp/${compId}/task/${taskId}/analysis/${slug}`);
       expect(res.ok(), slug).toBeTruthy();
       const html = await res.text();
-      expect(html, slug).toContain("window.__SSR_DATA__");
+      expect(html, slug).toContain('id="__SSR_DATA__"');
       expect(html, slug).toContain(`${heading} —`);
     }
   });
@@ -483,7 +488,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
     const res = await request.get(`/comp/${compId}/analysis`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
-    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain(`Comp analysis — ${compName}`);
     expect(html).toContain('aria-label="Sections"');
   });
@@ -653,4 +658,243 @@ test.describe("SSR — hydration is clean (real browser)", () => {
       expect(hydrationErrors, hydrationErrors.join("\n")).toHaveLength(0);
     });
   }
+});
+
+/**
+ * The sign-in page's "Last used" pill after a Google sign-in
+ * (web/frontend/src/auth/last-sign-in.ts), against the built output. The
+ * first version recorded Google when "who is signed in" was next answered;
+ * production answers that from the SSR'd /comp's payload, the dev server
+ * never does, and so last-used-sign-in.spec.ts passed while production never
+ * once moved the pill. This runs the same flow where /comp really is SSR'd.
+ */
+test.describe("SSR — the sign-in page's Last used pill", () => {
+  test("a Google sign-in landing on the SSR'd /comp moves the pill to Google", async ({
+    page,
+  }) => {
+    await page.goto("/signin");
+    await page.evaluate(() => localStorage.setItem("glidecomp:last-sign-in", "email"));
+    await page.reload();
+    const pill = (name: RegExp) =>
+      page.getByRole("button", { name }).getByTestId("last-used-pill");
+    await expect(pill(/Email me a sign-in code/)).toBeVisible();
+
+    // Stand in for the OAuth round trip: a real session, then the requested
+    // callbackURL, as better-auth does on success.
+    await page.route("**/api/auth/sign-in/social", async (route) => {
+      const { callbackURL } = route.request().postDataJSON() as { callbackURL: string };
+      const res = await page.request.post("/api/auth/dev-login", {
+        data: { name: "SSR Last Used", email: "ssr-last-used@test.local" },
+      });
+      expect(res.ok(), `dev-login failed: ${res.status()}`).toBeTruthy();
+      await route.fulfill({ json: { url: callbackURL, redirect: true } });
+    });
+    await page.getByRole("button", { name: /Continue with Google/ }).click();
+    await expect(page).toHaveURL(/\/comp$/);
+
+    // The production shape: the destination arrived with the user already in
+    // its SSR payload.
+    const seeded = await page.evaluate(
+      () =>
+        (JSON.parse(document.getElementById("__SSR_DATA__")?.textContent ?? "null") as {
+          user?: unknown;
+        } | null)?.user ?? null
+    );
+    expect(seeded, "expected /comp to seed a signed-in user from SSR").not.toBeNull();
+
+    await page.context().clearCookies();
+    await page.goto("/signin");
+    await expect(pill(/Continue with Google/)).toHaveText("Last used");
+    await expect(pill(/Email me a sign-in code/)).toHaveCount(0);
+  });
+});
+
+/**
+ * Who the visitor is, as the SSR Function works it out
+ * (functions/comp/[[path]].ts → fetchVisitor). Usually from auth-api's signed
+ * `session_data` cookie, checked with the public key and with no auth hop.
+ * When that cookie has expired it falls back to /api/auth/me, and the fresh
+ * cookie /me issues must reach the browser on the PAGE's response, or every
+ * later page (and its competition-api calls) would pay the hop again.
+ */
+test.describe("SSR — the visitor from the session cookie cache", () => {
+  const seededUser = (page: import("@playwright/test").Page) =>
+    page.evaluate(
+      () =>
+        (JSON.parse(document.getElementById("__SSR_DATA__")?.textContent ?? "null") as {
+          user?: { email?: string } | null;
+        } | null)?.user ?? null
+    );
+
+  test("an expired cache cookie is re-issued on the SSR'd page", async ({ page }) => {
+    const res = await page.request.post("/api/auth/dev-login", {
+      data: { name: "SSR Cache", email: "ssr-cache@test.local" },
+    });
+    expect(res.ok(), `dev-login failed: ${res.status()}`).toBeTruthy();
+
+    // With the cache cookie: answered from it.
+    await page.goto("/comp");
+    expect(await seededUser(page)).toMatchObject({ email: "ssr-cache@test.local" });
+
+    // Without it (as after its five minutes are up): /me decides, and the
+    // page hands the browser a fresh one.
+    const context = page.context();
+    const withoutCache = (await context.cookies()).filter(
+      (c) => !c.name.endsWith("session_data")
+    );
+    await context.clearCookies();
+    await context.addCookies(withoutCache);
+
+    const pageRes = await page.goto("/comp");
+    expect(pageRes?.headers()["cache-control"]).toBe("private, no-store");
+    expect(await seededUser(page)).toMatchObject({ email: "ssr-cache@test.local" });
+    const names = (await context.cookies()).map((c) => c.name);
+    expect(names.some((n) => n.endsWith("session_data"))).toBe(true);
+  });
+
+  test("a visitor with only non-auth cookies is anonymous and cacheable", async ({
+    page,
+  }) => {
+    const url = new URL(test.info().project.use.baseURL ?? "http://localhost:3100");
+    await page.context().addCookies([
+      { name: "_ga", value: "GA1.1.123", domain: url.hostname, path: "/" },
+    ]);
+    const res = await page.goto("/comp");
+    expect(res?.headers()["cache-control"]).not.toContain("private");
+    expect(await seededUser(page)).toBeNull();
+  });
+});
+
+/**
+ * The Content-Security-Policy is ENFORCED (web/frontend/src/security-headers.ts),
+ * so a violation is a broken page, not a log line. This is the one suite that
+ * can see it: it serves the built dist/ through the real Pages runtime, which
+ * applies public/_headers to static pages, and the SSR Function's pages get the
+ * same headers from functions/_middleware.ts. The dev server behind
+ * `test:e2e` sends no CSP at all.
+ *
+ * Two checks: the built HTML carries no inline script (fast, names the file),
+ * and a real browser loading each kind of page reports no violation — which
+ * also catches what a scan can't, like a new third-party host or eval().
+ */
+test.describe("Content-Security-Policy", () => {
+  const DIST = join(dirname(fileURLToPath(import.meta.url)), "..", "web", "frontend", "dist");
+
+  function htmlFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return htmlFiles(p);
+      return e.name.endsWith(".html") ? [p] : [];
+    });
+  }
+
+  test("no built page carries an inline script or on*= handler", () => {
+    const files = htmlFiles(DIST);
+    // The static pages are built too, not just the SPA shell.
+    expect(files.map((f) => f.slice(DIST.length))).toContain("/scoring/gap/index.html");
+    const found = files.flatMap((f) =>
+      findInlineScripts(readFileSync(f, "utf8")).map((x) => `${f.slice(DIST.length)}: ${x.snippet}`)
+    );
+    expect(found, found.join("\n")).toEqual([]);
+  });
+
+  const PAGES = [
+    // Static pages (Astro), served with public/_headers.
+    "/",
+    "/about",
+    "/legal",
+    "/scoring",
+    "/scoring/gap",
+    "/scoring/open-distance",
+    "/scoring/data-cleaning",
+    "/scoring/track-validity",
+    "/no-such-page",
+    // The SPA shell via a _redirects rewrite.
+    "/submit",
+    // The SSR Function's pages, which get the headers from the middleware.
+    "/comp",
+    ":compHub",
+    ":scores",
+    ":waypoints",
+    ":task",
+    ":pilot",
+    ":taskAnalysis",
+    ":compAnalysis",
+    // The analysis page's one anonymous URL shape (issue #666).
+    ":analysis",
+  ] as const;
+
+  for (const path of PAGES) {
+    test(`${path} is served the policy and violates nothing`, async ({ page, request }) => {
+      let url: string = path;
+      if (path.startsWith(":")) {
+        const d = await discover(request);
+        url = {
+          ":compHub": `/comp/${d.compId}`,
+          ":scores": `/comp/${d.compId}/scores`,
+          ":waypoints": `/comp/${d.compId}/waypoints`,
+          ":task": `/comp/${d.compId}/task/${d.taskId}`,
+          ":pilot": `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`,
+          ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,
+          ":compAnalysis": `/comp/${d.compId}/analysis`,
+          ":analysis": `/analysis?compId=${d.compId}&taskId=${d.taskId}&pilotId=${d.pilotId}`,
+        }[path];
+      }
+
+      // Registered before any page script runs, so nothing escapes it.
+      await page.addInitScript(() => {
+        const seen: string[] = [];
+        (window as unknown as { __cspViolations: string[] }).__cspViolations = seen;
+        document.addEventListener("securitypolicyviolation", (e) => {
+          seen.push(`${e.effectiveDirective} blocked ${e.blockedURI || "(inline)"} at ${e.sourceFile}:${e.lineNumber}`);
+        });
+      });
+
+      const res = await page.goto(url);
+      expect(res, url).not.toBeNull();
+      expect(res!.headers()["content-security-policy"], url).toBe(CONTENT_SECURITY_POLICY);
+      await page.waitForLoadState("networkidle");
+
+      const violations = await page.evaluate(
+        () => (window as unknown as { __cspViolations: string[] }).__cspViolations
+      );
+      expect(violations, `${url}:\n${violations.join("\n")}`).toEqual([]);
+    });
+  }
+});
+
+/**
+ * A tab that outlived a deploy (lib/stale-deploy.ts, AppErrorBoundary). Every
+ * deploy renames the hashed chunks, so the old app asks for files that no
+ * longer exist. It must reload itself onto the new deploy ONCE, and if the
+ * chunk is still missing after that, apologise rather than show a blank page.
+ * Against the built output, because the dev server has no hashed chunks.
+ */
+test.describe("SSR — a tab that outlived a deploy", () => {
+  test("reloads once for a missing chunk, then apologises", async ({ page }) => {
+    await page.goto("/comp");
+    await expect(page.getByRole("link", { name: /Corryong Cup/ })).toBeVisible();
+
+    // The Settings page's chunk is gone, as after a deploy.
+    await page.route(/\/assets\/Settings-[\w-]+\.js$/, (route) =>
+      route.fulfill({ status: 404, body: "Not found" })
+    );
+    let loads = 0;
+    page.on("load", () => loads++);
+
+    // A client-side navigation to a lazy route, as a click in the old app would.
+    await page.evaluate(() => {
+      history.pushState({}, "", "/settings");
+      dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await expect(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible();
+    // The one automatic reload happened; the loop guard stopped a second.
+    expect(loads).toBe(1);
+    await expect(page.getByRole("button", { name: "Reload page" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Go to the home page" })).toHaveAttribute(
+      "href",
+      "/"
+    );
+  });
 });

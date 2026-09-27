@@ -110,6 +110,21 @@ function csvField(s: string): string {
 }
 
 /**
+ * As {@link csvField}, but also guards against CSV/DDE formula injection: a
+ * leading `=`/`+`/`-`/`@`/tab/CR is a formula trigger in Excel/Sheets, so it
+ * is prefixed with `'` first — same rule as `csvEscape()` in
+ * src/react/comp/csv.ts (SEC-28/SEC-43). Used only for the plain `.csv`
+ * export below: that is the one format served as `text/csv`, so it is the
+ * one a browser or OS actually hands to a spreadsheet app. The device
+ * formats (SeeYou .cup, CompeGPS, OziExplorer, FS) are read literally by
+ * flight-instrument software, where the same prefix would corrupt a
+ * legitimate dash-leading waypoint code instead of protecting anyone.
+ */
+function csvFieldGuarded(s: string): string {
+  return csvField(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s);
+}
+
+/**
  * Altitude as whole metres, with 0 standing in for an unknown one.
  *
  * For the formats whose elevation field is POSITIONAL — FS $FormatGEO and
@@ -338,8 +353,8 @@ export function toCSV(waypoints: WaypointFileRecord[]): string {
   for (const w of waypoints) {
     lines.push(
       [
-        csvField(w.code),
-        csvField(w.name || w.code),
+        csvFieldGuarded(w.code),
+        csvFieldGuarded(w.name || w.code),
         w.latitude.toFixed(6),
         w.longitude.toFixed(6),
         // Header-driven, so an empty altitude reads back as unknown.

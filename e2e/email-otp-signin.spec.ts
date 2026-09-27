@@ -97,6 +97,8 @@ test("sign in with an emailed code (manual entry)", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Sign in to GlideComp" })
   ).toBeVisible();
+  // A browser that has never signed in labels nothing.
+  await expect(page.getByTestId("last-used-pill")).toHaveCount(0);
 
   await page.getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Email me a sign-in code" }).click();
@@ -124,6 +126,15 @@ test("sign in with an emailed code (manual entry)", async ({ page }) => {
   await page.goto("/comp");
   await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/comp");
+  // Signed out again, the sign-in page remembers how they came in.
+  await page.context().clearCookies();
+  await page.goto("/signin");
+  await expect(
+    page.getByRole("button", { name: /Email me a sign-in code/ }).getByTestId("last-used-pill")
+  ).toHaveText("Last used");
+  await expect(
+    page.getByRole("button", { name: /Continue with Google/ }).getByTestId("last-used-pill")
+  ).toHaveCount(0);
 });
 
 test("sign in via the emailed deep link (#otp=…&email=…)", async ({ page }) => {

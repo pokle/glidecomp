@@ -46,7 +46,7 @@ describe("Auth header trust boundary (SEC-10)", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: "test-user=user-1",
+        Cookie: "better-auth.test-user=user-1",
       },
       body: JSON.stringify({ name: "Real Comp", category: "hg" }),
     });
@@ -61,7 +61,7 @@ describe("Auth header trust boundary (SEC-10)", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: "test-user=user-1",
+        Cookie: "better-auth.test-user=user-1",
         "X-Glidecomp-Internal-User": JSON.stringify({
           id: "user-2",
           name: "Admin Two",
@@ -79,7 +79,7 @@ describe("Auth header trust boundary (SEC-10)", () => {
     // and confirm the actor is "Test Pilot" (user-1's name).
     const audit = await SELF.fetch(
       `https://test/api/comp/${body.comp_id}/audit`,
-      { headers: { Cookie: "test-user=user-1" } }
+      { headers: { Cookie: "better-auth.test-user=user-1" } }
     );
     expect(audit.status).toBe(200);
     const auditBody = (await audit.json()) as {

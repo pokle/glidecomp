@@ -6,9 +6,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-# SPA shell + SSR bundle. Astro static pages aren't needed for the four SSR
-# routes or the /u/me shell fallback, so skip them for a faster build.
-( cd web/frontend && bunx vite build && bunx vite build --config vite.ssr.config.ts )
+# The whole build — SPA shell, SSR bundle AND the Astro static pages: the
+# Content-Security-Policy tests in ssr.spec.ts load every kind of page.
+( cd web/frontend && bun run build )
 
 # The comp Worker owns the D1 schema; wait for it before seeding (seed writes
 # local D1 state directly and needs the tables to exist). All the Workers share

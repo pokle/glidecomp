@@ -4,7 +4,7 @@
  * build-3dvis — Turn a folder of IGC tracks (+ optional task.xctsk) into the
  * compact gzipped binary asset consumed by the 3D flight-replay viewer
  * (web/frontend/src/replay.* and web/frontend/src/replay/). See
- * docs/flight-replay-3d-brief.md.
+ * docs/3d-flight-replay-notes.md.
  *
  * The heavy lifting lives in the pure, fs-free `packTracks()` in the engine, so
  * this exact pipeline can later be lifted into a Cloudflare Worker (swap the

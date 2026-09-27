@@ -369,6 +369,32 @@ test("the browser back button closes a sheet, not the page", async ({ page }) =>
   expect(mutated()).toBe(false);
 });
 
+/**
+ * A sheet's body caps its column at a readable width, but on a wide window
+ * most of the sheet is the margin either side of it. The scroller used to be
+ * the capped column itself, so a mouse wheel over those margins scrolled
+ * nothing — the reader had to find the column first. The scroller is now full
+ * width (SheetBody in rac/full-screen-sheet.tsx).
+ */
+test("a sheet scrolls from its side margins on a wide window", async ({ page, isMobile }) => {
+  test.skip(isMobile, "a phone-width sheet has no margin beside its column");
+  // Wide and short, so the column has margins AND its fields overflow.
+  await page.setViewportSize({ width: 1400, height: 360 });
+
+  await (await firstWaypointRow(page)).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByRole("heading", { level: 2 })).toBeVisible();
+
+  const code = sheet.getByRole("textbox", { name: "Code", exact: true });
+  const before = (await code.boundingBox())!;
+  // Well left of the column, level with its fields.
+  await page.mouse.move(60, before.y + before.height / 2);
+  await page.mouse.wheel(0, 200);
+  await expect
+    .poll(async () => (await code.boundingBox())!.y, { message: "the fields moved up" })
+    .toBeLessThan(before.y - 50);
+});
+
 test("back closes a dialog too, and leaves the history as it found it", async ({
   page,
 }) => {

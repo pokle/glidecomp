@@ -59,27 +59,9 @@ const metaDescription =
     <meta name="twitter:card" content="summary" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
-    <script is:inline>
-      // Apply the Light/Dark/Auto colour-scheme preference via a `.dark` class on
-      // <html>, matching the SPA (localStorage `glidecomp-theme`; missing = auto,
-      // which follows the OS). Inline + in <head> so it runs before paint (no flash).
-      (function () {
-        var q = window.matchMedia("(prefers-color-scheme: dark)");
-        var sync = function () {
-          var pref = localStorage.getItem("glidecomp-theme");
-          if (pref !== "light" && pref !== "dark" && pref !== "auto") pref = "auto";
-          document.documentElement.classList.toggle(
-            "dark",
-            pref === "dark" || (pref === "auto" && q.matches)
-          );
-        };
-        sync();
-        q.addEventListener("change", sync);
-        window.addEventListener("storage", function (e) {
-          if (e.key === "glidecomp-theme") sync();
-        });
-      })();
-    </script>
+    <!-- Colour-scheme class before paint. A file, not an inline script, so the
+         CSP needs no 'unsafe-inline' or hash (public/_headers). -->
+    <script is:inline src="/theme-init.js"></script>
   </head>
   <body>
     <!-- Skip link (WCAG 2.4.1, accessibility-standard §4.3): first focusable

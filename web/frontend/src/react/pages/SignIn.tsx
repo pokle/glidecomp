@@ -18,15 +18,39 @@ import { TextField } from "@/react/rac/field";
 // thin wrapper over the `input-otp` package (hence react/vendor/, not rac/).
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/react/vendor/input-otp";
 import { Card } from "@/react/rac/card";
+import { Badge } from "@/react/rac/badge";
 import {
   sendSignInOtp,
   signInWithGoogle,
   signInWithOtp,
 } from "../../auth/client";
+import {
+  parseSignInMethod,
+  readLastSignInMethod,
+  SIGNED_IN_VIA_PARAM,
+  writeLastSignInMethod,
+} from "../../auth/last-sign-in";
 import { DEV_SIGN_IN_ENABLED, signInAsDev, useUser } from "../lib/user";
 import { safeNext } from "../lib/safe-next";
 
 const RESEND_COOLDOWN_S = 60;
+
+/**
+ * Tags the method this browser last signed in with (auth/last-sign-in.ts).
+ * Highlighter yellow so it stands out against both the primary and the grey
+ * outline button; the text is pinned near-black because yellow stays light
+ * in dark mode too (yellow-950 on yellow-300 is well past 4.5:1).
+ */
+function LastUsedPill() {
+  return (
+    <Badge
+      className="ml-1 border-yellow-400 bg-yellow-300 text-yellow-950"
+      data-testid="last-used-pill"
+    >
+      Last used
+    </Badge>
+  );
+}
 
 function parseOtpHash(hash: string): { otp: string; email: string } | null {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
@@ -52,16 +76,26 @@ export function SignIn() {
   // The emailed deep link is single-shot: consume it once, then behave like
   // a normal manual visit (a failed link degrades to the code form).
   const consumedHash = useRef(false);
+  // Read once on mount; this page renders client-side only (behind `loading`).
+  const [lastMethod] = useState(() =>
+    typeof window === "undefined" ? null : readLastSignInMethod()
+  );
 
   useEffect(() => {
     document.title = "GlideComp - Sign in";
   }, []);
 
-  // Already signed in (including arriving via an already-used email link a
-  // second time) — nothing to do here.
+  // Already signed in — nothing to do here but forward. That covers arriving
+  // via an already-used email link a second time, and Google returning as
+  // `?via=google` (see signInWithGoogle): the Google sign-in completing, so
+  // record it first. Only with a real session — a hand-typed `?via=` while
+  // signed out records nothing.
+  const via = parseSignInMethod(searchParams.get(SIGNED_IN_VIA_PARAM));
   useEffect(() => {
-    if (!loading && user) window.location.replace(next);
-  }, [user, loading, next]);
+    if (loading || !user) return;
+    if (via) writeLastSignInMethod(via);
+    window.location.replace(next);
+  }, [user, loading, next, via]);
 
   async function verify(targetEmail: string, otp: string) {
     setBusy(true);
@@ -149,7 +183,10 @@ export function SignIn() {
         </p>
 
         <div className="mt-6 flex flex-col gap-2">
-          <Button onPress={() => void signInWithGoogle(next)}>Continue with Google</Button>
+          <Button onPress={() => void signInWithGoogle(next)}>
+            Continue with Google
+            {lastMethod === "google" ? <LastUsedPill /> : null}
+          </Button>
           {DEV_SIGN_IN_ENABLED ? (
             <Button variant="outline" onPress={() => void signInAsDev()}>
               Sign in (dev)
@@ -199,6 +236,7 @@ export function SignIn() {
               pendingLabel="Sending your code"
             >
               Email me a sign-in code
+              {lastMethod === "email" ? <LastUsedPill /> : null}
             </Button>
             <p className="text-xs text-muted-foreground">
               No password needed — we'll email you a 6-digit code.
