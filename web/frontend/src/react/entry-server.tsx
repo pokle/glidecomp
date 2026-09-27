@@ -16,7 +16,7 @@ import { AppProviders, AppRoutes } from "./routes";
 /**
  * Render one of the public routes to an HTML stream. `initialData` is the
  * loader result for `url`; it is both handed to the React tree (so the server
- * markup matches) and, by the caller, serialized into `window.__SSR_DATA__`
+ * markup matches) and, by the caller, serialized into the `__SSR_DATA__` JSON block
  * for the client to hydrate from.
  */
 export async function render(

@@ -178,7 +178,7 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     const res = await request.get(`/comp/${compId}/task/${taskId}`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
-    expect(html).toContain('window.__SSR_DATA__');
+    expect(html).toContain('id="__SSR_DATA__"');
     // Turnpoints table / route content renders server-side.
     expect(html.toLowerCase()).toMatch(/turnpoint|start|goal/);
   });
@@ -265,7 +265,7 @@ test.describe("SSR — isolation and fallback", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     expect(html).toContain('name="robots" content="noindex"');
-    expect(html).not.toContain("window.__SSR_DATA__");
+    expect(html).not.toContain('id="__SSR_DATA__"');
     // The bare URL is unaffected — still the real server-rendered list.
     const bare = await request.get("/comp");
     expect(await bare.text()).not.toContain('name="robots" content="noindex"');
@@ -282,7 +282,7 @@ test.describe("SSR — isolation and fallback", () => {
       expect(res.ok()).toBeTruthy();
       const html = await res.text();
       expect(html).toContain('<div id="root"></div>');
-      expect(html).not.toContain("window.__SSR_DATA__");
+      expect(html).not.toContain('id="__SSR_DATA__"');
     });
   }
 
@@ -309,7 +309,7 @@ test.describe("SSR — isolation and fallback", () => {
       const html = await res.text();
       expect(html).toContain('<div id="root"></div>');
       expect(html).toContain('name="robots" content="noindex"');
-      expect(html).not.toContain("window.__SSR_DATA__");
+      expect(html).not.toContain('id="__SSR_DATA__"');
     });
   }
 });
@@ -423,7 +423,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
     // The defining SSR property: the loader data is embedded in the raw HTML.
-    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain("Task analysis —");
     // Branch on the actual server HTML (race-free): warm renders the summary's
     // section boxes and is indexable; cold renders the pending notice and is
@@ -459,7 +459,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
       const res = await request.get(`/comp/${compId}/task/${taskId}/analysis/${slug}`);
       expect(res.ok(), slug).toBeTruthy();
       const html = await res.text();
-      expect(html, slug).toContain("window.__SSR_DATA__");
+      expect(html, slug).toContain('id="__SSR_DATA__"');
       expect(html, slug).toContain(`${heading} —`);
     }
   });
@@ -483,7 +483,7 @@ test.describe("SSR — comp & task analysis (public)", () => {
     const res = await request.get(`/comp/${compId}/analysis`);
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
-    expect(html).toContain("window.__SSR_DATA__");
+    expect(html).toContain('id="__SSR_DATA__"');
     expect(html).toContain(`Comp analysis — ${compName}`);
     expect(html).toContain('aria-label="Sections"');
   });
@@ -690,7 +690,10 @@ test.describe("SSR — the sign-in page's Last used pill", () => {
     // The production shape: the destination arrived with the user already in
     // its SSR payload.
     const seeded = await page.evaluate(
-      () => (window as { __SSR_DATA__?: { user?: unknown } }).__SSR_DATA__?.user ?? null
+      () =>
+        (JSON.parse(document.getElementById("__SSR_DATA__")?.textContent ?? "null") as {
+          user?: unknown;
+        } | null)?.user ?? null
     );
     expect(seeded, "expected /comp to seed a signed-in user from SSR").not.toBeNull();
 
@@ -713,8 +716,9 @@ test.describe("SSR — the visitor from the session cookie cache", () => {
   const seededUser = (page: import("@playwright/test").Page) =>
     page.evaluate(
       () =>
-        (window as { __SSR_DATA__?: { user?: { email?: string } | null } }).__SSR_DATA__
-          ?.user ?? null
+        (JSON.parse(document.getElementById("__SSR_DATA__")?.textContent ?? "null") as {
+          user?: { email?: string } | null;
+        } | null)?.user ?? null
     );
 
   test("an expired cache cookie is re-issued on the SSR'd page", async ({ page }) => {

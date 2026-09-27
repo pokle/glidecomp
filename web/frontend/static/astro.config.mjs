@@ -32,6 +32,12 @@ export default defineConfig({
     // breaks Astro's SSR build); Astro provides its own Vite config.
     configFile: false,
     plugins: [tailwindcss()],
+    // Astro inlines a bundled <script> smaller than this limit straight into
+    // the HTML, which the CSP (`script-src 'self'`, public/_headers) refuses.
+    // Never inline a script; leave every other asset to Vite's default.
+    build: {
+      assetsInlineLimit: (filePath) => (filePath.endsWith(".js") ? false : undefined),
+    },
     // Browser connects the HMR socket directly to the Astro dev server so we
     // don't have to proxy websockets through the SPA's Vite server. (Vite 8
     // renamed this from `server.hmr.*`, which now warns.)

@@ -89,7 +89,7 @@ SPA.
    `src/react/routes.tsx`, rendered server-side by `entry-server.tsx`.
 3. Splice the markup into the `/app` shell with per-route `<title>`, description
    and JSON-LD.
-4. Embed `window.__SSR_DATA__` for the client to hydrate from
+4. Embed a `<script type="application/json" id="__SSR_DATA__">` block for the client to hydrate from (read by `src/ssr-data.ts`; a data block, so the CSP runs no inline script)
    (`entry-client.tsx` → `hydrateRoot`; `src/react/lib/initial-data.tsx` seeds
    each page's state so the first render matches).
 

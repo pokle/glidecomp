@@ -3,7 +3,7 @@
  * the matching route loader over the COMPETITION_API service binding (forwarding
  * the visitor's cookie so admins get their `test` comps), renders the same React
  * pages the SPA uses into the /app shell, and injects per-route <head> tags plus
- * `window.__SSR_DATA__` for the client to hydrate from.
+ * an `__SSR_DATA__` JSON block for the client to hydrate from.
  *
  * Safety net: anything that isn't one of the SSR routes, or any loader error,
  * falls back to the unmodified SPA shell — SSR can never make a page less
@@ -114,7 +114,7 @@ interface CacheHint {
 }
 
 interface Rendered {
-  /** The SSR loader result, embedded as window.__SSR_DATA__.data. */
+  /** The SSR loader result, embedded as the __SSR_DATA__ block's `data`. */
   data: unknown;
   head: HeadTags;
   /** Freshness of the materialized content, if any (scores / task analysis). */
@@ -730,7 +730,7 @@ function mergeCookie(init: RequestInit | undefined, cookie: string | null): Requ
 
 /**
  * Splice the rendered page into the shell: per-route <head> tags, the markup
- * into #root, and window.__SSR_DATA__ before the client module script.
+ * into #root, and the __SSR_DATA__ JSON block before the client module script.
  */
 function injectSsr(
   template: string,
@@ -752,12 +752,15 @@ function injectSsr(
     .replace(/<title>[\s\S]*?<\/title>/, "")
     .replace("</head>", `${headTags}</head>`);
 
-  // __SSR_DATA__ must run before the client entry module (which sits after the
+  // __SSR_DATA__ must precede the client entry module (which sits after the
   // root div in app.html), so the client hydrates from the same loader data.
+  // A JSON data block, not an executable script: the CSP (`script-src 'self'`,
+  // public/_headers) runs no inline script, and this needs none — the client
+  // reads it with readSsrData() (src/ssr-data.ts).
   // JSON.stringify drops an `undefined` value entirely, which is exactly the
   // encoding the client wants: no `user` key means "unknown, go and ask",
   // distinct from `"user":null` meaning a known signed-out visitor.
-  const ssrScript = `<script>window.__SSR_DATA__=${serialize(ssrData)}</script>`;
+  const ssrScript = `<script type="application/json" id="__SSR_DATA__">${serialize(ssrData)}</script>`;
   out = out.replace(
     '<div id="root"></div>',
     `<div id="root">${bodyHtml}</div>${ssrScript}`

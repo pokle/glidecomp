@@ -1,7 +1,7 @@
 /**
  * SSR initial-data handoff. The server-rendered Pages Function
  * (functions/comp/[[path]].ts) runs a route loader, embeds the result as
- * `window.__SSR_DATA__ = { path, data }`, and the client reads it here so the
+ * an `__SSR_DATA__` JSON block (`{ path, data }`), and the client reads it here so the
  * page's first render matches the server markup exactly (no hydration diff).
  *
  * The data is valid for one render of the SSR'd URL only: the moment the app
