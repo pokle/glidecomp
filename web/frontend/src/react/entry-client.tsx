@@ -15,10 +15,15 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 import "./globals.css";
 import { BrowserRouter } from "react-router-dom";
 import { initTheme } from "./lib/theme";
+import { installStaleDeployReload } from "./lib/stale-deploy";
 import { AppToaster } from "./lib/toast";
 import { InitialDataProvider, type InitialData } from "./lib/initial-data";
 import { AppProviders, AppRoutes } from "./routes";
 import { readSsrData } from "../ssr-data";
+
+// A tab that outlived a deploy asks for chunks that no longer exist: reload it
+// onto the new deploy, once (./lib/stale-deploy).
+installStaleDeployReload();
 
 // shadcn theming keys dark mode off a `.dark` class on <html>; apply the user's
 // Light/Dark/Auto preference (Auto follows the OS). See ./lib/theme.

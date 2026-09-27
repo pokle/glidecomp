@@ -30,6 +30,11 @@ import '../analysis.css';
 
 // Command palette behavior (vanilla, local)
 import { initCommandMenus } from './command-menu';
+import { installStaleDeployReload } from '../react/lib/stale-deploy';
+
+// A tab that outlived a deploy asks for chunks that no longer exist (the map
+// and terrain code load on demand): reload it onto the new deploy, once.
+installStaleDeployReload();
 
 interface AppState {
   igcFile: IGCFile | null;
