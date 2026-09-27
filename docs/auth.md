@@ -166,18 +166,20 @@ every request and nobody can sign in at all — and because only a *clean*
 verdict is cached, the failure repeats on every request forever. So
 `advanced.database.validateSchema` is `false` in `src/auth.ts`.
 
-This is in no changelog. Reported upstream at
-[better-auth#11346](https://github.com/better-auth/better-auth/issues/11346) —
-**watch that issue, and when it closes, re-test before deleting the config
-line rather than trusting the release note.** Don't mistake it for the two D1
-`SQLITE_AUTH` bugs better-auth *has* fixed
-([#10551](https://github.com/better-auth/better-auth/issues/10551),
-[#10976](https://github.com/better-auth/better-auth/issues/10976), August
-2026): those were the *migration* path. The per-request check arrived after
-them ([#11168](https://github.com/better-auth/better-auth/issues/11168),
-[#11178](https://github.com/better-auth/better-auth/issues/11178), September)
-and reintroduced the same incompatibility somewhere else — so "fixes D1" in a
-release note has meant the other path before.
+This was in no changelog. Reported upstream at
+[better-auth#11346](https://github.com/better-auth/better-auth/issues/11346)
+and **fixed in 1.7.6** by
+[#11366](https://github.com/better-auth/better-auth/pull/11366), which tries
+dialect introspection first and falls back to one `PRAGMA table_info` per
+configured table when the catalogue read is refused. The check would
+therefore run on D1 now.
+
+**The config line stays `false` regardless**, and that is a decision rather
+than an oversight: the drift it exists to catch is already asserted at test
+time by `test/schema.test.ts` (below), so enabling it buys no new information
+and costs a live auth path that can only ever fail closed. Turning it on is
+its own change, with its own blast radius, not a tidy-up to ride in on a
+dependency bump.
 
 `test/schema.test.ts` does the same job in a way D1 permits: it reads the
 expectation from `getAuthTables(auth.options)` — the very function the

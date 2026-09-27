@@ -55,6 +55,8 @@ breaks it will otherwise not surface until the Deploy workflow.
 
 `bun run test:e2e` is mandatory and easy to skip — it's the only thing that exercises `wrangler dev` startup, and it's what would have caught the May 2026 outage. If e2e fails locally, fix the root cause; do not push and "see if CI catches it."
 
+It also takes ~14 minutes, which is longer than a single tool call gets, so it will be moved to the background. **Do not pipe it through `tail`/`head` when you do that** — those buffer until the pipeline closes, so the output file stays at zero bytes for the whole run and you cannot tell a slow suite from a hung one. Let it write in full and read the tail of the file, or redirect to a log and `grep` that. To confirm it is alive rather than stuck, check the process (`ps aux | grep '[p]laywright'`) instead of the output.
+
 **A Playwright bump does not need a manual browser install, and this is not a lesson worth relearning.** Four cycles in a row logged `Executable doesn't exist at …chromium_headless_shell-<rev>…` as a fresh discovery and hand-ran `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell`, because Playwright pins the browser revision to the library version and the containers pre-bake a stale one. `bun run test:e2e` now installs the pinned build itself (`web/scripts/ensure-playwright-browsers.sh`). Record a Playwright bump's *revision change* if you like — it explains a slow first run — but don't re-derive the workaround, and don't reach for `--with-deps` (it wants root/apt; the OS packages are already validated in these images).
 
 ## 4. Push, then watch CI to green
