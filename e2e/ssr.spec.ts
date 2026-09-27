@@ -5,6 +5,11 @@ import {
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
 import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
+import { CONTENT_SECURITY_POLICY } from "../web/frontend/src/security-headers";
+import { findInlineScripts } from "../web/frontend/src/inline-script-scan";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
 
 /**
@@ -758,4 +763,102 @@ test.describe("SSR — the visitor from the session cookie cache", () => {
     expect(res?.headers()["cache-control"]).not.toContain("private");
     expect(await seededUser(page)).toBeNull();
   });
+});
+
+/**
+ * The Content-Security-Policy is ENFORCED (web/frontend/src/security-headers.ts),
+ * so a violation is a broken page, not a log line. This is the one suite that
+ * can see it: it serves the built dist/ through the real Pages runtime, which
+ * applies public/_headers to static pages, and the SSR Function's pages get the
+ * same headers from functions/_middleware.ts. The dev server behind
+ * `test:e2e` sends no CSP at all.
+ *
+ * Two checks: the built HTML carries no inline script (fast, names the file),
+ * and a real browser loading each kind of page reports no violation — which
+ * also catches what a scan can't, like a new third-party host or eval().
+ */
+test.describe("Content-Security-Policy", () => {
+  const DIST = join(dirname(fileURLToPath(import.meta.url)), "..", "web", "frontend", "dist");
+
+  function htmlFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return htmlFiles(p);
+      return e.name.endsWith(".html") ? [p] : [];
+    });
+  }
+
+  test("no built page carries an inline script or on*= handler", () => {
+    const files = htmlFiles(DIST);
+    // The static pages are built too, not just the SPA shell.
+    expect(files.map((f) => f.slice(DIST.length))).toContain("/scoring/gap/index.html");
+    const found = files.flatMap((f) =>
+      findInlineScripts(readFileSync(f, "utf8")).map((x) => `${f.slice(DIST.length)}: ${x.snippet}`)
+    );
+    expect(found, found.join("\n")).toEqual([]);
+  });
+
+  const PAGES = [
+    // Static pages (Astro), served with public/_headers.
+    "/",
+    "/about",
+    "/legal",
+    "/scoring",
+    "/scoring/gap",
+    "/scoring/open-distance",
+    "/scoring/data-cleaning",
+    "/scoring/track-validity",
+    "/no-such-page",
+    // The SPA shell via a _redirects rewrite.
+    "/submit",
+    // The SSR Function's pages, which get the headers from the middleware.
+    "/comp",
+    ":compHub",
+    ":scores",
+    ":waypoints",
+    ":task",
+    ":pilot",
+    ":taskAnalysis",
+    ":compAnalysis",
+    // The analysis page's one anonymous URL shape (issue #666).
+    ":analysis",
+  ] as const;
+
+  for (const path of PAGES) {
+    test(`${path} is served the policy and violates nothing`, async ({ page, request }) => {
+      let url: string = path;
+      if (path.startsWith(":")) {
+        const d = await discover(request);
+        url = {
+          ":compHub": `/comp/${d.compId}`,
+          ":scores": `/comp/${d.compId}/scores`,
+          ":waypoints": `/comp/${d.compId}/waypoints`,
+          ":task": `/comp/${d.compId}/task/${d.taskId}`,
+          ":pilot": `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`,
+          ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,
+          ":compAnalysis": `/comp/${d.compId}/analysis`,
+          ":analysis": `/analysis?compId=${d.compId}&taskId=${d.taskId}&pilotId=${d.pilotId}`,
+        }[path];
+      }
+
+      // Registered before any page script runs, so nothing escapes it.
+      await page.addInitScript(() => {
+        const seen: string[] = [];
+        (window as unknown as { __cspViolations: string[] }).__cspViolations = seen;
+        document.addEventListener("securitypolicyviolation", (e) => {
+          seen.push(`${e.effectiveDirective} blocked ${e.blockedURI || "(inline)"} at ${e.sourceFile}:${e.lineNumber}`);
+        });
+      });
+
+      const res = await page.goto(url);
+      expect(res, url).not.toBeNull();
+      expect(res!.headers()["content-security-policy"], url).toBe(CONTENT_SECURITY_POLICY);
+      await page.waitForLoadState("networkidle");
+
+      const violations = await page.evaluate(
+        () => (window as unknown as { __cspViolations: string[] }).__cspViolations
+      );
+      expect(violations, `${url}:\n${violations.join("\n")}`).toEqual([]);
+    });
+  }
 });

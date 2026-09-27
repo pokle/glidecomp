@@ -5,8 +5,9 @@
  * `report-uri` (the older `application/csp-report`, still what Firefox sends).
  *
  * Nothing is stored. Each violation becomes one log line, read with
- * `wrangler pages deployment tail`: while the policy is Report-Only this is how
- * we learn what enforcing it would break. Public and unauthenticated by
+ * `wrangler pages deployment tail`. The policy is enforced, so each line is
+ * something a visitor's browser REFUSED — a broken feature to fix, most likely
+ * an origin missing from web/frontend/src/security-headers.ts. Public and unauthenticated by
  * necessity (a browser sends these with no credentials), so the body is capped
  * and a request never gets anything back but an empty 204.
  */

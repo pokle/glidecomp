@@ -1,20 +1,15 @@
-# Content-Security-Policy, still Report-Only (security-review gap G-07):
-# violations are logged by functions/api/csp-report.ts and read with
-# `wrangler pages deployment tail`. `script-src 'self'` holds because the site
-# carries NO executable inline script — the theme and header scripts are files
-# (public/theme-init.js, public/site-header.js), Astro is told never to inline
-# a bundled script (static/astro.config.mjs), the SSR payload is a
-# non-executing JSON block (src/ssr-data.ts) and the analysis page's close
-# buttons use data attributes. Keep it that way rather than adding
-# 'unsafe-inline'. static.cloudflareinsights.com / cloudflareinsights.com are
-# Cloudflare Web Analytics, which Pages injects into every page.
+# Security headers, including the ENFORCED Content-Security-Policy. This block
+# is a literal copy of web/frontend/src/security-headers.ts — edit that module
+# and paste its output here; security-headers.test.ts fails while the two
+# differ. Pages never applies this file to Function responses, so
+# functions/_middleware.ts adds the same headers to the SSR'd /comp* pages.
 /*
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=()
   Reporting-Endpoints: csp="/api/csp-report"
-  Content-Security-Policy-Report-Only: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.tile.opentopomap.org https://server.arcgisonline.com https://api.mapbox.com; connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://cloudflareinsights.com; worker-src 'self' blob:; child-src 'self' blob:; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; report-to csp; report-uri /api/csp-report
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.tile.opentopomap.org https://server.arcgisonline.com https://api.mapbox.com https://*.googleusercontent.com; connect-src 'self' https://api.mapbox.com https://*.tiles.mapbox.com https://events.mapbox.com https://cloudflareinsights.com; worker-src 'self' blob:; child-src 'self' blob:; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; report-to csp; report-uri /api/csp-report
 
 # Build output — every filename in these two directories carries a content
 # hash (Vite emits `app-CHvJv1_e.js`, Astro emits `Base.CvppkQhU.css`), so a

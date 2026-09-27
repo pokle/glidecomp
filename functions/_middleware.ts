@@ -8,7 +8,14 @@
  * pages (/, /about, /legal, /scoring/*) alongside /api/*, /comp* and
  * /sitemap.xml precisely so they get this redirect (Pages _redirects can't
  * match on host); on any other hostname next() falls through to the asset.
+ *
+ * It also gives HTML the site's security headers, CSP included. Pages applies
+ * public/_headers to static assets only, never to a Function's response, so
+ * without this the SSR'd /comp* pages went out with no CSP at all. A header
+ * the response already carries (a static asset, from _headers) is left alone.
  */
+import { SECURITY_HEADERS } from "../web/frontend/src/security-headers";
+
 const PROD_ALIAS = "glidecomp.pages.dev";
 const CANONICAL_ORIGIN = "https://glidecomp.com";
 
@@ -17,5 +24,12 @@ export const onRequest: PagesFunction = async (context) => {
   if (url.hostname === PROD_ALIAS) {
     return Response.redirect(`${CANONICAL_ORIGIN}${url.pathname}${url.search}`, 301);
   }
-  return context.next();
+  const res = await context.next();
+  if (!(res.headers.get("content-type") ?? "").startsWith("text/html")) return res;
+  const missing = Object.entries(SECURITY_HEADERS).filter(([k]) => !res.headers.has(k));
+  if (missing.length === 0) return res;
+  // A response from next() can have immutable headers; copy before editing.
+  const out = new Response(res.body, res);
+  for (const [k, v] of missing) out.headers.set(k, v);
+  return out;
 };
