@@ -17,6 +17,8 @@ import { BrowserRouter } from "react-router-dom";
 import { initTheme } from "./lib/theme";
 import { installStaleDeployReload } from "./lib/stale-deploy";
 import { AppToaster } from "./lib/toast";
+import { maybeShowLegalNotice } from "./lib/legal-notice-toast";
+import { getCurrentUserOnce } from "../auth/client";
 import { InitialDataProvider, type InitialData } from "./lib/initial-data";
 import { AppProviders, AppRoutes } from "./routes";
 import { readSsrData } from "../ssr-data";
@@ -60,4 +62,13 @@ createRoot(document.createElement("div")).render(
   <StrictMode>
     <AppToaster />
   </StrictMode>
+);
+
+// The "terms changed" notice (./lib/legal-notice). The SSR payload already says
+// who is signed in; otherwise ask the one shared /me flight rather than a
+// second one. The delay lets the detached toaster above mount first — sonner
+// drops a toast published before its Toaster subscribes.
+const knownUser = initialData?.user;
+void (knownUser !== undefined ? Promise.resolve(knownUser) : getCurrentUserOnce()).then((user) =>
+  setTimeout(() => maybeShowLegalNotice(user), 1000)
 );
