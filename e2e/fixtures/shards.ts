@@ -103,6 +103,7 @@ export const E2E_SHARDS = {
     "search.spec.ts", // 10.6s
     "settings-save-ux.spec.ts", // 10.1s
     "account-name-sync.spec.ts", // new — not yet measured
+    "legal-notice.spec.ts", // new — not yet measured
     "not-found-suggestions.spec.ts", // 9.9s
     "full-screen-sheets.spec.ts", // 6.4s
     "non-route-links.spec.ts", // 2.2s

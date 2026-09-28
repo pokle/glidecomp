@@ -4,6 +4,7 @@ import {
   noticeAddress,
   sendTrackNotice,
   NOTICE_FROM_ADDRESS,
+  PRIVACY_CONTACT_ADDRESS,
 } from "../src/track-notice-email";
 
 function build(overrides: Partial<Parameters<typeof buildTrackNoticeEmail>[0]> = {}) {
@@ -46,6 +47,21 @@ describe("buildTrackNoticeEmail", () => {
     const msg = build();
     expect(msg.text).toContain("Sam Organiser (sam@example.com)");
     expect(msg.html).toContain('<a href="mailto:sam@example.com">');
+  });
+
+  test("tells a wrong recipient what to do, without a one-click action", () => {
+    // Organisers mistype addresses, so the notice can reach a stranger. They
+    // get a person to write to — never a link that acts when fetched, which a
+    // mail scanner would press for them.
+    const msg = build();
+    expect(msg.text).toContain("Not Jane Smith?");
+    expect(msg.text).toContain(PRIVACY_CONTACT_ADDRESS);
+    expect(msg.html).toContain("Not Jane Smith?");
+    expect(msg.html).toContain(`<a href="mailto:${PRIVACY_CONTACT_ADDRESS}">`);
+    const links = [...msg.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    expect(links.filter((h) => !h.startsWith("mailto:"))).toEqual([
+      "https://glidecomp.com/comp/voqc/task/bqlf",
+    ]);
   });
 
   test("still reads correctly when the comp has no named organiser", () => {
@@ -156,13 +172,17 @@ describe("the three things it can be about", () => {
     // The label tells the pilot which of their identifiers somebody is using
     // to submit as them — enough to act on. The VALUE would hand it to anyone
     // reading over their shoulder, so the builder is not even given one: the
-    // only address in the message is the organiser's, deliberately.
+    // only addresses in the message are the organiser's and the privacy
+    // contact's, deliberately.
     const msg = build({
       submitter: { kind: "anonymous", identifierLabel: "CIVL ID" },
       organisers: [],
     });
     expect(msg.text).toContain("CIVL ID");
-    expect(msg.text, "no address of any kind when no organiser is named").not.toContain("@");
+    expect(
+      msg.text.replaceAll(PRIVACY_CONTACT_ADDRESS, ""),
+      "no other address when no organiser is named"
+    ).not.toContain("@");
   });
 });
 

@@ -13,7 +13,7 @@ import BackLink from "../components/BackLink.astro";
           <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
           Privacy Policy &amp; Terms
         </h1>
-        <p class="text-muted-foreground mt-1">Last updated: April 6, 2026</p>
+        <p class="text-muted-foreground mt-1">Last updated: 28 September 2026</p>
       </header>
 
       {/* Table of Contents */}
@@ -41,143 +41,137 @@ import BackLink from "../components/BackLink.astro";
 
         <div class="space-y-6 text-sm leading-relaxed">
           <div>
-            <h3 class="text-lg font-semibold mb-2">1. What We Collect</h3>
+            <h3 class="text-lg font-semibold mb-2">1. Who We Are</h3>
             <p class="text-muted-foreground">
-              When you sign in with Google, we store your name, email address, and profile
-              picture to create your account. We do not access any other Google account data.
-            </p>
-            <p class="text-muted-foreground mt-2">
-              When you use GlideComp, we collect and store the following data on our servers:
-            </p>
-            <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
-              <li>IGC track files you upload</li>
-              <li>Task definitions and competition data</li>
-              <li>Analysis results and metadata associated with your tracks</li>
-            </ul>
-            <p class="text-muted-foreground mt-2">
-              Some data may also be cached locally in your browser (localStorage/IndexedDB) for
-              performance.
+              GlideComp is a free, non-commercial service for scoring and analysing hang gliding and paragliding competitions, run by Tushar Pokle. For anything about your data — seeing it, correcting it, deleting it, or making a complaint — email <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a>. Please don&rsquo;t use GitHub issues for this: they are public.
             </p>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">2. How We Use Your Data</h3>
+            <h3 class="text-lg font-semibold mb-2">2. What We Collect</h3>
             <ul class="list-disc list-inside text-muted-foreground space-y-1">
-              <li>
-                Account information (name, email, profile picture) is used to identify you within
-                the application
-              </li>
-              <li>
-                Track files and task data are stored securely in the cloud so you can access them
-                from any device
-              </li>
-              <li>
-                Analysis results are stored to avoid re-processing and to enable sharing features
-              </li>
+              <li><strong>Your account.</strong> If you sign in with Google: your name, email address and profile picture. We don&rsquo;t access any other Google account data. If you sign in with an emailed code: your email address.</li>
+              <li><strong>Sign-in sessions.</strong> Your IP address and browser type, kept with your session to keep you signed in and to protect against abuse.</li>
+              <li><strong>Competition registrations.</strong> Your name, email address, class, glider, team, pilot ID numbers (such as CIVL, FAI, SAFA, USHPA, BHPA, DHV or FFVL), world ranking points and a driver contact. <strong>An organiser can enter these for you, even if you don&rsquo;t have a GlideComp account.</strong></li>
+              <li><strong>Track logs (IGC files).</strong> Your flight&rsquo;s GPS positions, altitudes and times, and the pilot and glider details your flight instrument writes into the file.</li>
+              <li><strong>What organisers create.</strong> Competitions, tasks, waypoints, penalties, pilot status (such as absent or landed) and weather notes.</li>
+              <li><strong>Your own library.</strong> Tracks, tasks and notes you save to your account.</li>
             </ul>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">3. Third-Party Services</h3>
+            <h3 class="text-lg font-semibold mb-2">3. What Is Public</h3>
             <p class="text-muted-foreground">
-              GlideComp uses the following third-party services:
+              Competition results are public so that anyone can check them. For every competition except private test competitions, anyone — including search engines — can see pilot names and competition details (including glider and pilot ID numbers), track logs, scores and flight analysis, and the competition&rsquo;s activity log, which records who changed what.
             </p>
-            <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
-              <li>
-                <strong>Google OAuth</strong> — for authentication. Subject to
-                <a
-                  href="https://policies.google.com/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="underline hover:text-foreground"
-                >
-                  Google's Privacy Policy
-                </a>
-              </li>
-              <li>
-                <strong>Mapbox</strong> — for map rendering. Subject to
-                <a
-                  href="https://www.mapbox.com/legal/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="underline hover:text-foreground"
-                >
-                  Mapbox's Privacy Policy
-                </a>
-              </li>
-              <li>
-                <strong>Cloudflare</strong> — for hosting, content delivery, and cloud storage (R2
-                object storage and D1 database). Subject to
+            <p class="text-muted-foreground mt-2">
+              Pilot email addresses and driver contacts are visible only to that competition&rsquo;s organisers. When a track is submitted for you, we email you the organisers&rsquo; names and email addresses so you can contact them.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">4. Why We Use Your Data</h3>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1">
+              <li>To provide the service you use: your account, your uploads, and the competitions you run or fly in.</li>
+              <li>To publish fair, checkable competition results — a legitimate interest shared by pilots and organisers.</li>
+              <li>To email you every time a track is submitted for you, so a wrong or false submission can&rsquo;t go unnoticed.</li>
+              <li>To keep the service secure and prevent abuse.</li>
+            </ul>
+            <p class="text-muted-foreground mt-2">
+              We don&rsquo;t sell your data, show advertising, use analytics or tracking, or send marketing email. The only emails we send are sign-in codes and track submission notices.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">5. Services We Use</h3>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1">
+              <li><strong>Cloudflare</strong> — hosting, database, file storage and sending email. Subject to
                 <a
                   href="https://www.cloudflare.com/privacypolicy/"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="underline hover:text-foreground"
-                >
-                  Cloudflare's Privacy Policy
-                </a>
-              </li>
+                >Cloudflare&rsquo;s Privacy Policy</a></li>
+              <li><strong>Google</strong> — sign-in, if you choose it. Subject to
+                <a
+                  href="https://policies.google.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="underline hover:text-foreground"
+                >Google&rsquo;s Privacy Policy</a></li>
+              <li><strong>Mapbox</strong> — maps, terrain heights and place search. Mapbox&rsquo;s map library sends anonymous usage data to Mapbox. Subject to
+                <a
+                  href="https://www.mapbox.com/legal/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="underline hover:text-foreground"
+                >Mapbox&rsquo;s Privacy Policy</a></li>
+              <li><strong>Open-Meteo</strong> — weather for a task. We send only the task&rsquo;s location and date. Subject to
+                <a
+                  href="https://open-meteo.com/en/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="underline hover:text-foreground"
+                >Open-Meteo&rsquo;s Terms</a></li>
+              <li><strong>FAI / CIVL</strong> — we read the world rankings the FAI publishes. We send them nothing.</li>
             </ul>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">4. Cookies &amp; Local Storage</h3>
+            <h3 class="text-lg font-semibold mb-2">6. Where Your Data Is Stored</h3>
             <p class="text-muted-foreground">
-              We use cookies for authentication sessions. We may use your browser's localStorage
-              and IndexedDB to cache data and store application preferences locally on your
-              device.
+              On Cloudflare&rsquo;s global network, which may be outside your country, including in the United States. Cloudflare&rsquo;s data processing terms include safeguards for international transfers.
             </p>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">5. Data Retention &amp; Deletion</h3>
+            <h3 class="text-lg font-semibold mb-2">7. Cookies &amp; Browser Storage</h3>
             <p class="text-muted-foreground">
-              You can delete your account at any time from your dashboard. This removes all
-              account data, uploaded track files, competition registrations, and associated
-              metadata from our servers, and revokes the Google OAuth grant. Local browser data
-              (localStorage/IndexedDB) can be cleared through your browser settings.
+              We use only the cookies needed to keep you signed in — no advertising or analytics cookies. Your browser also keeps your preferences and cached data (localStorage and IndexedDB), which you can clear in your browser settings.
             </p>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">6. Data Storage &amp; Security</h3>
+            <h3 class="text-lg font-semibold mb-2">8. Deleting Your Account</h3>
             <p class="text-muted-foreground">
-              Your data is stored on Cloudflare's infrastructure:
+              You can delete your account from your dashboard. This removes your account, profile, sessions and preferences, your saved tracks, tasks and notes, and your API keys, and revokes GlideComp&rsquo;s access to your Google account.
             </p>
-            <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
-              <li>Account and metadata are stored in Cloudflare D1 (SQLite database)</li>
-              <li>
-                Track files and other uploaded content are stored in Cloudflare R2 (object
-                storage)
-              </li>
-            </ul>
             <p class="text-muted-foreground mt-2">
-              We take reasonable measures to protect your data but cannot guarantee absolute
-              security. You are responsible for keeping your account credentials safe.
+              Competition records stay, but are no longer linked to your account: your registrations, the tracks you flew in competitions, your scores and activity log entries. They are part of each competition&rsquo;s published results, and removing them would change other pilots&rsquo; scores. If you want them removed or your name hidden, email us — we will work with the organiser and remove them unless there is a strong reason to keep them.
             </p>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">7. Children's Privacy</h3>
+            <h3 class="text-lg font-semibold mb-2">9. Your Rights</h3>
             <p class="text-muted-foreground">
-              GlideComp is not directed at children under 13. We do not knowingly collect
-              personal information from children under 13.
-            </p>
-          </div>
-
-          <div>
-            <h3 class="text-lg font-semibold mb-2">8. Contact</h3>
-            <p class="text-muted-foreground">
-              For privacy questions, open an issue on our
+              You can ask to see, correct or delete your data — including data an organiser entered about you — by emailing <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a>. We will reply within 30 days. If you are not satisfied, you can complain to your local privacy regulator; in Australia, that is the
               <a
-                href="https://github.com/pokle/glidecomp"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="underline hover:text-foreground"
-              >
-                GitHub repository
-              </a>
-              .
+                  href="https://www.oaic.gov.au/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="underline hover:text-foreground"
+                >OAIC</a>.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">10. Security &amp; Breaches</h3>
+            <p class="text-muted-foreground">
+              We take reasonable steps to protect your data, but no system is perfectly secure. If a breach puts your data at risk, we will tell you and the relevant regulator promptly.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">11. Children</h3>
+            <p class="text-muted-foreground">
+              GlideComp is not directed at children under 13, and we don&rsquo;t knowingly collect their data. Junior pilots aged 13–17 may be registered by a competition organiser; a parent or guardian can ask us to remove a junior&rsquo;s data at <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a>.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">12. Changes</h3>
+            <p class="text-muted-foreground">
+              We will tell you about material changes as described in the Terms (<a href="#terms-changes" class="underline hover:text-foreground">section 9</a>).
             </p>
           </div>
         </div>
@@ -210,7 +204,7 @@ import BackLink from "../components/BackLink.astro";
           <div>
             <h3 class="text-lg font-semibold mb-2">3. User Accounts</h3>
             <p class="text-muted-foreground">
-              You may create an account using Google sign-in. You are responsible for maintaining
+              You may create an account using Google sign-in or a code emailed to you. You are responsible for maintaining
               the security of your account. You may delete your account at any time.
             </p>
           </div>
@@ -272,12 +266,17 @@ import BackLink from "../components/BackLink.astro";
             </p>
           </div>
 
-          <div>
+          <div id="terms-changes">
             <h3 class="text-lg font-semibold mb-2">9. Changes to Terms</h3>
             <p class="text-muted-foreground">
-              We may update these terms from time to time. Continued use of GlideComp after
-              changes constitutes acceptance of the updated terms. Changes will be reflected in
-              the "Last updated" date at the top of this page.
+              We may update these terms. If a change materially affects you, we will show a notice on GlideComp at least 14 days before it takes effect. Minor changes, such as corrections and clarifications, take effect when we publish them. If you don&rsquo;t agree with a change, you can stop using GlideComp and delete your account. The &ldquo;Last updated&rdquo; date at the top of this page shows when these terms last changed.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">10. Contact</h3>
+            <p class="text-muted-foreground">
+              Questions about these terms: <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a>.
             </p>
           </div>
         </div>
