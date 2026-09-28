@@ -23,6 +23,7 @@ import {
   type GAPParameters,
 } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
+import { deleteTrackFiles, trackFileKeys } from "../track-files";
 
 const MAX_COMPS_PER_ACCOUNT = 50;
 
@@ -923,12 +924,17 @@ export const compRoutes = new Hono<AuthedEnv>()
       // tracked by the comp's absence in listings; if needed later we could
       // move audit_log to its own retention table.
 
-      // D1 cascade deletes handle child rows
+      // D1 cascade deletes handle child rows; the track files are R2's, so
+      // name them before the cascade removes the rows that do.
+      const trackKeys = await trackFileKeys(
+        c.env.DB,
+        "task_id IN (SELECT task_id FROM task WHERE comp_id = ?)",
+        compId
+      );
       await c.env.DB.prepare("DELETE FROM comp WHERE comp_id = ?")
         .bind(compId)
         .run();
-
-      // TODO (Iteration 9): Enqueue R2 cleanup via Cloudflare Queue
+      await deleteTrackFiles(c.env.R2, trackKeys);
 
       return c.json({ success: true });
     }
