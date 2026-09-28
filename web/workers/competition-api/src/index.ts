@@ -29,6 +29,7 @@ import { visualizationRoutes } from "./routes/visualization";
 import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
 import { civlRankingsRoutes } from "./routes/civl-rankings";
+import { purgeExpiredAuthData } from "./data-retention";
 
 const app = new Hono<AuthedEnv>();
 
@@ -175,6 +176,12 @@ export default {
     let swept = 0;
     if (controller.cron === NIGHTLY_SWEEP_CRON) {
       swept = await sweepSearchIndex(env.DB);
+      // The privacy policy's retention promises (./data-retention).
+      const purged = await purgeExpiredAuthData(env.DB);
+      console.log(
+        `[retention] purged ${purged.sessions} sessions, ` +
+          `${purged.verifications} sign-in codes, ${purged.rateLimits} rate-limit rows`
+      );
     }
     const drained = await drainSearchIndex(env.DB, DRAIN_PASSES_PER_CRON);
     console.log(
