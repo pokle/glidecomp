@@ -4,6 +4,203 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-09-27
+
+A quiet cycle: **`bun audit` opened and closed at 0 vulnerabilities**, and every
+upgrade below is a patch or additive minor that needed no source change. The one
+finding worth recording is not a version at all — the D1 schema-validation bug
+this project reported upstream last cycle has been fixed, and the config line
+that works around it is staying anyway. See Code Changes.
+
+### Security Vulnerabilities Fixed
+
+**None — and none were open.** `bun audit` was re-run fresh at the start of the
+cycle rather than trusting the 2026-09-20 count (2026-08-09 lesson) and reported
+**0 vulnerabilities**, the second clean audit in a row. It reports 0 after this
+cycle's changes too.
+
+Two upgrades below are nonetheless security-adjacent and were taken for that
+reason as much as for the fixes:
+
+- **sharp 0.35.4 → 0.35.5** carries libvips **1.3.4** (up from 1.3.3) and adds
+  upper-bounds checks on the `linear` and GIF `delay` array lengths. No CVE is
+  claimed, but sharp is the package the critical astro AVIF advisory
+  (GHSA-26w7-cxv4-gfx2) actually resolves to — the whole of astro 7.2.8's fix for
+  it was raising sharp's floor — so this tree's `sharp` override is the thing that
+  keeps that advisory answered. The override moves with it, to `^0.35.5`.
+- **hono 4.13.9** hardens its JWT verifier: an invalid base64url signature now
+  throws `JwtTokenInvalid` rather than propagating a decode error. **Checked, and
+  it does not apply here** — `grep` for `hono/jwt` across `web/`, `functions/` and
+  `e2e/` returns nothing, and the session-cookie verification added in `42d7141`
+  (`web/workers/shared/src/session-cookie.ts`) uses `jose`'s `jwtVerify`, not
+  hono's. Taken as a general robustness bump, not as a fix this tree needed.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth** | 1.7.5 | 1.7.6 | frontend, auth-api | **Fixes the D1 schema-validation bug this repo reported last cycle** ([#11346](https://github.com/better-auth/better-auth/issues/11346) → [#11366](https://github.com/better-auth/better-auth/pull/11366)): introspection is tried first and falls back to one `PRAGMA table_info` per configured table when the catalogue read is refused. Also: over-long passwords are rejected before hashing rather than after, a React hydration fix for a session query that resolves early, an auth-query race where an older response could overwrite a newer one, and an OAuth-proxy social-linking fix. Additive features (`bannedUserMessage`, a Vercel BotID captcha provider, a CLI `check schema` command) are unused here. **No schema or migration change** — the `account` table this log has watched across 1.7 is untouched. |
+| **@better-auth/api-key** | 1.7.5 | 1.7.6 | auth-api | Version-locked to better-auth. |
+| **hono** | 4.13.8 | 4.13.9 | frontend, auth-api, competition-api, airscore-api (+ root override) | Nine bug fixes, no breaking changes. The one that touches a code path this repo runs is `Accept`/`Accept-Language` media-type and language-tag matching becoming case-insensitive; the JWT fix is in `hono/jwt`, which nothing here imports (see above). Also: the linear router no longer matches an empty path segment as a parameter, pretty-JSON no longer breaks on an unparseable body, and JSX `Suspense`/`ErrorBoundary` content survives newlines. The rest is AWS Lambda and Lambda@Edge adapter work, which nothing here uses. |
+| **astro** | 7.3.3 | 7.3.5 | frontend (dev) | Two patch releases. 7.3.4 fixes incremental builds re-rendering unchanged pages that reference bundled assets, double-escaped ampersands in Markdown image `alt`/`title`, three error names rendering with a spurious "Error" suffix, dev-server module-graph re-evaluation on every request from the `astro:head-metadata` plugin, domain-based i18n routing ignoring `security.allowedDomains`, and invalid `object-position` values for contradictory keyword pairs; it also bumps `@astrojs/markdown-satteri` to 0.4.2. 7.3.5 adds a container-API `renderComponent()`. **None of it reaches the prerendered content pages** — they are `.astro` files with no Markdown, no i18n and no container API — and `bun run build` produces the same 9 pages. 7.3.4 also improves the message `astro check` prints under TypeScript 7; this repo does not run `astro check`. |
+| **lucide-react** | 1.47.0 | 1.48.0 | frontend | New icons only (`briefcase-plus`, `square-sparkles`, `house-cog`, and three `line-dot-*`), plus artwork edits to `card-sim`, `map-pinned` and `mail-pen`. **Nothing renamed, removed or deprecated** — the failure mode to watch for here, and the frontend's own `typecheck` (which is what would catch it) is clean. |
+| **sharp** | 0.35.4 | 0.35.5 | frontend (dev) + root override | See the security note above. Also: multi-frame options for JXL output in the types, a non-existent named export removed from the types, wider accepted dimensions for `extend`, and gain-map support for `extract`/`rotate`. The Astro image pipeline is the only consumer and `bun run build` runs it over all 51 image variants. |
+| **vite** | 8.3.0 | 8.3.1 | frontend (dev) + root override | Patch. `server.ws: false` now survives `mergeConfig`, `build.rolldownOptions.output.comments` merges correctly, the optimiser stops skipping imports whose binding name starts with `type` and resolves pending discovered-dep work on close before init, the server no longer reinitialises the watcher when a file is added after close, and sourcemap injection skips URL source roots. Bug fixes only. |
+
+### Code Changes Required
+
+**No source change was needed to make anything work.** The two edits below are
+both about a workaround whose upstream cause has now been fixed, and both are
+comments rather than behaviour:
+
+- **`web/workers/auth-api/src/auth.ts`** — the `advanced.database.validateSchema:
+  false` comment told the next reader to watch
+  [better-auth#11346](https://github.com/better-auth/better-auth/issues/11346)
+  and "re-test before deleting this line" when it closed. It has closed, and
+  1.7.6 carries the fix. The comment now says so, and says why the line stays
+  `false` regardless.
+- **`docs/auth.md`** — the same correction in the prose, in
+  [the schema section](auth.md#the-schema-and-who-checks-it).
+
+**The line stays `false`, and that is the decision, not an omission.** Better
+Auth can validate the schema on D1 now, but enabling it would buy no information
+the repo does not already have: `web/workers/auth-api/test/schema.test.ts` asserts
+the same drift, table by table and column by column, off the same
+`getAuthTables(auth.options)` the library's own check reads — at test time, where
+a failure is a red CI run. Turning the runtime check on instead trades that for
+per-request `PRAGMA` round trips on a live auth path that can only ever fail
+closed, and where only a *clean* verdict is cached. That is a deliberate change
+with its own blast radius; it is not a tidy-up to ride in on a routine bump.
+Whoever picks it up should read the last cycle's entry first — 59 tests failed
+with `D1_ERROR: not authorized: SQLITE_AUTH` the last time this was on.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `hono` (`^4.13.8` → `^4.13.9`) | **Updated** | Keeps the override aligned with the four workspaces' own specs. |
+| `sharp` (`^0.35.4` → `^0.35.5`) | **Updated** | Keeps the floor that answers GHSA-26w7-cxv4-gfx2 above astro's own `optionalDependencies: { sharp: "^0.35.4" }`. |
+| `vite` (`^8.3.0` → `^8.3.1`) | **Updated** | Keeps the tree-wide pin at the frontend's own resolved version. |
+
+None added, none removed. Full list after this cycle: `@babel/core`,
+`@hono/node-server`, `brace-expansion`, `defu`, `devalue`, `browserslist`,
+`esbuild`, `fast-uri`, `form-data`, `hono`, `js-yaml`, `kysely`, `nanoid`,
+`postcss`, `protocol-buffers-schema`, `qs`, `shell-quote`, `sharp`, `smol-toml`,
+`svgo`, `undici`, `vite`, `ws`.
+
+`bun.lock` was checked after installing rather than trusting the ranges
+(2026-08-09 lesson): exactly one key each for `hono@4.13.9`, `sharp@0.35.5`,
+`vite@8.3.1` and `devalue`, with no second nested copy. (`@tailwindcss/vite` is a
+different package, not a nested `vite`.)
+
+### Packages Not Upgraded (intentional)
+
+Every row was re-checked against the current `package.json`/`bun.lock` this cycle
+rather than copied forward (2026-08-23 lesson), and every "latest" below was read
+from `npm view` today.
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.142.0 | **Still capped — 10 cycles.** `npm view wrangler@<version> dependencies.miniflare` re-run this cycle for 4.120.0, 4.130.0, 4.135.0, 4.140.0 and 4.142.0: every one reports an alpha (`5.20260801.1-alpha` → `5.20260926.0-alpha`). Nothing has appeared on the stable miniflare 4.x line since 4.116.0 and the gap is now 26 releases wide. Re-check with that same command before ever bumping. |
+| @cloudflare/vitest-pool-workers | 0.19.1 | 0.22.0 | Paired with the wrangler cap. `npm view @cloudflare/vitest-pool-workers@0.22.0 dependencies` re-run this cycle: `wrangler 4.124.0` + `miniflare 5.20260815.0-alpha`. Unchanged from 2026-09-20 — 0.22.0 is still the latest, so nothing new to evaluate. |
+| **vitest** | 4.1.11 | 5.0.2 | Purely wrangler-gated (the Vite 8 half of this deferral ended with PR #699). vitest 5 needs a `@cloudflare/vitest-pool-workers` that supports it, and every such release bundles the alpha miniflare above. Already at latest within `^4`. |
+| **react**, **react-dom** | 19.2.8 | 19.3.0 | **Third cycle deferred, and that is now one cycle past what the last entry thought reasonable.** The reasoning has not expired — these are pinned *exactly*, the SPA is server-rendered, and a React minor is a hydration-surface change — but "deferred again" is how a deferral goes stale (see the better-auth lesson of 2026-09-20). Carried here deliberately rather than by habit: 19.3.0 is still documented as additive (`<ViewTransition>`, Fragment refs, `react-dom`'s `browser()`, independent transitions) with no breaking changes, so this is a scheduling choice, not a blocker. **The next cycle should either do it or open an issue for it**, lifting `@types/react`/`@types/react-dom` to `~19.3.x` in the same change, and reading `test:e2e:ssr`'s 12 hydration-mismatch checks as the verdict. |
+| @types/react, @types/react-dom | 19.2.18 / 19.2.7 | 19.3.0 / 19.3.0 | Held at `~19.2.x` deliberately so the types cannot run ahead of the pinned runtime (2026-09-13 lesson). Lift with react/react-dom, never alone. |
+| **@astrojs/mdx** | 7.0.8 | 8.0.2 | **The case for deleting it got stronger, not weaker.** Re-verified this cycle: `find web/frontend/static -name '*.mdx' -o -name '*.md'` still returns nothing, and the Astro config still registers `integrations: [mdx()]`, dragging `@mdx-js/mdx`, `@astrojs/markdown-remark` and the remark/rehype/unified chain into a build that never enters Astro's Markdown pipeline. New this cycle: astro 7.3.4 moved its bundled `@astrojs/markdown-satteri` to **0.4.2**, while `@astrojs/mdx@7.0.8` peer-declares `^0.3.1` — an *optional* peer, so bun says nothing, on top of the `@astrojs/markdown-remark@7.2.4` vs astro's `^7.3.0` mismatch the last cycle found. Two silent peer mismatches on an integration with no content to process. Removing it is still the likelier right answer than upgrading to 8, and it is still a change to the Astro build config rather than a version bump, so it still wants its own PR. |
+| **three**, **@types/three** | 0.185.1 / 0.185.4 | 0.186.1 / 0.186.0 | Pre-1.0 minor bump (equivalent to a major, same treatment as `kysely` and `katex`), and three's minors routinely move renderer APIs. The 3D replay is the only consumer; defer to a focused PR that can actually look at it. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20260927.1 | **Major (5.x).** `npm view @cloudflare/workers-types dist-tags` re-run this cycle: `latest: 5.20260927.1`, and the only other tags are a 2024 `alpha` and a 2025 `beta` — there is no 4.x dist-tag. The 4.x line has ended; evaluate 5.x in a focused PR. |
+| typescript | 7.0.2 | 7.0.2 | Already at latest — re-confirmed this cycle. |
+| zod | 3.25.76 | 4.6.5 | Major. Standalone task — `@hono/zod-validator` 0.9.1 accepts both. |
+| kysely | 0.28.17 | 0.29.6 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.28`. Worth noting that `better-auth@1.7.6` now declares `kysely: ^0.28.17 \|\| ^0.29.0`, so the auth adapter is no longer what would hold this back. Still a focused PR. |
+| jsdom | 25.0.1 | 30.1.1 | Major version jump. Already at latest within `^25`. Defer. |
+| katex | 0.17.0 | 0.18.9 | Pre-1.0 minor bump (equivalent to major). Already at latest within `^0.17`. Defer. |
+| concurrently | 9.2.4 | 10.0.5 | Major. ESM-only, drops `--name-separator`. Already at latest within `^9`. Low priority. |
+| @types/node | 25.9.8 | 26.6.3 | Major. Already at latest within `^25`. Stay on 25.x. |
+
+### Verification
+
+- `bun run typecheck:all` — all 6 workspace typechecks pass (root, engine,
+  airscore-api, auth-api, competition-api, dev-router).
+- `bun run --filter '@glidecomp/frontend' typecheck` — clean, run separately
+  because `typecheck:all` reaches the frontend only through the root `tsc`
+  project. This is the check that would have caught a lucide-react icon rename.
+- `bun run test:all` — **1643** root/engine/airscore-api/dev-router/scripts tests
+  (92 files) + **897** frontend (62 files) + **129** auth-api (11 files, 6 todo)
+  + **780** competition-api (46 files). All pass, 0 fail. The auth-api count
+  includes `test/schema.test.ts`, which is what stands in for the runtime schema
+  check discussed above.
+- `bun run build` — clean, including the Astro static build (9 pages) and its
+  sharp image pipeline over all 51 image variants, and the frontend's production
+  chunking.
+- `bun run test:e2e` — **215 passed, 9 skipped** in 14.1 minutes, exit 0, on the
+  first run, no flakes and no re-runs needed. (Up from 212+8 on 2026-09-20; the
+  suite is now 27 spec files.)
+- `bun run test:e2e:ssr` — **66/66 passed** in 1.3 minutes, exit 0, including all
+  12 "no hydration mismatch" checks and the 21 new Content-Security-Policy
+  route checks from `9a7f8e4`. This is the run that proves better-auth 1.7.6 did
+  not move the session cookie or its signing — the server-rendered pages forward
+  it to resolve the visitor — and it is also what would catch an astro 7.3.4
+  whitespace or escaping change in the prerendered content pages.
+- `bun audit` — **0 vulnerabilities before and after.** Re-run fresh rather than
+  trusting the 2026-09-20 count (2026-08-09 lesson).
+- `bun run check:scoring-note` — not required; no scoring source changed, and
+  nothing under `web/engine/src/` was touched at all.
+- Root `package.json` `dependencies` read at the start of the run and
+  `git diff package.json` checked after every `bun update`: the three legitimate
+  root entries (`@fontsource/atkinson-hyperlegible-next`, `mapbox-gl`,
+  `threebox-plugin`) are all that is there, and no stray arrived this cycle.
+- Runtime floors checked against CI: the highest `engines.node` among the
+  upgraded packages is astro 7.3.5's `>=22.12.0`, and `.github/workflows/*.yml`
+  install Node 22 at all four `setup-node` sites. No workflow change needed.
+
+### Lessons / Notes for Future Sessions
+
+- **An upstream fix landing is not by itself a reason to remove the workaround.**
+  This cycle's most interesting finding is that better-auth 1.7.6 fixes
+  [#11346](https://github.com/better-auth/better-auth/issues/11346), the D1
+  `SQLITE_AUTH` bug this project reported last cycle — the config comment
+  literally said "when that closes, re-test before deleting this line". It has
+  closed, and the line is staying. The reason is worth internalising: the
+  workaround costs nothing (a test asserts the same thing, earlier and more
+  loudly), while undoing it adds a per-request failure path to sign-in. **Ask
+  what removing the workaround BUYS, not just whether it is still needed** — and
+  see the Code Changes section for the full argument, which is now recorded in
+  `auth.md` rather than only here.
+- **Do correct a stale comment even when you change no behaviour.** The
+  workaround stayed, but the comment telling the next reader to watch an issue
+  that has since closed did not. A comment that sends a future session to chase
+  a resolved issue is a small, compounding tax; the two-line fix belongs in the
+  cycle that discovered it.
+- **`cd <workspace> && bun update <pkgs>` behaved again — fifth cycle running.**
+  Four workspace-scoped runs (frontend, auth-api, competition-api, airscore-api),
+  no stray root additions from any of them, `git diff package.json` clean after
+  each. It rewrote each workspace's own ranges to the newly-resolved versions,
+  which is the intended outcome. This form is now well enough established that a
+  future cycle should treat a stray root dependency as a signal that something
+  ELSE added it (as the 2026-09-09 security commit did with `hono`), not as this
+  command misbehaving.
+- **Two clean audits in a row is a new state for this log, and the reason is
+  structural.** The audit has been non-zero in almost every entry since April,
+  and it is zero now because PR #699 moved astro to 7.x and because the
+  `overrides` block has absorbed the rest. Don't read a clean audit as a reason to
+  skip `bun audit` next cycle — the 2026-08-09 lesson (advisories get indexed
+  against versions you already have) cuts both ways, and this cycle's 0 was
+  confirmed fresh rather than assumed.
+- **Both `@astrojs/mdx` peer mismatches are invisible to bun**, because both are
+  *optional* peers. `bun install --dry-run` prints no warning at all. The only way
+  this surfaces is reading the lockfile entry against astro's — worth doing for any
+  integration that looks vestigial. See its row above; the removal case is now
+  two mismatches deep and still unactioned.
+- **Playwright needed no manual browser install**, as the routine promises — no
+  Playwright bump this cycle, and `web/scripts/ensure-playwright-browsers.sh` had
+  nothing to fetch. Still not worth re-deriving the old workaround.
+- **Routine edited this cycle:** `.claude/commands/upgrade-deps.md` now warns not
+  to pipe the backgrounded `bun run test:e2e` through `tail`. It takes longer than
+  one tool call, so it gets backgrounded — and `tail` buffers until the pipeline
+  closes, which leaves the output file at zero bytes for the whole 14 minutes.
+  A hung suite and a healthy one look identical that way. Check the process, not
+  the (empty) output.
+
 ## 2026-09-20 — better-auth 1.6.26 → 1.7.5 (focused PR, not a weekly cycle)
 
 **The blocker that deferred this for four cycles no longer exists — and 1.7.3
