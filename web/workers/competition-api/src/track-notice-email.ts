@@ -40,6 +40,10 @@ export interface EmailSendBinding {
 
 export const NOTICE_FROM_ADDRESS = "no-reply@glidecomp.com";
 
+/** Where a stranger who got this by mistake writes — the privacy contact
+ *  named on /legal. `no-reply@` cannot be the answer to "this isn't me". */
+export const PRIVACY_CONTACT_ADDRESS = "tushar.pokle@gmail.com";
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -119,6 +123,11 @@ export function buildTrackNoticeEmail(input: TrackNoticeInput): EmailMessage {
     ? `If that was you, there is nothing to do — the new track is the one that will be scored.`
     : `If that was you, there is nothing to do.`;
 
+  // The address came from an organiser's roster, and organisers mistype. A
+  // mailto rather than a one-click "not me" action: mail scanners fetch every
+  // link in a message, and would press such a button for the recipient.
+  const wrongRecipient = `Not ${pilotName}? An organiser may have entered your email address by mistake. Please let them know, or write to ${PRIVACY_CONTACT_ADDRESS} and we will remove it.`;
+
   const text = [
     `Hi ${pilotName},`,
     ``,
@@ -135,6 +144,8 @@ export function buildTrackNoticeEmail(input: TrackNoticeInput): EmailMessage {
     ``,
     `See what is on file now:`,
     taskUrl,
+    ``,
+    wrongRecipient,
     ``,
     `— GlideComp`,
   ].join("\n");
@@ -163,6 +174,8 @@ export function buildTrackNoticeEmail(input: TrackNoticeInput): EmailMessage {
     )}`,
     ` Every submission is recorded in the competition's public activity log.</p>`,
     `<p><a href="${escapeHtml(taskUrl)}">See what is on file now</a></p>`,
+    `<p>Not ${escapeHtml(pilotName)}? An organiser may have entered your email address by mistake.`,
+    ` Please let them know, or write to <a href="mailto:${PRIVACY_CONTACT_ADDRESS}">${PRIVACY_CONTACT_ADDRESS}</a> and we will remove it.</p>`,
     `<p>— GlideComp</p>`,
   ].join("");
 
