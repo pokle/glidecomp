@@ -304,7 +304,7 @@ export function buildRoute(
       radius > MAX_RADIUS
     ) {
       errors.push(
-        `${label} (${name || "unnamed"}): radius must be a whole number of meters between ${MIN_RADIUS} and ${MAX_RADIUS}`
+        `${label} (${name || "unnamed"}): radius must be a whole number of metres between ${MIN_RADIUS} and ${MAX_RADIUS}`
       );
       geometryComplete = false;
     }

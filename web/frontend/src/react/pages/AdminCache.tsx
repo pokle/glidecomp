@@ -172,7 +172,7 @@ export function AdminCache() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Cache</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Materialized scores in D1, the search index, the KV replay-bundle
+            Materialised scores in D1, the search index, the KV replay-bundle
             cache, and the AirScore proxy cache
           </p>
         </div>
