@@ -17,6 +17,7 @@ import type { z } from "zod";
 import { bumpAndRevalidateScores } from "../score-store";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
+import { deleteTrackFiles, trackFileKeys } from "../track-files";
 
 const MAX_TASKS_PER_COMP = 50;
 
@@ -580,10 +581,13 @@ export const taskRoutes = new Hono<AuthedEnv>()
         return c.json({ error: "Task not found" }, 404);
       }
 
-      // D1 cascade deletes handle task_class and task_track rows
+      // D1 cascade deletes handle task_class and task_track rows; the track
+      // files are R2's, so name them before the cascade removes the rows.
+      const trackKeys = await trackFileKeys(c.env.DB, "task_id = ?", taskId);
       await c.env.DB.prepare("DELETE FROM task WHERE task_id = ?")
         .bind(taskId)
         .run();
+      await deleteTrackFiles(c.env.R2, trackKeys);
 
       await audit(c.env.DB, c.var.user, compId, {
         subject_type: "task",

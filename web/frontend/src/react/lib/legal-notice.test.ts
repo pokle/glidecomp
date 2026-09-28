@@ -1,5 +1,11 @@
 import { describe, test, expect } from "vitest";
-import { LEGAL_NOTICE, shouldShowLegalNotice, type LegalNotice } from "./legal-notice";
+import {
+  LEGAL_NOTICE,
+  formatLegalDate,
+  legalNoticeEffectiveDate,
+  shouldShowLegalNotice,
+  type LegalNotice,
+} from "./legal-notice";
 
 const notice: LegalNotice = { version: "2026-09-28", message: "Updated." };
 
@@ -34,5 +40,21 @@ describe("shouldShowLegalNotice", () => {
   test("the shipped version is a real date", () => {
     expect(LEGAL_NOTICE.version).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(Number.isNaN(Date.parse(`${LEGAL_NOTICE.version}T00:00:00Z`))).toBe(false);
+  });
+});
+
+describe("dates", () => {
+  test("formats a date the same way everywhere", () => {
+    expect(formatLegalDate("2026-10-13")).toBe("13 October 2026");
+  });
+
+  test("a change takes effect the notice period after publication", () => {
+    expect(legalNoticeEffectiveDate(notice)).toBe("2026-10-12");
+  });
+
+  test("the toast names the effective date the page prints", () => {
+    expect(LEGAL_NOTICE.message).toContain(
+      formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE))
+    );
   });
 });

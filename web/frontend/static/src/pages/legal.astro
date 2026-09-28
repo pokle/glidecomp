@@ -2,6 +2,16 @@
 /** Privacy Policy & Terms page. Ported from react/pages/Legal.tsx. */
 import Base from "../layouts/Base.astro";
 import BackLink from "../components/BackLink.astro";
+import {
+  LEGAL_NOTICE,
+  formatLegalDate,
+  legalNoticeEffectiveDate,
+} from "../../../src/react/lib/legal-notice";
+
+// The same constant drives the "terms changed" toast, so the date the page
+// prints and the date the toast announces cannot disagree.
+const published = formatLegalDate(LEGAL_NOTICE.version);
+const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
 ---
 
 <Base title="GlideComp - Privacy Policy & Terms">
@@ -13,7 +23,10 @@ import BackLink from "../components/BackLink.astro";
           <img src="/icon.svg" alt="GlideComp logo" class="w-8 h-8" />
           Privacy Policy &amp; Terms
         </h1>
-        <p class="text-muted-foreground mt-1">Last updated: 28 September 2026</p>
+        <p class="text-muted-foreground mt-1">Last updated: {published}</p>
+        <p class="text-muted-foreground mt-1">
+          The changes of {published} (Terms sections 5, 7 and 12) take effect on {effective}.
+        </p>
       </header>
 
       {/* Table of Contents */}
@@ -132,7 +145,18 @@ import BackLink from "../components/BackLink.astro";
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">8. Deleting Your Account</h3>
+            <h3 class="text-lg font-semibold mb-2">8. How Long We Keep Data</h3>
+            <ul class="list-disc list-inside text-muted-foreground space-y-1">
+              <li><strong>Your account and saved library:</strong> until you delete your account.</li>
+              <li><strong>Sign-in sessions</strong> (with your IP address and browser type): a session ends after 60 days without use, and we delete it within a day of ending.</li>
+              <li><strong>Sign-in codes:</strong> they expire after 10 minutes, and we delete them within a day.</li>
+              <li><strong>IP addresses used to limit abuse</strong> (for example, of sign-in attempts and submissions made without an account): deleted within two days.</li>
+              <li><strong>Competition data</strong> (registrations, tracks, scores and the activity log): kept as the published record of the competition, unless its organiser deletes the competition or we remove it on request (see section 9).</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">9. Deleting Your Account</h3>
             <p class="text-muted-foreground">
               You can delete your account from your dashboard. This removes your account, profile, sessions and preferences, your saved tracks, tasks and notes, and your API keys, and revokes GlideComp&rsquo;s access to your Google account.
             </p>
@@ -142,7 +166,7 @@ import BackLink from "../components/BackLink.astro";
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">9. Your Rights</h3>
+            <h3 class="text-lg font-semibold mb-2">10. Your Rights</h3>
             <p class="text-muted-foreground">
               You can ask to see, correct or delete your data — including data an organiser entered about you — by emailing <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a>. We will reply within 30 days. If you are not satisfied, you can complain to your local privacy regulator; in Australia, that is the
               <a
@@ -155,23 +179,23 @@ import BackLink from "../components/BackLink.astro";
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">10. Security &amp; Breaches</h3>
+            <h3 class="text-lg font-semibold mb-2">11. Security &amp; Breaches</h3>
             <p class="text-muted-foreground">
               We take reasonable steps to protect your data, but no system is perfectly secure. If a breach puts your data at risk, we will tell you and the relevant regulator promptly.
             </p>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">11. Children</h3>
+            <h3 class="text-lg font-semibold mb-2">12. Children</h3>
             <p class="text-muted-foreground">
               GlideComp is not directed at children under 13, and we don&rsquo;t knowingly collect their data. Junior pilots aged 13–17 may be registered by a competition organiser; a parent or guardian can ask us to remove a junior&rsquo;s data at <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a>.
             </p>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">12. Changes</h3>
+            <h3 class="text-lg font-semibold mb-2">13. Changes</h3>
             <p class="text-muted-foreground">
-              We will tell you about material changes as described in the Terms (<a href="#terms-changes" class="underline hover:text-foreground">section 9</a>).
+              We will tell you about material changes as described in the Terms (<a href="#terms-changes" class="underline hover:text-foreground">section 11</a>).
             </p>
           </div>
         </div>
@@ -220,7 +244,14 @@ import BackLink from "../components/BackLink.astro";
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">5. Acceptable Use</h3>
+            <h3 class="text-lg font-semibold mb-2">5. Organisers</h3>
+            <p class="text-muted-foreground">
+              If you run a competition on GlideComp, you are responsible for the pilot details you enter, such as names, email addresses, pilot ID numbers and driver contacts. Only enter details you are entitled to use to run the competition, keep them accurate, and correct or remove them when a pilot asks. Results, tracks and the activity log are public, so don&rsquo;t write anything in a penalty reason, weather note or other text field that you wouldn&rsquo;t say publicly about the pilot.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">6. Acceptable Use</h3>
             <p class="text-muted-foreground">You agree not to:</p>
             <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
               <li>Use the service for any unlawful purpose</li>
@@ -229,11 +260,19 @@ import BackLink from "../components/BackLink.astro";
                 Reverse engineer or attempt to extract the source code (beyond what is publicly
                 available on GitHub)
               </li>
+              <li>Upload content you don&rsquo;t have the right to share, or enter false information about other people</li>
             </ul>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">6. Disclaimer of Warranties</h3>
+            <h3 class="text-lg font-semibold mb-2">7. Reporting Content</h3>
+            <p class="text-muted-foreground">
+              If you think something on GlideComp is wrong, unlawful or defamatory, or infringes your rights, email <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a> with a link to it and a description of the problem. We will review it, and may edit, hide or remove it. We may also remove content, or suspend an account, that breaks these terms.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">8. Disclaimer of Warranties</h3>
             <p class="text-muted-foreground">
               GlideComp is provided "as is" without warranties of any kind, either express or
               implied. We do not guarantee that the service will be uninterrupted, error-free, or
@@ -243,7 +282,7 @@ import BackLink from "../components/BackLink.astro";
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">7. Limitation of Liability</h3>
+            <h3 class="text-lg font-semibold mb-2">9. Limitation of Liability</h3>
             <p class="text-muted-foreground">
               To the fullest extent permitted by law, GlideComp and its contributors shall not be
               liable for any indirect, incidental, special, or consequential damages arising from
@@ -252,7 +291,7 @@ import BackLink from "../components/BackLink.astro";
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">8. Open Source</h3>
+            <h3 class="text-lg font-semibold mb-2">10. Open Source</h3>
             <p class="text-muted-foreground">
               GlideComp is open-source software. The source code is available on
               <a
@@ -267,14 +306,21 @@ import BackLink from "../components/BackLink.astro";
           </div>
 
           <div id="terms-changes">
-            <h3 class="text-lg font-semibold mb-2">9. Changes to Terms</h3>
+            <h3 class="text-lg font-semibold mb-2">11. Changes to Terms</h3>
             <p class="text-muted-foreground">
               We may update these terms. If a change materially affects you, we will show a notice on GlideComp at least 14 days before it takes effect. Minor changes, such as corrections and clarifications, take effect when we publish them. If you don&rsquo;t agree with a change, you can stop using GlideComp and delete your account. The &ldquo;Last updated&rdquo; date at the top of this page shows when these terms last changed.
             </p>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-2">10. Contact</h3>
+            <h3 class="text-lg font-semibold mb-2">12. Governing Law</h3>
+            <p class="text-muted-foreground">
+              These terms are governed by the laws of Victoria, Australia, and the courts of Victoria have jurisdiction. Nothing in these terms limits rights you have under consumer law, including the Australian Consumer Law, that cannot be excluded.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-semibold mb-2">13. Contact</h3>
             <p class="text-muted-foreground">
               Questions about these terms: <a href="mailto:tushar.pokle@gmail.com" class="underline hover:text-foreground">tushar.pokle@gmail.com</a>.
             </p>

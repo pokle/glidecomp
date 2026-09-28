@@ -18,6 +18,7 @@ import { linkExistingRegistrations } from "../pilot-linker";
 import { audit, auditAll, describeChange } from "../audit";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
+import { deleteTrackFiles, trackFileKeysForPilots } from "../track-files";
 
 /** How many pilot-link lookups to run at once on a bulk roster import. */
 const PILOT_RESOLVE_CONCURRENCY = 10;
@@ -650,9 +651,14 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         ),
       ];
 
+      // The removed pilots' track files, named before the cascade drops the
+      // rows that point at them.
+      const trackKeys = await trackFileKeysForPilots(c.env.DB, toDelete);
+
       if (statements.length > 0) {
         await c.env.DB.batch(statements);
       }
+      await deleteTrackFiles(c.env.R2, trackKeys);
 
       await bumpAndRevalidateScores(c, scoreAffectedTaskIds);
 
@@ -978,12 +984,15 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       // task_track rows this looks at.
       const affectedTaskIds = await taskIdsForPilots(c.env.DB, [compPilotId]);
 
+      const trackKeys = await trackFileKeysForPilots(c.env.DB, [compPilotId]);
+
       // Cascade deletes task_track rows for this comp_pilot.
       await c.env.DB.prepare(
         "DELETE FROM comp_pilot WHERE comp_pilot_id = ?"
       )
         .bind(compPilotId)
         .run();
+      await deleteTrackFiles(c.env.R2, trackKeys);
 
       await bumpAndRevalidateScores(c, affectedTaskIds);
       await audit(c.env.DB, c.var.user, compId, {
