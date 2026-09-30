@@ -56,6 +56,7 @@
 | 2026-09-09 | [round](security-review/rounds/2026-09-09.md) | Day-difficulty metrics + comp-wide section nav; SEC-50 (dependency-audit regression, 1 critical) + SEC-49 fixed inline |
 | 2026-09-16 | [round](security-review/rounds/2026-09-16.md) | Routine dependency-upgrade window only; SEC-50 confirmed held; no new findings |
 | 2026-09-23 | [round](security-review/rounds/2026-09-23.md) | Astro 6→7 closes SEC-34/G-16 (`bun audit` now clean); SEC-51 (public waypoint-CSV formula injection) fixed inline |
+| 2026-09-30 | [round](security-review/rounds/2026-09-30.md) | `bun audit` regressed to 18 (4 high) — SEC-52 fixed inline (third G-20 recurrence); JWKS session-cookie cache reviewed clean; SEC-53 (Low) + SEC-54 (Info) documented |
 
 ## Findings register
 
@@ -116,6 +117,9 @@ rounds linked here.
 | SEC-49 | Account display-name write (`/api/auth/set-name`, `/api/auth/set-username`) skips the SEC-22 defence-in-depth text checks applied everywhere else | Fixed | [2026-09-02](security-review/rounds/2026-09-02.md) | [2026-09-09](security-review/rounds/2026-09-09.md) — `@glidecomp/worker-kit/name-text`, both routes |
 | SEC-50 | `bun audit` regression: hono/js-yaml/sharp/svgo/smol-toml advisories (13 vulnerabilities, 1 critical) via newly-disclosed CVEs against already-locked, range-satisfying versions | Fixed | [2026-09-09](security-review/rounds/2026-09-09.md) | Fixed same round — five overrides bumped/added, `bun audit` back to the SEC-34 residual (now 5, incl. a Critical) |
 | SEC-51 | Public waypoint-CSV export (`GET /api/comp/:comp_id/waypoints/csv` + per-task equivalent, both unauthenticated) missing the shared CSV/DDE formula-injection guard | Fixed | [2026-09-23](security-review/rounds/2026-09-23.md) | Fixed same round — `csvFieldGuarded()` in `web/engine/src/waypoint-export.ts`, scoped to the one format actually served as `text/csv`; regression test added |
+| SEC-52 | `bun audit` regression: undici/fast-uri/ip-address/brace-expansion (18 advisories, 4 high) via locked, range-satisfying dev/build-time versions | Fixed | [2026-09-30](security-review/rounds/2026-09-30.md) | Fixed same round — four overrides raised/added, `bun audit` clean again |
+| SEC-53 | `functions/api/csp-report.ts` enforces its 64 KB cap on `Content-Length` (0 when absent) before buffering the body, so a chunked upload is read in full | Open (Low) | [2026-09-30](security-review/rounds/2026-09-30.md) | Gap G-22 |
+| SEC-54 | Revoked/signed-out-elsewhere session keeps working at competition-api + SSR for up to 5 min (session-cookie cache) | Accepted (by design, Info) | [2026-09-30](security-review/rounds/2026-09-30.md) | Documented in `auth.ts`; account deletion reads D1 |
 
 ## Standing scope gaps
 
@@ -164,40 +168,30 @@ list; earlier rounds' per-round gap numbers do not correspond.)
   spreadsheet app. Re-check that reasoning if any of them ever gains a
   spreadsheet-facing `Content-Type` or a new consumer that hands the file to
   a browser as `text/*`.
+- **G-22** — SEC-53: stream-cap (or reject no-`Content-Length`) in `csp-report.ts`.
+- **G-23** — Live check that `/api/auth/jwks` answers anonymously and returns public key members only (source review says so; not verified on a deploy).
 
 ## Where to start the next review
 
-1. Commit reviewed up to: **HEAD = `f1477ca`** (base `06f7108`). Both
-   `.github/workflows/` and `functions/` were present in this session's
-   checkout; if a future sandboxed session lacks `.github/workflows/`
-   again, diff that file with
-   `diff <(git show <rev1>:path) <(git show <rev2>:path)`, not a `git diff`
-   pathspec, which silently returns empty there.
-2. **SEC-45 (G-10) is the only open engine-DoS finding of its class and the
-   top open item — now six rounds running with no fix PR started.** It
-   needs its own PR: oracle tests over the S7F 2026 suite, a bound on
-   `computeBestProgress`'s `exactAt()` evaluations (or a time-based
-   Lipschitz prune), a ~60k-fix adversarial wandering track under a hard
-   timeout, a `scoring-changes/` note, and archive parity measurement. The
-   SEC-46 fix ([2026-08-17](security-review/rounds/2026-08-17.md)) is the
-   template at smaller scale.
-3. **`bun audit` reads 0 vulnerabilities for the first time this log has
-   recorded** (astro 6→7 closed the last residual, SEC-34/G-16, this round).
-   Confirm it holds next round — the G-20 pattern (a newly-disclosed CVE
-   against an already-pinned, range-satisfying version) has bitten twice
-   already (SEC-48, SEC-50) and could reappear on any of the five packages
-   those rounds pinned via `overrides`.
-4. **G-21** — SEC-51's sibling waypoint-export formats (SeeYou `.cup`,
-   CompeGPS, OziExplorer, FS) were deliberately left unguarded against
-   formula injection because they're served `application/octet-stream` and
-   read literally by flight-instrument software; re-check that reasoning if
-   any of them gains a spreadsheet-facing `Content-Type` or a browser-facing
-   `text/*` consumer.
-5. **G-20** — decide whether `upgrade-deps` should routinely force
-   re-resolution to latest-patch for in-range dependencies (`bun update
-   --latest` or equivalent). Not re-triggered this round.
-6. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved across the last
-   six rounds.
-7. The CSP (G-07) is enforced; check the `csp-violation` log lines for
-   anything the tests missed.
-8. Do NOT re-open SEC-03 (accepted by design).
+1. Commit reviewed up to: **HEAD = `517e35f`**. `.github/workflows/` and
+   `functions/` were present; if a future sandboxed session lacks
+   `.github/workflows/`, diff with `diff <(git show <rev1>:path) <(git show <rev2>:path)`,
+   not a `git diff` pathspec.
+2. **SEC-45 (G-10)** remains the top open engine-DoS item — seven rounds
+   running with no fix PR. Needs its own oracle-tested PR (bound
+   `computeBestProgress`'s `exactAt()` evaluations, ~60k-fix adversarial
+   track, `scoring-changes/` note, archive parity).
+3. **`bun audit` regressed the week after first reading clean (SEC-52) — the
+   third G-20 recurrence.** Confirm it still reads 0; decide G-20 (make
+   `upgrade-deps` re-resolve with `bun update --latest`) rather than
+   re-fixing overrides by hand each round.
+4. Fix SEC-53 (G-22, small) and verify G-23 (JWKS endpoint exposure) on a live
+   deploy, alongside G-02/G-03/G-04.
+5. The new JWKS session-cookie cache (`shared/src/session-cookie.ts`) was
+   reviewed clean; re-check it on any better-auth bump (cookie names, `typ`,
+   `aud` are copied internals pinned by `session-cache.test.ts`).
+6. G-21: revisit if the non-CSV waypoint exporters gain a spreadsheet-facing
+   Content-Type.
+7. Chase SEC-26/29/31/40 (G-08/G-12/G-13/G-11) — none moved in seven rounds.
+8. Check `csp-violation` log lines now the CSP is enforced everywhere (G-07).
+9. Do NOT re-open SEC-03 (accepted by design).
