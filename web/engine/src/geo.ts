@@ -139,6 +139,49 @@ export function ellipsoidDistance(
   return WGS84_B * A * (sigma - deltaSigma);
 }
 
+/**
+ * A point on the surface of the WGS84 ellipsoid, as Earth-centred,
+ * Earth-fixed Cartesian coordinates (metres). Only {@link chordLowerBound}
+ * reads these.
+ */
+export interface EcefPoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** The ECEF position of a point on the WGS84 ellipsoid (height 0). */
+export function ecefOnEllipsoid(lat: number, lon: number): EcefPoint {
+  const toRad = Math.PI / 180;
+  const e2 = WGS84_F * (2 - WGS84_F);
+  const sinPhi = Math.sin(lat * toRad);
+  const cosPhi = Math.cos(lat * toRad);
+  const n = WGS84_A / Math.sqrt(1 - e2 * sinPhi * sinPhi);
+  return {
+    x: n * cosPhi * Math.cos(lon * toRad),
+    y: n * cosPhi * Math.sin(lon * toRad),
+    z: n * (1 - e2) * sinPhi,
+  };
+}
+
+/**
+ * The straight-line chord between two surface points: a cheap LOWER BOUND
+ * on {@link ellipsoidDistance}, never a measurement. No path along the
+ * surface, the geodesic included, is shorter than the straight line through
+ * the ellipsoid, so a chord longer than some distance proves the geodesic
+ * is too.
+ *
+ * It exists so a hot loop can skip a Vincenty call it can prove would not
+ * change a decision (the best-progress search's Lipschitz prune). It must
+ * not stand in for a distance: §7.1.5 requires every scored distance to be
+ * an InverseGeodesic.
+ */
+export function chordLowerBound(a: EcefPoint, b: EcefPoint): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const dz = a.z - b.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
 
 /**
  * The S7F 2026 §7.1.4 InverseGeodesic: distance AND initial azimuth between

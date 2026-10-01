@@ -465,15 +465,21 @@ function buildBestProgressItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[]
           .slice(nextIdx)
           .map((p) => ({ latitude: p.lat, longitude: p.lon })),
       ];
+    // SEC-45: the search ran out of its work budget. The point is still
+    // exact; say how much closer a point it never checked could have been.
+    const capped = result.bestProgress.searchCapped;
+    const cappedNote = capped
+      ? ` This track has an unusually large number of points about equally far from goal, so the search for the best one stopped after ${capped.routesMeasured} route measurements. A point it did not check could be at most ${km(Math.max(0, result.bestProgress.distanceToGoal - capped.lowerBound), 2)} closer to goal.`
+      : '';
     out.push({
       id: 'best-progress',
       text: `Landed out — best distance made good along the task, ${km(result.bestProgress.distanceToGoal)} short of goal`,
       value: fmt(result.bestProgress.time),
-      detail: nextIsGoal
+      detail: (nextIsGoal
         ? `The marked point is where the flight had the least distance still to fly to ${goalIsLine ? 'the goal line' : 'goal'}${nextName ? ` (${nextName})` : ''}. Scored distance is measured along the task to this point: ${km(entry.flown_distance)}.`
         : nextIsExit
           ? `The next turnpoint, ${nextDesc}, is an exit cylinder — it counts only when the pilot flies OUT of its ${km(task.turnpoints[nextIdx]?.radius ?? 0)} boundary, and this flight never did. The marked point is where the flight had the least distance still to fly — measured as the shortest route from that point out to the boundary and on through the remaining turnpoints to goal — so the scored distance is ${km(entry.flown_distance)}.`
-          : `The marked point is where the flight had the least distance still to fly — measured as the shortest route from that point through the remaining turnpoints (next: ${nextDesc}) to goal, not as a straight line to goal — so the scored distance is ${km(entry.flown_distance)}.`,
+          : `The marked point is where the flight had the least distance still to fly — measured as the shortest route from that point through the remaining turnpoints (next: ${nextDesc}) to goal, not as a straight line to goal — so the scored distance is ${km(entry.flown_distance)}.`) + cappedNote,
       anchor: {
         kind: 'best_progress',
         latitude: result.bestProgress.latitude,

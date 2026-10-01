@@ -111,7 +111,7 @@ rounds linked here.
 | SEC-42 | Unvalidated external URL in official-results `href` | Fixed | [2026-08-12](security-review/rounds/2026-08-12.md) | Fixed same round (`safeExternalUrl()`) + regression test |
 | SEC-43 | Route-editor CSV export missing formula-injection guard | Fixed | [2026-08-12](security-review/rounds/2026-08-12.md) | Fixed same round — shared `csvEscape()` |
 | SEC-44 | `PATCH /pilot/:id` omits 3 fields from the audit log | Fixed | [2026-08-12](security-review/rounds/2026-08-12.md) | Fixed same round + regression test |
-| SEC-45 | O(fixes)×O(turnpoints²) PathFinder route-optimiser search, reachable via anonymous upload | **Open (deferred) — top open item** | [2026-08-12](security-review/rounds/2026-08-12.md) | Gap G-10 — needs its own oracle-tested PR (rolls the engine generation) |
+| SEC-45 | O(fixes)×O(turnpoints²) PathFinder route-optimiser search, reachable via anonymous upload | Fixed | [2026-08-12](security-review/rounds/2026-08-12.md) | Fixed 2026-10-01 in its own PR — chord-filtered prune + metered work budget; oracle tests (`best-progress-oracle.test.ts`) + 60k-fix contour regression (`best-progress-adversarial.test.ts`); `scoring-changes/052`, archive parity byte-identical |
 | SEC-46 | Same-timestamp O(n²) scan in `circle-detector.ts` | Fixed | [2026-08-12](security-review/rounds/2026-08-12.md) | [2026-08-17](security-review/rounds/2026-08-17.md) — persistent pointer + budgeted fallback, oracle tests |
 | SEC-47 | `setFlightInfo` renders the pilot name into `innerHTML` unescaped | Fixed | [2026-08-17](security-review/rounds/2026-08-17.md) | Fixed same round |
 | SEC-48 | `bun audit` regression: qs/fast-uri/browserslist via unused `shadcn` devDependency, undercounted by a stale `fast-uri` override | Fixed | [2026-09-02](security-review/rounds/2026-09-02.md) | Fixed same round — overrides added/bumped, `bun audit` back to the SEC-34 residual |
@@ -145,7 +145,7 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 - **G-07** — CLOSED 2026-09-27: CSP enforced on every page, SSR'd `/comp*` included (`functions/_middleware.ts`). One definition in `web/frontend/src/security-headers.ts`; `security-headers.test.ts` pins `_headers` to it and scans page sources for inline script; the SSR e2e suite fails on any browser-reported violation; reports reach `functions/api/csp-report.ts`.
 - **G-08** — SEC-26: packer/task-analysis decompression cap + test.
 - **G-09** — Extend `html-sinks.test.ts` from count-pinning towards content (statement-level escapeHtml check) if a tenth SEC-41-class instance ever appears.
-- **G-10** — SEC-45: bound the PathFinder branch-and-bound search; oracle tests + ~60k-fix adversarial regression, in its own PR (`scoring-changes/` note + archive parity measurement owed).
+- **G-10** — CLOSED 2026-10-01: SEC-45 fixed. The best-progress search's Lipschitz prune now filters each comparison by the ECEF chord (a provable lower bound on the geodesic, so every decision is unchanged), and the search runs on a deterministic budget — route optimisations weighted by (zones to go)², plus prune comparisons — 16× and 28× above the heaviest of the archive's 2,695 landed-out flights. Oracle tests pin it to brute-force §9.3 and to the pre-fix answers; a 60k-fix contour track went from 147 s to under 1 s; best progress over all 5,220 bundled + archive tracks is byte-identical. The engine still has no turnpoint-count cap of its own (SEC-45's related note); the weighted budget makes this path independent of it.
 - **G-11** — SEC-40: bound or restructure `findSubCores` in `thermal-shape.ts`.
 - **G-12** — SEC-29: parser loop bounds + `file.size` pre-check + regression test.
 - **G-13** — SEC-31: byte/fix-based task-analysis cap.
@@ -208,8 +208,8 @@ list; earlier rounds' per-round gap numbers do not correspond.)
    new per-address lockout, which lasts up to an hour. Proposed wording for
    that case only: "Too many wrong codes for this address. Try again in an
    hour, or sign in with Google." Consider an 8-digit code or Turnstile (A8).
-5. **SEC-45 (G-10)** remains the top open engine-DoS item, eight rounds
-   running; A7 is the class-level answer for it and SEC-26/29/31/40.
+5. **SEC-45 (G-10) is fixed** (2026-10-01, its own PR). A7 remains the
+   class-level answer for SEC-26/29/31/40.
 6. `bun audit` read clean twice running; G-20 is still undecided (A6
    proposes a scheduled audit).
 7. Fix SEC-53 (G-22, small); SEC-60 (A5) is a similarly small,

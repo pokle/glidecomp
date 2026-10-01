@@ -12,7 +12,9 @@ import {
   destinationPoint,
   calculateBearingRadians,
   isInsideCylinder,
-  getCirclePoints
+  getCirclePoints,
+  ecefOnEllipsoid,
+  chordLowerBound
 } from '../src/geo';
 import { createFix } from './test-helpers';
 
@@ -574,6 +576,38 @@ describe('inverseGeodesic ↔ ellipsoidDistance parity', () => {
       const lon2 = rnd() * 360 - 180;
       expect(inverseGeodesic(lat1, lon1, lat2, lon2).distance)
         .toBe(ellipsoidDistance(lat1, lon1, lat2, lon2));
+    }
+  });
+});
+
+describe('chordLowerBound (the best-progress prune filter, SEC-45)', () => {
+  // The prune skips a Vincenty call only when the chord proves the geodesic
+  // is too long to matter, so the chord must never exceed ellipsoidDistance
+  // by more than Vincenty's own rounding (its iteration stops at ~6 µm;
+  // the search allows a 1 cm margin on top).
+  it('never exceeds ellipsoidDistance beyond rounding, from 1 m to across a continent', () => {
+    let seed = 12345;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (let k = 0; k < 2000; k++) {
+      const lat = -80 + rand() * 160;
+      const lon = -180 + rand() * 360;
+      const d = 10 ** (rand() * 6.5); // 1 m … ~3,000 km
+      const q = destinationPoint(lat, lon, d, rand() * 2 * Math.PI);
+      const chord = chordLowerBound(ecefOnEllipsoid(lat, lon), ecefOnEllipsoid(q.lat, q.lon));
+      const geodesic = ellipsoidDistance(lat, lon, q.lat, q.lon);
+      expect(chord).toBeLessThanOrEqual(geodesic + 1e-4);
+    }
+  });
+
+  it('is the geodesic to well under a millimetre at track scale', () => {
+    const a = { lat: -36.185833, lon: 147.976667 };
+    for (const d of [1, 7, 50, 500, 1000]) {
+      const q = destinationPoint(a.lat, a.lon, d, 1.1);
+      const chord = chordLowerBound(ecefOnEllipsoid(a.lat, a.lon), ecefOnEllipsoid(q.lat, q.lon));
+      expect(ellipsoidDistance(a.lat, a.lon, q.lat, q.lon) - chord).toBeLessThan(1e-3);
     }
   });
 });
