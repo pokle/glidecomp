@@ -157,7 +157,7 @@ export const cacheRoutes = new Hono<AuthedEnv>()
     const airscoreStats = await getAirscoreCacheStats(c.env.AIRSCORE_API);
 
     const namespaces: NamespaceStats[] = [
-      { name: "Materialized scores (D1)", ...scoreStoreStats },
+      { name: "Materialised scores (D1)", ...scoreStoreStats },
       { name: "Search index (D1)", ...searchStats },
       { name: "Score cache (KV)", ...kvStats },
     ];

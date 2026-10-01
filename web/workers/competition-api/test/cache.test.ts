@@ -80,7 +80,7 @@ describe("GET /api/admin/cache/stats", () => {
     const data = (await res.json()) as CacheStatsResponse;
 
     const scoreStore = data.namespaces.find(
-      (ns) => ns.name === "Materialized scores (D1)"
+      (ns) => ns.name === "Materialised scores (D1)"
     )!;
     expect(scoreStore.by_prefix["Task scores (stale)"]).toBeGreaterThanOrEqual(1);
     expect(scoreStore.item_count).toBeGreaterThanOrEqual(1);

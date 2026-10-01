@@ -943,13 +943,13 @@ export function PilotScoreDetail() {
               >
                 {!mapInView ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Loading map...
+                    Loading map…
                   </div>
                 ) : (
                 <Suspense
                   fallback={
                     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      Loading map...
+                      Loading map…
                     </div>
                   }
                 >

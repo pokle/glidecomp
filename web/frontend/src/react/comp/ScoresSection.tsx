@@ -119,7 +119,7 @@ export function ScoresSection({
         </h2>
       ) : null}
       {state.kind === "loading" ? (
-        <p className="mt-2 text-muted-foreground">Loading scores...</p>
+        <p className="mt-2 text-muted-foreground">Loading scores…</p>
       ) : null}
       {state.kind === "no-route" ? (
         <p className="mt-2 text-muted-foreground">No scores yet — task route not defined</p>
