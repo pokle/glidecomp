@@ -48,7 +48,8 @@ is still exact, really measured from a real fix, so a pilot is never credited
 with more than they flew. Because the search works through the most promising
 fixes first, it can also say how much it might have missed: no fix it never
 checked can be closer to goal than a stated bound. The result records both
-(`BestProgress.searchCapped`).
+(`BestProgress.searchCapped`), and the pilot's report card says so in the
+landed-out explanation.
 
 Only a track with an extraordinary number of points about equally far from
 goal can reach this, and no track in the archive does.

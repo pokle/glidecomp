@@ -351,6 +351,7 @@ describe('explainGapScore — flight narrative', () => {
     // the routed course, not the point nearest goal in a straight line.
     expect(bp!.detail).toContain('next: ESS (ESSWP)');
     expect(bp!.detail).toContain('not as a straight line to goal');
+    expect(bp!.detail).not.toContain('search for the best one');
     expect(bp!.anchor!.kind).toBe('best_progress');
     // The anchor carries the routed distance-to-goal polyline: the
     // best-progress point, then each un-reached turnpoint's tag point to goal.
@@ -363,6 +364,55 @@ describe('explainGapScore — flight narrative', () => {
     const time = section(explanation, 'time');
     expect(time.items[0].id).toBe('no-time-points');
     expect(explanation.headline).toBe('Landed out at 42.0 km — 280 points');
+  });
+
+  it('says so when the best-progress search ran out of budget (SEC-45)', () => {
+    const sss = reaching(1, 30, 'last_before_next');
+    const result: TurnpointSequenceResult = {
+      ...makeReentryResult(),
+      crossings: [crossing(1, 30, 'exit')],
+      sequence: [sss, reaching(2, 60, 'first_after_previous')],
+      sssReaching: sss,
+      essReaching: null,
+      madeGoal: false,
+      lastTurnpointReached: 2,
+      bestProgress: {
+        fixIndex: 900,
+        time: at(90),
+        latitude: -36.3,
+        longitude: 147.3,
+        distanceToGoal: 18_000,
+        searchCapped: { routesMeasured: 6250, lowerBound: 17_850 },
+      },
+      flownDistance: 42_000,
+      speedSectionTime: null,
+    };
+    const entry: ScoreEntryInput = {
+      ...makeGoalEntry(),
+      made_goal: false,
+      reached_ess: false,
+      flown_distance: 42_000,
+      speed_section_time: null,
+      distance_points: 280,
+      distance_linear_points: 280,
+      time_points: 0,
+      total_score: 280,
+    };
+
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result,
+      entry,
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+
+    const flight = section(explanation, 'flight');
+    const bp = flight.items.find((i) => i.id === 'best-progress');
+    expect(bp).toBeDefined();
+    expect(bp!.detail).toContain(
+      'This track has an unusually large number of points about equally far from goal, so the search for the best one stopped after 6250 route measurements. A point it did not check could be at most 0.15 km closer to goal.',
+    );
   });
 
   it('flags the no-SSS fallback and a start measured from the first fix', () => {
