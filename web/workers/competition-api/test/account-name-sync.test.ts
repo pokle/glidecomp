@@ -28,7 +28,7 @@ const ORIGINAL_NAME = "Original Name";
 /** PATCH the profile as `user-rename`, with whichever mock flags are wanted. */
 function patchProfile(
   body: Record<string, unknown>,
-  flags: { sync?: boolean; failSetName?: boolean } = {}
+  flags: { sync?: boolean; failSetName?: boolean; apiKey?: boolean } = {}
 ): Promise<Response> {
   const cookie = [
     `better-auth.test-user=${USER}`,
@@ -40,7 +40,11 @@ function patchProfile(
 
   return SELF.fetch("https://test/api/comp/pilot", {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: cookie,
+      ...(flags.apiKey ? { "x-api-key": "glc_test" } : {}),
+    },
     body: JSON.stringify(body),
   });
 }
@@ -152,6 +156,15 @@ describe("PATCH /api/comp/pilot keeps the account's display name in step", () =>
     expect(res.status).toBe(503);
 
     // The profile is untouched: a half-saved rename is the bug, not the fix.
+    expect(await profileName()).toBe(ORIGINAL_NAME);
+  });
+
+  test("an API key cannot rename the account, and saves nothing (SEC-57)", async () => {
+    const res = await patchProfile(
+      { name: "Renamed By A Key" },
+      { sync: true, apiKey: true }
+    );
+    expect(res.status).toBe(403);
     expect(await profileName()).toBe(ORIGINAL_NAME);
   });
 

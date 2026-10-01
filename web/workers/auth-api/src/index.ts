@@ -9,13 +9,14 @@ import { isValidNameText, normaliseNameText, NAME_TEXT_ERROR } from "@glidecomp/
 import { bodyLimit } from "hono/body-limit";
 import { APIError } from "better-auth/api";
 import {
+  API_KEY_HEADER,
   createAuth,
   getDevOtp,
   isLocalDev,
   runWithExecutionCtx,
   type AuthEnv,
 } from "./auth";
-import { isServedAuthEndpoint } from "./endpoints";
+import { isServedAuthEndpoint, requiresBrowserSession } from "./endpoints";
 import {
   normalizeEmail,
   otpSendAllowed,
@@ -63,6 +64,26 @@ app.use("/api/auth/*", async (c, next) => {
     res.headers.set("Retry-After", "60");
     c.res = res;
   }
+});
+
+// An API key is not a way to manage the account (SEC-57): it cannot create,
+// list or revoke keys, rename the account or its handle, or delete it. The
+// plugin decides a request is an API-key session by this header alone — over
+// any session cookie sent with it — so its presence is the whole test. A
+// browser never sends it (CORS does not allow it cross-origin, and the app
+// does not set it). Registered ahead of every route it guards.
+app.use("/api/auth/*", async (c, next) => {
+  if (c.req.raw.headers.has(API_KEY_HEADER) && requiresBrowserSession(c.req.path)) {
+    return c.json(
+      {
+        code: "BROWSER_SESSION_REQUIRED",
+        error:
+          "An API key cannot manage the account. Sign in to GlideComp in a browser to manage API keys, change your name or username, or delete your account.",
+      },
+      403
+    );
+  }
+  await next();
 });
 
 // Surface unhandled exceptions as a JSON body instead of Hono's bare
@@ -444,7 +465,8 @@ app.get("/api/auth/dev-last-otp", (c) => {
 });
 
 // API key create/list/delete are handled by the @better-auth/api-key plugin
-// via the catch-all handler below. Programmatic clients verify API keys by
+// via the catch-all handler below, for a browser session only (SEC-57, the
+// guard near the top of this file). Programmatic clients verify API keys by
 // calling GET /api/auth/me with the x-api-key header — enableSessionForAPIKeys
 // makes this return the user associated with the key.
 

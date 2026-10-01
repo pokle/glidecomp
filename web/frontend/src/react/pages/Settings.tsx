@@ -34,7 +34,10 @@ interface ApiKey {
   name: string | null;
   createdAt: string;
   updatedAt: string;
-  lastUsedAt?: string | null;
+  /** When the key last made a request: the api-key plugin's own field name. */
+  lastRequest?: string | null;
+  /** Every key made since SEC-57 has one; auth-api's API_KEY_LIFETIME_DAYS. */
+  expiresAt?: string | null;
 }
 
 /**
@@ -590,7 +593,10 @@ function ApiKeysSection() {
         title="API keys"
         description={
           <>
-            Grant scoring agents programmatic access to your account. See the{" "}
+            Grant scoring agents programmatic access to your account. Keys
+            expire after 90 days and can't manage your account — creating
+            keys, renaming or deleting the account needs you signed in here.
+            See the{" "}
             <a
               href="https://github.com/pokle/glidecomp/blob/master/docs/api.md"
               target="_blank"
@@ -632,6 +638,7 @@ function ApiKeysSection() {
                 <Column isRowHeader>Label</Column>
                 <Column>Created</Column>
                 <Column>Last used</Column>
+                <Column>Expires</Column>
                 <Column>
                   <span className="sr-only">Actions</span>
                 </Column>
@@ -645,9 +652,16 @@ function ApiKeysSection() {
                       {new Date(key.createdAt).toLocaleDateString()}
                     </Cell>
                     <Cell className="font-mono tabular-nums">
-                      {key.lastUsedAt
-                        ? new Date(key.lastUsedAt).toLocaleDateString()
+                      {key.lastRequest
+                        ? new Date(key.lastRequest).toLocaleDateString()
                         : "Never"}
+                    </Cell>
+                    <Cell className="font-mono tabular-nums">
+                      {!key.expiresAt
+                        ? "—"
+                        : new Date(key.expiresAt).getTime() <= Date.now()
+                          ? "Expired"
+                          : new Date(key.expiresAt).toLocaleDateString()}
                     </Cell>
                     <Cell>
                       <Button
@@ -679,6 +693,7 @@ function ApiKeysSection() {
               value={keyName}
               onChange={setKeyName}
               placeholder="e.g. My scoring agent"
+              description="This key will expire in 90 days. Create a new one when it does."
               autoFocus
             />
             <DialogFooter>

@@ -89,6 +89,24 @@ async function inBackground(work: Promise<unknown>): Promise<void> {
  */
 export const SESSION_CACHE_MAX_AGE_S = 5 * 60;
 
+/**
+ * The one header that turns a request into an API-key session. Stated here
+ * rather than left to the plugin's default so index.ts, which refuses key
+ * sessions on account management (SEC-57), checks the same header the plugin
+ * reads: a second header the plugin honoured and the guard did not would walk
+ * straight past it.
+ */
+export const API_KEY_HEADER = "x-api-key";
+
+/**
+ * How long an API key lives (SEC-57). A key carries its whole account, so one
+ * that never expires is one leak away from being someone else's for good.
+ * Settings states this figure in its copy ("Keys expire after 90 days"), and
+ * migration 0036 gave every key made before it the same lifetime from the day
+ * it ran. Change all three together.
+ */
+export const API_KEY_LIFETIME_DAYS = 90;
+
 /** How long an isolate trusts its copy of the `jwks` table. */
 const JWKS_CACHE_MS = 5 * 60 * 1000;
 
@@ -250,7 +268,15 @@ function buildAuth(env: AuthEnv) {
       // @better-auth/core with structurally identical but nominally distinct types.
       apiKey({
         defaultPrefix: "glc_",
+        apiKeyHeaders: API_KEY_HEADER,
         enableSessionForAPIKeys: true,
+        keyExpiration: {
+          defaultExpiresIn: API_KEY_LIFETIME_DAYS * 24 * 60 * 60, // seconds
+          // A caller cannot pick its own lifetime: what Settings promises is
+          // what every key gets. (Extending one is /api-key/update, which
+          // endpoints.ts does not serve.)
+          disableCustomExpiresTime: true,
+        },
         rateLimit: {
           enabled: true,
           timeWindow: API_KEY_RATE_LIMIT.timeWindowMs,

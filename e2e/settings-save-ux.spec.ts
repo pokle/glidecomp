@@ -132,3 +132,31 @@ test("a clean profile navigates without any prompt", async ({ page }) => {
   await expect(page).toHaveURL(/\/comp$/);
   await expect(page.getByRole("alertdialog")).toBeHidden();
 });
+
+test("an API key says when it expires, and the dialog says so before it is made", async ({
+  page,
+}) => {
+  // SEC-57: every key lives API_KEY_LIFETIME_DAYS (90), and Settings says so.
+  const label = `e2e expiry ${Date.now()}`;
+  await page.getByRole("button", { name: "Create API key" }).click();
+  const create = page.getByRole("dialog");
+  await expect(
+    create.getByText("This key will expire in 90 days. Create a new one when it does.")
+  ).toBeVisible();
+  await create.getByLabel("Label (optional)").fill(label);
+  await create.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+
+  const row = page.getByRole("row").filter({ hasText: label });
+  const expected = await page.evaluate(() =>
+    new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString()
+  );
+  // The label is the row header; the grid cells are Created, Last used, Expires.
+  await expect(row.getByRole("gridcell").nth(2)).toHaveText(expected);
+  await expect(row.getByRole("gridcell").nth(1)).toHaveText("Never");
+
+  // Leave the fixture user with no keys.
+  await row.getByRole("button", { name: "Revoke" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Revoke" }).click();
+  await expect(row).toHaveCount(0);
+});
