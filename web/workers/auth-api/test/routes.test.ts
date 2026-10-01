@@ -1,6 +1,6 @@
 // Tier-1 security-invariant tests for the custom /api/auth/* routes.
-// Tiers 2-4 are stubbed as test.todo(...) — see docs/security-review.md and
-// PR #151 for the full proposal.
+// Tiers 2-4 are stubbed as test.todo(...) — see PR #151 for the full
+// proposal.
 //
 // delete-account is covered more thoroughly in delete-account.test.ts;
 // here we only assert the auth-gate behaviour for routes that the dedicated

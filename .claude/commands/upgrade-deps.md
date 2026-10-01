@@ -19,6 +19,15 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
   reports the ROOT workspace only.** Run it again from inside `web/frontend`,
   each `web/workers/*` and `web/engine`, or you will miss most of the tree (on
   2026-09-13 the root listed 7 rows; `web/frontend` alone listed 23 more).
+- **GitHub Actions are pinned to commit SHAs**, with the release in a trailing
+  comment (`uses: actions/checkout@<sha> # v5.1.0`), so nothing moves them for
+  you. Each cycle, for every `uses:` in `.github/workflows/*.yml`, list the
+  action's tags (`git ls-remote --tags https://github.com/<owner>/<repo>`; use
+  the peeled `^{}` line for an annotated tag) and re-pin to the newest release
+  in the same major line, updating the comment with it. A new MAJOR is an
+  upgrade like any other: read its changelog first. Never replace a SHA with a
+  tag: a tag can be moved to point at different code, and the deploy job hands
+  these actions the Cloudflare token.
 - For each candidate upgrade, read its changelog.
 - For each upgrade, note:
   - **Code changes required** → make them in this PR.

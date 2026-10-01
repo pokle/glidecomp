@@ -1,14 +1,25 @@
 # Whole-repo security review
 
-You are the periodic full-repository security review for GlideComp. The built-in `/security-review` skill only looks at pending changes on the current branch — this routine looks at the **whole repo** and is paired with a living memory of findings across rounds: `docs/security-review.md` (the index — findings register, standing scope gaps, review log) plus one archived file per round under `docs/security-review/rounds/`.
+You are the periodic full-repository security review for GlideComp. The built-in `/security-review` skill only looks at pending changes on the current branch — this routine looks at the **whole repo** and is paired with a living memory of findings across rounds.
 
-Land a PR that (a) adds a new round file under `docs/security-review/rounds/`, (b) updates the index's register, gap list, review log and "Where to start" section, and (c) fixes any **Critical** issues inline so the round closes them.
+**That memory is private.** `pokle/glidecomp` is a public repository, so the working log lives in the private repository **`pokle/glidecomp-security`**: `docs/security-review.md` there is the index (findings register, standing scope gaps, review log), with one file per round under `docs/security-review/rounds/`. In this public repository, `docs/security-review.md` lists only findings whose fixes are deployed.
+
+A round produces (a) a new round file and an updated index, committed to `pokle/glidecomp-security`; (b) inline fixes for any **Critical** issues, as a PR on `pokle/glidecomp`; and (c) public rows for findings whose fixes have deployed since the last round.
+
+## 0. What may be public
+
+Before writing anything, know where it may go:
+
+- **An open finding's details — what, where, how — never enter the public repository.** Not in a file, a code comment, a commit message, a PR title, description or comment, or a public issue. This includes a finding fixed in a PR that has not yet deployed: the PR is public from the moment it is opened.
+- **If `pokle/glidecomp-security` is not in the session**, attach it (`add_repo`, push access) and clone it. If that fails, STOP and ask the user. Never fall back to writing the log into the public repo.
+- **A fix PR on the public repo is worded neutrally**: what the change does ("refuse X unless Y", "cap Z"), not what an attacker could do before it. The bypass, the exploit path and the test that proves the fix go in the private round file.
+- **A finding becomes public only once its fix is deployed** (the `master` Deploy workflow is green), as a row in the public `docs/security-review.md`: ID, a plain-English title, the date. Add those rows in the next round's public PR, never in the PR that carries the fix.
 
 ## 1. Read the memory first
 
-Read `docs/security-review.md` (the index) in full, then the most recent
-round file in `docs/security-review/rounds/` in full, before touching
-anything else. Both are deliberately small enough to read whole. Only open
+In `pokle/glidecomp-security`, read `docs/security-review.md` (the index) in
+full, then the most recent round file in `docs/security-review/rounds/` in
+full, before touching anything else. Both are deliberately small enough to read whole. Only open
 older round files when a register row or the latest round sends you there.
 From the index take:
 
@@ -76,15 +87,15 @@ Run static analysis with the full set of categories in mind. The list below is n
 
 Any new finding rated **Critical** (exploitable now, user data or auth at risk) must be fixed inline as part of this PR. Add a regression test where the test surface allows it (e.g. miniflare-level test for an authn bypass; helper-level test for a parser cap). Do not defer Critical fixes to a follow-up PR.
 
-For **High** findings, fix them in this PR if the diff is small and obvious; otherwise file a tracked follow-up and call out the deferral in the executive summary.
+For **High** findings, fix them in this PR if the diff is small and obvious; otherwise record a follow-up in the private index (never a public issue) and call out the deferral in the executive summary.
 
 For **Medium / Low / Info**, document them and let the next round close them — do not let scope creep block the review PR from landing.
 
 If you do fix a finding inline, mark it in the doc as `~~Open~~ **Fixed (<date>, this PR)**` with a short resolution note pointing at the new file/lines, exactly as the prior rounds did for SEC-01, SEC-10, SEC-11, SEC-12, SEC-14.
 
-## 7. Write the round file and update the index
+## 7. Write the round file and update the index (private repo)
 
-Create `docs/security-review/rounds/<YYYY-MM-DD>.md` (never rewrite an earlier round file — they are history). Start it with the same two-line archived-round preamble the existing files carry, then:
+In `pokle/glidecomp-security`, create `docs/security-review/rounds/<YYYY-MM-DD>.md` (never rewrite an earlier round file — they are history). Start it with the same two-line archived-round preamble the existing files carry, then:
 
 - **Methodology** — what you read, what you ran (`bun audit`, diffs), and what you explicitly did *not* do.
 - **Executive summary** — one paragraph. Lead with the worst new finding. If `bun audit` was clean, say so. If you fixed Critical issues inline, say so.
@@ -92,7 +103,7 @@ Create `docs/security-review/rounds/<YYYY-MM-DD>.md` (never rewrite an earlier r
 - **Status changes** — only the prior findings whose status this round moved (with file:line if the finding's code moved). Do NOT restate the full register.
 - **Re-checked but no change** — short list of categories you walked and found clean, so the next round knows you covered them.
 
-Then update `docs/security-review.md` (the index) in the same PR:
+Then update that repo's `docs/security-review.md` (the index) in the same change:
 
 - Add one **Review Log** line (short headline + link to the round file).
 - Update the **findings register** rows whose status moved; add rows for new findings.
@@ -100,6 +111,8 @@ Then update `docs/security-review.md` (the index) in the same PR:
 - Replace the **Where to start the next review** section wholesale: the commit you reviewed up to, the prioritised open items, anything that needs verification on a live deploy.
 
 Convert any relative dates ("today", "last week") to absolute dates before writing.
+
+Finally, in the **public** repo's `docs/security-review.md`, add a row for each finding whose fix has deployed since the last round. Check the Deploy run on `master` rather than assuming a merge deployed.
 
 ## 8. Verify locally
 
@@ -111,14 +124,12 @@ bun audit
 
 If you wrote regression tests for an inline fix, run them too. Don't push with red tests.
 
-## 9. Open the PR
+## 9. Open the PRs
 
-Title: `Security review (<YYYY-MM-DD>): <one-line headline>` — the headline is the worst finding (e.g. `SEC-NN critical authn bypass + N new findings`).
+**Private, `pokle/glidecomp-security`.** Title: `Security review (<YYYY-MM-DD>): <one-line headline>`, the headline being the worst finding (e.g. `SEC-NN critical authn bypass + N new findings`). Body: a short summary of the round, the new SEC-NN IDs, which were fixed inline, and a link to the round file. If a Critical was fixed inline, spell out (a) what the bypass was, (b) how the fix closes it, (c) the regression test that proves it stays closed.
 
-Body: short summary of the round, the new SEC-NN IDs introduced, which were fixed inline, and a link to the new round file under `docs/security-review/rounds/`.
-
-If any Critical was fixed inline, the PR description must spell out (a) what the bypass was, (b) how the fix closes it, (c) the regression test that proves it stays closed.
+**Public, `pokle/glidecomp`**, only if the round changes code or adds public rows. Title: `Security hardening (<YYYY-MM-DD>)`. Body: what each change does, in neutral terms (section 0), the verification you ran, and the preview URL. No open-finding detail, and no description of what an attacker could have done. Merge it promptly: until it deploys, the fix is visible in public while the hole is still open.
 
 ---
 
-This routine itself lives at `.claude/commands/security-review-repo.md`. If you discover a missing step or stale instruction while running, edit this file in the same PR.
+This routine itself lives at `.claude/commands/security-review-repo.md` in the public repo, so keep it to method: no findings, and no detail that only makes sense with one in mind. If you discover a missing step or stale instruction while running, edit this file in the round's public PR.
