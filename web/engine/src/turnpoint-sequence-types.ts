@@ -231,6 +231,17 @@ export interface BestProgress {
 
   /** Stopped tasks only: GNSS altitude (m) at the best progress point. */
   altitude?: number;
+
+  /**
+   * Present only when the exact search ran out of its work budget before it
+   * could prove this was the best point (SEC-45). No real flight comes close
+   * to the budget; a track that does has an extraordinary number of points
+   * about equally far from goal. The point reported is still exact — the
+   * remaining distance really measured from a real fix — so the pilot is
+   * never over-credited, but a point the search never checked could have
+   * had a remaining distance as low as `lowerBound` (metres).
+   */
+  searchCapped?: { routesMeasured: number; lowerBound: number };
 }
 
 /**

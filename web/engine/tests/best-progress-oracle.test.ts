@@ -409,6 +409,8 @@ describe('best-progress search returns what it returned before SEC-45', () => {
       const golden = GOLDEN[c.name];
       expect(golden).toBeDefined();
       const result = run(c)!;
+      // Ordinary tracks never come near the work budget.
+      expect(result.searchCapped).toBeUndefined();
       expect(result.fixIndex).toBe(golden[0]);
       expect(Math.abs(result.distanceToGoal - golden[1])).toBeLessThan(1e-6);
     });
