@@ -61,6 +61,10 @@ export default defineConfig(async () => {
  * So ignore exactly that: a Better Auth `APIError` carrying a 4xx, which by
  * construction is one the library has already turned into a response. A 5xx
  * APIError, and every other unhandled error, still fails the run.
+ *
+ * A 3xx too: Better Auth also throws its redirects as APIErrors (a failed
+ * OAuth callback "fails" by redirecting to /error), they leak the same way,
+ * and the router has likewise already answered with the 302.
  */
 function onUnhandledError(error: unknown): boolean | void {
   const e = error as {
@@ -71,7 +75,7 @@ function onUnhandledError(error: unknown): boolean | void {
   if (
     e?.name === "APIError" &&
     typeof e.statusCode === "number" &&
-    e.statusCode >= 400 &&
+    e.statusCode >= 300 &&
     e.statusCode < 500 &&
     typeof e.errorStack === "string" &&
     e.errorStack.includes("better-auth")

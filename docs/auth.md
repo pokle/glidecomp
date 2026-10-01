@@ -112,12 +112,13 @@ useless if leaked. Full design and rationale: [2026-07-14-email-otp-signin-plan.
    one), so the SPA sends it to /onboarding — see the onboarding gate above
 ```
 
-Only `type: "sign-in"` codes are ever sent; the plugin's password-reset and
-email-change endpoints are inert because `emailAndPassword` is disabled outside
-local dev. In local dev nothing is emailed at all — the code is logged and
-readable via `GET /api/auth/dev-last-otp`.
+Only `type: "sign-in"` codes are ever minted: `src/index.ts` refuses any
+other `type` before Better Auth sees the request, and the plugin's
+password-reset, email-change, verify-email and check-code endpoints are not
+served at all (`src/endpoints.ts`, below). In local dev nothing is emailed —
+the code is logged and readable via `GET /api/auth/dev-last-otp`.
 
-**Rate limits** — three layers, with every constant in `src/rate-limit.ts` as
+**Rate limits** — four layers, with every constant in `src/rate-limit.ts` as
 the single source of truth (the API-key limit in the same file is quoted by
 `docs/api.md` and pinned by `e2e/api-doc.spec.ts`, so the doc can't drift from
 what the worker enforces):
@@ -127,7 +128,22 @@ what the worker enforces):
 | Per-code attempts | 3 | `allowedAttempts` in the `emailOTP` plugin |
 | Per-IP sends | 3 / 60 s | Better Auth `customRules`, D1-backed (`rateLimit` table, migration 0017) |
 | Per-IP verifies | 5 / 60 s | as above |
-| Per-email sends | 5 / 15 min | `registerOtpEmailSend()` — silently drops past the cap, so it can't become an inbox-existence oracle |
+| Per-email sends | 5 / 15 min | `otpSendAllowed()` in `src/index.ts`, before Better Auth mints a code; charged by `registerOtpEmailSend()` in the send hook. Past the cap the answer is still `{"success":true}`, so it can't become an inbox-existence oracle |
+| Per-email wrong codes | 10 / hour | `otpVerifyAllowed()` before Better Auth checks a code, `registerOtpVerifyFailure()` after it refuses one. Past the cap that address gets `429`, whoever asks |
+
+The two per-email layers are the ones that bound a *distributed* guesser, and
+they sit in front of Better Auth for a reason (SEC-56): the plugin mints and
+stores a fresh code — three fresh attempts — before it calls the send hook, so
+a throttle inside the hook withheld only the email, and the per-IP layers count
+per client address (per /64 for IPv6), which a guesser can source by the tens
+of thousands. Together they hold a guesser to about ten tries an hour against a
+million possible codes.
+
+**Served endpoints.** The Better Auth catch-all forwards only the endpoints the
+app uses (`src/endpoints.ts`: Google sign-in and its callback, the two
+email-OTP endpoints, the session, `/jwks`, API-key create/list/delete); every
+other path under `/api/auth/` is a 404 (SEC-55). A feature that needs another
+Better Auth endpoint adds it to that list.
 
 IP keying uses `cf-connecting-ip` (not the spoofable `x-forwarded-for`);
 `x-test-client-ip` is honoured **only** when `isLocalDev()`, so e2e runs get
@@ -195,10 +211,11 @@ new migration in `web/db/migrations/`.
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, `/set-name`, `/delete-account`, the dev-only endpoints, and the Better Auth catch-all |
+| `src/index.ts` | Hono app with CORS, `/me`, `/set-username`, `/set-name`, `/delete-account`, the dev-only endpoints, the per-email OTP guards, and the Better Auth catch-all |
+| `src/endpoints.ts` | The Better Auth endpoints the catch-all serves; everything else under `/api/auth/` is a 404 |
 | `src/auth.ts` | Better Auth config: Kysely D1 dialect, Google social provider, `emailOTP` + `apiKey` + `jwt` plugins, session cookie cache, rate limits, 60-day rolling sessions, username field, auto-derive-username create hook, pilot bootstrap on sign-in |
 | `src/otp-email.ts` | Builds the sign-in OTP email (subject/HTML/text) for the Cloudflare Email Sending binding |
-| `src/rate-limit.ts` | Single source of truth for the API-key and email-OTP limits; per-email send throttle over the `rateLimit` table |
+| `src/rate-limit.ts` | Single source of truth for the API-key and email-OTP limits; the per-email send throttle and wrong-code budget over the `rateLimit` table |
 | `src/pilot-bootstrap.ts` | On every sign-in, ensures the account's `pilot` row exists and claims email-matching unlinked pre-registrations |
 | `src/username.ts` | Slugify + derive a unique, format-valid username at sign-up |
 | `src/routes/preferences.ts` | `GET`/`PUT /api/auth/preferences` (per-user UI preferences) |

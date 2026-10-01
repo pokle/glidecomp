@@ -383,7 +383,9 @@ It's what the "did you mean…" repair on a dead `/comp` URL runs on. Accepts
 | `GET` | `/api/auth/preferences` | Units, timezone and display preferences |
 | `PUT` | `/api/auth/preferences` | Update them |
 | `GET` | `/api/auth/token` | **Always 404.** Better Auth's bearer-JWT endpoint, deliberately not served |
-| `ALL` | `/api/auth/*` | Everything else Better Auth serves: sessions, email OTP, API-key management, and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)) |
+| `POST` | `/api/auth/email-otp/send-verification-otp` | Email a sign-in code (`{"email", "type": "sign-in"}`). Limited per address as well as per client: past the limit it still answers `{"success":true}`, but no code is sent |
+| `POST` | `/api/auth/sign-in/email-otp` | Exchange a code for a session (`{"email", "otp"}`). Ten wrong codes for one address in an hour, from anywhere, and that address gets `429` until the hour is up |
+| `ALL` | `/api/auth/*` | The rest of what Better Auth serves here, and nothing more: Google sign-in (`/sign-in/social`, `/callback/:id`), the session (`/get-session`, `/sign-out`), API-key management (`/api-key/create`, `/api-key/list`, `/api-key/delete`) and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)). Any other path under `/api/auth/` is a 404 |
 | `GET` | `/api/comp/pilot` | Your pilot profile (CIVL id, wing, nationality) |
 | `PATCH` | `/api/comp/pilot` | Update it |
 | `GET` | `/api/comp/pilot/flights` | Every comp flight of yours, across competitions |

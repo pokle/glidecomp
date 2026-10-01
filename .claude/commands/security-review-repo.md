@@ -28,6 +28,7 @@ Before reading code, write down (in your head or as TaskCreate items) what you i
 - Frontend under `web/frontend/src/` — the main UI is a React SPA under `src/react/` (grep it for `dangerouslySetInnerHTML`, ref-based DOM HTML writes, and unencoded interpolation into `href`/`src`/`location.*`); the vanilla analysis page (`src/analysis/**`) and 3D replay (`src/replay/**`) are where `innerHTML`-style sinks still live. Across both: data flow from untrusted files (IGC, XCTask, share-target uploads) and API strings (pilot/team/comp/task names) into the DOM.
 - Engine package under `web/engine/src/` — parsers (`igc-parser.ts`, `xctsk-parser.ts`) and any `eval`/`Function`-style constructs.
 - Infrastructure: every `wrangler.toml` (especially `[[routes]]` blocks and binding IDs), `Containerfile`, `web/frontend/public/_redirects`, `web/frontend/public/_headers` (if present), `web/frontend/public/sw.js`.
+- Delivery pipeline: `.github/workflows/*` — which jobs can reach which secrets, whether third-party actions are pinned, and what an agent-driven workflow (`claude.yml`) can push into a deploy.
 - `package.json` + `bun.lock` via `bun audit`.
 
 Carry forward the prior round's scope gaps — if the last round flagged "wrangler.toml binding cross-environment audit" or a similar deferred item, do it this round unless you have a reason not to.
@@ -58,6 +59,8 @@ For each prior `SEC-NN`, open the file/lines cited and verify the current state.
 Run static analysis with the full set of categories in mind. The list below is non-exhaustive — use your judgement, but at minimum cover:
 
 - **Authn / authz**: every mutating route guarded by `requireAuth` + (where appropriate) `requireCompAdmin` / `authorizeStatusMutation`. No header- or cookie-based "trust me, I am user X" backdoors. Pay particular attention to any worker bound to a public `[[routes]]` pattern — if it trusts an internal-only header, that's a SEC-10-class bypass.
+- **Library-mounted surfaces**: auth-api hands `/api/auth/*` to Better Auth only for the endpoints listed in `web/workers/auth-api/src/endpoints.ts` (SEC-55). On any `better-auth` / `@better-auth/*` bump, list the library's endpoints (`grep -rho 'createAuthEndpoint("[^"]*"'` over its `dist/`) and check that nothing new is served, and that a listed endpoint has not grown a new input (a sign-up `name`, an `image`).
+- **Account-level brute force**: per-IP limits are not account protection — Better Auth buckets IPv6 per /64, and a free /48 is 65,536 of those. Any endpoint that checks a guessable secret needs a per-account failure budget enforced BEFORE the library acts, and must not mint a fresh secret on a request it has throttled (SEC-56). Model the attacker as distributed.
 - **CORS**: no reflective `Access-Control-Allow-Origin` paired with `credentials: true`. Allowlist matches the actual production + preview hostnames.
 - **Input validation**: Zod schemas on every body, with bounded string/array/JSON sizes. No `z.record(z.unknown())` on stored fields.
 - **SQL**: every query parameterised via `.bind(...)`. No string concatenation into SQL.
