@@ -102,7 +102,14 @@ test("the analysis page renders a flight with Trusted Types enforced", async ({ 
   // event list (SEC-41's).
   await openPanel(page);
   const panel = page.locator("#event-panel-container");
-  await expect(panel.locator(".flight-info-content")).toHaveText(/^Tushar Pokle \| \S.* \| \S/);
+
+  // The sample track's pilot header is deliberately hostile:
+  // `HFPLTPILOTINCHARGE:<img src=x onerror=alert(1)>Tushar Pokle`. The parser
+  // keeps it verbatim (scoring change 053), so the banner must SHOW those
+  // characters as text and must not have made an element out of them.
+  const flightInfo = panel.locator(".flight-info-content");
+  await expect(flightInfo).toHaveText(/^<img src=x onerror=alert\(1\)>Tushar Pokle \| \S.* \| \S/);
+  await expect(flightInfo.locator("img")).toHaveCount(0);
   await expect(panel).toContainText(/\d+ of \d+ events/);
   await expect(panel.locator(".event-item").first()).toBeVisible();
 
