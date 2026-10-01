@@ -6,7 +6,7 @@
  */
 
 import { ellipsoidDistance } from './geo';
-import { sanitizeText } from './sanitize';
+import { toText } from './text';
 import type { IGCTask, IGCTaskPoint } from './igc-parser';
 import { DEFAULT_WAYPOINT_RADIUS_M, findWaypoint, type WaypointRecord } from './waypoints';
 
@@ -154,8 +154,8 @@ function parseV1(data: Record<string, unknown>): XCTask {
             // falls back to the default.
             radius: typeof tpObj.radius === 'number' ? tpObj.radius : DEFAULT_TURNPOINT_RADIUS,
             waypoint: {
-              name: sanitizeText((wp.name as string) || 'Unnamed'),
-              description: wp.description ? sanitizeText(wp.description as string) : undefined,
+              name: toText((wp.name as string) || 'Unnamed'),
+              description: wp.description ? toText(wp.description as string) : undefined,
               lat: wp.lat as number,
               lon: wp.lon as number,
               altSmoothed: wp.altSmoothed as number | undefined,
@@ -265,7 +265,7 @@ function parseV2(data: Record<string, unknown>): XCTask {
           type,
           radius,
           waypoint: {
-            name: sanitizeText((tpObj.n as string) || 'Unnamed'),
+            name: toText((tpObj.n as string) || 'Unnamed'),
             lat,
             lon,
             altSmoothed: alt || undefined,

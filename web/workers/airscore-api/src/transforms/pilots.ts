@@ -2,7 +2,7 @@
  * Extract pilot results from AirScore data array
  */
 
-import { sanitizeText } from '@glidecomp/engine';
+import { toText } from '@glidecomp/engine';
 import type { AirScoreDataRow, PilotResult } from '../types';
 
 /**
@@ -115,9 +115,9 @@ export function extractPilotResults(data: AirScoreDataRow[]): PilotResult[] {
     return {
       rank: parseRank(rank as string | number),
       pilotId: String(pilotId || ''),
-      name: sanitizeText(name),
+      name: toText(name),
       nationality: String(nationality || ''),
-      glider: sanitizeText(String(glider || '')),
+      glider: toText(String(glider || '')),
       gliderClass: String(gliderClass || ''),
       startTime: parseString(startTime),
       finishTime: parseString(finishTime),

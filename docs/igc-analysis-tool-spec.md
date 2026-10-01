@@ -206,7 +206,7 @@ When an event is selected from the panel, the map highlights the event location 
 ├── geo.ts                       # Geographic calculations (WGS84: Vincenty inverse distance, Vincenty destination, Turf.js bearing/bbox)
 ├── glide-speed.ts               # Glide segment speed calculations
 ├── units.ts                     # Unit conversion
-├── sanitize.ts                  # Text sanitization (HTML escaping)
+├── text.ts                      # toText(): coerce parsed fields to plain text (no encoding)
 ├── waypoints.ts                 # Waypoint handling
 └── index.ts                     # Library exports
 

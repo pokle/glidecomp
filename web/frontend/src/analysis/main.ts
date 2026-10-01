@@ -31,6 +31,13 @@ import '../analysis.css';
 // Command palette behavior (vanilla, local)
 import { initCommandMenus } from './command-menu';
 import { installStaleDeployReload } from '../react/lib/stale-deploy';
+import { html, renderInto } from '../render-html';
+import { installDefaultTrustedTypesPolicy } from '../trusted-types';
+
+// Before anything can create a map: Mapbox GL's and threebox's own HTML, and
+// Mapbox's worker URL, go through the default Trusted Types policy
+// (src/trusted-types.ts).
+installDefaultTrustedTypesPolicy();
 
 // A tab that outlived a deploy asks for chunks that no longer exist (the map
 // and terrain code load on demand): reload it onto the new deploy, once.
@@ -397,7 +404,7 @@ async function init(): Promise<void> {
 
     const panel = document.createElement('div');
     panel.id = 'ts-tuner-panel';
-    panel.innerHTML = `
+    renderInto(panel, html`
       <div style="position:fixed;top:10px;right:10px;z-index:99999;background:#1e1e1e;color:#eee;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;min-width:260px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-weight:bold;">text-shadow tuner</span>
@@ -414,7 +421,7 @@ async function init(): Promise<void> {
           <button id="ts-preset-none" style="padding:2px 6px;cursor:pointer;">none</button>
         </div>
         <textarea id="ts-output" readonly style="margin-top:8px;padding:4px;background:#333;color:#eee;border:none;border-radius:4px;font-size:11px;font-family:monospace;width:240px;height:48px;resize:none;overflow:auto;word-wrap:break-word;"></textarea>
-      </div>`;
+      </div>`);
     document.body.appendChild(panel);
 
     const inputs = {
@@ -517,28 +524,28 @@ async function init(): Promise<void> {
     const nominalPct = config.getNominalDistancePct();
     const isCompMode = config.isCompScoringMode();
     const whatIfNotice = isCompMode
-      ? `<div class="rounded-md border border-border/50 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      ? html`<div class="rounded-md border border-border/50 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
            What-if analysis only — seeded from the competition's scoring settings.
            Changes affect just this page's score table, never the official scores,
            and last until you leave the page.
          </div>`
-      : `<div class="rounded-md border border-border/50 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      : html`<div class="rounded-md border border-border/50 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
            What-if analysis only — these settings affect just this page's score table.
          </div>`;
     const helpLink = (hash: string, text: string, heading = false) =>
-      `<a href="/scoring-gap.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
-    competitionSettingsContent.innerHTML = `
+      html`<a href="/scoring-gap.html#${hash}" target="_blank" rel="noopener noreferrer" class="text-sm ${heading ? 'font-medium' : 'text-muted-foreground'} hover:text-foreground inline-flex items-center gap-0.5">${text} <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>`;
+    renderInto(competitionSettingsContent, html`
       <form id="competition-settings-form" class="space-y-4">
         ${whatIfNotice}
         <div class="space-y-3">
           ${helpLink('what-is-gap', 'Scoring Type', true)}
           <div class="flex gap-4">
             <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-              <input type="radio" name="gap-scoring" value="HG" ${params.scoring === 'HG' ? 'checked' : ''} class="accent-primary">
+              <input type="radio" name="gap-scoring" value="HG" ?checked=${params.scoring === 'HG'} class="accent-primary">
               Hang Gliding
             </label>
             <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-              <input type="radio" name="gap-scoring" value="PG" ${params.scoring === 'PG' ? 'checked' : ''} class="accent-primary">
+              <input type="radio" name="gap-scoring" value="PG" ?checked=${params.scoring === 'PG'} class="accent-primary">
               Paragliding
             </label>
           </div>
@@ -565,11 +572,11 @@ async function init(): Promise<void> {
         <div class="space-y-2">
           <label class="text-sm font-medium">Point Categories</label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-            <input type="checkbox" id="gap-use-leading" ${params.useLeading ? 'checked' : ''} class="accent-primary">
+            <input type="checkbox" id="gap-use-leading" ?checked=${params.useLeading} class="accent-primary">
             <a href="/scoring-gap.html#leading-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Leading (departure) points</a>
           </label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-            <input type="checkbox" id="gap-use-arrival" ${params.useArrival ? 'checked' : ''} class="accent-primary">
+            <input type="checkbox" id="gap-use-arrival" ?checked=${params.useArrival} class="accent-primary">
             <a href="/scoring-gap.html#arrival-points" target="_blank" rel="noopener noreferrer" class="hover:text-foreground">Arrival points (HG only)</a>
           </label>
         </div>
@@ -583,7 +590,7 @@ async function init(): Promise<void> {
           <a href="/scoring-gap.html" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors underline">How does GAP scoring work?</a>
         </div>
       </form>
-    `;
+    `);
 
     const form = competitionSettingsContent.querySelector('#competition-settings-form') as HTMLFormElement;
     form?.addEventListener('submit', (e) => {

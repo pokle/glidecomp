@@ -20,8 +20,8 @@
  * is the caller's job — the engine holds no timezone opinion, and the SSR and
  * client trees must format identically.
  *
- * Header strings arrive already sanitised by the parser (igc-parser.ts, via
- * sanitizeText). Do not sanitise them again — that double-encodes.
+ * Header strings arrive as the file wrote them (igc-parser.ts, via toText):
+ * plain text, NOT HTML-encoded. Encode them where they are output.
  */
 
 import { fixAltitude, type IGCFile, type IGCFix } from './igc-parser';

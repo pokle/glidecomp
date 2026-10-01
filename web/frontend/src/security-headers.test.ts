@@ -11,7 +11,11 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import { SECURITY_HEADERS } from "./security-headers";
+import {
+  SECURITY_HEADERS,
+  TRUSTED_TYPES_HEADERS,
+  TRUSTED_TYPES_PATHS,
+} from "./security-headers";
 import { findInlineScripts } from "./inline-script-scan";
 
 const FRONTEND = join(__dirname, "..");
@@ -46,6 +50,24 @@ describe("security headers", () => {
       headersBlock("/*"),
       `public/_headers has drifted from src/security-headers.ts — replace the /* block with:\n${expected}`
     ).toEqual(SECURITY_HEADERS);
+  });
+
+  test.each([...TRUSTED_TYPES_PATHS])("public/_headers carries exactly TRUSTED_TYPES_HEADERS for %s", (path) => {
+    const expected = Object.entries(TRUSTED_TYPES_HEADERS)
+      .map(([k, v]) => `  ${k}: ${v}`)
+      .join("\n");
+    expect(
+      headersBlock(path),
+      `public/_headers has drifted from src/security-headers.ts — replace the ${path} block with:\n${expected}`
+    ).toEqual(TRUSTED_TYPES_HEADERS);
+  });
+
+  test("Trusted Types is report-only, and separate from the enforced CSP", () => {
+    expect(TRUSTED_TYPES_HEADERS["Content-Security-Policy-Report-Only"]).toMatch(
+      /^require-trusted-types-for 'script'; trusted-types /
+    );
+    expect(TRUSTED_TYPES_HEADERS).not.toHaveProperty("Content-Security-Policy");
+    expect(SECURITY_HEADERS["Content-Security-Policy"]).not.toMatch(/trusted-types/);
   });
 
   test("the CSP is enforced, not report-only", () => {

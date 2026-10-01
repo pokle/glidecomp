@@ -52,6 +52,38 @@ const CSP_DIRECTIVES: ReadonlyArray<readonly [string, string]> = [
 
 export const CONTENT_SECURITY_POLICY = CSP_DIRECTIVES.map(([k, v]) => `${k} ${v}`).join("; ");
 
+/**
+ * Trusted Types for the two vanilla-TS pages, `/analysis` and `/replay`
+ * (security review proposal A4, 2026-10-01). Under
+ * `require-trusted-types-for 'script'` the browser refuses a plain string at
+ * every DOM XSS sink unless a named policy minted it; `trusted-types` lists the
+ * policies a page may create (src/trusted-types.ts explains each).
+ *
+ * REPORT-ONLY first, as A4 proposes: the browser reports to
+ * functions/api/csp-report.ts what it would have refused and blocks nothing.
+ * It is a separate header from the enforced CSP above (a page may carry both),
+ * and `public/_headers` applies it to those two paths only — the SPA, with
+ * Tabulator and React's own internals, is not yet covered.
+ * `e2e/trusted-types.spec.ts` loads both pages with this policy ENFORCED and
+ * fails on any violation, so the switch to enforcing is a header rename once
+ * production reports are quiet.
+ */
+export const TRUSTED_TYPES_POLICY_NAMES = ["default", "lit-html", "dompurify"] as const;
+
+export const TRUSTED_TYPES_POLICY = [
+  "require-trusted-types-for 'script'",
+  `trusted-types ${TRUSTED_TYPES_POLICY_NAMES.join(" ")}`,
+].join("; ");
+
+export const TRUSTED_TYPES_REPORT_ONLY_POLICY = `${TRUSTED_TYPES_POLICY}; report-to csp; report-uri /api/csp-report`;
+
+/** The `_headers` paths that carry `TRUSTED_TYPES_HEADERS`. */
+export const TRUSTED_TYPES_PATHS = ["/analysis*", "/replay*"] as const;
+
+export const TRUSTED_TYPES_HEADERS: Readonly<Record<string, string>> = {
+  "Content-Security-Policy-Report-Only": TRUSTED_TYPES_REPORT_ONLY_POLICY,
+};
+
 /** Header name → value, in the order `_headers` lists them. */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "X-Frame-Options": "DENY",

@@ -66,6 +66,7 @@ export const E2E_SHARDS = {
     "explain-affordance.spec.ts", // 39.9s
     "report-card.spec.ts", // 7.4s
     "lazy-map-in-view.spec.ts", // 4.9s
+    "trusted-types.spec.ts", // new — measure on its first CI run
   ],
 
   /**

@@ -368,6 +368,14 @@ These are the standing imperatives. Each links to the reference that explains it
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
     library. The 3D
     replay styles itself (`replay.css` + inline theme).
+  - **Neither page puts a string into the DOM as HTML.** Markup is
+    `html\`…\`` + `renderInto()` from `src/render-html.ts` (lit-html), with
+    values interpolated plainly — no `escapeHtml()`, no `innerHTML`, no
+    `unsafeHTML`. `src/html-sinks.test.ts` fails on any string sink anywhere in
+    `src/`, and both pages carry Trusted Types (report-only for now; see
+    `src/trusted-types.ts`). Three stored XSS in seven weeks (SEC-22/41/47)
+    came from the escape-at-every-site pattern this replaced (security review
+    A4).
 - **Use Tailwind utilities** — avoid custom CSS where Tailwind has an equivalent.
 - **UI conventions** (see the design-language section of
   [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md)):

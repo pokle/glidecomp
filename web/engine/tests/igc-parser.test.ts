@@ -212,22 +212,24 @@ B1230004728234N01152432EA0123401567
       expect(result.fixes[0].time.getUTCDate()).toBe(15);
     });
 
-    it('should sanitize HTML in pilot name and other headers', () => {
+    // Header and task text is kept as the file wrote it — NOT HTML-encoded.
+    // Encoding happens where the text is output (src/text.ts).
+    it('keeps header text verbatim, apostrophes and markup included', () => {
       const igcContent = `HFDTE150124
-HFPLTPILOTINCHARGE:<script>alert(1)</script>
+HFPLTPILOTINCHARGE:Seán O'Brien & <script>x</script>
 HFGTYGLIDERTYPE:<img src=x onerror=alert(1)>Boom
 B1234564728234N01152432EA0123401567
 `;
 
       const result = parseIGC(igcContent);
 
-      expect(result.header.pilot).toBe('alert(1)');
-      expect(result.header.gliderType).toBe('Boom');
+      expect(result.header.pilot).toBe("Seán O'Brien & <script>x</script>");
+      expect(result.header.gliderType).toBe('<img src=x onerror=alert(1)>Boom');
     });
 
-    it('should sanitize HTML in C record waypoint names', () => {
+    it('keeps C record waypoint names verbatim', () => {
       const igcContent = `HFDTE150124
-C4728234N01152432E<b>Start</b>
+C4728234N01152432E<b>Start</b> & "Co"
 C4729000N01153000EGoal
 B1234564728234N01152432EA0123401567
 `;
@@ -235,8 +237,7 @@ B1234564728234N01152432EA0123401567
       const result = parseIGC(igcContent);
 
       expect(result.task).toBeDefined();
-      expect(result.task!.takeoff!.name).toBe('Start');
-      expect(result.task!.takeoff!.name).not.toContain('<');
+      expect(result.task!.takeoff!.name).toBe('<b>Start</b> & "Co"');
     });
 
     it('should handle midnight UTC rollover', () => {
@@ -349,17 +350,16 @@ C4730000N01155000ESSS Start
       expect(result.task!.start!.areaOZ).toBeUndefined();
     });
 
-    it('should sanitize HTML in E record event descriptions', () => {
+    it('keeps E record event descriptions verbatim', () => {
       const igcContent = `HFDTE150124
 B1234564728234N01152432EA0123401567
-E123456PEV<script>xss</script>
+E123456PEV<script>xss</script> & 'more'
 `;
 
       const result = parseIGC(igcContent);
 
       expect(result.events).toHaveLength(1);
-      expect(result.events[0].description).toBe('xss');
-      expect(result.events[0].description).not.toContain('<script>');
+      expect(result.events[0].description).toBe("<script>xss</script> & 'more'");
     });
   });
 

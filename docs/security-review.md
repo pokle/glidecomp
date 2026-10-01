@@ -23,6 +23,7 @@ disclosed and are being fixed first.
 | SEC-01 | Credentialed CORS reflected any origin | 2026-04-20 |
 | SEC-02 | No security response headers on the site | 2026-05-25 |
 | SEC-04 | IGC uploads were not checked for an IGC file's shape | 2026-06-08 |
+| SEC-05 | The analysis page and 3D replay built HTML from strings, escaped by hand | 2026-10-01 |
 | SEC-06 | No size cap on JSON request bodies | 2026-06-12 |
 | SEC-08 | Rate-limited responses did not say when to retry | 2026-06-11 |
 | SEC-10 | Authentication bypass through a trusted internal header | 2026-05-04 |
@@ -52,6 +53,7 @@ disclosed and are being fixed first.
 | SEC-42 | Unchecked external link in official results | 2026-08-12 |
 | SEC-43 | Spreadsheet formula injection in the route editor's CSV export | 2026-08-12 |
 | SEC-44 | Three pilot fields changed without an audit-log entry | 2026-08-12 |
+| SEC-45 | A crafted track could make the best-progress search run for minutes | 2026-10-01 |
 | SEC-46 | Slow circle detection on crafted IGC timestamps | 2026-08-17 |
 | SEC-47 | Stored XSS through a pilot's name in the flight panel | 2026-08-17 |
 | SEC-48 | Dependency advisories (`qs`, `fast-uri`, `browserslist`) | 2026-09-02 |

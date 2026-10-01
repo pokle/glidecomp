@@ -1,7 +1,7 @@
 // Copyright (c) 2026, Tushar Pokle.  All rights reserved.
 
 // Public API
-export { sanitizeText } from './sanitize';
+export { toText } from './text';
 export {
   fixAltitude,
   parseIGC,
