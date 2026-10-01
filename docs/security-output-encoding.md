@@ -92,7 +92,7 @@ was the anti-pattern this note describes, and it failed the same ways:
 
 The parsers now return text as the file wrote it (`web/engine/src/text.ts`,
 `toText()`, which only coerces a non-string field so a malformed file cannot
-crash its caller). Scoring change 052 records it, and migration 0035 decoded the
+crash its caller). Scoring change 053 records it, and migration 0035 decoded the
 names already stored encoded. A competition route imported from a file before
 then may still carry an `&amp;` in a turnpoint name; that is stored route data,
 so it is renamed by the organiser rather than rewritten by a migration.

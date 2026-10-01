@@ -8,7 +8,7 @@
 
 import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
-import { ellipsoidDistance } from './geo';
+import { chordLowerBound, ecefOnEllipsoid, ellipsoidDistance, type EcefPoint } from './geo';
 import {
   computeTurnpointDirections,
   optimizeRemainingRoute,
@@ -234,6 +234,32 @@ export function buildRemainingPath(
 const BEST_PROGRESS_TOLERANCE_M = 5;
 
 /**
+ * The exact search's work budget (SEC-45). Pruning only rules out a fix
+ * that is CLOSE to one already measured, so a track that keeps finding new
+ * points about as far from goal as its best — a long contour-hugging
+ * wander — forces a route optimisation per fix and a prune scan per fix
+ * over everything measured so far. Uncapped, 60,000 such fixes (what the
+ * 2 MiB upload limit admits) took 147 s, and the search runs server-side on
+ * every upload, anonymous ones included.
+ *
+ * Two meters, both deterministic so a score never depends on the machine:
+ *
+ * - ROUTE units: each route optimisation costs max(16, n²) units, n being
+ *   the number of zones still to fly — its cost grows about with n², from
+ *   ~60 µs at 2 zones to ~6.5 ms at 49. That holds the worst case near or
+ *   below a second at any route length the API admits.
+ * - Prune COMPARISONS: one per measured fix scanned for each candidate.
+ *
+ * Over the 5,220 tracks of the bundled comps and the archive, the most any
+ * landed-out flight used was ~6,000 route units (239 optimisations, 5 zones
+ * to go) and 693,390 comparisons — the budgets sit at 16× and 28× that. A
+ * search that exhausts either keeps its best point so far and says so
+ * ({@link BestProgress.searchCapped}).
+ */
+const SEARCH_ROUTE_UNITS = 100_000;
+const SEARCH_COMPARISONS = 20_000_000;
+
+/**
  * Compute best progress for a non-goal pilot.
  *
  * Scans all fixes after the last reaching time and finds the one with the
@@ -263,7 +289,9 @@ const BEST_PROGRESS_TOLERANCE_M = 5;
  * neighbours by the Lipschitz property (remaining distance between two
  * positions can differ by at most their separation). Fixes are evaluated
  * in ascending-bound order until no bound can improve the incumbent by
- * more than {@link BEST_PROGRESS_TOLERANCE_M}.
+ * more than {@link BEST_PROGRESS_TOLERANCE_M}, or until the search's work
+ * budget runs out ({@link SEARCH_ROUTE_UNITS}) — which no real flight comes
+ * near, and which the result then records.
  *
  * @param task - The scoring task (already trimmed for the distance origin).
  * @param lastReachedIndex - Index of the last turnpoint reached.
@@ -445,19 +473,52 @@ export function computeBestProgress(
   // remaining distance between two positions differs by at most their
   // separation, so eff(fix) ≥ geom(evaluated) − separation − cap(fix).
   // Ties go to the earliest fix, matching the previous scan.
+  //
+  // Each prune comparison first takes the straight-line chord between the
+  // two fixes, which can never exceed their geodesic separation: when the
+  // chord alone puts the fix out of reach, the Vincenty call could not
+  // have ruled it out either, so it is skipped. The margin covers float
+  // rounding and the Andoyer-Lambert fallback's 2 ppm, so every decision is
+  // the one the full comparison makes.
+  //
+  // The work is metered (SEARCH_ROUTE_UNITS, SEARCH_COMPARISONS). Out of
+  // budget, the search stops at the next candidate and keeps its best so
+  // far. Candidates run in ascending lower-bound order and every pruned fix
+  // was within TOL of the incumbent, so no fix it never examined can be
+  // closer to goal than that candidate's bound.
   const TOL = BEST_PROGRESS_TOLERANCE_M;
+  const routeCost = Math.max(16, remainingTPs.length * remainingTPs.length);
+  const maxRoutes = Math.max(1, Math.floor(SEARCH_ROUTE_UNITS / routeCost));
+  let routes = 1;
+  let comparisons = 0;
+  let capped: { routesMeasured: number; lowerBound: number } | null = null;
+
   let best = { index: seed.index, ...exactAt(seed.index) };
-  const evaluated: Array<{ lat: number; lon: number; geom: number }> = [
-    { lat: fixes[seed.index].latitude, lon: fixes[seed.index].longitude, geom: best.geom },
+  const evaluated: Array<{ lat: number; lon: number; geom: number; ecef: EcefPoint }> = [
+    {
+      lat: fixes[seed.index].latitude,
+      lon: fixes[seed.index].longitude,
+      geom: best.geom,
+      ecef: ecefOnEllipsoid(fixes[seed.index].latitude, fixes[seed.index].longitude),
+    },
   ];
   candidates.sort((a, b) => a.lb - b.lb);
-  for (const c of candidates) {
+  search: for (const c of candidates) {
     if (c.lb >= best.eff - TOL) break;
     if (c.index === seed.index) continue;
     const fix = fixes[c.index];
     const capHere = capFor(fix, c.index);
+    const here = ecefOnEllipsoid(fix.latitude, fix.longitude);
     let ruledOut = false;
     for (const e of evaluated) {
+      if (++comparisons > SEARCH_COMPARISONS) {
+        capped = { routesMeasured: routes, lowerBound: c.lb };
+        break search;
+      }
+      // The separation at or below which `e` rules this fix out.
+      const reach = e.geom - capHere - (best.eff - TOL);
+      const chord = chordLowerBound(e.ecef, here);
+      if (chord - (0.01 + 1e-5 * chord) > reach) continue;
       const sep = ellipsoidDistance(e.lat, e.lon, fix.latitude, fix.longitude);
       if (e.geom - sep - capHere >= best.eff - TOL) {
         ruledOut = true;
@@ -465,8 +526,13 @@ export function computeBestProgress(
       }
     }
     if (ruledOut) continue;
+    if (routes >= maxRoutes) {
+      capped = { routesMeasured: routes, lowerBound: c.lb };
+      break;
+    }
+    routes++;
     const e = exactAt(c.index);
-    evaluated.push({ lat: fix.latitude, lon: fix.longitude, geom: e.geom });
+    evaluated.push({ lat: fix.latitude, lon: fix.longitude, geom: e.geom, ecef: here });
     if (e.eff < best.eff - 1e-6 || (Math.abs(e.eff - best.eff) <= 1e-6 && c.index < best.index)) {
       best = { index: c.index, ...e };
     }
@@ -483,5 +549,6 @@ export function computeBestProgress(
     ...(altitudeBonus
       ? { altitudeBonus: best.bonus, altitude: fixAltitude(fix) }
       : {}),
+    ...(capped ? { searchCapped: capped } : {}),
   };
 }

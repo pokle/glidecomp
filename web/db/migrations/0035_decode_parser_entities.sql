@@ -5,7 +5,7 @@
 -- & < > " ' — so a pilot called O'Brien was stored as `O&#39;Brien`, and a
 -- React page (which encodes on output itself) showed exactly that. The parsers
 -- now return the text as the file wrote it (web/engine/src/text.ts, scoring
--- change 052). New rows are stored plain; this decodes the rows written before.
+-- change 053). New rows are stored plain; this decodes the rows written before.
 --
 -- The decode is the exact inverse of the old encoding. That encoder turned
 -- every `&` into `&amp;`, so in a value it produced, every `&` begins one of
