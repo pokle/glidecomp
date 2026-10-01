@@ -695,8 +695,11 @@ describe('XCTSK Parser', () => {
     });
   });
 
-  describe('XSS sanitization', () => {
-    it('should sanitize HTML in v1 waypoint names and descriptions', () => {
+  // The parser reads text as the file wrote it and does NOT HTML-encode:
+  // encoding is the job of whatever outputs the text (React, the lit-html
+  // templates, the XML/CSV exporters). See src/text.ts.
+  describe('text fields are kept verbatim', () => {
+    it('keeps v1 waypoint names and descriptions exactly, markup included', () => {
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',
         version: 1,
@@ -706,7 +709,7 @@ describe('XCTSK Parser', () => {
             radius: 400,
             waypoint: {
               name: '<img src=x onerror=alert(1)>Start',
-              description: '<script>steal(cookies)</script>',
+              description: "O'Brien's paddock & dam",
               lat: 47.0,
               lon: 11.0,
             },
@@ -714,21 +717,19 @@ describe('XCTSK Parser', () => {
           {
             type: 'ESS',
             radius: 400,
-            waypoint: { name: 'Goal<b>xss</b>', lat: 48.0, lon: 12.0 },
+            waypoint: { name: 'Mt "Big" <Goal>', lat: 48.0, lon: 12.0 },
           },
         ],
       });
 
       const task = parseXCTask(taskJson);
 
-      expect(task.turnpoints[0].waypoint.name).toBe('Start');
-      expect(task.turnpoints[0].waypoint.name).not.toContain('<');
-      expect(task.turnpoints[0].waypoint.description).toBe('steal(cookies)');
-      expect(task.turnpoints[0].waypoint.description).not.toContain('<script>');
-      expect(task.turnpoints[1].waypoint.name).toBe('Goalxss');
+      expect(task.turnpoints[0].waypoint.name).toBe('<img src=x onerror=alert(1)>Start');
+      expect(task.turnpoints[0].waypoint.description).toBe("O'Brien's paddock & dam");
+      expect(task.turnpoints[1].waypoint.name).toBe('Mt "Big" <Goal>');
     });
 
-    it('should sanitize HTML in v2 waypoint names', () => {
+    it('keeps v2 waypoint names exactly', () => {
       const taskJson = JSON.stringify({
         t: [
           {
@@ -736,15 +737,24 @@ describe('XCTSK Parser', () => {
             r: 400,
             lat: 47.0,
             lon: 11.0,
-            n: '<img onerror=alert(document.cookie)>TP1',
+            n: 'Tom & Jerry <TP1>',
           },
         ],
       });
 
       const task = parseXCTask(taskJson);
 
-      expect(task.turnpoints[0].waypoint.name).toBe('TP1');
-      expect(task.turnpoints[0].waypoint.name).not.toContain('<');
+      expect(task.turnpoints[0].waypoint.name).toBe('Tom & Jerry <TP1>');
+    });
+
+    it('round-trips a name through toXctskJSON unchanged', () => {
+      const name = `A&B "quoted" <tag> it's`;
+      const task = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC', version: 1,
+        turnpoints: [{ type: 'SSS', radius: 400, waypoint: { name, lat: 47, lon: 11 } }],
+      }));
+      const again = parseXCTask(JSON.stringify(toXctskJSON(task)));
+      expect(again.turnpoints[0].waypoint.name).toBe(name);
     });
   });
 

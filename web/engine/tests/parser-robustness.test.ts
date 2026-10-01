@@ -20,7 +20,8 @@
  *   1. `parseXCTask('null' | '123' | '"x"' | 'true')` threw
  *      `TypeError: null is not an Object` via the `'turnpoints' in data` check.
  *   2. A non-string `waypoint.name`/`description`/`n` in otherwise-valid JSON
- *      threw `TypeError: input.replace is not a function` from `sanitizeText`.
+ *      threw `TypeError: input.replace is not a function` from `sanitizeText`
+ *      (now `toText`, which coerces and no longer encodes).
  */
 import { describe, it, expect } from 'bun:test';
 import { parseIGC } from '../src/igc-parser';

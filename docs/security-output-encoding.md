@@ -73,23 +73,29 @@ way in optimises for exactly one of them (HTML) and breaks the rest:
    name has no idea whether it will later land in an HTML attribute, a URL, a CSV
    cell, or a JSON body. Only the render site knows its own context.
 
-## "But the engine's `sanitizeText` HTML-encodes on parse — isn't that the same?"
+## "Didn't the engine HTML-encode names on parse?"
 
-`web/engine/src/sanitize.ts` HTML-encodes IGC/XCTSK values at parse time, and the
-security review has praised it. It is a deliberately **contained special case**,
-not a model to copy to database fields:
+It did, until 2026-10. `sanitizeText()` stripped tag-shaped runs from every
+IGC and XCTask name and HTML-encoded `& < > " '` at parse time, on the theory
+that a widely-shared parser should hand out values safe to drop into HTML. It
+was the anti-pattern this note describes, and it failed the same ways:
 
-- Those values come out of an opaque file-parser that is reused across many call
-  sites; encoding once at the parse boundary is a pragmatic belt-and-braces for a
-  widely-shared parser.
-- They are **not** round-tripped through CSV export, the audit log, or the public
-  API the way `registered_pilot_name` / `team_name` / `pilot_class` are.
+- **It corrupted the non-HTML consumers.** React encodes on output, so a pilot
+  called O'Brien read `O&#39;Brien`. A route imported from an `.xctsk` stored
+  the entities in its turnpoint names, and the personal library stored them in
+  track names.
+- **It double-encoded** wherever a page also (correctly) escaped on output — the
+  analysis page showed `&amp;`.
+- **It never was the defence.** SEC-22 was exploitable in comp mode because the
+  name there came from the database (`registered_pilot_name`), which never
+  passed through the parser.
 
-Even for the engine, output encoding at each sink is what actually prevents the
-XSS; `sanitizeText` is the second layer, not the first. That is exactly why
-SEC-22 was still exploitable in comp mode: the display name there comes from the
-**database** (`registered_pilot_name`), which never passes through `sanitizeText`
-— only IGC-header names do.
+The parsers now return text as the file wrote it (`web/engine/src/text.ts`,
+`toText()`, which only coerces a non-string field so a malformed file cannot
+crash its caller). Scoring change 052 records it, and migration 0035 decoded the
+names already stored encoded. A competition route imported from a file before
+then may still carry an `&amp;` in a turnpoint name; that is stored route data,
+so it is renamed by the organiser rather than rewritten by a migration.
 
 ## Where server-side input handling *does* help (validation, not sanitisation)
 
@@ -156,11 +162,8 @@ choice:
    `trusted-types.ts` sanitises third-party HTML (Mapbox's attribution) with
    DOMPurify and refuses foreign script URLs.
 
-The engine's parse-time `sanitizeText` is untouched by this, so a waypoint name
-containing `&` reaches these pages already encoded and reads `&amp;` on screen —
-as it did before, when the page then escaped it a second time. The complete fix
-is to stop encoding at parse time, which moves code inside the scoring closure
-and so owes a `scoring-changes/` note; it is not part of A4.
+With every sink encoding on output, the engine's parse-time encoding had
+nothing left to protect and was removed too (see above).
 
 Input validation trims the edges of the attack surface; consistent output
 encoding removes the bug class.

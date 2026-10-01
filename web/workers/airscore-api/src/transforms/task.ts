@@ -2,7 +2,7 @@
  * Transform AirScore task data to XCTask format
  */
 
-import { sanitizeText } from '@glidecomp/engine';
+import { toText } from '@glidecomp/engine';
 import type {
   AirScoreTask,
   AirScoreWaypoint,
@@ -38,8 +38,8 @@ function mapWaypointType(tawType: string): TurnpointType | undefined {
  */
 function transformWaypoint(wp: AirScoreWaypoint): Turnpoint {
   const waypoint: Waypoint = {
-    name: sanitizeText(wp.rwpName),
-    description: wp.rwpDescription ? sanitizeText(wp.rwpDescription) : undefined,
+    name: toText(wp.rwpName),
+    description: wp.rwpDescription ? toText(wp.rwpDescription) : undefined,
     lat: parseFloat(wp.rwpLatDecimal),
     lon: parseFloat(wp.rwpLongDecimal),
   };
@@ -124,14 +124,14 @@ export function transformAirScoreTask(task: AirScoreTask): XCTask {
  */
 export function extractCompetitionInfo(task: AirScoreTask): CompetitionInfo {
   return {
-    name: sanitizeText(task.comp_name),
+    name: toText(task.comp_name),
     class: task.comp_class,
-    taskName: sanitizeText(task.task_name),
+    taskName: toText(task.task_name),
     date: task.date,
     taskType: task.task_type,
     taskDistance: task.task_dist,
     waypointDistance: task.wp_dist,
-    comment: task.comment ? sanitizeText(task.comment) : undefined,
+    comment: task.comment ? toText(task.comment) : undefined,
     quality: parseFloat(task.quality),
     stopped: task.stopped,
   };
