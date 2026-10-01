@@ -3,6 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2025-03-10"
 compatibility_flags = ["nodejs_compat"]
 
+# Reached only through glidecomp.com (the [[routes]] below) or a service
+# binding, never at a workers.dev or per-version preview URL. Stated rather
+# than left to wrangler, which switches workers.dev off only while [[routes]]
+# exist (see airscore-api/wrangler.toml for why that matters).
+workers_dev = false
+preview_urls = false
+
 # Run this worker near its storage (D1 primary / R2 bucket) instead of near
 # the client. Requests here make many sequential D1/R2/KV round trips (4 D1
 # queries even on a cache hit; up to ~35 R2 GETs on a cold 3dvis build), so
