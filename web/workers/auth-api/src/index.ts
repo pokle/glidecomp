@@ -15,6 +15,13 @@ import {
   runWithExecutionCtx,
   type AuthEnv,
 } from "./auth";
+import { isServedAuthEndpoint } from "./endpoints";
+import {
+  normalizeEmail,
+  otpSendAllowed,
+  otpVerifyAllowed,
+  registerOtpVerifyFailure,
+} from "./rate-limit";
 import { mountPreferencesRoutes } from "./routes/preferences";
 
 const app = new Hono<{ Bindings: AuthEnv }>();
@@ -448,11 +455,102 @@ mountPreferencesRoutes(app);
 // The jwt plugin's bearer-token endpoint. Nothing here uses its tokens, and
 // it would hand page scripts a JWT signed with the session-cache key — the
 // httpOnly session cookie exists precisely so they never hold a credential.
+// (endpoints.ts would refuse it too; the explicit 404 keeps the reason here.)
 app.get("/api/auth/token", (c) => c.notFound());
 
-// Better Auth catch-all handler. The ExecutionContext lets sendVerificationOTP
-// hand the outbound email to waitUntil instead of blocking the response on it.
+// ── Email-OTP budgets keyed on the address (SEC-56) ──────────────────────────
+//
+// Both run BEFORE Better Auth's handler. Better Auth's own limiter counts per
+// client address, which a distributed guesser escapes for free (a single IPv6
+// /48 is 65,536 of its buckets), and it mints a fresh code — three more
+// guesses — before our sendVerificationOTP hook runs. So the budgets that
+// count per ACCOUNT have to stand in front of it: a spent address gets no new
+// code, and an address that has taken too many wrong codes gets no more tries.
+
+const OTP_ERROR_CODES_THAT_COUNT = new Set(["INVALID_OTP", "OTP_EXPIRED", "TOO_MANY_ATTEMPTS"]);
+/** RFC 5321's ceiling on a deliverable address: anything longer is nobody's,
+ * and refusing it up front keeps a 100 KB "address" out of the budget table. */
+const MAX_EMAIL_LENGTH = 254;
+
+/**
+ * The JSON body of an email-OTP request, read from a copy so Better Auth can
+ * still read the original; `null` for anything else.
+ *
+ * Better Auth's router accepts only JSON on these two endpoints today (its
+ * default `allowedMediaTypes`; some of its other endpoints also take form
+ * bodies). The guards refuse any other shape themselves rather than rely on
+ * that, so a body they could not read can never reach a handler that can.
+ */
+async function otpRequestBody(req: Request): Promise<Record<string, unknown> | null> {
+  const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (type !== "application/json") return null;
+  try {
+    const body: unknown = await req.clone().json();
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function otpAddress(body: Record<string, unknown>): string | null {
+  const email = body.email;
+  return typeof email === "string" && email.length > 0 && email.length <= MAX_EMAIL_LENGTH
+    ? email
+    : null;
+}
+
+app.post("/api/auth/email-otp/send-verification-otp", async (c, next) => {
+  const body = await otpRequestBody(c.req.raw);
+  if (!body) return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Expected a JSON body" }, 415);
+  // Sign-in codes are the only kind this app uses; a code of any other type
+  // would be one more thing to guess at for a flow nothing serves.
+  if (body.type !== "sign-in") return c.json({ code: "BAD_REQUEST", message: "Invalid OTP type" }, 400);
+  const email = otpAddress(body);
+  if (!email) return c.json({ code: "INVALID_EMAIL", message: "Invalid email" }, 400);
+  if (!(await otpSendAllowed(c.env.glidecomp_auth, email))) {
+    console.warn("[auth-api] OTP send throttled for", normalizeEmail(email));
+    // Better Auth's own answer to a sent code: refusing visibly would say
+    // which addresses someone is busy with.
+    return c.json({ success: true });
+  }
+  await next();
+});
+
+app.post("/api/auth/sign-in/email-otp", async (c, next) => {
+  const body = await otpRequestBody(c.req.raw);
+  if (!body) return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Expected a JSON body" }, 415);
+  // A first sign-in may carry a display name and avatar URL into the new
+  // account, around the checks /set-name applies (SEC-55). The app sends
+  // neither; onboarding asks for the name.
+  if ("name" in body || "image" in body) {
+    return c.json({ code: "BAD_REQUEST", message: "Unexpected field" }, 400);
+  }
+  const email = otpAddress(body);
+  if (!email) return c.json({ code: "INVALID_EMAIL", message: "Invalid email" }, 400);
+  const db = c.env.glidecomp_auth;
+  const verdict = await otpVerifyAllowed(db, email);
+  if (!verdict.allowed) {
+    c.header("Retry-After", String(verdict.retryAfterSeconds));
+    return c.json({ code: "TOO_MANY_REQUESTS", message: "Too many incorrect codes" }, 429);
+  }
+  await next();
+  // Charge only a code Better Auth actually refused. Its per-IP 429 checked no
+  // code, and its 400 for a malformed body names no account worth a row.
+  if (c.res.status === 400 || c.res.status === 403) {
+    const err = (await c.res.clone().json().catch(() => null)) as { code?: unknown } | null;
+    if (typeof err?.code === "string" && OTP_ERROR_CODES_THAT_COUNT.has(err.code)) {
+      await registerOtpVerifyFailure(db, email);
+    }
+  }
+});
+
+// Better Auth catch-all handler — for the endpoints endpoints.ts lists, and
+// nothing else (SEC-55). The ExecutionContext lets sendVerificationOTP hand
+// the outbound email to waitUntil instead of blocking the response on it.
 app.all("/api/auth/*", async (c) => {
+  if (!isServedAuthEndpoint(c.req.method, c.req.path)) return c.notFound();
   const auth = createAuth(c.env);
   return runWithExecutionCtx(c.executionCtx, () => auth.handler(c.req.raw));
 });

@@ -214,6 +214,12 @@ function buildAuth(env: AuthEnv) {
           // Per-email throttle (layer 3). Silently drop past the cap: an
           // error here would be an inbox-existence oracle and a UX dead end;
           // the per-IP limiter below already 429s interactive abuse.
+          //
+          // This charge decides whether an EMAIL goes out. By the time Better
+          // Auth calls this hook it has already minted and stored `otp`, so it
+          // cannot decide whether a CODE exists: index.ts checks the same
+          // budget before the request reaches Better Auth, so a spent address
+          // gets no new code to guess at (SEC-56).
           const allowed = await registerOtpEmailSend(env.glidecomp_auth, email);
           if (!allowed) {
             console.warn("[auth-api] OTP send throttled for", normalizeEmail(email));

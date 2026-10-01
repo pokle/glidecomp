@@ -7,12 +7,13 @@
 // limits on): without one, every test would share Better Auth's fallback
 // bucket and the suite would 429 itself.
 
-import { env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, expect, test } from "vitest";
 import { applySetCookies, loginAs, request } from "./helpers";
 import {
   OTP_EMAIL_SEND_THROTTLE,
   OTP_SEND_RATE_LIMIT,
+  OTP_VERIFY_FAILURE_BUDGET,
   registerOtpEmailSend,
 } from "../src/rate-limit";
 
@@ -226,5 +227,122 @@ describe("dev-last-otp gating (SEC-07 pattern)", () => {
       "/api/auth/dev-last-otp?email=never-asked@example.com"
     );
     expect(res.status).toBe(404);
+  });
+});
+
+/** How many codes Better Auth holds for `email` (it stores one row per mint). */
+async function liveCodeRows(email: string, type = "sign-in"): Promise<number> {
+  const row = await env.glidecomp_auth
+    .prepare("SELECT COUNT(*) AS n FROM verification WHERE identifier = ?")
+    .bind(`${type}-otp-${email}`)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+describe("SEC-56: per-address budgets hold against a distributed guesser", () => {
+  // Every request below comes from its own address, so Better Auth's per-IP
+  // limiter never trips: the per-ADDRESS budgets are all that stands between
+  // a guesser and a six-digit code.
+
+  test("a throttled send leaves no new code behind", async () => {
+    const email = "sec56-throttled-mint@example.com";
+    for (let i = 0; i < OTP_EMAIL_SEND_THROTTLE.maxSends; i++) {
+      await registerOtpEmailSend(env.glidecomp_auth, email);
+    }
+    const res = await sendOtp(email, "198.51.100.200");
+    expect(res.status).toBe(200); // still indistinguishable from a sent code
+    // Before the fix Better Auth minted (and stored) a fresh code — three new
+    // guesses — and only the email was withheld.
+    expect(await liveCodeRows(email)).toBe(0);
+  });
+
+  test("wrong codes spend the address's budget, after which even the right code is refused", async () => {
+    const email = "sec56-guessed@example.com";
+    expect((await sendOtp(email, "198.51.100.1")).status).toBe(200);
+    const real = await fetchDevOtp(email);
+    const wrong = real === "000000" ? "000001" : "000000";
+
+    for (let i = 0; i < OTP_VERIFY_FAILURE_BUDGET.max; i++) {
+      const res = await signInWithOtp(email, wrong, `198.51.100.${10 + i}`);
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).toBeLessThan(429);
+    }
+
+    // A fresh, correct code, from yet another address: still refused, so a
+    // guesser who finally hits the code is turned away with everyone else.
+    expect((await sendOtp(email, "198.51.100.99")).status).toBe(200);
+    const blocked = await signInWithOtp(email, await fetchDevOtp(email), "198.51.100.98");
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(blocked.headers.getSetCookie()).toEqual([]);
+  });
+
+  test("another address is untouched by one address's spent budget", async () => {
+    const spent = "sec56-spent@example.com";
+    await sendOtp(spent, "198.51.100.120");
+    const real = await fetchDevOtp(spent);
+    const wrong = real === "000000" ? "000001" : "000000";
+    for (let i = 0; i < OTP_VERIFY_FAILURE_BUDGET.max; i++) {
+      await signInWithOtp(spent, wrong, `198.51.100.${130 + i}`);
+    }
+    const other = "sec56-other@example.com";
+    await sendOtp(other, "198.51.100.121");
+    const ok = await signInWithOtp(other, await fetchDevOtp(other), "198.51.100.122");
+    expect(ok.status).toBe(200);
+  });
+
+  test("a right code first time costs nothing", async () => {
+    const email = "sec56-first-time@example.com";
+    await sendOtp(email, "198.51.100.140");
+    const ok = await signInWithOtp(email, await fetchDevOtp(email), "198.51.100.141");
+    expect(ok.status).toBe(200);
+    const row = await env.glidecomp_auth
+      .prepare('SELECT 1 FROM "rateLimit" WHERE "key" = ?')
+      .bind(`otp-fail:${email}`)
+      .first();
+    expect(row).toBeNull();
+  });
+
+  test("only sign-in codes are minted", async () => {
+    // An existing account, so that a mint for it is kept rather than undone.
+    const email = "sec56-other-type@example.com";
+    await loginAs(email, "Other Type");
+    for (const type of ["forget-password", "email-verification"]) {
+      const res = await request("POST", "/api/auth/email-otp/send-verification-otp", {
+        body: { email, type },
+        headers: { "cf-connecting-ip": "198.51.100.150" },
+      });
+      expect(res.status).toBe(400);
+      expect(await liveCodeRows(email, type)).toBe(0);
+    }
+  });
+
+  test("a body the guards cannot read never reaches Better Auth", async () => {
+    // The budgets only read JSON. Better Auth refuses other bodies on these two
+    // routes today too, but the guards must not depend on that: some of its
+    // endpoints do take form bodies.
+    for (const path of ["/api/auth/email-otp/send-verification-otp", "/api/auth/sign-in/email-otp"]) {
+      const res = await SELF.fetch(`https://test${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "cf-connecting-ip": "198.51.100.160",
+        },
+        body: "email=sec56-form%40example.com&type=sign-in&otp=000000",
+      });
+      expect(res.status).toBe(415);
+    }
+    expect(await liveCodeRows("sec56-form@example.com")).toBe(0);
+  });
+
+  test("a first sign-in cannot name the account (SEC-55)", async () => {
+    const email = "sec56-named@example.com";
+    await sendOtp(email, "198.51.100.170");
+    const res = await request("POST", "/api/auth/sign-in/email-otp", {
+      body: { email, otp: await fetchDevOtp(email), name: "<b>x</b>" },
+      headers: { "cf-connecting-ip": "198.51.100.170" },
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.getSetCookie()).toEqual([]);
   });
 });
