@@ -19,14 +19,21 @@ import {
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
-  formatGlideLabel, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, computeOccludedLabels,
+  formatGlideLabel, setGlideLabelContent, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, computeOccludedLabels,
   calculateAltitudeRange, buildTrackSegments,
 } from './map-provider-shared';
 import { formatAltitude, formatDistance } from './units-browser';
 import { createMapAnnotationLayer, type MapAnnotationLayer } from './map-annotations';
-import { escapeHtml } from '../escape-html';
+import { html, renderInto, type TemplateResult } from '../render-html';
 
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
+/** A popup's content as DOM — `Popup.setHTML` would be a string sink. */
+function popupContent(content: TemplateResult): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  renderInto(frag, content);
+  return frag;
+}
 
 // Terrain exaggeration factor — applied to both the Mapbox terrain and
 // Threebox 3D track altitudes so the track stays above the terrain surface.
@@ -528,9 +535,9 @@ export function createMapBoxProvider(
             // Chevron centered on the track point
             const chevronEl = document.createElement('div');
             chevronEl.style.cssText = 'display:flex;align-items:center;justify-content:center;';
-            chevronEl.innerHTML = `<svg width="28" height="16" viewBox="0 0 20 12" style="transform:rotate(${gm.bearing}deg);">
-              <path d="M2 10 L10 2 L18 10" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>`;
+            renderInto(chevronEl, html`<svg width="28" height="16" viewBox="0 0 20 12" style="transform:rotate(${gm.bearing}deg);">
+              <path d="M2 10 L10 2 L18 10" fill="none" stroke=${color} stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`);
             const chevronMarker = new mapboxgl.Marker({
               element: chevronEl,
               rotationAlignment: 'map',
@@ -541,9 +548,6 @@ export function createMapBoxProvider(
             speedOverlayMarkers.push(chevronMarker);
 
             // Label below the chevron
-            const { speed, altitude, detailText, reqText } = formatGlideLabel(gm);
-            const speedDisplay = isFastest ? `${speed} (fastest)` : speed;
-            const metricsLine = altitude ? `${speedDisplay}\u2002${altitude}` : speedDisplay;
 
             const labelEl = document.createElement('div');
             labelEl.style.cssText = `
@@ -556,16 +560,12 @@ export function createMapBoxProvider(
               text-align: center;
               line-height: 1.3;
             `;
-            labelEl.innerHTML = reqText
-              ? `${metricsLine}<br>${detailText}<br>${reqText}`
-              : `${metricsLine}<br>${detailText}`;
-            labelEl.dataset.glideLabel = 'true';
-            labelEl.dataset.speedLabel = speedDisplay;
-            labelEl.dataset.altLabel = altitude;
-            labelEl.dataset.detailLabel = detailText;
-            labelEl.dataset.reqLabel = reqText;
+            setGlideLabelContent(labelEl, {
+              label: formatGlideLabel(gm),
+              fastest: isFastest,
+              showAltitude: true,
+            });
             labelEl.dataset.labelIndex = String(labelIndex);
-            if (isFastest) labelEl.dataset.fastest = 'true';
             labelIndex++;
 
             const labelMarker = new mapboxgl.Marker({ element: labelEl, anchor: 'top', offset: [0, 12] })
@@ -1175,7 +1175,7 @@ export function createMapBoxProvider(
           btn.setAttribute('aria-label', 'Toggle analysis panel');
           btn.style.cssText = 'display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:none;cursor:pointer;background:transparent;color:#333;font-size:13px;font-weight:500;white-space:nowrap;';
           // Bar-chart icon + label (label hidden on mobile via media query class)
-          btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg><span class="mapctl-label">Analysis</span>`;
+          renderInto(btn, html`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg><span class="mapctl-label">Analysis</span>`);
           btn.addEventListener('click', () => panelToggleCallback?.());
           this.container.appendChild(btn);
           return this.container;
@@ -1250,7 +1250,7 @@ export function createMapBoxProvider(
           btn.style.cssText = 'display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:none;cursor:pointer;background:transparent;color:#333;font-size:13px;font-weight:500;white-space:nowrap;';
           const isMac = /Mac|iPhone|iPad/.test(navigator.platform ?? '');
           const kbdHint = isMac ? '\u2318K' : 'Ctrl+K';
-          btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg><span class="mapctl-label">Menu</span><kbd class="mapctl-label" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,0.08);color:#333;opacity:0.6;font-family:inherit;">${kbdHint}</kbd>`;
+          renderInto(btn, html`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg><span class="mapctl-label">Menu</span><kbd class="mapctl-label" style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(0,0,0,0.08);color:#333;opacity:0.6;font-family:inherit;">${kbdHint}</kbd>`);
           btn.addEventListener('click', () => menuButtonCallback?.());
           this.container.appendChild(btn);
           return this.container;
@@ -1304,11 +1304,11 @@ export function createMapBoxProvider(
       map.addControl(new MapBoxStyleControl(), 'top-left');
 
       // Camera preset control (shown only in 3D mode)
-      const CAMERA_PRESETS: { id: CameraPreset; label: string; icon: string }[] = [
-        { id: 'side', label: 'Side', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>' },
-        { id: 'top', label: 'Top', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="10"/></svg>' },
-        { id: 'behind', label: 'Behind', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>' },
-        { id: 'front', label: 'Front', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>' },
+      const CAMERA_PRESETS: { id: CameraPreset; label: string; icon: TemplateResult }[] = [
+        { id: 'side', label: 'Side', icon: html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>` },
+        { id: 'top', label: 'Top', icon: html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="10"/></svg>` },
+        { id: 'behind', label: 'Behind', icon: html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>` },
+        { id: 'front', label: 'Front', icon: html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>` },
       ];
 
       class CameraPresetControl {
@@ -1325,7 +1325,7 @@ export function createMapBoxProvider(
             btn.type = 'button';
             btn.title = preset.label;
             btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:3px;padding:6px 10px;border:none;cursor:pointer;font-size:11px;font-family:inherit;color:#1e293b;background:white;border-right:1px solid #e2e8f0;';
-            btn.innerHTML = `${preset.icon}<span>${preset.label}</span>`;
+            renderInto(btn, html`${preset.icon}<span>${preset.label}</span>`);
             if (preset.id === activeCameraPreset) {
               btn.style.background = '#e2e8f0';
               btn.style.fontWeight = 'bold';
@@ -2011,7 +2011,7 @@ export function createMapBoxProvider(
             const label = document.createElement('div');
             label.style.cssText = `position:absolute;right:2px;bottom:${pct}%;transform:translateY(50%);font-size:9px;line-height:1;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:1px;white-space:nowrap;`;
             const fv = formatAltitude(val);
-            label.innerHTML = `<span>${fv.formatted}</span><span style="width:4px;height:1px;background:rgba(255,255,255,0.4);display:inline-block;flex-shrink:0;"></span>`;
+            renderInto(label, html`<span>${fv.formatted}</span><span style="width:4px;height:1px;background:rgba(255,255,255,0.4);display:inline-block;flex-shrink:0;"></span>`);
             yAxis.appendChild(label);
           }
         }
@@ -2043,7 +2043,7 @@ export function createMapBoxProvider(
               const d = new Date(tickMs);
               const h = d.getHours().toString().padStart(2, '0');
               const m = d.getMinutes().toString().padStart(2, '0');
-              label.innerHTML = `<span style="width:1px;height:4px;background:rgba(255,255,255,0.4);display:block;"></span><span>${h}:${m}</span>`;
+              renderInto(label, html`<span style="width:1px;height:4px;background:rgba(255,255,255,0.4);display:block;"></span><span>${h}:${m}</span>`);
               xAxis.appendChild(label);
             }
           }
@@ -2336,7 +2336,7 @@ export function createMapBoxProvider(
         // Clear what the last scrub position drew — the screen-space labels and,
         // in 3D, the position markers. Both are rebuilt below for the new
         // position; neither may be left behind, or a drag leaves a trail.
-        labelsContainer.innerHTML = '';
+        labelsContainer.replaceChildren();
         clearMultiTrackMarkers();
 
         // Get top 3 ranked pilots
@@ -2875,10 +2875,10 @@ export function createMapBoxProvider(
             const marker = new mapboxgl.Marker({ element: el })
               .setLngLat([event.longitude, event.latitude])
               .setPopup(
-                new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                  <strong>${escapeHtml(event.description)}</strong><br>
+                new mapboxgl.Popup({ offset: 25 }).setDOMContent(popupContent(html`
+                  <strong>${event.description}</strong><br>
                   ${event.time.toLocaleTimeString()}
-                `)
+                `))
               )
               .addTo(map);
 
@@ -2945,9 +2945,9 @@ export function createMapBoxProvider(
                   // Chevron centered on the track point
                   const chevronEl = document.createElement('div');
                   chevronEl.style.cssText = 'display:flex;align-items:center;justify-content:center;';
-                  chevronEl.innerHTML = `<svg width="28" height="16" viewBox="0 0 20 12" style="transform:rotate(${marker.bearing}deg);">
+                  renderInto(chevronEl, html`<svg width="28" height="16" viewBox="0 0 20 12" style="transform:rotate(${marker.bearing}deg);">
                     <path d="M2 10 L10 2 L18 10" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>`;
+                  </svg>`);
                   const chevronMarker = new mapboxgl.Marker({
                     element: chevronEl,
                     rotationAlignment: 'map',
@@ -2958,7 +2958,6 @@ export function createMapBoxProvider(
                   activeMarkers.push(chevronMarker);
 
                   // Label
-                  const { speed, detailText, reqText } = formatGlideLabel(marker);
                   const labelEl = document.createElement('div');
                   labelEl.style.cssText = `
                     font-family: ${MAP_FONT_FAMILY};
@@ -2970,13 +2969,7 @@ export function createMapBoxProvider(
                     text-align: center;
                     line-height: 1.3;
                   `;
-                  labelEl.innerHTML = reqText
-                    ? `${speed}<br>${detailText}<br>${reqText}`
-                    : `${speed}<br>${detailText}`;
-                  labelEl.dataset.glideLabel = 'true';
-                  labelEl.dataset.speedLabel = speed;
-                  labelEl.dataset.detailLabel = detailText;
-                  labelEl.dataset.reqLabel = reqText;
+                  setGlideLabelContent(labelEl, { label: formatGlideLabel(marker) });
                   labelEl.dataset.labelIndex = String(highlightLabelIndex);
                   highlightLabelIndex++;
 
@@ -3160,7 +3153,7 @@ export function createMapBoxProvider(
 
           // Add crosshair marker on the map
           const crosshairEl = document.createElement('div');
-          crosshairEl.innerHTML = CROSSHAIR_MAP_SVG;
+          renderInto(crosshairEl, CROSSHAIR_MAP_SVG);
           crosshairEl.style.pointerEvents = 'none';
           hudCrosshairMarker = new mapboxgl.Marker({ element: crosshairEl })
             .setLngLat([data.fix.longitude, data.fix.latitude])
@@ -3443,7 +3436,7 @@ export function createMapBoxProvider(
           clearHudCrosshair();
           showGlideLegend(false);
           const crosshairEl = document.createElement('div');
-          crosshairEl.innerHTML = CROSSHAIR_MAP_SVG;
+          renderInto(crosshairEl, CROSSHAIR_MAP_SVG);
           crosshairEl.style.pointerEvents = 'none';
           hudCrosshairMarker = new mapboxgl.Marker({ element: crosshairEl })
             .setLngLat([data.fix.longitude, data.fix.latitude])
@@ -3454,7 +3447,7 @@ export function createMapBoxProvider(
           // Add pilot name to HUD
           const summaryEl = hudElement.querySelector('.hud-summary');
           if (summaryEl) {
-            summaryEl.innerHTML = `${CROSSHAIR_MAP_SVG}<span style="font-weight:600;color:#ff8c00">${escapeHtml(pilotName)}</span>`;
+            renderInto(summaryEl, html`${CROSSHAIR_MAP_SVG}<span style="font-weight:600;color:#ff8c00">${pilotName}</span>`);
           }
           updateTrackPointHUD(hudElement, data);
         },

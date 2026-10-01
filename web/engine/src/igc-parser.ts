@@ -5,7 +5,7 @@
  * Reference: https://xp-soaring.github.io/igc_file_format/igc_format_2008.html
  */
 
-import { sanitizeText } from './sanitize';
+import { toText } from './text';
 import { cleanAltitudes, type AltitudeCleaningReport } from './altitude-cleaning';
 
 export interface IGCFix {
@@ -283,10 +283,10 @@ function parseCRecord(line: string): IGCTaskPoint | null {
   // Try to parse area task OZ parameters from the name field
   const area = parseAreaTaskName(rawName);
   if (area) {
-    return { latitude, longitude, name: sanitizeText(area.name), areaOZ: area.areaOZ };
+    return { latitude, longitude, name: toText(area.name), areaOZ: area.areaOZ };
   }
 
-  return { latitude, longitude, name: sanitizeText(rawName) };
+  return { latitude, longitude, name: toText(rawName) };
 }
 
 /**
@@ -305,7 +305,7 @@ function eventFromERecord(m: RegExpExecArray, baseMidnightMs: number, dayOffset:
   return {
     time: parseTime(m[1], baseMidnightMs, dayOffset),
     code: m[2],
-    description: sanitizeText(m[3].trim()),
+    description: toText(m[3].trim()),
   };
 }
 
@@ -355,7 +355,7 @@ function parseHRecord(line: string, header: IGCHeader): void {
     if (prefix.test(content)) {
       const match = value.exec(content);
       if (match) {
-        header[field] = sanitizeText(match[1].trim());
+        header[field] = toText(match[1].trim());
       }
       return;
     }

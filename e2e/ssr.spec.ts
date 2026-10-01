@@ -5,7 +5,10 @@ import {
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
 import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
-import { CONTENT_SECURITY_POLICY } from "../web/frontend/src/security-headers";
+import {
+  CONTENT_SECURITY_POLICY,
+  TRUSTED_TYPES_REPORT_ONLY_POLICY,
+} from "../web/frontend/src/security-headers";
 import { findInlineScripts } from "../web/frontend/src/inline-script-scan";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -776,6 +779,12 @@ test.describe("SSR — the visitor from the session cookie cache", () => {
  * Two checks: the built HTML carries no inline script (fast, names the file),
  * and a real browser loading each kind of page reports no violation — which
  * also catches what a scan can't, like a new third-party host or eval().
+ *
+ * The analysis page and the replay also carry Trusted Types, REPORT-ONLY
+ * (security review A4). A report-only violation fires the same
+ * `securitypolicyviolation` event, so the same check covers it here, in the
+ * production build; e2e/trusted-types.spec.ts drives both pages with it
+ * enforced.
  */
 test.describe("Content-Security-Policy", () => {
   const DIST = join(dirname(fileURLToPath(import.meta.url)), "..", "web", "frontend", "dist");
@@ -820,9 +829,12 @@ test.describe("Content-Security-Policy", () => {
     ":pilot",
     ":taskAnalysis",
     ":compAnalysis",
-    // The analysis page's one anonymous URL shape (issue #666).
+    // The analysis page's one anonymous URL shape (issue #666), and the
+    // replay — the two pages that also carry Trusted Types.
     ":analysis",
+    "/replay",
   ] as const;
+  const TRUSTED_TYPES_PAGES: ReadonlySet<string> = new Set([":analysis", "/replay"]);
 
   for (const path of PAGES) {
     test(`${path} is served the policy and violates nothing`, async ({ page, request }) => {
@@ -846,13 +858,16 @@ test.describe("Content-Security-Policy", () => {
         const seen: string[] = [];
         (window as unknown as { __cspViolations: string[] }).__cspViolations = seen;
         document.addEventListener("securitypolicyviolation", (e) => {
-          seen.push(`${e.effectiveDirective} blocked ${e.blockedURI || "(inline)"} at ${e.sourceFile}:${e.lineNumber}`);
+          seen.push(`${e.disposition} ${e.effectiveDirective} blocked ${e.blockedURI || "(inline)"} "${e.sample}" at ${e.sourceFile}:${e.lineNumber}`);
         });
       });
 
       const res = await page.goto(url);
       expect(res, url).not.toBeNull();
       expect(res!.headers()["content-security-policy"], url).toBe(CONTENT_SECURITY_POLICY);
+      expect(res!.headers()["content-security-policy-report-only"], url).toBe(
+        TRUSTED_TYPES_PAGES.has(path) ? TRUSTED_TYPES_REPORT_ONLY_POLICY : undefined
+      );
       await page.waitForLoadState("networkidle");
 
       const violations = await page.evaluate(

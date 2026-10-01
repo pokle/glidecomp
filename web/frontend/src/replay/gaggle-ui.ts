@@ -18,6 +18,7 @@
 
 import type { TrackManifest } from '@glidecomp/engine';
 import { gaggleColor, type GaggleEpisode, type GaggleResult } from './gaggles';
+import { html, renderElement, renderInto } from '../render-html';
 
 export interface GaggleUIDeps {
   ribbon: HTMLElement;
@@ -65,7 +66,7 @@ export class GaggleUI {
 
   private buildRibbon(): void {
     const { ribbon, result, duration } = this.d;
-    ribbon.innerHTML = '';
+    ribbon.replaceChildren();
     ribbon.classList.add('relative');
 
     const lanes = packLanes(result.episodes);
@@ -114,9 +115,9 @@ export class GaggleUI {
 
   private showTip(ep: GaggleEpisode, e: PointerEvent): void {
     const tip = this.d.tooltip;
-    tip.innerHTML = `<div class="font-medium" style="color:${css(gaggleColor(ep.id))}">${ep.peakSize} pilots</div>
-      <div class="text-slate-400">${this.d.fmtTime(ep.tStart)}–${this.d.fmtTime(ep.tEnd)}${esc(this.tpLabel(ep))}</div>
-      <div class="text-slate-500 max-w-[14rem] truncate">${this.memberNames(ep)}</div>`;
+    renderInto(tip, html`<div class="font-medium" style="color:${css(gaggleColor(ep.id))}">${ep.peakSize} pilots</div>
+      <div class="text-slate-400">${this.d.fmtTime(ep.tStart)}–${this.d.fmtTime(ep.tEnd)}${this.tpLabel(ep)}</div>
+      <div class="text-slate-500 max-w-[14rem] truncate">${this.memberNames(ep)}</div>`);
     tip.style.left = `${e.clientX + 14}px`;
     tip.style.top = `${e.clientY - 8}px`;
     tip.classList.remove('hidden');
@@ -182,7 +183,7 @@ export class GaggleUI {
 
   private renderList(episodes: GaggleEpisode[]): void {
     const list = this.d.list;
-    list.innerHTML = '';
+    list.replaceChildren();
     this.rows.clear();
     if (episodes.length === 0) {
       const empty = document.createElement('li');
@@ -192,18 +193,17 @@ export class GaggleUI {
       return;
     }
     for (const ep of episodes) {
-      const li = document.createElement('li');
-      li.className =
-        'flex items-start gap-2 px-3 py-1.5 hover:bg-slate-700/40 cursor-pointer select-none border-b border-slate-800/60';
-      li.innerHTML = `
-        <span class="shrink-0 mt-0.5 w-3 h-3 rounded-sm" style="background:${css(gaggleColor(ep.id))}"></span>
-        <span class="flex-1 min-w-0">
-          <span class="flex justify-between gap-2">
-            <span class="font-medium">${ep.peakSize} pilots</span>
-            <span class="text-[10px] text-slate-500 tabular-nums">${this.d.fmtTime(ep.tStart)}</span>
+      const li = renderElement<HTMLLIElement>(html`
+        <li class="flex items-start gap-2 px-3 py-1.5 hover:bg-slate-700/40 cursor-pointer select-none border-b border-slate-800/60">
+          <span class="shrink-0 mt-0.5 w-3 h-3 rounded-sm" style="background:${css(gaggleColor(ep.id))}"></span>
+          <span class="flex-1 min-w-0">
+            <span class="flex justify-between gap-2">
+              <span class="font-medium">${ep.peakSize} pilots</span>
+              <span class="text-[10px] text-slate-500 tabular-nums">${this.d.fmtTime(ep.tStart)}</span>
+            </span>
+            <span class="block text-[10px] text-slate-500 truncate">${this.tpLabel(ep, true)}${this.memberNames(ep)}</span>
           </span>
-          <span class="block text-[10px] text-slate-500 truncate">${esc(this.tpLabel(ep, true))}${this.memberNames(ep)}</span>
-        </span>`;
+        </li>`);
       li.addEventListener('pointerenter', () => this.d.onHighlight(ep.id));
       li.addEventListener('pointerleave', () => this.d.onHighlight(-1));
       li.addEventListener('click', () => {
@@ -231,12 +231,12 @@ export class GaggleUI {
 
   private memberNames(ep: GaggleEpisode): string {
     const names = ep.members.map((m) => this.d.manifest.pilots[m]?.name ?? `#${m}`);
-    return esc(names.join(', '));
+    return names.join(', ');
   }
 
   destroy(): void {
-    this.d.ribbon.innerHTML = '';
-    this.d.list.innerHTML = '';
+    this.d.ribbon.replaceChildren();
+    this.d.list.replaceChildren();
     this.bars.clear();
     this.rows.clear();
   }
@@ -257,10 +257,4 @@ function packLanes(episodes: GaggleEpisode[]): Map<number, number> {
     out.set(ep.id, lane);
   }
   return out;
-}
-
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) =>
-    ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '"' ? '&quot;' : '&#39;',
-  );
 }

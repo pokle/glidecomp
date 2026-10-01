@@ -18,6 +18,7 @@
 
 import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl';
 import { storage, type AnnotationStroke } from './storage';
+import { html, renderInto } from '../render-html';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -279,7 +280,7 @@ export function createMapAnnotationLayer(
     font-family: system-ui, sans-serif; font-size: 13px;
     user-select: none;
   `;
-  toolbar.innerHTML = `
+  renderInto(toolbar, html`
     <button data-ann-tool="draw" title="Draw (D)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9998; <u>D</u>raw</button>
     <button data-ann-tool="erase" title="Erase (E)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#9003; <u>E</u>rase</button>
     <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
@@ -289,7 +290,7 @@ export function createMapAnnotationLayer(
     <button data-ann-tool="clear" title="Clear all" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;color:#e03131;">&#128465;</button>
     <span style="width:1px;height:20px;background:#ccc;margin:0 4px;"></span>
     <button data-ann-tool="close" title="Close (Esc)" style="cursor:pointer;border:none;background:none;padding:4px 8px;border-radius:6px;font-size:13px;">&#10005; <span style="font-size:11px;opacity:0.6;">esc</span></button>
-  `;
+  `);
   container.appendChild(toolbar);
 
   // --- Toggle button (always visible on map) ---
@@ -305,7 +306,7 @@ export function createMapAnnotationLayer(
     display: flex; align-items: center; justify-content: center;
     user-select: none; color: #333;
   `;
-  toggleBtn.innerHTML = '&#9998;';
+  toggleBtn.textContent = '\u270E';
   container.appendChild(toggleBtn);
 
   function updateToggleButton() {

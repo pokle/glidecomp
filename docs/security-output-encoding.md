@@ -23,8 +23,9 @@ encoded for *that output's* grammar:
 
 | Context | Encoding | Example helper |
 |---|---|---|
-| HTML text (`>…<`) | escape `& < >` | `escapeHtml` |
-| HTML attribute (`title="…"`) | escape `& < > " '` | `escapeHtml` (quote-safe) |
+| HTML text (`>…<`) | set as a text node | `html\`…${v}…\`` (lit-html, `web/frontend/src/render-html.ts`); JSX |
+| HTML attribute (`title="…"`) | set as an attribute value | the same template bindings; JSX |
+| HTML built as a string (SSR Function, emails) | escape `& < > " '` | the module's own escaper, e.g. `track-notice-email.ts` |
 | URL path/query segment | percent-encode | `encodeURIComponent` |
 | CSV cell | quote + double the quotes | `csvEscape` |
 | JSON | `JSON.stringify` | — |
@@ -32,9 +33,11 @@ encoded for *that output's* grammar:
 
 The safest form is not to build HTML strings at all: set `.textContent` or build
 nodes with `createElement`, which makes injection structurally impossible. The
-React pages get this by default — JSX text children are escaped — so the
-string-building helpers above are for the places that still write markup or
-files by hand (the replay HUD, the SSR Function, emails, CSV exports).
+React pages get this by default — JSX text children are escaped — and since
+2026-10 so do the vanilla analysis page and 3D replay, whose lit-html templates
+set every interpolated value on a DOM node rather than parsing it. The
+string-encoding helpers are for what still writes markup or files by hand (the
+SSR Function, emails, CSV exports).
 
 **Input HTML-sanitisation (what we avoid).** The value is transformed *once* on
 write — e.g. `<` becomes `&lt;`, or tags are stripped — and the mangled version
@@ -70,23 +73,29 @@ way in optimises for exactly one of them (HTML) and breaks the rest:
    name has no idea whether it will later land in an HTML attribute, a URL, a CSV
    cell, or a JSON body. Only the render site knows its own context.
 
-## "But the engine's `sanitizeText` HTML-encodes on parse — isn't that the same?"
+## "Didn't the engine HTML-encode names on parse?"
 
-`web/engine/src/sanitize.ts` HTML-encodes IGC/XCTSK values at parse time, and the
-security review has praised it. It is a deliberately **contained special case**,
-not a model to copy to database fields:
+It did, until 2026-10. `sanitizeText()` stripped tag-shaped runs from every
+IGC and XCTask name and HTML-encoded `& < > " '` at parse time, on the theory
+that a widely-shared parser should hand out values safe to drop into HTML. It
+was the anti-pattern this note describes, and it failed the same ways:
 
-- Those values come out of an opaque file-parser that is reused across many call
-  sites; encoding once at the parse boundary is a pragmatic belt-and-braces for a
-  widely-shared parser.
-- They are **not** round-tripped through CSV export, the audit log, or the public
-  API the way `registered_pilot_name` / `team_name` / `pilot_class` are.
+- **It corrupted the non-HTML consumers.** React encodes on output, so a pilot
+  called O'Brien read `O&#39;Brien`. A route imported from an `.xctsk` stored
+  the entities in its turnpoint names, and the personal library stored them in
+  track names.
+- **It double-encoded** wherever a page also (correctly) escaped on output — the
+  analysis page showed `&amp;`.
+- **It never was the defence.** SEC-22 was exploitable in comp mode because the
+  name there came from the database (`registered_pilot_name`), which never
+  passed through the parser.
 
-Even for the engine, output encoding at each sink is what actually prevents the
-XSS; `sanitizeText` is the second layer, not the first. That is exactly why
-SEC-22 was still exploitable in comp mode: the display name there comes from the
-**database** (`registered_pilot_name`), which never passes through `sanitizeText`
-— only IGC-header names do.
+The parsers now return text as the file wrote it (`web/engine/src/text.ts`,
+`toText()`, which only coerces a non-string field so a malformed file cannot
+crash its caller). Scoring change 053 records it, and migration 0035 decoded the
+names already stored encoded. A competition route imported from a file before
+then may still carry an `&amp;` in a turnpoint name; that is stored route data,
+so it is renamed by the organiser rather than rewritten by a migration.
 
 ## Where server-side input handling *does* help (validation, not sanitisation)
 
@@ -132,13 +141,29 @@ request never reaches the handler that would have logged it. Coverage:
 The root cause of SEC-22 was not "missing input sanitisation" — it was that the
 frontend had seven hand-rolled `escapeHtml` copies applied by per-author
 discipline, so any new sink that forgot to call one was vulnerable (this is
-SEC-05). The structural close-out is:
+SEC-05). Consolidating them into one shared encoder (`escape-html.ts`, with the
+SEC-22 fix) did not end it: SEC-41 found eight more sites that forgot to call
+it, and SEC-47 a ninth. Opt-in escaping keeps failing however good the
+encoder is. The close-out (security review proposal A4, 2026-10) removes the
+choice:
 
-1. One shared, quote-safe output encoder — `web/frontend/src/escape-html.ts`
-   (introduced with the SEC-22 fix) — used everywhere.
-2. Prefer `.textContent` / DOM construction over building HTML strings.
-3. A lint rule forbidding `innerHTML =` with interpolated non-constant template
-   literals, to make the safe path the default.
+1. **No string reaches a DOM sink.** The analysis page and replay render
+   through lit-html templates (`web/frontend/src/render-html.ts`); a value
+   interpolated into one becomes a text node or an attribute value, in any
+   position, with nothing to remember. `escape-html.ts` is deleted — there is
+   nothing left to call it.
+2. **A test instead of a lint rule** — `web/frontend/src/html-sinks.test.ts`
+   fails on any `innerHTML`-style sink, `insertAdjacentHTML`, `DOMParser`,
+   Mapbox's `setHTML`, or lit's `unsafeHTML` escape hatch anywhere in
+   `web/frontend/src/`.
+3. **Trusted Types in the browser** — the same rule enforced at runtime, so it
+   also covers code we didn't write. `security-headers.ts` ships it
+   report-only on `/analysis` and `/replay` for now; the `default` policy in
+   `trusted-types.ts` sanitises third-party HTML (Mapbox's attribution) with
+   DOMPurify and refuses foreign script URLs.
+
+With every sink encoding on output, the engine's parse-time encoding had
+nothing left to protect and was removed too (see above).
 
 Input validation trims the edges of the attack surface; consistent output
 encoding removes the bug class.
