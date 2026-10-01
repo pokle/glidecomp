@@ -356,8 +356,12 @@ export const pilotProfileRoutes = new Hono<AuthedEnv>()
           if (!synced.ok) {
             // auth-api gave a real answer and refused. It validates the same
             // 1-128 characters this route does, so in practice this is the
-            // session having gone away between requireAuth and now.
-            return c.json({ error: synced.error }, synced.status === 401 ? 401 : 400);
+            // session having gone away between requireAuth and now (401), or
+            // an API key, which may not rename the account (403, SEC-57).
+            return c.json(
+              { error: synced.error },
+              synced.status === 401 || synced.status === 403 ? synced.status : 400
+            );
           }
           for (const cookie of synced.setCookies) {
             c.header("Set-Cookie", cookie, { append: true });

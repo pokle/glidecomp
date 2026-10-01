@@ -48,6 +48,11 @@ curl -H "x-api-key: $API_KEY" https://glidecomp.com/api/auth/me
 A key inherits the permissions of the account that created it. If your account
 administers a competition, its key can perform admin actions on that comp.
 
+A key cannot manage the account itself: it cannot create, list or revoke API
+keys, change the account's name or username, or delete the account. Those
+answer `403 {"code":"BROWSER_SESSION_REQUIRED"}` to any request carrying
+`x-api-key`. Sign in to GlideComp in a browser to do them.
+
 ### Object IDs
 
 `comp_id`, `task_id`, and `comp_pilot_id` in URLs are short opaque strings of
@@ -377,17 +382,17 @@ It's what the "did you mean…" repair on a dead `/comp` URL runs on. Accepts
 | Method | Path | |
 |---|---|---|
 | `GET` | `/api/auth/me` | Who this key belongs to; `{"user":null}` if it is bad |
-| `POST` | `/api/auth/set-name` | Change your display name |
-| `POST` | `/api/auth/set-username` | Claim or change your public `/u/<username>` |
-| `POST` | `/api/auth/delete-account` | Delete your account |
+| `POST` | `/api/auth/set-name` | Change your display name. **Browser only:** `403` with a key |
+| `POST` | `/api/auth/set-username` | Claim or change your public `/u/<username>`. **Browser only:** `403` with a key |
+| `POST` | `/api/auth/delete-account` | Delete your account. **Browser only:** `403` with a key |
 | `GET` | `/api/auth/preferences` | Units, timezone and display preferences |
 | `PUT` | `/api/auth/preferences` | Update them |
 | `GET` | `/api/auth/token` | **Always 404.** Better Auth's bearer-JWT endpoint, deliberately not served |
 | `POST` | `/api/auth/email-otp/send-verification-otp` | Email a sign-in code (`{"email", "type": "sign-in"}`). Limited per address as well as per client: past the limit it still answers `{"success":true}`, but no code is sent |
 | `POST` | `/api/auth/sign-in/email-otp` | Exchange a code for a session (`{"email", "otp"}`). Ten wrong codes for one address in an hour, from anywhere, and that address gets `429` until the hour is up |
-| `ALL` | `/api/auth/*` | The rest of what Better Auth serves here, and nothing more: Google sign-in (`/sign-in/social`, `/callback/:id`), the session (`/get-session`, `/sign-out`), API-key management (`/api-key/create`, `/api-key/list`, `/api-key/delete`) and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)). Any other path under `/api/auth/` is a 404 |
+| `ALL` | `/api/auth/*` | The rest of what Better Auth serves here, and nothing more: Google sign-in (`/sign-in/social`, `/callback/:id`), the session (`/get-session`, `/sign-out`), API-key management (`/api-key/create`, `/api-key/list`, `/api-key/delete`; browser only, `403` with a key) and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)). Any other path under `/api/auth/` is a 404 |
 | `GET` | `/api/comp/pilot` | Your pilot profile (CIVL id, wing, nationality) |
-| `PATCH` | `/api/comp/pilot` | Update it |
+| `PATCH` | `/api/comp/pilot` | Update it. Changing `name` renames the account too, so with a key that is a `403`; the other fields are fine |
 | `GET` | `/api/comp/pilot/flights` | Every comp flight of yours, across competitions |
 
 ```bash

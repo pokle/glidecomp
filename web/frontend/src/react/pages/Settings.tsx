@@ -34,7 +34,8 @@ interface ApiKey {
   name: string | null;
   createdAt: string;
   updatedAt: string;
-  lastUsedAt?: string | null;
+  /** When the key last made a request: the api-key plugin's own field name. */
+  lastRequest?: string | null;
 }
 
 /**
@@ -645,8 +646,8 @@ function ApiKeysSection() {
                       {new Date(key.createdAt).toLocaleDateString()}
                     </Cell>
                     <Cell className="font-mono tabular-nums">
-                      {key.lastUsedAt
-                        ? new Date(key.lastUsedAt).toLocaleDateString()
+                      {key.lastRequest
+                        ? new Date(key.lastRequest).toLocaleDateString()
                         : "Never"}
                     </Cell>
                     <Cell>

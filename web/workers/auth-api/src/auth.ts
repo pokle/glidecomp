@@ -89,6 +89,15 @@ async function inBackground(work: Promise<unknown>): Promise<void> {
  */
 export const SESSION_CACHE_MAX_AGE_S = 5 * 60;
 
+/**
+ * The one header that turns a request into an API-key session. Stated here
+ * rather than left to the plugin's default so index.ts, which refuses key
+ * sessions on account management (SEC-57), checks the same header the plugin
+ * reads: a second header the plugin honoured and the guard did not would walk
+ * straight past it.
+ */
+export const API_KEY_HEADER = "x-api-key";
+
 /** How long an isolate trusts its copy of the `jwks` table. */
 const JWKS_CACHE_MS = 5 * 60 * 1000;
 
@@ -250,6 +259,7 @@ function buildAuth(env: AuthEnv) {
       // @better-auth/core with structurally identical but nominally distinct types.
       apiKey({
         defaultPrefix: "glc_",
+        apiKeyHeaders: API_KEY_HEADER,
         enableSessionForAPIKeys: true,
         rateLimit: {
           enabled: true,

@@ -240,22 +240,32 @@ new migration in `web/db/migrations/`.
 | Method | Path | Auth Required | Description |
 |--------|------|---------------|-------------|
 | GET | `/api/auth/me` | No | Returns `{ user }` or `{ user: null }`. Accepts a session cookie **or** an `x-api-key` |
-| POST | `/api/auth/set-username` | Yes | Sets username (3-20 chars, `[a-zA-Z0-9-]`) and, when `name` is sent, the account's display name (1-128 chars) — both in one write |
-| POST | `/api/auth/set-name` | Yes | Sets the account's display name (1-128 chars, trimmed; blank refused). Called by competition-api over the service binding whenever `PATCH /api/comp/pilot` renames a profile, so the two names cannot drift |
+| POST | `/api/auth/set-username` | Yes (no API key) | Sets username (3-20 chars, `[a-zA-Z0-9-]`) and, when `name` is sent, the account's display name (1-128 chars) — both in one write |
+| POST | `/api/auth/set-name` | Yes (no API key) | Sets the account's display name (1-128 chars, trimmed; blank refused). Called by competition-api over the service binding whenever `PATCH /api/comp/pilot` renames a profile, so the two names cannot drift |
 | GET | `/api/auth/preferences` | Yes | Read the caller's UI preferences (`src/routes/preferences.ts`) |
 | PUT | `/api/auth/preferences` | Yes | Update them |
-| POST | `/api/auth/delete-account` | Yes | Purges every R2 object under `u/{userId}/`, then deletes the `user` row (cascades to sessions, accounts, preferences, user tracks/tasks/annotations — see [database.md](database.md)) |
+| POST | `/api/auth/delete-account` | Yes (no API key) | Purges every R2 object under `u/{userId}/`, then deletes the `user` row (cascades to sessions, accounts, preferences, user tracks/tasks/annotations — see [database.md](database.md)) |
 | POST | `/api/auth/dev-login` | No | **Local dev only** (404s unless `isLocalDev()`). Signs up-or-in an email+password identity so e2e specs don't need Google |
 | GET | `/api/auth/dev-last-otp` | No | **Local dev only.** Returns the last sign-in OTP issued for an email, so local/e2e flows can complete OTP sign-in without a mailbox |
 | GET | `/api/auth/jwks` | No | Public keys that verify the `session_data` cookie cache (Better Auth's `jwt` plugin) |
 | GET | `/api/auth/token` | — | **Always 404.** The `jwt` plugin's bearer-token endpoint, deliberately not served |
-| ALL | `/api/auth/*` | — | Better Auth handles OAuth sign-in/callback, email-OTP send + verify, sign-out, session, and API-key management |
+| ALL | `/api/auth/*` | — | Better Auth handles OAuth sign-in/callback, email-OTP send + verify, sign-out, session, and API-key management (no API key) |
 
 **API keys.** The Better Auth [`apiKey`](https://www.better-auth.com/docs/plugins/api-key)
 plugin issues `glc_`-prefixed keys (created under Settings → API keys). A key
-carries the permissions of the account that made it, is accepted anywhere a
-session cookie is (`enableSessionForAPIKeys`), and is rate-limited to the
-`API_KEY_RATE_LIMIT` in `src/rate-limit.ts`. See [api.md](api.md).
+carries the permissions of the account that made it, is accepted almost
+anywhere a session cookie is (`enableSessionForAPIKeys`), and is rate-limited
+to the `API_KEY_RATE_LIMIT` in `src/rate-limit.ts`. See [api.md](api.md).
+
+The exception is managing the account itself (SEC-57). A request carrying an
+`x-api-key` header gets `403 {"code":"BROWSER_SESSION_REQUIRED"}` from
+`/api-key/*`, `/delete-account`, `/set-username` and `/set-name`, before any
+of them runs — so `PATCH /api/comp/pilot` cannot rename the account with a key
+either. Otherwise one leaked key could mint a second that outlived revoking
+the first, revoke its owner's other keys, or delete the account. The list is
+`requiresBrowserSession()` in `src/endpoints.ts`; the header is
+`API_KEY_HEADER` in `src/auth.ts`, which the plugin is configured with too, so
+the guard and the plugin cannot disagree about what makes a key session.
 
 ## Configuration
 
