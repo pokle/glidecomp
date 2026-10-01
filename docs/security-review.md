@@ -71,7 +71,7 @@ rounds linked here.
 | SEC-02 | No security response headers (`_headers`) | Fixed | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-05-25](security-review/rounds/2026-05-25.md) |
 | SEC-03 | Admin emails returned on public comp detail | Accepted (by design) | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-06-01](security-review/rounds/2026-06-01.md) — do not re-open |
 | SEC-04 | IGC upload size/shape — manufacturer-record check | Fixed | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-06-08](security-review/rounds/2026-06-08.md) |
-| SEC-05 | `innerHTML` is the default render primitive | Open — guarded | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-08-17](security-review/rounds/2026-08-17.md) — `html-sinks.test.ts` pins every sink site |
+| SEC-05 | `innerHTML` is the default render primitive | Fixed (Trusted Types report-only) | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-08-17](security-review/rounds/2026-08-17.md) — `html-sinks.test.ts` pinned every sink site; 2026-10-01, proposal A4 — all 73 sinks now render through lit-html templates (`web/frontend/src/render-html.ts`), `html-sinks.test.ts` pins ZERO string sinks across `src/`, `escape-html.ts` deleted; Trusted Types report-only on `/analysis*` and `/replay*` with a DOMPurify `default` policy for Mapbox/threebox (`trusted-types.ts`), and `e2e/trusted-types.spec.ts` drives both pages with it enforced. Enforcement pending: G-28 |
 | SEC-06 | No JSON body-size cap | Fixed | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-06-12](security-review/rounds/2026-06-12.md) |
 | SEC-07 | Dev-only endpoints gated by `BETTER_AUTH_URL` hostname | Verified safe (load-bearing) | [2026-04-20](security-review/rounds/2026-04-20.md) | Re-verify on every deploy |
 | SEC-08 | Rate-limit headers not surfaced | Fixed | [2026-04-20](security-review/rounds/2026-04-20.md) | [2026-06-11](security-review/rounds/2026-06-11.md) |
@@ -144,7 +144,11 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 - **G-06** — TOCTOU / idempotency on `/api/user/tracks` + `/api/user/tasks` quota checks (needs a live concurrency test).
 - **G-07** — CLOSED 2026-09-27: CSP enforced on every page, SSR'd `/comp*` included (`functions/_middleware.ts`). One definition in `web/frontend/src/security-headers.ts`; `security-headers.test.ts` pins `_headers` to it and scans page sources for inline script; the SSR e2e suite fails on any browser-reported violation; reports reach `functions/api/csp-report.ts`.
 - **G-08** — SEC-26: packer/task-analysis decompression cap + test.
-- **G-09** — Extend `html-sinks.test.ts` from count-pinning towards content (statement-level escapeHtml check) if a tenth SEC-41-class instance ever appears.
+- ~~**G-09** — Extend `html-sinks.test.ts` from count-pinning towards content (statement-level escapeHtml check) if a tenth SEC-41-class instance ever appears.~~
+  Closed 2026-10-01 (proposal A4) — there is no sink left to check the
+  content of: `html-sinks.test.ts` now fails on ANY string HTML sink, lit's
+  `unsafe*` directives, a direct `lit-html` import or a second Trusted Types
+  policy, anywhere in `web/frontend/src/`.
 - **G-10** — SEC-45: bound the PathFinder branch-and-bound search; oracle tests + ~60k-fix adversarial regression, in its own PR (`scoring-changes/` note + archive parity measurement owed).
 - **G-11** — SEC-40: bound or restructure `findSubCores` in `thermal-shape.ts`.
 - **G-12** — SEC-29: parser loop bounds + `file.size` pre-check + regression test.
@@ -186,6 +190,15 @@ list; earlier rounds' per-round gap numbers do not correspond.)
 - **G-25** — SEC-61: live `workers_dev` / preview-URL state of auth-api, competition-api and airscore-api (is `/internal/cache/clear` reachable anywhere?).
 - **G-26** — After the SEC-55 allowlist deploys: Google sign-in on glidecomp.com AND on a branch preview (`/callback/:id/oauth-proxy`). A missing path is one line in `endpoints.ts`.
 - **G-27** — SEC-55 residual: run the Google-profile name through `isValidNameText()` at first sign-in (`databaseHooks.user.create.before`, blanking an invalid name so onboarding asks).
+- **G-28** — SEC-05/A4 follow-through. (1) Read the production
+  `require-trusted-types-for` reports from `/analysis*` and `/replay*`
+  (`wrangler pages deployment tail`, `csp-violation` lines with
+  `disposition: "report"`; `sample` names the sink); when they are quiet, rename
+  `TRUSTED_TYPES_HEADERS`' header in `security-headers.ts` to the enforcing
+  `Content-Security-Policy` (Pages merges two CSP headers as two policies, so
+  both are enforced). (2) Extend Trusted Types to the SPA: Tabulator's cell
+  rendering and the RAC/React internals need surveying first — report-only
+  there before anything else.
 
 ## Where to start the next review
 
@@ -214,4 +227,7 @@ list; earlier rounds' per-round gap numbers do not correspond.)
    proposes a scheduled audit).
 7. Fix SEC-53 (G-22, small); SEC-60 (A5) is a similarly small,
    self-contained PR.
-8. Do NOT re-open SEC-03 (accepted by design).
+8. **A4 landed after this round (SEC-05 fixed, G-09 closed)**: the analysis
+   page and replay render through lit-html, with Trusted Types report-only.
+   Read the production reports and flip to enforcing (G-28).
+9. Do NOT re-open SEC-03 (accepted by design).

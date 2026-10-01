@@ -31,6 +31,12 @@ import { parseThermalParam } from './thermal-link';
 import type { GaggleResult } from './gaggles';
 import { requiredGlideToTarget, type TrackManifest, type ThermalShapeSummary } from '@glidecomp/engine';
 import { installStaleDeployReload } from '../react/lib/stale-deploy';
+import { html, renderElement, renderInto } from '../render-html';
+import { installDefaultTrustedTypesPolicy } from '../trusted-types';
+
+// Before anything can create a map: Mapbox GL's own HTML and worker URL go
+// through the default Trusted Types policy (src/trusted-types.ts).
+installDefaultTrustedTypesPolicy();
 
 // A tab that outlived a deploy asks for chunks that no longer exist (the map
 // and terrain code load on demand): reload it onto the new deploy, once.
@@ -519,9 +525,10 @@ async function main(): Promise<void> {
   // map style picker (terrain only)
   const mapStyleRow = $('mapStyleRow');
   const mapStyleSel = $<HTMLSelectElement>('mapStyle');
-  mapStyleSel.innerHTML = MAP_STYLES.map(
-    (s) => `<option value="${s.url}">${s.name}</option>`,
-  ).join('');
+  renderInto(
+    mapStyleSel,
+    MAP_STYLES.map((s) => html`<option value=${s.url}>${s.name}</option>`),
+  );
   mapStyleSel.value = DEFAULT_MAP_STYLE.url;
   mapStyleSel.addEventListener('change', () => viewer.setMapStyle(mapStyleSel.value));
 
@@ -580,25 +587,24 @@ async function main(): Promise<void> {
     const p = manifest.pilots[i];
     const rgb = pilotRgb(i);
     const scoreLabel = p.score != null ? String(Math.round(p.score)) : '';
-    const li = document.createElement('li');
-    li.className =
-      'flex items-center gap-2 px-3 py-1 hover:bg-slate-700/40 cursor-pointer select-none';
-    li.dataset.search = `${p.rank != null ? `${p.rank}. ` : ''}${p.name}`.toLowerCase();
     // Ranked pilots get the same rank chip as their cone in the 3D scene (it
     // doubles as the visibility toggle); unranked pilots keep a plain swatch.
-    const swatchHtml =
+    const swatch =
       p.rank != null
-        ? `<button class="swatch shrink-0 grid place-items-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold text-slate-900 leading-none" style="background:${rgb}; box-shadow: 0 0 0 1px rgba(8,12,22,0.6)" title="Toggle visibility">${p.rank}</button>`
-        : `<button class="swatch shrink-0 w-3 h-3 rounded-sm" style="background:${rgb}" title="Toggle visibility"></button>`;
-    li.innerHTML = `
-      ${swatchHtml}
-      <span class="name flex-1 truncate" title="Click to follow">${escapeHtml(p.name)}</span>
-      <span class="shrink-0 text-[10px] text-slate-500 tabular-nums">${scoreLabel}</span>`;
+        ? html`<button class="swatch shrink-0 grid place-items-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold text-slate-900 leading-none" style="background:${rgb}; box-shadow: 0 0 0 1px rgba(8,12,22,0.6)" title="Toggle visibility">${p.rank}</button>`
+        : html`<button class="swatch shrink-0 w-3 h-3 rounded-sm" style="background:${rgb}" title="Toggle visibility"></button>`;
+    const li = renderElement<HTMLLIElement>(html`
+      <li class="flex items-center gap-2 px-3 py-1 hover:bg-slate-700/40 cursor-pointer select-none">
+        ${swatch}
+        <span class="name flex-1 truncate" title="Click to follow">${p.name}</span>
+        <span class="shrink-0 text-[10px] text-slate-500 tabular-nums">${scoreLabel}</span>
+      </li>`);
+    li.dataset.search = `${p.rank != null ? `${p.rank}. ` : ''}${p.name}`.toLowerCase();
     legend.appendChild(li);
     rows[i] = li;
 
     let visible = true;
-    const swatch = li.querySelector<HTMLButtonElement>('.swatch')!;
+    const swatchBtn = li.querySelector<HTMLButtonElement>('.swatch')!;
     const nameEl = li.querySelector<HTMLSpanElement>('.name')!;
 
     li.addEventListener('pointerenter', () => {
@@ -607,7 +613,7 @@ async function main(): Promise<void> {
     li.addEventListener('pointerleave', () => {
       if (followIdx < 0) viewer.setHighlight(-1);
     });
-    swatch.addEventListener('click', (e) => {
+    swatchBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       visible = !visible;
       viewer.setPilotVisible(i, visible);
@@ -1338,18 +1344,6 @@ async function main(): Promise<void> {
   viewer.setTime(0);
 
   window.addEventListener('beforeunload', () => viewer.dispose());
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => {
-    switch (ch) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      default: return '&#39;';
-    }
-  });
 }
 
 main();

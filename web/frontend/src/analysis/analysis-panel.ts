@@ -11,7 +11,7 @@ import { getEventStyle, getOptimizedSegmentDistances, resolveTurnpointSequence, 
 import { formatAltitude, formatSpeed, formatDistance, formatClimbRate } from './units-browser';
 import { config } from './config';
 import { createTaskEditor, type TaskEditor } from './task-editor';
-import { escapeHtml } from '../escape-html';
+import { html, nothing, renderInto, type TemplateResult } from '../render-html';
 import { restorePanelTab, type PanelTabType } from './panel-tab';
 
 export type { PanelTabType };
@@ -110,93 +110,93 @@ function formatTime(date: Date): string {
  * Unified metadata for flight event types.
  * Each entry provides the display label and SVG icon for a given event type.
  */
-const EVENT_METADATA: Record<FlightEventType, { label: string; icon: string }> = {
+const EVENT_METADATA: Record<FlightEventType, { label: string; icon: TemplateResult }> = {
   takeoff: {
     label: 'Takeoff',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10l-6.9-6.43-1.93.51 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43 5.31-1.42 4.35-1.16L21 11.49c.81-.23 1.28-1.05 1.07-1.85z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10l-6.9-6.43-1.93.51 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43 5.31-1.42 4.35-1.16L21 11.49c.81-.23 1.28-1.05 1.07-1.85z"/></svg>`,
   },
   landing: {
     label: 'Landing',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm17.16-5.84l-7.29 1.95-6.41-6.14-1.93.52 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43L9.4 19.4l7.29-1.95 3.49-.93c.81-.22 1.28-1.04 1.07-1.84-.22-.81-1.04-1.28-1.84-1.06l-.75.2z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19v2h-19v-2zm17.16-5.84l-7.29 1.95-6.41-6.14-1.93.52 4.14 7.17-4.97 1.33-1.97-1.54-1.45.39 1.82 3.16.77 1.33 1.6-.43L9.4 19.4l7.29-1.95 3.49-.93c.81-.22 1.28-1.04 1.07-1.84-.22-.81-1.04-1.28-1.84-1.06l-.75.2z"/></svg>`,
   },
   thermal_entry: {
     label: 'Thermal Entry',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg>`,
   },
   thermal_exit: {
     label: 'Thermal Exit',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>`,
   },
   glide_start: {
     label: 'Glide Start',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/></svg>`,
   },
   glide_end: {
     label: 'Glide End',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l1.41 1.41L7.83 11H20v2H7.83l5.58 5.59L12 20l-8-8 8-8z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l1.41 1.41L7.83 11H20v2H7.83l5.58 5.59L12 20l-8-8 8-8z"/></svg>`,
   },
   turnpoint_entry: {
     label: 'TP Entry',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
   },
   turnpoint_exit: {
     label: 'TP Exit',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
   },
   start_crossing: {
     label: 'Start',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/></svg>`,
   },
   goal_crossing: {
     label: 'Goal',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>`,
   },
   start_reaching: {
     label: 'Start (scored)',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
   },
   turnpoint_reaching: {
     label: 'TP Reached',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
   },
   ess_reaching: {
     label: 'ESS Reached',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
   },
   goal_reaching: {
     label: 'Goal Reached',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`,
   },
   max_altitude: {
     label: 'Max Alt',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
   },
   min_altitude: {
     label: 'Min Alt',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>`,
   },
   max_climb: {
     label: 'Max Climb',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>`,
   },
   max_sink: {
     label: 'Max Sink',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z"/></svg>`,
   },
   circle_complete: {
     label: 'Circle',
-    icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`,
+    icon: html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>`,
   },
 };
 
 /** Default icon used when an event type has no specific icon */
-const DEFAULT_EVENT_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`;
+const DEFAULT_EVENT_ICON = html`<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>`;
 
 function getEventTypeLabel(type: FlightEventType): string {
   return EVENT_METADATA[type]?.label || type;
 }
 
-function getEventIcon(type: FlightEventType): string {
+function getEventIcon(type: FlightEventType): TemplateResult {
   return EVENT_METADATA[type]?.icon || DEFAULT_EVENT_ICON;
 }
 
@@ -280,7 +280,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   // Create panel structure with unified tab row
   const panel = document.createElement('div');
   panel.className = 'flex h-full flex-col overflow-hidden';
-  panel.innerHTML = `
+  renderInto(panel, html`
     <!-- Flight info banner -->
     <div class="flex items-start gap-2 border-b border-border bg-muted/50 pl-4 pr-[10px] py-[10px] text-sm">
       <div class="flight-info-content text-muted-foreground flex-1 min-w-0 pt-1">Load an IGC file to see flight info</div>
@@ -352,7 +352,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       </div>
     </div>
 
-  `;
+  `);
 
   container.appendChild(panel);
 
@@ -439,7 +439,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    * Render Y-axis (altitude) labels with tick marks
    */
   function renderYAxisLabels(minAlt: number, maxAlt: number): void {
-    sparklineYAxis.innerHTML = '';
+    sparklineYAxis.replaceChildren();
     const range = maxAlt - minAlt;
     if (range <= 0) return;
 
@@ -453,7 +453,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const label = document.createElement('div');
       label.style.cssText = `position: absolute; right: 2px; bottom: ${pct}%; transform: translateY(50%); font-size: 9px; line-height: 1; color: var(--color-muted-foreground); display: flex; align-items: center; gap: 1px;`;
       const fv = formatAltitude(val);
-      label.innerHTML = `<span>${fv.formatted}</span><span style="width: 4px; height: 1px; background: var(--color-muted-foreground); display: inline-block; flex-shrink: 0;"></span>`;
+      renderInto(label, html`<span>${fv.formatted}</span><span style="width: 4px; height: 1px; background: var(--color-muted-foreground); display: inline-block; flex-shrink: 0;"></span>`);
       sparklineYAxis.appendChild(label);
     }
   }
@@ -462,7 +462,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    * Render X-axis (time) labels with tick marks
    */
   function renderXAxisLabels(timestamps: Date[]): void {
-    sparklineXAxis.innerHTML = '';
+    sparklineXAxis.replaceChildren();
     if (timestamps.length < 2) return;
 
     const startMs = timestamps[0].getTime();
@@ -486,7 +486,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const label = document.createElement('div');
       label.style.cssText = `position: absolute; left: ${pct}%; top: 0; transform: translateX(-50%); font-size: 9px; line-height: 1; color: var(--color-muted-foreground); display: flex; flex-direction: column; align-items: center;`;
       const tickDate = new Date(tickMs);
-      label.innerHTML = `<span style="width: 1px; height: 4px; background: var(--color-muted-foreground); display: block;"></span><span>${formatTimeShort(tickDate)}</span>`;
+      renderInto(label, html`<span style="width: 1px; height: 4px; background: var(--color-muted-foreground); display: block;"></span><span>${formatTimeShort(tickDate)}</span>`);
       sparklineXAxis.appendChild(label);
     }
   }
@@ -554,8 +554,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     } else {
       sparklineDataUri = '';
       sparklineInner.style.backgroundImage = '';
-      sparklineYAxis.innerHTML = '';
-      sparklineXAxis.innerHTML = '';
+      sparklineYAxis.replaceChildren();
+      sparklineXAxis.replaceChildren();
       sparklineContainer.classList.add('hidden');
     }
   }
@@ -721,41 +721,35 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
    */
   function renderEvents(): void {
     if (filteredEvents.length === 0) {
-      listContainer.innerHTML = `
+      renderInto(listContainer, html`
         <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
           ${allEvents.length === 0 ? 'Load an IGC file to see events' : 'No events in current view'}
         </div>
-      `;
+      `);
       eventCountEl.textContent = `${allEvents.length} events`;
       return;
     }
 
     eventCountEl.textContent = `${filteredEvents.length} of ${allEvents.length} events`;
 
-    let html = '<div class="space-y-1">';
-
-    for (const event of filteredEvents) {
+    const items = filteredEvents.map((event) => {
       const style = getEventStyle(event.type);
-      const icon = getEventIcon(event.type);
-
-      html += `
-        <button class="event-item" data-event-id="${event.id}">
+      return html`
+        <button class="event-item" data-event-id=${event.id}>
           <span class="event-icon" style="color: ${style.color}">
-            ${icon}
+            ${getEventIcon(event.type)}
           </span>
           <div class="event-content">
             <span class="event-type">${getEventTypeLabel(event.type)}</span>
-            <span class="event-desc">${escapeHtml(event.description)}</span>
+            <span class="event-desc">${event.description}</span>
             <span class="event-meta">
               ${formatTime(event.time)} | ${formatAltitude(event.altitude).withUnit}
             </span>
           </div>
         </button>
       `;
-    }
-
-    html += '</div>';
-    listContainer.innerHTML = html;
+    });
+    renderInto(listContainer, html`<div class="space-y-1">${items}</div>`);
 
     // Add click handlers
     listContainer.querySelectorAll('.event-item').forEach(item => {
@@ -799,27 +793,24 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     emptyLabel: string;
     countLabel: string;
     sortDescription: string;
-    renderItem: (item: T, index: number) => string;
+    renderItem: (item: T, index: number) => TemplateResult;
   }): void {
     if (opts.items.length === 0) {
-      listContainer.innerHTML = `
+      renderInto(listContainer, html`
         <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
           ${allEvents.length === 0 ? `Load an IGC file to see ${opts.countLabel}` : opts.emptyLabel}
         </div>
-      `;
+      `);
       eventCountEl.textContent = `0 ${opts.countLabel}`;
       return;
     }
 
     eventCountEl.textContent = `${opts.items.length} ${opts.countLabel}`;
 
-    let html = '<div class="space-y-2">';
-    html += `<div class="text-xs text-muted-foreground px-1 pb-2">${opts.sortDescription}</div>`;
-    for (let i = 0; i < opts.items.length; i++) {
-      html += opts.renderItem(opts.items[i], i);
-    }
-    html += '</div>';
-    listContainer.innerHTML = html;
+    renderInto(listContainer, html`<div class="space-y-2">
+      <div class="text-xs text-muted-foreground px-1 pb-2">${opts.sortDescription}</div>
+      ${opts.items.map((item, i) => opts.renderItem(item, i))}
+    </div>`);
 
     // Add click handlers
     listContainer.querySelectorAll(`.${opts.itemClass}`).forEach(el => {
@@ -867,8 +858,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         const altLostStr = formatAltitude(glide.altitudeLost).withUnit;
         const startAltStr = formatAltitude(glide.startAltitude).withUnit;
         const endAltStr = formatAltitude(glide.endAltitude).withUnit;
-        return `
-          <button class="glide-item" data-glide-id="${glide.id}">
+        return html`
+          <button class="glide-item" data-glide-id=${glide.id}>
             <div class="glide-rank">#${i + 1}</div>
             <div class="glide-details">
               <div class="glide-primary">
@@ -902,8 +893,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         const climbRateStr = formatClimbRate(climb.avgClimbRate).withUnit;
         const startAltStr = formatAltitude(climb.startAltitude).withUnit;
         const endAltStr = formatAltitude(climb.endAltitude).withUnit;
-        return `
-          <button class="climb-item" data-climb-id="${climb.id}">
+        return html`
+          <button class="climb-item" data-climb-id=${climb.id}>
             <div class="climb-rank">#${i + 1}</div>
             <div class="climb-details">
               <div class="climb-primary">
@@ -938,8 +929,8 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         const sinkRateStr = formatClimbRate(-sink.avgSinkRate).withUnit;
         const startAltStr = formatAltitude(sink.startAltitude).withUnit;
         const endAltStr = formatAltitude(sink.endAltitude).withUnit;
-        return `
-          <button class="sink-item" data-sink-id="${sink.id}">
+        return html`
+          <button class="sink-item" data-sink-id=${sink.id}>
             <div class="sink-rank">#${i + 1}</div>
             <div class="sink-details">
               <div class="sink-primary">
@@ -992,28 +983,28 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   function renderScore(): void {
     if (!currentScore || !currentTask) {
       eventCountEl.textContent = 'No score';
-      scorePanelContent.innerHTML = `
+      renderInto(scorePanelContent, html`
         <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
           Load a task and track to see scoring
         </div>
-      `;
+      `);
       return;
     }
 
     const result = currentScore;
     eventCountEl.textContent = result.madeGoal ? 'Goal' : result.sequence.length > 0 ? `${result.sequence.length} TPs reached` : 'Not started';
 
-    let html = '<div class="space-y-3">';
+    const out: TemplateResult[] = [];
 
     // A. Status banner
     if (result.madeGoal) {
-      html += `<div class="rounded-lg bg-green-500/15 px-3 py-2 text-sm font-medium text-green-700">Goal</div>`;
+      out.push(html`<div class="rounded-lg bg-green-500/15 px-3 py-2 text-sm font-medium text-green-700">Goal</div>`);
     } else if (result.sequence.length > 0) {
       const lastTP = result.sequence[result.sequence.length - 1];
-      const tpName = escapeHtml(currentTask.turnpoints[lastTP.taskIndex]?.waypoint.name || getTurnpointLabel(lastTP.taskIndex));
-      html += `<div class="rounded-lg bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-700">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`;
+      const tpName = currentTask.turnpoints[lastTP.taskIndex]?.waypoint.name || getTurnpointLabel(lastTP.taskIndex);
+      out.push(html`<div class="rounded-lg bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-700">${getTurnpointLabel(lastTP.taskIndex)} reached &ndash; ${tpName}</div>`);
     } else {
-      html += `<div class="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground">Not started</div>`;
+      out.push(html`<div class="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground">Not started</div>`);
     }
 
     // A2. Task-setup fallbacks — explain scoring decisions made because the
@@ -1028,9 +1019,9 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       fallbackNotes.push('No ESS turnpoint in this task — the speed section ends at the last turnpoint (goal).');
     }
     if (fallbackNotes.length > 0) {
-      html += `<div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-0.5">${
-        fallbackNotes.map(n => `<div class="text-xs text-amber-500">&#9888; ${n}</div>`).join('')
-      }</div>`;
+      out.push(html`<div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-0.5">${
+        fallbackNotes.map(n => html`<div class="text-xs text-amber-500">&#9888; ${n}</div>`)
+      }</div>`);
     }
 
     // B. Distance bar
@@ -1043,7 +1034,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const taskStr = formatDistance(result.taskDistance).withUnit;
     const pct = result.taskDistance > 0 ? Math.min(100, (displayDistance / result.taskDistance) * 100) : 0;
 
-    html += `
+    out.push(html`
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="flex items-baseline justify-between text-sm">
           <span>${flownStr} / ${taskStr}</span>
@@ -1054,49 +1045,46 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         </div>
         <div class="text-xs text-muted-foreground mt-1">${completedLegs.length} of ${result.legs.length} legs completed</div>
       </div>
-    `;
+    `);
 
     // C. Speed section
     if (result.speedSectionTime !== null) {
-      html += `
+      out.push(html`
         <div class="rounded-lg border border-border bg-muted/30 p-3">
           <div class="text-xs text-muted-foreground mb-1">Speed section</div>
           <div class="text-sm font-medium">${formatHMS(result.speedSectionTime)}</div>
         </div>
-      `;
+      `);
     }
 
     // D. Legs
-    html += `<div class="rounded-lg border border-border bg-muted/30 p-3">`;
-    html += `<div class="text-xs text-muted-foreground mb-2">Legs</div>`;
-    for (const leg of result.legs) {
-      const fromTp = currentTask.turnpoints[leg.fromTaskIndex];
-      const toTp = currentTask.turnpoints[leg.toTaskIndex];
-      const fromLabel = getTurnpointLabel(leg.fromTaskIndex);
-      const toLabel = getTurnpointLabel(leg.toTaskIndex);
-      const fromName = fromTp?.waypoint.name ? `${escapeHtml(fromTp.waypoint.name)} <span class="text-xs text-muted-foreground">(${fromLabel})</span>` : fromLabel;
-      const toName = toTp?.waypoint.name ? `${escapeHtml(toTp.waypoint.name)} <span class="text-xs text-muted-foreground">(${toLabel})</span>` : toLabel;
+    const tpWithLabel = (name: string | undefined, label: string) =>
+      name ? html`${name} <span class="text-xs text-muted-foreground">(${label})</span>` : label;
+    const legRows = result.legs.map((leg) => {
+      const fromName = tpWithLabel(currentTask!.turnpoints[leg.fromTaskIndex]?.waypoint.name, getTurnpointLabel(leg.fromTaskIndex));
+      const toName = tpWithLabel(currentTask!.turnpoints[leg.toTaskIndex]?.waypoint.name, getTurnpointLabel(leg.toTaskIndex));
       const legDist = formatDistance(leg.distance).withUnit;
       const icon = leg.completed
-        ? '<span class="text-green-600">&#10003;</span>'
-        : '<span class="text-muted-foreground">&#10007;</span>';
-      html += `
+        ? html`<span class="text-green-600">&#10003;</span>`
+        : html`<span class="text-muted-foreground">&#10007;</span>`;
+      return html`
         <div class="flex items-center justify-between py-1 text-sm">
           <span>${fromName} &rarr; ${toName}</span>
           <span class="flex items-center gap-2"><span class="text-muted-foreground">${legDist}</span>${icon}</span>
         </div>
       `;
-    }
-    html += `</div>`;
+    });
+    out.push(html`<div class="rounded-lg border border-border bg-muted/30 p-3">
+      <div class="text-xs text-muted-foreground mb-2">Legs</div>
+      ${legRows}
+    </div>`);
 
     // E. Sequence (reachings)
     if (result.sequence.length > 0) {
-      html += `<div class="rounded-lg border border-border bg-muted/30 p-3">`;
-      html += `<div class="text-xs text-muted-foreground mb-2">Sequence</div>`;
-      for (const reaching of result.sequence) {
-        const tp = currentTask.turnpoints[reaching.taskIndex];
+      const reachingRows = result.sequence.map((reaching) => {
+        const tp = currentTask!.turnpoints[reaching.taskIndex];
         const tpLabel = getTurnpointLabel(reaching.taskIndex);
-        const tpName = tp?.waypoint.name ? escapeHtml(tp.waypoint.name) : tpLabel;
+        const tpName = tp?.waypoint.name || tpLabel;
         const timeStr = formatTime(reaching.time);
         const altStr = formatAltitude(reaching.altitude).withUnit;
 
@@ -1117,19 +1105,22 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           reasonStr = 'Track began outside the start cylinder — measured from first fix';
         }
 
-        html += `
-          <button class="score-reaching-item w-full text-left py-1.5 cursor-pointer hover:bg-muted/50 rounded transition-colors" data-reaching-idx="${reaching.taskIndex}" data-lat="${reaching.latitude}" data-lon="${reaching.longitude}" data-alt="${reaching.altitude}" data-time="${reaching.time.getTime()}">
+        return html`
+          <button class="score-reaching-item w-full text-left py-1.5 cursor-pointer hover:bg-muted/50 rounded transition-colors" data-reaching-idx=${reaching.taskIndex} data-lat=${reaching.latitude} data-lon=${reaching.longitude} data-alt=${reaching.altitude} data-time=${reaching.time.getTime()}>
             <div class="flex items-baseline gap-2 text-sm">
               <span class="shrink-0 text-muted-foreground">${timeStr}</span>
               <span class="font-medium">${tpLabel}</span>
               <span class="truncate text-muted-foreground">${tpName}</span>
               <span class="ml-auto shrink-0 text-muted-foreground">${altStr}</span>
             </div>
-            ${reasonStr ? `<div class="text-xs text-muted-foreground mt-0.5 pl-[4.5rem]">${reasonStr}</div>` : ''}
+            ${reasonStr ? html`<div class="text-xs text-muted-foreground mt-0.5 pl-[4.5rem]">${reasonStr}</div>` : nothing}
           </button>
         `;
-      }
-      html += `</div>`;
+      });
+      out.push(html`<div class="rounded-lg border border-border bg-muted/30 p-3">
+        <div class="text-xs text-muted-foreground mb-2">Sequence</div>
+        ${reachingRows}
+      </div>`);
     }
 
     // F. Best progress (non-goal only)
@@ -1137,17 +1128,16 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       const distToGoalStr = formatDistance(result.bestProgress.distanceToGoal).withUnit;
       const creditStr = formatDistance(result.flownDistance).withUnit;
       const timeStr = formatTime(result.bestProgress.time);
-      html += `
-        <button class="score-best-progress w-full rounded-lg border border-border bg-muted/30 p-3 text-left cursor-pointer hover:bg-muted/50 transition-colors" data-lat="${result.bestProgress.latitude}" data-lon="${result.bestProgress.longitude}" data-time="${result.bestProgress.time.getTime()}">
+      out.push(html`
+        <button class="score-best-progress w-full rounded-lg border border-border bg-muted/30 p-3 text-left cursor-pointer hover:bg-muted/50 transition-colors" data-lat=${result.bestProgress.latitude} data-lon=${result.bestProgress.longitude} data-time=${result.bestProgress.time.getTime()}>
           <div class="text-xs text-muted-foreground mb-1">Best progress</div>
           <div class="text-sm">${distToGoalStr} from goal at ${timeStr}</div>
           <div class="text-xs text-muted-foreground mt-1">Distance credit: ${creditStr}</div>
         </button>
-      `;
+      `);
     }
 
-    html += '</div>';
-    scorePanelContent.innerHTML = html;
+    renderInto(scorePanelContent, html`<div class="space-y-3">${out}</div>`);
 
     // Click handlers for reachings
     scorePanelContent.querySelectorAll('.score-reaching-item').forEach(item => {
@@ -1373,11 +1363,11 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
   function renderCompetitionScore(): void {
     if (!currentCompScore) {
       eventCountEl.textContent = 'No competition score';
-      compScorePanelContent.innerHTML = `
+      renderInto(compScorePanelContent, html`
         <div class="flex h-full items-center justify-center p-6 text-center text-muted-foreground">
           Load multiple tracks and a task to see competition scores
         </div>
-      `;
+      `);
       return;
     }
 
@@ -1448,56 +1438,50 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     eventCountEl.textContent =
       `${result.pilotScores.length} pilots · best ${formatDistance(stats.bestDistance).withUnit}`;
 
-    let html = '<div class="space-y-3">';
+    const rows = result.pilotScores.map((ps) => {
+      const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
+      const od = openDistanceStats?.get(ps.pilotName);
+      const stayedMark = od?.leftTakeoff === false
+        ? html`<span class="text-amber-500" title="Never left the take-off cylinder — open distance is measured from the cylinder exit, so this flight scores 0">*</span>`
+        : nothing;
+      return html`<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
+        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot=${ps.pilotName} ?checked=${isChecked}></td>
+        <td class="px-2 py-1.5 text-right font-medium tabular-nums sticky left-[28px] z-10 bg-background">${ps.rank}</td>
+        <td class="px-2 py-1.5 truncate max-w-[140px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title=${ps.pilotName}>${ps.pilotName}</td>
+        <td class="px-2 py-1.5 text-right font-medium tabular-nums">${formatDistance(ps.flownDistance).withUnit}${stayedMark}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${od ? formatDistance(od.flownTrackDistance).withUnit : '—'}</td>
+        <td class="px-2 py-1.5 text-right tabular-nums">${od && od.airtimeSeconds !== null ? formatHMS(od.airtimeSeconds) : '—'}</td>
+      </tr>`;
+    });
 
-    html += `<div class="flex justify-end"><a href="/scoring-open-distance.html" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How Open Distance works</a></div>`;
+    renderInto(compScorePanelContent, html`<div class="space-y-3">
+      <div class="flex justify-end"><a href="/scoring-open-distance.html" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How Open Distance works</a></div>
 
-    // Stats
-    html += `
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">Stats</div>
         <div class="flex gap-3 text-sm flex-wrap">
           <span title="Pilots with a tracklog${stats.numPresent !== stats.numFlying ? ` (of ${stats.numPresent} present)` : ''}">Pilots: ${stats.numFlying}${stats.numPresent !== stats.numFlying ? ` / ${stats.numPresent}` : ''}</span>
           <span>Best dist: ${formatDistance(stats.bestDistance).withUnit}</span>
-          ${neverLeft > 0 ? `<span title="Pilots who never left the take-off cylinder score 0">Never left launch: ${neverLeft}</span>` : ''}
+          ${neverLeft > 0 ? html`<span title="Pilots who never left the take-off cylinder score 0">Never left launch: ${neverLeft}</span>` : nothing}
         </div>
       </div>
-    `;
 
-    // Ranked distances table
-    html += `<div class="rounded-lg border border-border overflow-x-auto overflow-y-hidden">`;
-    html += `<table class="text-sm">`;
-    html += `<thead class="bg-muted/50"><tr>
-      <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ${allSelected ? 'checked' : ''}></th>
-      <th class="px-2 py-1.5 text-right font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
-      <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
-      <th class="px-2 py-1.5 text-right font-medium" title="Straight-line distance from the take-off cylinder exit to the furthest point reached — this is the score">Scored</th>
-      <th class="px-2 py-1.5 text-right font-medium" title="Distance actually flown along the track">Flown</th>
-      <th class="px-2 py-1.5 text-right font-medium" title="Time in the air (takeoff to landing)">Airtime</th>
-    </tr></thead>`;
-    html += `<tbody>`;
+      <div class="rounded-lg border border-border overflow-x-auto overflow-y-hidden">
+        <table class="text-sm">
+          <thead class="bg-muted/50"><tr>
+            <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ?checked=${allSelected}></th>
+            <th class="px-2 py-1.5 text-right font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
+            <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
+            <th class="px-2 py-1.5 text-right font-medium" title="Straight-line distance from the take-off cylinder exit to the furthest point reached — this is the score">Scored</th>
+            <th class="px-2 py-1.5 text-right font-medium" title="Distance actually flown along the track">Flown</th>
+            <th class="px-2 py-1.5 text-right font-medium" title="Time in the air (takeoff to landing)">Airtime</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
 
-    for (const ps of result.pilotScores) {
-      const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
-      const od = openDistanceStats?.get(ps.pilotName);
-      const stayedMark = od?.leftTakeoff === false
-        ? '<span class="text-amber-500" title="Never left the take-off cylinder — open distance is measured from the cylinder exit, so this flight scores 0">*</span>'
-        : '';
-      html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
-        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${escapeHtml(ps.pilotName)}" ${isChecked ? 'checked' : ''}></td>
-        <td class="px-2 py-1.5 text-right font-medium tabular-nums sticky left-[28px] z-10 bg-background">${ps.rank}</td>
-        <td class="px-2 py-1.5 truncate max-w-[140px] sticky left-[52px] z-10 bg-background after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" title="${escapeHtml(ps.pilotName)}">${escapeHtml(ps.pilotName)}</td>
-        <td class="px-2 py-1.5 text-right font-medium tabular-nums">${formatDistance(ps.flownDistance).withUnit}${stayedMark}</td>
-        <td class="px-2 py-1.5 text-right tabular-nums">${od ? formatDistance(od.flownTrackDistance).withUnit : '—'}</td>
-        <td class="px-2 py-1.5 text-right tabular-nums">${od && od.airtimeSeconds !== null ? formatHMS(od.airtimeSeconds) : '—'}</td>
-      </tr>`;
-    }
-
-    html += `</tbody></table></div>`;
-
-    html += `<p class="text-xs text-muted-foreground px-1">Scored distance is the straight line from where the pilot exits the take-off cylinder to the furthest point they reached, drawn on the map as a dashed line. Pilots who never leave the take-off cylinder score 0.</p>`;
-    html += '</div>';
-    compScorePanelContent.innerHTML = html;
+      <p class="text-xs text-muted-foreground px-1">Scored distance is the straight line from where the pilot exits the take-off cylinder to the furthest point they reached, drawn on the map as a dashed line. Pilots who never leave the take-off cylinder score 0.</p>
+    </div>`);
 
     wirePilotSelection(result);
   }
@@ -1511,14 +1495,12 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
 
     eventCountEl.textContent = `${result.pilotScores.length} pilots \u00b7 ${stats.numInGoal} in goal`;
 
-    let html = '<div class="space-y-3">';
-
     // Settings gear link
-    html += `<div class="flex justify-end gap-3"><a href="/scoring-gap.html" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How GAP works</a><button type="button" class="comp-settings-btn flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-0 p-0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Scoring Config</button></div>`;
+    const settingsRow = html`<div class="flex justify-end gap-3"><a href="/scoring-gap.html" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>How GAP works</a><button type="button" class="comp-settings-btn flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-0 p-0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Scoring Config</button></div>`;
 
     // Helpers for linking to the scoring docs and formatting fractions.
     const docLink = (anchor: string, text: string) =>
-      `<a href="/scoring-gap.html#${anchor}" target="_blank" rel="noopener noreferrer" class="underline decoration-dotted hover:text-foreground">${text}</a>`;
+      html`<a href="/scoring-gap.html#${anchor}" target="_blank" rel="noopener noreferrer" class="underline decoration-dotted hover:text-foreground">${text}</a>`;
     const pct1 = (n: number) => `${(n * 100).toFixed(1)}%`;
     const wPct = (n: number) => `${Math.round(n * 100)}%`;
 
@@ -1528,7 +1510,7 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     const leadCfg = params.useLeading
       ? `on (ratio ${Math.round(resolveLeadingTimeRatio(params) * 100)}%)`
       : 'off';
-    html += `
+    const configBox = html`
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">${docLink('what-is-gap', 'Scoring configuration')} — FAI S7F 2026</div>
         <div class="flex gap-x-3 gap-y-1 text-sm flex-wrap">
@@ -1537,15 +1519,15 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           <span title="Nominal task time">Nom time: ${Math.round(params.nominalTime / 60)} min</span>
           <span>Min dist: ${formatDistance(params.minimumDistance).withUnit}</span>
           <span>${docLink('leading-points', 'Leading')}: ${leadCfg}</span>
-          ${params.scoring === 'HG' ? `<span>${docLink('arrival-points', 'Arrival')}: ${params.useArrival ? 'on' : 'off'}</span>` : ''}
+          ${params.scoring === 'HG' ? html`<span>${docLink('arrival-points', 'Arrival')}: ${params.useArrival ? 'on' : 'off'}</span>` : nothing}
           <span title="Where scored distance begins (take-off vs start cylinder)">${docLink('distance-origin', 'Dist origin')}: ${params.distanceOrigin}</span>
-          ${params.scoring === 'HG' ? `<span>${docLink('distance-difficulty', 'Difficulty')}: ${params.useDistanceDifficulty ? 'on' : 'off'}</span>` : ''}
+          ${params.scoring === 'HG' ? html`<span>${docLink('distance-difficulty', 'Difficulty')}: ${params.useDistanceDifficulty ? 'on' : 'off'}</span>` : nothing}
         </div>
       </div>
     `;
 
     // Task validity (with the inputs that drive each component as tooltips)
-    html += `
+    const validityBox = html`
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">${docLink('task-validity', 'Task Validity')}</div>
         <div class="flex gap-3 text-sm flex-wrap">
@@ -1558,28 +1540,28 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     `;
 
     // Available points + the weight fraction that produced each
-    html += `
+    const pointsBox = html`
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">${docLink('scoring-components', `Available Points (${result.availablePoints.total.toFixed(0)})`)}</div>
         <div class="flex gap-3 text-sm flex-wrap">
           <span title="Distance weight ${wPct(result.weights.distance)}">Distance: ${result.availablePoints.distance.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.distance)})</span></span>
           <span title="Time weight ${wPct(result.weights.time)}">Time: ${result.availablePoints.time.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.time)})</span></span>
           <span title="Leading weight ${wPct(result.weights.leading)}">Leading: ${result.availablePoints.leading.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.leading)})</span></span>
-          ${params.scoring === 'HG' ? `<span title="Arrival weight ${wPct(result.weights.arrival)}">Arrival: ${result.availablePoints.arrival.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.arrival)})</span></span>` : ''}
+          ${params.scoring === 'HG' ? html`<span title="Arrival weight ${wPct(result.weights.arrival)}">Arrival: ${result.availablePoints.arrival.toFixed(0)} <span class="text-muted-foreground">(${wPct(result.weights.arrival)})</span></span>` : nothing}
         </div>
         ${
           // FAI S7F §11 (HG): nobody reached ESS, so the time and arrival
           // offers are zero and nothing replaces them — say why, or the row
           // above visibly fails to add up to the total.
           params.scoring === 'HG' && stats.numReachedESS === 0 && result.availablePoints.total > 0
-            ? `<div class="text-xs text-muted-foreground mt-1">Nobody reached ESS, so no time or arrival points were available (FAI S7F §12) — only ${(result.availablePoints.distance + result.availablePoints.leading).toFixed(0)} points could be won.</div>`
-            : ''
+            ? html`<div class="text-xs text-muted-foreground mt-1">Nobody reached ESS, so no time or arrival points were available (FAI S7F §12) — only ${(result.availablePoints.distance + result.availablePoints.leading).toFixed(0)} points could be won.</div>`
+            : nothing
         }
       </div>
     `;
 
     // Stats
-    html += `
+    const statsBox = html`
       <div class="rounded-lg border border-border bg-muted/30 p-3">
         <div class="text-xs text-muted-foreground mb-1">Stats</div>
         <div class="flex gap-3 text-sm flex-wrap">
@@ -1589,17 +1571,15 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           <span title="Pilots in goal ÷ pilots flying (drives the point weights)">Goal ratio: ${pct1(stats.goalRatio)}</span>
           <span title="Optimized task distance">Task dist: ${formatDistance(stats.taskDistance).withUnit}</span>
           <span>Best dist: ${formatDistance(stats.bestDistance).withUnit}</span>
-          ${stats.bestTime ? `<span>Best time: ${formatHMS(stats.bestTime)}</span>` : ''}
+          ${stats.bestTime ? html`<span>Best time: ${formatHMS(stats.bestTime)}</span>` : nothing}
         </div>
       </div>
     `;
 
     // Ranked scores table
     const allSelected = selectedPilots === null;
-    html += `<div class="rounded-lg border border-border overflow-x-auto overflow-y-hidden">`;
-    html += `<table class="text-sm">`;
-    html += `<thead class="bg-muted/50"><tr>
-      <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ${allSelected ? 'checked' : ''}></th>
+    const tableHead = html`<thead class="bg-muted/50"><tr>
+      <th class="px-2 py-1.5 text-left font-medium sticky left-0 z-10 bg-muted/50"><input type="checkbox" id="comp-select-all" class="accent-primary" ?checked=${allSelected}></th>
       <th class="px-2 py-1.5 text-right font-medium sticky left-[28px] z-10 bg-muted/50">#</th>
       <th class="px-2 py-1.5 text-left font-medium sticky left-[52px] z-10 bg-muted/50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border">Pilot</th>
       <th class="px-2 py-1.5 text-right font-medium">Dist</th>
@@ -1607,82 +1587,90 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
       <th class="px-2 py-1.5 text-right font-medium">${docLink('distance-points', 'Dist Pts')}</th>
       <th class="px-2 py-1.5 text-right font-medium">${docLink('time-points', 'Time Pts')}</th>
       <th class="px-2 py-1.5 text-right font-medium">${docLink('leading-points', 'Lead')}</th>
-      ${params.useLeading ? `<th class="px-2 py-1.5 text-right font-medium" title="Leading coefficient — lower means more time spent out front">${docLink('leading-coefficient', 'LC')}</th>` : ''}
-      ${params.scoring === 'HG' ? `<th class="px-2 py-1.5 text-right font-medium">${docLink('arrival-points', 'Arr')}</th>` : ''}
+      ${params.useLeading ? html`<th class="px-2 py-1.5 text-right font-medium" title="Leading coefficient — lower means more time spent out front">${docLink('leading-coefficient', 'LC')}</th>` : nothing}
+      ${params.scoring === 'HG' ? html`<th class="px-2 py-1.5 text-right font-medium">${docLink('arrival-points', 'Arr')}</th>` : nothing}
       <th class="px-2 py-1.5 text-right font-medium">${docLink('total-score', 'Total')}</th>
     </tr></thead>`;
-    html += `<tbody>`;
 
     const colCount = 9 + (params.useLeading ? 1 : 0) + (params.scoring === 'HG' ? 1 : 0);
 
     // Expandable per-pilot breakdown (legs, sequence, points split, raw crossings).
-    const renderDetail = (ps: (typeof result.pilotScores)[number]): string => {
+    const renderDetail = (ps: (typeof result.pilotScores)[number]): TemplateResult => {
       const tr = ps.turnpointResult;
       const floored = tr.flownDistance < params.minimumDistance;
       const legsDone = tr.legs.filter(l => l.completed).length;
 
-      const parts: string[] = [
-        `<span>${docLink('distance-points', 'Distance')} ${ps.distancePoints.toFixed(1)}${ps.distanceDifficultyPoints > 0 ? ` <span class="text-muted-foreground">(${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty)</span>` : ''}</span>`,
-        `<span>${docLink('time-points', 'Time')} ${ps.timePoints.toFixed(1)}</span>`,
+      const parts: TemplateResult[] = [
+        html`<span>${docLink('distance-points', 'Distance')} ${ps.distancePoints.toFixed(1)}${ps.distanceDifficultyPoints > 0 ? html` <span class="text-muted-foreground">(${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty)</span>` : nothing}</span>`,
+        html`<span>${docLink('time-points', 'Time')} ${ps.timePoints.toFixed(1)}</span>`,
       ];
       if (params.useLeading) {
-        parts.push(`<span>${docLink('leading-points', 'Leading')} ${ps.leadingPoints.toFixed(1)} <span class="text-muted-foreground">(LC ${isFinite(ps.leadingCoefficient) ? ps.leadingCoefficient.toFixed(3) : '—'})</span></span>`);
+        parts.push(html`<span>${docLink('leading-points', 'Leading')} ${ps.leadingPoints.toFixed(1)} <span class="text-muted-foreground">(LC ${isFinite(ps.leadingCoefficient) ? ps.leadingCoefficient.toFixed(3) : '—'})</span></span>`);
       }
       if (params.scoring === 'HG') {
-        parts.push(`<span>${docLink('arrival-points', 'Arrival')} ${ps.arrivalPoints.toFixed(1)}</span>`);
+        parts.push(html`<span>${docLink('arrival-points', 'Arrival')} ${ps.arrivalPoints.toFixed(1)}</span>`);
       }
-      parts.push(`<span>${docLink('total-score', 'Total')} <span class="font-medium">${ps.totalScore}</span></span>`);
+      parts.push(html`<span>${docLink('total-score', 'Total')} <span class="font-medium">${ps.totalScore}</span></span>`);
 
       const status = ps.madeGoal ? 'Made goal' : ps.reachedESS ? 'Reached ESS (no goal)' : 'Landed out';
-      const statusBits: string[] = [`<span>${status}</span>`, `<span>Legs ${legsDone}/${tr.legs.length}</span>`];
-      if (floored) statusBits.push(`<span title="Flew ${formatDistance(tr.flownDistance).withUnit}, raised to the ${formatDistance(params.minimumDistance).withUnit} minimum">Min-distance floored</span>`);
-      if (!ps.madeGoal && tr.bestProgress) statusBits.push(`<span>${formatDistance(tr.bestProgress.distanceToGoal).withUnit} from goal</span>`);
+      const statusBits: TemplateResult[] = [html`<span>${status}</span>`, html`<span>Legs ${legsDone}/${tr.legs.length}</span>`];
+      if (floored) statusBits.push(html`<span title="Flew ${formatDistance(tr.flownDistance).withUnit}, raised to the ${formatDistance(params.minimumDistance).withUnit} minimum">Min-distance floored</span>`);
+      if (!ps.madeGoal && tr.bestProgress) statusBits.push(html`<span>${formatDistance(tr.bestProgress.distanceToGoal).withUnit} from goal</span>`);
 
       const seq = tr.sequence.map(r => {
-        const rawName = currentTask?.turnpoints[r.taskIndex]?.waypoint.name || '';
-        const name = rawName ? escapeHtml(rawName) : '';
-        const reason = r.candidateCount > 1 ? ` <span class="text-muted-foreground">(chosen from ${r.candidateCount})</span>` : '';
-        return `<span class="mr-3 whitespace-nowrap"><span class="text-muted-foreground">${formatTime(r.time)}</span> <span class="font-medium">${getTurnpointLabel(r.taskIndex)}</span>${name ? ` <span class="text-muted-foreground">${name}</span>` : ''}${reason}</span>`;
-      }).join('');
+        const name = currentTask?.turnpoints[r.taskIndex]?.waypoint.name || '';
+        const reason = r.candidateCount > 1 ? html` <span class="text-muted-foreground">(chosen from ${r.candidateCount})</span>` : nothing;
+        return html`<span class="mr-3 whitespace-nowrap"><span class="text-muted-foreground">${formatTime(r.time)}</span> <span class="font-medium">${getTurnpointLabel(r.taskIndex)}</span>${name ? html` <span class="text-muted-foreground">${name}</span>` : nothing}${reason}</span>`;
+      });
 
-      return `
+      return html`
         <div class="space-y-2 text-xs">
-          <div class="flex flex-wrap gap-x-4 gap-y-1">${parts.join('')}</div>
-          <div class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">${statusBits.join('')}</div>
-          ${seq ? `<div class="leading-6"><span class="text-muted-foreground">Sequence: </span>${seq}</div>` : ''}
+          <div class="flex flex-wrap gap-x-4 gap-y-1">${parts}</div>
+          <div class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">${statusBits}</div>
+          ${seq.length > 0 ? html`<div class="leading-6"><span class="text-muted-foreground">Sequence: </span>${seq}</div>` : nothing}
           <div class="text-muted-foreground">${tr.crossings.length} raw cylinder crossing${tr.crossings.length === 1 ? '' : 's'} detected</div>
         </div>`;
     };
 
-    for (const ps of result.pilotScores) {
+    const rows = result.pilotScores.map((ps) => {
       const isChecked = allSelected || selectedPilots!.has(ps.pilotName);
-      const goalIcon = ps.madeGoal ? '<span class="text-green-600 ml-1" title="Goal">&#10003;</span>' : '';
+      const goalIcon = ps.madeGoal ? html`<span class="text-green-600 ml-1" title="Goal">&#10003;</span>` : nothing;
       const floored = ps.turnpointResult.flownDistance < params.minimumDistance;
-      const distMark = floored ? '<span class="text-amber-500" title="Raised to minimum distance">*</span>' : '';
+      const distMark = floored ? html`<span class="text-amber-500" title="Raised to minimum distance">*</span>` : nothing;
       const distPtsCell = ps.distanceDifficultyPoints > 0
-        ? `<span class="cursor-help underline decoration-dotted" title="${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty">${ps.distancePoints.toFixed(1)}</span>`
+        ? html`<span class="cursor-help underline decoration-dotted" title="${ps.distanceLinearPoints.toFixed(1)} linear + ${ps.distanceDifficultyPoints.toFixed(1)} difficulty">${ps.distancePoints.toFixed(1)}</span>`
         : ps.distancePoints.toFixed(1);
-      html += `<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
-        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot="${escapeHtml(ps.pilotName)}" ${isChecked ? 'checked' : ''}></td>
+      return html`<tr class="border-t border-border hover:bg-muted/30${!isChecked ? ' opacity-40' : ''}">
+        <td class="px-2 py-1.5 sticky left-0 z-10 bg-background"><input type="checkbox" class="comp-pilot-cb accent-primary" data-pilot=${ps.pilotName} ?checked=${isChecked}></td>
         <td class="px-2 py-1.5 text-right font-medium tabular-nums sticky left-[28px] z-10 bg-background">${ps.rank}</td>
-        <td class="comp-detail-toggle px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background cursor-pointer select-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" data-pilot="${escapeHtml(ps.pilotName)}" title="Show scoring breakdown for ${escapeHtml(ps.pilotName)}"><span class="comp-caret inline-block text-muted-foreground transition-transform">&#9656;</span> ${escapeHtml(ps.pilotName)}${goalIcon}</td>
+        <td class="comp-detail-toggle px-2 py-1.5 truncate max-w-[120px] sticky left-[52px] z-10 bg-background cursor-pointer select-none after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-border" data-pilot=${ps.pilotName} title="Show scoring breakdown for ${ps.pilotName}"><span class="comp-caret inline-block text-muted-foreground transition-transform">&#9656;</span> ${ps.pilotName}${goalIcon}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${formatDistance(ps.flownDistance).withUnit}${distMark}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.madeGoal && ps.speedSectionTime !== null ? formatHMS(ps.speedSectionTime) : ps.reachedESS ? 'ESS' : 'LO'}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${distPtsCell}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.timePoints.toFixed(1)}</td>
         <td class="px-2 py-1.5 text-right tabular-nums">${ps.leadingPoints.toFixed(1)}</td>
-        ${params.useLeading ? `<td class="px-2 py-1.5 text-right tabular-nums text-muted-foreground">${isFinite(ps.leadingCoefficient) ? ps.leadingCoefficient.toFixed(3) : '—'}</td>` : ''}
-        ${params.scoring === 'HG' ? `<td class="px-2 py-1.5 text-right tabular-nums">${ps.arrivalPoints.toFixed(1)}</td>` : ''}
+        ${params.useLeading ? html`<td class="px-2 py-1.5 text-right tabular-nums text-muted-foreground">${isFinite(ps.leadingCoefficient) ? ps.leadingCoefficient.toFixed(3) : '—'}</td>` : nothing}
+        ${params.scoring === 'HG' ? html`<td class="px-2 py-1.5 text-right tabular-nums">${ps.arrivalPoints.toFixed(1)}</td>` : nothing}
         <td class="px-2 py-1.5 text-right font-medium tabular-nums">${ps.totalScore}</td>
       </tr>
-      <tr class="comp-detail-row hidden bg-muted/20" data-detail-for="${escapeHtml(ps.pilotName)}">
-        <td colspan="${colCount}" class="px-3 py-2 border-t border-border/40">${renderDetail(ps)}</td>
+      <tr class="comp-detail-row hidden bg-muted/20" data-detail-for=${ps.pilotName}>
+        <td colspan=${colCount} class="px-3 py-2 border-t border-border/40">${renderDetail(ps)}</td>
       </tr>`;
-    }
+    });
 
-    html += `</tbody></table></div>`;
-    html += '</div>';
-    compScorePanelContent.innerHTML = html;
+    renderInto(compScorePanelContent, html`<div class="space-y-3">
+      ${settingsRow}
+      ${configBox}
+      ${validityBox}
+      ${pointsBox}
+      ${statsBox}
+      <div class="rounded-lg border border-border overflow-x-auto overflow-y-hidden">
+        <table class="text-sm">
+          ${tableHead}
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`);
 
     // Wire checkbox handlers
     wirePilotSelection(result);
@@ -1718,12 +1706,12 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
     },
 
     setFlightInfo(info: FlightInfo) {
-      const parts: string[] = [];
+      const parts: Array<TemplateResult | string> = [];
 
       if (info.pilot) {
         // The pilot name comes from the comp roster or the IGC header —
-        // untrusted either way (SEC-47, the setFlightInfo sink SEC-41 missed).
-        parts.push(`<strong class="text-foreground">${escapeHtml(info.pilot)}</strong>`);
+        // untrusted either way (SEC-47). A template binding renders it as text.
+        parts.push(html`<strong class="text-foreground">${info.pilot}</strong>`);
       }
       if (info.date) {
         parts.push(info.date);
@@ -1735,9 +1723,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
         parts.push(info.task);
       }
 
-      flightInfoEl.innerHTML = parts.length > 0
-        ? parts.join(' <span class="mx-1 text-border">|</span> ')
-        : 'Load an IGC file to see flight info';
+      const separator = html` <span class="mx-1 text-border">|</span> `;
+      renderInto(flightInfoEl, parts.length > 0
+        ? parts.map((part, i) => (i === 0 ? part : html`${separator}${part}`))
+        : 'Load an IGC file to see flight info');
     },
 
     setTask(task: XCTask | null) {

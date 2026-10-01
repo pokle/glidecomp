@@ -15,7 +15,7 @@ import {
 } from '@glidecomp/engine';
 import { formatDistance, formatRadius, formatCylinderRadius, formatAltitude, formatSpeed, formatAltitudeChange } from './units-browser';
 import { config } from './config';
-import { escapeHtml } from '../escape-html';
+import { html, nothing, renderInto, type TemplateResult } from '../render-html';
 
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -337,7 +337,7 @@ export function exitTurnpointArrowFeatures(
 export function createGlideLegend(container: HTMLElement): HTMLElement {
   const legend = document.createElement('div');
   legend.id = 'glide-legend';
-  legend.innerHTML = `
+  renderInto(legend, html`
     <button class="glide-legend-btn" title="Glide metrics help">?</button>
     <div class="glide-legend-content">
       <div class="glide-legend-title">Glide Metrics</div>
@@ -346,7 +346,7 @@ export function createGlideLegend(container: HTMLElement): HTMLElement {
       <div class="glide-legend-item"><strong>L/D:</strong> Glide ratio (distance &divide; altitude lost)</div>
       <div class="glide-legend-item"><strong>Alt:</strong> Altitude change from segment start to end</div>
     </div>
-  `;
+  `);
 
   const btn = legend.querySelector('.glide-legend-btn');
   btn?.addEventListener('click', () => {
@@ -447,7 +447,7 @@ export function estimateWindFromNearbyCircles(
 // ── Crosshair SVG ───────────────────────────────────────────────────────
 
 /** Crosshair SVG for the map marker (white with drop-shadow for visibility) */
-export const CROSSHAIR_MAP_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="filter:drop-shadow(0 0 2px rgba(0,0,0,0.8))">
+export const CROSSHAIR_MAP_SVG: TemplateResult = html`<svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="filter:drop-shadow(0 0 2px rgba(0,0,0,0.8))">
   <circle cx="12" cy="12" r="4" stroke="white" stroke-width="1.5"/>
   <line x1="12" y1="2" x2="12" y2="8" stroke="white" stroke-width="2" stroke-linecap="round"/>
   <line x1="12" y1="16" x2="12" y2="22" stroke="white" stroke-width="2" stroke-linecap="round"/>
@@ -456,7 +456,7 @@ export const CROSSHAIR_MAP_SVG = `<svg width="24" height="24" viewBox="0 0 24 24
 </svg>`;
 
 /** Crosshair SVG for the HUD (white, inline with text) */
-export const CROSSHAIR_HUD_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px">
+export const CROSSHAIR_HUD_SVG: TemplateResult = html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;margin-right:4px">
   <circle cx="12" cy="12" r="4" stroke="white" stroke-width="2"/>
   <line x1="12" y1="2" x2="12" y2="8" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
   <line x1="12" y1="16" x2="12" y2="22" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
@@ -557,7 +557,7 @@ export function createTrackPointHUD(container: HTMLElement): HTMLElement {
   hud.style.display = 'none';
   hud.style.left = '8px';
   hud.style.bottom = '32px';
-  hud.innerHTML = `
+  renderInto(hud, html`
     <div class="hud-drag-handle"></div>
     <button class="hud-toggle" title="Minimize">−</button>
     <div class="hud-body">
@@ -578,7 +578,7 @@ export function createTrackPointHUD(container: HTMLElement): HTMLElement {
         <div class="hud-wind"></div>
       </details>
     </div>
-  `;
+  `);
   const toggle = hud.querySelector('.hud-toggle') as HTMLButtonElement;
   toggle.addEventListener('click', () => {
     const minimized = hud.classList.toggle('hud-minimized');
@@ -673,8 +673,8 @@ function makeHUDDraggable(hud: HTMLElement, container: HTMLElement): void {
 }
 
 /** Wind arrow SVG pointing down (south). Rotate by wind-FROM direction to show flow. */
-function windArrowSVG(direction: number): string {
-  return `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:inline-block;vertical-align:middle;margin-right:3px;transform:rotate(${direction}deg)">
+function windArrowSVG(direction: number): TemplateResult {
+  return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:inline-block;vertical-align:middle;margin-right:3px;transform:rotate(${direction}deg)">
     <line x1="7" y1="1" x2="7" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     <path d="M3 8 L7 12 L11 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
@@ -722,16 +722,16 @@ export function updateTrackPointHUD(
     thermalAltEl.textContent = `${opts.thermal.maxAlt} at ${opts.thermal.maxAltTime}`;
 
     if (opts.thermal.wind) {
-      windEl.innerHTML = `${windArrowSVG(opts.thermal.wind.direction)}${opts.thermal.wind.speedText}`;
+      renderInto(windEl, html`${windArrowSVG(opts.thermal.wind.direction)}${opts.thermal.wind.speedText}`);
       windEl.style.display = '';
     } else {
-      windEl.innerHTML = '';
+      windEl.replaceChildren();
       windEl.style.display = 'none';
     }
   } else {
     thermalDivider.style.display = 'none';
     thermalGroup.style.display = 'none';
-    windEl.innerHTML = '';
+    windEl.replaceChildren();
     windEl.style.display = 'none';
   }
 
@@ -870,19 +870,27 @@ export function ensureTurnpointCache(
 
 // ── formatGlideLabel ────────────────────────────────────────────────────
 
+/** A number and its unit, rendered with the unit set smaller. */
+export interface ValueWithUnit {
+  value: string;
+  unit: string;
+}
+
 export interface FormattedGlideLabel {
-  speed: string;
-  altitude: string;
+  speed: ValueWithUnit;
+  altitude: ValueWithUnit | null;
+  /** "12:1 -40 m" — plain text. */
   detailText: string;
+  /** "8:1 to GOAL" when there is a next turnpoint — plain text, may be empty. */
   reqText: string;
 }
 
-/** Format a glide marker's data into display strings for speed, altitude, detail, and required GR. */
+/** Format a glide marker's data into display parts for speed, altitude, detail, and required GR. */
 export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
   const speedVal = formatSpeed(marker.speedMps || 0);
-  const speed = `${speedVal.formatted}\u00A0<span style="font-size:0.7em">${speedVal.unit}</span>`;
+  const speed = { value: speedVal.formatted, unit: speedVal.unit };
   const altVal = marker.altitude !== undefined ? formatAltitude(marker.altitude) : null;
-  const altitude = altVal ? `${altVal.formatted}\u00A0<span style="font-size:0.7em">${altVal.unit}</span>` : '';
+  const altitude = altVal ? { value: altVal.formatted, unit: altVal.unit } : null;
   const glideRatio = marker.glideRatio !== undefined
     ? `${marker.glideRatio.toFixed(0)}:1`
     : '\u221E:1';
@@ -893,10 +901,41 @@ export function formatGlideLabel(marker: GlideMarker): FormattedGlideLabel {
 
   let reqText = '';
   if (marker.requiredGlideRatio !== undefined && marker.targetName) {
-    reqText = `${marker.requiredGlideRatio.toFixed(0)}:1 to ${escapeHtml(marker.targetName)}`;
+    reqText = `${marker.requiredGlideRatio.toFixed(0)}:1 to ${marker.targetName}`;
   }
 
   return { speed, altitude, detailText, reqText };
+}
+
+/** What a glide label shows, kept beside its element for zoom-driven re-renders. */
+export interface GlideLabelContent {
+  label: FormattedGlideLabel;
+  /** Appends "(fastest)" to the speed. */
+  fastest?: boolean;
+  /** Include the altitude on the metrics line (the speed overlay does; an event highlight doesn't). */
+  showAltitude?: boolean;
+}
+
+const glideLabelContent = new WeakMap<HTMLElement, GlideLabelContent>();
+
+const valueWithUnit = (v: ValueWithUnit) =>
+  html`${v.value}\u00A0<span style="font-size:0.7em">${v.unit}</span>`;
+
+function renderGlideLabel(el: HTMLElement, content: GlideLabelContent, withDetails: boolean): void {
+  const { label, fastest, showAltitude } = content;
+  const altitude = showAltitude ? label.altitude : null;
+  renderInto(el, html`${valueWithUnit(label.speed)}${fastest ? ' (fastest)' : ''}${
+    altitude ? html`\u2002${valueWithUnit(altitude)}` : nothing}${
+    withDetails && label.detailText ? html`<br>${label.detailText}` : nothing}${
+    withDetails && label.reqText ? html`<br>${label.reqText}` : nothing}`);
+}
+
+/** Give a glide-label element its content, fully rendered (details included). */
+export function setGlideLabelContent(el: HTMLElement, content: GlideLabelContent): void {
+  glideLabelContent.set(el, content);
+  el.dataset.glideLabel = 'true';
+  if (content.fastest) el.dataset.fastest = 'true';
+  renderGlideLabel(el, content, true);
 }
 
 // ── formatTurnpointLabel ────────────────────────────────────────────────
@@ -982,20 +1021,9 @@ export function updateGlideLabelElement(
     }
   }
 
-  const speed = el.dataset.speedLabel || '';
-  const alt = el.dataset.altLabel || '';
-  const metricsLine = alt ? `${speed}\u2002${alt}` : speed;
   el.style.display = '';
-
-  if (zoom < GLIDE_LABEL_DETAILS_MIN_ZOOM) {
-    el.innerHTML = metricsLine;
-  } else {
-    const details = el.dataset.detailLabel || '';
-    const req = el.dataset.reqLabel || '';
-    let html = details ? `${metricsLine}<br>${details}` : metricsLine;
-    if (req) html += `<br>${req}`;
-    el.innerHTML = html;
-  }
+  const content = glideLabelContent.get(el);
+  if (content) renderGlideLabel(el, content, zoom >= GLIDE_LABEL_DETAILS_MIN_ZOOM);
 }
 
 // ── Screen-space label collision detection ─────────────────────────────────

@@ -5,11 +5,21 @@
  * `report-uri` (the older `application/csp-report`, still what Firefox sends).
  *
  * Nothing is stored. Each violation becomes one log line, read with
- * `wrangler pages deployment tail`. The policy is enforced, so each line is
- * something a visitor's browser REFUSED — a broken feature to fix, most likely
- * an origin missing from web/frontend/src/security-headers.ts. Public and unauthenticated by
- * necessity (a browser sends these with no credentials), so the body is capped
- * and a request never gets anything back but an empty 204.
+ * `wrangler pages deployment tail`. Two policies report here (both in
+ * web/frontend/src/security-headers.ts):
+ *
+ * - the site-wide CSP, which is ENFORCED: a line with `disposition: "enforce"`
+ *   is something a visitor's browser REFUSED — a broken feature to fix, most
+ *   likely an origin missing from the policy;
+ * - Trusted Types on /analysis and /replay, which is REPORT-ONLY
+ *   (`disposition: "report"`, directive `require-trusted-types-for`): a string
+ *   that reached a DOM sink without a policy, and would break once Trusted
+ *   Types is enforced. `sample` names the sink and the value's first 40
+ *   characters (e.g. `Element innerHTML|<span>…`), which is how to find it.
+ *
+ * Public and unauthenticated by necessity (a browser sends these with no
+ * credentials), so the body is capped and a request never gets anything back
+ * but an empty 204.
  */
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -22,6 +32,7 @@ interface Violation {
   source?: unknown;
   line?: unknown;
   disposition?: unknown;
+  sample?: unknown;
 }
 
 /** Both report shapes, reduced to the fields worth a log line. */
@@ -39,6 +50,7 @@ function violations(body: unknown): Violation[] {
           source: b.sourceFile,
           line: b.lineNumber,
           disposition: b.disposition,
+          sample: b.sample,
         };
       });
   }
@@ -54,6 +66,7 @@ function violations(body: unknown): Violation[] {
         source: b["source-file"],
         line: b["line-number"],
         disposition: b.disposition,
+        sample: b["script-sample"],
       },
     ];
   }
@@ -85,6 +98,7 @@ export const onRequestPost: PagesFunction = async ({ request }) => {
             source: clip(v.source),
             line: v.line,
             disposition: clip(v.disposition),
+            sample: clip(v.sample),
           })
         );
       }

@@ -9,7 +9,7 @@ import type { XCTask, Turnpoint, TurnpointType, WaypointRecord } from '@glidecom
 import { getOptimizedSegmentDistances, toXctskJSON, parseXCTask } from '@glidecomp/engine';
 import { formatDistance, formatAltitude, formatCylinderRadius } from './units-browser';
 import { fetchTaskByCodeWithRaw } from './xctsk-fetch';
-import { escapeHtml } from '../escape-html';
+import { html, nothing, renderInto, type TemplateResult } from '../render-html';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,25 +68,25 @@ const DEFAULT_TYPE_LABEL = 'Turnpoint';
 // SVG Icons (inline, no external deps)
 // ---------------------------------------------------------------------------
 
-const ICON_GRIP = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="shrink-0 text-muted-foreground/50"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>`;
+const ICON_GRIP: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="shrink-0 text-muted-foreground/50"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>`;
 
-const ICON_PLUS = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+const ICON_PLUS: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 
-const ICON_MAP_PIN = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+const ICON_MAP_PIN: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
 
-const ICON_TRASH = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+const ICON_TRASH: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
 
-const ICON_X = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+const ICON_X: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
 
-const ICON_DOWNLOAD = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`;
+const ICON_DOWNLOAD: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`;
 
-const ICON_UPLOAD = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>`;
+const ICON_UPLOAD: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>`;
 
-const ICON_SEARCH = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+const ICON_SEARCH: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
 
-const ICON_COORDS = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+const ICON_COORDS: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
 
-const ICON_GLOBE = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`;
+const ICON_GLOBE: TemplateResult = html`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`;
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -222,7 +222,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   // ---------------------------------------------------------------------------
 
   function render(): void {
-    container.innerHTML = '';
+    container.replaceChildren();
 
     if (openDistance) {
       const notice = document.createElement('div');
@@ -265,15 +265,15 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       const toolbar = document.createElement('div');
       toolbar.className = 'flex items-center gap-1 border-b border-border px-2 py-1.5';
       const hideMap = hiddenAddMethods.includes('map');
-      toolbar.innerHTML = `
+      renderInto(toolbar, html`
         <button type="button" class="te-add-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors" title="Add waypoint">${ICON_PLUS}</button>
-        ${hideMap ? '' : `<button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>`}
+        ${hideMap ? nothing : html`<button type="button" class="te-map-pin-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors ${mapClickMode ? 'bg-primary text-primary-foreground' : ''}" title="Click map to add waypoint">${ICON_MAP_PIN}</button>`}
         <div class="flex-1"></div>
         <button type="button" class="te-upload-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground" title="Open .xctsk file">${ICON_UPLOAD} Open\u2026</button>
         <button type="button" class="te-xcontest-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground ${xcontestInputOpen ? 'bg-muted' : ''}" title="Load XContest task">${ICON_GLOBE} XContest</button>
         <button type="button" class="te-download-btn inline-flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-muted transition-colors text-muted-foreground disabled:opacity-30 disabled:pointer-events-none" title="Save as .xctsk file">${ICON_DOWNLOAD} Save</button>
         <button type="button" class="te-clear-btn inline-flex items-center justify-center rounded p-1.5 hover:bg-muted transition-colors text-muted-foreground hover:text-destructive" title="Clear all waypoints">${ICON_TRASH}</button>
-      `;
+      `);
       container.appendChild(toolbar);
 
       // Wire toolbar buttons
@@ -358,20 +358,20 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
 
     if (tps.length === 0) {
       if (readOnly) {
-        list.innerHTML = `
+        renderInto(list, html`
           <div class="flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
             <div class="text-sm">No task defined</div>
           </div>
-        `;
+        `);
       } else {
-        list.innerHTML = `
+        renderInto(list, html`
           <div class="flex flex-col items-center justify-center p-8 text-center text-muted-foreground gap-3">
             <div class="text-sm">Add waypoints to build a task</div>
             <button type="button" class="te-empty-add inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-4 py-2 text-sm hover:bg-muted transition-colors">
               ${ICON_PLUS} Add waypoint
             </button>
           </div>
-        `;
+        `);
         list.querySelector('.te-empty-add')?.addEventListener('click', () => toggleAddMenu());
       }
     } else {
@@ -415,14 +415,14 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     // Collapsed header
     const header = document.createElement('div');
     header.className = `flex items-center gap-2 p-2 ${readOnly ? '' : 'cursor-pointer'}`;
-    header.innerHTML = `
-      ${readOnly ? '' : `<div class="te-drag-handle flex items-center justify-center w-6 h-11 cursor-grab shrink-0 touch-none" data-drag-handle>${ICON_GRIP}</div>`}
+    renderInto(header, html`
+      ${readOnly ? nothing : html`<div class="te-drag-handle flex items-center justify-center w-6 h-11 cursor-grab shrink-0 touch-none" data-drag-handle>${ICON_GRIP}</div>`}
       <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium ${typeClass}">
         ${index + 1}
       </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-1.5">
-          <span class="font-medium text-sm truncate">${escapeHtml(tp.waypoint.name)}</span>
+          <span class="font-medium text-sm truncate">${tp.waypoint.name}</span>
           <span class="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] ${typeClass}">${typeLabel}</span>
         </div>
         <div class="flex gap-3 text-xs text-muted-foreground mt-0.5">
@@ -432,8 +432,8 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
           <span title="Cumulative">${cumDist}</span>
         </div>
       </div>
-      ${readOnly ? '' : `<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors opacity-40 hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
-    `;
+      ${readOnly ? nothing : html`<button type="button" class="te-delete-btn shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors opacity-40 hover:opacity-100" title="Delete waypoint">${ICON_X}</button>`}
+    `);
 
     card.appendChild(header);
 
@@ -517,16 +517,16 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     if (isExpanded && !readOnly) {
       const expanded = document.createElement('div');
       expanded.className = 'border-t border-border p-2 space-y-2';
-      expanded.innerHTML = `
+      renderInto(expanded, html`
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Name</label>
-            <input type="text" class="te-field-name w-full rounded border border-border bg-background px-2 py-1 text-sm" value="${escapeHtml(tp.waypoint.name)}">
+            <input type="text" class="te-field-name w-full rounded border border-border bg-background px-2 py-1 text-sm" value=${tp.waypoint.name}>
           </div>
           <div>
             <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Type</label>
             <select class="te-field-type w-full rounded border border-border bg-background px-2 py-1 text-sm">
-              ${TYPE_OPTIONS.map(o => `<option value="${o.value}" ${o.value === (tp.type || '') ? 'selected' : ''}>${o.label}</option>`).join('')}
+              ${TYPE_OPTIONS.map(o => html`<option value=${o.value} ?selected=${o.value === (tp.type || '')}>${o.label}</option>`)}
             </select>
           </div>
           <div>
@@ -541,7 +541,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
         <div class="text-[10px] text-muted-foreground">
           ${tp.waypoint.lat.toFixed(5)}, ${tp.waypoint.lon.toFixed(5)}
         </div>
-      `;
+      `);
       card.appendChild(expanded);
 
       // Wire field handlers
@@ -604,7 +604,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'flex items-center gap-2 w-full rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors text-left';
-      btn.innerHTML = `${item.icon}<span>${item.label}</span>`;
+      renderInto(btn, html`${item.icon}<span>${item.label}</span>`);
       btn.addEventListener('click', () => {
         addMenuOpen = false;
         if (item.action === 'search') {
@@ -637,14 +637,14 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   function renderSearchField(): void {
     const wrapper = document.createElement('div');
     wrapper.className = 'border-b border-border bg-muted/20 p-2';
-    wrapper.innerHTML = `
+    renderInto(wrapper, html`
       <div class="relative">
         <input type="text" class="te-search-input w-full rounded border border-border bg-background pl-7 pr-7 py-1.5 text-sm" placeholder="Search waypoints..." autocomplete="off">
         <div class="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground">${ICON_SEARCH}</div>
         <button type="button" class="te-search-close absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground">${ICON_X}</button>
       </div>
       <div class="te-search-results mt-1 max-h-48 overflow-y-auto scrollbar"></div>
-    `;
+    `);
 
     // Insert after toolbar (and after add menu if present)
     const insertRef = container.querySelector('.te-list') || container.children[1];
@@ -669,7 +669,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     input.addEventListener('input', () => {
       const query = input.value.toLowerCase().trim();
       if (query.length < 2) {
-        resultsEl.innerHTML = '';
+        resultsEl.replaceChildren();
         return;
       }
 
@@ -679,26 +679,26 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       ).slice(0, 20);
 
       if (matches.length === 0) {
-        resultsEl.innerHTML = '<div class="text-xs text-muted-foreground p-2">No matches</div>';
+        renderInto(resultsEl, html`<div class="text-xs text-muted-foreground p-2">No matches</div>`);
         return;
       }
 
-      resultsEl.innerHTML = '';
+      resultsEl.replaceChildren();
       for (const wp of matches) {
         const item = document.createElement('button');
         item.type = 'button';
         item.className = 'flex items-center justify-between w-full rounded px-2 py-1 text-sm hover:bg-muted transition-colors text-left';
-        item.innerHTML = `
+        renderInto(item, html`
           <div class="min-w-0">
-            <div class="font-medium truncate">${escapeHtml(wp.description || wp.name)}</div>
-            <div class="text-[10px] text-muted-foreground">${escapeHtml(wp.name)} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${formatCylinderRadius(wp.radius || 400).withUnit}</div>
+            <div class="font-medium truncate">${wp.description || wp.name}</div>
+            <div class="text-[10px] text-muted-foreground">${wp.name} \u00b7 ${wp.altitude ? formatAltitude(wp.altitude).withUnit : ''} \u00b7 r=${formatCylinderRadius(wp.radius || 400).withUnit}</div>
           </div>
-        `;
+        `);
         item.addEventListener('click', () => {
           addWaypointFromDatabase(wp);
           // Keep search open for adding multiple
           input.value = '';
-          resultsEl.innerHTML = '';
+          resultsEl.replaceChildren();
           input.focus();
         });
         resultsEl.appendChild(item);
@@ -713,13 +713,13 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   function renderCoordsInput(): void {
     const wrapper = document.createElement('div');
     wrapper.className = 'border-b border-border bg-muted/20 p-2';
-    wrapper.innerHTML = `
+    renderInto(wrapper, html`
       <div class="relative">
         <input type="text" class="te-coords-input w-full rounded border border-border bg-background px-2 py-1.5 text-sm" placeholder="-36.185, 147.891" autocomplete="off">
         <button type="button" class="te-coords-close absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground">${ICON_X}</button>
       </div>
       <div class="text-[10px] text-muted-foreground mt-1">Enter lat, lon (e.g. from Google Maps)</div>
-    `;
+    `);
 
     const insertRef = container.querySelector('.te-list') || container.children[1];
     container.insertBefore(wrapper, insertRef);
@@ -754,13 +754,13 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
   function renderXContestInput(): void {
     const wrapper = document.createElement('div');
     wrapper.className = 'border-b border-border bg-muted/20 p-2';
-    wrapper.innerHTML = `
+    renderInto(wrapper, html`
       <div class="relative">
         <input type="text" class="te-xcontest-input w-full rounded border border-border bg-background px-2 py-1.5 text-sm" placeholder="Enter task code (e.g. buje)" autocomplete="off">
         <button type="button" class="te-xcontest-close absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground">${ICON_X}</button>
       </div>
       <div class="te-xcontest-status text-[10px] text-muted-foreground mt-1">Paste an XContest task code and press Enter</div>
-    `;
+    `);
 
     const insertRef = container.querySelector('.te-list') || container.children[1];
     container.insertBefore(wrapper, insertRef);
@@ -821,14 +821,14 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     if (btn.dataset.confirming === 'true') return;
 
     btn.dataset.confirming = 'true';
-    const original = btn.innerHTML;
-    btn.innerHTML = `<span class="text-xs text-destructive font-medium">Clear?</span>
+    const original = [...btn.childNodes];
+    renderInto(btn, html`<span class="text-xs text-destructive font-medium">Clear?</span>
       <span class="te-confirm-yes text-xs text-destructive underline cursor-pointer ml-1">Yes</span>
-      <span class="te-confirm-no text-xs text-muted-foreground underline cursor-pointer ml-1">No</span>`;
+      <span class="te-confirm-no text-xs text-muted-foreground underline cursor-pointer ml-1">No</span>`);
     btn.classList.add('px-2');
 
     const timer = setTimeout(() => {
-      btn.innerHTML = original;
+      btn.replaceChildren(...original);
       btn.classList.remove('px-2');
       btn.dataset.confirming = 'false';
     }, 3000);
@@ -841,7 +841,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     btn.querySelector('.te-confirm-no')?.addEventListener('click', (e) => {
       e.stopPropagation();
       clearTimeout(timer);
-      btn.innerHTML = original;
+      btn.replaceChildren(...original);
       btn.classList.remove('px-2');
       btn.dataset.confirming = 'false';
     });
@@ -874,7 +874,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
     },
 
     destroy() {
-      container.innerHTML = '';
+      container.replaceChildren();
     },
   };
 }

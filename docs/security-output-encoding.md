@@ -23,8 +23,9 @@ encoded for *that output's* grammar:
 
 | Context | Encoding | Example helper |
 |---|---|---|
-| HTML text (`>…<`) | escape `& < >` | `escapeHtml` |
-| HTML attribute (`title="…"`) | escape `& < > " '` | `escapeHtml` (quote-safe) |
+| HTML text (`>…<`) | set as a text node | `html\`…${v}…\`` (lit-html, `web/frontend/src/render-html.ts`); JSX |
+| HTML attribute (`title="…"`) | set as an attribute value | the same template bindings; JSX |
+| HTML built as a string (SSR Function, emails) | escape `& < > " '` | the module's own escaper, e.g. `track-notice-email.ts` |
 | URL path/query segment | percent-encode | `encodeURIComponent` |
 | CSV cell | quote + double the quotes | `csvEscape` |
 | JSON | `JSON.stringify` | — |
@@ -32,9 +33,11 @@ encoded for *that output's* grammar:
 
 The safest form is not to build HTML strings at all: set `.textContent` or build
 nodes with `createElement`, which makes injection structurally impossible. The
-React pages get this by default — JSX text children are escaped — so the
-string-building helpers above are for the places that still write markup or
-files by hand (the replay HUD, the SSR Function, emails, CSV exports).
+React pages get this by default — JSX text children are escaped — and since
+2026-10 so do the vanilla analysis page and 3D replay, whose lit-html templates
+set every interpolated value on a DOM node rather than parsing it. The
+string-encoding helpers are for what still writes markup or files by hand (the
+SSR Function, emails, CSV exports).
 
 **Input HTML-sanitisation (what we avoid).** The value is transformed *once* on
 write — e.g. `<` becomes `&lt;`, or tags are stripped — and the mangled version
@@ -132,13 +135,32 @@ request never reaches the handler that would have logged it. Coverage:
 The root cause of SEC-22 was not "missing input sanitisation" — it was that the
 frontend had seven hand-rolled `escapeHtml` copies applied by per-author
 discipline, so any new sink that forgot to call one was vulnerable (this is
-SEC-05). The structural close-out is:
+SEC-05). Consolidating them into one shared encoder (`escape-html.ts`, with the
+SEC-22 fix) did not end it: SEC-41 found eight more sites that forgot to call
+it, and SEC-47 a ninth. Opt-in escaping keeps failing however good the
+encoder is. The close-out (security review proposal A4, 2026-10) removes the
+choice:
 
-1. One shared, quote-safe output encoder — `web/frontend/src/escape-html.ts`
-   (introduced with the SEC-22 fix) — used everywhere.
-2. Prefer `.textContent` / DOM construction over building HTML strings.
-3. A lint rule forbidding `innerHTML =` with interpolated non-constant template
-   literals, to make the safe path the default.
+1. **No string reaches a DOM sink.** The analysis page and replay render
+   through lit-html templates (`web/frontend/src/render-html.ts`); a value
+   interpolated into one becomes a text node or an attribute value, in any
+   position, with nothing to remember. `escape-html.ts` is deleted — there is
+   nothing left to call it.
+2. **A test instead of a lint rule** — `web/frontend/src/html-sinks.test.ts`
+   fails on any `innerHTML`-style sink, `insertAdjacentHTML`, `DOMParser`,
+   Mapbox's `setHTML`, or lit's `unsafeHTML` escape hatch anywhere in
+   `web/frontend/src/`.
+3. **Trusted Types in the browser** — the same rule enforced at runtime, so it
+   also covers code we didn't write. `security-headers.ts` ships it
+   report-only on `/analysis` and `/replay` for now; the `default` policy in
+   `trusted-types.ts` sanitises third-party HTML (Mapbox's attribution) with
+   DOMPurify and refuses foreign script URLs.
+
+The engine's parse-time `sanitizeText` is untouched by this, so a waypoint name
+containing `&` reaches these pages already encoded and reads `&amp;` on screen —
+as it did before, when the page then escaped it a second time. The complete fix
+is to stop encoding at parse time, which moves code inside the scoring closure
+and so owes a `scoring-changes/` note; it is not part of A4.
 
 Input validation trims the edges of the attack surface; consistent output
 encoding removes the bug class.
