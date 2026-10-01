@@ -255,7 +255,11 @@ new migration in `web/db/migrations/`.
 plugin issues `glc_`-prefixed keys (created under Settings → API keys). A key
 carries the permissions of the account that made it, is accepted almost
 anywhere a session cookie is (`enableSessionForAPIKeys`), and is rate-limited
-to the `API_KEY_RATE_LIMIT` in `src/rate-limit.ts`. See [api.md](api.md).
+to the `API_KEY_RATE_LIMIT` in `src/rate-limit.ts`. Every key expires
+`API_KEY_LIFETIME_DAYS` (90) after it is made (`src/auth.ts`); a caller cannot
+choose another lifetime (`disableCustomExpiresTime`), and migration 0036 gave
+the keys made before that 90 days from when it ran. Settings states the 90
+days in its copy, so change the two together. See [api.md](api.md).
 
 The exception is managing the account itself (SEC-57). A request carrying an
 `x-api-key` header gets `403 {"code":"BROWSER_SESSION_REQUIRED"}` from

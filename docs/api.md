@@ -45,6 +45,11 @@ Verify a key works by calling the identity endpoint — it returns your user, or
 curl -H "x-api-key: $API_KEY" https://glidecomp.com/api/auth/me
 ```
 
+Keys expire **90 days** after they are made; Settings shows each key's expiry
+date. An expired key answers like a bad one (`{"user":null}` from `/me`, `401`
+elsewhere), so create a new key before then. A key's lifetime cannot be chosen
+or extended.
+
 A key inherits the permissions of the account that created it. If your account
 administers a competition, its key can perform admin actions on that comp.
 

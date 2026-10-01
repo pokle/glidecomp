@@ -6,6 +6,7 @@
 
 import { env } from "cloudflare:test";
 import { describe, expect, test } from "vitest";
+import { API_KEY_LIFETIME_DAYS } from "../src/auth";
 import { requiresBrowserSession } from "../src/endpoints";
 import { loginAs, request } from "./helpers";
 
@@ -181,5 +182,54 @@ describe("an API key cannot manage the account (SEC-57)", () => {
     });
     expect(del.status).toBe(200);
     expect(await keyCount(email)).toBe(0);
+  });
+});
+
+describe("API keys expire (SEC-57)", () => {
+  const ISO_MS = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  test(`a new key expires ${API_KEY_LIFETIME_DAYS} days after it is made`, async () => {
+    const before = Date.now();
+    const created = (await (
+      await request("POST", "/api/auth/api-key/create", {
+        cookie: await loginAs("sec57-expiry@test.com"),
+        body: { name: "agent" },
+        headers: ORIGIN,
+      })
+    ).json()) as { expiresAt: string };
+    const expiresAt = new Date(created.expiresAt).getTime();
+    expect(expiresAt).toBeGreaterThanOrEqual(before + API_KEY_LIFETIME_DAYS * DAY_MS);
+    expect(expiresAt).toBeLessThanOrEqual(Date.now() + API_KEY_LIFETIME_DAYS * DAY_MS);
+  });
+
+  test("a caller cannot choose a longer lifetime", async () => {
+    const email = "sec57-expiresin@test.com";
+    const res = await request("POST", "/api/auth/api-key/create", {
+      cookie: await loginAs(email),
+      body: { name: "forever", expiresIn: 365 * 24 * 60 * 60 },
+      headers: ORIGIN,
+    });
+    expect(res.status).toBe(400);
+    expect(await keyCount(email)).toBe(0);
+  });
+
+  test("migration 0036 writes the expiry in the format Better Auth does", async () => {
+    // The plugin finds expired keys by comparing these strings, so the
+    // backfill's dates must sort with the ones it writes itself.
+    const email = "sec57-format@test.com";
+    await createApiKey(await loginAs(email));
+    const stored = await env.glidecomp_auth
+      .prepare(
+        'SELECT "expiresAt" AS v FROM apikey WHERE "referenceId" = (SELECT id FROM "user" WHERE email = ?)'
+      )
+      .bind(email)
+      .first<{ v: string }>();
+    expect(stored?.v).toMatch(ISO_MS);
+
+    const backfill = await env.glidecomp_auth
+      .prepare("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+90 days') AS v")
+      .first<{ v: string }>();
+    expect(backfill?.v).toMatch(ISO_MS);
   });
 });
