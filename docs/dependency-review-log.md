@@ -72,13 +72,26 @@ None.
 - `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck` — clean.
 - `bun run test:all` — 1696 root, 944 frontend, 182 auth-api (6 todo), 788 competition-api. 0 fail.
 - `bun run build` — clean, 9 Astro pages.
-E2E_PLACEHOLDER
+- `bun run test:e2e` — **222 passed, 9 skipped** in 15.4 minutes, exit 0, on a clean run (see the first lesson for the two earlier invalid runs).
+- `bun run test:e2e:ssr` — **67/67 passed** in 1.4 minutes, exit 0, including the hydration-mismatch checks.
 - `bun audit` — 2 high before, 1 high after (the unfixable `braces`).
 - Root `package.json` `dependencies` read first and `git diff package.json` checked after every `bun update`: only the three legitimate entries; no stray.
 - Runtime floors: no new engine floor above Node 22.
 
 ### Lessons / Notes for Future Sessions
 
+- **This container sets `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, which makes
+  `ensure-playwright-browsers.sh` exit without fetching.** With the pinned
+  Chromium (revision 1243) absent, every browser test failed in ~30 ms. Running
+  with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0` fetched it (the script's own header
+  names this incantation). The routine now says so.
+- **Never start a second e2e chain while a first may still be alive.** A
+  backgrounded `( ... ; ... ) &` chain survived `pkill`, then started its SSR run
+  beside the new e2e run. They shared ports and `test-results/`, producing ENOENT
+  errors and an interrupted run (exit 130), and a stale `ssr.log` that looked like
+  a pass. Use `run_in_background`, delete old logs first, and `bun run kill-dev`
+  before a rerun. Do not `pkill -f playwright` from a command containing that
+  word; it kills its own shell.
 - **An advisory with no patched release is a finding to record, not to chase.**
   Check `npm view <pkg> versions` before looking for an override; `braces` has
   none, and the audit will stay at 1 until it does.
