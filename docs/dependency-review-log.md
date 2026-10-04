@@ -4,6 +4,89 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-10-04
+
+**`bun audit` opened at 2 high and closes at 1.** The one that closed is
+`http-cache-semantics` (an override fixes it). The one that stays is `braces`,
+for which **no patched release exists on npm**, so nothing here can fix it.
+Everything else is a patch or additive minor with no source change.
+
+### Security Vulnerabilities Fixed
+
+| Advisory | Severity | Package | What was done |
+|----------|----------|---------|---------------|
+| [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | high | `http-cache-semantics` `<=4.2.0` (via `astro`) | New root override `^4.3.0`. astro asks for `^4.2.0`, so 4.3.0 satisfies it; `bun.lock` has one key, `4.3.0`. `astro` uses it only at build time to cache remote image fetches. |
+
+**Open, and not fixable by us — `braces` `<=3.0.3`
+([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm), high,
+stack exhaustion on deeply nested patterns).** `npm view braces versions` ends at
+3.0.3, which is also `latest`, so there is no version to override to. The path is
+`shadcn` → `ts-morph` → `@ts-morph/common` → `fast-glob` → `micromatch` → `braces`.
+`shadcn` is a frontend dependency only for one line, `@import "shadcn/tailwind.css"`
+in `globals.css`; nothing runs its CLI, and the code path (a glob pattern of
+attacker-controlled shape) is never reached at build or runtime. Treat it as
+live-in-the-audit but not exploitable here. **Re-run `npm view braces versions`
+next cycle**; when a release above 3.0.3 appears, add it as an override.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth**, **@better-auth/api-key** | 1.7.6 | 1.7.7 | frontend, auth-api | Patch. Auth-api (182 tests, including `schema.test.ts`) and the SSR run are the check. |
+| **hono** | 4.13.9 | 4.13.13 | frontend, auth-api, competition-api, airscore-api (+ root override) | Four patch releases. |
+| **lucide-react** | 1.48.0 | 1.52.0 | frontend | Icons; the frontend `typecheck` is the check for a rename. Clean. |
+| **mapbox-gl** | 3.31.0 | 3.32.0 | root, frontend | Minor. |
+| **tabulator-tables** | 6.5.3 | 6.6.1 | frontend | Minor. The pilots grid is the consumer. |
+| **shadcn** | 4.21.0 | 4.21.1 | frontend | Patch. |
+| **vite** | 8.3.1 | 8.3.2 | frontend (dev) + root override | Patch. |
+| **@types/node** | 25.9.8 | 25.9.9 | root | Patch. |
+| `anthropics/claude-code-action` | v1.0.238 | v1.0.241 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `cab360f6…`. The other six actions are already at the newest release in their major line. |
+
+### Code Changes Required
+
+None.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `http-cache-semantics` (`^4.3.0`) | **Added** | GHSA-ch52-4w7c-c8xp. |
+| `hono` (`^4.13.9` → `^4.13.13`) | Updated | Aligned with the workspaces. |
+| `vite` (`^8.3.1` → `^8.3.2`) | Updated | Aligned with the frontend. |
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.147.0 | Still capped (11 cycles) by the alpha miniflare; see 2026-09-27. Not re-queried this cycle. |
+| @cloudflare/vitest-pool-workers, **vitest** | 0.19.1, 4.1.11 | 0.22.0, 5.0.3 | Paired with the wrangler cap. |
+| **react**, **react-dom**, @types/react, @types/react-dom | 19.2.8 / 19.2.18 / 19.2.7 | 19.3.0 | **Fourth cycle deferred.** The last entry asked this cycle to "do it or open an issue". Neither was done in this unattended run, because a React minor needs `test:e2e:ssr` read as the verdict on its own, not folded into a security cycle. **An issue should be opened for it by a human or the next run.** |
+| **@astrojs/mdx** | 7.0.8 | 8.0.2 | Still vestigial (no `.md`/`.mdx` content); wants its own PR to delete it. |
+| **three**, **@types/three** | 0.185.x | 0.186.x | Pre-1.0 minor; focused PR. |
+| **katex** | 0.17.0 | 0.19.0 | Pre-1.0 minor; focused PR. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261004.1 | Major. |
+| zod, kysely, jsdom, concurrently, @types/node | — | 4.6.5, 0.29.6, 30.1.2, 10.0.5, 26.6.4 | Majors / pre-1.0 minors; unchanged reasons from 2026-09-27. |
+
+### Verification
+
+- `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck` — clean.
+- `bun run test:all` — 1696 root, 944 frontend, 182 auth-api (6 todo), 788 competition-api. 0 fail.
+- `bun run build` — clean, 9 Astro pages.
+E2E_PLACEHOLDER
+- `bun audit` — 2 high before, 1 high after (the unfixable `braces`).
+- Root `package.json` `dependencies` read first and `git diff package.json` checked after every `bun update`: only the three legitimate entries; no stray.
+- Runtime floors: no new engine floor above Node 22.
+
+### Lessons / Notes for Future Sessions
+
+- **An advisory with no patched release is a finding to record, not to chase.**
+  Check `npm view <pkg> versions` before looking for an override; `braces` has
+  none, and the audit will stay at 1 until it does.
+- **`cd <workspace> && bun update <pkgs>` stayed well-behaved** (sixth cycle). The
+  only root edits were the ones made by hand.
+- A new `claude-code-action` tag appears nearly every week; its peeled SHA is
+  the `^{}` line.
+
 ## 2026-09-27
 
 A quiet cycle: **`bun audit` opened and closed at 0 vulnerabilities**, and every
