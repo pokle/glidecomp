@@ -64,7 +64,7 @@ when its checklist is green.
 ```
 glidecomp/
 ├── mobile/                 ← NEW: the Expo app (@glidecomp/mobile)
-│   ├── app/                  Expo Router routes — the IA's screens
+│   ├── src/app/              Expo Router routes — the IA's screens
 │   ├── src/                  components, hooks, platform modules
 │   ├── .maestro/             end-to-end flows
 │   ├── app.config.ts         bundle ids, plugins, universal links
@@ -100,7 +100,7 @@ Version numbers are for the planned start; stage 1 pins what is current then.
 
 | Concern | Choice | Why |
 |---|---|---|
-| Framework | **Expo SDK 58** (React Native 0.88, React 19.2) | SDK 58 makes native tabs and toolbars stable and targets iOS 27. Its stable release is due mid-October 2026; if it slips, start on 57 and upgrade in stage 2. |
+| Framework | **Expo SDK 58** (React Native 0.88, React 19.3) | SDK 58 makes native tabs and toolbars stable and targets iOS 27. Its stable release is due mid-October 2026; if it slips, start on 57 and upgrade in stage 2. |
 | Navigation | **Expo Router**: native stack + `NativeTabs` | Real `UINavigationController` and system tab bar on iOS, Material 3 on Android; file routes mirror the web's URL shapes |
 | Lists, forms, switches, pickers | **`@expo/ui`** (SwiftUI and Jetpack Compose) | The IA's grouped lists are literally the platforms' own; stable since SDK 56 |
 | Sheets | Router `formSheet` presentation | Native sheets, swipe to dismiss, system Back on Android |
@@ -256,7 +256,10 @@ risk that could sink the plan surfaces here, cheaply.
 
 - **Two copies of React.** The website pins React 19.2.8; the app must resolve
   the same single copy or hooks break mysteriously. Settle it here with bun's
-  resolution and Metro's monorepo config.
+  resolution and Metro's monorepo config. *Settled in stage 1:* bun's isolated
+  installs give each workspace its own React — 19.3.0 for the app (which React
+  Native requires exactly), 19.2.8 for the website — and everything the app
+  loads resolves 19.3.0. See `mobile/CLAUDE.md`.
 - **TypeScript 7.** The repo is on TypeScript 7; Expo transpiles with Babel, so
   only type-checking is affected. Confirm `tsc` handles the app's types.
 - **The scoring fingerprint.** The engine imports a generated file; the app's

@@ -1,0 +1,46 @@
+# Stage 1: launch, the engine check, every tab, and the Submit sheet.
+# Run on a booted simulator or emulator with the app installed:
+#   bun run --cwd mobile e2e
+appId: com.glidecomp.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Comps"
+- extendedWaitUntil:
+    visible: "Task distance 78.85 km"
+    timeout: 20000
+- assertVisible: "Jon Durand, 1000 points"
+- assertVisible:
+    id: "engine-check-times"
+    text: "Start 15:30:00, ESS 17:07:55 \\(Australia/Melbourne\\)"
+- takeScreenshot: comps
+
+- tapOn: "My flights"
+- assertVisible: "Your flights arrive in stage 6."
+- takeScreenshot: my-flights
+
+- tapOn: "Me"
+- assertVisible: "Sign-in and your account arrive in stage 4."
+- takeScreenshot: me
+
+# Submit is an action: it presents a sheet over the current tab.
+- tapOn: "Submit"
+- assertVisible: "The submit form arrives in stage 5."
+- takeScreenshot: submit-sheet
+# Dismiss the way each platform does: system Back, or a swipe down.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - swipe:
+          start: "50%, 45%"
+          end: "50%, 98%"
+- assertVisible: "Sign-in and your account arrive in stage 4."
+
+- tapOn: "Comps"
+- assertVisible: "Task distance 78.85 km"

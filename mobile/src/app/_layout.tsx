@@ -1,0 +1,31 @@
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { LogBox, useColorScheme } from 'react-native';
+
+// The engine has import cycles that are legal ES modules and harmless
+// (task-optimizer <-> goal-line). Metro warns about every one; the engine is
+// imported unchanged, so the warning says nothing the app can act on.
+LogBox.ignoreLogs([/^Require cycle: \.\.\/web\/engine\//]);
+
+export default function RootLayout() {
+  const scheme = useColorScheme();
+  return (
+    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        {/* Submit is a sheet over whatever is on screen (IA §2), not a stack
+            of its own. /submit is also the website's URL for it, so a
+            universal link lands here in stage 9. */}
+        <Stack.Screen
+          name="submit"
+          options={{
+            presentation: 'formSheet',
+            sheetGrabberVisible: true,
+            sheetAllowedDetents: [0.6, 1],
+            headerShown: true,
+            title: 'Submit a track',
+          }}
+        />
+      </Stack>
+    </ThemeProvider>
+  );
+}
