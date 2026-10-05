@@ -1,7 +1,8 @@
 # Native iOS and Android app — implementation plan
 
 Date: 2026-10-05
-Status: plan, not started. Implementation happens on the owner's Mac.
+Status: stage 0 decisions made (2026-10-06); accounts and tools in progress.
+Implementation happens on the owner's Mac.
 
 Builds the app described in
 [2026-09-22-ios-app-information-architecture.md](./2026-09-22-ios-app-information-architecture.md),
@@ -163,34 +164,64 @@ competitions, not about web pages. This is how each applies to the app. Stage
 **Goal:** nothing left to decide that would change a stage's work, and a Mac
 that can build both apps.
 
-**Decide** (the IA's §18 questions, plus the ones this plan adds):
+**Decided** (2026-10-06 — the IA's §18 questions, plus the ones this plan
+adds):
 
-1. **The comp view's "You" group** — does it sit with #514's "every task alike"?
-2. **Submit: a tab, or an action on the comp and task screens?**
-3. **Can a registered pilot see the roster?** (The IA says organisers only.)
-4. **Comp-level organiser's notes**: plain text or Markdown; and is a pinned,
-   expiring notice ("briefing moved to 09:30") a separate feature?
-5. **iPad**: does the comp own the sidebar, with tasks in the detail column?
-6. **App name, bundle id and package name** — for example `GlideComp`,
-   `com.glidecomp.app`. These are hard to change after the first store upload.
-7. **Sign in with Apple.** App Store guideline 4.8 expects it from an app that
-   offers Google sign-in. The options: add Apple sign-in to the auth worker
-   (better-auth supports it), or offer only email codes on iOS.
-8. **Minimum OS versions** — suggest iOS 17 and Android 10, checked against
-   what pilots actually carry.
-9. **Expo plan**: start on the free tier (local builds make it workable) and
-   move to the US$19-a-month plan only if queue times hurt.
+1. **The comp view's "You" group — kept.** #514 stopped one *task* being
+   privileged in the task list. The You group carries the pilot's own state
+   (your track, your rank), not a task, so it does not conflict — on the
+   condition that it never becomes a featured task card.
+2. **Submit is a tab.** Share-sheet import (stage 5) and the offline queue make
+   submitting an app-wide action, not one that starts from a comp.
+3. **The roster stays organiser-only**, as on the website. Opening it to
+   registered pilots would be a server authorisation change for both clients,
+   not an app decision.
+4. **Comp-level organiser's notes are plain text**, with URLs made clickable.
+   A pinned, expiring notice ("briefing moved to 09:30") is a separate feature,
+   tracked as a GitHub issue and outside this plan.
+5. **iPad: the comp owns the sidebar**, and tasks push within the detail
+   column, keeping the stack intact.
+6. **App name `GlideComp`; iOS bundle id and Android package
+   `com.glidecomp.app`; URL scheme `glidecomp`.** Confirm the name is free in
+   both stores before the first upload — these are hard to change after it.
+7. **Sign in with Apple is added to the auth worker** (better-auth supports
+   it), in stage 4. App Store guideline 4.8 expects it from an app that offers
+   Google sign-in. Apple's "Hide My Email" gives a relay address that will
+   never match a pilot's registration email, so those pilots always meet the
+   "which one is you?" picker — correct under "registration is never guessed",
+   and the picker must be designed with it in mind.
+8. **Minimum OS: iOS 17 and Android 10**, or the Expo SDK's own floor if that
+   is higher.
+9. **Expo plan: the free tier** (local builds make it workable); move to the
+   US$19-a-month plan only if queue times hurt.
+10. **Developer accounts are personal.** The Apple Developer Program enrolment
+    is the owner's individual account, so the stores name the owner as the
+    seller. No D-U-N-S number is needed; moving the app to an organisation
+    later is possible but slow, so revisit before the store release if that
+    matters.
+11. **Expo SDK 58 or 57** is settled when stage 1 starts, by whether 58's
+    stable release (due mid-October 2026) has shipped.
+12. **Mapbox mobile pricing** is checked against the account's free tier
+    before stage 3 (§6).
 
 **Set up** (owner, with Claude's help in the session):
 
 - Apple Developer Program (US$99 a year) and Google Play Console (US$25 once).
 - Expo account; `eas login` on the Mac.
-- Xcode 27 with an iOS 27 simulator; Android Studio with an emulator image.
+- Xcode 27 with an iOS 27 simulator; an Android SDK with an emulator image.
+  Android Studio is optional — the Mac uses Homebrew's
+  `android-commandlinetools`, with `ANDROID_HOME` pointing at it.
+- **JDK 17 for Gradle** (`brew install openjdk@17`, set as `JAVA_HOME`). React
+  Native's Android build does not support newer JDKs, and the Mac's default
+  `java` is newer.
+- `watchman`, `cocoapods` and `eas-cli` from Homebrew.
 - Mapbox: a separate token for the app, restricted to the bundle ids.
 - Claude Code on the Mac with XcodeBuildMCP, agent-device and Maestro.
+- At least 40 GB free disk: Xcode's derived data, the CocoaPods cache, Gradle
+  and emulator images grow fast.
 
 **Delivers:** this document updated with the answers; a one-page record of
-accounts and identifiers (no secrets in the repo).
+accounts and identifiers, [mobile-accounts.md](./mobile-accounts.md) (no secrets in the repo).
 
 **Owner checks:** the decisions read as intended; `xcodebuild -version`, an
 Android emulator and `eas whoami` all answer.
@@ -322,11 +353,11 @@ screen showing each person only what they may use.
 - Add the `expo()` plugin from `@better-auth/expo`.
 - Add the app's scheme to `trustedOrigins` (`glidecomp://`, plus the
   development scheme in local dev only).
-- Sign in with Apple, if stage 0 chose it.
+- Sign in with Apple (stage 0, decision 7).
 
 **Build:**
 
-- **Sign-in** — email code (OTP) and Google (and Apple, if chosen), from the Me
+- **Sign-in** — email code (OTP), Google and Apple, from the Me
   tab and whenever an action needs it; never as an interruption on launch.
 - **Session** in the secure store; the `session_data` cookie cache works
   unchanged because it is just another cookie.
@@ -336,7 +367,7 @@ screen showing each person only what they may use.
   appearance, sign out, delete account (Apple requires in-app deletion; the
   website's flow already exists).
 - **Role-aware screens** — `is_admin` from the comp payload drives organiser
-  rows; registration drives the comp view's "You" group (if stage 0 kept it)
+  rows; registration drives the comp view's "You" group
   and the task view's "Your track"; Comps gains "Yours".
 - **Hidden comps** stay not-found for anyone who is not an organiser, naming
   nothing.
@@ -525,7 +556,7 @@ Kept deliberately small; each follows the existing "part of done" rules.
 | Stage | Change | Audit | Score bump |
 |---|---|---|---|
 | 4 | auth-api: `@better-auth/expo` plugin, app scheme in `trustedOrigins` | — | — |
-| 4 | auth-api: Sign in with Apple (if chosen) | — | — |
+| 4 | auth-api: Sign in with Apple | — | — |
 | 7 | competition-api: comp-level organiser's notes (migration, `PATCH`) | Yes | No — not a scoring input |
 | 9 | Static: `.well-known` files for universal links | — | — |
 | 9 | competition-api: push-token storage and notification sends | — | — |
