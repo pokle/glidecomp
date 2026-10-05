@@ -47,3 +47,6 @@ npm-debug.log*
 
 # SSR bundle build artifact (web/frontend/dist-ssr)
 dist-ssr/
+
+# Python bytecode — the experiments' uv scripts import each other as modules
+__pycache__/
