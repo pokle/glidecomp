@@ -32,6 +32,7 @@
     "web/workers/**/*",
     "web/engine/tests/**/*",
     "web/scripts/**/*",
+    "mobile/scripts/**/*",
     "functions/**/*"
   ],
   "exclude": [
