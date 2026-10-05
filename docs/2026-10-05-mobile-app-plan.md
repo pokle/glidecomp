@@ -199,8 +199,12 @@ adds):
     seller. No D-U-N-S number is needed; moving the app to an organisation
     later is possible but slow, so revisit before the store release if that
     matters.
-11. **Expo SDK 58 or 57** is settled when stage 1 starts, by whether 58's
-    stable release (due mid-October 2026) has shipped.
+11. **Expo SDK 58, from its beta.** On 2026-10-06 58 was still in beta
+    (`expo@next`, React Native 0.88.0-rc.3, React 19.3.0) and 57 was stable.
+    The owner chose to start on the 58 beta rather than build on 57 and
+    upgrade: the app reaches no store before stage 10, long after 58 is
+    stable, and starting on it avoids an upgrade in stage 2. Stage 1 moves to
+    the stable 58 release when it ships.
 12. **Mapbox mobile pricing** is checked against the account's free tier
     before stage 3 (§6).
 
