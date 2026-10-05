@@ -659,3 +659,6 @@ And two renames: "Miscellaneous" → **Competition**, "Wing" → **Class of wing
 5. **iPad split view**: does the task view belong in the detail column with the
    comp in the list column, or does the comp own the list column and tasks push
    within the detail? The second keeps the stack intact and is probably right.
+
+These were answered on 2026-10-06 — see stage 0 of
+[2026-10-05-mobile-app-plan.md](./2026-10-05-mobile-app-plan.md#stage-0--decisions-and-the-mac).
