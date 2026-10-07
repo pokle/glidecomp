@@ -112,7 +112,7 @@ Then update that repo's `docs/security-review.md` (the index) in the same change
 
 Convert any relative dates ("today", "last week") to absolute dates before writing.
 
-Finally, in the **public** repo's `docs/security-review.md`, add a row for each finding whose fix has deployed since the last round. Check the Deploy run on `master` rather than assuming a merge deployed.
+Finally, in the **public** repo's `docs/security-review.md`, add a row for each finding whose fix has deployed since the last round. Check the Deploy run on `master` rather than assuming a merge deployed, and read its job steps: a run can be red at a later verification step while every deploy step succeeded (or the reverse), and the two mean different things.
 
 ## 8. Verify locally
 
