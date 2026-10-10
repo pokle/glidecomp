@@ -36,7 +36,35 @@ or a config plugin, never in those folders.
 **The Android build needs JDK 17** (`JAVA_HOME`) and `ANDROID_HOME`; see the
 plan's stage 0 for the Mac's setup.
 
+### Development and production identities
+
+Every local build is a **development** build: bundle id and package
+`com.glidecomp.app.dev`, named "GlideComp Dev", scheme `glidecomp-dev`. Only
+`APP_VARIANT=production` (the EAS store profiles) builds `com.glidecomp.app`.
+See `app.config.ts` for why: chiefly, a free Apple Personal Team signing a
+phone build must never register the store's bundle id. Maestro flows target
+`com.glidecomp.app.dev`.
+
+### On your own iPhone
+
+No paid developer account is needed for this; a free Personal Team signs it,
+and the build stops opening after 7 days (rebuild to renew).
+
+1. Xcode → Settings → Accounts has your Apple ID (it creates the Personal
+   Team), the phone is paired (it appears in DeviceHub), and Developer Mode is
+   on (Settings → Privacy & Security on the phone).
+2. With Metro running (`bun run start`), on the same Wi-Fi as the Mac:
+   `bun run ios -- --device "<phone name>" --no-bundler`. Signing picks the
+   Personal Team automatically.
+3. The first time only, the launch fails with "profile has not been explicitly
+   trusted". On the phone: Settings → General → VPN & Device Management →
+   the "Apple Development" developer app → Trust. Then open GlideComp Dev.
+4. Allow the local-network prompt; that is how the phone reaches Metro.
+
 ### When the simulators misbehave
+
+- **Xcode 27 renamed Simulator.app to DeviceHub**
+  (`/Applications/Xcode.app/Contents/Applications/DeviceHub.app`).
 
 - **`expo run:ios` builds and installs, then fails on `osascript ... System
   Events`.** The CLI asks System Events whether the Simulator app is running,

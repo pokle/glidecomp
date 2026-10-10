@@ -1,7 +1,7 @@
 # Stage 1: launch, the engine check, every tab, and the Submit sheet.
 # Run on a booted simulator or emulator with the app installed:
 #   bun run --cwd mobile e2e
-appId: com.glidecomp.app
+appId: com.glidecomp.app.dev
 ---
 - launchApp:
     clearState: true
