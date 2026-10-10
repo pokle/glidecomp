@@ -1,0 +1,16 @@
+# Go back one screen the way each platform does it: system Back on Android,
+# the edge swipe on iOS (Maestro's `back` is Android-only).
+appId: com.glidecomp.app.dev
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - swipe:
+          start: "1%, 50%"
+          end: "85%, 50%"

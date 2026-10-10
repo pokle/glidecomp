@@ -1,14 +1,12 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import { LogBox, useColorScheme } from 'react-native';
+import { useColorScheme } from 'react-native';
 
-// The engine has import cycles that are legal ES modules and harmless
-// (task-optimizer <-> goal-line). Metro warns about every one; the engine is
-// imported unchanged, so the warning says nothing the app can act on.
-LogBox.ignoreLogs([/^Require cycle: \.\.\/web\/engine\//]);
+import { QueryProvider } from '@/api/query-client';
 
 export default function RootLayout() {
   const scheme = useColorScheme();
   return (
+    <QueryProvider>
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
@@ -27,5 +25,6 @@ export default function RootLayout() {
         />
       </Stack>
     </ThemeProvider>
+    </QueryProvider>
   );
 }

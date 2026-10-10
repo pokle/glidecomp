@@ -1,0 +1,57 @@
+# Stage 2 / issue #481: with no signal, the app shows what it last saw and
+# says so; it never replaces it with an empty state or "not found".
+# Android only: Maestro can switch airplane mode there, not on iOS. The dev
+# build must reach Metro over `adb reverse` (debug host localhost:8081), or
+# airplane mode cuts the JavaScript too (mobile/CLAUDE.md).
+appId: com.glidecomp.app.dev
+# Airplane mode outlives the flow (and the emulator's reboot): switch it off
+# however the flow ends.
+onFlowComplete:
+  - runFlow:
+      when:
+        platform: Android
+      commands:
+        - setAirplaneMode: disabled
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - setAirplaneMode: disabled
+      - launchApp
+      - extendedWaitUntil:
+          visible: "Past"
+          timeout: 30000
+      - tapOn:
+          id: "comp-row-.*"
+          index: 0
+      - extendedWaitUntil:
+          visible: "Wing"
+          timeout: 20000
+      # Open a task and come back: it caches more, and gives the cache (saved
+      # at most every 2 s) time to reach the phone before the app is killed.
+      - tapOn:
+          id: "task-row-.*"
+          index: 0
+      - extendedWaitUntil:
+          visible: "Turnpoints|Route not set yet."
+          timeout: 20000
+      - runFlow: subflows/back.yaml
+      - assertVisible: "Wing"
+      - setAirplaneMode: enabled
+      - stopApp
+      - launchApp
+      # A relaunch opens on Comps; the list is the one it saw, under the banner.
+      - extendedWaitUntil:
+          visible: "No signal — showing what you saw.*"
+          timeout: 60000
+      - assertVisible: "Past"
+      # And the comp it opened is still there, with no signal.
+      - tapOn:
+          id: "comp-row-.*"
+          index: 0
+      - extendedWaitUntil:
+          visible: "Wing"
+          timeout: 30000
+      - assertVisible: "No signal — showing what you saw.*"
+      - setAirplaneMode: disabled

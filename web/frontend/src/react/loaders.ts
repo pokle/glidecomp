@@ -69,18 +69,9 @@ async function getJson<T>(f: FetchFn, path: string): Promise<T> {
 // ── /comp ──────────────────────────────────────────────────────────────────
 
 /** One row of GET /api/comp (presentational fields only). */
-export interface CompListEntry {
-  comp_id: string;
-  name: string;
-  category: string;
-  creation_date: string;
-  pilot_classes: string[];
-  scoring_format?: string;
-  is_admin: boolean;
-  test: boolean;
-  first_task_date: string | null;
-  last_task_date: string | null;
-}
+// Moved to @glidecomp/client, shared with the app (mobile plan, stage 2).
+export type { CompListEntry } from "@glidecomp/client/types";
+import type { CompListEntry } from "@glidecomp/client/types";
 
 export interface CompetitionsLoaderData {
   comps: CompListEntry[];
