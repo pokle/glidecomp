@@ -37,10 +37,8 @@ import { api } from "../../comp/api";
 import {
   formatInstant,
   utcISOToZonedDateTimeLocal,
-  utcToZonedHHMM,
   zonedDateTimeLocalToUtcISO,
   zoneLabel,
-  zoneNameWithOffset,
 } from "../lib/time";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -57,7 +55,7 @@ import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
-import { gateToHHMM, startConfigSummary } from "../comp/route-editor";
+import { goalSummary, startConfigSummary } from "@glidecomp/client/route";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 // Comp admins only, so its code has no business in every pilot's bundle.
 const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
@@ -555,20 +553,6 @@ function TaskSummaryHeader({
   timezone: string | null;
 }) {
   const goal = xctsk.goal;
-  const goalTypeLabel = goal?.type === "LINE" ? "Line" : "Cylinder";
-  // Goal deadline: comp-local when a zone is set, else UTC as stored.
-  const deadlineHHMM = goal?.deadline ? gateToHHMM(goal.deadline) : null;
-  let deadline: string | null = null;
-  if (deadlineHHMM) {
-    const zoned = timezone
-      ? utcToZonedHHMM(taskDate, deadlineHHMM, timezone)
-      : deadlineHHMM;
-    const zoneLbl = timezone
-      ? zoneNameWithOffset(new Date(`${taskDate}T12:00:00Z`), timezone)
-      : "UTC";
-    deadline = `${zoned ?? deadlineHHMM} ${zoneLbl}`;
-  }
-
   if (!xctsk.sss && !goal) return null;
 
   return (
@@ -585,8 +569,7 @@ function TaskSummaryHeader({
         <div>
           <dt className="text-xs text-muted-foreground">Goal</dt>
           <dd className="font-medium">
-            {goalTypeLabel}
-            {deadline ? ` · deadline ${deadline}` : ""}
+            {goalSummary(goal, { timeZone: timezone, taskDate })}
           </dd>
         </div>
       ) : null}

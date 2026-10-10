@@ -277,6 +277,28 @@ still read it with no signal.
 - Open a comp, switch on airplane mode, force-quit, reopen: the comp is still
   there, with the banner.
 
+**As built (2026-10-10).** Where stage 2 departs from the list above:
+
+- `@glidecomp/client` took more than planned: the start and goal wording
+  (`startConfigSummary`, a new `goalSummary` the website's task page now
+  uses too) and the weather helpers (`usableCeilingM`, the source credit), so
+  the app words a route and credits a forecast exactly as the website does.
+- **Weather is an hourly list** (wind, gusts, cloud, usable ceiling in the
+  reader's units) under the source's kind — "Forecast" or "Modelled" — with
+  the website's credit. The charts arrive with stage 3's `react-native-svg`,
+  and the list stays beneath them as the exact reading.
+- **Search groups results by kind** — competitions, tasks, turnpoints,
+  pilots — and each opens the deepest screen that exists so far (a pilot opens
+  the task they flew until stage 3 brings the report card).
+- **The read-only notice is a row under Me → This build**, not a banner: every
+  stage 2 request is a read, so a banner would say nothing on any screen. The
+  first screen that writes (stage 4) says so when the guard refuses.
+- Lists are `@expo/ui`'s universal components (SwiftUI on iOS, Material 3 on
+  Android), as planned. Android's Material 3 list draws rows as separate
+  cards — the owner's call whether that stands.
+- The SDK moved to `expo@58.0.7` (React Native 0.88.0-rc.4): `@expo/ui`
+  58.0.15 needs its `expo-modules-core`.
+
 ---
 
 ### Stage 3 — Results: scores and the report card

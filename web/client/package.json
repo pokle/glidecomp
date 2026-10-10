@@ -1,0 +1,62 @@
+{
+  "name": "@glidecomp/client",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "description": "What the website and the app share above the engine: the typed API client, the retry rules, the wire types, and the pure URL, time, unit and number formatting. No DOM.",
+  "exports": {
+    "./api": {
+      "types": "./src/api.ts",
+      "default": "./src/api.ts"
+    },
+    "./format": {
+      "types": "./src/format.ts",
+      "default": "./src/format.ts"
+    },
+    "./met": {
+      "types": "./src/met.ts",
+      "default": "./src/met.ts"
+    },
+    "./retry": {
+      "types": "./src/retry.ts",
+      "default": "./src/retry.ts"
+    },
+    "./route": {
+      "types": "./src/route.ts",
+      "default": "./src/route.ts"
+    },
+    "./search": {
+      "types": "./src/search.ts",
+      "default": "./src/search.ts"
+    },
+    "./slug": {
+      "types": "./src/slug.ts",
+      "default": "./src/slug.ts"
+    },
+    "./time": {
+      "types": "./src/time.ts",
+      "default": "./src/time.ts"
+    },
+    "./transport": {
+      "types": "./src/transport.ts",
+      "default": "./src/transport.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./units": {
+      "types": "./src/units.ts",
+      "default": "./src/units.ts"
+    },
+    "./weather": {
+      "types": "./src/weather.ts",
+      "default": "./src/weather.ts"
+    }
+  },
+  "dependencies": {
+    "@glidecomp/engine": "workspace:*",
+    "hono": "^4.13.13"
+  }
+}

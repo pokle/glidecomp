@@ -5,14 +5,9 @@ appId: com.glidecomp.app.dev
 ---
 - launchApp:
     clearState: true
-- assertVisible: "Comps"
 - extendedWaitUntil:
-    visible: "Task distance 78.85 km"
-    timeout: 20000
-- assertVisible: "Jon Durand, 1000 points"
-- assertVisible:
-    id: "engine-check-times"
-    text: "Start 15:30:00, ESS 17:07:55 \\(Australia/Melbourne\\)"
+    visible: "Past"
+    timeout: 30000
 - takeScreenshot: comps
 
 - tapOn: "My flights"
@@ -22,6 +17,17 @@ appId: com.glidecomp.app.dev
 - tapOn: "Me"
 - assertVisible: "Sign-in and your account arrive in stage 4."
 - takeScreenshot: me
+
+# The engine check moved to Me in stage 2.
+- tapOn: "Engine check"
+- extendedWaitUntil:
+    visible: "Task distance 78.85 km"
+    timeout: 20000
+- assertVisible: "Jon Durand, 1000 points"
+- assertVisible:
+    id: "engine-check-times"
+    text: "Start 15:30:00, ESS 17:07:55 \\(Australia/Melbourne\\)"
+- runFlow: subflows/back.yaml
 
 # Submit is an action: it presents a sheet over the current tab.
 - tapOn: "Submit"
@@ -43,4 +49,4 @@ appId: com.glidecomp.app.dev
 - assertVisible: "Sign-in and your account arrive in stage 4."
 
 - tapOn: "Comps"
-- assertVisible: "Task distance 78.85 km"
+- assertVisible: "Past"

@@ -1,7 +1,5 @@
-import { hc } from "hono/client";
-import type { AppType } from "../../../workers/competition-api/src/index";
+import { createApi } from "@glidecomp/client/api";
 
-export const api = hc<AppType>("/", {
-  fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-    fetch(input, { ...init, credentials: "include" }),
-});
+export const api = createApi("/", (input, init) =>
+  fetch(input, { ...init, credentials: "include" })
+);

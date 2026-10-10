@@ -6,7 +6,7 @@ export default function TabsLayout() {
     // Material shows only the selected tab's label by default; every tab is
     // labelled here, so no destination is a bare icon to guess at.
     <NativeTabs labelVisibilityMode="labeled">
-      <NativeTabs.Trigger name="comps">
+      <NativeTabs.Trigger name="comp">
         <NativeTabs.Trigger.Label>Comps</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="trophy" md="emoji_events" />
       </NativeTabs.Trigger>
