@@ -28,6 +28,7 @@ import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
+import { ID_FIELDS, NAME_CONTACT_FIELDS, PROFILE_FIELDS } from "@glidecomp/client/account";
 
 interface ApiKey {
   id: string;
@@ -307,26 +308,8 @@ function UnitsSection() {
 }
 
 // Names and contact details on one side, pilot registration IDs on the other —
-// two groups that lay out multi-column on wider screens.
-const NAME_CONTACT_FIELDS = [
-  { key: "name", label: "Display name" },
-  { key: "phone", label: "Phone" },
-  { key: "glider", label: "Glider" },
-  { key: "emergency_contact_name", label: "Emergency contact name" },
-  { key: "emergency_contact_phone", label: "Emergency contact phone" },
-] as const;
-
-const ID_FIELDS = [
-  { key: "civl_id", label: "CIVL ID" },
-  { key: "safa_id", label: "SAFA ID" },
-  { key: "ushpa_id", label: "USHPA ID" },
-  { key: "bhpa_id", label: "BHPA ID" },
-  { key: "dhv_id", label: "DHV ID" },
-  { key: "ffvl_id", label: "FFVL ID" },
-  { key: "fai_id", label: "FAI ID" },
-] as const;
-
-const PROFILE_FIELDS = [...NAME_CONTACT_FIELDS, ...ID_FIELDS] as const;
+// two groups that lay out multi-column on wider screens. The field lists are
+// shared with the app's Me tab (@glidecomp/client/account).
 
 type ProfileValues = Record<(typeof PROFILE_FIELDS)[number]["key"], string>;
 
