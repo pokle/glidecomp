@@ -6,7 +6,8 @@
  * no UI and no other reader, so without this there is no way to answer "did
  * last month's import actually land, and does it match civlcomps.org?" short
  * of `wrangler d1 execute` against production. It is served at
- * `/civl-rankings.csv` via a Pages Function and linked from nowhere.
+ * `/civl-rankings.csv` via a Pages Function, linked only from the superadmin
+ * card on /settings.
  *
  * Public and unauthenticated, deliberately: every row is a verbatim copy of a
  * list anyone can download from civlcomps.org, so there is nothing here to

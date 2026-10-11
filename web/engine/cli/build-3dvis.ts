@@ -15,7 +15,10 @@
  *
  * Defaults:
  *   comp-dir = web/samples/comps/corryong-cup-2026-open-t1
- *   out-dir  = web/frontend/public/replay-offline
+ *   out-dir  = web/engine/out/3dvis (gitignored)
+ *
+ * The page does not read this output: it loads the same bundle from the
+ * competition-api Worker. This is for inspecting the packed asset offline.
  *
  * Writes <out-dir>/tracks.bin.gz and <out-dir>/manifest.json.
  */
@@ -32,7 +35,7 @@ const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 
 const args = process.argv.slice(2);
 const compDir = resolve(args[0] ?? join(REPO_ROOT, 'web/samples/comps/corryong-cup-2026-open-t1'));
-const outDir = resolve(args[1] ?? join(REPO_ROOT, 'web/frontend/public/replay-offline'));
+const outDir = resolve(args[1] ?? join(REPO_ROOT, 'web/engine/out/3dvis'));
 
 /** Pull a CIVL-ish id out of `lamb_18239_050126.igc` → `18239`, else the stem. */
 function pilotIdFromFilename(file: string): string {

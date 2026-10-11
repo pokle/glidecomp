@@ -42,9 +42,9 @@ viewer was built from) as background.
     IGC from R2, packs, and returns one binary **bundle** — `[uint32 manifestLen]
     [manifest JSON][gzipped Float32 data]` — cached in KV. This is what the page
     loads (`viewer.loadBundle`).
-  - **Build-time mirror (offline):** the `build-3dvis` CLI writes the same
-    manifest + `tracks.bin.gz` to `web/frontend/public/replay-offline/` for
-    offline inspection/regression. No longer on the page's hot path.
+  - **Offline (CLI):** the `build-3dvis` CLI writes the same manifest +
+    `tracks.bin.gz` to the gitignored `web/engine/out/3dvis/`, for offline
+    inspection and regression. Nothing serves it; the page never reads it.
 - The sample is a **real competition in the database** (comp + task + pilots +
   IGC in R2), so every user can view it; see *Sample competition* below.
 
@@ -55,7 +55,7 @@ bun run dev                   # workers + frontend; http://localhost:3000/replay
 bun run seed                     # load every bundled comp into local D1 + R2 (idempotent)
 bun run seed corryong-cup-2026   # …or just the comp the replay defaults to
 bun run seed --remote            # …or into production D1 + R2
-bun run build-3dvis           # offline: regenerate the static asset mirror
+bun run build-3dvis           # offline: pack the sample into web/engine/out/3dvis/
 ```
 
 The page calls `/api/comp/sample-3dvis` by default; `?comp=<id>&task=<id>` points
@@ -75,7 +75,7 @@ IGC + task.xctsk ──▶ packTracksFromIgc() (pure) ──▶ manifest + Float
         ▼                               ▼                     │
  [build-3dvis CLI]            [competition-api Worker]        │
  tracks.bin.gz + manifest      GET …/3dvis → bundle (KV-cached)│
- (offline mirror)              R2 IGC → pack → one response    │
+ (offline, not served)         R2 IGC → pack → one response    │
                                                         ┌──────┘
                                                         ▼
                                    [FlightScene]  shared Three objects
@@ -98,9 +98,9 @@ Engine (pure, no DOM — runs in both the Worker and the CLI):
   pack the binary + manifest, palette, task geometry. Exported from `index.ts`.
 - `web/engine/src/track-pack-pipeline.ts` — `packTracksFromIgc()`: parse IGC →
   GAP score → `packTracks`. Shared by the Worker and the CLI.
-- `web/engine/cli/build-3dvis.ts` — offline mirror: reads IGC + task, resolves
+- `web/engine/cli/build-3dvis.ts` — offline: reads IGC + task, resolves
   the timezone (engine `src/timezone.ts` / tz-lookup), gzips, writes the
-  static asset.
+  asset to `web/engine/out/3dvis/`.
 
 Worker (`web/workers/competition-api/src/`):
 - `visualization.ts` (`buildTask3dvisBundle`) + `routes/visualization.ts` — the
@@ -182,8 +182,8 @@ transparently gunzip.)
   field changes. FNV-1a → hue, with the saturation/lightness bands the old
   roster palette used so it stays visually consistent. Trade-off: hashing can occasionally put
   two pilots on near-identical hues (the golden-angle palette guaranteed maximal
-  separation) — name-stability was judged worth it. Re-run `bun run build-3dvis`
-  to regenerate the manifest after touching the colour logic.
+  separation) — name-stability was judged worth it. Run `bun run build-3dvis`
+  to inspect the manifest after touching the colour logic.
 
 ---
 

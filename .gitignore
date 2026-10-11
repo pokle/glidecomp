@@ -10,6 +10,8 @@ node_modules/
 dist/
 .wrangler/
 web/frontend/public/js/
+# build-3dvis CLI output (offline inspection only)
+web/engine/out/
 
 # The scoring engine's generation, derived from its own sources by
 # web/scripts/generate-scoring-fingerprint.ts. Deliberately not committed:
