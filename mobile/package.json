@@ -1,0 +1,45 @@
+{
+  "name": "@glidecomp/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "main": "expo-router/entry",
+  "scripts": {
+    "prepare-sources": "bun run --cwd .. engine:fingerprint --quiet && bun scripts/bundle-engine-sample.ts",
+    "start": "bun run prepare-sources && expo start",
+    "ios": "bun run prepare-sources && expo run:ios",
+    "android": "bun run prepare-sources && expo run:android",
+    "test": "bun run prepare-sources && jest",
+    "typecheck": "bun run prepare-sources && tsc --noEmit",
+    "e2e": "maestro test .maestro"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.29.2",
+    "@expo/log-box": "~58.0.9",
+    "@expo/metro-runtime": "~58.0.11",
+    "@glidecomp/engine": "workspace:*",
+    "expo": "~58.0.3",
+    "expo-constants": "~58.0.9",
+    "expo-linking": "~58.0.10",
+    "expo-router": "~58.0.13",
+    "expo-splash-screen": "~58.0.5",
+    "expo-status-bar": "~58.0.3",
+    "expo-symbols": "~58.0.4",
+    "expo-system-ui": "~58.0.5",
+    "fflate": "^0.8.3",
+    "react": "19.3.0",
+    "react-native": "0.88.0-rc.3",
+    "react-native-safe-area-context": "~5.9.1",
+    "react-native-screens": "~4.28.0"
+  },
+  "devDependencies": {
+    "@glidecomp/samples": "workspace:*",
+    "@react-native/jest-preset": "0.88.0-rc.3",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/react": "~19.3.0",
+    "jest": "^30.0.0",
+    "jest-expo": "~58.0.7",
+    "test-renderer": "^1.0.0"
+  }
+}
