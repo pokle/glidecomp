@@ -60,3 +60,30 @@ export function isServedAuthEndpoint(method: string, pathname: string): boolean 
   const verb = method.toUpperCase();
   return SERVED.some(([m, pattern]) => m === verb && pattern.test(path));
 }
+
+/**
+ * Routes an API key may not use, whatever it is otherwise allowed (SEC-57).
+ *
+ * The apiKey plugin turns an `x-api-key` header into a full session, so
+ * without this a key could mint further keys (which outlive revoking it),
+ * revoke its owner's other keys, rename the account or its public handle, and
+ * delete the account with every file in it. A key is handed to agents, and an
+ * agent that reads untrusted text inherits whatever its key can do. Managing
+ * the account, keys included, takes a signed-in browser.
+ *
+ * Covers GlideComp's own routes in index.ts as well as the plugin's, so it is
+ * checked ahead of both rather than in the catch-all.
+ */
+const BROWSER_SESSION_ONLY: ReadonlyArray<RegExp> = [
+  /^\/api-key\//,
+  /^\/delete-account$/,
+  /^\/set-username$/,
+  /^\/set-name$/,
+];
+
+/** Whether this path refuses a request that carries an API key. */
+export function requiresBrowserSession(pathname: string): boolean {
+  if (!pathname.startsWith(`${BASE_PATH}/`)) return false;
+  const path = pathname.slice(BASE_PATH.length);
+  return BROWSER_SESSION_ONLY.some((pattern) => pattern.test(path));
+}
