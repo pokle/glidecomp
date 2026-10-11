@@ -436,6 +436,43 @@ screen showing each person only what they may use.
   and a pilot account does not.
 - Delete a throwaway account from the app.
 
+**As built (2026-10-11):**
+
+- **Google and Apple sign in natively, with an ID token** — never through the
+  browser round trip `@better-auth/expo` also offers, which ends by putting
+  the session cookie in a `glidecomp://` URL that any app on the phone can
+  register to receive. The auth worker does not serve that flow's
+  `/expo-authorization-proxy` (it is an open redirect too), and refuses a
+  custom-scheme callback URL outright. See [auth.md](./auth.md#the-native-app).
+- **Sign in with Apple needed no secret after all.** Native-only, its token is
+  checked against Apple's public keys with the bundle ids as audience; the
+  Services ID and private key are for Apple's web flow, which is not
+  configured (the website does not offer Apple). It still needs the paid
+  team's capability on the bundle id, so a Personal Team build hides the
+  button (`APPLE_SIGN_IN`).
+- **Google needs the app's own client ids** from the Google Cloud Console (an
+  iOS client, and an Android client with the signing key's SHA-1). Until they
+  exist the button is absent; email codes work everywhere.
+- **The development scheme is trusted in production too** (`glidecomp-dev://`),
+  not "local dev only": the owner's phone runs a Release build of the
+  development variant, and that signs in to glidecomp.com. Trusting a scheme
+  as an origin opens nothing a browser could use.
+- **A development build reading production cannot sign in at all** — signing
+  in is a write, and the write guard refuses it. The simulators sign in
+  against the local workers, whose dev-only code lookup the Maestro flow uses.
+- **A new read route, `GET /api/comp/pilot/registrations`** (§5): the comps
+  an account is on the roster of. Flights alone could not say it — a pilot is
+  registered before they fly. No audit, no score bump: it reads.
+- **"Whenever an action needs it"** has no action yet: the first is stage 5's
+  submit sheet. Sign-in lives on Me.
+- **The organiser rows open stage 7 placeholders** (Pilots, Settings; Pilots &
+  tracks, Task settings) — present for an organiser, absent for anyone else.
+- **Units follow the account through the website's own preferences blob**,
+  changing its `units` and leaving the website's other preferences alone.
+- **The account's shape and the profile's fields moved to
+  `@glidecomp/client/account`**, with `needsOnboarding()`: a new email-code
+  account has no name, and the app asks for one exactly when the website does.
+
 ---
 
 ### Stage 5 — Submit a track
@@ -611,7 +648,8 @@ Kept deliberately small; each follows the existing "part of done" rules.
 | Stage | Change | Audit | Score bump |
 |---|---|---|---|
 | 4 | auth-api: `@better-auth/expo` plugin, app scheme in `trustedOrigins` | — | — |
-| 4 | auth-api: Sign in with Apple | — | — |
+| 4 | auth-api: Sign in with Apple (ID token only; no secret) | — | — |
+| 4 | competition-api: `GET /api/comp/pilot/registrations` (read-only) | — | — |
 | 7 | competition-api: comp-level organiser's notes (migration, `PATCH`) | Yes | No — not a scoring input |
 | 9 | Static: `.well-known` files for universal links | — | — |
 | 9 | competition-api: push-token storage and notification sends | — | — |

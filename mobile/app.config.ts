@@ -18,22 +18,49 @@ import type { ExpoConfig } from 'expo/config';
 const production = process.env.APP_VARIANT === 'production';
 
 /**
- * The Mapbox PUBLIC token (pk.…) the track map draws with. Never committed:
- * it comes from the environment (EAS sets it for a store build) or from the
- * repository's root `.env`, the file the website's Vite build reads its own
- * token from. A public token ships inside every app by design; the secret
- * download token (sk.…) is never here — CocoaPods reads it from ~/.netrc.
+ * A build setting from the environment (EAS sets them for a store build) or
+ * from the repository's root `.env`, the file the website's Vite build reads
+ * its own settings from. Never committed.
  */
-function mapboxPublicToken(): string | undefined {
-  const fromEnv = process.env.REACT_NATIVE_MAPBOX_PUBLIC_TOKEN;
+function setting(name: string): string | undefined {
+  const fromEnv = process.env[name];
   if (fromEnv) return fromEnv;
   try {
     const dotenv = readFileSync(join(__dirname, '..', '.env'), 'utf8');
-    return /^REACT_NATIVE_MAPBOX_PUBLIC_TOKEN=(.+)$/m.exec(dotenv)?.[1].trim();
+    return new RegExp(`^${name}=(.+)$`, 'm').exec(dotenv)?.[1].trim();
   } catch {
     return undefined;
   }
 }
+
+/**
+ * The Mapbox PUBLIC token (pk.…) the track map draws with. A public token
+ * ships inside every app by design; the secret download token (sk.…) is never
+ * here — CocoaPods reads it from ~/.netrc.
+ */
+const mapboxPublicToken = setting('REACT_NATIVE_MAPBOX_PUBLIC_TOKEN');
+
+/**
+ * Google sign-in, natively (docs/auth.md, "The native app"). Client ids are
+ * not secrets — every app that signs in with Google carries its own — but
+ * they come from the Google Cloud Console, so a build without them simply
+ * offers no Google button. The web client id is the website's
+ * GOOGLE_CLIENT_ID: the ID token is addressed to it, which is what the auth
+ * worker checks. The iOS client id also names the URL scheme Google's sheet
+ * returns through.
+ */
+const googleWebClientId = setting('GOOGLE_WEB_CLIENT_ID');
+const googleIosClientId = setting('GOOGLE_IOS_CLIENT_ID');
+const googleIosUrlScheme = googleIosClientId?.split('.').reverse().join('.');
+
+/**
+ * Sign in with Apple needs the capability on the bundle id, which only the
+ * paid Apple Developer team can grant: a free Personal Team build that asked
+ * for it would fail to sign. So it is on for store builds, and for a
+ * development build only when APPLE_SIGN_IN=1 says the team signing it has
+ * the capability.
+ */
+const appleSignIn = production || setting('APPLE_SIGN_IN') === '1';
 
 const config: ExpoConfig = {
   name: production ? 'GlideComp' : 'GlideComp Dev',
@@ -47,13 +74,25 @@ const config: ExpoConfig = {
     // iPad gets its own split view in stage 9; until then it runs the phone
     // layout rather than a stretched one.
     supportsTablet: false,
+    usesAppleSignIn: appleSignIn,
   },
   android: {
     package: production ? 'com.glidecomp.app' : 'com.glidecomp.app.dev',
   },
-  plugins: ['expo-router', '@rnmapbox/maps'],
+  plugins: [
+    'expo-router',
+    '@rnmapbox/maps',
+    'expo-secure-store',
+    ...(appleSignIn ? ['expo-apple-authentication'] : []),
+    ...(googleIosUrlScheme
+      ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, unknown]]
+      : []),
+  ],
   extra: {
-    mapboxPublicToken: mapboxPublicToken(),
+    mapboxPublicToken,
+    googleWebClientId,
+    googleIosClientId,
+    appleSignIn,
   },
   experiments: {
     typedRoutes: true,

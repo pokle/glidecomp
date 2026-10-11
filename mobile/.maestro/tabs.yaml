@@ -6,7 +6,7 @@ appId: com.glidecomp.app.dev
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: "Past"
+    visible: "Yours|Past"
     timeout: 30000
 - takeScreenshot: comps
 
@@ -15,7 +15,9 @@ appId: com.glidecomp.app.dev
 - takeScreenshot: my-flights
 
 - tapOn: "Me"
-- assertVisible: "Sign-in and your account arrive in stage 4."
+# The sign-in group, the sentence saying why a development build reading
+# production cannot sign in there, or (signed in) the account's Sign out.
+- assertVisible: "Email me a sign-in code|This development build reads glidecomp.com.*|Units"
 - takeScreenshot: me
 
 # The engine check moved to Me in stage 2.
@@ -46,7 +48,8 @@ appId: com.glidecomp.app.dev
       - swipe:
           start: "50%, 45%"
           end: "50%, 98%"
-- assertVisible: "Sign-in and your account arrive in stage 4."
+# Back on Me, where the sheet was presented from.
+- assertVisible: "Units"
 
 - tapOn: "Comps"
-- assertVisible: "Past"
+- assertVisible: "Yours|Past"

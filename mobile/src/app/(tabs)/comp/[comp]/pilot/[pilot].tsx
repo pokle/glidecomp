@@ -12,6 +12,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { useComp, useCompScores } from '@/api/queries';
+import { findSeriesPilot } from '@/lib/yours';
 import { Freshness } from '@/ui/Freshness';
 import { Group, GroupedList, Note, Row } from '@/ui/grouped-list';
 import { QueryGate, StaleBanner } from '@/ui/QueryStates';
@@ -34,14 +35,6 @@ export default function PilotSeriesScreen() {
   );
 }
 
-function findPilot(scores: CompScores, pilotId: string) {
-  for (const cls of scores.class_scores) {
-    const pilot = cls.pilots.find((p) => p.comp_pilot_id === pilotId);
-    if (pilot) return { pilot, pilotClass: cls.pilot_class, fieldSize: cls.pilots.length };
-  }
-  return null;
-}
-
 function SeriesBody({
   scores,
   pilotId,
@@ -53,7 +46,7 @@ function SeriesBody({
   compName: string | undefined;
   timeZone: string | null;
 }) {
-  const found = findPilot(scores, pilotId);
+  const found = findSeriesPilot(scores, pilotId);
   if (!found) {
     return (
       <GroupedList>

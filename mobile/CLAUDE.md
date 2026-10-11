@@ -124,7 +124,11 @@ production. That matters from stage 4, when the app first writes.
   (`/comp/<comp>/task/<task>/route`, `…/weather`), so `compPath()` and
   `taskPath()` from `@glidecomp/client/slug` build the app's own routes, and
   universal links (stage 9) map one to one.
-- `src/api/` — the API client, its transport, the queries, the cache.
+- `src/api/` — the API client, its transport, the queries, the cache, and the
+  account's writes (`account.ts`).
+- `src/auth/` — signing in and the session: the Better Auth client, the
+  cookie transport (`session-fetch.ts`), the identity store (`session.ts`),
+  Google and Apple (`providers.ts`). See "Signing in" below.
 - `src/ui/` — the grouped list and the query states (loading, error, stale,
   and the report card's own gate, `ReportCardGate`).
 - `src/charts/` — the `react-native-svg` charts: the report card's emphasis
@@ -134,7 +138,8 @@ production. That matters from stage 4, when the app first writes.
 - `src/map/` — the track map (`@rnmapbox/maps`), the only file that imports
   the map library.
 - `src/lib/` — pure logic behind the screens, unit-tested in `__tests__/`.
-- `src/settings/` — what the reader chooses on this phone (units).
+- `src/settings/` — what the reader chooses: units (synced to the account
+  while signed in, `units-sync.ts`) and appearance (this phone only).
 - `src/components/` — other shared components.
 - `src/engine-check/` — stage 1's on-device proof that the engine runs (Me →
   Engine check).
@@ -171,6 +176,11 @@ type-checking only. Responses are cast to the wire types, as on the website.
   - `Group` **is** `FieldGroup.Section`, not a wrapper. Android's
     `FieldGroup` recognises a section by its exact component type and wraps
     anything else in an implicit section of its own (cards inside cards).
+  - **So every `Group` is a direct child of `GroupedList`** — never returned
+    from a component of your own, nor from a fragment. Android does not see
+    through either: a fragment's second `Group` was dropped altogether (stage
+    4 lost the Me tab's Profile and Danger zone that way, on Android only). Inline the group, or build it
+    with a plain function you CALL (`compGroup({...})` on the Comps tab).
   - Android's list item only styles a **bare string**: text that is wrapped
     (even in a fragment) fails with "Text strings must be rendered within a
     `<Text>`". The `.ios.tsx`/`.tsx` pairs in `src/ui/` return SwiftUI views
@@ -236,6 +246,15 @@ change, it is a scoring change like any other and owes a note in
   row. `offline.yaml` runs on Android only (Maestro switches airplane mode
   there), and needs the `adb reverse` set-up above. `results.yaml` walks
   scores → a pilot's series → a report card → a section → the track map.
+  `signin.yaml` signs up with an emailed code, names the account, relaunches
+  and signs out; it needs a build pointed at the local workers, and reads the
+  code from their dev-only `/api/auth/dev-last-otp`
+  (`maestro test -e API=http://localhost:8790 .maestro/signin.yaml`). On iOS
+  the keychain outlives `clearState`, so a flow must not assume it starts
+  signed out.
+- **Better Auth is ES modules only**, some of it `.mjs`; `jest.config.js`
+  compiles both (`ESM_ONLY`, and the `.mjs` transform). A test that imports
+  anything under `src/api/` pulls it in.
 - Flows are data-light: they run against production (read-only) or the
   seeded local workers, whose competitions differ.
 
@@ -255,6 +274,44 @@ change, it is a scoring change like any other and owes a note in
 | Never inline geo maths | The engine's `geo.ts` only. |
 | Map interaction spec | `@rnmapbox/maps` implements `docs/mapbox-interactions-spec.md`; touch-only differences are written into the spec. |
 | Accessibility (WCAG 2.2 AA) | VoiceOver and TalkBack labels, Dynamic Type and font scaling, 44 pt targets, contrast. Audited every stage. |
+
+## Signing in
+
+The same accounts as the website, through the same auth worker; the server's
+side is in [docs/auth.md](../docs/auth.md#the-native-app).
+
+- **The session is a cookie kept in the secure store** (Keychain, Android
+  Keystore) by `@better-auth/expo`, and attached by `withSession`
+  (`src/auth/session-fetch.ts`) to requests for this build's API origin and
+  no other, with native `fetch`'s own cookie jar off. Any `Set-Cookie` in a
+  response goes back into the store. Never call `fetch` for the API directly:
+  `apiFetch` / `api` (`src/api/client.ts`) carry the session and the write
+  guard.
+- **Who is signed in follows #481** (`src/lib/identity.ts`, the store in
+  `src/auth/session.ts`): launch shows the last confirmed user at once, asks
+  `/api/auth/me` (and again on returning to the foreground, and when the
+  signal comes back), and only a real answer — `{user: null}` or a 401 —
+  signs anyone out. A dropped request leaves the reader signed in, and Me says
+  it could not check.
+- **Signing out, or a real "no", forgets everything cached** (`queryClient
+  .clear()`): a comp read as its organiser carries `is_admin`, and a hidden
+  comp must not stay readable from the phone. Signing in re-asks every query.
+- **Email code** works everywhere. **Google** is offered once the build has
+  the app's client ids (`GOOGLE_WEB_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`, read
+  by `app.config.ts` like the Mapbox token). **Apple** is offered on iOS when
+  the signing team has the capability — store builds, or `APPLE_SIGN_IN=1`;
+  a free Personal Team cannot have it. Both sign in natively with an ID
+  token: the app never signs in through a browser redirect, because that
+  would hand the session to a custom-scheme URL another app could claim.
+- **A development build reading production cannot sign in**: signing in is a
+  write, and `guardWrites` refuses it. Point the build at the local workers
+  (`EXPO_PUBLIC_API_ORIGIN`), which also serve the dev-only code lookup the
+  sign-in flow uses. A Release build of the development variant signs in to
+  production, which is why the auth worker trusts `glidecomp-dev://` there.
+- **Role-aware screens**: `is_admin` (comp payload, comps list) shows the
+  organiser's rows; `GET /api/comp/pilot/registrations` drives Yours, the
+  comp's You group and the task's Your track. Hide, never disable: a row a
+  role may not use is absent.
 
 ## The track map
 
