@@ -164,7 +164,7 @@ export default defineConfig(async () => {
               // real route's gate and its 1-128 character rule; a
               // `test-setname-fail=1` cookie makes it 500 instead, so a test
               // can prove the caller reports a failed hop rather than saving
-              // half of the rename.
+              // half of the rename, and an x-api-key header makes it 403.
               if (pathname === "/api/auth/set-name") {
                 if (!base) {
                   return Response.json(
@@ -174,6 +174,17 @@ export default defineConfig(async () => {
                 }
                 if (/test-setname-fail=1/.test(cookie)) {
                   return new Response("set-name blew up", { status: 500 });
+                }
+                // The real route refuses an API key (SEC-57): renaming the
+                // account takes a browser session.
+                if (request.headers.has("x-api-key")) {
+                  return Response.json(
+                    {
+                      code: "BROWSER_SESSION_REQUIRED",
+                      error: "An API key cannot manage the account.",
+                    },
+                    { status: 403 }
+                  );
                 }
                 const body = (await request.json().catch(() => ({}))) as {
                   name?: unknown;

@@ -219,4 +219,4 @@ The replay at `/replay` loads packed tracks from the competition-api Worker:
 `GET /api/comp/sample-3dvis` (the first task by date) or
 `/api/comp/:comp_id/task/:task_id/3dvis` for any comp task. Packing is
 `packTracksFromIgc` in the engine, shared with the offline `bun run build-3dvis`
-mirror. See [3d-flight-replay-notes.md](3d-flight-replay-notes.md).
+CLI. See [3d-flight-replay-notes.md](3d-flight-replay-notes.md).
