@@ -62,7 +62,16 @@ export function QueryProvider({ children }: PropsWithChildren) {
   return (
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister, maxAge: 30 * DAY_MS, buster: CACHE_BUSTER }}>
+      persistOptions={{
+        persister,
+        maxAge: 30 * DAY_MS,
+        buster: CACHE_BUSTER,
+        dehydrateOptions: {
+          // A query marked `meta: { persist: false }` lives in memory only.
+          shouldDehydrateQuery: (query) =>
+            query.state.status === 'success' && query.meta?.persist !== false,
+        },
+      }}>
       {children}
     </PersistQueryClientProvider>
   );

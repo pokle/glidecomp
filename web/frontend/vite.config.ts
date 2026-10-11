@@ -4,8 +4,12 @@ import { readFileSync, existsSync, cpSync } from 'fs';
 import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { buildScoresCsv, scoresCsvFilename, type ScoresCsvInput } from './src/scores-csv';
-import { idFromSegment } from './src/react/lib/slug';
+// By relative path into @glidecomp/client's source, not through the package:
+// Vite bundles its config with esbuild, which leaves a package's imports to
+// Node, and Node's ESM loader will not resolve the client's extensionless
+// relative imports (scores-csv → ./slug). A relative path is bundled instead.
+import { buildScoresCsv, scoresCsvFilename, type ScoresCsvInput } from '../client/src/scores-csv';
+import { idFromSegment } from '../client/src/slug';
 
 // Where /api/* is proxied in dev: the dev-router Worker started by
 // `bun run dev:workers` (all Workers, one wrangler session — see

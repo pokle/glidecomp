@@ -6,11 +6,20 @@
  */
 import type { SearchResults } from '@glidecomp/client/search';
 import { MIN_SEARCH_CHARS } from '@glidecomp/client/search';
-import type { CompDetailData, CompListEntry, TaskDetailData } from '@glidecomp/client/types';
+import type {
+  CompDetailData,
+  CompListEntry,
+  CompScores,
+  PilotAnalysisData,
+  TaskDetailData,
+  TaskScoreData,
+} from '@glidecomp/client/types';
 import type { TaskWeatherData } from '@glidecomp/client/weather';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { api, getJson } from './client';
+import { igcText } from '@/lib/igc-text';
+
+import { api, getBytes, getJson } from './client';
 
 export function useComps() {
   return useQuery({
@@ -81,5 +90,84 @@ export function useSearch(query: string) {
     placeholderData: keepPreviousData,
     // A search is a question asked now, not a page to keep for the hill.
     gcTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Scores are stale-first: a read never computes, and while a re-score is in
+ * flight the server answers with the last result marked `stale`. Poll until
+ * it lands, as the website's ScoreFreshness does.
+ */
+const STALE_POLL_MS = 8_000;
+
+export function useCompScores(compId: string) {
+  return useQuery({
+    queryKey: ['compScores', compId],
+    queryFn: ({ signal }) =>
+      getJson<CompScores>(
+        (s) => api.api.comp[':comp_id'].scores.$get({ param: { comp_id: compId } }, { init: { signal: s } }),
+        signal,
+      ),
+    refetchInterval: (query) => (query.state.data?.stale ? STALE_POLL_MS : false),
+  });
+}
+
+export function useTaskScore(compId: string, taskId: string) {
+  return useQuery({
+    queryKey: ['taskScore', compId, taskId],
+    queryFn: ({ signal }) =>
+      getJson<TaskScoreData>(
+        (s) =>
+          api.api.comp[':comp_id'].task[':task_id'].score.$get(
+            { param: { comp_id: compId, task_id: taskId } },
+            { init: { signal: s } },
+          ),
+        signal,
+      ),
+    refetchInterval: (query) => (query.state.data?.stale ? STALE_POLL_MS : false),
+  });
+}
+
+/** The pilot's resolved flight on a task: what the report card narrates. */
+export function usePilotAnalysis(compId: string, taskId: string, pilotId: string) {
+  return useQuery({
+    queryKey: ['pilotAnalysis', compId, taskId, pilotId],
+    queryFn: ({ signal }) =>
+      getJson<PilotAnalysisData>(
+        (s) =>
+          api.api.comp[':comp_id'].task[':task_id'].pilot[':comp_pilot_id'].analysis.$get(
+            { param: { comp_id: compId, task_id: taskId, comp_pilot_id: pilotId } },
+            { init: { signal: s } },
+          ),
+        signal,
+      ),
+  });
+}
+
+/**
+ * A pilot's tracklog as IGC text, for the report card's map and its data
+ * cleaning chart. The narrative never needs it, so nothing waits on it.
+ *
+ * Kept out of the persisted cache (`meta.persist`): a tracklog is up to a
+ * megabyte, and the phone is better spent keeping the comps a reader looked
+ * at than the files behind them.
+ */
+export function useTracklog(compId: string, taskId: string, pilotId: string) {
+  return useQuery({
+    queryKey: ['tracklog', compId, taskId, pilotId],
+    meta: { persist: false },
+    gcTime: 10 * 60_000,
+    staleTime: Infinity,
+    queryFn: async ({ signal }) =>
+      igcText(
+        await getBytes(
+          (s) =>
+            api.api.comp[':comp_id'].task[':task_id'].igc[':comp_pilot_id'].download.$get(
+              { param: { comp_id: compId, task_id: taskId, comp_pilot_id: pilotId } },
+              { init: { signal: s } },
+            ),
+          signal,
+        ),
+      ),
   });
 }

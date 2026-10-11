@@ -35,7 +35,12 @@ export function isNotFound(err: unknown): boolean {
  */
 const ATTEMPT_TIMEOUT_MS = 15_000;
 
-type Responds = Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+type Responds = Promise<{
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}>;
 
 /** One attempt, cut off at ATTEMPT_TIMEOUT_MS or when the caller gives up. */
 async function attempt(request: (signal: AbortSignal) => Responds, outer?: AbortSignal): Responds {
@@ -64,4 +69,14 @@ export async function getJson<T>(
   const res = await fetchWithRetry(() => attempt(request, signal), { signal });
   if (!res.ok) throw new ApiError(res.status);
   return (await res.json()) as T;
+}
+
+/** The same rules as getJson, for a body that is a file rather than JSON. */
+export async function getBytes(
+  request: (signal: AbortSignal) => Responds,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  const res = await fetchWithRetry(() => attempt(request, signal), { signal });
+  if (!res.ok) throw new ApiError(res.status);
+  return new Uint8Array(await res.arrayBuffer());
 }

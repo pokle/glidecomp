@@ -8,6 +8,10 @@ import type { IGCFix, XCTask, FlightEvent, FlightSegments, PilotScore } from '@g
 import type { MapAnnotationLayer } from './map-annotations';
 
 /** A loaded track with metadata for multi-track display */
+// Shared with the report card in @glidecomp/client (mobile plan, stage 3).
+import type { BestProgressRoute, OpenDistanceLine } from "@glidecomp/client/report-card";
+export type { BestProgressRoute, OpenDistanceLine };
+
 export interface LoadedTrack {
     pilotName: string;
     date: Date | null;
@@ -18,27 +22,7 @@ export interface LoadedTrack {
     segments: FlightSegments;
 }
 
-/** One pilot's scored open-distance line: take-off cylinder exit → furthest fix */
-export interface OpenDistanceLine {
-    pilotName: string;
-    origin: { lat: number; lon: number };
-    end: { lat: number; lon: number };
-    /** Scored straight-line distance in metres (drawn as the line's label) */
-    distance: number;
-}
 
-/**
- * A landed-out pilot's routed "distance to goal" line: the best-progress
- * point, through each un-reached turnpoint's optimal tag point, to goal.
- * Drawn so the "measured along the task / X km short of goal" wording is
- * visible on the map rather than implied by a lone pin.
- */
-export interface BestProgressRoute {
-    /** Ordered polyline vertices: [best-progress point, …tag points, goal]. */
-    coords: { lat: number; lon: number }[];
-    /** Remaining routed distance to goal in metres (drawn as the line's label). */
-    distanceToGoal: number;
-}
 
 /**
  * Interaction mode for the map. Controls which click/hover handlers are active.

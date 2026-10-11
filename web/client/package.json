@@ -10,13 +10,25 @@
       "types": "./src/api.ts",
       "default": "./src/api.ts"
     },
+    "./chart-scale": {
+      "types": "./src/chart-scale.ts",
+      "default": "./src/chart-scale.ts"
+    },
     "./format": {
       "types": "./src/format.ts",
       "default": "./src/format.ts"
     },
+    "./map-geometry": {
+      "types": "./src/map-geometry.ts",
+      "default": "./src/map-geometry.ts"
+    },
     "./met": {
       "types": "./src/met.ts",
       "default": "./src/met.ts"
+    },
+    "./report-card": {
+      "types": "./src/report-card.ts",
+      "default": "./src/report-card.ts"
     },
     "./retry": {
       "types": "./src/retry.ts",
@@ -25,6 +37,22 @@
     "./route": {
       "types": "./src/route.ts",
       "default": "./src/route.ts"
+    },
+    "./rules-edition": {
+      "types": "./src/rules-edition.ts",
+      "default": "./src/rules-edition.ts"
+    },
+    "./score-curve-layout": {
+      "types": "./src/score-curve-layout.ts",
+      "default": "./src/score-curve-layout.ts"
+    },
+    "./scores-csv": {
+      "types": "./src/scores-csv.ts",
+      "default": "./src/scores-csv.ts"
+    },
+    "./scores-views": {
+      "types": "./src/scores-views.ts",
+      "default": "./src/scores-views.ts"
     },
     "./search": {
       "types": "./src/search.ts",
@@ -37,6 +65,14 @@
     "./time": {
       "types": "./src/time.ts",
       "default": "./src/time.ts"
+    },
+    "./time-axis": {
+      "types": "./src/time-axis.ts",
+      "default": "./src/time-axis.ts"
+    },
+    "./track-cleaning": {
+      "types": "./src/track-cleaning.ts",
+      "default": "./src/track-cleaning.ts"
     },
     "./transport": {
       "types": "./src/transport.ts",

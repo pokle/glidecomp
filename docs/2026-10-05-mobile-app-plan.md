@@ -366,6 +366,36 @@ score?" — answered on the phone, with numbers identical to the website.
 - The emphasis charts mark you, and only you.
 - The map pans and zooms the way the website's does.
 
+**As built (2026-10-11).** Where stage 3 departs from the list above:
+
+- **More than the derivation moved.** `@glidecomp/client` now holds the pure
+  half of every chart and of the map, and the website imports them back: the
+  score curve's label placement, the cleaning chart's frame and decimation,
+  the weather charts' time axis and wind glyphs, `unitDisplay`, the rules
+  edition check, and the map's features and colours (`map-geometry`, which the
+  website's Mapbox provider now builds its task and track layers from). A
+  platform draws; it does not decide what to draw.
+- **The zone offset no longer comes from `timeZoneName: "shortOffset"`.**
+  Hermes prints a bare "GMT" for it, so every time on the phone read
+  "AEST (GMT)". `@glidecomp/client/time` derives "GMT+10" from the offset
+  itself, which prints the same on every runtime, the website's included.
+- **The report card is a list of sections, each its own screen** — points "of"
+  what was on offer, the rank, the substituted arithmetic, the chart under it,
+  and "How this works" opening the GAP guide in an in-app browser. A line that
+  happened somewhere carries a pin and opens the map there.
+- **The map has no time slider.** Opened from a line, it clips the track to
+  that moment, as the website does on a click; "Show the whole flight" puts
+  it back. The touch differences are written into
+  `docs/mapbox-interactions-spec.md` ("Native app").
+- **The weather charts sit above the hourly list** inside the native list
+  (`@expo/ui`'s `RNHostView`), each with its source under its name — a phone
+  is too narrow for the website's one-row heading.
+- **A pilot's series is a screen of its own** (`/comp/:id/pilot/:id`); the
+  website shows the FTV breakdown in a dialog. Search opens it for a pilot
+  matched in a comp, and the report card for a pilot matched in a task.
+- The tracklog stays out of the phone's persisted cache (`meta.persist`):
+  it is up to a megabyte, and the space is better spent on comps.
+
 ---
 
 ### Stage 4 — Sign-in, the Me tab, role-aware screens

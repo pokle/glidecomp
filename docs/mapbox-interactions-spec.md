@@ -426,3 +426,28 @@ Freehand drawing overlay for scrawling on the map. Strokes are geo-anchored (per
 ## Style Reload Behaviour
 
 On style change, all custom sources/layers are re-added and current track/task/event data is restored via `restoreData()` (including an active time-scrub clip, re-applied after `setTrack`). Terrain and sky layer are also re-added on every `style.load` event.
+
+## Native app (report card map)
+
+The app's track map (`mobile/src/map/TrackMap.tsx`, `@rnmapbox/maps`) draws
+the report card's map to this spec. Its features and colours are the
+website's own (`@glidecomp/client/map-geometry` builds the task and track
+features for both), and its layers are declared in the order above. What a
+touch screen does differently:
+
+- **Controls** — the native SDK's compass and scale bar; pinch, pan, rotate
+  and two-finger pitch. No panel toggle, menu, fullscreen or geolocate button:
+  the map IS the screen, and Back leaves it.
+- **Event markers** are a circle layer (20 pt, event colour, 2 pt white ring)
+  rather than DOM markers. A tap shows the event's description and time in a
+  card at the foot of the map instead of a popup; a tap elsewhere clears it.
+- **Event highlight** — opened from a line of the explanation, the map flies
+  to that event keeping its zoom (1 s), the point marker throbs four times,
+  and a segment event's segment is drawn in the highlight colour.
+- **Time scrub** — there is no slider. Opened from a line with a real time,
+  the track is clipped to that moment with the position dot at its end (the
+  website's click-a-step behaviour); "Show the whole flight" restores it.
+  Altitude colours stay normalised against the whole flight.
+- **Not drawn** — the glide chevrons and labels, the track point HUD, the
+  speed overlay, 3D and annotations: they belong to the analysis page, which
+  the website's report card links to and the app does not have yet.

@@ -169,15 +169,31 @@ export function utcISOToZonedDateTimeLocal(
  */
 export function zoneNameWithOffset(refDate: Date, timeZone?: string): string {
   try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZoneName: "shortOffset",
-      timeZone,
-    }).formatToParts(refDate);
-    const offset = parts.find((p) => p.type === "timeZoneName")?.value;
     const name = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const offset = offsetToken(refDate, timeZone);
     return offset ? `${name} (${offset})` : name;
   } catch {
     return timeZone ?? "local";
+  }
+}
+
+/**
+ * The zone's UTC offset at `date` as `timeZoneName: "shortOffset"` prints it —
+ * "GMT+11", "GMT-7", "GMT+5:30", or "GMT" at zero — but derived from the
+ * offset itself, so every runtime prints the same thing. Hermes, the app's
+ * JavaScript engine, has no `shortOffset` and answers a bare "GMT" for every
+ * zone. Null for a zone the runtime doesn't know.
+ */
+function offsetToken(date: Date, timeZone: string | undefined): string | null {
+  try {
+    const zone = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const minutes = zoneOffsetMinutes(date, zone);
+    if (minutes === 0) return "GMT";
+    const abs = Math.abs(minutes);
+    const m = abs % 60;
+    return `GMT${minutes < 0 ? "-" : "+"}${Math.floor(abs / 60)}${m ? `:${pad2(m)}` : ""}`;
+  } catch {
+    return null;
   }
 }
 
@@ -211,7 +227,7 @@ function zoneToken(
   date: Date,
   timeZone: string | undefined,
   locale: string,
-  style: "short" | "shortOffset"
+  style: "short"
 ): string | null {
   try {
     return (
@@ -247,7 +263,7 @@ export function zoneLabel(
   timeZone: string | undefined,
   enriched = true
 ): string {
-  const offset = zoneToken(date, timeZone, "en-GB", "shortOffset");
+  const offset = offsetToken(date, timeZone);
   const zero = !offset || ZERO_OFFSET.test(offset);
   if (enriched) {
     for (const loc of ABBR_LOCALES) {
@@ -302,7 +318,7 @@ export function formatInstant(
  * like a per-row time cell. Viewer-local when `timeZone` is undefined.
  */
 export function zoneAbbrev(date: Date, timeZone: string | undefined): string {
-  const offset = zoneToken(date, timeZone, "en-GB", "shortOffset");
+  const offset = offsetToken(date, timeZone);
   for (const loc of ABBR_LOCALES) {
     const s = zoneToken(date, timeZone, loc, "short");
     if (s && !NUMERIC_OFFSET.test(s)) return s;

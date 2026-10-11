@@ -212,3 +212,45 @@ export function sampleProvenance(weather: TaskWeather): string {
 
   return parts.length > 0 ? ` (${parts.join("; ")}).` : ".";
 }
+
+// ── Wind glyphs ─────────────────────────────────────────────────────────
+
+const COMPASS_16 = [
+  "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+  "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+];
+
+/** 16-point compass name for a bearing, e.g. 312° → "NW". */
+export function degToCompass(deg: number): string {
+  return COMPASS_16[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
+}
+
+/**
+ * An arrow of length `len` pointing UP (screen north), centred on the
+ * origin: a shaft plus an open head. Rotate it by `directionDeg + 180` to
+ * make it fly WITH the wind (the engine's directions are degrees FROM, and
+ * an up-pointing arrow rotated by a compass bearing points along that
+ * bearing on screen).
+ */
+export function windArrowPath(len: number): string {
+  const half = len / 2;
+  const head = Math.max(3, len * 0.32);
+  const hw = head * 0.55;
+  return (
+    `M0 ${half.toFixed(1)} L0 ${(-half).toFixed(1)} ` +
+    `M${(-hw).toFixed(1)} ${(-half + head).toFixed(1)} L0 ${(-half).toFixed(1)} ` +
+    `L${hw.toFixed(1)} ${(-half + head).toFixed(1)}`
+  );
+}
+
+/** The SVG transform placing a wind arrow at (x, y) flying with the wind. */
+export function windArrowTransform(x: number, y: number, directionFromDeg: number): string {
+  return `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((directionFromDeg + 180) % 360).toFixed(0)})`;
+}
+
+/** "15 km/h NW" — the compact wind reading used on bars and in readouts.
+ * Speed arrives already converted to the display unit; the token is the
+ * metric-unit vocabulary ('km/h', 'mph', 'kts'). */
+export function windLabel(speed: number, unit: string, directionFromDeg: number): string {
+  return `${speed.toFixed(0)} ${unit} ${degToCompass(directionFromDeg)}`;
+}

@@ -1,0 +1,72 @@
+# Stage 3: a comp's scores → a pilot's series → their report card → one
+# section's arithmetic → the track map; then a task's scores. Reads
+# production's Corryong Cup 2026 (a bundled sample comp, so the seeded local
+# workers carry it too).
+appId: com.glidecomp.app.dev
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Past"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Corryong Cup 2026"
+    timeout: 30000
+- tapOn: "Corryong Cup 2026"
+- extendedWaitUntil:
+    visible: "Wing"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Scores"
+- tapOn: "Scores"
+- extendedWaitUntil:
+    visible:
+      id: "standing-row-.*"
+    timeout: 30000
+- assertVisible: "Standings"
+- tapOn:
+    id: "standing-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Place"
+    timeout: 20000
+- tapOn:
+    id: "series-task-.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "The score"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "section-row-total"
+- tapOn:
+    id: "section-row-total"
+- extendedWaitUntil:
+    visible:
+      id: "section-total"
+    timeout: 20000
+- runFlow: subflows/back.yaml
+- scrollUntilVisible:
+    element: "Track map"
+- tapOn: "Track map"
+- extendedWaitUntil:
+    visible:
+      id: "track-map"
+    timeout: 30000
+- runFlow: subflows/back-button.yaml
+- runFlow: subflows/back.yaml
+- runFlow: subflows/back.yaml
+- runFlow: subflows/back.yaml
+- scrollUntilVisible:
+    element: "Task 1 \\(Open\\)"
+- tapOn: "Task 1 \\(Open\\)"
+- extendedWaitUntil:
+    visible: "Turnpoints"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Task scores"
+- tapOn: "Task scores"
+- extendedWaitUntil:
+    visible:
+      id: "score-row-.*"
+    timeout: 30000
