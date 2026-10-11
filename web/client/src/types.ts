@@ -3,6 +3,7 @@
  * Ported from src/comp-detail.ts — the shapes mirror the competition-api
  * serialisers exactly.
  */
+import type { CompClassScore, TaskInfo } from "./scores-views";
 import type {
   GAPParameters,
   TurnpointSequenceResultJSON,
@@ -443,4 +444,17 @@ export interface CompListEntry {
   timezone?: string | null;
   /** Last day submissions are accepted (YYYY-MM-DD), when set. */
   close_date?: string | null;
+}
+
+/** GET /api/comp/:id/scores — whole-comp scores (see CompScoresSection). */
+export interface CompScores {
+  comp_id: string;
+  tasks: TaskInfo[];
+  class_scores: CompClassScore[];
+  computed_at: string | null;
+  stale: boolean;
+  /** Series-scoring method the scores were computed with (migration 0022). */
+  series_scoring: "total" | "ftv";
+  /** FTV comps only: the resolved discard fraction used (0<f<1). */
+  ftv_factor?: number | null;
 }

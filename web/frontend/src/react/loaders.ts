@@ -20,7 +20,6 @@ import type {
   TaskAnalysisData,
 } from "./analysis/types";
 import type { WaypointFileRecord } from "@glidecomp/engine";
-import type { CompClassScore, TaskInfo } from "../scores-views";
 import { todayInZone } from "./lib/format";
 import { retry } from "./lib/retry";
 
@@ -83,18 +82,10 @@ export function loadCompetitions(f: FetchFn): Promise<CompetitionsLoaderData> {
 
 // ── /comp/:compId ────────────────────────────────────────────────────────────
 
-/** GET /api/comp/:id/scores — whole-comp scores (see CompScoresSection). */
-export interface CompScores {
-  comp_id: string;
-  tasks: TaskInfo[];
-  class_scores: CompClassScore[];
-  computed_at: string | null;
-  stale: boolean;
-  /** Series-scoring method the scores were computed with (migration 0022). */
-  series_scoring: "total" | "ftv";
-  /** FTV comps only: the resolved discard fraction used (0<f<1). */
-  ftv_factor?: number | null;
-}
+// Moved to @glidecomp/client, shared with the app (mobile plan, stage 3).
+export type { CompScores } from "@glidecomp/client/types";
+import type { CompScores } from "@glidecomp/client/types";
+
 
 export interface CompDetailLoaderData {
   comp: CompDetailData;

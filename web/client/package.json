@@ -10,6 +10,10 @@
       "types": "./src/api.ts",
       "default": "./src/api.ts"
     },
+    "./chart-scale": {
+      "types": "./src/chart-scale.ts",
+      "default": "./src/chart-scale.ts"
+    },
     "./format": {
       "types": "./src/format.ts",
       "default": "./src/format.ts"
@@ -18,6 +22,10 @@
       "types": "./src/met.ts",
       "default": "./src/met.ts"
     },
+    "./report-card": {
+      "types": "./src/report-card.ts",
+      "default": "./src/report-card.ts"
+    },
     "./retry": {
       "types": "./src/retry.ts",
       "default": "./src/retry.ts"
@@ -25,6 +33,14 @@
     "./route": {
       "types": "./src/route.ts",
       "default": "./src/route.ts"
+    },
+    "./scores-csv": {
+      "types": "./src/scores-csv.ts",
+      "default": "./src/scores-csv.ts"
+    },
+    "./scores-views": {
+      "types": "./src/scores-views.ts",
+      "default": "./src/scores-views.ts"
     },
     "./search": {
       "types": "./src/search.ts",
