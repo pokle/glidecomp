@@ -18,6 +18,10 @@
       "types": "./src/format.ts",
       "default": "./src/format.ts"
     },
+    "./map-geometry": {
+      "types": "./src/map-geometry.ts",
+      "default": "./src/map-geometry.ts"
+    },
     "./met": {
       "types": "./src/met.ts",
       "default": "./src/met.ts"
@@ -33,6 +37,14 @@
     "./route": {
       "types": "./src/route.ts",
       "default": "./src/route.ts"
+    },
+    "./rules-edition": {
+      "types": "./src/rules-edition.ts",
+      "default": "./src/rules-edition.ts"
+    },
+    "./score-curve-layout": {
+      "types": "./src/score-curve-layout.ts",
+      "default": "./src/score-curve-layout.ts"
     },
     "./scores-csv": {
       "types": "./src/scores-csv.ts",
@@ -53,6 +65,14 @@
     "./time": {
       "types": "./src/time.ts",
       "default": "./src/time.ts"
+    },
+    "./time-axis": {
+      "types": "./src/time-axis.ts",
+      "default": "./src/time-axis.ts"
+    },
+    "./track-cleaning": {
+      "types": "./src/track-cleaning.ts",
+      "default": "./src/track-cleaning.ts"
     },
     "./transport": {
       "types": "./src/transport.ts",

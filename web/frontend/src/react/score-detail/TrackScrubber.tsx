@@ -5,28 +5,11 @@
  * one of its sub-components inlined below the page itself.
  */
 import type { IGCFix } from "@glidecomp/engine";
+import { nearestFixIndexByTime } from "@glidecomp/client/map-geometry";
 import { formatTimeInZone } from "../lib/time";
 
-/**
- * Index of the fix closest in time to `timeMs` (fix times are ascending).
- * Binary search — tracklogs run to tens of thousands of fixes.
- */
-export function nearestFixIndexByTime(fixes: IGCFix[], timeMs: number): number {
-  let lo = 0;
-  let hi = fixes.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (fixes[mid].time.getTime() < timeMs) lo = mid + 1;
-    else hi = mid;
-  }
-  if (
-    lo > 0 &&
-    timeMs - fixes[lo - 1].time.getTime() < fixes[lo].time.getTime() - timeMs
-  ) {
-    return lo - 1;
-  }
-  return lo;
-}
+// The fix lookup is shared with the app's map.
+export { nearestFixIndexByTime };
 
 /**
  * Map time scrubber: drag to draw the track only up to a moment — when a

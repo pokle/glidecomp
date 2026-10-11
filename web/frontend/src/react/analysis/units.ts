@@ -7,7 +7,8 @@
  * also imported by MetricExplanation — which the table imports, so leaving
  * it in the table would close an import cycle.
  */
-import { TO_SI, type UnitPreferences } from "@glidecomp/engine";
+import type { UnitPreferences } from "@glidecomp/engine";
+import { unitDisplay } from "@glidecomp/client/units";
 import type {
   CorrelationVerdict,
   TaskAnalysisReport,
@@ -52,48 +53,9 @@ export function unitWords(unit: string): string {
   }
 }
 
-/**
- * Display conversion for one engine metric unit under the viewer's preferred
- * units. The engine always computes and stores metric units; the UI converts
- * numbers at the display boundary. Horizontal speeds ('km/h') follow the
- * speed preference, vertical rates ('m/s') the climb preference, heights
- * ('m') the altitude preference, ground distances ('km') the distance
- * preference; everything else ('pct', 's', 'min', …) is dimensionless or time
- * and passes through.
- *
- * Every factor is derived from the engine's canonical TO_SI table, so a value
- * displayed here can never disagree with the same value formatted by the
- * engine's own formatUnit.
- */
-export interface UnitDisplay {
-  /** Display token in the metric-unit vocabulary ('mph', 'kts', 'fpm', 'ft',
-   * or the engine unit itself when no conversion applies). */
-  unit: string;
-  /** Multiply an engine-unit value by this to get the display value. */
-  factor: number;
-}
+// Shared with the app's weather charts.
+export { unitDisplay, type UnitDisplay } from "@glidecomp/client/units";
 
-export function unitDisplay(engineUnit: string, units: UnitPreferences): UnitDisplay {
-  switch (engineUnit) {
-    case "km/h":
-      if (units.speed === "mph") return { unit: "mph", factor: TO_SI["km/h"] / TO_SI.mph };
-      if (units.speed === "knots") return { unit: "kts", factor: TO_SI["km/h"] / TO_SI.knots };
-      return { unit: "km/h", factor: 1 };
-    case "m/s":
-      if (units.climbRate === "ft/min") return { unit: "fpm", factor: 1 / TO_SI["ft/min"] };
-      if (units.climbRate === "knots") return { unit: "kts", factor: 1 / TO_SI.knots };
-      return { unit: "m/s", factor: 1 };
-    case "m":
-      if (units.altitude === "ft") return { unit: "ft", factor: 1 / TO_SI.ft };
-      return { unit: "m", factor: 1 };
-    case "km":
-      if (units.distance === "mi") return { unit: "mi", factor: 1000 / TO_SI.mi };
-      if (units.distance === "nmi") return { unit: "nmi", factor: 1000 / TO_SI.nmi };
-      return { unit: "km", factor: 1 };
-    default:
-      return { unit: engineUnit, factor: 1 };
-  }
-}
 
 /**
  * A copy of the report with every metric's per-pilot values and unit token

@@ -8,19 +8,20 @@
 
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateOptimizedTaskLine, getOptimizedSegmentDistances, calculateBearing, computeGoalLine, goalSemicirclePoints, ellipsoidDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
+import { taskMapFeatures, trackLineFeatures } from '@glidecomp/client/map-geometry';
+import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateBearing, ellipsoidDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
 import type { MapProvider, MapBounds, MapCamera, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
 import {
   MAP_FONT_FAMILY, GLIDE_LABEL_TEXT_SHADOW, GLIDE_LABEL_SPARSE_MIN_ZOOM, GLIDE_LABEL_SPEED_MIN_ZOOM,
   KEY_EVENT_TYPES, getAltitudeColorNormalized,
   findNearestFixIndex as sharedFindNearestFixIndex,
-  createCirclePolygon, exitTurnpointArrowFeatures, createGlideLegend, showGlideLegend as sharedShowGlideLegend,
+  createGlideLegend, showGlideLegend as sharedShowGlideLegend,
   createTrackPointHUD, updateTrackPointHUD, hideTrackPointHUD as sharedHideTrackPointHUD,
   CROSSHAIR_MAP_SVG,
   buildTrackPointHUDData, buildNextTurnpointContext, ensureTurnpointCache,
-  formatGlideLabel, setGlideLabelContent, formatTurnpointLabel, computeSegmentLabels, updateGlideLabelElement, computeOccludedLabels,
-  calculateAltitudeRange, buildTrackSegments,
+  formatGlideLabel, setGlideLabelContent, updateGlideLabelElement, computeOccludedLabels,
+  calculateAltitudeRange,
 } from './map-provider-shared';
 import { formatAltitude, formatDistance } from './units-browser';
 import { createMapAnnotationLayer, type MapAnnotationLayer } from './map-annotations';
@@ -76,20 +77,8 @@ function buildTrackFeatures(
   altRange: number,
   minAlt: number,
 ): GeoJSON.Feature[] {
-  return buildTrackSegments(fixes, altRange, minAlt).map(seg => {
-    const coordinates: [number, number][] = [];
-    for (let j = seg.startIndex; j < seg.endIndex; j++) {
-      coordinates.push([fixes[j].longitude, fixes[j].latitude]);
-    }
-    return {
-      type: 'Feature' as const,
-      properties: { normalizedAlt: seg.normalizedAlt },
-      geometry: {
-        type: 'LineString' as const,
-        coordinates,
-      },
-    };
-  });
+  // Shared with the app: @glidecomp/client/map-geometry.
+  return trackLineFeatures(fixes, { minAlt, maxAlt: minAlt + altRange, altRange });
 }
 
 // How far (screen px) from an add-waypoint tap to look for a named label —
@@ -2723,104 +2712,16 @@ export function createMapBoxProvider(
             return;
           }
 
-          // Create optimized task line that tags cylinder edges
-          const optimizedPath = calculateOptimizedTaskLine(task);
-          const lineCoords = optimizedPath.map(p => [p.lon, p.lat]);
-
-          updateGeoJSONSource(map, 'task-line', [{
-            type: 'Feature',
-            properties: {},
-            geometry: {
-              type: 'LineString',
-              coordinates: lineCoords,
-            },
-          }]);
-
-          // Create segment distance labels
-          const segmentDistances = getOptimizedSegmentDistances(task);
-          const segmentLabels = computeSegmentLabels(optimizedPath, segmentDistances);
-          const segmentLabelFeatures = segmentLabels.map(label => ({
-            type: 'Feature' as const,
-            properties: {
-              distance: label.text,
-              bearing: label.bearing,
-            },
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [label.midLon, label.midLat],
-            },
-          }));
-
-          updateGeoJSONSource(map, 'task-segment-labels', segmentLabelFeatures);
-
-          // Create turnpoint markers
-          const pointFeatures = task.turnpoints.map((tp, idx) => ({
-            type: 'Feature' as const,
-            properties: {
-              name: formatTurnpointLabel(tp, idx),
-              type: tp.type || '',
-              radius: tp.radius,
-            },
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [tp.waypoint.lon, tp.waypoint.lat],
-            },
-          }));
-
-          updateGeoJSONSource(map, 'task-points', pointFeatures);
-
-          // Create cylinder polygons. A LINE goal replaces the last
-          // turnpoint's circle with its control semicircle (the half-disc
-          // behind the line) and draws the line itself on task-goal-line.
-          const goalLine = computeGoalLine(task);
-          const cylinderFeatures = task.turnpoints.map((tp, idx) => ({
-            type: 'Feature' as const,
-            properties: {
-              name: tp.waypoint.name || `TP${idx + 1}`,
-              type: tp.type || '',
-              radius: tp.radius,
-            },
-            geometry:
-              goalLine && idx === task.turnpoints.length - 1
-                ? {
-                    type: 'Polygon' as const,
-                    coordinates: [
-                      goalSemicirclePoints(goalLine).map((p) => [p.lon, p.lat]),
-                    ],
-                  }
-                : createCirclePolygon(
-                    tp.waypoint.lon,
-                    tp.waypoint.lat,
-                    tp.radius
-                  ),
-          }));
-
-          updateGeoJSONSource(map, 'task-cylinders', cylinderFeatures);
-
-          // Outward arrowheads marking exit turnpoints (crossed flying out).
-          updateGeoJSONSource(
-            map,
-            'task-exit-arrows',
-            exitTurnpointArrowFeatures(task, optimizedPath) as GeoJSON.Feature<GeoJSON.Geometry>[]
-          );
-
-          updateGeoJSONSource(
-            map,
-            'task-goal-line',
-            goalLine
-              ? [{
-                  type: 'Feature' as const,
-                  properties: {},
-                  geometry: {
-                    type: 'LineString' as const,
-                    coordinates: [
-                      [goalLine.end1.lon, goalLine.end1.lat],
-                      [goalLine.end2.lon, goalLine.end2.lat],
-                    ],
-                  },
-                }]
-              : []
-          );
+          // The features are shared with the app (@glidecomp/client/map-geometry).
+          // A LINE goal replaces the last turnpoint's circle with its control
+          // semicircle and draws the line itself on task-goal-line.
+          const f = taskMapFeatures(task, config.getUnits());
+          updateGeoJSONSource(map, 'task-line', f.line.features);
+          updateGeoJSONSource(map, 'task-segment-labels', f.segmentLabels.features);
+          updateGeoJSONSource(map, 'task-points', f.points.features);
+          updateGeoJSONSource(map, 'task-cylinders', f.cylinders.features);
+          updateGeoJSONSource(map, 'task-exit-arrows', f.exitArrows.features as GeoJSON.Feature<GeoJSON.Geometry>[]);
+          updateGeoJSONSource(map, 'task-goal-line', f.goalLine.features);
 
           // If no track is loaded, fit to task bounds (re-measure first — see
           // setTrack). Callers editing the task live pass fit:false so picks
@@ -3465,4 +3366,3 @@ export function createMapBoxProvider(
   });
 }
 
-// createCirclePolygon is imported from map-provider-shared

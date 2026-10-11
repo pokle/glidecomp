@@ -10,18 +10,10 @@
  * was published gets plain "FAI S7F" with no edition claim.
  */
 import { Alert, AlertDescription } from "@/react/rac/alert";
+import { predatesS7f2026, rulesEditionLabel } from "@glidecomp/client/rules-edition";
 
-/**
- * The 2026 edition's effective date (1 May 2026). A task flown before this
- * was flown under earlier rules, so its GlideComp scores are indicative.
- */
-export const S7F_2026_EFFECTIVE = "2026-05-01";
-
-/** Is the given ISO date (YYYY-MM-DD…) before the 2026 edition took effect? */
-export function predatesS7f2026(isoDate: string | null | undefined): boolean {
-  if (!isoDate) return false;
-  return isoDate.slice(0, 10) < S7F_2026_EFFECTIVE;
-}
+// The date check and the label are shared with the app.
+export { S7F_2026_EFFECTIVE, predatesS7f2026 } from "@glidecomp/client/rules-edition";
 
 /**
  * The badge itself: "FAI S7F 2026" (or plain "FAI S7F" when the payload
@@ -38,7 +30,7 @@ export function RulesEditionBadge({
       href="/scoring/gap"
       className="text-xs text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground"
     >
-      {edition === "s7f-2026" ? "FAI S7F 2026" : "FAI S7F"}
+      {rulesEditionLabel(edition)}
     </a>
   );
 }
