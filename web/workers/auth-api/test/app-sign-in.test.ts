@@ -5,10 +5,10 @@
 import { describe, expect, test } from "vitest";
 import { request } from "./helpers";
 
-async function fetchDevOtp(email: string): Promise<string> {
+async function devOtp(email: string): Promise<{ otp: string; forApp: boolean }> {
   const res = await request("GET", `/api/auth/dev-last-otp?email=${encodeURIComponent(email)}`);
   expect(res.status).toBe(200);
-  return ((await res.json()) as { otp: string }).otp;
+  return (await res.json()) as { otp: string; forApp: boolean };
 }
 
 describe("the app's origin", () => {
@@ -20,14 +20,27 @@ describe("the app's origin", () => {
       headers: { "expo-origin": origin, "cf-connecting-ip": ip },
     });
     expect(send.status).toBe(200);
+    const recorded = await devOtp(email);
+    // The app's email has no link to the website's sign-in (otp-email.ts).
+    expect(recorded.forApp).toBe(true);
 
     const signIn = await request("POST", "/api/auth/sign-in/email-otp", {
-      body: { email, otp: await fetchDevOtp(email) },
+      body: { email, otp: recorded.otp },
       headers: { "expo-origin": origin, "cf-connecting-ip": ip },
     });
     expect(signIn.status).toBe(200);
     // The cookie arrives in the response, for the app's secure store.
     expect(signIn.headers.getSetCookie().some((c) => c.includes("session_token"))).toBe(true);
+  });
+
+  test("the website's code gets the website's email, link and all", async () => {
+    const email = "app-website-origin@example.com";
+    const send = await request("POST", "/api/auth/email-otp/send-verification-otp", {
+      body: { email, type: "sign-in" },
+      headers: { origin: "https://glidecomp.com", "cf-connecting-ip": "203.0.113.70" },
+    });
+    expect(send.status).toBe(200);
+    expect((await devOtp(email)).forApp).toBe(false);
   });
 
   test("an origin nobody trusts is refused", async () => {

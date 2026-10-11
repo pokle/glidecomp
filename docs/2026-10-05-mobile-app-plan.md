@@ -463,6 +463,11 @@ screen showing each person only what they may use.
 - **A new read route, `GET /api/comp/pilot/registrations`** (§5): the comps
   an account is on the roster of. Flights alone could not say it — a pilot is
   registered before they fly. No audit, no score bump: it reads.
+- **The emailed code says where to type it.** The website's email links to
+  the website's sign-in, which from the app would sign the pilot in on the
+  wrong thing; a code the app asked for gets an email with no link, just the
+  code and "Type it into the GlideComp app to sign in." A link that opens the
+  app is stage 9's.
 - **"Whenever an action needs it"** has no action yet: the first is stage 5's
   submit sheet. Sign-in lives on Me.
 - **The organiser rows open stage 7 placeholders** (Pilots, Settings; Pilots &
@@ -602,6 +607,13 @@ pending state on a task whose analysis is cold.
   `_headers` (checked against the CSP and the SSR Function's routes); every
   public URL shape opens the matching screen, and a dead one opens the
   not-found repair.
+- **The sign-in email opens the app** — a code the app asked for gets a link
+  of its own, `https://glidecomp.com/signin/app#otp=…&email=…`, and only that
+  path is registered for the app. Registering `/signin` itself would pull the
+  website's sign-in links into the app on any phone that has it installed;
+  a `glidecomp://` link would hand the code and address to whichever app
+  claims the scheme. Until then (stage 4) the app's email carries the code
+  and no link (`buildOtpEmail`'s `forApp`).
 - **Notifications** (opt-in, per comp): your track was received and scored, a
   task was published, scores recomputed, a penalty applied to you. New backend:
   a push-token table and sends through Expo's push service, triggered from the

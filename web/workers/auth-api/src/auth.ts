@@ -52,9 +52,11 @@ export type AuthEnv = {
  * populated when isLocalDev() — in production OTPs are hashed at rest and
  * exist in plaintext only inside the outbound email.
  */
-const devOtps = new Map<string, string>();
+const devOtps = new Map<string, { otp: string; forApp: boolean }>();
 
-export function getDevOtp(email: string): string | undefined {
+/** The last code and, so tests can see which email it would have been
+ * (buildOtpEmail's `forApp`), whether the app asked for it. */
+export function getDevOtp(email: string): { otp: string; forApp: boolean } | undefined {
   return devOtps.get(normalizeEmail(email));
 }
 
@@ -131,6 +133,18 @@ export const API_KEY_LIFETIME_DAYS = 90;
  * redirect at all (see guardSocialSignIn in index.ts).
  */
 export const APP_ORIGINS = ["glidecomp://", "glidecomp-dev://"];
+
+/**
+ * Whether a request came from the native app: its Origin (which the expo()
+ * plugin fills from `expo-origin`) is one of the app's schemes. Decides only
+ * the wording of the sign-in email — a client that claims to be the app gets
+ * an email without the website's link, and nothing else.
+ */
+export function isAppOrigin(origin: string | null | undefined): boolean {
+  if (!origin) return false;
+  const scheme = origin.split(":")[0]?.toLowerCase();
+  return APP_ORIGINS.some((o) => o.split(":")[0] === scheme);
+}
 
 /**
  * The app's iOS bundle ids, the audience of an Apple ID token. Sign in with
@@ -273,7 +287,7 @@ function buildAuth(env: AuthEnv) {
         allowedAttempts: 3,
         // Only the emailed copy is plaintext; the D1 row is useless if leaked.
         storeOTP: "hashed",
-        async sendVerificationOTP({ email, otp, type }) {
+        async sendVerificationOTP({ email, otp, type }, ctx) {
           // Sign-in codes only. The plugin also registers password-reset and
           // email-change endpoints; emailAndPassword is disabled in prod so
           // they're inert, and this guard means they can never send mail.
@@ -294,8 +308,12 @@ function buildAuth(env: AuthEnv) {
             return;
           }
 
+          // The app gets an email without the website's link (otp-email.ts).
+          const headers = ctx?.request?.headers;
+          const forApp = isAppOrigin(headers?.get("origin") ?? headers?.get("expo-origin"));
+
           if (isLocalDev(env)) {
-            devOtps.set(normalizeEmail(email), otp);
+            devOtps.set(normalizeEmail(email), { otp, forApp });
             console.log(`[auth-api] dev sign-in OTP for ${email}: ${otp}`);
             return;
           }
@@ -304,7 +322,7 @@ function buildAuth(env: AuthEnv) {
             throw new Error("EMAIL send binding is not configured");
           }
           const send = env.EMAIL.send(
-            buildOtpEmail({ email, otp, baseURL: env.BETTER_AUTH_URL })
+            buildOtpEmail({ email, otp, baseURL: env.BETTER_AUTH_URL, forApp })
           ).catch((err) => {
             console.error("[auth-api] OTP email send failed", err);
           });

@@ -457,11 +457,12 @@ app.get("/api/auth/dev-last-otp", (c) => {
   if (!email) {
     return c.json({ error: "email query param is required" }, 400);
   }
-  const otp = getDevOtp(email);
-  if (!otp) {
+  const recorded = getDevOtp(email);
+  if (!recorded) {
     return c.json({ error: "No OTP recorded for this email" }, 404);
   }
-  return c.json({ otp });
+  // `forApp`: which email production would have sent (otp-email.ts).
+  return c.json(recorded);
 });
 
 // API key create/list/delete are handled by the @better-auth/api-key plugin
