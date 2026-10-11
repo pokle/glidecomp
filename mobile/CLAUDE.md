@@ -53,9 +53,12 @@ and the build stops opening after 7 days (rebuild to renew).
 1. Xcode → Settings → Accounts has your Apple ID (it creates the Personal
    Team), the phone is paired (it appears in DeviceHub), and Developer Mode is
    on (Settings → Privacy & Security on the phone).
-2. With Metro running (`bun run start`), on the same Wi-Fi as the Mac:
-   `bun run ios -- --device "<phone name>" --no-bundler`. Signing picks the
-   Personal Team automatically.
+2. On the same Wi-Fi as the Mac: `bun run ios -- --device "<phone name>"`.
+   It builds, installs, and then keeps Metro running in that terminal; leave
+   it open while you use the app. (`--no-bundler` skips starting Metro — use
+   it only when `bun run start` is already running elsewhere.) Signing picks
+   the Personal Team automatically. The build records the Mac's Wi-Fi
+   address, so rebuild if that address changes.
 3. The first time only, the launch fails with "profile has not been explicitly
    trusted". On the phone: Settings → General → VPN & Device Management →
    the "Apple Development" developer app → Trust. Then open GlideComp Dev.
