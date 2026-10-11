@@ -460,7 +460,7 @@ function TasksList({
     // the section's CTA in the body (not just the header corner).
     return (
       <div className="mt-2 text-muted-foreground">
-        <p>The organizers haven't published any tasks yet.</p>
+        <p>The organisers haven't published any tasks yet.</p>
         {isAdmin ? (
           <Button variant="outline" size="sm" className="mt-3" onPress={onCreateTask}>
             New Task

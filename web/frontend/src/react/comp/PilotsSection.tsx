@@ -197,7 +197,7 @@ export function PilotsSection({
         <Loading className="mt-2">Loading pilots…</Loading>
       ) : pilots.length === 0 ? (
         <div className="mt-2 text-muted-foreground">
-          <p>No pilots registered yet — pilots appear here when the organizers add them or when they submit a track.</p>
+          <p>No pilots registered yet — pilots appear here when the organisers add them or when they submit a track.</p>
           {isAdmin ? (
             <Button
               variant="outline"

@@ -127,7 +127,7 @@ export function MetAttribution({ weather }: { weather: TaskWeather }) {
       ({weather.source.model}, {weather.source.license}). Sampled at{" "}
       {weather.source.pointLat.toFixed(3)}, {weather.source.pointLon.toFixed(3)}
       {sampleProvenance(weather)} A grid cell, not a reading at launch — the
-      organizer&rsquo;s notes are the local ground truth.
+      organiser&rsquo;s notes are the local ground truth.
     </p>
   );
 }
