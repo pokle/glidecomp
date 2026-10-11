@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { ConfigPlugin } from 'expo/config-plugins';
 import type { ExpoConfig } from 'expo/config';
 
 // Identifiers are decided in docs/2026-10-05-mobile-app-plan.md (stage 0,
@@ -62,6 +63,20 @@ const googleIosUrlScheme = googleIosClientId?.split('.').reverse().join('.');
  */
 const appleSignIn = production || setting('APPLE_SIGN_IN') === '1';
 
+/**
+ * Keep Sign in with Apple's entitlement out of a build that cannot have it.
+ * Prebuild applies `expo-apple-authentication`'s plugin to any app that has
+ * the package installed, whatever `plugins` says, and that plugin adds the
+ * entitlement unconditionally — which a Personal Team then refuses to sign.
+ * It is a run-once plugin, so recording it as already run is what skips it.
+ */
+const withoutAppleSignIn: ConfigPlugin = (config) => {
+  const internal = (config._internal ??= {});
+  const history = (internal.pluginHistory ??= {});
+  history['expo-apple-authentication'] = { name: 'expo-apple-authentication', version: 'skipped' };
+  return config;
+};
+
 const config: ExpoConfig = {
   name: production ? 'GlideComp' : 'GlideComp Dev',
   slug: 'glidecomp',
@@ -99,4 +114,4 @@ const config: ExpoConfig = {
   },
 };
 
-export default config;
+export default appleSignIn ? config : withoutAppleSignIn(config);
