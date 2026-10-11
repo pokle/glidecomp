@@ -19,6 +19,15 @@
 #                      and skipped for branch previews.
 #
 # Emits ::error:: annotations for CI and exits non-zero if any check fails.
+#
+# Env (optional):
+#   CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+#                      A Cloudflare Access service token. Every *.glidecomp.pages.dev
+#                      deployment — branch previews, and the hash URL production is
+#                      tested at — sits behind Access, which answers anything else
+#                      with a 302 to its login page. With both set, every request
+#                      to DEPLOY_URL carries the token; without them the script
+#                      behaves as it always has (fine for https://glidecomp.com).
 
 set -uo pipefail
 
@@ -37,6 +46,24 @@ done
 if [ -z "$DEPLOY_URL" ] || [ -z "$EXPECTED_SHA" ]; then
   echo "Usage: smoke-test.sh <deploy_url> <expected_sha> [--scores-api <url>]" >&2
   exit 2
+fi
+
+# Send the Access service token, if there is one, on requests to the
+# deployment under test and nowhere else: the checks below also reach the apex
+# domain (--scores-api), which needs no token and should never be handed one.
+if [ -n "${CF_ACCESS_CLIENT_ID:-}" ] && [ -n "${CF_ACCESS_CLIENT_SECRET:-}" ]; then
+  curl() {
+    local arg
+    for arg in "$@"; do
+      if [[ "$arg" == "${DEPLOY_URL}"* ]]; then
+        command curl -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID}" \
+          -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET}" "$@"
+        return
+      fi
+    done
+    command curl "$@"
+  }
+  echo "Using a Cloudflare Access service token for ${DEPLOY_URL}"
 fi
 
 echo "Smoke-testing ${DEPLOY_URL} @ ${EXPECTED_SHA}"

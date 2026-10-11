@@ -476,11 +476,16 @@ jobs:
       # smoke logic is validated on the PR's preview before it can reach master.
       # The stale-first scores check targets the apex-routed competition worker
       # (only freshly deployed on master), so it's added only for the master run.
+      # The deployment URL is always a *.glidecomp.pages.dev one, which sits
+      # behind Cloudflare Access on every branch, master included; the service
+      # token is what gets the smoke test through it (see smoke-test.sh).
       - name: Smoke test — deployment serves the app correctly
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
           EXPECTED_SHA: ${{ github.sha }}
           IS_PROD: ${{ github.ref_name == 'master' }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           args=("$DEPLOY_URL" "$EXPECTED_SHA")
           if [ "$IS_PROD" = "true" ]; then
