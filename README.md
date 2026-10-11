@@ -324,7 +324,7 @@ bun run seed big-chip kosci-loop  # just these slugs
 bun run civl-rankings
 ```
 
-**build-3dvis** - Pack a task's tracks into the asset the 3D replay loads:
+**build-3dvis** - Pack a task's tracks into a 3D replay asset for offline inspection (the replay itself loads it from the Worker):
 
 ```bash
 bun run build-3dvis
