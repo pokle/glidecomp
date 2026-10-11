@@ -4,7 +4,8 @@
  * A verification hatch for the monthly import
  * (`web/scripts/fetch-civl-rankings.ts` → the `pilot_ranking` table). The
  * table has no UI and no other reader, so this is how you check that a month
- * landed and matches civlcomps.org. Linked from nowhere on purpose.
+ * landed and matches civlcomps.org. Its only link is the superadmin card on
+ * /settings; the URL itself is public.
  *
  * Lives at the site root rather than under `/api/` because it is something a
  * person opens in a browser, not something the app calls. The work happens in
