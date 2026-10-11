@@ -4,9 +4,8 @@
  * "lat, lon" format), live validation, and xctsk (de)serialization helpers
  * shared with the task detail page. Kept DOM-free so it's unit-testable.
  */
-import type { SSSConfig, Turnpoint, TurnpointType, UnitPreferences, XCTask } from "@glidecomp/engine";
+import type { Turnpoint, TurnpointType, UnitPreferences, XCTask } from "@glidecomp/engine";
 import { formatDistance, toXctskJSON } from "@glidecomp/engine";
-import { utcToZonedHHMM, zoneNameWithOffset } from "../lib/time";
 import { csvEscape } from "./csv";
 
 // ---------------------------------------------------------------------------
@@ -40,13 +39,8 @@ export interface RouteRow {
   dir: "enter" | "exit" | null;
 }
 
-export const TYPE_LABELS: Record<string, string> = {
-  TAKEOFF: "Takeoff",
-  SSS: "Start Speed Section (SSS)",
-  "": "Turnpoint",
-  ESS: "End Speed Section (ESS)",
-  GOAL: "Goal",
-};
+// Moved to @glidecomp/client, which the app shares (mobile plan, stage 2).
+export { TYPE_LABELS } from "@glidecomp/client/route";
 
 export function formatCoords(lat: number, lon: number): string {
   return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
@@ -387,61 +381,13 @@ export function buildRoute(
 // Start gate helpers (shared with the task detail page's read-only summary)
 // ---------------------------------------------------------------------------
 
-/** "HH:MM:SSZ" / "HH:MM" (the xctsk gate format) → "HH:MM", or null. */
-export function gateToHHMM(value: string): string | null {
-  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?Z?$/.exec(value.trim());
-  if (!m) return null;
-  return `${m[1].padStart(2, "0")}:${m[2]}`;
-}
-
-/** The task's real gates as "HH:MM" — drops the lone 00:00 placeholder. */
-export function editableGates(sss: SSSConfig | undefined): string[] {
-  const gates = (sss?.timeGates ?? [])
-    .map(gateToHHMM)
-    .filter((g): g is string => g !== null);
-  // toXctskJSON writes a lone 00:00:00Z to satisfy the format's
-  // non-empty-gates rule; scoring ignores it, so the editor does too.
-  if (gates.length === 1 && gates[0] === "00:00") return [];
-  return gates;
-}
+export { gateToHHMM, editableGates, startConfigSummary } from "@glidecomp/client/route";
 
 /** Add minutes to an "HH:MM" time of day, wrapping at midnight. */
 export function addMinutes(hhmm: string, minutes: number): string {
   const [h, m] = hhmm.split(":").map(Number);
   const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-/**
- * One-line human summary of the start configuration. When the comp's
- * timezone and the task date are known, gate times are shown comp-local
- * (labelled with the zone); otherwise they stay UTC as stored.
- */
-export function startConfigSummary(
-  sss: SSSConfig,
-  opts?: { timeZone?: string | null; taskDate?: string }
-): string {
-  const kind = sss.type === "ELAPSED-TIME" ? "Elapsed time" : "Race to goal";
-  const dir = sss.direction === "ENTER" ? "enter" : "exit";
-  let gates = editableGates(sss);
-  let zoneLabel = "UTC";
-  const tz = opts?.timeZone;
-  if (tz && opts?.taskDate && gates.length > 0) {
-    const converted = gates.map((g) => utcToZonedHHMM(opts.taskDate!, g, tz));
-    if (converted.every((g): g is string => g !== null)) {
-      gates = converted;
-      zoneLabel = zoneNameWithOffset(new Date(`${opts.taskDate}T12:00:00Z`), tz);
-    }
-  }
-  const gateStr =
-    sss.type === "ELAPSED-TIME"
-      ? gates.length > 0
-        ? ` · start opens ${gates[0]} ${zoneLabel}`
-        : ""
-      : gates.length > 0
-        ? ` · ${gates.length} start gate${gates.length === 1 ? "" : "s"}: ${gates.join(", ")} ${zoneLabel}`
-        : " · no start gates (pilots timed from their crossing)";
-  return `${kind} · ${dir} start${gateStr}`;
 }
 
 // ---------------------------------------------------------------------------

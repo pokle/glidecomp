@@ -17,46 +17,22 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../comp/api";
 import { fetchWithRetry } from "../comp/types";
+import { MIN_SEARCH_CHARS, type SearchResults } from "@glidecomp/client/search";
 
-/** Below this many characters, the server is not asked at all. */
-export const MIN_SEARCH_CHARS = 2;
+// The wire types and the minimum query length moved to @glidecomp/client,
+// shared with the app (mobile plan, stage 2).
+export {
+  MIN_SEARCH_CHARS,
+  type SearchComp,
+  type SearchPilot,
+  type SearchResults,
+  type SearchTask,
+} from "@glidecomp/client/search";
+
 
 /** Quiet time before a query is sent. Long enough that ordinary typing sends
  *  one request, short enough to feel immediate. */
 const DEBOUNCE_MS = 200;
-
-export interface SearchPilot {
-  comp_pilot_id: string;
-  name: string;
-}
-
-export interface SearchTask {
-  task_id: string;
-  name: string;
-  task_date: string;
-  matched: boolean;
-  matched_turnpoints: string[];
-  pilots: SearchPilot[];
-  pilot_count: number;
-}
-
-export interface SearchComp {
-  comp_id: string;
-  name: string;
-  category: string;
-  test: boolean;
-  scoring_format: string;
-  matched: boolean;
-  task_count: number;
-  tasks: SearchTask[];
-  pilots: SearchPilot[];
-}
-
-export interface SearchResults {
-  terms: string[];
-  comps: SearchComp[];
-  truncated: boolean;
-}
 
 export type SearchState =
   /** Nothing asked for — the query is too short, or empty. */

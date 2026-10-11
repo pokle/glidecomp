@@ -1,0 +1,45 @@
+# Stage 2: find a comp, open it, open a task, its turnpoints and its weather,
+# then search. Data-light on purpose: it runs against production (read-only)
+# or the seeded local workers, whose competitions differ.
+appId: com.glidecomp.app.dev
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Past"
+    timeout: 30000
+- tapOn:
+    id: "comp-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Wing"
+    timeout: 20000
+- assertVisible: "Results"
+- tapOn:
+    id: "task-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Turnpoints|Route not set yet."
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Turnpoints"
+    commands:
+      - tapOn: "Turnpoints"
+      - extendedWaitUntil:
+          visible:
+            id: "turnpoint-0"
+          timeout: 20000
+      - runFlow: subflows/back.yaml
+- tapOn: "Weather"
+- extendedWaitUntil:
+    visible: "Organiser’s notes"
+    timeout: 20000
+- runFlow: subflows/back.yaml
+- runFlow: subflows/back.yaml
+- runFlow: subflows/back.yaml
+- tapOn: "Comps, tasks, pilots, turnpoints|Search"
+- inputText: "corryong"
+- extendedWaitUntil:
+    visible: "Competitions"
+    timeout: 20000

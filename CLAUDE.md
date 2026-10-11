@@ -17,6 +17,13 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
   detection, GAP scoring, cross-pilot task analysis (`src/analysis/`),
   track quality (`src/track-quality.ts`), task weather (`src/weather/`). No DOM
   dependencies; all track analysis runs client-side in the browser.
+- **`web/client`** — `@glidecomp/client`: what the website and the native app
+  share above the engine — the typed API client, the retry rules (#481), the
+  wire types, and pure URL, time, unit, number, route-wording and weather
+  helpers. No DOM. The website's old module paths re-export from it.
+- **`mobile`** — the native iOS and Android app (Expo on React Native), built in
+  the stages of [docs/2026-10-05-mobile-app-plan.md](docs/2026-10-05-mobile-app-plan.md).
+  It has its own [mobile/CLAUDE.md](mobile/CLAUDE.md).
 - **`web/frontend`** — Vite app on Cloudflare Pages. Three kinds of page:
   - The **SPA** (`src/react/`, served from `src/app.html`) — competitions,
     comp/task detail, scores, dashboard, profile, settings, onboarding. Built

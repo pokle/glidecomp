@@ -33,6 +33,7 @@
     "wrangler": "4.116.0"
   },
   "dependencies": {
+    "@glidecomp/client": "workspace:*",
     "@glidecomp/engine": "workspace:*",
     "@glidecomp/samples": "workspace:*",
     "@internationalized/date": "^3.12.4",
