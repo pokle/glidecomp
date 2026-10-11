@@ -495,15 +495,16 @@ const OTP_ERROR_CODES_THAT_COUNT = new Set(["INVALID_OTP", "OTP_EXPIRED", "TOO_M
 const MAX_EMAIL_LENGTH = 254;
 
 /**
- * The JSON body of an email-OTP request, read from a copy so Better Auth can
- * still read the original; `null` for anything else.
+ * The JSON body of a request bound for Better Auth (the email-OTP and social
+ * sign-in guards), read from a copy so Better Auth can still read the
+ * original; `null` for anything else.
  *
- * Better Auth's router accepts only JSON on these two endpoints today (its
+ * Better Auth's router accepts only JSON on these endpoints today (its
  * default `allowedMediaTypes`; some of its other endpoints also take form
  * bodies). The guards refuse any other shape themselves rather than rely on
  * that, so a body they could not read can never reach a handler that can.
  */
-async function otpRequestBody(req: Request): Promise<Record<string, unknown> | null> {
+async function jsonRequestBody(req: Request): Promise<Record<string, unknown> | null> {
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (type !== "application/json") return null;
   try {
@@ -524,7 +525,7 @@ function otpAddress(body: Record<string, unknown>): string | null {
 }
 
 app.post("/api/auth/email-otp/send-verification-otp", async (c, next) => {
-  const body = await otpRequestBody(c.req.raw);
+  const body = await jsonRequestBody(c.req.raw);
   if (!body) return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Expected a JSON body" }, 415);
   // Sign-in codes are the only kind this app uses; a code of any other type
   // would be one more thing to guess at for a flow nothing serves.
@@ -541,7 +542,7 @@ app.post("/api/auth/email-otp/send-verification-otp", async (c, next) => {
 });
 
 app.post("/api/auth/sign-in/email-otp", async (c, next) => {
-  const body = await otpRequestBody(c.req.raw);
+  const body = await jsonRequestBody(c.req.raw);
   if (!body) return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Expected a JSON body" }, 415);
   // A first sign-in may carry a display name and avatar URL into the new
   // account, around the checks /set-name applies (SEC-55). The app sends
@@ -566,6 +567,66 @@ app.post("/api/auth/sign-in/email-otp", async (c, next) => {
       await registerOtpVerifyFailure(db, email);
     }
   }
+});
+
+// ── Social sign-in: what the app may ask for, and what nobody may (stage 4) ──
+//
+// The app signs in with Google and Apple NATIVELY: the platform's own sign-in
+// sheet hands it an ID token, and it posts that here. Better Auth checks the
+// token's signature and audience (auth.ts) and answers with the session
+// cookie in the RESPONSE — never in a URL.
+//
+// Better Auth's Expo integration has a second way, which this refuses: a
+// browser round trip that ends by redirecting to the app's custom scheme
+// with the session cookie in the query string. Any app on a phone can
+// register a custom scheme, so that hands the session to whichever app
+// claims `glidecomp://` (RFC 8252 §8.1). Its entry point,
+// /expo-authorization-proxy, is not served (endpoints.ts); the checks below
+// close the rest of it:
+//
+// - every callback URL must be a web address or a path, so the expo()
+//   plugin's after-hook — which appends the cookie only when a callback
+//   redirects to a custom scheme — has nothing to act on;
+// - Apple is ID-token only. Its web flow would need a client secret this
+//   worker does not hold, and would fail later with a 500;
+// - an ID token's `user` (the name Apple hands the app on first sign-in) is
+//   refused: it would name the new account around /set-name's checks — the
+//   same hole SEC-55 closed on the email-OTP route. Onboarding asks instead.
+
+const CALLBACK_FIELDS = ["callbackURL", "newUserCallbackURL", "errorCallbackURL"] as const;
+
+/** A path on this site, or an http(s) URL — never a custom scheme. */
+function isWebCallback(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  if (value.startsWith("/") && !value.startsWith("//")) return true;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+app.post("/api/auth/sign-in/social", async (c, next) => {
+  const body = await jsonRequestBody(c.req.raw);
+  if (!body) return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Expected a JSON body" }, 415);
+  for (const field of CALLBACK_FIELDS) {
+    if (field in body && !isWebCallback(body[field])) {
+      return c.json({ code: "BAD_REQUEST", message: `Invalid ${field}` }, 400);
+    }
+  }
+  const idToken = body.idToken;
+  if (idToken !== undefined && idToken !== null) {
+    if (typeof idToken !== "object" || Array.isArray(idToken)) {
+      return c.json({ code: "BAD_REQUEST", message: "Invalid idToken" }, 400);
+    }
+    if ("user" in idToken) {
+      return c.json({ code: "BAD_REQUEST", message: "Unexpected field" }, 400);
+    }
+  } else if (body.provider === "apple") {
+    return c.json({ code: "BAD_REQUEST", message: "Sign in with Apple needs an ID token" }, 400);
+  }
+  await next();
 });
 
 // Better Auth catch-all handler — for the endpoints endpoints.ts lists, and

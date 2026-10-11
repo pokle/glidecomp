@@ -2,6 +2,7 @@ import { betterAuth, type BetterAuthPlugin } from "better-auth";
 import { emailOTP, jwt, oAuthProxy } from "better-auth/plugins";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { apiKey } from "@better-auth/api-key";
+import { expo } from "@better-auth/expo";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 import { AUTH_COOKIE_PREFIX } from "@glidecomp/worker-kit/session-cookie";
@@ -33,6 +34,13 @@ export type AuthEnv = {
   EMAIL?: EmailSendBinding;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
+  /**
+   * The app's own Google OAuth client ids (iOS, Android), comma-separated.
+   * Not secrets: a client id ships inside every app that signs in with it.
+   * The app signs in with Google natively and sends the ID token Google gave
+   * it, whose audience is one of these or GOOGLE_CLIENT_ID (see APP_ORIGINS).
+   */
+  GOOGLE_NATIVE_CLIENT_IDS?: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
 };
@@ -106,6 +114,42 @@ export const API_KEY_HEADER = "x-api-key";
  * it ran. Change all three together.
  */
 export const API_KEY_LIFETIME_DAYS = 90;
+
+/**
+ * The native app's URL schemes (docs/2026-10-05-mobile-app-plan.md, stage 4).
+ * The app is not a browser and sends no Origin of its own; the expo() plugin
+ * copies its `expo-origin` header into Origin, and Better Auth's CSRF check
+ * then needs the scheme here, or every sign-in from the app is a 403.
+ *
+ * Both schemes, in production too: `glidecomp-dev` is the development
+ * variant's (mobile/app.config.ts), and a Release build of that variant is
+ * what the owner's own phone runs and signs in to glidecomp.com with.
+ *
+ * Trusting a scheme as an ORIGIN is safe: a browser never sends one. What
+ * would not be safe is a session cookie riding a redirect to one, which any
+ * app on the phone can register — so the app never signs in through a browser
+ * redirect at all (see guardSocialSignIn in index.ts).
+ */
+export const APP_ORIGINS = ["glidecomp://", "glidecomp-dev://"];
+
+/**
+ * The app's iOS bundle ids, the audience of an Apple ID token. Sign in with
+ * Apple is native-only (iOS): the app hands over the token Apple gave it, and
+ * Better Auth checks it against Apple's public keys. No secret is involved —
+ * the Services ID and private key Apple's WEB flow needs are not configured,
+ * and guardSocialSignIn refuses that flow.
+ */
+export const APPLE_AUDIENCES = ["com.glidecomp.app", "com.glidecomp.app.dev"];
+
+/** The Google client ids an ID token from the app may be addressed to. */
+export function googleAudiences(env: Pick<AuthEnv, "GOOGLE_CLIENT_ID" | "GOOGLE_NATIVE_CLIENT_IDS">): string[] {
+  const native = (env.GOOGLE_NATIVE_CLIENT_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  // The web client first: Better Auth's redirect flow uses the first id.
+  return [env.GOOGLE_CLIENT_ID, ...native];
+}
 
 /** How long an isolate trusts its copy of the `jwks` table. */
 const JWKS_CACHE_MS = 5 * 60 * 1000;
@@ -215,8 +259,14 @@ function buildAuth(env: AuthEnv) {
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
-    trustedOrigins: ["https://glidecomp.com", "https://*.glidecomp.pages.dev"],
+    trustedOrigins: ["https://glidecomp.com", "https://*.glidecomp.pages.dev", ...APP_ORIGINS],
     plugins: [
+      // The native app (stage 4 of the mobile plan): maps its `expo-origin`
+      // header onto Origin for the CSRF check. Its other half — handing a
+      // session to the app through a browser redirect — is never reached:
+      // /expo-authorization-proxy is not served (endpoints.ts), and
+      // guardSocialSignIn (index.ts) refuses a custom-scheme callbackURL.
+      expo(),
       emailOTP({
         otpLength: 6,
         expiresIn: 600, // 10 min — must match OTP_EXPIRY_MINUTES in otp-email.ts
@@ -395,8 +445,17 @@ function buildAuth(env: AuthEnv) {
     },
     socialProviders: {
       google: {
-        clientId: env.GOOGLE_CLIENT_ID,
+        // The website's redirect flow uses the first; an ID token from the
+        // app may be addressed to any of them.
+        clientId: googleAudiences(env),
         clientSecret: env.GOOGLE_CLIENT_SECRET,
+      },
+      apple: {
+        clientId: APPLE_AUDIENCES[0],
+        // Only Apple's web flow would use a client secret, and it is refused
+        // (guardSocialSignIn): the app signs in with an ID token alone.
+        clientSecret: "",
+        audience: APPLE_AUDIENCES,
       },
     },
     user: {

@@ -29,6 +29,10 @@ name = "EMAIL"
 
 [vars]
 BETTER_AUTH_URL = "https://glidecomp.com"
+# The native app's own Google client ids (iOS, Android), comma-separated, once
+# they exist in the Google Cloud Console. Not secrets — see docs/auth.md,
+# "The native app".
+# GOOGLE_NATIVE_CLIENT_IDS = ""
 
 # Secrets (set via `wrangler secret put` or .dev.vars):
 # GOOGLE_CLIENT_ID
