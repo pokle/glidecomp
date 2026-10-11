@@ -61,6 +61,15 @@ and the build stops opening after 7 days (rebuild to renew).
    the "Apple Development" developer app → Trust. Then open GlideComp Dev.
 4. Allow the local-network prompt; that is how the phone reaches Metro.
 
+A development build loads its JavaScript from Metro over Wi-Fi, so it shows
+"No script URL provided" whenever Metro is not running or the phone is on
+another network. For a build that runs on its own — on the hill, or for the
+airplane-mode checks — add `--configuration Release`: the JavaScript is
+embedded and no Mac is needed. (The CLI then sits at "Connecting to …" after
+the app has installed and launched; stop it.) A Release build has `__DEV__`
+off, so the write guard treats it like a preview build and lets it write to
+production. That matters from stage 4, when the app first writes.
+
 ### When the simulators misbehave
 
 - **Xcode 27 renamed Simulator.app to DeviceHub**
