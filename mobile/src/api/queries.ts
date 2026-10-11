@@ -17,7 +17,9 @@ import type {
 import type { TaskWeatherData } from '@glidecomp/client/weather';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { api, getJson } from './client';
+import { igcText } from '@/lib/igc-text';
+
+import { api, getBytes, getJson } from './client';
 
 export function useComps() {
   return useQuery({
@@ -138,6 +140,34 @@ export function usePilotAnalysis(compId: string, taskId: string, pilotId: string
             { init: { signal: s } },
           ),
         signal,
+      ),
+  });
+}
+
+/**
+ * A pilot's tracklog as IGC text, for the report card's map and its data
+ * cleaning chart. The narrative never needs it, so nothing waits on it.
+ *
+ * Kept out of the persisted cache (`meta.persist`): a tracklog is up to a
+ * megabyte, and the phone is better spent keeping the comps a reader looked
+ * at than the files behind them.
+ */
+export function useTracklog(compId: string, taskId: string, pilotId: string) {
+  return useQuery({
+    queryKey: ['tracklog', compId, taskId, pilotId],
+    meta: { persist: false },
+    gcTime: 10 * 60_000,
+    staleTime: Infinity,
+    queryFn: async ({ signal }) =>
+      igcText(
+        await getBytes(
+          (s) =>
+            api.api.comp[':comp_id'].task[':task_id'].igc[':comp_pilot_id'].download.$get(
+              { param: { comp_id: compId, task_id: taskId, comp_pilot_id: pilotId } },
+              { init: { signal: s } },
+            ),
+          signal,
+        ),
       ),
   });
 }

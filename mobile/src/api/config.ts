@@ -17,3 +17,10 @@ const LOCAL_HOST = /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d
 export const API_IS_LOCAL = LOCAL_HOST.test(API_ORIGIN);
 
 export const WRITES_ALLOWED = !__DEV__ || API_IS_LOCAL;
+
+/**
+ * Where the website's explainers live (`/scoring/gap`, `/scoring/data-cleaning`
+ * …). Always production: a development API on this Mac serves no static pages,
+ * and the GAP guide reads the same everywhere.
+ */
+export const SITE_ORIGIN = 'https://glidecomp.com';

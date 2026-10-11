@@ -2,7 +2,8 @@
  * The day → Weather (IA §7): the organiser's account first, then the
  * model's. A prediction is never read as a record (docs/weather.md): the
  * group is named for its source's kind — "Forecast" for a day still to come —
- * and the credit says it is a grid cell, not a reading at launch.
+ * and the credit says it is a grid cell, not a reading at launch. The charts
+ * come first; the hourly list under them is the exact reading.
  */
 import { sampleProvenance } from '@glidecomp/client/met';
 import { idFromSegment } from '@glidecomp/client/slug';
@@ -13,7 +14,8 @@ import { View } from 'react-native';
 import { useComp, useTask, useTaskWeather } from '@/api/queries';
 import { weatherRows } from '@/lib/weather-hours';
 import { useUnits } from '@/settings/units';
-import { GroupedList, Group, Note, Row } from '@/ui/grouped-list';
+import { WeatherCharts } from '@/charts/WeatherCharts';
+import { Embedded, GroupedList, Group, Note, Row } from '@/ui/grouped-list';
 import { QueryGate, StaleBanner } from '@/ui/QueryStates';
 
 function capitalise(s: string): string {
@@ -50,6 +52,11 @@ function WeatherBody({ data, timeZone }: { data: TaskWeatherData; timeZone: stri
       </Group>
       {w && rows.length > 0 ? (
         <>
+          <Group title="Charts">
+            <Embedded testID="weather-charts-host">
+              <WeatherCharts weather={w} timeZone={timeZone} prefs={prefs} />
+            </Embedded>
+          </Group>
           <Group title={capitalise(sourceKindLabel(w.source.kind))}>
             {rows.map((row) => (
               <Row key={row.key} title={row.time} value={row.wind} detail={row.detail || undefined} />

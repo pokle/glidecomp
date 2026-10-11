@@ -1,0 +1,15 @@
+# Go back from a screen whose content takes the iOS edge swipe for itself — a
+# map pans instead of going back — by tapping the header's back button.
+appId: com.glidecomp.app.dev
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          point: "12%, 9%"

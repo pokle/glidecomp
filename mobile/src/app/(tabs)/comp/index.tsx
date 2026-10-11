@@ -5,7 +5,7 @@
  */
 import { categoryLabel, formatTaskDateRange } from '@glidecomp/client/format';
 import { MIN_SEARCH_CHARS, type SearchResults } from '@glidecomp/client/search';
-import { compPath, taskPath, taskRoutePath } from '@glidecomp/client/slug';
+import { compPath, pilotPath, taskPath, taskRoutePath } from '@glidecomp/client/slug';
 import type { CompListEntry } from '@glidecomp/client/types';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
@@ -97,8 +97,8 @@ function Search({ query }: { query: string }) {
 
 /**
  * Grouped by what matched. Each row opens the deepest thing it names: a
- * turnpoint opens the task's turnpoints, a pilot the task they flew (their
- * report card, from stage 3).
+ * turnpoint opens the task's turnpoints, a pilot their report card for the
+ * task they flew — or, matched in a comp rather than a task, their series.
  */
 function SearchGroups({ results }: { results: SearchResults }) {
   const comps = results.comps.filter((c) => c.matched);
@@ -170,8 +170,8 @@ function SearchGroups({ results }: { results: SearchResults }) {
               onPress={() =>
                 router.push(
                   (task
-                    ? taskPath(comp.comp_id, comp.name, task.task_id, task.name)
-                    : compPath(comp.comp_id, comp.name)) as never,
+                    ? pilotPath(comp.comp_id, comp.name, task.task_id, task.name, pilot.comp_pilot_id, pilot.name)
+                    : `${compPath(comp.comp_id, comp.name)}/pilot/${pilot.comp_pilot_id}`) as never,
                 )
               }
             />

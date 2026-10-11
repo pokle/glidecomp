@@ -1,12 +1,12 @@
 /**
  * The app's grouped list: the platform's own (a SwiftUI Form on iOS, a Material
  * list on Android) through @expo/ui's universal components. Screens use these
- * four names and nothing from @expo/ui directly, so if the beta API changes
+ * names and nothing from @expo/ui directly, so if the beta API changes
  * shape, this file is the only one that does.
  */
-import { FieldGroup, Host, Icon, ListItem } from '@expo/ui';
-import type { PropsWithChildren, ReactNode } from 'react';
-import { Platform, PlatformColor, StyleSheet } from 'react-native';
+import { FieldGroup, Host, Icon, ListItem, RNHostView } from '@expo/ui';
+import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
+import { Platform, PlatformColor, StyleSheet, View } from 'react-native';
 
 import { checkMark } from './check-mark';
 import { secondary } from './secondary-text';
@@ -65,6 +65,19 @@ export function Note({ children }: { children: string }) {
   return <ListItem>{children}</ListItem>;
 }
 
+/**
+ * React Native content in a group — a chart — hosted inside the native list.
+ * Takes the row's width and grows to its content's height.
+ */
+export function Embedded({ children, testID }: { children: ReactElement; testID?: string }) {
+  return (
+    <RNHostView matchContents={{ vertical: true }} testID={testID}>
+      <View style={styles.embedded}>{children}</View>
+    </RNHostView>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  embedded: { paddingVertical: 8 },
 });

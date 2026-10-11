@@ -125,7 +125,14 @@ production. That matters from stage 4, when the app first writes.
   `taskPath()` from `@glidecomp/client/slug` build the app's own routes, and
   universal links (stage 9) map one to one.
 - `src/api/` — the API client, its transport, the queries, the cache.
-- `src/ui/` — the grouped list and the query states (loading, error, stale).
+- `src/ui/` — the grouped list and the query states (loading, error, stale,
+  and the report card's own gate, `ReportCardGate`).
+- `src/charts/` — the `react-native-svg` charts: the report card's emphasis
+  charts, the track data cleaning chart and the weather charts. They draw in
+  the screen's own points (`useWidth`), not a scaled viewBox, so their type is
+  the platform's real size; colours are the website's tokens (`palette.ts`).
+- `src/map/` — the track map (`@rnmapbox/maps`), the only file that imports
+  the map library.
 - `src/lib/` — pure logic behind the screens, unit-tested in `__tests__/`.
 - `src/settings/` — what the reader chooses on this phone (units).
 - `src/components/` — other shared components.
@@ -142,6 +149,14 @@ types, and the pure slug, time, number, unit, route-wording and weather
 helpers. The website's old module paths re-export from it, so its imports did
 not change. **Put a pure helper there rather than rewriting it here** — a
 pilot should read the same sentence on both.
+
+Stage 3 moved the report card's whole derivation there (`report-card`,
+`buildReportCard`; `__tests__/one-derivation.test.ts` fails if either side
+grows its own), and the pure halves of every chart and of the map: the
+score-curve label placement (`score-curve-layout`), the cleaning chart's frame
+and decimation (`track-cleaning`), the weather charts' time axis
+(`time-axis`) and wind glyphs (`met`), and the map's features and colours
+(`map-geometry`). A platform draws; it does not decide what to draw.
 
 The typed client takes its types from the competition worker's source, so
 the app's `tsconfig.json` carries `@cloudflare/workers-types` and `node` for
@@ -164,6 +179,13 @@ type-checking only. Responses are cast to the wire types, as on the website.
   the phone (`expo-sqlite` key-value store), so a comp read this morning
   is there with no signal this afternoon. Queries do not retry on their own:
   `getJson` applies the website's retry rules, with a per-attempt timeout.
+- **A chart inside a list is `Embedded`** (`grouped-list.tsx`), which hosts
+  React Native views in the native list through `@expo/ui`'s `RNHostView`.
+  The report card's section screens are a plain `ScrollView` instead: they
+  are mostly charts and arithmetic, not rows.
+- **A query can opt out of the phone's cache** with `meta: { persist: false }`
+  — the tracklog does, because a megabyte of IGC is a poor use of the space
+  that keeps this morning's comps readable this afternoon.
 - **Every screen goes through `QueryGate` and `StaleBanner`**
   (`src/ui/QueryStates.tsx`). A failed refresh never replaces data on screen
   (#481); the banner says what is being shown and how old it is, and "not
@@ -212,7 +234,8 @@ change, it is a scoring change like any other and owes a note in
   Test ids are distinct prefixes (`comp-row-…`, `task-row-…`): a pattern like
   `comp-.*` also matches the list's own `comp-list` and taps the list, not a
   row. `offline.yaml` runs on Android only (Maestro switches airplane mode
-  there), and needs the `adb reverse` set-up above.
+  there), and needs the `adb reverse` set-up above. `results.yaml` walks
+  scores → a pilot's series → a report card → a section → the track map.
 - Flows are data-light: they run against production (read-only) or the
   seeded local workers, whose competitions differ.
 
@@ -232,6 +255,26 @@ change, it is a scoring change like any other and owes a note in
 | Never inline geo maths | The engine's `geo.ts` only. |
 | Map interaction spec | `@rnmapbox/maps` implements `docs/mapbox-interactions-spec.md`; touch-only differences are written into the spec. |
 | Accessibility (WCAG 2.2 AA) | VoiceOver and TalkBack labels, Dynamic Type and font scaling, 44 pt targets, contrast. Audited every stage. |
+
+## The track map
+
+`@rnmapbox/maps` draws the report card's map, following
+`docs/mapbox-interactions-spec.md` (its "Native app" section lists what a
+touch screen does differently). Two tokens, neither committed:
+
+- **The public token** (`pk.…`) is `REACT_NATIVE_MAPBOX_PUBLIC_TOKEN`, read by
+  `app.config.ts` from the environment or the repository's root `.env` (the
+  file the website's `VITE_MAPBOX_TOKEN` lives in; a worktree has its own
+  copy, so add the line there too). It ends up in `extra.mapboxPublicToken`;
+  a public token ships inside every app by design. A build without it shows a
+  sentence where the map would be, rather than crashing.
+- **The secret download token** (`sk.…`, `DOWNLOADS:READ`) lives only in
+  `~/.netrc` (`machine api.mapbox.com login mapbox password sk.…`, mode 600),
+  where CocoaPods reads it for the Mapbox SDK. Android's Maven repository no
+  longer needs it.
+
+A new native module means regenerating the native projects:
+`bunx expo prebuild --clean`, then `pod install` in `ios/`.
 
 ## Which API a build talks to
 
