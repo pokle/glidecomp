@@ -1,0 +1,115 @@
+# Stage 5: submit a track from the Submit tab and read the receipt, then find
+# it under Me → Track uploads. Needs a build pointed at the LOCAL workers
+# (a development build never writes to production) and a competition flying
+# today with a tracklog on the device — both made by:
+#   bun run --cwd mobile seed:submit
+#   maestro test .maestro/submit.yaml
+# Signed out (Android after clearState) it submits anonymously as the seeded
+# pilot's CIVL ID; signed in (the iOS keychain outlives clearState) it answers
+# "which registration are you?" if asked.
+appId: com.glidecomp.app.dev
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Yours|Past|Upcoming|Flying now"
+    timeout: 60000
+- tapOn: "Submit"
+- extendedWaitUntil:
+    visible: "Who is the track for\\?"
+    timeout: 15000
+# The task step chose today's task by itself, and says which it is.
+- assertVisible: "Today's Task"
+- takeScreenshot: submit-sheet
+
+- runFlow:
+    when:
+      visible:
+        id: "ident-value"
+    commands:
+      - tapOn:
+          id: "ident-value"
+      - inputText: "77001"
+      - hideKeyboard
+# Signed in, the sheet first asks the server which registration this is.
+- extendedWaitUntil:
+    notVisible: "Checking your registration…"
+    timeout: 15000
+- runFlow:
+    when:
+      visible:
+        id: "registration-new"
+    commands:
+      - tapOn:
+          id: "registration-new"
+
+- scrollUntilVisible:
+    element:
+      id: "choose-file"
+- tapOn:
+    id: "choose-file"
+# The system picker: Android lists recent files; iOS opens where it was last,
+# so go to On My iPhone when the file is not already on screen.
+- runFlow:
+    when:
+      platform: iOS
+      notVisible: "today.igc"
+    commands:
+      - tapOn: "Browse"
+      - tapOn: "On My iPhone"
+- extendedWaitUntil:
+    visible: "today.igc"
+    timeout: 15000
+- waitForAnimationToEnd
+# iOS: the cell ("today.igc, igc, 10:50 pm, 194 KB"), not its caption, which
+# the picker does not treat as a choice. Android lists the bare name.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "today.igc, .*"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "today.igc"
+- extendedWaitUntil:
+    # iOS reads a row's title and detail as one label.
+    visible: ".*Pilot named in the file: .*"
+    timeout: 15000
+
+- scrollUntilVisible:
+    element:
+      id: "submit-track"
+- tapOn:
+    id: "submit-track"
+# The receipt (a group's test id is not exposed on iOS, so its words).
+- extendedWaitUntil:
+    visible: ".*Check the flight below is the one you meant to send\\."
+    timeout: 60000
+- assertVisible: "Track (submitted|replaced) for .*"
+- takeScreenshot: submit-receipt
+
+# Me → Track uploads lists it as submitted.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - swipe:
+          start: "50%, 15%"
+          end: "50%, 90%"
+- tapOn: "Me"
+- scrollUntilVisible:
+    element:
+      id: "uploads-row"
+- tapOn:
+    id: "uploads-row"
+- extendedWaitUntil:
+    visible: "Submitted|Replaced"
+    timeout: 15000
+- takeScreenshot: track-uploads

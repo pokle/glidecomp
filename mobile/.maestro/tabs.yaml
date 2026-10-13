@@ -5,9 +5,11 @@ appId: com.glidecomp.app.dev
 ---
 - launchApp:
     clearState: true
+# A clean start loads the whole development bundle again: a minute, on an
+# emulator.
 - extendedWaitUntil:
     visible: "Yours|Past"
-    timeout: 30000
+    timeout: 60000
 - takeScreenshot: comps
 
 - tapOn: "My flights"
@@ -33,7 +35,9 @@ appId: com.glidecomp.app.dev
 
 # Submit is an action: it presents a sheet over the current tab.
 - tapOn: "Submit"
-- assertVisible: "The submit form arrives in stage 5."
+- extendedWaitUntil:
+    visible: "Which task did you fly\\?"
+    timeout: 15000
 - takeScreenshot: submit-sheet
 # Dismiss the way each platform does: system Back, or a swipe down.
 - runFlow:

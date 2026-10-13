@@ -1,7 +1,7 @@
 # Native iOS and Android app — implementation plan
 
 Date: 2026-10-05
-Status: stage 0 decisions made (2026-10-06); accounts and tools in progress.
+Status: stage 0 decisions made (2026-10-06); stages 1–4 merged; stage 5 in review.
 Implementation happens on the owner's Mac.
 
 Builds the app described in
@@ -508,6 +508,44 @@ anywhere, with or without signal.
 - Submit with airplane mode on; the track waits in the queue; it sends when the
   signal returns; the email arrives.
 - As a pilot on a roster with unclaimed entries, the app asks which one is you.
+
+**As built (2026-10-13).** Where stage 5 departs from the list above:
+
+- **The flow's rules moved, not copied**, as stage 3's derivation did: the
+  website's `submit-track.ts` is now `@glidecomp/client/submit`, re-exported
+  where it was, and gained the endpoint choice (`submissionRequest`), the
+  refusal reading (`submitErrorFrom`) and the IGC checks the website's form
+  kept inline. `__tests__/one-derivation.test.ts` fails if either client
+  spells an endpoint of its own.
+- **Every track goes through the queue, signal or not.** There is no
+  "online" path that skips the disk: Submit writes the track to the phone and
+  the sheet watches it go. With signal the receipt follows in a second or two;
+  without, the sheet says the track is saved here and not yet submitted.
+- **On iOS the upload is a background transfer**, so a track sent with no
+  route to the server is not "failed": iOS holds it and sends it when there is
+  one, even with the app suspended. The sheet says "Sending your track… It
+  hasn't been submitted until this says so", and Me → Track uploads shows it.
+  Android sends while the app is alive, and the queue tries again at launch,
+  on return to the foreground, when the signal comes back, and on a timer.
+- **A refusal is kept, not dropped.** A track the server answers no to stays
+  under Me → Track uploads as "Not accepted", with the server's sentence and
+  "Fix and send again", which reopens the sheet on it, file and all.
+- **Android's Share needed a native module of our own**
+  (`mobile/modules/share-intake`, about 40 lines of Kotlin): React Native only
+  reports an opened file, so a Share is turned into an open before it looks.
+- **The sheet is a native grouped list, not a form of React Native fields**,
+  like every other screen; text fields are the platform's own
+  (`FieldRow`). The task step lists every open competition rather than the
+  website's three with a search box: the list is a ±2-day window and rarely
+  long.
+- **The task view gained "Submit track"**, as the IA's one action button;
+  hidden when the competition has closed, or when the task is closed and the
+  reader is not its organiser.
+- **The app's anonymous identifier lives in the secure store**, not plain
+  storage, since it can be an email address.
+- `bun run --cwd mobile seed:submit` seeds a local competition flying today
+  and forges a tracklog that flies it, for the owner checks and the Maestro
+  flow.
 
 ---
 

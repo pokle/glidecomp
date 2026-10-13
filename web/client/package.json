@@ -66,6 +66,10 @@
       "types": "./src/slug.ts",
       "default": "./src/slug.ts"
     },
+    "./submit": {
+      "types": "./src/submit.ts",
+      "default": "./src/submit.ts"
+    },
     "./time": {
       "types": "./src/time.ts",
       "default": "./src/time.ts"

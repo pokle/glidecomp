@@ -12,7 +12,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { ApiError, isNotFound } from '@/api/client';
 import { ago } from '@/lib/ago';
 
-function useOnline(): boolean {
+/** Whether the phone has a network, as the query layer sees it. */
+export function useOnline(): boolean {
   return useSyncExternalStore(
     (cb) => onlineManager.subscribe(cb),
     () => onlineManager.isOnline(),

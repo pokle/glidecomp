@@ -140,9 +140,18 @@ production. That matters from stage 4, when the app first writes.
 - `src/lib/` — pure logic behind the screens, unit-tested in `__tests__/`.
 - `src/settings/` — what the reader chooses: units (synced to the account
   while signed in, `units-sync.ts`) and appearance (this phone only).
+- `src/submit/` — submitting a track (stage 5): the upload queue
+  (`queue.ts`), files from outside the app (`incoming.ts`), and the receipt
+  the sheet and Me → Track uploads share (`receipt.tsx`). See "Submitting a
+  track" below.
 - `src/components/` — other shared components.
 - `src/engine-check/` — stage 1's on-device proof that the engine runs (Me →
   Engine check).
+- `modules/` — local Expo modules, autolinked. `share-intake` (Android only)
+  turns a Share of a file into an open of it.
+- `scripts/` — `bundle-engine-sample.ts` (the engine check's sample) and
+  `seed-submit-comp.ts` (`bun run seed:submit`: a local comp open today, and
+  a forged tracklog that flies it, in `scripts/out/`).
 - `.maestro/` — end-to-end flows; `subflows/back.yaml` goes back one screen
   on either platform.
 
@@ -252,6 +261,11 @@ change, it is a scoring change like any other and owes a note in
   (`maestro test -e API=http://localhost:8790 .maestro/signin.yaml`). On iOS
   the keychain outlives `clearState`, so a flow must not assume it starts
   signed out.
+  `submit.yaml` submits a track from the Submit tab (anonymously on a
+  signed-out Android, as the registered pilot on a signed-in iOS) and finds it
+  under Me → Track uploads; run `bun run seed:submit` first. Maestro and
+  agent-device cannot drive the Android emulator at the same time: close
+  agent-device's session before `maestro test`.
 - **Better Auth is ES modules only**, some of it `.mjs`; `jest.config.js`
   compiles both (`ESM_ONLY`, and the `.mjs` transform). A test that imports
   anything under `src/api/` pulls it in.
@@ -312,6 +326,41 @@ side is in [docs/auth.md](../docs/auth.md#the-native-app).
   organiser's rows; `GET /api/comp/pilot/registrations` drives Yours, the
   comp's You group and the task's Your track. Hide, never disable: a row a
   role may not use is absent.
+
+## Submitting a track
+
+The sheet (`src/app/submit.tsx`) follows the website's flow and takes its
+rules from `@glidecomp/client/submit` — the endpoint and headers
+(`submissionRequest`), the default task, the failure codes and their repairs.
+`__tests__/one-derivation.test.ts` fails if either client spells an endpoint
+of its own. The server's side is [docs/track-submission.md](../docs/track-submission.md).
+
+- **Written to the phone, then sent.** Submit puts the gzipped track in the
+  queue (`src/submit/queue.ts`: an index and one file per track in the app's
+  documents directory) and the sheet watches it. Nothing calls a track
+  submitted until the server has stored it; until then it is "waiting", and
+  Me → Track uploads says so. The decisions — what an answer means, when to
+  try again, whose session sends it, what the list keeps — are pure, in
+  `src/lib/submission.ts`, and tested.
+- **The upload is the one write that bypasses `apiFetch`**, because the
+  platform sends it (`File.upload`, a background session on iOS). So the
+  queue checks `WRITES_ALLOWED` itself, and attaches the session cookie
+  itself — only for a track queued signed in, and only while the same account
+  is signed in.
+- **Files from outside the app** arrive as a URL: `file://` on iOS (a copy in
+  the Inbox, which is deleted once read), `content://` on Android.
+  `+native-intent.tsx` parks it (`src/submit/incoming.ts`) and opens the
+  sheet. Android's Share (ACTION_SEND) carries its file in an extra React
+  Native never reads; `modules/share-intake` rewrites it into a VIEW before
+  React Native looks. The document type and intent filters are in
+  `app.config.ts`.
+- **Trying it locally**: with the workers running, `bun run seed:submit`
+  makes a comp open today, forges a tracklog that flies it, and copies that
+  onto each booted device — Files → On My iPhone on the iOS simulator,
+  Downloads on the Android emulator — for the picker, or for Share → GlideComp
+  Dev from the Files app. On the simulator, a new document type only shows in
+  the share sheet once LaunchServices has re-read the app: reboot the
+  simulator after the first install of a build that adds one.
 
 ## The track map
 

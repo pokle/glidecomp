@@ -21,6 +21,7 @@ import { deleteAccount, signOut, useIdentity } from '@/auth/session';
 import { ago } from '@/lib/ago';
 import { accountTitle, appearanceLabel, pilotIdSummary } from '@/lib/me-labels';
 import { useAppearance } from '@/settings/appearance';
+import { useSubmissions } from '@/submit/queue';
 import { useUnits } from '@/settings/units';
 import { ActionRow, Embedded, GroupedList, Group, Note, Row } from '@/ui/grouped-list';
 
@@ -33,6 +34,8 @@ export default function Me() {
   const scheme = useColorScheme();
   const { colors } = useTheme();
   const [busy, setBusy] = useState(false);
+  const uploads = useSubmissions().items;
+  const waiting = uploads.filter((s) => s.status !== 'sent').length;
 
   const signInWith = async (provider: typeof signInWithGoogle) => {
     if (busy) return;
@@ -140,6 +143,18 @@ export default function Me() {
               title="Profile"
               detail={pilotIdSummary(profile.data) ?? 'Name and contact, pilot IDs'}
               onPress={() => router.push('/me/profile')}
+            />
+          </Group>
+        ) : null}
+
+        {uploads.length > 0 ? (
+          <Group title="Tracks">
+            <Row
+              testID="uploads-row"
+              title="Track uploads"
+              value={waiting > 0 ? `${waiting} on this phone` : undefined}
+              detail={waiting > 0 ? 'Not submitted yet' : 'All submitted'}
+              onPress={() => router.push('/me/uploads')}
             />
           </Group>
         ) : null}

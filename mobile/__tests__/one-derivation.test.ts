@@ -25,3 +25,28 @@ describe('the report card derivation', () => {
     expect(hook).not.toMatch(/function\s+buildReportCard\s*\(/);
   });
 });
+
+/**
+ * And ONE set of submission rules (stage 5): which endpoint, which headers,
+ * what a refusal says. The website's form and the app's queue both take them
+ * from @glidecomp/client/submit, so the two can never send a track
+ * differently.
+ */
+describe('the submission rules', () => {
+  const SHARED_REQUEST = /import\s*\{[^}]*\bsubmissionRequest\b[^}]*\}\s*from\s*["'](\.\/submit-track|@glidecomp\/client\/submit)["']/;
+
+  it('are the shared ones on the website', () => {
+    expect(read('web/frontend/src/react/comp/submit-track.ts')).toMatch(
+      /export\s*\*\s*from\s*["']@glidecomp\/client\/submit["']/,
+    );
+    const form = read('web/frontend/src/react/comp/SubmitTrackForm.tsx');
+    expect(form).toMatch(SHARED_REQUEST);
+    expect(form).not.toMatch(/open-submit|x-pilot-ident|x-comp-pilot["']\]/);
+  });
+
+  it('are the shared ones in the app', () => {
+    const queue = read('mobile/src/submit/queue.ts');
+    expect(queue).toMatch(SHARED_REQUEST);
+    expect(queue).not.toMatch(/open-submit|x-pilot-ident|x-comp-pilot/);
+  });
+});

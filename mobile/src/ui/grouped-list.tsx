@@ -4,7 +4,7 @@
  * names and nothing from @expo/ui directly, so if the beta API changes
  * shape, this file is the only one that does.
  */
-import { FieldGroup, Host, Icon, ListItem, RNHostView } from '@expo/ui';
+import { FieldGroup, Host, Icon, ListItem, RNHostView, TextInput } from '@expo/ui';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { Platform, PlatformColor, StyleSheet, View } from 'react-native';
 
@@ -86,6 +86,41 @@ export function ActionRow({
       modifiers={[...(style.modifiers ?? []), ...(testIdModifiers(testID) ?? [])]}>
       {title}
     </ListItem>
+  );
+}
+
+/**
+ * A text field as a row of the list — the platform's own (SwiftUI's
+ * TextField in a Form row; Material's on Android). Uncontrolled: it starts
+ * from `defaultValue` and reports every change. The label is the
+ * placeholder, which is also what VoiceOver and TalkBack read.
+ */
+export function FieldRow({
+  label,
+  defaultValue,
+  onChangeText,
+  email = false,
+  testID,
+}: {
+  label: string;
+  defaultValue?: string;
+  onChangeText: (text: string) => void;
+  /** An email address: the email keyboard, and the phone's autofill. */
+  email?: boolean;
+  testID?: string;
+}) {
+  return (
+    <TextInput
+      placeholder={label}
+      defaultValue={defaultValue}
+      onChangeText={onChangeText}
+      autoCapitalize="none"
+      autoCorrect={false}
+      keyboardType={email ? 'email-address' : 'default'}
+      autoComplete={email ? 'email' : 'off'}
+      testID={testID}
+      modifiers={testIdModifiers(testID)}
+    />
   );
 }
 
