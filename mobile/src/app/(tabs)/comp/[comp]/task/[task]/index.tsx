@@ -1,16 +1,20 @@
 /**
  * A task (IA §7): its card with any stopped or closed state in words, the
- * route, and the day's weather. Scores arrive in stage 3.
+ * route, the day's weather, the results — and, by role, the reader's own
+ * track (registered pilots) and the organiser's rows (`is_admin`).
  */
 import { calculateOptimizedTaskDistance, formatDistance } from '@glidecomp/engine';
-import { formatTaskDate } from '@glidecomp/client/format';
-import { idFromSegment, taskPath, taskRoutePath, taskWeatherPath } from '@glidecomp/client/slug';
+import type { PilotFlight } from '@glidecomp/client/account';
+import { formatTaskDate, ordinal } from '@glidecomp/client/format';
+import { idFromSegment, pilotPath, taskPath, taskRoutePath, taskWeatherPath } from '@glidecomp/client/slug';
 import type { CompDetailData, TaskDetailData } from '@glidecomp/client/types';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { View } from 'react-native';
 
-import { useComp, useTask } from '@/api/queries';
+import { useComp, useMyFlights, useRegistrations, useTask } from '@/api/queries';
+import { useUserId } from '@/auth/session';
+import { flightOnTask, submittedWhen } from '@/lib/yours';
 import { taskStatusLines } from '@/lib/task-status';
 import { useUnits } from '@/settings/units';
 import { GroupedList, Group, Note, Row } from '@/ui/grouped-list';
@@ -48,6 +52,10 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
   }, [task.xctsk]);
   const status = taskStatusLines(task, comp);
   const compName = comp?.name;
+  const userId = useUserId();
+  const registered = !!useRegistrations(userId).data?.some((r) => r.comp_id === task.comp_id);
+  const flights = useMyFlights(registered ? userId : null);
+  const base = taskPath(task.comp_id, compName, task.task_id, task.name);
   const go = (path: string) => () => router.push(path as never);
   return (
     <GroupedList testID="task-screen">
@@ -88,11 +96,56 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
       </Group>
 
       <Group title="Results">
-        <Row
-          title="Task scores"
-          onPress={go(`${taskPath(task.comp_id, compName, task.task_id, task.name)}/scores`)}
-        />
+        <Row title="Task scores" onPress={go(`${base}/scores`)} />
       </Group>
+
+      {registered ? (
+        <Group title="Your track" testID="your-track">
+          <YourTrack
+            flight={flightOnTask(flights.data, task.task_id)}
+            loading={flights.data === undefined}
+            timeZone={comp?.timezone ?? null}
+            taskDate={task.task_date}
+            open={(f) => router.push(pilotPath(task.comp_id, compName, task.task_id, task.name, f.comp_pilot_id, undefined) as never)}
+          />
+        </Group>
+      ) : null}
+
+      {comp?.is_admin ? (
+        <Group title="Organiser" testID="organiser">
+          <Row title="Pilots & tracks" value={String(task.track_count)} onPress={go(`${base}/pilots`)} />
+          <Row title="Task settings" onPress={go(`${base}/settings`)} />
+        </Group>
+      ) : null}
     </GroupedList>
+  );
+}
+
+function YourTrack({
+  flight,
+  loading,
+  timeZone,
+  taskDate,
+  open,
+}: {
+  flight: PilotFlight | null;
+  loading: boolean;
+  timeZone: string | null;
+  taskDate: string;
+  open: (flight: PilotFlight) => void;
+}) {
+  if (!flight) return <Note>{loading ? 'Looking for your track…' : 'No track from you yet.'}</Note>;
+  const title =
+    flight.kind === 'manual'
+      ? 'Flight recorded by the organiser'
+      : `Submitted ${submittedWhen(flight.recorded_at, taskDate, timeZone)}`;
+  return (
+    <Row
+      testID="your-flight"
+      title={title}
+      value={flight.rank != null && flight.class_size != null ? `${ordinal(flight.rank)} of ${flight.class_size}` : undefined}
+      detail={flight.rank == null ? 'Not scored yet' : undefined}
+      onPress={() => open(flight)}
+    />
   );
 }

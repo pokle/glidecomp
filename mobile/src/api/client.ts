@@ -1,16 +1,22 @@
 /**
  * The app's API client: the shared typed client (@glidecomp/client) over a
- * transport that refuses writes when this build may not make them, plus the
- * retry rules the website uses (issue #481): a dropped request or a 5xx is
- * retried, and a 4xx is a real answer that is never asked twice.
+ * transport that carries the session (when there is one) and refuses writes
+ * when this build may not make them, plus the retry rules the website uses
+ * (issue #481): a dropped request or a 5xx is retried, and a 4xx is a real
+ * answer that is never asked twice.
  */
 import { createApi } from '@glidecomp/client/api';
 import { fetchWithRetry } from '@glidecomp/client/retry';
 import { guardWrites } from '@glidecomp/client/transport';
 
+import { withSession } from '@/auth/session-fetch';
+
 import { API_ORIGIN, WRITES_ALLOWED } from './config';
 
-export const api = createApi(API_ORIGIN, guardWrites(fetch, WRITES_ALLOWED));
+/** `fetch` for this build's API: the session attached, writes guarded. */
+export const apiFetch = guardWrites(withSession(fetch, API_ORIGIN), WRITES_ALLOWED);
+
+export const api = createApi(API_ORIGIN, apiFetch);
 
 /** The server answered, and the answer was no. Never retried. */
 export class ApiError extends Error {
@@ -18,6 +24,16 @@ export class ApiError extends Error {
     super(`HTTP ${status}`);
     this.name = 'ApiError';
   }
+}
+
+/** A JSON request to an auth-worker route the typed client does not cover. */
+export function authRequest(path: string, init: RequestInit = {}) {
+  return (signal: AbortSignal) =>
+    apiFetch(`${API_ORIGIN}/api/auth${path}`, {
+      ...init,
+      signal,
+      headers: init.body ? { 'content-type': 'application/json', ...init.headers } : init.headers,
+    });
 }
 
 export function isNotFound(err: unknown): boolean {

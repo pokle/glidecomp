@@ -8,6 +8,7 @@ import { FieldGroup, Host, Icon, ListItem, RNHostView } from '@expo/ui';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { Platform, PlatformColor, StyleSheet, View } from 'react-native';
 
+import { actionStyle } from './action-style';
 import { checkMark } from './check-mark';
 import { secondary } from './secondary-text';
 import { testIdModifiers } from './test-id';
@@ -55,6 +56,34 @@ export function Row({ title, detail, value, onPress, selected, testID }: RowProp
       trailing={items.length > 0 ? trailing(items) : undefined}
       testID={testID}
       modifiers={testIdModifiers(testID)}>
+      {title}
+    </ListItem>
+  );
+}
+
+/**
+ * A row that does something rather than going somewhere — Sign out, Delete
+ * account — in the platform's action colour, or its destructive red. No
+ * chevron: nothing is pushed.
+ */
+export function ActionRow({
+  title,
+  onPress,
+  destructive = false,
+  testID,
+}: {
+  title: string;
+  onPress: () => void;
+  destructive?: boolean;
+  testID?: string;
+}) {
+  const style = actionStyle(destructive);
+  return (
+    <ListItem
+      onPress={onPress}
+      testID={testID}
+      colors={style.colors}
+      modifiers={[...(style.modifiers ?? []), ...(testIdModifiers(testID) ?? [])]}>
       {title}
     </ListItem>
   );

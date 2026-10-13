@@ -40,33 +40,11 @@ export async function signOut() {
   return result;
 }
 
-export interface AuthUser {
-  id: string;
-  name: string;
-  email: string;
-  image: string | null;
-  username: string | null;
-}
-
-/**
- * Has this account still to be onboarded? The ONE definition of the gate —
- * Shell, the dashboard, the analysis page and onboarding itself all ask here,
- * so they can't drift apart and strand someone in a redirect loop.
- *
- * Both halves matter, and each is the sole signal for a different sign-up
- * path. A username is auto-derived at sign-up so a Google user never has to
- * pick one by hand — but that derivation also fires for email-OTP sign-ups,
- * which arrive with `name: ""` and so used to sail past a username-only gate
- * with nothing but a handle guessed off their email address. Nothing else in
- * the app ever asks for a display name, so the account stayed nameless.
- *
- * `name` is `"user".name` (the account's own display name, what /api/auth/me
- * and the header show), NOT the pilot profile's — those are separate fields.
- * Onboarding writes both.
- */
-export function needsOnboarding(user: AuthUser): boolean {
-  return !user.username || user.name.trim() === "";
-}
+// The account's shape and the onboarding gate moved to @glidecomp/client,
+// shared with the app (mobile plan, stage 4); re-exported so the website's
+// imports do not change.
+export { needsOnboarding, type AuthUser } from "@glidecomp/client/account";
+import type { AuthUser } from "@glidecomp/client/account";
 
 /**
  * Last-known account state, mirrored into localStorage so the *static* Astro

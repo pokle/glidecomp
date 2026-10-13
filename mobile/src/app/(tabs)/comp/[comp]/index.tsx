@@ -1,9 +1,13 @@
 /**
- * A competition (IA §6): its card, its tasks by day (every task alike, #514),
- * then Results and Competition rows. Read-only and signed out in stage 2; the
- * "You" group and organiser rows arrive with sign-in in stage 4.
+ * A competition (IA §6): its card, the reader's own "You" group when they are
+ * on the roster, its tasks by day (every task alike, #514), then Results and
+ * Competition rows — with the organiser's rows only for an organiser
+ * (`is_admin`): hide, never disable.
+ *
+ * The You group is about the reader, not about a task: it never features one
+ * (stage 0, decision 1).
  */
-import { formatTaskDate, formatTaskDateRange, scoringFormatLabel } from '@glidecomp/client/format';
+import { formatScore, formatTaskDate, formatTaskDateRange, ordinal, scoringFormatLabel } from '@glidecomp/client/format';
 import {
   compAnalysisPath,
   compPath,
@@ -16,7 +20,9 @@ import type { CompDetailData } from '@glidecomp/client/types';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
-import { useComp } from '@/api/queries';
+import { useComp, useCompScores, useRegistrations } from '@/api/queries';
+import { useUserId } from '@/auth/session';
+import { findSeriesPilot } from '@/lib/yours';
 import { wingLabel } from '@/lib/labels';
 import { groupTasksByDay } from '@/lib/task-days';
 import { GroupedList, Group, Note, Row } from '@/ui/grouped-list';
@@ -40,6 +46,11 @@ export default function CompScreen() {
 }
 
 function CompBody({ comp }: { comp: CompDetailData }) {
+  const registrations = useRegistrations(useUserId());
+  const mine = registrations.data?.find((r) => r.comp_id === comp.comp_id);
+  // Asked only of a registered pilot's comp view, for "Your score".
+  const scores = useCompScores(comp.comp_id, { enabled: !!mine });
+  const place = mine && scores.data ? findSeriesPilot(scores.data, mine.comp_pilot_id) : null;
   const days = groupTasksByDay(comp.tasks);
   const dates = comp.tasks.map((t) => t.task_date).sort();
   const go = (path: string) => () => router.push(path as never);
@@ -61,7 +72,30 @@ function CompBody({ comp }: { comp: CompDetailData }) {
             detail={comp.admins.map((a) => a.name || a.email).join(', ')}
           />
         ) : null}
+        {comp.test && comp.is_admin ? (
+          <Row title="Hidden" detail="Only this competition’s organisers can see it." />
+        ) : null}
       </Group>
+
+      {/* The reader's own entry. Inline, not a component: Android's list
+          only recognises a section that is its direct child. */}
+      {mine ? (
+        <Group title="You" testID="you">
+          <Row
+            testID="registered-as"
+            title="Registered as"
+            value={`${mine.registered_pilot_name} · ${mine.pilot_class}`}
+          />
+          {place ? (
+            <Row
+              testID="your-score"
+              title="Your score"
+              value={`${ordinal(place.pilot.rank)} · ${formatScore(place.pilot.total_score)} pts`}
+              onPress={go(`${compPath(comp.comp_id, comp.name)}/pilot/${mine.comp_pilot_id}`)}
+            />
+          ) : null}
+        </Group>
+      ) : null}
 
       {days.length === 0 ? (
         <Group title="Tasks">
@@ -94,7 +128,22 @@ function CompBody({ comp }: { comp: CompDetailData }) {
 
       <Group title="Competition">
         <Row title="Waypoints" onPress={go(compWaypointsPath(comp.comp_id, comp.name))} />
+        {comp.is_admin ? (
+          <Row
+            testID="organiser-pilots"
+            title="Pilots"
+            value={String(comp.pilot_count)}
+            onPress={go(`${compPath(comp.comp_id, comp.name)}/pilots`)}
+          />
+        ) : null}
         <Row title="Activity" onPress={go(`${compPath(comp.comp_id, comp.name)}/activity`)} />
+        {comp.is_admin ? (
+          <Row
+            testID="organiser-settings"
+            title="Settings"
+            onPress={go(`${compPath(comp.comp_id, comp.name)}/settings`)}
+          />
+        ) : null}
       </Group>
     </GroupedList>
   );

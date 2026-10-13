@@ -1,0 +1,130 @@
+# Stage 4: sign in with an emailed code, name the new account, stay signed in
+# across a relaunch, then sign out. Needs a build pointed at the LOCAL workers
+# (EXPO_PUBLIC_API_ORIGIN; a development build never signs in to production),
+# whose dev-only /api/auth/dev-last-otp hands the flow its code:
+#   maestro test -e API=http://localhost:8790 .maestro/signin.yaml
+# (The Android emulator reaches the Mac's workers as 10.0.2.2, but this script
+# runs on the Mac, so API stays localhost.)
+appId: com.glidecomp.app.dev
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Yours|Past|Upcoming|Flying now"
+    timeout: 30000
+- tapOn: "Me"
+# The keychain outlives the app's own data on iOS: start from signed out.
+- runFlow:
+    when:
+      visible:
+        id: "sign-out"
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: "sign-out"
+          centerElement: true
+      - tapOn:
+          id: "sign-out"
+      # The alert's button, not the row behind it, which says the same.
+      - tapOn:
+          text: "(?i)sign out"
+          rightOf: "(?i)cancel"
+- extendedWaitUntil:
+    visible:
+      id: "email-sign-in"
+    timeout: 15000
+- takeScreenshot: me-signed-out
+
+- tapOn:
+    id: "email-sign-in"
+- runScript: scripts/new-email.js
+- tapOn:
+    id: "email-field"
+- inputText: ${output.email}
+- tapOn:
+    id: "send-code"
+- extendedWaitUntil:
+    visible:
+      id: "sign-in-status"
+    timeout: 15000
+- takeScreenshot: code-step
+- runScript:
+    file: scripts/dev-otp.js
+    env:
+      API: ${API}
+      EMAIL: ${output.email}
+- tapOn:
+    id: "code-field"
+- inputText: ${output.otp}
+
+# A brand-new email-code account has no name: Me asks for one.
+- extendedWaitUntil:
+    visible:
+      id: "add-name"
+    timeout: 20000
+- takeScreenshot: me-signed-in-nameless
+- tapOn:
+    id: "add-name"
+- extendedWaitUntil:
+    visible:
+      id: "profile-name"
+    timeout: 15000
+- tapOn:
+    id: "profile-name"
+- inputText: "Maestro Pilot"
+# Android's keyboard covers the IDs below; iOS scrolls past its own.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "profile-civl_id"
+- tapOn:
+    id: "profile-civl_id"
+- inputText: "12345"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "save-profile"
+- tapOn:
+    id: "save-profile"
+- extendedWaitUntil:
+    visible: "Profile saved.*"
+    timeout: 15000
+- takeScreenshot: profile-saved
+- runFlow: subflows/back.yaml
+- extendedWaitUntil:
+    visible: "Maestro Pilot"
+    timeout: 15000
+- assertNotVisible:
+    id: "add-name"
+- assertVisible: "CIVL 12345"
+- takeScreenshot: me-signed-in
+
+# Still signed in after the app is closed and opened again.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Me"
+    timeout: 30000
+- tapOn: "Me"
+- extendedWaitUntil:
+    visible: "Maestro Pilot"
+    timeout: 15000
+
+- scrollUntilVisible:
+    element:
+      id: "sign-out"
+    centerElement: true
+- tapOn:
+    id: "sign-out"
+# The alert's button, not the row behind it, which says the same.
+- tapOn:
+    text: "(?i)sign out"
+    rightOf: "(?i)cancel"
+- extendedWaitUntil:
+    visible:
+      id: "email-sign-in"
+    timeout: 15000

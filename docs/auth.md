@@ -3,7 +3,9 @@
 Authentication for GlideComp using Better Auth, Hono, and Cloudflare D1. Two
 sign-in methods run in production: **Google OAuth** and **passwordless email
 OTP** (a 6-digit code emailed to the address you type). Email+password exists
-only in local dev, to back the `dev-login` endpoint the e2e suite uses.
+only in local dev, to back the `dev-login` endpoint the e2e suite uses. The
+native app adds **Sign in with Apple** on iOS, and signs in to the same
+accounts — see [The native app](#the-native-app).
 
 ## Architecture
 
@@ -271,6 +273,65 @@ the first, revoke its owner's other keys, or delete the account. The list is
 `API_KEY_HEADER` in `src/auth.ts`, which the plugin is configured with too, so
 the guard and the plugin cannot disagree about what makes a key session.
 
+## The native app
+
+The iOS and Android app (`mobile/`, stage 4 of
+[2026-10-05-mobile-app-plan.md](2026-10-05-mobile-app-plan.md)) signs in to the
+same accounts through the same worker. What is different:
+
+- **The session lives in the platform's secure store**, not a cookie jar
+  (`@better-auth/expo`'s client over `expo-secure-store`, readable after the
+  phone's first unlock so stage 5's background uploads can use it). The app
+  attaches it as a `Cookie` header, by hand, only to its own API origin, with
+  native `fetch`'s jar switched off (`mobile/src/auth/session-fetch.ts`), and
+  folds any refreshed cookie — the five-minute `session_data`, the rolling
+  session's new expiry — back into the store. So competition-api, the cookie
+  cache and the `/me` hop all work unchanged: it is just another cookie.
+- **Its origin is its URL scheme.** A native app sends no `Origin`; the
+  `expo()` plugin copies the app's `expo-origin` header into it, and Better
+  Auth's CSRF check then needs the scheme trusted. `APP_ORIGINS` in
+  `src/auth.ts` trusts `glidecomp://` and `glidecomp-dev://` — the development
+  variant's too, in production, because a Release build of it is what the
+  owner's own phone signs in to glidecomp.com with. Trusting a scheme as an
+  ORIGIN opens nothing: no browser ever sends one.
+- **Google and Apple sign in natively, with an ID token.** The platform's own
+  sheet hands the app a token, the app posts it to `/sign-in/social`
+  (`idToken`), and Better Auth checks its signature and audience against
+  Google's or Apple's public keys. The session comes back in the response.
+- **No session ever rides a URL.** Better Auth's Expo integration has a second
+  way to sign in: a browser round trip that ends by redirecting to the app's
+  custom scheme with the session cookie in the query string. Any app on a
+  phone can register a custom scheme, so that hands the session to whichever
+  app claims `glidecomp://` (RFC 8252 §8.1). It is closed three ways:
+  `/expo-authorization-proxy` is not served (`endpoints.ts` — it is also an
+  open redirect), `/sign-in/social` refuses any callback URL that is not a
+  web address or a path, and so the plugin's cookie-appending after-hook never
+  finds a custom-scheme redirect to act on (`index.ts`, the social sign-in
+  guard; `test/app-sign-in.test.ts`).
+- **Sign in with Apple needs no secret.** It is ID-token only: the audience is
+  the app's bundle ids (`APPLE_AUDIENCES`), and Apple's public keys verify the
+  token. Apple's WEB flow — which would need a Services ID and a private key
+  held as a worker secret — is not configured, and the guard refuses it with a
+  400 rather than let it fail with a 500. The website does not offer Apple.
+  Apple hands the app the pilot's name on the first sign-in only; the guard
+  refuses it inside the token request (it would name the account around
+  `/set-name`'s checks, the SEC-55 hole), so the app saves it through
+  `PATCH /api/comp/pilot` afterwards, under those checks.
+- **Google's app client ids** (iOS, Android) go in `GOOGLE_NATIVE_CLIENT_IDS`,
+  comma-separated: a `[vars]` entry, not a secret, since every app that signs
+  in with Google carries its own. `googleAudiences()` accepts a token
+  addressed to any of them or to `GOOGLE_CLIENT_ID`; the redirect flow still
+  uses `GOOGLE_CLIENT_ID` alone.
+- **A code the app asks for gets its own email**: the code and "Type it into
+  the GlideComp app to sign in.", without the website's sign-in link, which
+  would sign the pilot in on the website. The worker tells by the request's
+  origin (`isAppOrigin`); the dev-only `/dev-last-otp` reports it as
+  `forApp`. A link that opens the app waits for universal links (stage 9).
+- **A failure to ask is not an answer** (#481) holds on the phone too: the
+  last confirmed user is kept beside the cookie, a launch with no signal opens
+  signed in as them, and only a real answer from `/me` signs anyone out
+  (`mobile/src/lib/identity.ts`).
+
 ## Configuration
 
 ### Cloudflare Secrets (Production)
@@ -304,6 +365,7 @@ Set in `wrangler.toml` (production) or `.dev.vars` (local dev override):
 | Variable | Production Value | Dev Value |
 |----------|-----------------|-----------|
 | `BETTER_AUTH_URL` | `https://glidecomp.com` | `http://localhost:3000` |
+| `GOOGLE_NATIVE_CLIENT_IDS` | The app's iOS and Android Google client ids, comma-separated (unset until they exist) | — |
 
 ### Google Cloud Console
 

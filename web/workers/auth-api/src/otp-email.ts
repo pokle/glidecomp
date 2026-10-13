@@ -53,12 +53,20 @@ export function buildOtpSignInUrl(
   return `${origin}/signin#otp=${encodeURIComponent(otp)}&email=${encodeURIComponent(email)}`;
 }
 
+/**
+ * `forApp`: the code was asked for by the native app. Its email carries no
+ * link — the website's would sign the pilot in on the website, not in the app
+ * they are standing in — just the code and where to type it. (A link that
+ * opens the app needs universal links, stage 9 of the mobile plan, on a path
+ * of its own so the website's sign-in links never get pulled into the app.)
+ */
 export function buildOtpEmail(opts: {
   email: string;
   otp: string;
   baseURL: string;
+  forApp?: boolean;
 }): OtpEmailMessage {
-  const { email, otp, baseURL } = opts;
+  const { email, otp, baseURL, forApp = false } = opts;
   const url = buildOtpSignInUrl(baseURL, email, otp);
 
   const text = [
@@ -66,8 +74,7 @@ export function buildOtpEmail(opts: {
     ``,
     `    ${otp}`,
     ``,
-    `Or click to sign in directly:`,
-    url,
+    ...(forApp ? [`Type it into the GlideComp app to sign in.`] : [`Or click to sign in directly:`, url]),
     ``,
     `This code expires in ${OTP_EXPIRY_MINUTES} minutes and can be used once.`,
     `If you didn't request it, you can ignore this email — no one can sign in`,
@@ -80,9 +87,13 @@ export function buildOtpEmail(opts: {
   <div style="max-width:420px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">
     <p style="margin:0 0 8px;font-size:16px;">Your GlideComp sign-in code is:</p>
     <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">${escapeHtml(otp)}</p>
-    <p style="margin:0 0 24px;">
+    ${
+      forApp
+        ? `<p style="margin:0 0 24px;font-size:16px;">Type it into the GlideComp app to sign in.</p>`
+        : `<p style="margin:0 0 24px;">
       <a href="${escapeHtml(url)}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-size:15px;">Sign in to GlideComp</a>
-    </p>
+    </p>`
+    }
     <p style="margin:0;font-size:13px;color:#555555;">
       This code expires in ${OTP_EXPIRY_MINUTES} minutes and can be used once.
       If you didn't request it, you can ignore this email &mdash; no one can

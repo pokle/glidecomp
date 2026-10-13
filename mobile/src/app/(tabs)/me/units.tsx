@@ -68,6 +68,7 @@ export default function Units() {
         ))}
         <Group>
           <Note>Cylinder radii are always in metres: that is how the task states them.</Note>
+          <Note>Synced to your account when you’re signed in.</Note>
         </Group>
       </GroupedList>
     </>

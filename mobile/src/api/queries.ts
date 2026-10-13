@@ -4,6 +4,7 @@
  * exactly as the website does: the Hono types prove the route exists, the
  * interfaces say what a screen may rely on.
  */
+import type { PilotFlight, PilotProfile, PilotRegistration } from '@glidecomp/client/account';
 import type { SearchResults } from '@glidecomp/client/search';
 import { MIN_SEARCH_CHARS } from '@glidecomp/client/search';
 import type {
@@ -100,9 +101,10 @@ export function useSearch(query: string) {
  */
 const STALE_POLL_MS = 8_000;
 
-export function useCompScores(compId: string) {
+export function useCompScores(compId: string, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['compScores', compId],
+    enabled,
     queryFn: ({ signal }) =>
       getJson<CompScores>(
         (s) => api.api.comp[':comp_id'].scores.$get({ param: { comp_id: compId } }, { init: { signal: s } }),
@@ -169,5 +171,50 @@ export function useTracklog(compId: string, taskId: string, pilotId: string) {
           signal,
         ),
       ),
+  });
+}
+
+// ── The signed-in account's own (stage 4) ───────────────────────────────────
+//
+// Keyed by the account, so one account's answers are never read as another's,
+// and off while signed out — there is nothing to ask.
+
+/** The comps this account is on: "Yours", the comp's "You", "Your track". */
+export function useRegistrations(userId: string | null) {
+  return useQuery({
+    queryKey: ['registrations', userId],
+    enabled: userId !== null,
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ registrations: PilotRegistration[] }>(
+          (s) => api.api.comp.pilot.registrations.$get(undefined, { init: { signal: s } }),
+          signal,
+        )
+      ).registrations,
+  });
+}
+
+/** Every flight this account has in a competition, newest task first. */
+export function useMyFlights(userId: string | null) {
+  return useQuery({
+    queryKey: ['myFlights', userId],
+    enabled: userId !== null,
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ flights: PilotFlight[] }>(
+          (s) => api.api.comp.pilot.flights.$get(undefined, { init: { signal: s } }),
+          signal,
+        )
+      ).flights,
+  });
+}
+
+/** The pilot profile: name and contact, pilot IDs. */
+export function useProfile(userId: string | null) {
+  return useQuery({
+    queryKey: ['profile', userId],
+    enabled: userId !== null,
+    queryFn: ({ signal }) =>
+      getJson<PilotProfile>((s) => api.api.comp.pilot.$get(undefined, { init: { signal: s } }), signal),
   });
 }

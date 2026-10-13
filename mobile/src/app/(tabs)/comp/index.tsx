@@ -1,5 +1,6 @@
 /**
- * Comps (IA §5): the launch tab. Flying now, Upcoming, Past — and a search
+ * Comps (IA §5): the launch tab. Yours (signed in), Flying now, Upcoming,
+ * Past — and a search
  * over competitions, tasks, turnpoints and pilots that opens the deepest
  * match rather than the comp it lives in.
  */
@@ -11,7 +12,8 @@ import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import { useComps, useSearch } from '@/api/queries';
+import { useComps, useRegistrations, useSearch } from '@/api/queries';
+import { useUserId } from '@/auth/session';
 import { groupComps } from '@/lib/comp-groups';
 import { GroupedList, Group, Note, Row } from '@/ui/grouped-list';
 import { QueryGate, StaleBanner } from '@/ui/QueryStates';
@@ -38,18 +40,23 @@ export default function Comps() {
 
 function CompList() {
   const comps = useComps();
+  const registrations = useRegistrations(useUserId());
+  const registeredIn = new Set((registrations.data ?? []).map((r) => r.comp_id));
   return (
     <>
       <StaleBanner query={comps} />
       <QueryGate query={comps} loading="Loading competitions…" notFound="">
         {(list) => {
-          const { flyingNow, upcoming, past } = groupComps(list);
+          const { yours, flyingNow, upcoming, past } = groupComps(list, new Date(), registeredIn);
           return (
             <GroupedList testID="comp-list">
-              {flyingNow.length > 0 ? <CompGroup title="Flying now" comps={flyingNow} /> : null}
-              {upcoming.length > 0 ? <CompGroup title="Upcoming" comps={upcoming} /> : null}
-              {past.length > 0 ? <CompGroup title="Past" comps={past} /> : null}
-              {flyingNow.length + upcoming.length + past.length === 0 ? (
+              {/* Called, not rendered as components: Android's list only
+                  recognises a section that is its direct child. */}
+              {yours.length > 0 ? compGroup({ title: 'Yours', comps: yours, registeredIn, testID: 'yours' }) : null}
+              {flyingNow.length > 0 ? compGroup({ title: 'Flying now', comps: flyingNow }) : null}
+              {upcoming.length > 0 ? compGroup({ title: 'Upcoming', comps: upcoming }) : null}
+              {past.length > 0 ? compGroup({ title: 'Past', comps: past }) : null}
+              {yours.length + flyingNow.length + upcoming.length + past.length === 0 ? (
                 <Group>
                   <Note>No competitions yet.</Note>
                 </Group>
@@ -62,9 +69,20 @@ function CompList() {
   );
 }
 
-function CompGroup({ title, comps }: { title: string; comps: CompListEntry[] }) {
+function compGroup({
+  title,
+  comps,
+  registeredIn,
+  testID,
+}: {
+  title: string;
+  comps: CompListEntry[];
+  /** Given for Yours, whose rows say why each comp is the reader's. */
+  registeredIn?: ReadonlySet<string>;
+  testID?: string;
+}) {
   return (
-    <Group title={title}>
+    <Group key={title} title={title} testID={testID}>
       {comps.map((comp) => (
         <Row
           key={comp.comp_id}
@@ -75,12 +93,22 @@ function CompGroup({ title, comps }: { title: string; comps: CompListEntry[] }) 
             comp.first_task_date
               ? formatTaskDateRange(comp.first_task_date, comp.last_task_date ?? comp.first_task_date)
               : 'No tasks yet',
+            ...(registeredIn ? roleWords(comp, registeredIn) : []),
           ].join(' · ')}
           onPress={() => router.push(compPath(comp.comp_id, comp.name) as never)}
         />
       ))}
     </Group>
   );
+}
+
+/** Why a comp is in Yours: "Organiser", "Registered", and "Hidden" for a test comp. */
+function roleWords(comp: CompListEntry, registeredIn: ReadonlySet<string>): string[] {
+  return [
+    ...(comp.is_admin ? ['Organiser'] : []),
+    ...(registeredIn.has(comp.comp_id) ? ['Registered'] : []),
+    ...(comp.test ? ['Hidden'] : []),
+  ];
 }
 
 function Search({ query }: { query: string }) {
