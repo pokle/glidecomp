@@ -15,8 +15,8 @@
     "seed:submit": "bun scripts/seed-submit-comp.ts"
   },
   "dependencies": {
-    "@babel/runtime": "^7.29.2",
-    "@better-auth/expo": "1.7.7",
+    "@babel/runtime": "^7.29.10",
+    "@better-auth/expo": "1.7.10",
     "@expo/log-box": "~58.0.9",
     "@expo/metro-runtime": "~58.0.14",
     "@expo/ui": "~58.0.15",
@@ -24,10 +24,10 @@
     "@glidecomp/engine": "workspace:*",
     "@react-native-google-signin/google-signin": "^16.1.5",
     "@rnmapbox/maps": "^10.3.7",
-    "@tanstack/query-async-storage-persister": "^5.104.1",
-    "@tanstack/react-query": "^5.104.1",
-    "@tanstack/react-query-persist-client": "^5.104.1",
-    "better-auth": "^1.7.7",
+    "@tanstack/query-async-storage-persister": "^5.104.3",
+    "@tanstack/react-query": "^5.104.3",
+    "@tanstack/react-query-persist-client": "^5.104.3",
+    "better-auth": "^1.7.10",
     "expo": "~58.0.7",
     "expo-apple-authentication": "~58.0.2",
     "expo-constants": "~58.0.10",
@@ -55,11 +55,11 @@
   "devDependencies": {
     "@glidecomp/samples": "workspace:*",
     "@react-native/jest-preset": "0.88.0-rc.4",
-    "@testing-library/react-native": "^14.0.1",
+    "@testing-library/react-native": "^14.1.0",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.3.0",
     "jest": "^30.0.0",
     "jest-expo": "~58.0.9",
-    "test-renderer": "^1.0.0"
+    "test-renderer": "^1.3.1"
   }
 }

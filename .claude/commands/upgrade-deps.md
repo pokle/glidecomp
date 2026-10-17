@@ -17,8 +17,25 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
   anything a workspace declares for itself does not belong at the root.
 - Check for upgrades with `bun outdated` — but **`bun outdated` at the repo root
   reports the ROOT workspace only.** Run it again from inside `web/frontend`,
-  each `web/workers/*` and `web/engine`, or you will miss most of the tree (on
-  2026-09-13 the root listed 7 rows; `web/frontend` alone listed 23 more).
+  each `web/workers/*`, `web/engine`, `web/client` and `mobile`, or you will
+  miss most of the tree (on 2026-09-13 the root listed 7 rows; `web/frontend`
+  alone listed 23 more).
+- **`mobile` is an Expo app, and its versions are Expo's to choose.** Run
+  `cd mobile && bunx expo install --check` and read [mobile/CLAUDE.md](../../mobile/CLAUDE.md)
+  before touching it. Bump only what that check expects, and only where the bump
+  is JS-only (TanStack Query, better-auth, test libraries). `expo-*`,
+  `react-native` and any package with native code need a device rebuild that
+  this container cannot do. Defer them to a focused PR and say so. Keep
+  `@better-auth/expo` exactly in step with `better-auth` in BOTH `mobile` and
+  `web/workers/auth-api`.
+- **Check every `patchedDependencies` entry against `bun.lock`.** Bun patches the
+  exact version named and nothing else, and it says nothing when the version
+  moves on. `better-call@1.3.7` went unapplied from 2026-10-04 because better-auth
+  had moved to 1.4.x. If a bump moves a patched package, re-target the patch or
+  deliberately drop it in the same PR.
+- **Read a map-library bump against the CSP** in
+  `web/frontend/src/security-headers.ts`. mapbox-gl 3.33 compiles WebAssembly to
+  shape right-to-left text, and `script-src` has no `'wasm-unsafe-eval'`.
 - **GitHub Actions are pinned to commit SHAs**, with the release in a trailing
   comment (`uses: actions/checkout@<sha> # v5.1.0`), so nothing moves them for
   you. Each cycle, for every `uses:` in `.github/workflows/*.yml`, list the
