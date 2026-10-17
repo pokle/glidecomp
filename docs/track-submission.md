@@ -32,7 +32,12 @@ poster or behind a QR code at launch.
 ### One flow, two presentations
 
 The logic lives in `src/react/comp/SubmitTrackForm.tsx` and its DOM-free half
-in `submit-track.ts`. Two things render it:
+in `@glidecomp/client/submit` (`web/client/src/submit.ts`; the website's
+`submit-track.ts` re-exports it). That half — the default task, the endpoint
+and its headers (`submissionRequest`), the failure codes and their repairs,
+the receipt's formatting — is shared with the native app's submit sheet, so
+the two can never send a track differently (see "The native app" below). Two
+things render it on the website:
 
 - `pages/SubmitTrack.tsx` — as page content.
 - `comp/SubmitTrackDialog.tsx` — a `Modal` wrapper, for the **task page**
@@ -646,12 +651,44 @@ The button only appears when the task has a route, because there is nothing to
 fly without one. The component is `lazy()`-loaded so its code stays out of
 everyone else's bundle.
 
+## The native app
+
+The app (`mobile/`, stage 5 of
+[the mobile app plan](2026-10-05-mobile-app-plan.md)) submits through the same
+three routes with the same rules, from the shared module. What it adds:
+
+- **The track is written to the phone first.** Submit puts the gzipped file
+  in an upload queue on disk (`mobile/src/submit/queue.ts`), and only then
+  sends it. Without signal the sheet says the track is saved on the phone and
+  **not yet submitted**, and Me → Track uploads lists it until the server has
+  answered. It is sent again at launch, when the app returns to the screen,
+  when the signal comes back, and on a timer. On iOS the upload runs in a
+  background URL session.
+- **The retry rules are #481's.** A dropped request or a 5xx leaves the track
+  waiting; a 4xx is the server's answer and is never sent twice — the track
+  is marked "Not accepted" with the server's sentence, and "Fix and send
+  again" reopens the sheet on it. An upload that reached the server but whose
+  answer was lost is sent again, which replaces the track with the same file
+  and emails the pilot a second time — the price of never losing one.
+- **A track goes with the session that queued it.** One queued while signed
+  in waits, rather than going as somebody else, if that account signs out.
+- **"Open in GlideComp".** An `.igc` shared from Files, Mail or an
+  instrument's app opens the sheet with the file chosen: an iOS document type
+  (`com.glidecomp.igc`), Android VIEW and SEND intent filters, and
+  `mobile/modules/share-intake`, which turns an Android Share into the same
+  "open" so both arrive at `+native-intent.tsx`. A file without a readable
+  name is recognised by its content (`looksLikeIgc`).
+- The anonymous identifier is remembered in the phone's secure store rather
+  than plain storage, because it can be an email address.
+
 ## Where things are
 
 | Thing | File |
 |---|---|
 | The flow | `src/react/comp/SubmitTrackForm.tsx` |
-| Its DOM-free logic + tests | `src/react/comp/submit-track.ts` |
+| Its DOM-free logic | `web/client/src/submit.ts` (`@glidecomp/client/submit`) |
+| Its tests | `src/react/comp/submit-track.test.ts` |
+| The app's sheet, queue and share-sheet import | `mobile/src/app/submit.tsx`, `mobile/src/submit/` |
 | Dialog wrapper | `src/react/comp/SubmitTrackDialog.tsx` |
 | Admin per-row upload | `src/react/comp/TaskScoresAdmin.tsx` |
 | The page | `src/react/pages/SubmitTrack.tsx` |

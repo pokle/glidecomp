@@ -8,17 +8,19 @@ import { ListItem, Picker } from '@expo/ui';
 import type { ChoiceRowProps } from './choice-row.types';
 import { testIdModifiers } from './test-id';
 
-export function ChoiceRow<T extends string>({ title, value, choices, onChange, testID }: ChoiceRowProps<T>) {
+export function ChoiceRow<T extends string>({ title, value, choices, onChange, testID, stacked }: ChoiceRowProps<T>) {
+  const picker = (
+    <Picker selectedValue={value} onValueChange={(v) => onChange(v as T)}>
+      {choices.map((c) => (
+        <Picker.Item key={c.value} label={c.label} value={c.value} />
+      ))}
+    </Picker>
+  );
   return (
     <ListItem
       modifiers={testIdModifiers(testID)}
-      trailing={
-        <Picker selectedValue={value} onValueChange={(v) => onChange(v as T)}>
-          {choices.map((c) => (
-            <Picker.Item key={c.value} label={c.label} value={c.value} />
-          ))}
-        </Picker>
-      }>
+      trailing={stacked ? undefined : picker}
+      supportingText={stacked ? picker : undefined}>
       {title}
     </ListItem>
   );

@@ -11,7 +11,8 @@
     "android": "bun run prepare-sources && expo run:android",
     "test": "bun run prepare-sources && jest",
     "typecheck": "bun run prepare-sources && tsc --noEmit",
-    "e2e": "maestro test .maestro"
+    "e2e": "maestro test .maestro",
+    "seed:submit": "bun scripts/seed-submit-comp.ts"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.2",

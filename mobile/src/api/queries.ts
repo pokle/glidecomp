@@ -6,12 +6,14 @@
  */
 import type { PilotFlight, PilotProfile, PilotRegistration } from '@glidecomp/client/account';
 import type { SearchResults } from '@glidecomp/client/search';
+import type { IdentifierKind, OpenCompsResponse, RegistrationState } from '@glidecomp/client/submit';
 import { MIN_SEARCH_CHARS } from '@glidecomp/client/search';
 import type {
   CompDetailData,
   CompListEntry,
   CompScores,
   PilotAnalysisData,
+  PilotListEntry,
   TaskDetailData,
   TaskScoreData,
 } from '@glidecomp/client/types';
@@ -20,7 +22,8 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { igcText } from '@/lib/igc-text';
 
-import { api, getBytes, getJson } from './client';
+import { api, apiFetch, getBytes, getJson } from './client';
+import { API_ORIGIN } from './config';
 
 export function useComps() {
   return useQuery({
@@ -216,5 +219,76 @@ export function useProfile(userId: string | null) {
     enabled: userId !== null,
     queryFn: ({ signal }) =>
       getJson<PilotProfile>((s) => api.api.comp.pilot.$get(undefined, { init: { signal: s } }), signal),
+  });
+}
+
+// ── Submitting a track (stage 5) ───────────────────────────────────────────
+
+/**
+ * The competitions open for submissions now, each with its tasks and the one
+ * most likely meant — what the submit sheet's task step lists. Persisted like
+ * every read, so a pilot who opened the app this morning can still pick a
+ * task on a landing paddock with no signal.
+ */
+export function useOpenComps() {
+  return useQuery({
+    queryKey: ['openComps'],
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<OpenCompsResponse>(
+          (s) => api.api.comp['open-now'].$get(undefined, { init: { signal: s } }),
+          signal,
+        )
+      ).comps,
+  });
+}
+
+/**
+ * Which registration in a comp the signed-in pilot is, asked before a file is
+ * chosen: the upload refuses to guess when the roster holds unclaimed entries
+ * (409 identity_ambiguous), and a refusal after the file is chosen is a
+ * refusal at the worst moment. Strictly read-only on the server, but a POST
+ * (the identifier can be an email address), so a development build reading
+ * production cannot ask — and cannot submit either.
+ *
+ * Not kept on the phone: it is the server's answer for this moment, and a
+ * claim made since would make yesterday's "choose" wrong.
+ */
+export function useRegistrationState(
+  compId: string | null,
+  userId: string | null,
+  identifier: { kind: IdentifierKind; value: string } | null,
+) {
+  return useQuery({
+    queryKey: ['registrationState', compId, userId, identifier],
+    enabled: compId !== null && userId !== null,
+    meta: { persist: false },
+    staleTime: 60_000,
+    queryFn: ({ signal }) =>
+      getJson<RegistrationState>(
+        (s) =>
+          apiFetch(`${API_ORIGIN}/api/comp/${encodeURIComponent(compId!)}/registration/resolve`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(identifier ? { identifier } : {}),
+            signal: s,
+          }),
+        signal,
+      ),
+  });
+}
+
+/** A comp's roster, for an organiser (or a pilot the comp lets) submitting on someone's behalf. */
+export function useRoster(compId: string | null, { enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: ['roster', compId],
+    enabled: enabled && compId !== null,
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ pilots: PilotListEntry[] }>(
+          (s) => api.api.comp[':comp_id'].pilot.$get({ param: { comp_id: compId! } }, { init: { signal: s } }),
+          signal,
+        )
+      ).pilots,
   });
 }

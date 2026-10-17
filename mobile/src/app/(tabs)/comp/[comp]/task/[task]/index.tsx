@@ -5,7 +5,7 @@
  */
 import { calculateOptimizedTaskDistance, formatDistance } from '@glidecomp/engine';
 import type { PilotFlight } from '@glidecomp/client/account';
-import { formatTaskDate, ordinal } from '@glidecomp/client/format';
+import { formatTaskDate, isPastCloseDate, ordinal } from '@glidecomp/client/format';
 import { idFromSegment, pilotPath, taskPath, taskRoutePath, taskWeatherPath } from '@glidecomp/client/slug';
 import type { CompDetailData, TaskDetailData } from '@glidecomp/client/types';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -17,7 +17,7 @@ import { useUserId } from '@/auth/session';
 import { flightOnTask, submittedWhen } from '@/lib/yours';
 import { taskStatusLines } from '@/lib/task-status';
 import { useUnits } from '@/settings/units';
-import { GroupedList, Group, Note, Row } from '@/ui/grouped-list';
+import { ActionRow, GroupedList, Group, Note, Row } from '@/ui/grouped-list';
 import { QueryGate, StaleBanner } from '@/ui/QueryStates';
 
 export default function TaskScreen() {
@@ -57,6 +57,9 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
   const flights = useMyFlights(registered ? userId : null);
   const base = taskPath(task.comp_id, compName, task.task_id, task.name);
   const go = (path: string) => () => router.push(path as never);
+  // The website's rule: nobody submits after the comp closes; a task closed
+  // for submissions still takes tracks from its organisers.
+  const canSubmit = !!comp && !isPastCloseDate(comp.close_date) && (!task.submissions_closed || comp.is_admin);
   return (
     <GroupedList testID="task-screen">
       <Group>
@@ -69,6 +72,18 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
           <Row key={line.title} testID="task-status" title={line.title} detail={line.detail} />
         ))}
       </Group>
+
+      {canSubmit ? (
+        <Group>
+          <ActionRow
+            testID="task-submit"
+            title="Submit track"
+            onPress={() =>
+              router.push({ pathname: '/submit', params: { comp: task.comp_id, task: task.task_id } } as never)
+            }
+          />
+        </Group>
+      ) : null}
 
       <Group title="Route">
         {task.xctsk ? (

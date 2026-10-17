@@ -77,6 +77,27 @@ const withoutAppleSignIn: ConfigPlugin = (config) => {
   return config;
 };
 
+/**
+ * "Open in GlideComp" for a tracklog (stage 5). IGC has no system type on
+ * either platform, so the app declares one.
+ *
+ * iOS: an imported type for the `.igc` extension, and a document type that
+ * lists the app as one that can open it — which puts GlideComp in the share
+ * sheet of Files, Mail and an instrument's app. `LSSupportsOpeningDocumentsInPlace`
+ * off makes iOS hand over a copy (in the app's Inbox) rather than the original.
+ * If an instrument's app exports a type of its own for `.igc`, iOS prefers
+ * that one, so its identifier goes in `IGC_TYPES` too.
+ */
+const IGC_TYPES = ['com.glidecomp.igc'];
+
+/**
+ * Android: Open with (VIEW) and Share (SEND). An IGC file has no registered
+ * MIME type, so apps label it in several ways; these are the ones that do not
+ * also claim every photo on the phone. A SEND is turned into a VIEW by
+ * modules/share-intake, so both arrive the same way.
+ */
+const IGC_MIME_TYPES = ['application/octet-stream', 'application/x-igc', 'application/vnd.fai.igc', 'text/plain', 'text/x-igc'];
+
 const config: ExpoConfig = {
   name: production ? 'GlideComp' : 'GlideComp Dev',
   slug: 'glidecomp',
@@ -90,9 +111,51 @@ const config: ExpoConfig = {
     // layout rather than a stretched one.
     supportsTablet: false,
     usesAppleSignIn: appleSignIn,
+    infoPlist: {
+      CFBundleDocumentTypes: [
+        {
+          CFBundleTypeName: 'IGC tracklog',
+          CFBundleTypeRole: 'Viewer',
+          LSHandlerRank: 'Alternate',
+          LSItemContentTypes: IGC_TYPES,
+        },
+      ],
+      UTImportedTypeDeclarations: [
+        {
+          UTTypeIdentifier: IGC_TYPES[0],
+          UTTypeDescription: 'IGC tracklog',
+          UTTypeConformsTo: ['public.data'],
+          UTTypeTagSpecification: { 'public.filename-extension': ['igc', 'IGC'] },
+        },
+      ],
+      LSSupportsOpeningDocumentsInPlace: false,
+    },
   },
   android: {
     package: production ? 'com.glidecomp.app' : 'com.glidecomp.app.dev',
+    intentFilters: [
+      {
+        action: 'VIEW',
+        category: ['DEFAULT'],
+        data: IGC_MIME_TYPES.map((mimeType) => ({ scheme: 'content', mimeType })),
+      },
+      // A file manager that names the file rather than its type. A filter of
+      // its own: Android merges the <data> of one filter, so a path pattern
+      // beside the MIME types would restrict every one of them to it.
+      {
+        action: 'VIEW',
+        category: ['DEFAULT'],
+        data: [
+          { scheme: 'content', mimeType: '*/*', pathPattern: '.*\\\\.igc' },
+          { scheme: 'content', mimeType: '*/*', pathPattern: '.*\\\\.IGC' },
+        ],
+      },
+      {
+        action: 'SEND',
+        category: ['DEFAULT'],
+        data: IGC_MIME_TYPES.map((mimeType) => ({ mimeType })),
+      },
+    ],
   },
   plugins: [
     'expo-router',

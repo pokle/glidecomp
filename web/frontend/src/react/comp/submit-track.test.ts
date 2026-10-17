@@ -13,11 +13,15 @@ import {
   formatRetryAfter,
   formatTrackAltitude,
   formatTrackDistance,
+  igcPilotNameFromText,
   inferIdentifierKind,
+  looksLikeIgc,
   needsSignIn,
   pickDefaultTask,
   readLastSubmission,
   repairStepFor,
+  submissionRequest,
+  submitErrorFrom,
   taskLine,
   unnamedClasses,
   writeLastSubmission,
@@ -543,5 +547,89 @@ describe("formatting the summary", () => {
     expect(formatRetryAfter(7200)).toBe("in about 2 hours");
     expect(formatRetryAfter(600)).toBe("in about 10 minutes");
     expect(formatRetryAfter(30)).toBe("in a moment");
+  });
+});
+
+describe("submissionRequest — which endpoint, decided once for every client", () => {
+  test("signed in for themselves: the plain route, no header unless they answered", () => {
+    expect(submissionRequest("abc", "def", { kind: "self" })).toEqual({
+      path: "/api/comp/abc/task/def/igc",
+      headers: {},
+    });
+    expect(submissionRequest("abc", "def", { kind: "self", registration: null }).headers).toEqual({});
+  });
+
+  test("the registration answer travels in one header", () => {
+    expect(
+      submissionRequest("abc", "def", { kind: "self", registration: "xyz" }).headers
+    ).toEqual({ "x-comp-pilot": "xyz" });
+    expect(
+      submissionRequest("abc", "def", { kind: "self", registration: NEW_PILOT_SENTINEL })
+        .headers
+    ).toEqual({ "x-comp-pilot": "new-pilot" });
+  });
+
+  test("on behalf: the pilot is in the path", () => {
+    expect(submissionRequest("abc", "def", { kind: "on-behalf", compPilotId: "pqr" })).toEqual({
+      path: "/api/comp/abc/task/def/igc/pqr",
+      headers: {},
+    });
+  });
+
+  test("anonymous: the identifier rides in headers, trimmed and encoded, never the URL", () => {
+    const req = submissionRequest("abc", "def", {
+      kind: "anonymous",
+      identifierKind: "email",
+      identifierValue: "  jo+hg@example.com ",
+    });
+    expect(req.path).toBe("/api/comp/abc/task/def/igc/open-submit");
+    expect(req.path).not.toContain("example");
+    expect(req.headers).toEqual({
+      "x-pilot-ident-kind": "email",
+      "x-pilot-ident": "jo%2Bhg%40example.com",
+    });
+  });
+});
+
+describe("submitErrorFrom", () => {
+  test("keeps the server's sentence and code", () => {
+    expect(submitErrorFrom({ error: "No pilot matches", code: "no_pilot_match" })).toEqual({
+      error: "No pilot matches",
+      code: "no_pilot_match",
+    });
+  });
+
+  test("a body with nothing to read still says something", () => {
+    expect(submitErrorFrom(null).error).toBe("We could not accept that track.");
+    expect(submitErrorFrom({ code: "invalid_file" })).toEqual({
+      code: "invalid_file",
+      error: "We could not accept that track.",
+    });
+  });
+});
+
+describe("looksLikeIgc", () => {
+  const igc = "AXCT0f3a2b\r\nHFDTEDATE:140126\r\nB1203004730123S15302456EA0045600512\r\n";
+
+  test("a .igc name is enough, whatever the case", () => {
+    expect(looksLikeIgc("Task 3.IGC", "")).toBe(true);
+  });
+
+  test("no name: the A record and a fix decide", () => {
+    expect(looksLikeIgc(null, igc)).toBe(true);
+    expect(looksLikeIgc("12345", igc)).toBe(true);
+  });
+
+  test("anything else is not a track", () => {
+    expect(looksLikeIgc("photo.jpg", "\u00ff\u00d8\u00ff")).toBe(false);
+    expect(looksLikeIgc(null, "A note to myself")).toBe(false);
+  });
+});
+
+describe("igcPilotNameFromText", () => {
+  test("reads the pilot in charge, and ignores placeholders", () => {
+    expect(igcPilotNameFromText("HFPLTPILOTINCHARGE:Jo Bloggs\r\n")).toBe("Jo Bloggs");
+    expect(igcPilotNameFromText("HOPLTPILOT: not set\r\n")).toBeNull();
+    expect(igcPilotNameFromText("HFDTE140126\r\n")).toBeNull();
   });
 });

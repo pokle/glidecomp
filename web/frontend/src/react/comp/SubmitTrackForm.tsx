@@ -30,18 +30,21 @@ import { useUser } from "../lib/user";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
 import {
   IDENTIFIER_KINDS,
-  NEW_PILOT_SENTINEL,
   NOT_AN_IGC_MESSAGE,
+  igcPilotNameFromText,
   inferIdentifierKind,
   pickDefaultTask,
   readLastSubmission,
   repairStepFor,
+  submissionRequest,
+  submitErrorFrom,
   taskLine,
   tooLargeReason,
   writeLastSubmission,
   type FlightSummaryWire,
   type IdentifierKind,
   type OpenComp,
+  type SubmitAcceptedWire,
   type OpenCompsResponse,
   type RegistrationState,
   type TrackQualityWire,
@@ -80,16 +83,9 @@ export interface SubmitTrackResult {
   timezone: string | null;
 }
 
-/**
- * Pull the pilot's name out of an IGC header (HFPLTPILOTINCHARGE / HOPLT…).
- * Returns null for missing or placeholder values ("not set", "unknown").
- */
-export function igcPilotNameFromText(text: string): string | null {
-  const m = text.match(/^H[FOP]PLT[^:\r\n]*:[ \t]*(.+?)[ \t]*\r?$/im);
-  const name = m?.[1]?.trim();
-  if (!name || /^(not[ _-]?set|unknown|pilot)$/i.test(name)) return null;
-  return name;
-}
+// Moved to @glidecomp/client/submit with the rest of the flow's rules; kept
+// importable from here.
+export { igcPilotNameFromText };
 
 export function SubmitTrackForm({
   prefill,
@@ -392,25 +388,21 @@ export function SubmitTrackForm({
       const tooLarge = tooLargeReason(file.size, compressed.byteLength);
       if (tooLarge) return fail(tooLarge, "invalid_file");
 
-      const base = `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc`;
-      let url = base;
-      const headers: Record<string, string> = {};
-      if (user) {
-        // Signed in: the existing routes, and with them open registration and
-        // whatever on-behalf rights this pilot already has.
-        if (onBehalfOf !== SELF) {
-          url = `${base}/${encodeURIComponent(onBehalfOf)}`;
-        } else if (chosenRegistration) {
-          // Which registration this is. Only ever sent when the pilot answered
-          // the question — the server's own resolution is otherwise the one
-          // that applies, and it refuses to guess rather than duplicating.
-          headers["x-comp-pilot"] = chosenRegistration;
-        }
-      } else {
-        url = `${base}/open-submit`;
-        headers["x-pilot-ident-kind"] = identifierKind;
-        headers["x-pilot-ident"] = encodeURIComponent(identifierValue.trim());
-      }
+      // Which endpoint is decided by the shared rules, so the website and
+      // the app can never disagree about it. Signed in: the existing routes,
+      // and with them open registration and whatever on-behalf rights this
+      // pilot already has. The registration answer is only ever sent when the
+      // pilot gave one — the server's own resolution otherwise applies, and
+      // it refuses to guess rather than duplicating.
+      const { path: url, headers } = submissionRequest(
+        compId,
+        taskId,
+        user
+          ? onBehalfOf !== SELF
+            ? { kind: "on-behalf", compPilotId: onBehalfOf }
+            : { kind: "self", registration: chosenRegistration }
+          : { kind: "anonymous", identifierKind, identifierValue }
+      );
 
       const res = await fetch(url, {
         method: "POST",
@@ -420,17 +412,11 @@ export function SubmitTrackForm({
       });
 
       if (!res.ok) {
-        // Guarded: a non-JSON error body must not be reported as a network
-        // error, which is what hid the real message before.
-        const body = (await res.json().catch(() => ({}))) as Partial<SubmitError>;
-        setFailure({
-          ...body,
-          error: body.error || "We could not accept that track.",
-        });
+        setFailure(submitErrorFrom(await res.json().catch(() => null)));
         return;
       }
 
-      const data = (await res.json()) as Record<string, any>;
+      const data = (await res.json()) as SubmitAcceptedWire;
       const uploaded: SubmitTrackResult = {
         compId,
         taskId,
