@@ -4,6 +4,66 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-10-18 — React 19.3 (focused PR, #744)
+
+This is not a weekly cycle. It is the React minor that four cycles deferred,
+done on its own as [#744](https://github.com/pokle/glidecomp/issues/744)
+asked. **Take react / react-dom / their types off the "Not upgraded" table.**
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **react**, **react-dom** | 19.2.8 | 19.3.1 | frontend | Still pinned exactly. `scheduler` 0.27 → 0.28 comes with react-dom. |
+| @types/react, @types/react-dom | ~19.2.18 / ~19.2.7 | ~19.3.0 | frontend | Lifted in the same change, as the 2026-09-13 lesson requires. |
+
+**The mobile app's React is untouched.** `mobile` still resolves `react@19.3.0`
+(Expo SDK 58's pin), and so do the `react-native` and `react-reconciler` it
+loads. A clean `--frozen-lockfile` install confirms it. The lockfile drops their
+nested `react@19.3.0`/`scheduler@0.28.0` keys only because the hoisted copies
+now satisfy those ranges. Peer resolution still sends them to mobile's copy.
+
+The two risks the previous entry named do not reach this tree:
+
+- **Trusted Types integration.** Trusted Types headers cover only `/analysis*`
+  and `/replay*`. Those are the vanilla-TS pages, and no chunk they load or
+  lazy-load contains React (checked in the built `dist/assets`). The SPA has
+  no `dangerouslySetInnerHTML`.
+- **StrictMode double-invokes effects during hydration.** That is dev-only,
+  and dev serves the SPA shell through `createRoot` without SSR, which has
+  double-invoked since React 18. The SSR harness hydrates a production build,
+  which never double-invokes. No setup we run reaches the new path.
+
+### Code Changes
+
+**The SSR hydration check could not fail, and that was true before this
+upgrade too.** `e2e/ssr.spec.ts` "SSR — hydration is clean" listened only on
+`console`. The harness serves a production build, and there `hydrateRoot`'s
+default `onRecoverableError` sends a mismatch to `window.reportError`.
+Playwright reports that as `pageerror` ("Minified React error #418"), and
+nothing reaches `console`. A probe that planted a text mismatch in `/comp`'s SSR
+HTML confirmed it: zero console errors and one page error. The test now listens
+on both. The same planted mismatch fails it, and every page passes without it.
+**Every earlier "hydration-mismatch checks passed" line in this log proved
+nothing about hydration.**
+
+### Verification
+
+- `bun run --filter '@glidecomp/frontend' typecheck`: clean.
+- `bun run test:all` (includes `typecheck:all`): 1703 root/engine, 954
+  frontend, 221 auth-api (6 todo), 794 competition-api, 70 mobile. 0 fail.
+- `bun run build`: clean, 9 Astro pages.
+- `bun run test:e2e:ssr`: **67/67**, with the hydration check repaired. This
+  run is the verdict #744 asked for.
+- `bun run test:e2e`: **223 passed, 9 skipped** in 24.0 minutes, exit 0. These
+  are the same counts as the weekly cycle above. The only `✘` lines are the
+  worker's Open-Meteo HTTP 429 log lines, not test results.
+
+### Lessons
+
+- **Before you trust a green check, make it fail once.** The hydration test
+  was named as the verdict for this upgrade in four log entries, and it had
+  never been able to fail. Plant the fault, check that the test fails, then
+  remove the fault.
+
 ## 2026-10-18
 
 **`bun audit` opens and closes at 2 high, and neither has a patched release on
