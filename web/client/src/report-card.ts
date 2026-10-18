@@ -11,6 +11,8 @@ import {
   explainGapScore,
   explainManualFlightScore,
   explainOpenDistanceScore,
+  getEffectiveSSSIndex,
+  getOptimizedSegmentDistances,
   resolveCompGapParams,
   reviveTurnpointSequenceResult,
   taskForDistanceOrigin,
@@ -105,12 +107,41 @@ export class ScorePendingError extends Error {
  * cache-versioning guarantee is broken — a bug to fix, not a state to
  * present to the user.
  */
-function assertAnalysisMatchesScore(analysedDistance: number, scoredDistance: number) {
+export function assertAnalysisMatchesScore(analysedDistance: number, scoredDistance: number) {
   if (Math.abs(analysedDistance - scoredDistance) > 500) {
     console.error(
       `Score/analysis mismatch: analysis says ${analysedDistance} m, published score says ${scoredDistance} m — the scoring cache-versioning guarantee is broken`,
     );
   }
+}
+
+/**
+ * The distance the scorer must have published for a pilot whose track the
+ * analysis measured as `analysedDistance`, on the same `scoringTask` the
+ * scorer used. Usually that is the flown distance floored at the minimum
+ * (FAI S7F §12.1), but a neutralised early start (§13.3) is scored for a
+ * distance the pilot did not fly — the engine's `applyEarlyStarts` replaces
+ * it before scoring (issue #742):
+ * - HG beyond the jump-the-gun limit: the minimum distance only;
+ * - PG: the fixed launch→SSS leg of the optimised task line, floored at the
+ *   minimum (it is 0 under distanceOrigin "start", where the task begins at
+ *   the SSS).
+ */
+export function expectedScoredDistance(
+  analysedDistance: number,
+  earlyStartOutcome: PilotScoreEntry["early_start_outcome"],
+  scoringTask: XCTask,
+  minimumDistance: number,
+): number {
+  if (earlyStartOutcome === "hg_min_distance") return minimumDistance;
+  if (earlyStartOutcome === "pg_launch_to_sss") {
+    const segs = getOptimizedSegmentDistances(scoringTask);
+    const sssIdx = Math.max(0, getEffectiveSSSIndex(scoringTask));
+    let launchToSss = 0;
+    for (let i = 0; i < sssIdx; i++) launchToSss += segs[i];
+    return Math.max(launchToSss, minimumDistance);
+  }
+  return Math.max(analysedDistance, minimumDistance);
 }
 
 const ANCHOR_EVENT_TYPE: Record<ExplanationAnchor["kind"], FlightEventType> = {
@@ -366,7 +397,7 @@ export function buildReportCard(
     });
     const minimumDistance = params.minimumDistance ?? 5000;
     assertAnalysisMatchesScore(
-      Math.max(mf.made_good, minimumDistance),
+      expectedScoredDistance(mf.made_good, entry.early_start_outcome, scoringTask, minimumDistance),
       entry.flown_distance,
     );
     return {
@@ -410,7 +441,12 @@ export function buildReportCard(
 
   const minimumDistance = params.minimumDistance ?? 5000;
   assertAnalysisMatchesScore(
-    Math.max(result.flownDistance, minimumDistance),
+    expectedScoredDistance(
+      result.flownDistance,
+      entry.early_start_outcome,
+      scoringTask,
+      minimumDistance,
+    ),
     entry.flown_distance,
   );
 
