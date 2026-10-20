@@ -17,25 +17,28 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
   anything a workspace declares for itself does not belong at the root.
 - Check for upgrades with `bun outdated` — but **`bun outdated` at the repo root
   reports the ROOT workspace only.** Run it again from inside `web/frontend`,
-  each `web/workers/*`, `web/engine`, `web/client` and `mobile`, or you will
-  miss most of the tree (on 2026-09-13 the root listed 7 rows; `web/frontend`
-  alone listed 23 more).
-- **`mobile` is an Expo app, and its versions are Expo's to choose.** Run
-  `cd mobile && bunx expo install --check` and read [mobile/CLAUDE.md](../../mobile/CLAUDE.md)
-  before touching it. Bump only what that check expects, and only where the bump
-  is JS-only (TanStack Query, better-auth, test libraries). `expo-*`,
-  `react-native` and any package with native code need a device rebuild that
-  this container cannot do. Defer them to a focused PR and say so. Keep
-  `@better-auth/expo` exactly in step with `better-auth` in BOTH `mobile` and
-  `web/workers/auth-api`.
-- **Check every `patchedDependencies` entry against `bun.lock`.** Bun patches the
-  exact version named and nothing else, and it says nothing when the version
-  moves on. `better-call@1.3.7` went unapplied from 2026-10-04 because better-auth
-  had moved to 1.4.x. If a bump moves a patched package, re-target the patch or
-  deliberately drop it in the same PR.
+  each `web/workers/*` and `web/engine`, or you will miss most of the tree (on
+  2026-09-13 the root listed 7 rows; `web/frontend` alone listed 23 more).
+  Take the list from the root `package.json`'s `workspaces` rather than from
+  this sentence — it now includes `mobile` (the Expo app), `web/client` and
+  `web/samples`, and will grow again.
+- **The `mobile` workspace's Expo SDK and native packages are not a weekly
+  bump.** `expo`, every `expo-*`, `react-native`, `@rnmapbox/maps`,
+  `react-native-*` and the app's `react` move together through
+  `bunx expo install --fix` (see [mobile/CLAUDE.md](../../mobile/CLAUDE.md)),
+  and only a native rebuild on a device proves them — nothing this routine runs
+  does. Take the pure-JS ones (`@tanstack/*`, `@babel/runtime`, test
+  libraries) and keep `better-auth` / `@better-auth/expo` at the same version
+  as `web/workers/auth-api`; leave the rest for a focused PR and list them.
+- **A `patchedDependencies` entry is keyed by an exact version.** When the
+  package moves past it, bun prints `warn: patches/<pkg>@<ver>.patch no longer
+  applies` and silently runs the unpatched code. Treat that warning as a
+  finding: decide whether the patch is still needed on the new version and
+  either port it or delete the entry and the file.
 - **Read a map-library bump against the CSP** in
-  `web/frontend/src/security-headers.ts`. mapbox-gl 3.33 compiles WebAssembly to
-  shape right-to-left text, and `script-src` has no `'wasm-unsafe-eval'`.
+  `web/frontend/src/security-headers.ts`. Grep the new dist for `WebAssembly.`,
+  `new Function` and `eval`: `script-src` has no `'wasm-unsafe-eval'`, and
+  mapbox-gl 3.33 compiles WebAssembly to shape right-to-left text.
 - **GitHub Actions are pinned to commit SHAs**, with the release in a trailing
   comment (`uses: actions/checkout@<sha> # v5.1.0`), so nothing moves them for
   you. Each cycle, for every `uses:` in `.github/workflows/*.yml`, list the

@@ -16,7 +16,7 @@
     "@glidecomp/worker-kit": "workspace:*",
     "better-auth": "^1.7.10",
     "hono": "^4.13.13",
-    "kysely": "^0.28.17",
+    "kysely": "^0.28.18",
     "kysely-d1": "^0.4.0"
   },
   "devDependencies": {

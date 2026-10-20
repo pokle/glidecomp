@@ -4,7 +4,209 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-10-18 — React 19.3 (focused PR, #744)
+
+This is not a weekly cycle. It is the React minor that four cycles deferred,
+done on its own as [#744](https://github.com/pokle/glidecomp/issues/744)
+asked. **Take react / react-dom / their types off the "Not upgraded" table.**
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **react**, **react-dom** | 19.2.8 | 19.3.1 | frontend | Still pinned exactly. `scheduler` 0.27 → 0.28 comes with react-dom. |
+| @types/react, @types/react-dom | ~19.2.18 / ~19.2.7 | ~19.3.0 | frontend | Lifted in the same change, as the 2026-09-13 lesson requires. |
+
+**The mobile app's React is untouched.** `mobile` still resolves `react@19.3.0`
+(Expo SDK 58's pin), and so do the `react-native` and `react-reconciler` it
+loads. A clean `--frozen-lockfile` install confirms it. The lockfile drops their
+nested `react@19.3.0`/`scheduler@0.28.0` keys only because the hoisted copies
+now satisfy those ranges. Peer resolution still sends them to mobile's copy.
+
+The two risks the previous entry named do not reach this tree:
+
+- **Trusted Types integration.** Trusted Types headers cover only `/analysis*`
+  and `/replay*`. Those are the vanilla-TS pages, and no chunk they load or
+  lazy-load contains React (checked in the built `dist/assets`). The SPA has
+  no `dangerouslySetInnerHTML`.
+- **StrictMode double-invokes effects during hydration.** That is dev-only,
+  and dev serves the SPA shell through `createRoot` without SSR, which has
+  double-invoked since React 18. The SSR harness hydrates a production build,
+  which never double-invokes. No setup we run reaches the new path.
+
+### Code Changes
+
+**The SSR hydration check could not fail, and that was true before this
+upgrade too.** `e2e/ssr.spec.ts` "SSR — hydration is clean" listened only on
+`console`. The harness serves a production build, and there `hydrateRoot`'s
+default `onRecoverableError` sends a mismatch to `window.reportError`.
+Playwright reports that as `pageerror` ("Minified React error #418"), and
+nothing reaches `console`. A probe that planted a text mismatch in `/comp`'s SSR
+HTML confirmed it: zero console errors and one page error. The test now listens
+on both. The same planted mismatch fails it, and every page passes without it.
+**Every earlier "hydration-mismatch checks passed" line in this log proved
+nothing about hydration.**
+
+### Verification
+
+- `bun run --filter '@glidecomp/frontend' typecheck`: clean.
+- `bun run test:all` (includes `typecheck:all`): 1703 root/engine, 954
+  frontend, 221 auth-api (6 todo), 794 competition-api, 70 mobile. 0 fail.
+- `bun run build`: clean, 9 Astro pages.
+- `bun run test:e2e:ssr`: **67/67**, with the hydration check repaired. This
+  run is the verdict #744 asked for.
+- `bun run test:e2e`: **223 passed, 9 skipped** in 24.0 minutes, exit 0. These
+  are the same counts as the weekly cycle above. The only `✘` lines are the
+  worker's Open-Meteo HTTP 429 log lines, not test results.
+
+### Lessons
+
+- **Before you trust a green check, make it fail once.** The hydration test
+  was named as the verdict for this upgrade in four log entries, and it had
+  never been able to fail. Plant the fault, check that the test fails, then
+  remove the fault.
+
+## 2026-10-18
+
+**`bun audit` opens and closes at 2 high, and neither has a patched release on
+npm.** `braces` is the one carried from 2026-10-04. `node-forge` is new: it
+arrived with the `mobile` workspace (the Expo app, stages 1–5,
+#733–#740). Everything taken below is a patch or an additive minor that needed
+no source change. The one real finding is a **dead `better-call` patch**: it has
+not applied since 2026-09-20, and bun has warned about it on every install
+since then.
+
+### Security Vulnerabilities Fixed
+
+**None could be fixed.** Both open advisories are at the newest version
+published:
+
+| Advisory | Severity | Package | Status |
+|----------|----------|---------|--------|
+| [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | high | `braces` `<=3.0.3` | Open. `npm view braces versions` still ends at 3.0.3. There are now ten paths: `shadcn` → `@shadcn/registry` → `fast-glob` (frontend), and nine in `mobile` through `jest`, `metro` and `expo`. Every one is a build-time or test-time glob over patterns from this repo, never from a user. |
+| [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) | high | `node-forge` `<=1.4.0` (via `mobile` → `expo` → `@expo/cli`) | **New, not fixable.** `npm view node-forge versions` ends at 1.4.0, so there is no version to override to. `@expo/cli` uses it for development certificates (`@expo/devcert`) and code-signing certificate generation. It runs on a developer's machine during `expo start`/`run`. It is not bundled into the app, and nothing in the web or worker tree depends on it. **Re-run `npm view node-forge versions` next cycle** and add an override when 1.4.1 or later appears. |
+
+A subagent also queried npm's bulk advisory endpoint for every "from" version in
+the table below. It reported no GHSA or CVE against any of them. `dompurify`
+3.4.17 and `vite` 8.3.3 carry hardening with no advisory published yet.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth**, **@better-auth/api-key**, **@better-auth/expo** | 1.7.7 | 1.7.10 | frontend, auth-api, mobile | Most of the change is in 1.7.8. **There is no schema change**: the one migration fix (foreign keys when a custom table name matches another model key, #11505) does not reach this tree. The `lastLoginMethod` cookie now takes the session cookie's `Secure`/scope attributes. The session cookie itself is unchanged. Also: stale customSession cookies are cleared on expiry, and the JWKS refetch is rate-limited. 1.7.9 and 1.7.10 are oauth-provider and One Tap fixes. `@better-auth/expo` stays pinned exactly, at the same version in auth-api and mobile. It brings `better-call` 1.4.0 → 1.4.2; see Code Changes. |
+| **react-aria-components** | 1.21.1 | 1.22.1 | frontend | Minor. No export was renamed or removed. It adds `Sheet`/`SheetTrigger` (unused here; `rac/full-screen-sheet.tsx` is ours), and overlays now account for the virtual keyboard. Behaviour fixes: a nested Popover stops inheriting the outer one's context, ComboBox reopens when async items arrive, and `suppressHydrationWarning` is forwarded. The e2e suite is the check. |
+| **astro** | 7.3.5 | 7.4.0 | frontend (dev) | **Node floor 22.12.0 → 22.22.0.** CI's `setup-node` asks for `22`, which resolves to the newest 22.x (≥ 22.22), so no workflow change is needed. The local container runs 22.22.0. It adds `build --timings` and separate build/runtime image services. The same 9 pages build. |
+| **mapbox-gl** | 3.32.0 | 3.33.0 | root, frontend | **Breaking in name only:** `setRTLTextPlugin`, `getRTLTextPluginStatus` and `PluginStatus` are removed (`grep` finds no use in `web/` or `mobile/`). RTL shaping is now a WASM module loaded lazily from `RTL_TEXT_URL`, beside the Draco, meshopt and building-gen WASM that 3.32 already loaded the same way. The CSP needed nothing new for those, so it needs nothing new for this one. |
+| **kysely** | 0.28.17 | 0.28.18 | auth-api (+ root override) | Backports from 0.29. On SQLite, `RETURNING` is now emitted before `ORDER BY`/`LIMIT` in deletes. |
+| **vite** | 8.3.2 | 8.3.4 | frontend (dev) + root override | 8.3.3 hardens the dev server (`fs.serve` checks for `?vite-wasm-instance`). 8.3.4 fixes preload/CSS edge cases. |
+| @vitejs/plugin-react | 6.1.1 | 6.1.2 | frontend (dev) | HMR fix. |
+| vitest | 4.1.11 | 4.1.12 | frontend, auth-api, competition-api (dev) | Mock hardening only. |
+| **@playwright/test** | 1.63.0 | 1.64.1 | root (dev) | Chromium 156. **Device descriptors now forward `screen`**, so the Pixel 7 project sees an emulated `window.screen`. Elements inside hidden iframes now count as hidden. 1.64.1 fixes a Chromium 155+ regression that aborted preflighted cross-origin redirects whenever a route was registered. `ensure-playwright-browsers.sh` fetched the new revision. |
+| lucide-react | 1.52.0 | 1.59.0 | frontend | About 22 icons added. None renamed or removed; the frontend `typecheck` is clean. |
+| dompurify | 3.4.16 | 3.4.17 | frontend | Sanitiser hardening (SAFE_FOR_TEMPLATES with shadow roots, SMIL `attributeName` in XHTML). |
+| shadcn | 4.21.1 | 4.22.1 | frontend | Registry schemas move to Zod 4. That matters only to programmatic users, and this tree imports one CSS file from it. |
+| concurrently | 9.2.4 | 9.2.5 | root (dev) | `shell-quote` bump. |
+| @types/bun | 1.4.2 | 1.4.3 | root (dev) | Types. |
+| @tanstack/react-query (+ `-persist-client`, `query-async-storage-persister`) | 5.104.1 | 5.104.4 | mobile | Patches. Pure JS. |
+| @babel/runtime | 7.29.7 | 7.29.10 | mobile | Patch. Stays on 7.x (8.x is a major). |
+| @testing-library/react-native, test-renderer | 14.0.1, 1.3.0 | 14.1.0, 1.3.1 | mobile (dev) | Test libraries. The 70 mobile Jest tests pass. |
+| `anthropics/claude-code-action` | v1.0.241 | v1.0.252 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `f27be6b6…`. The other six actions are already at the newest release in their major line. |
+
+### Code Changes Required
+
+**Removed a dead patch: `patches/better-call@1.3.7.patch`, and its
+`patchedDependencies` entry.** bun keys a patch by exact version. better-auth
+1.7 (the 2026-09-20 focused PR) moved `better-call` to 1.4.0, and the 1.3.7 patch
+has matched nothing since then. bun printed `warn: patches/better-call@1.3.7.patch
+no longer applies` on every install, and three cycles did not act on it.
+
+- **What the patch did.** It rewrote `createEndpoint` so that a handler's
+  rejection goes through `try/await` instead of `.catch()`. That changes one
+  thing: a handler that throws *synchronously* is also caught. better-call 1.4.2
+  still uses `.catch()`.
+- **Why deletion is right, not a port.**
+  - Every Better Auth endpoint is an `async` function, so a synchronous throw
+    cannot reach that code.
+  - `web/workers/auth-api/src` defines no endpoint of its own (`grep` for
+    `createAuthEndpoint`/`createEndpoint` finds nothing).
+  - The tree has run without the patch for four weeks, through two full e2e
+    cycles and this one.
+  - Its origin is lost: it arrived inside an unrelated squashed commit
+    (`bb20c44`).
+
+If a reason to keep it turns up, it is in git history, and it must be re-keyed
+to the current version to have any effect.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `kysely` (`^0.28.17` → `^0.28.18`) | Updated | Aligned with auth-api. |
+| `vite` (`^8.3.2` → `^8.3.4`) | Updated | Aligned with the frontend. |
+
+`bun.lock` holds one key each for `vite@8.3.4`, `kysely@0.28.18` and
+`better-call@1.4.2`. The nested `@better-auth/expo/better-call@1.4.0` copy from
+before the bump is gone.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **react**, **react-dom**, @types/react, @types/react-dom (frontend) | 19.2.8 / 19.2.18 / 19.2.7 | 19.3.1 / 19.3.0 | **Now tracked as [#744](https://github.com/pokle/glidecomp/issues/744)**, so it is no longer an orphan deferral. The changelog adds two reasons to keep it out of a weekly cycle. React 19.3 **turns on its Trusted Types integration**, and both of our pages run Trusted Types report-only. StrictMode now **double-invokes effects during hydration**, and `lib/use-back-dismiss.ts` is documented as having broken under StrictMode double-runs before. Both want a reviewer looking at them, not a bump riding in a batch. |
+| **mobile: Expo SDK and native packages** — `expo` 58.0.7→58.0.14, `expo-*` patches, `expo-router` 58.0.17→58.0.23, `@expo/ui`, `react-native` 0.88.0-rc.4→0.88.0, `@react-native/jest-preset`, `jest-expo`, `@rnmapbox/maps` 10.3.7→10.3.8, `react-native-safe-area-context` 5.9→5.10, `react-native-screens` 4.28→4.30, `react-native-svg` 15.15→15.16, mobile `react` 19.3.0→19.3.1 | — | — | These carry native code. They move together through `bunx expo install --fix` (mobile/CLAUDE.md), and only a native rebuild proves them. Nothing in this routine runs one. The release-candidate → final step for React Native 0.88 especially wants a device build. Leave it for a focused mobile PR. |
+| **wrangler** | 4.116.0 | 4.151.1 | Still capped (12 cycles). `wrangler@4.151.1` now depends on `miniflare 5.20261012.1-beta`. That is a **beta**, not the alpha of earlier cycles, but it is still not the stable 4.x line (`latest` is 4.20260730.0). |
+| @cloudflare/vitest-pool-workers, **vitest** 5 | 0.19.1, 4.1.12 | 0.23.0, 5.0.5 | Paired with the wrangler cap. 0.23.0 pins `wrangler 4.124.0` + `miniflare 5.20260815.0-alpha`. |
+| **@astrojs/mdx** | 7.0.8 | 8.1.0 | Still vestigial. It wants its own PR to delete it. |
+| **three**, **@types/three** | 0.185.x | 0.186.x | Pre-1.0 minor; focused PR. |
+| **katex** | 0.18.11 | 0.19.0 | Pre-1.0 minor; focused PR. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261018.1 | Major. |
+| zod, kysely 0.29, jsdom, concurrently 10, @types/node 26, @babel/runtime 8 | — | 4.6.7, 0.29.7, 30.1.3, 10.0.6, 26.6.5, 8.0.7 | Majors / pre-1.0 minors. Reasons unchanged from 2026-09-27. |
+
+### Verification
+
+- `bun run typecheck:all` (now including `typecheck:mobile`) and
+  `bun run --filter '@glidecomp/frontend' typecheck`: clean.
+- `bun run test:all`: 1705 root/engine, 954 frontend, 221 auth-api (6 todo),
+  794 competition-api and 70 mobile (Jest). 0 fail.
+- `bun run build`: clean, 9 Astro pages.
+- `bun run test:e2e`: **223 passed, 9 skipped** in 18.9 minutes, exit 0, on
+  the first run (with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`, so
+  `ensure-playwright-browsers.sh` fetched Playwright 1.64's Chromium). The
+  worker log printed `✘ [ERROR] weather fetch failed … HTTP 429` from
+  Open-Meteo's daily limit on the shared container IP. That line is a worker
+  log, not a test result; a filter on `✘` matches both.
+- `bun run test:e2e:ssr`: **67/67 passed** in 1.6 minutes, exit 0, including
+  the hydration-mismatch and Content-Security-Policy checks. This run covers
+  better-auth 1.7.10's cookies and react-aria-components 1.22 on the
+  server-rendered pages.
+- `bun audit`: 2 high before and 2 high after, neither with a patched
+  release.
+- Root `package.json` `dependencies`: read first and checked after every
+  `bun update`. Only the three legitimate entries are there.
+- Runtime floors: astro 7.4.0 asks for Node ≥ 22.22.0, and CI's
+  `node-version: 22` resolves above it.
+
+### Lessons / Notes for Future Sessions
+
+- **Read every `warn:` line `bun install` prints.** `patches/better-call@1.3.7.patch
+  no longer applies` had been printed since 2026-09-20. Three cycles ran past it,
+  because a patch that fails to apply is a warning, not an error, and the run
+  stays green. The routine now names this case.
+- **The workspace list grew without telling the routine.** `mobile`,
+  `web/client` and `web/samples` are new since the routine's `bun outdated`
+  sentence was written, and `mobile` alone listed 27 rows. The routine now says
+  to take the list from the root `workspaces` field.
+- **A new workspace brings new advisories.** `node-forge` was not in the tree
+  on 2026-10-04. The audit count rose because of Expo, not because anything
+  regressed. Read the `workspace:` prefix of each audit path before deciding
+  whose finding it is.
+- **`cd <workspace> && bun update <pkgs>` behaved for a seventh cycle**,
+  including in `mobile`. The root diff held only the hand-edited overrides and
+  the patch removal. An exactly pinned package (`@better-auth/expo`) is not
+  moved by `bun update`; edit it by hand in every workspace that pins it.
+
 ## 2026-10-17
+
+> **Superseded by the 2026-10-18 cycle above (#746); the tree carries that cycle's versions.** That cycle took the same upgrades and also took mapbox-gl 3.33, concluding the CSP needs nothing new. This entry's opposite reading (3.33's RTL shaping compiles WebAssembly that `script-src` without `'wasm-unsafe-eval'` refuses) has not been settled either way in a browser. Check a map with Arabic or Hebrew labels before trusting either entry.
 
 **`bun audit` opened at 2 high and closes at 2 high, and neither can be fixed
 from here: npm has no patched release for either package.** The new one is

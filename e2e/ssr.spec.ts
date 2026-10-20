@@ -649,11 +649,22 @@ test.describe("SSR — hydration is clean (real browser)", () => {
       };
       const url = urls[path];
 
+      // Listen on BOTH channels. This harness serves a production build, where
+      // hydrateRoot's default onRecoverableError hands a mismatch to
+      // window.reportError: it arrives as "Minified React error #418" on
+      // `pageerror` and never reaches `console` at all. Listening on `console`
+      // alone passed every page with a planted mismatch (#744). `console` stays
+      // for a development build, which logs the full message there.
+      const isHydrationError = (text: string) =>
+        /hydrat|did not match|#418|#423|server rendered/i.test(text);
       const hydrationErrors: string[] = [];
       page.on("console", (msg) => {
-        if (msg.type() === "error" && /hydrat|did not match|#418|#423|server rendered/i.test(msg.text())) {
+        if (msg.type() === "error" && isHydrationError(msg.text())) {
           hydrationErrors.push(msg.text());
         }
+      });
+      page.on("pageerror", (err) => {
+        if (isHydrationError(err.message)) hydrationErrors.push(err.message);
       });
       await page.goto(url);
       // Give hydration a beat to run and surface any mismatch.
