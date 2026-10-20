@@ -15,6 +15,7 @@ import type { CircleDetectionResult } from '../circle-detector';
 import { detectCircles } from '../circle-detector';
 import { detectTakeoffLanding } from '../takeoff-landing-detector';
 import { detectThermals, detectGlides } from '../flight-phase-detectors';
+import { medianInterval } from '../flight-summary';
 import { detectGaggles, DEFAULT_GAGGLE_PARAMS, type StartCylinder } from '../cluster-detector';
 import { DEFAULT_THRESHOLDS } from '../thresholds';
 import { getOptimizedSegmentDistances } from '../task-optimizer';
@@ -178,6 +179,7 @@ function analysePilot(
     landingIndex,
     sssMs: score.turnpointResult.sssReaching?.time.getTime() ?? null,
     essMs: score.turnpointResult.essReaching?.time.getTime() ?? null,
+    fixIntervalSeconds: medianInterval(fixes, takeoffIndex, landingIndex),
   };
 }
 

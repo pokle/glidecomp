@@ -18,10 +18,11 @@ import type {
   PilotAnalysisContext,
   PilotMetricValue,
   CategoricalReportSeries,
+  ReportCell,
   ReportTable,
 } from '../types';
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
-import { mean, median } from '../stats';
+import { combineWindEstimates, mean, median } from '../stats';
 import { allNullPerPilot, na } from './util';
 import { stepFor } from '../resample';
 import { ellipsoidDistance, localEastNorth } from '../../geo';
@@ -529,6 +530,79 @@ const essMargin: MetricComputer = {
  */
 const MIN_FINAL_LEG_METERS = 1000;
 
+/** Centre-drift estimates the last climb needs before its wind is trusted. */
+const MIN_FINAL_GLIDE_WIND_CIRCLES = 3;
+/** A shorter glide gives no stable ground speed to time the wind over. */
+const MIN_FINAL_GLIDE_SECONDS = 60;
+/**
+ * Slower than this over the ground, it was not a glide. A pilot far above
+ * glide who spirals off height near goal takes minutes over a few kilometres
+ * (Corryong 2026 T1: 1,600 m over 3.6 km at 18 km/h), and dividing the wind by
+ * that speed would "correct" a glide that never needed it. 407 of the
+ * archive's 408 measured final glides were faster.
+ */
+const MIN_FINAL_GLIDE_SPEED_MPS = 7;
+/** The share by which the wind must move the ratio to be counted as changing it. */
+const THROUGH_AIR_CHANGE = 0.1;
+
+interface ThroughAir {
+  /** Wind component along the line to goal, km/h; negative is a headwind. */
+  tailwindKmh: number;
+  /** Through-the-air ratio ÷ over-the-ground ratio. */
+  factor: number;
+}
+
+/**
+ * How the wind the pilot's own last climb measured changes the glide they
+ * committed to. The glide to goal takes D / vg at the pilot's made-good
+ * ground speed vg, and over that time the air moves W·t, so the path through
+ * the air is D·û − W·D/vg and the ratio scales by |û − W/vg|. Over the archive
+ * this moves the committed ratio by 10% or more for 41% of ESS pilots
+ * (docs/2026-10-20-logger-interval-evidence.md, "Final glide").
+ *
+ * Centre drift only, combined by the shared policy, like day.wind. Null when
+ * the climb has too few estimates or the glide too little time or speed.
+ */
+function throughTheAir(
+  p: PilotAnalysisContext,
+  thermal: PilotAnalysisContext['thermals'][number],
+  goal: { lat: number; lon: number },
+  endMs: number | null,
+): ThroughAir | null {
+  const samples = p.circles.circles
+    .filter((c) => c.startIndex >= thermal.startIndex && c.endIndex <= thermal.endIndex)
+    .flatMap((c) => (c.windFromCenterDrift ? [c.windFromCenterDrift] : []));
+  if (samples.length < MIN_FINAL_GLIDE_WIND_CIRCLES || endMs === null) return null;
+  const wind = combineWindEstimates(samples);
+  if (!wind) return null;
+
+  const exit = p.fixes[thermal.endIndex];
+  const ess = p.score.turnpointResult.essReaching;
+  const landing = p.fixes[p.landingIndex];
+  const end =
+    p.essMs !== null && ess
+      ? { lat: ess.latitude, lon: ess.longitude }
+      : { lat: landing.latitude, lon: landing.longitude };
+  const seconds = (endMs - exit.time.getTime()) / 1000;
+  if (seconds < MIN_FINAL_GLIDE_SECONDS) return null;
+  const groundSpeed = ellipsoidDistance(exit.latitude, exit.longitude, end.lat, end.lon) / seconds;
+  if (groundSpeed < MIN_FINAL_GLIDE_SPEED_MPS) return null;
+
+  const toGoal = localEastNorth(exit.latitude, exit.longitude, goal.lat, goal.lon);
+  const length = Math.hypot(toGoal.east, toGoal.north);
+  if (length <= 0) return null;
+  const ux = toGoal.east / length;
+  const uy = toGoal.north / length;
+  // Wind FROM `direction` blows toward direction + 180°.
+  const rad = (wind.direction * Math.PI) / 180;
+  const wx = -wind.speed * Math.sin(rad);
+  const wy = -wind.speed * Math.cos(rad);
+  return {
+    tailwindKmh: (wx * ux + wy * uy) * 3.6,
+    factor: Math.hypot(ux - wx / groundSpeed, uy - wy / groundSpeed),
+  };
+}
+
 const finalGlideInit: MetricComputer = {
   id: 'race.final_glide_init',
   label: 'Final glide committed to when leaving the last climb',
@@ -550,7 +624,10 @@ const finalGlideInit: MetricComputer = {
     'counts only when that climb ended within 1.5 times the length of the last course leg ' +
     'longer than 1 km from goal — when ESS and goal share a waypoint, the zero-length hop ' +
     'between them is not that leg. There is no expected direction: a marginal glide wins if ' +
-    'it connects, and loses if it does not.',
+    'it connects, and loses if it does not. We also give the ratio through the air. The ' +
+    'pilot’s own last climb measured the wind, and we remove its effect over the time the ' +
+    'glide took. A tailwind makes the glide easier than the number over the ground, and a ' +
+    'headwind makes it harder.',
   compute(field): MetricOutput {
     const goalIdx = getGoalIndex(field.task);
     const goalWp = goalIdx >= 0 ? field.task.turnpoints[goalIdx].waypoint : null;
@@ -560,6 +637,8 @@ const finalGlideInit: MetricComputer = {
     const maxDistance = lastLeg ? 1.5 * lastLeg.optimizedMeters : null;
 
     const perPilot: PilotMetricValue[] = [];
+    const airRows: ReportCell[][] = [];
+    let changed = 0;
     for (const p of field.pilots) {
       if (!goalWp || maxDistance === null || p.sssMs === null) {
         perPilot.push(na(p));
@@ -592,16 +671,48 @@ const finalGlideInit: MetricComputer = {
         perPilot.push(na(p));
         continue;
       }
+      const ratio = distanceToGoal / height;
       perPilot.push({
         trackFile: p.trackFile,
-        value: distanceToGoal / height,
+        value: ratio,
         note: `left last climb ${(distanceToGoal / 1000).toFixed(1)} km out at ${Math.round(
           last.thermal.endAltitude,
         )} m`,
       });
+      const air = throughTheAir(p, last.thermal, goalWp, endMs);
+      if (air) {
+        if (Math.abs(air.factor - 1) >= THROUGH_AIR_CHANGE) changed++;
+        const tail = Math.round(air.tailwindKmh);
+        airRows.push([
+          p.pilotName,
+          ratio.toFixed(1),
+          tail > 0 ? `+${tail}` : String(tail),
+          (ratio * air.factor).toFixed(1),
+        ]);
+      }
     }
 
-    return { perPilot };
+    if (airRows.length === 0) return { perPilot };
+    const n = airRows.length;
+    return {
+      perPilot,
+      fieldSummary: [
+        `Through the air, the wind changed the committed glide by 10% or more for ${changed} of ${n} pilot${n === 1 ? '' : 's'}.`,
+      ],
+      extraTables: [
+        {
+          title: 'Final glide through the air',
+          columns: [
+            { header: 'Pilot', align: 'left' },
+            { header: 'Over the ground', align: 'right' },
+            { header: 'Tailwind (km/h)', align: 'right' },
+            { header: 'Through the air', align: 'right' },
+          ],
+          rows: airRows,
+          footnotes: ['A negative tailwind is a headwind.'],
+        },
+      ],
+    };
   },
 };
 

@@ -107,11 +107,9 @@ describe('task analysis integration (kosci-loop-t1)', () => {
     for (const id of [
       'day.airtime_quality',
       'climb.shared_percentile',
-      'climb.time_to_core',
       'climb.exit_decay',
       'climb.departure_band',
       'glide.speed',
-      'glide.dolphin_fraction',
       'decision.low_saves',
       'decision.search_fraction',
       'gaggle.affinity',
@@ -135,6 +133,17 @@ describe('task analysis integration (kosci-loop-t1)', () => {
       'decision.altitude_floor',
     ]) {
       expect(coverage(id)).toBeGreaterThanOrEqual(Math.floor(0.55 * started));
+    }
+    // Logger-gated metrics: kosci's forged tracks log every 9 s, too seldom
+    // for the metrics that read circles or thermal edges, so every pilot is
+    // left out of them — with the reason, never a silent blank.
+    for (const id of ['climb.time_to_core', 'glide.dolphin_fraction', 'climb.circle_smoothness', 'decision.km_between_climbs']) {
+      expect(coverage(id)).toBe(0);
+      const m = byId.get(id)!;
+      expect(m.perPilot.every((v) => v.note?.startsWith('instrument records every 9 s'))).toBe(true);
+      expect(m.fieldSummary).toContain(
+        `${field.pilots.length} pilots left out: their instruments record a position only every 9 s, too seldom for this measure.`,
+      );
     }
     // ESS-scoped metrics: bounded by the 7 pilots who reach ESS on this task.
     expect(coverage('race.time_behind')).toBeGreaterThanOrEqual(5);

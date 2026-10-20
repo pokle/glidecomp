@@ -157,13 +157,15 @@ describe('climb.shared_percentile', () => {
   });
 });
 
+// Fixtures here log every 2 s: the metric leaves out coarser loggers (see
+// the logger-gate tests), and these tests are about its arithmetic.
 describe('climb.time_to_core', () => {
   // 'ramp' finds the core a minute in (1 m/s then 3 m/s); 'steady' is centred
   // from the start (constant 2 m/s).
   const field = makeTestField([
-    { name: 'ramp', fixes: profileCircling(0, 180, 0, 1000, (t) => (t < 60 ? 1 : 3)) },
-    { name: 'steady', fixes: profileCircling(0, 180, 0, 1000, () => 2) },
-    { name: 'glideonly', fixes: straightFixes(0, 600, 0, 2000, 12, -1) },
+    { name: 'ramp', fixes: profileCircling(0, 180, 0, 1000, (t) => (t < 60 ? 1 : 3), 2) },
+    { name: 'steady', fixes: profileCircling(0, 180, 0, 1000, () => 2, 2) },
+    { name: 'glideonly', fixes: straightFixes(0, 600, 0, 2000, 12, -1, 2) },
   ]);
 
   it('detects late coring vs immediate coring', () => {
@@ -375,8 +377,9 @@ describe('climbing metrics over kosci-loop-t1 (smoke)', () => {
     // Own-thermal metrics should cover a decent share of the 44 pilots
     // (observed 40–43; thresholds kept lenient below that). Selectivity and
     // circle smoothness are legitimately all-null here: kosci's synthetic
-    // triangle-wave tracks barely circle (0 detected circles).
-    expect(nonNullCount['climb.time_to_core']).toBeGreaterThanOrEqual(25);
+    // triangle-wave tracks barely circle (0 detected circles). Time to core
+    // is all-null too, by the logger gate: these tracks log every 9 s.
+    expect(nonNullCount['climb.time_to_core']).toBe(0);
     expect(nonNullCount['climb.exit_decay']).toBeGreaterThanOrEqual(25);
     expect(nonNullCount['climb.departure_band']).toBeGreaterThanOrEqual(25);
     expect(nonNullCount['climb.shared_percentile']).toBeGreaterThanOrEqual(20);

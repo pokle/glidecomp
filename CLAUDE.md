@@ -554,6 +554,16 @@ These are the standing imperatives. Each links to the reference that explains it
   and counted in `IGCFile.timeOrder`. One midnight crossing per file is the
   cap, and only a VALIDATED time field may advance the day offset. See
   `scoring-changes/050-monotonic-fix-timestamps.md`.
+- **A detector window is measured in seconds, never in fixes**
+  ([docs/2026-10-20-logger-interval-evidence.md](docs/2026-10-20-logger-interval-evidence.md)).
+  One pilot in eight logs slower than 1 Hz, and a window of N fixes is N
+  seconds for some pilots and 10N for others: the task analysis then ranks
+  the logger, not the pilot. `detectThermals` counted fixes until 2026-10, and
+  that moved a 5–10 s logger by 30–55 percentile points on seven metrics.
+  Where a coarse log really cannot show a detail (a circle's shape needs about
+  8 fixes per circle), the metric leaves the pilot out through
+  `coarseLoggerGate()` and says why, never a value the instrument decided.
+  Re-tune those limits only via `web/scripts/audit-fix-interval.ts`.
 - **Never implement inline geo math** (distance, bearing, etc.) — always use
   `web/engine/src/geo.ts`, which provides WGS84 ellipsoid formulas
   (`ellipsoidDistance` — the Vincenty inverse that S7F 2026 §7.1.5 requires,

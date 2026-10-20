@@ -376,18 +376,20 @@ describe('glide.extra_distance', () => {
 // glide.dolphin_fraction
 // ---------------------------------------------------------------------------
 
+// Fixtures here log every 2 s: the metric leaves out coarser loggers (see
+// the logger-gate tests), and these tests are about its arithmetic.
 describe('glide.dolphin_fraction', () => {
   it('is high for straight-line climbing, low for thermal-only gain, null otherwise', () => {
     // Dolphin: gains 360 m on a dead-straight run (+0.4 m/s — below the 0.5
     // thermal-detection threshold, so no ThermalSegment exists).
-    const dolphin = straightFixes(0, 900, 0, 2000, 12, 0.4);
+    const dolphin = straightFixes(0, 900, 0, 2000, 12, 0.4, 2);
     // Circler: all 600 m gained inside a detected circling thermal.
     const circler = [
-      ...circlingFixes(0, 300, 0, 1000, 2),
-      ...straightFixes(310, 600, 60, 1600, 12, -1),
+      ...circlingFixes(0, 300, 0, 1000, 2, 2),
+      ...straightFixes(310, 600, 60, 1600, 12, -1, 2),
     ];
     // Sinker: never gains → total gain < 200 m → null.
-    const sinker = straightFixes(0, 900, 0, 2000, 12, -1);
+    const sinker = straightFixes(0, 900, 0, 2000, 12, -1, 2);
     const field = makeTestField([
       {
         name: 'dolphin',
@@ -404,7 +406,7 @@ describe('glide.dolphin_fraction', () => {
         fixes: sinker,
         turnpointResult: { sssReaching: reachingAt(sinker, 1, 0) },
       },
-      { name: 'nostart', fixes: straightFixes(0, 900, 0, 2000, 12, 0.4) },
+      { name: 'nostart', fixes: straightFixes(0, 900, 0, 2000, 12, 0.4, 2) },
     ]);
     const out = metric('glide.dolphin_fraction').compute(field);
     expect(out.perPilot.length).toBe(4);
@@ -478,7 +480,9 @@ describe('gliding metrics over kosci-loop-t1 (smoke)', () => {
     // Lenient coverage thresholds — every started pilot glides post-start;
     // leg metrics need at least one completed speed-section leg.
     expect(nonNullCount('glide.speed')).toBeGreaterThanOrEqual(0.6 * started);
-    expect(nonNullCount('glide.dolphin_fraction')).toBeGreaterThanOrEqual(0.5 * started);
+    // kosci's forged tracks log every 9 s: too seldom for dolphin share,
+    // which leaves every pilot out (the logger gate).
+    expect(nonNullCount('glide.dolphin_fraction')).toBe(0);
     expect(nonNullCount('glide.extra_distance')).toBeGreaterThanOrEqual(0.3 * started);
 
     // Sanity: real tracks fly at least the optimized line, so the excess over

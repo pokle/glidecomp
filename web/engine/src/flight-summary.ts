@@ -131,9 +131,11 @@ function airborneWindow(
 /**
  * The median gap between consecutive fixes, which is what tells a reader
  * whether the logger was recording once a second or once a minute. Median
- * rather than mean so one mid-flight dropout does not dominate.
+ * rather than mean so one mid-flight dropout does not dominate. The task
+ * analysis reads it too, to leave a coarse logger out of the metrics that
+ * need fine detail (analysis/metrics/util.ts `coarseLoggerGate`).
  */
-function medianInterval(fixes: IGCFix[], start: number, end: number): number | null {
+export function medianInterval(fixes: IGCFix[], start: number, end: number): number | null {
   if (end - start < 1) return null;
   const gaps: number[] = [];
   for (let i = start; i < end; i++) {

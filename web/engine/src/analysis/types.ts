@@ -53,6 +53,12 @@ export interface PilotAnalysisContext {
   sssMs: number | null;
   /** ESS reaching time (epoch ms), null when not reached. */
   essMs: number | null;
+  /**
+   * Median gap between fixes over takeoff..landing, in seconds — how often
+   * the logger recorded. Null for a track too short to tell. Metrics that
+   * need fine detail leave a coarse logger out (metrics/util.ts).
+   */
+  fixIntervalSeconds: number | null;
   /** This pilot on the shared time grid. */
   track: ResampledTrack;
 }

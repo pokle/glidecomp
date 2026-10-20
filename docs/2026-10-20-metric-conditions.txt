@@ -1,0 +1,313 @@
+Behavioural metrics vs the day's conditions — full non-synthetic sweep
+Generated 2026-10-20 by web/scripts/audit-metric-conditions.ts
+(TASK_ANALYSIS_VERSION 30) over the bundled comps AND the
+pokle/glidecomp-archive comps/ together, as in 2026-09-03-metric-conditions.txt.
+See 2026-10-20-logger-interval-evidence.md.
+
+======================================================================
+
+
+Metric conditions over 27 comps / 194 tasks
+Excluded 2 synthetic comp(s): big-chip, kosci-loop
+
+1. IS THERE ANY SIGNAL?  cleared vs EXACT expected (the floor is ~5% only at large n;
+   at n = 3 it is 33%, so a 3-pilot task is not evidence)
+
+metric                        cleared  expected  ratio          p    >=10 pilots   
+------------------------------------------------------------------------------------------------
+race.time_behind                  112       7.4  15.06   4.6e-131    79/79  p=1.7e-103
+gaggle.affinity                    89       9.2   9.65    3.0e-67    85/122 p=1.0e-80
+race.start_delay                   67       7.2   9.26    2.0e-49    65/105 p=5.8e-57
+decision.search_fraction          126      15.1   8.34    1.4e-91    105/123p=1.7e-116
+gaggle.departure_winrate           50       6.2   8.04    6.7e-33    45/85  p=1.1e-35
+glide.speed                       103      14.5   7.12    4.4e-65    94/117 p=2.2e-99
+glide.ld_vs_field                  72      10.4   6.91    5.5e-43    63/115 p=1.4e-50
+race.leg_time_lost                 68      10.4   6.57    8.0e-39    64/116 p=1.3e-51
+climb.selectivity                  87      13.8   6.28    1.2e-48    81/116 p=4.0e-77
+glide.dolphin_fraction             85      13.7   6.22    9.2e-48    69/111 p=1.5e-60
+decision.km_between_climbs         64      10.5   6.09    1.8e-34    55/112 p=6.0e-41
+climb.departure_band               84      13.9   6.05    2.7e-45    68/117 p=7.5e-57
+glide.extra_distance               62      10.4   5.99    1.2e-32    59/116 p=5.9e-45
+race.final_glide_init              69      12.8   5.41    4.6e-34    54/95  p=9.4e-45
+decision.altitude_floor            69      14.8   4.66    1.9e-29    54/115 p=6.4e-39
+race.ess_margin                    32       7.4   4.30    1.1e-12    28/79  p=5.7e-17
+decision.low_saves                 43      10.1   4.26    2.3e-16    41/121 p=2.8e-23
+gaggle.marker_usage                45      10.8   4.16    8.7e-17    44/116 p=3.2e-27
+day.airtime_quality                55      13.6   4.06    1.1e-19    49/125 p=6.4e-31
+climb.shared_percentile            49      14.1   3.47    6.0e-15    39/121 p=2.5e-21
+climb.exit_decay                   37      13.0   2.86     6.3e-9    27/122 p=6.1e-11
+climb.circle_smoothness            27      15.9   1.69     4.8e-3    15/116 p=7.0e-4
+climb.time_to_core                 23      14.8   1.55     2.3e-2    14/119 p=2.6e-3
+
+2. DOES THE DAY PREDICT THE SIGN?  Spearman(per-task ρ, condition), fields >= 10 pilots
+   414 (metric, condition) pairs tested; q = Benjamini-Hochberg over all of them.
+
+metric                      condition                 ρ     n          p        q
+----------------------------------------------------------------------------------
+race.leg_time_lost          goalRate            +  0.61   116    5.7e-13    0.000
+race.leg_time_lost          essRate             +  0.59   116    2.2e-12    0.000
+climb.exit_decay            essRate              -0.57   122    5.4e-12    0.000
+climb.exit_decay            goalRate             -0.57   122    8.5e-12    0.000
+glide.speed                 essRate              -0.52   117     2.3e-9    0.000
+glide.speed                 goalRate             -0.51   117     4.5e-9    0.000
+decision.low_saves          goalRate            +  0.50   121     5.0e-9    0.000
+climb.exit_decay            searchShare         +  0.49   122     8.4e-9    0.000
+glide.extra_distance        goalRate            +  0.50   116     8.5e-9    0.000
+decision.low_saves          essRate             +  0.49   121     9.3e-9    0.000
+climb.exit_decay            glideShare           -0.49   122     1.0e-8    0.000
+glide.extra_distance        essRate             +  0.49   116     1.7e-8    0.000
+day.airtime_quality         climbShare          +  0.48   125     2.2e-8    0.000
+day.airtime_quality         searchShare          -0.47   125     3.9e-8    0.000
+climb.exit_decay            climbP90             -0.46   122     7.5e-8    0.000
+climb.exit_decay            climbSpread          -0.45   122     2.0e-7    0.000
+race.leg_time_lost          climbShare          +  0.46   116     2.7e-7    0.000
+day.airtime_quality         goalRate            +  0.44   125     2.8e-7    0.000
+day.airtime_quality         essRate             +  0.44   125     3.3e-7    0.000
+climb.shared_percentile     windKmh             +  0.44   121     3.3e-7    0.000
+day.airtime_quality         multiPilotThermals  +  0.43   125     4.6e-7    0.000
+day.airtime_quality         taskDistanceKm      +  0.43   125     4.9e-7    0.000
+decision.km_between_climbs  essRate              -0.45   112     8.6e-7    0.000
+decision.km_between_climbs  goalRate             -0.44   112     1.0e-6    0.000
+day.airtime_quality         sharedThermals      +  0.42   125     1.2e-6    0.000
+climb.exit_decay            climbMedian          -0.42   122     1.3e-6    0.000
+climb.shared_percentile     fieldSize            -0.41   121     3.3e-6    0.000
+day.airtime_quality         climbMedian         +  0.38   125     9.6e-6    0.000
+glide.extra_distance        climbMedian         +  0.39   116     1.9e-5    0.000
+day.airtime_quality         glideShare          +  0.37   125     2.0e-5    0.000
+day.airtime_quality         durationH           +  0.37   125     2.1e-5    0.000
+decision.km_between_climbs  bandCeilingM         -0.39   112     2.4e-5    0.000
+decision.low_saves          bandCeilingM        +  0.37   121     3.6e-5    0.000
+decision.low_saves          climbMedian         +  0.37   121     3.8e-5    0.000
+glide.extra_distance        climbShare          +  0.37   116     4.0e-5    0.000
+race.leg_time_lost          climbMedian         +  0.37   116     4.2e-5    0.000
+climb.departure_band        windKmh              -0.37   117     4.6e-5    0.001
+glide.extra_distance        sharedThermals      +  0.36   116     5.7e-5    0.001
+climb.departure_band        fieldSize           +  0.35   117     1.0e-4    0.001
+decision.altitude_floor     fieldSize           +  0.35   115     1.0e-4    0.001
+climb.time_to_core          glideShare           -0.34   119     1.3e-4    0.001
+glide.extra_distance        bandCeilingM        +  0.35   116     1.3e-4    0.001
+decision.altitude_floor     windKmh              -0.34   115     1.9e-4    0.002
+race.time_behind            gaggleDensity        -0.41    79     2.0e-4    0.002
+decision.low_saves          climbP90            +  0.33   121     2.4e-4    0.002
+decision.search_fraction    goalRate            +  0.32   123     3.0e-4    0.003
+climb.exit_decay            climbShare           -0.32   122     3.1e-4    0.003
+climb.exit_decay            bandCeilingM         -0.32   122     3.2e-4    0.003
+decision.search_fraction    essRate             +  0.32   123     3.3e-4    0.003
+glide.extra_distance        climbP90            +  0.33   116     3.3e-4    0.003
+climb.shared_percentile     taskDistanceKm      +  0.32   121     3.5e-4    0.003
+gaggle.affinity             goalRate             -0.32   122     3.5e-4    0.003
+gaggle.affinity             essRate              -0.32   122     4.0e-4    0.003
+race.leg_time_lost          searchShare          -0.32   116     4.0e-4    0.003
+decision.km_between_climbs  climbMedian          -0.33   112     4.4e-4    0.003
+glide.extra_distance        climbSpread         +  0.32   116     5.2e-4    0.004
+decision.low_saves          climbSpread         +  0.31   121     5.4e-4    0.004
+glide.speed                 climbMedian          -0.31   117     5.7e-4    0.004
+decision.km_between_climbs  climbP90             -0.32   112     5.9e-4    0.004
+day.airtime_quality         climbP90            +  0.30   125     7.4e-4    0.005
+decision.low_saves          climbShare          +  0.30   121     8.6e-4    0.006
+glide.extra_distance        bandSpanM           +  0.30   116     9.6e-4    0.006
+climb.exit_decay            sharedThermals       -0.29   122     9.9e-4    0.007
+decision.km_between_climbs  climbSpread          -0.31   112     1.0e-3    0.007
+climb.time_to_core          searchShare         +  0.29   119     1.2e-3    0.007
+race.leg_time_lost          taskDistanceKm      +  0.29   116     1.4e-3    0.009
+climb.exit_decay            multiPilotThermals   -0.28   122     1.5e-3    0.009
+day.airtime_quality         climbSpread         +  0.28   125     1.5e-3    0.009
+climb.exit_decay            durationH            -0.28   122     1.6e-3    0.010
+decision.low_saves          bandSpanM           +  0.28   121     1.9e-3    0.011
+decision.km_between_climbs  sharedThermals       -0.29   112     2.0e-3    0.011
+climb.time_to_core          bandCeilingM         -0.28   119     2.0e-3    0.011
+race.leg_time_lost          climbP90            +  0.28   116     2.1e-3    0.012
+decision.km_between_climbs  bandSpanM            -0.29   112     2.3e-3    0.013
+race.final_glide_init       fieldSize            -0.31    95     2.6e-3    0.014
+day.airtime_quality         bandCeilingM        +  0.27   125     2.7e-3    0.015
+climb.time_to_core          durationH            -0.27   119     2.9e-3    0.016
+glide.extra_distance        multiPilotThermals  +  0.27   116     3.5e-3    0.018
+race.leg_time_lost          climbSpread         +  0.26   116     4.1e-3    0.021
+glide.speed                 bandCeilingM         -0.26   117     4.6e-3    0.024
+race.leg_time_lost          windKmh             +  0.26   116     4.8e-3    0.025
+glide.extra_distance        searchShare          -0.26   116     5.0e-3    0.025
+gaggle.affinity             searchShare         +  0.25   122     5.2e-3    0.026
+race.final_glide_init       windKmh             +  0.28    95     5.4e-3    0.027
+race.final_glide_init       essRate              -0.28    95     5.8e-3    0.028
+climb.time_to_core          bandSpanM            -0.25   119     5.8e-3    0.028
+race.leg_time_lost          sharedThermals      +  0.25   116     5.9e-3    0.028
+glide.ld_vs_field           durationH            -0.25   115     6.4e-3    0.030
+glide.speed                 climbP90             -0.25   117     6.7e-3    0.031
+race.ess_margin             goalRate            +  0.30    79     6.8e-3    0.031
+race.time_behind            fieldSize            -0.30    79     7.0e-3    0.032
+decision.low_saves          searchShare          -0.24   121     7.7e-3    0.034
+climb.exit_decay            bandSpanM            -0.24   122     7.7e-3    0.034
+race.final_glide_init       goalRate             -0.27    95     8.5e-3    0.037
+race.ess_margin             essRate             +  0.29    79     9.5e-3    0.042
+glide.ld_vs_field           fieldSize            -0.24   115     1.1e-2    0.045
+climb.time_to_core          sharedThermals       -0.23   119     1.1e-2    0.045
+glide.ld_vs_field           multiPilotThermals   -0.24   115     1.1e-2    0.047
+race.final_glide_init       taskDistanceKm      +  0.26    95     1.1e-2    0.047
+day.airtime_quality         month               +  0.23   125     1.1e-2    0.047
+climb.shared_percentile     climbShare          +  0.23   121     1.2e-2    0.050
+glide.speed                 climbSpread          -0.23   117     1.3e-2    0.052
+gaggle.affinity             month                -0.22   122     1.3e-2    0.053
+climb.time_to_core          essRate              -0.22   119     1.4e-2    0.056
+glide.extra_distance        durationH           +  0.23   116     1.5e-2    0.058
+climb.time_to_core          goalRate             -0.22   119     1.5e-2    0.059
+climb.selectivity           durationH           +  0.22   116     1.7e-2    0.065
+glide.dolphin_fraction      bandCeilingM        +  0.22   111     1.8e-2    0.071
+gaggle.affinity             glideShare           -0.21   122     1.9e-2    0.073
+glide.extra_distance        gaggleDensity        -0.21   116     2.3e-2    0.086
+race.time_behind            windKmh             +  0.25    79     2.3e-2    0.087
+decision.search_fraction    sharedThermals      +  0.20   123     2.4e-2    0.090
+climb.departure_band        gaggleDensity       +  0.21   117     2.5e-2    0.092
+decision.search_fraction    multiPilotThermals  +  0.20   123     2.5e-2    0.092
+gaggle.affinity             gaggleDensity        -0.20   122     2.6e-2    0.092
+day.airtime_quality         windKmh             +  0.20   125     2.7e-2    0.095
+day.airtime_quality         bandSpanM           +  0.20   125     2.7e-2    0.096
+race.leg_time_lost          multiPilotThermals  +  0.20   116     2.8e-2    0.097
+climb.time_to_core          multiPilotThermals   -0.20   119     2.8e-2    0.097
+decision.search_fraction    searchShare          -0.20   123     2.8e-2    0.098
+
+3. THE SURVIVING SPLITS, BY QUARTILE OF THE CONDITION
+   "informative" = |ρ| cleared that task's own noise floor.
+
+   race.leg_time_lost by goalRate  (ρ=+0.61, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.29      +0.06        10/29     70%
+     Q2                  0.32..0.48      +0.18         9/29    100%
+     Q3                  0.49..0.64      +0.41        18/29     94%
+     Q4                  0.65..0.90      +0.68        27/29    100%
+
+   climb.exit_decay by essRate  (ρ=-0.57, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.26      +0.03         2/30     50%
+     Q2                  0.28..0.47      +0.04         4/30     50%
+     Q3                  0.47..0.63      -0.18         6/30    100%
+     Q4                  0.64..0.90      -0.29        15/32    100%
+
+   glide.speed by essRate  (ρ=-0.52, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.28      -0.34        16/29     94%
+     Q2                  0.29..0.48      -0.65        25/29    100%
+     Q3                  0.49..0.64      -0.68        25/29    100%
+     Q4                  0.65..0.90      -0.77        28/30    100%
+
+   decision.low_saves by goalRate  (ρ=+0.50, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.26      -0.39        14/30    100%
+     Q2                  0.28..0.47      -0.35        13/30    100%
+     Q3                  0.47..0.63      -0.19        10/30    100%
+     Q4                  0.64..0.90      -0.03         4/31    100%
+
+   glide.extra_distance by goalRate  (ρ=+0.50, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.29      -0.22        12/29     83%
+     Q2                  0.32..0.48      +0.34        13/29     85%
+     Q3                  0.49..0.64      +0.42        16/29     88%
+     Q4                  0.65..0.90      +0.48        18/29    100%
+
+   day.airtime_quality by climbShare  (ρ=+0.48, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                20.85..35.39      -0.14         9/31     56%
+     Q2                35.45..37.50      +0.19        11/31     82%
+     Q3                37.50..39.62      +0.33        17/31    100%
+     Q4                39.74..43.38      +0.36        12/32    100%
+
+   climb.shared_percentile by windKmh  (ρ=+0.44, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                  6.46..8.57      -0.32        17/30    100%
+     Q2                 8.62..10.04      -0.26        14/30     93%
+     Q3                10.09..14.86      -0.11         5/30     80%
+     Q4                15.02..36.55      -0.06         3/31     67%
+
+   decision.km_between_climbs by essRate  (ρ=-0.45, q=0.000)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.29      -0.08         2/28    100%
+     Q2                  0.32..0.49      -0.52        18/28    100%
+     Q3                  0.50..0.65      -0.46        15/28    100%
+     Q4                  0.66..0.90      -0.57        20/28    100%
+
+   climb.departure_band by windKmh  (ρ=-0.37, q=0.001)
+     quartile                 range   median ρ  informative    sign
+     Q1                  6.46..8.62      -0.28        12/29     83%
+     Q2                 8.64..10.09      -0.37        20/29    100%
+     Q3                10.14..15.02      -0.49        16/29    100%
+     Q4                15.29..36.55      -0.57        20/30    100%
+
+   decision.altitude_floor by fieldSize  (ρ=+0.35, q=0.001)
+     quartile                 range   median ρ  informative    sign
+     Q1                12.00..22.00      -0.49        13/28    100%
+     Q2                22.00..30.00      -0.47        16/28    100%
+     Q3                31.00..48.00      -0.32        12/28    100%
+     Q4                48.00..96.00      -0.10        13/31     77%
+
+   climb.time_to_core by glideShare  (ρ=-0.34, q=0.001)
+     quartile                 range   median ρ  informative    sign
+     Q1                15.28..23.24      +0.08         5/29     60%
+     Q2                23.28..26.81      -0.07         2/29     50%
+     Q3                26.97..29.26      -0.11         2/29    100%
+     Q4                29.37..37.11      -0.21         5/32    100%
+
+   race.time_behind by gaggleDensity  (ρ=-0.41, q=0.002)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.14..0.27      +1.00        19/19    100%
+     Q2                  0.27..0.30      +1.00        19/19    100%
+     Q3                  0.31..0.34      +0.95        19/19    100%
+     Q4                  0.34..0.61      +0.99        22/22    100%
+
+   decision.search_fraction by goalRate  (ρ=+0.32, q=0.003)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.24      +0.54        16/30    100%
+     Q2                  0.26..0.46      +0.75        29/30    100%
+     Q3                  0.46..0.61      +0.73        29/30    100%
+     Q4                  0.61..0.90      +0.75        31/33    100%
+
+   gaggle.affinity by goalRate  (ρ=-0.32, q=0.003)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.00..0.26      -0.33        13/30     92%
+     Q2                  0.26..0.46      -0.48        22/30    100%
+     Q3                  0.47..0.61      -0.60        24/30    100%
+     Q4                  0.63..0.90      -0.62        26/32    100%
+
+   race.final_glide_init by fieldSize  (ρ=-0.31, q=0.014)
+     quartile                 range   median ρ  informative    sign
+     Q1                12.00..22.00      +0.57        14/23    100%
+     Q2                22.00..31.00      +0.23        10/23     90%
+     Q3                31.00..47.00      +0.53        16/23    100%
+     Q4                48.00..92.00      +0.17        14/26     79%
+
+   glide.ld_vs_field by durationH  (ρ=-0.25, q=0.030)
+     quartile                 range   median ρ  informative    sign
+     Q1                  2.83..4.06      -0.27         7/28    100%
+     Q2                  4.07..4.84      -0.41        17/28    100%
+     Q3                  4.87..5.66      -0.35        17/28    100%
+     Q4                5.67..242.92      -0.48        22/31    100%
+
+   race.ess_margin by goalRate  (ρ=+0.30, q=0.031)
+     quartile                 range   median ρ  informative    sign
+     Q1                  0.14..0.46      -0.01         4/19     75%
+     Q2                  0.46..0.55      +0.21         5/19     80%
+     Q3                  0.55..0.69      +0.40         9/19    100%
+     Q4                  0.70..0.90      +0.31        10/22    100%
+
+   climb.selectivity by durationH  (ρ=+0.22, q=0.065)
+     quartile                 range   median ρ  informative    sign
+     Q1                  2.83..4.06      -0.53        20/29    100%
+     Q2                  4.07..4.87      -0.55        22/29    100%
+     Q3                  4.92..5.76      -0.48        25/29    100%
+     Q4                5.76..242.92      -0.36        14/29    100%
+
+   glide.dolphin_fraction by bandCeilingM  (ρ=+0.22, q=0.071)
+     quartile                 range   median ρ  informative    sign
+     Q1            1148.00..1762.00      +0.31         9/27    100%
+     Q2            1762.70..1999.60      +0.51        20/27    100%
+     Q3            2000.00..2286.40      +0.51        22/27    100%
+     Q4            2300.00..2582.20      +0.49        18/30    100%
+
+4. OUTRIGHT SIGN REVERSALS
+   Both extreme quartiles informative on >= 4 tasks AND >= 75% agreed, opposite ways.
+
+   climb.shared_percentile      taskDistanceKm     low=neg  high=pos
+   glide.extra_distance         goalRate           low=neg  high=pos
+   glide.extra_distance         essRate            low=neg  high=pos
+
+Skipped 2 task(s):
+  dalby-big-air-2022-open-t6: no parseable tracks
+  dalby-big-air-2022-sports-t6: no parseable tracks

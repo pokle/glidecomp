@@ -15,7 +15,13 @@ import type { MetricComputer, PilotMetricValue, ReportCell, ReportTable } from '
 import { mean, median } from '../stats';
 import { sharedClimbPercentiles } from '../shared-thermals';
 import { hourStartMs, pushInto } from '../util';
-import { fixMs, na } from './util';
+import {
+  CIRCLE_DETAIL_MAX_INTERVAL_S,
+  THERMAL_EDGE_MAX_INTERVAL_S,
+  coarseLoggerGate,
+  fixMs,
+  na,
+} from './util';
 
 /** Thermal start time (epoch ms) from its start fix; null when out of range. */
 function thermalStartMs(fixes: IGCFix[], t: ThermalSegment): number | null {
@@ -139,10 +145,15 @@ const timeToCore: MetricComputer = {
     'climb rate first reaches 90% of its peak in that thermal. The value is the median across ' +
     'the thermals of the pilot. There is no expected direction. Time spent working into the ' +
     'core is not lost if the pilot ends up in the better lift, so the sign of the correlation ' +
-    'says whether the hunt paid on this day.',
+    'says whether the hunt paid on this day. We leave out a pilot whose instrument records a ' +
+    'position only every 5 seconds or less often. A track that coarse cannot show this ' +
+    'detail, and the pilot would seem to fly differently when they do not.',
   compute(field) {
+    const gate = coarseLoggerGate(field, THERMAL_EDGE_MAX_INTERVAL_S);
     return {
       perPilot: field.pilots.map((p): PilotMetricValue => {
+        const coarse = gate.excluded.get(p.trackFile);
+        if (coarse) return coarse;
         const values: number[] = [];
         for (const t of p.thermals) {
           if (t.duration < MIN_CORE_THERMAL_SECONDS) continue;
@@ -156,6 +167,7 @@ const timeToCore: MetricComputer = {
           note: `${values.length} climb${values.length === 1 ? '' : 's'} ≥ 60 s`,
         };
       }),
+      ...(gate.summaryLine ? { fieldSummary: [gate.summaryLine] } : {}),
     };
   },
 };
@@ -418,10 +430,13 @@ const circleSmoothness: MetricComputer = {
     'measures how round the turn was. The value is the median over all of the circles of the ' +
     'pilot. A lower value means smoother and more consistent turns. There is no expected ' +
     'direction: a rough trace can be a pilot chasing a drifting or broken core rather than a ' +
-    'pilot circling badly.',
+    'pilot circling badly. We leave out a pilot whose instrument records a position less ' +
+    'often than every 2 seconds. A track that coarse cannot show this detail, and the pilot ' +
+    'would seem to fly differently when they do not.',
   compute(field) {
     let fieldLeft = 0;
     let fieldTotal = 0;
+    const gate = coarseLoggerGate(field, CIRCLE_DETAIL_MAX_INTERVAL_S);
 
     const perPilot = field.pilots.map((p): PilotMetricValue => {
       const ratios: number[] = [];
@@ -436,6 +451,10 @@ const circleSmoothness: MetricComputer = {
           ratios.push(c.fittedCircle.fitErrorRMS / c.fittedCircle.radiusMeters);
         }
       }
+      // A coarse logger's circles still count toward the field's turn
+      // direction above; only their shape is unreadable.
+      const coarse = gate.excluded.get(p.trackFile);
+      if (coarse) return coarse;
       const total = p.circles.circles.length;
       return {
         trackFile: p.trackFile,
@@ -444,14 +463,17 @@ const circleSmoothness: MetricComputer = {
       };
     });
 
+    const fieldSummary = [
+      ...(fieldTotal > 0
+        ? [
+            `Turn direction across the field: ${Math.round((100 * fieldLeft) / fieldTotal)}% left (${fieldTotal} circles).`,
+          ]
+        : []),
+      ...(gate.summaryLine ? [gate.summaryLine] : []),
+    ];
     return {
       perPilot,
-      fieldSummary:
-        fieldTotal > 0
-          ? [
-              `Turn direction across the field: ${Math.round((100 * fieldLeft) / fieldTotal)}% left (${fieldTotal} circles).`,
-            ]
-          : undefined,
+      fieldSummary: fieldSummary.length > 0 ? fieldSummary : undefined,
     };
   },
 };

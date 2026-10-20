@@ -201,11 +201,13 @@ describe('decision.low_saves', () => {
 // Metric 14 — decision.km_between_climbs
 // ---------------------------------------------------------------------------
 
+// Fixtures here log every 2 s: the metric leaves out coarser loggers (see
+// the logger-gate tests), and these tests are about its arithmetic.
 describe('decision.km_between_climbs', () => {
   // fast + slow share one thermal (same place, same time, different rates).
   const climbAndGlide = (rate: number) => [
-    ...circlingFixes(0, 300, 0, 1000, rate),
-    ...straightFixes(310, 400, 60, 1000 + rate * 300, 12, -1),
+    ...circlingFixes(0, 300, 0, 1000, rate, 2),
+    ...straightFixes(310, 400, 60, 1000 + rate * 300, 12, -1, 2),
   ];
   const field = makeTestField([
     {
@@ -223,12 +225,12 @@ describe('decision.km_between_climbs', () => {
     // Started but flew < 20 km → null.
     {
       name: 'short',
-      fixes: straightFixes(0, 600, 0, 1500, 12, -1),
+      fixes: straightFixes(0, 600, 0, 1500, 12, -1, 2),
       turnpointResult: startedAt(0),
       score: { flownDistance: 10_000 },
     },
     // Never started → null.
-    { name: 'ns', fixes: straightFixes(0, 600, 0, 1500, 12, -1) },
+    { name: 'ns', fixes: straightFixes(0, 600, 0, 1500, 12, -1, 2) },
   ]);
 
   it('divides flown distance by the post-start thermal count', () => {
@@ -259,7 +261,7 @@ describe('decision.km_between_climbs', () => {
     const noClimb = makeTestField([
       {
         name: 'glideout',
-        fixes: straightFixes(0, 1200, 0, 3000, 12, -1.5),
+        fixes: straightFixes(0, 1200, 0, 3000, 12, -1.5, 2),
         turnpointResult: startedAt(0),
         score: { flownDistance: 40_000 },
       },
@@ -311,8 +313,14 @@ describe('decision.search_fraction', () => {
 
   it('clips the window at ESS, excluding post-ESS wandering', () => {
     const clipped = valueFor(field, 'decision.search_fraction', 'clipped');
+    const searcher = valueFor(field, 'decision.search_fraction', 'searcher');
     expect(clipped).not.toBeNull();
-    expect(clipped!).toBeLessThan(10);
+    // What remains is one 60 s phase window at the top of the climb, where
+    // the circling outlasts the thermal (which now ends AT the top, 300 s,
+    // rather than 30 s into the glide as the 10-fix window had it on this
+    // 5 s fixture). The 300 s meander after ESS is gone.
+    expect(clipped!).toBeLessThan(15);
+    expect(clipped!).toBeLessThan(searcher! / 2);
   });
 
   it('is null for a never-started pilot and summarises the field phase shares', () => {

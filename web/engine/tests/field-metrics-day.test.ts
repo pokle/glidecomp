@@ -191,6 +191,13 @@ describe('day.wind', () => {
     expect(taskRow[0]).toBe('Whole task');
     const n = Number(taskRow[3]);
     expect(n).toBeGreaterThan(0);
+    // Centre drift only: a circle with nothing but a ground-speed estimate
+    // (the first of each climb, which has no earlier centre to drift from)
+    // is not counted — that method reads about 1.5× high.
+    const circles = field.pilots.flatMap((p) => p.circles.circles);
+    const withDrift = circles.filter((c) => c.windFromCenterDrift).length;
+    expect(circles.filter((c) => c.windFromGroundSpeed && !c.windFromCenterDrift).length).toBeGreaterThan(0);
+    expect(n).toBe(withDrift);
     const speedKmh = Number(taskRow[1]);
     expect(speedKmh).toBeGreaterThan(5); // 4 m/s drift = 14.4 km/h
     expect(speedKmh).toBeLessThan(40);

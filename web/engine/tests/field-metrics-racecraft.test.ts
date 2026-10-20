@@ -32,8 +32,10 @@ import {
   circlingFixes,
   BASE_TIME,
   TEST_ORIGIN,
+  DEG_LAT_PER_M,
   DEG_LON_PER_M,
 } from './field-test-helpers';
+import { createFix } from './test-helpers';
 
 // ---------------------------------------------------------------------------
 // Synthetic field
@@ -348,6 +350,86 @@ describe('race.final_glide_init', () => {
   it('is null without a qualifying post-SSS climb or without a start', () => {
     expect(valueOf(out, 'bravo.igc')).toBeNull(); // started, but never climbed
     expect(valueOf(out, 'delta.igc')).toBeNull(); // never started
+  });
+});
+
+describe('race.final_glide_init through the air', () => {
+  // A 1 Hz climb whose circles drift east at `driftMps`, the line to goal.
+  const driftClimb = (start: number, seconds: number, east: number, alt: number, driftMps: number) => {
+    const fixes = [];
+    for (let t = 0; t <= seconds; t++) {
+      const angle = (2 * Math.PI * t) / 20;
+      fixes.push(
+        createFix(
+          start + t,
+          TEST_ORIGIN.lat + 60 * Math.sin(angle) * DEG_LAT_PER_M,
+          TEST_ORIGIN.lon + (east + driftMps * t + 60 * Math.cos(angle)) * DEG_LON_PER_M,
+          alt + 2 * t,
+        ),
+      );
+    }
+    return fixes;
+  };
+  // Run 12 km east, climb 300 s to 1800 m, glide east at 15 m/s through ESS
+  // (15 km) toward goal (22 km).
+  const pilot = (name: string, driftMps: number) => {
+    const exitEast = 12_000 + driftMps * 300;
+    const essAt = 920 + (15_000 - exitEast) / 15;
+    return {
+      name,
+      fixes: [
+        ...straightFixes(0, 600, 0, 1200, 20, 0, 1),
+        ...driftClimb(610, 300, 12_000, 1200, driftMps),
+        ...straightFixes(920, 600, exitEast, 1800, 15, -2, 1),
+      ],
+      turnpointResult: seqResult(
+        [reach(1, 250, 5_000, 1200), reach(2, 500, 10_000, 1200), reach(3, essAt, 15_000, 1500)],
+        3,
+      ),
+    };
+  };
+  const field = makeTestField([pilot('drifter', 4), pilot('still', 0)], { task: makeRaceTask() });
+  const out = metric('race.final_glide_init').compute(field);
+  const table = out.extraTables?.find((t) => t.title === 'Final glide through the air');
+  const row = (name: string) => table!.rows.find((r) => r[0] === name)!;
+
+  it('lists each pilot over the ground, the tailwind, and through the air', () => {
+    expect(table!.columns.map((c) => c.header)).toEqual([
+      'Pilot',
+      'Over the ground',
+      'Tailwind (km/h)',
+      'Through the air',
+    ]);
+    expect(table!.footnotes).toEqual(['A negative tailwind is a headwind.']);
+    expect(row('drifter')[1]).toBe(valueOf(out, 'drifter.igc')!.toFixed(1));
+  });
+
+  it('takes a tailwind off the committed ratio, and leaves still air alone', () => {
+    // 4 m/s of drift = +14 km/h along the line to goal.
+    expect(Number(row('drifter')[2])).toBeGreaterThanOrEqual(12);
+    expect(Number(row('drifter')[2])).toBeLessThanOrEqual(16);
+    // Through the air the glide needs |û − W/vg| of the ground ratio: with
+    // vg ≈ 14 m/s and W = 4 m/s that is about 0.7.
+    const ground = Number(row('drifter')[1]);
+    expect(Number(row('drifter')[3]) / ground).toBeGreaterThan(0.6);
+    expect(Number(row('drifter')[3]) / ground).toBeLessThan(0.8);
+    expect(Math.abs(Number(row('still')[2]))).toBeLessThanOrEqual(1);
+    expect(Number(row('still')[3])).toBeCloseTo(Number(row('still')[1]), 0);
+  });
+
+  it('counts how many glides the wind changed by 10% or more', () => {
+    expect(out.fieldSummary).toEqual([
+      'Through the air, the wind changed the committed glide by 10% or more for 1 of 2 pilots.',
+    ]);
+  });
+
+  it('leaves the metric value itself as the ratio over the ground', () => {
+    const drifter = field.pilots.find((p) => p.trackFile === 'drifter.igc')!;
+    const last = drifter.thermals[drifter.thermals.length - 1];
+    const exit = drifter.fixes[last.endIndex];
+    const goal = field.task.turnpoints[4].waypoint;
+    const expected = ellipsoidDistance(exit.latitude, exit.longitude, goal.lat, goal.lon) / (last.endAltitude - 300);
+    expect(valueOf(out, 'drifter.igc')).toBeCloseTo(expected, 6);
   });
 });
 
