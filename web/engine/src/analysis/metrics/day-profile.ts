@@ -87,14 +87,18 @@ interface CircleWindSample {
 }
 
 /**
- * Every circle's wind estimate across the field, centre-drift preferred over
- * ground-speed modulation. One pass over each pilot's circles.
+ * Every circle's centre-drift wind estimate across the field. One pass over
+ * each pilot's circles. A circle with only a ground-speed estimate is
+ * skipped: half the ground-speed spread around a circle reads the extremes of
+ * noisy per-fix speeds, and over 20,000 archived climbs it came out at 1.7×
+ * the climb's own net drift (centre drift: 1.1×), lifting the day's wind by
+ * up to a fifth where it filled in (docs/2026-10-20-logger-interval-evidence.md).
  */
 function collectCircleWinds(field: FieldContext): CircleWindSample[] {
   const out: CircleWindSample[] = [];
   for (const pilot of field.pilots) {
     for (const c of pilot.circles.circles) {
-      const est = c.windFromCenterDrift ?? c.windFromGroundSpeed;
+      const est = c.windFromCenterDrift;
       if (!est) continue;
       const start = pilot.fixes[c.startIndex];
       const end = pilot.fixes[c.endIndex];
@@ -182,8 +186,9 @@ function rangeCell(fromMs: number, toMs: number): ReportCell {
 }
 
 const WIND_METHOD_FOOTNOTE =
-  'Each circle gives one wind estimate. GlideComp uses centre drift where it can, and ' +
-  'ground-speed modulation where it cannot. The direction is the vector mean of the estimates, ' +
+  'Each circle gives one wind estimate, from the drift of its centre. We do not use the ' +
+  'change of ground speed around a circle: checked against 20,000 climbs, it read about 1.5 ' +
+  'times too high. The direction is the vector mean of the estimates, ' +
   'in degrees the wind blows FROM (0° = north). The speed is the median of their magnitudes, ' +
   'because the length of a vector mean falls toward zero when the directions scatter.';
 
@@ -196,13 +201,12 @@ const dayWind: MetricComputer = {
   direction: 'neutral',
   explanation:
     'What the air did, read from the field itself. We estimate the wind from the circling of ' +
-    'every pilot. The first method is the drift of the circle centre, and the second method, ' +
-    'used when the first is not available, is the modulation of the ground speed. We then ' +
+    'every pilot, from how far the centre of each circle drifts. We then ' +
     'combine the estimates two ways. The table by hour of day shows how the wind increased and ' +
     'changed direction through the day. The table by speed-section leg shows the wind on each ' +
     'part of the course. This metric describes the day, so it has no value for each pilot.',
   compute(field) {
-    // ONE estimate per circle, centre-drift preferred (collectCircleWinds) —
+    // ONE estimate per circle, centre drift only (collectCircleWinds) —
     // deliberately this metric's own selection rule; only the combining
     // policy (combineWindEstimates) is shared with the thermal shapes.
     const winds = collectCircleWinds(field);

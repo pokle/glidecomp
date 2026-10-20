@@ -15,7 +15,7 @@ import { ellipsoidDistance, calculateTrackDistance } from '../../geo';
 import { getEffectiveSSSIndex } from '../../xctsk-parser';
 import { mean, median, percentile } from '../stats';
 import { pushInto } from '../util';
-import { fixMsAt, na } from './util';
+import { CIRCLE_DETAIL_MAX_INTERVAL_S, coarseLoggerGate, fixMsAt, na } from './util';
 import type {
   MetricComputer,
   PilotAnalysisContext,
@@ -355,9 +355,15 @@ const glideDolphinFraction: MetricComputer = {
     'Dolphin flying: how much of the height that the pilot gained came outside of circling. '
     + 'The value is the share of the altitude gain after the start, '
     + 'smoothed over 10 s, that the pilot made outside a detected thermal. There is no expected '
-    + 'direction. The sign of the correlation shows whether dolphin flying paid on this day.',
+    + 'direction. The sign of the correlation shows whether dolphin flying paid on this day. '
+    + 'We leave out a pilot whose instrument records a position less often than every 2 '
+    + 'seconds. A track that coarse cannot show this detail, and the pilot would seem to fly '
+    + 'differently when they do not.',
   compute(field) {
+    const gate = coarseLoggerGate(field, CIRCLE_DETAIL_MAX_INTERVAL_S);
     const perPilot: PilotMetricValue[] = field.pilots.map((p) => {
+      const coarse = gate.excluded.get(p.trackFile);
+      if (coarse) return coarse;
       const sss = p.sssMs;
       if (sss === null) return na(p);
       let start = p.takeoffIndex;
@@ -390,7 +396,7 @@ const glideDolphinFraction: MetricComputer = {
         note: `${Math.round(dolphinGain)} of ${Math.round(totalGain)} m gained outside thermals`,
       };
     });
-    return { perPilot };
+    return { perPilot, ...(gate.summaryLine ? { fieldSummary: [gate.summaryLine] } : {}) };
   },
 };
 

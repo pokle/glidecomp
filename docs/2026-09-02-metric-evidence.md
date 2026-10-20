@@ -15,6 +15,18 @@ are swept as one corpus.
 Reproduce with `web/scripts/audit-metric-distributions.ts`; the raw output is
 in [`2026-09-02-metric-distributions.txt`](./2026-09-02-metric-distributions.txt).
 
+> **Re-swept 2026-10-20 (TASK_ANALYSIS_VERSION 30).** The thermal detector
+> now measures its windows in seconds, and four metrics leave out coarse
+> loggers. `decision.search_fraction`, `glide.dolphin_fraction` and
+> `decision.km_between_climbs` separate the field on more tasks;
+> `climb.time_to_core` and `climb.circle_smoothness` still carry no stable
+> signal. The changed rows, and why, are in
+> [2026-10-20-logger-interval-evidence.md](2026-10-20-logger-interval-evidence.md);
+> the new raw outputs are
+> [`2026-10-20-metric-distributions.txt`](./2026-10-20-metric-distributions.txt) and
+> [`2026-10-20-metric-conditions.txt`](./2026-10-20-metric-conditions.txt).
+> The figures below are the 2026-09-02 sweep.
+
 This supersedes the bundled-only run (2 comps, 10 tasks, 197 rows) that the
 script shipped with, which was ~25× smaller and could not settle whether a
 metric has explanatory power.

@@ -436,4 +436,23 @@
 //     so they gain the pair on their next lazy revalidation; a v28 row
 //     renders the single field-wide split until then. The pair is omitted
 //     when either group is empty, and consumers must tolerate its absence.
-export const TASK_ANALYSIS_VERSION = 29;
+// v30: the analysis stops reading the logger's fix interval as behaviour
+//     (docs/2026-10-20-logger-interval-evidence.md). Thinning 1 Hz tracks
+//     to 5 s over the 187-task archive moved a pilot by 24–48 percentile
+//     points on seven metrics, and the archive's real 5–10 s loggers showed
+//     the same shifts.
+//     - detectThermals' climb window and exit are measured in seconds (10 s,
+//       weak for 2 s), not fixes (10, 3). Identical on an even 1 Hz track;
+//       on a coarse or gappy one, thermals no longer stretch into the glide.
+//       Every thermal-built metric can move for those pilots.
+//     - glide.dolphin_fraction and climb.circle_smoothness leave out a
+//       pilot logging slower than every 2 s; climb.time_to_core and
+//       decision.km_between_climbs one slower than every 4 s. Null with a
+//       note, plus a field-summary line naming how many.
+//     - day.wind uses centre drift only. The ground-speed fallback filled
+//       ~12% of estimates and read 1.5× high, lifting the day's wind by a
+//       median 6% (up to 21%).
+//     - race.final_glide_init gains a "Final glide through the air" table
+//       and a field-summary line: the committed ratio with the wind its last
+//       climb measured removed. The metric's own value is unchanged.
+export const TASK_ANALYSIS_VERSION = 30;

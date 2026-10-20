@@ -21,7 +21,7 @@ import type {
 import { mean, median, percentile } from '../stats';
 import { sharedClimbPercentiles } from '../shared-thermals';
 import { pushInto } from '../util';
-import { na } from './util';
+import { THERMAL_EDGE_MAX_INTERVAL_S, coarseLoggerGate, na } from './util';
 
 // --- Tunables (named constants so the explanations stay honest) -------------
 
@@ -201,10 +201,15 @@ const kmBetweenClimbs: MetricComputer = {
     "each climb. The pilot must fly 20 km or more. The note of each pilot adds their mean climb "
     + 'percentile inside shared thermals, so you can read the number of stops together with the ' +
     'climb strength. Long legs between weak climbs is a different day from long legs between ' +
-    'strong ones.',
+    'strong ones. We leave out a pilot whose instrument records a position only every 5 ' +
+    'seconds or less often. A track that coarse cannot show this detail, and the pilot would ' +
+    'seem to fly differently when they do not.',
   compute(field: FieldContext): MetricOutput {
     const pctByPilot = sharedClimbPctsByPilot(field);
+    const gate = coarseLoggerGate(field, THERMAL_EDGE_MAX_INTERVAL_S);
     const perPilot = field.pilots.map((p): PilotMetricValue => {
+      const coarse = gate.excluded.get(p.trackFile);
+      if (coarse) return coarse;
       if (p.sssMs === null) return na(p);
       if (p.score.flownDistance < MIN_FLOWN_DISTANCE_METERS) return na(p);
       const count = postSssThermals(p).length;
@@ -224,7 +229,7 @@ const kmBetweenClimbs: MetricComputer = {
           : {}),
       };
     });
-    return { perPilot };
+    return { perPilot, ...(gate.summaryLine ? { fieldSummary: [gate.summaryLine] } : {}) };
   },
 };
 

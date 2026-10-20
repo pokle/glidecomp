@@ -50,12 +50,26 @@ function buildThermalSegment(fixes: IGCFix[], startIndex: number, endIndex: numb
 // Internal smoothing parameters of the thermal state machine. Deliberately
 // NOT part of the DetectionThresholds model: they shape how the climb signal
 // is read, not what counts as a thermal, so they are not user-tunable.
+//
+// Both are measured in SECONDS, never in fixes. They used to be 10 fixes and
+// 3 fixes, which is 10 s and 3 s at 1 Hz but 100 s and 30 s on a 10 s logger:
+// the same flight then split into different thermals, and the metrics built
+// on them (exit decay, dolphin share, search share, time to core…) moved a
+// real 5–10 s logger by 30–55 percentile points against a 1 Hz field. On an
+// evenly spaced 1 Hz track the rules below are exactly the old ones. See
+// docs/2026-10-20-logger-interval-evidence.md.
 
-/** Number of fixes in the trailing climb-rate averaging window. */
-const THERMAL_WINDOW_SIZE = 10;
+/** Span of the trailing climb-rate averaging window. */
+const THERMAL_WINDOW_MS = 10_000;
 
-/** Consecutive below-threshold windows required before a thermal exit. */
+/**
+ * A thermal ends after THERMAL_EXIT_WINDOWS consecutive below-threshold
+ * windows, or sooner once two of them already span THERMAL_EXIT_SPAN_MS —
+ * at 1 Hz both read "weak for 2 s", while on a coarse log three windows
+ * would stretch the exit to tens of seconds.
+ */
 const THERMAL_EXIT_WINDOWS = 3;
+const THERMAL_EXIT_SPAN_MS = 2_000;
 
 /**
  * Detect thermal segments in the flight
@@ -66,50 +80,54 @@ const THERMAL_EXIT_WINDOWS = 3;
  */
 export function detectThermals(fixes: IGCFix[], thresholds: DetectionThresholds): ThermalSegment[] {
   const thermals: ThermalSegment[] = [];
-  const windowSize = THERMAL_WINDOW_SIZE;
   const minClimbRate = thresholds.thermal.minClimbRate;
   const minDuration = thresholds.thermal.minThermalDuration;
+  const timeMs = (k: number) => fixes[k].time.getTime();
 
   let inThermal = false;
   let thermalStart = 0;
-  let exitCounter = 0; // Count consecutive windows below threshold
+  let belowStart = -1; // First fix of the current run of below-threshold windows
+  let belowCount = 0; // Length of that run
   let lastThermalEnd = -1; // Track the end of the last thermal to prevent overlaps
+  let windowStart = 0;
 
-  for (let i = windowSize; i < fixes.length; i++) {
-    // Calculate average climb rate over window
-    let totalClimb = 0;
-    let totalTime = 0;
-
-    for (let j = i - windowSize; j < i; j++) {
-      const dt = (fixes[j + 1].time.getTime() - fixes[j].time.getTime()) / 1000;
-      const da = fixAltitude(fixes[j + 1]) - fixAltitude(fixes[j]);
-      totalClimb += da;
-      totalTime += dt;
+  for (let i = 1; i < fixes.length; i++) {
+    if (timeMs(i) - timeMs(0) < THERMAL_WINDOW_MS) continue;
+    // The shortest run of fixes ending at i that spans the window.
+    while (windowStart + 1 < i && timeMs(i) - timeMs(windowStart + 1) >= THERMAL_WINDOW_MS) {
+      windowStart++;
     }
-
-    const avgClimb = totalTime > 0 ? totalClimb / totalTime : 0;
+    const totalTime = (timeMs(i) - timeMs(windowStart)) / 1000;
+    const avgClimb =
+      totalTime > 0 ? (fixAltitude(fixes[i]) - fixAltitude(fixes[windowStart])) / totalTime : 0;
 
     if (!inThermal && avgClimb > minClimbRate) {
       // Entering thermal - but only if we're past the last thermal's end
       // and at least minGapDuration seconds have passed
-      const potentialStart = i - windowSize;
+      const potentialStart = windowStart;
       const minGapDuration = thresholds.thermal.minThermalGap;
       const timeSinceLastThermal = lastThermalEnd >= 0
-        ? (fixes[potentialStart].time.getTime() - fixes[lastThermalEnd].time.getTime()) / 1000
+        ? (timeMs(potentialStart) - timeMs(lastThermalEnd)) / 1000
         : Infinity;
 
       if (potentialStart > lastThermalEnd && timeSinceLastThermal >= minGapDuration) {
         inThermal = true;
         thermalStart = potentialStart;
-        exitCounter = 0;
+        belowStart = -1;
+        belowCount = 0;
       }
     } else if (inThermal) {
       if (avgClimb <= minClimbRate) {
-        exitCounter++;
+        if (belowStart < 0) belowStart = i;
+        belowCount++;
 
-        if (exitCounter >= THERMAL_EXIT_WINDOWS) {
-          const thermalEnd = i - THERMAL_EXIT_WINDOWS;
-          const duration = (fixes[thermalEnd].time.getTime() - fixes[thermalStart].time.getTime()) / 1000;
+        if (
+          belowCount >= THERMAL_EXIT_WINDOWS ||
+          (belowCount >= 2 && timeMs(i) - timeMs(belowStart) >= THERMAL_EXIT_SPAN_MS)
+        ) {
+          // The thermal ends on the last fix before the weak run began.
+          const thermalEnd = Math.max(thermalStart, belowStart - 1);
+          const duration = (timeMs(thermalEnd) - timeMs(thermalStart)) / 1000;
 
           if (duration >= minDuration) {
             const segment = buildThermalSegment(fixes, thermalStart, thermalEnd);
@@ -120,10 +138,12 @@ export function detectThermals(fixes: IGCFix[], thresholds: DetectionThresholds)
           }
 
           inThermal = false;
-          exitCounter = 0;
+          belowStart = -1;
+          belowCount = 0;
         }
       } else {
-        exitCounter = 0;
+        belowStart = -1;
+        belowCount = 0;
       }
     }
   }
