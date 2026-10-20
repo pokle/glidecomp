@@ -35,6 +35,10 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
   applies` and silently runs the unpatched code. Treat that warning as a
   finding: decide whether the patch is still needed on the new version and
   either port it or delete the entry and the file.
+- **Read a map-library bump against the CSP** in
+  `web/frontend/src/security-headers.ts`. Grep the new dist for `WebAssembly.`,
+  `new Function` and `eval`: `script-src` has no `'wasm-unsafe-eval'`, and
+  mapbox-gl 3.33 compiles WebAssembly to shape right-to-left text.
 - **GitHub Actions are pinned to commit SHAs**, with the release in a trailing
   comment (`uses: actions/checkout@<sha> # v5.1.0`), so nothing moves them for
   you. Each cycle, for every `uses:` in `.github/workflows/*.yml`, list the

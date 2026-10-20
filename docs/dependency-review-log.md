@@ -204,6 +204,115 @@ before the bump is gone.
   the patch removal. An exactly pinned package (`@better-auth/expo`) is not
   moved by `bun update`; edit it by hand in every workspace that pins it.
 
+## 2026-10-17
+
+> **Superseded by the 2026-10-18 cycle above (#746); the tree carries that cycle's versions.** That cycle took the same upgrades and also took mapbox-gl 3.33, concluding the CSP needs nothing new. This entry's opposite reading (3.33's RTL shaping compiles WebAssembly that `script-src` without `'wasm-unsafe-eval'` refuses) has not been settled either way in a browser. Check a map with Arabic or Hebrew labels before trusting either entry.
+
+**`bun audit` opened at 2 high and closes at 2 high, and neither can be fixed
+from here: npm has no patched release for either package.** The new one is
+`node-forge`, which came into the tree with the mobile app's Expo CLI. Every upgrade below is a patch or an
+additive minor, with no source change. Two candidates were **held on purpose**:
+mapbox-gl 3.33, which would break map tiles with right-to-left labels under our
+CSP, and the mobile app's move from the Expo SDK 58 beta to its stable release,
+which needs a device rebuild.
+
+This is the first cycle with the `mobile` workspace (Expo SDK 58, stages 1–5,
+#733–#740) in the tree.
+
+### Security Vulnerabilities Fixed
+
+**None fixable.** Both open advisories were checked for a release to override to:
+
+| Advisory | Severity | Package | Status |
+|----------|----------|---------|--------|
+| [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | high | `braces` `<=3.0.3` | Carried from 2026-10-04. `npm view braces versions` still ends at 3.0.3. The mobile app adds eight new paths to it (jest, metro, expo's metro-config), all of them dev and bundling tools that glob patterns we write. Not reachable with attacker-shaped input. |
+| [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) | high | `node-forge` `<=1.4.0` (via `expo` → `@expo/cli`) | **New this cycle**: it came into the tree with the mobile workspace. RSA PKCS#1 v1.5 signature forgery with a low public exponent, published 2026-09-03. The advisory lists no patched version, `latest` is 1.4.0 (2026-03-24), and the newest `@expo/cli` (58.1.11) and `@expo/code-signing-certificates` (0.0.7) both still depend on `^1.4.0`, so there is nothing to override to. `@expo/cli` uses it on a developer's machine, for dev-server HTTPS and code-signing certificates. It never reaches the app bundle or a worker. |
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth**, **@better-auth/api-key** | 1.7.7 | 1.7.10 | frontend, auth-api, mobile | 1.7.8: cookie attributes aligned with RFC 6265bis. `customSession` now throws when the lookup fails (it used to treat that as signed out). Password reset and change now run in one transaction with the session revocation. 30 s of ID-token clock skew is allowed. 1.7.9: an `onAPIError.onError` that throws no longer fails the request. 1.7.10: One Tap and FedCM changes, and the JWKS refetch is rate-limited. **No schema or migration change.** Pulls `better-call` 1.4.0 → 1.4.2 (see Lessons). |
+| **@better-auth/expo** | 1.7.7 | 1.7.10 | auth-api, mobile | Pinned exactly, in lockstep with better-auth. Edited by hand in both `package.json` files. |
+| **react-aria-components** | 1.21.1 | 1.22.1 | frontend | Adds a `Sheet` component, which we don't use. Overlays now allow for the virtual keyboard. Invalid `rgb()` colour strings now throw. `TokenFieldContext` is now exported as a value. Nothing labelled breaking. |
+| **astro** | 7.3.5 | 7.4.0 | frontend (dev) | Adds `build --timings` and experimental parallel prerendering. 7.3.6 hardens CSRF and `Host` checks (Node adapter only). **Raises the Node floor to `>=22.22.0`.** CI installs `node-version: 22` (the latest 22.x), so no workflow change. |
+| **vite** | 8.3.2 | 8.3.4 | frontend (dev) + root override | Bug fixes. 8.3.3 also hardens the dev server's `fs.serve` check. |
+| **@vitejs/plugin-react** | 6.1.1 | 6.1.2 | frontend (dev) | HMR fixes. |
+| **vitest** | 4.1.11 | 4.1.12 | frontend, auth-api, competition-api | One fix (hardened mocks). |
+| **lucide-react** | 1.52.0 | 1.59.0 | frontend | About 29 new icons. No exports removed. `Music*` renamed to `EighthNote(s)`, `HalfNote` and `SixteenthNotes`, with the old names kept as aliases. We use none of them. |
+| **dompurify** | 3.4.16 | 3.4.17 | frontend | Hardening of `IN_PLACE` sanitising and of namespaces. No GHSA. |
+| **shadcn** | 4.21.1 | 4.22.0 | frontend | Moves to Zod 4 internally. We import only `shadcn/tailwind.css`. The `braces` path through it remains. |
+| **@playwright/test** | 1.63.0 | 1.64.1 | root (dev) | Chromium 153 → **156**, Firefox 157, WebKit 27.2. `ensure-playwright-browsers.sh` fetched the new build. 1.64 changes: device descriptors forward `screen`, and elements in a hidden iframe now count as hidden. |
+| **concurrently** | 9.2.4 | 9.2.5 | root (dev) | Only bumps shell-quote. |
+| **@types/bun** | 1.4.2 | 1.4.3 | root (dev) | Describes bun 1.4.3. CI's `setup-bun` installs the latest bun; the container has 1.4.2. Types only. |
+| **@tanstack/react-query** (+ persist-client, async-storage-persister) | 5.104.1 | 5.104.3 | mobile | The persister now awaits `storage.setItem`. JS-only. |
+| **@testing-library/react-native**, **test-renderer**, **@babel/runtime** | 14.0.1, 1.3.0, 7.29.7 | 14.1.0, 1.3.1, 7.29.10 | mobile (dev; runtime for babel) | JS-only. Supports RN 0.88. |
+| `anthropics/claude-code-action` | v1.0.241 | v1.0.252 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `f27be6b6…`. The other six actions are already at the newest release in their major line. |
+
+### Code Changes Required
+
+None in source. Two version specs were tightened: `mapbox-gl` went from `^3.32.0` to
+`~3.32.0` at the root and in `web/frontend` (see below).
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `vite` (`^8.3.2` → `^8.3.4`) | Updated | Aligned with the frontend. |
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **mapbox-gl** | 3.32.0 | 3.33.0 | **Held, and now pinned `~3.32.0`.** 3.33 removes `setRTLTextPlugin` (unused here) and instead shapes Arabic and Hebrew text by compiling a WebAssembly module the first time such a label appears (`WebAssembly.instantiateStreaming` in the worker, `ushapeArabic`/`bidiProcessLines`). Our enforced CSP's `script-src` has no `'wasm-unsafe-eval'`, so the compile is refused. The worker then chains the tile's symbol layout onto the rejected promise, so a tile with any right-to-left label fails, where 3.32 drew the label unshaped. A comp in Israel, Jordan or Morocco would lose those tiles. This was not reproduced in a browser: the conclusion comes from reading the 3.33 worker source against the CSP. Before lifting it, **decide whether to add `'wasm-unsafe-eval'` to `script-src`** (`web/frontend/src/security-headers.ts`). That is a security decision, not a version bump. |
+| **Mobile: Expo SDK 58 GA** — `expo`, 10 `expo-*`/`@expo/ui`, `react-native` 0.88.0-rc.4 → 0.88.0, `react-native-safe-area-context`, `-screens`, `-svg`, `jest-expo`, `@react-native/jest-preset` | 58.0.7 etc. | 58.0.14 etc. | Expo published SDK 58 as `latest` on 2026-10-16. `bunx expo install --check` lists 16 packages behind. All are native modules, and a mismatched set crashes at launch (`mobile/CLAUDE.md`, "The SDK 58 beta moves fast"), which neither jest nor typecheck can catch, and this container cannot rebuild the app. Needs a focused PR with a device rebuild and the Maestro flows. `@rnmapbox/maps` 10.3.8 waits for the same PR. |
+| **wrangler** | 4.116.0 | 4.151.1 | **Still capped (12 cycles).** 4.145.0 needs miniflare `5.20260930.0-alpha`, and 4.151.1 needs `5.20261012.1-beta`. The line has moved from alpha to **beta** (miniflare's `beta` dist-tag), but it is still a prerelease. Stable miniflare `latest` is 4.20260730.0. |
+| @cloudflare/vitest-pool-workers, **vitest** 5 | 0.19.1, 4.1.12 | 0.23.0, 5.0.5 | Paired with the wrangler cap. |
+| **react**, **react-dom**, @types/react, @types/react-dom (website) | 19.2.8 / 19.2.18 / 19.2.7 | 19.3.1 / 19.3.0 | **Fifth cycle deferred, and now tracked in [#744](https://github.com/pokle/glidecomp/issues/744)** as the 2026-10-04 entry asked. The mobile app already runs 19.3 in its own isolated install. |
+| **@astrojs/mdx** | 7.0.8 | 8.1.0 | Still vestigial; wants its own PR to delete it. |
+| **three**, **@types/three**, **katex** | 0.185.x, 0.18.11 | 0.186.x, 0.19.0 | Pre-1.0 minors; focused PRs. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261016.1 | Major. |
+| zod, kysely, jsdom, concurrently, @types/node, @babel/runtime (mobile) | — | 4.6.7, 0.29.6, 30.1.3, 10.0.6, 26.6.5, 8.0.7 | Majors / pre-1.0 minors; unchanged reasons. |
+
+### Verification
+
+- `bun run typecheck:all` (now includes `typecheck:mobile`) and `bun run --filter '@glidecomp/frontend' typecheck`: clean.
+- `bun run test:all`: 1699 root, 954 frontend, 221 auth-api (6 todo), 794 competition-api, 70 mobile (9 suites). 0 fail.
+- `bun run build`: clean, 9 Astro pages.
+- `bun run test:e2e`: **223 passed, 9 skipped** in 16.1 minutes, exit 0, first run (Chromium 156 fetched by `ensure-playwright-browsers.sh` with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`).
+- `bun run test:e2e:ssr`: **67/67 passed** in 1.5 minutes, exit 0, including the hydration-mismatch checks. This is the run that would catch a better-auth cookie change in the SSR session hop.
+- `bun audit`: 2 high before, 2 high after. Neither package has a patched release.
+- `bunx expo install --check` in `mobile`: 16 deferred packages listed (see above); none of this cycle's mobile bumps are on it.
+- Root `package.json` `dependencies` read first. `git diff package.json` after every workspace `bun update` showed no stray additions; the only root edits were made by hand.
+- `bun.lock` checked: one key each for `better-auth@1.7.10`, `vite@8.3.4`, `playwright-core@1.64.1` and `mapbox-gl@3.32.0`, and no `1.7.7` left anywhere.
+- Runtime floors: astro's `>=22.22.0` is met by CI's `node-version: 22`.
+
+### Lessons / Notes for Future Sessions
+
+- **`patchedDependencies` fails silently when the version moves.** The root
+  patches `better-call@1.3.7`, but better-auth 1.7.7 had already moved to
+  `better-call` 1.4.0 (2026-10-04), and this cycle moves it to 1.4.2. Bun
+  applied the patch to nothing for two weeks with no warning, and every test
+  stayed green. Better-call 1.4.2 still has the unpatched `.catch` form in
+  `createEndpoint`. Whether the patch is still needed, and its re-targeting,
+  is left to a focused change, because the git history that explained it is
+  squashed. **The routine now checks every patch against `bun.lock`.**
+- **A changelog line about a removed API can hide a CSP problem.** mapbox-gl
+  3.33 lists "removed `setRTLTextPlugin`" as its breaking change, and we never
+  called it, so the change looked irrelevant. The consequence that matters
+  here is that the replacement compiles WebAssembly, which our CSP refuses.
+  Grep the new dist for `WebAssembly.`, `new Function` and `eval` whenever a
+  browser library changes how it loads code. **The routine now says so.**
+- **The mobile workspace brings Expo's versioning rules.** `bun outdated` in
+  `mobile` lists 27 rows, most of them native modules that Expo SDK
+  58 chooses. `bunx expo install --check` is what tells you which versions
+  the SDK actually expects. **The routine now covers `mobile` and `web/client`.**
+- **The miniflare cap has moved from alpha to beta.** The next cycle should
+  re-run `npm view miniflare dist-tags`. When `5.x` reaches `latest`, the cap
+  can lift, together with `@cloudflare/vitest-pool-workers` and vitest 5.
+- **`cd <workspace> && bun update <pkgs>` stayed well-behaved** (seventh
+  cycle), including from `mobile`.
+
 ## 2026-10-04
 
 **`bun audit` opened at 2 high and closes at 1.** The one that closed is
