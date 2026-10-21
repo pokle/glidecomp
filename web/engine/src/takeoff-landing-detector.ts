@@ -242,6 +242,24 @@ export function detectTakeoffLandingIndices(
 }
 
 /**
+ * The landing half of {@link detectTakeoffLandingIndices} alone: the fix
+ * index of the last sustained flight indication, or null where the criteria
+ * never fired (or the track is too short to judge). Scans backward from the
+ * end, so on a track that ends airborne it is one of the last two fixes.
+ */
+export function detectLandingIndex(
+  fixes: IGCFix[],
+  thresholds: DetectionThresholds
+): number | null {
+  if (fixes.length < 10) return null;
+  const landing = detectLanding(fixes, {
+    ...thresholds.takeoffLanding,
+    landingDescentThreshold: thresholds.vario.landingDescentThreshold,
+  });
+  return landing ? landing.index : null;
+}
+
+/**
  * Flatten a {@link TakeoffLandingDetection} into the FlightEvent objects the
  * event stream carries (takeoff first, then landing, when detected).
  */

@@ -1,7 +1,7 @@
 /**
- * FAI S7F §7.2 distance-definition compliance (2024 edition).
+ * FAI S7F §7.2 distance-definition compliance.
  *
- * Two rules from Annex A that the optimizer must implement:
+ * Two rules the optimizer must implement:
  *
  * 1. Launch centre (§7.2): "the distance is measured from the center
  *    of the launch waypoint (regardless of whether it has been given a
@@ -11,13 +11,12 @@
  *    imports) previously measured from the start cylinder's edge, losing
  *    exactly its radius: 5–10 km on real archive tasks.
  *
- * 2. ESS pin (§7.2): "The end of speed section is taken from its
- *    center position, so that its fix is pinned to the preceding points,
- *    rather than any subsequent points at a different position." The task
- *    path deliberately KINKS at ESS; its launch→ESS prefix then equals the
- *    §7.2 launchToESSPath = getShortestPath(launchToESS) by construction,
- *    so every slice-based consumer (speed-section length for leading points,
- *    launch→ESS for stopped validity) reads the spec's number.
+ * 2. Mid-route ESS (2026 §7.2): the ESS is an ordinary element of the task
+ *    route, and the speed section is measured on its OWN route,
+ *    launchToESSPath = RouteOptimizer(launchToESS). The 2024 edition instead
+ *    pinned the ESS tag to the incoming leg (Annex A §3.2.4) so the task
+ *    path's prefix equalled that route; 2026 dropped the pin, so the task
+ *    path no longer kinks at the ESS and the two are computed apart.
  *
  * Real-task fixtures come from pokle/glidecomp-archive (see fixtures/README).
  * Published reference distances are AirScore's, from each task's
@@ -31,9 +30,10 @@ import {
   calculateOptimizedTaskLine,
   calculateOptimizedTaskDistance,
   getOptimizedSegmentDistances,
+  getLaunchToESSSegmentDistances,
 } from '../src/task-optimizer';
 import { parseXCTask, getESSIndex, type XCTask, type Turnpoint } from '../src/xctsk-parser';
-import { ellipsoidDistance, destinationPoint, calculateBearingRadians } from '../src/geo';
+import { ellipsoidDistance, destinationPoint } from '../src/geo';
 import { computeLeadingAggregate } from '../src/gap-leading';
 
 const fixture = (name: string): XCTask =>
@@ -55,8 +55,7 @@ function makeTask(turnpoints: Turnpoint[]): XCTask {
 /**
  * The independent §7.2 launchToESS optimisation: the task truncated at the
  * ESS, optimised as its own route (its terminal element measured like a
- * goal). The ESS pin must make the full task path's launch→ESS prefix equal
- * this — the property the 2024 spec establishes by pinning.
+ * goal). calculateLaunchToESSLine must equal this.
  */
 function independentLaunchToEssDistance(task: XCTask, essIdx: number): number {
   const sub: XCTask = {
@@ -67,11 +66,8 @@ function independentLaunchToEssDistance(task: XCTask, essIdx: number): number {
   return calculateOptimizedTaskDistance(sub);
 }
 
-function prefixDistance(task: XCTask, essIdx: number): number {
-  const segs = getOptimizedSegmentDistances(task);
-  let sum = 0;
-  for (let i = 0; i < essIdx; i++) sum += segs[i];
-  return sum;
+function launchToEssDistance(task: XCTask): number {
+  return getLaunchToESSSegmentDistances(task).reduce((a, b) => a + b, 0);
 }
 
 describe('launch centre rule (§7.2)', () => {
@@ -125,10 +121,10 @@ describe('launch centre rule (§7.2)', () => {
   });
 });
 
-describe('ESS pin (§7.2)', () => {
+describe('mid-route ESS (2026 §7.2)', () => {
   // A course that bends sharply at a big ESS cylinder: launch → ESS(r=5km)
-  // → goal off at an angle. Free-floating optimisation would drag the ESS
-  // tag toward the goal; the pin fixes it to the incoming leg.
+  // → goal off at an angle. The 2024 pin fixed the ESS tag to the incoming
+  // leg; under 2026 it floats like any other turnpoint.
   const bentTask = (): XCTask => {
     const a = { lat: -36.0, lon: 147.0 };
     const b = destinationPoint(a.lat, a.lon, 30000, Math.PI / 2); // ESS centre, due east
@@ -140,58 +136,60 @@ describe('ESS pin (§7.2)', () => {
     ]);
   };
 
-  it('the ESS tag is the closest point on the ESS cylinder to the incoming leg', () => {
+  it('the ESS is not pinned: the task distance is the free-floating optimum', () => {
     const task = bentTask();
-    const line = calculateOptimizedTaskLine(task);
-    const ess = task.turnpoints[1];
-    // Pinned: the tag sits on the line from the previous tag through the
-    // ESS centre — the nearest boundary point, ignoring the goal beyond.
-    const bearing = calculateBearingRadians(
-      ess.waypoint.lat, ess.waypoint.lon, line[0].lat, line[0].lon,
-    );
-    const pinned = destinationPoint(ess.waypoint.lat, ess.waypoint.lon, ess.radius, bearing);
-    expect(ellipsoidDistance(line[1].lat, line[1].lon, pinned.lat, pinned.lon)).toBeLessThan(2);
-  });
-
-  it('the task path kinks at ESS: pinned total ≥ the free-floating optimum', () => {
-    const task = bentTask();
-    const pinned = calculateOptimizedTaskDistance(task);
-    // The free-floating optimum: strip the ESS marker so nothing pins.
     const free = calculateOptimizedTaskDistance({
       ...task,
       turnpoints: task.turnpoints.map((tp, i) =>
         i === 1 ? { ...tp, type: undefined } : tp,
       ),
     });
-    expect(pinned).toBeGreaterThan(free + 100); // this geometry kinks by ~km
+    expect(Math.abs(calculateOptimizedTaskDistance(task) - free)).toBeLessThan(0.5);
   });
 
-  const prefixEqualsIndependent = (task: XCTask) => {
+  it('the speed section is measured on its own route, not the task line', () => {
+    const task = bentTask();
+    // Launch→ESS on its own: the ESS tag faces the incoming leg — the
+    // nearest boundary point to the start's tag.
+    const own = launchToEssDistance(task);
+    expect(Math.abs(own - independentLaunchToEssDistance(task, 1))).toBeLessThan(1);
+    // The task line's ESS tag leans toward the goal, so its prefix is longer.
+    expect(getOptimizedSegmentDistances(task)[0]).toBeGreaterThan(own + 100);
+  });
+
+  const launchToEssEqualsIndependent = (task: XCTask) => {
     const essIdx = getESSIndex(task);
     expect(essIdx).toBeGreaterThan(0);
-    const prefix = prefixDistance(task, essIdx);
+    const own = launchToEssDistance(task);
     const independent = independentLaunchToEssDistance(task, essIdx);
-    expect(Math.abs(prefix - independent)).toBeLessThan(3);
+    expect(Math.abs(own - independent)).toBeLessThan(3);
   };
 
-  it('bright-open-2023-open-t1: launch→ESS prefix equals the independent §7.2 optimisation', () => {
-    // The archive's worst divergence under the old free-floating ESS:
-    // prefix 66.214 km vs true launch→ESS optimum 63.727 km (−2.5 km).
-    prefixEqualsIndependent(fixture('bright-open-2023-open-t1.xctsk'));
+  it('bright-open-2023-open-t1: launch→ESS equals the independent §7.2 optimisation', () => {
+    launchToEssEqualsIndependent(fixture('bright-open-2023-open-t1.xctsk'));
   });
 
-  it('unungra-cup-2020-open-t1: launch→ESS prefix equals the independent optimisation', () => {
-    prefixEqualsIndependent(sample('unungra-cup-2020-open-t1'));
+  it('unungra-cup-2020-open-t1: launch→ESS equals the independent optimisation', () => {
+    launchToEssEqualsIndependent(sample('unungra-cup-2020-open-t1'));
   });
 
-  it('kosci-loop-t3: launch→ESS prefix equals the independent optimisation', () => {
-    prefixEqualsIndependent(sample('kosci-loop-t3'));
+  it('kosci-loop-t3: launch→ESS equals the independent optimisation', () => {
+    launchToEssEqualsIndependent(sample('kosci-loop-t3'));
   });
 
-  it('ESS at goal: pin is a no-op (corryong-cup-2026-open-t1 unchanged)', () => {
+  it('task distances without the pin (engine code review 2026-10-20, finding 1.4)', () => {
+    // With the 2024 pin these were 67.356 km and 17.431 km.
+    expect(calculateOptimizedTaskDistance(sample('unungra-cup-2020-open-t1')) / 1000)
+      .toBeCloseTo(66.729, 2);
+    expect(calculateOptimizedTaskDistance(sample('kosci-loop-t3')) / 1000)
+      .toBeCloseTo(17.281, 2);
+  });
+
+  it('ESS at goal: launch→ESS is the task line (corryong-cup-2026-open-t1 unchanged)', () => {
     const task = sample('corryong-cup-2026-open-t1');
     expect(getESSIndex(task)).toBe(task.turnpoints.length - 1);
     expect(calculateOptimizedTaskDistance(task) / 1000).toBeCloseTo(78.846, 2);
+    expect(launchToEssDistance(task)).toBeCloseTo(calculateOptimizedTaskDistance(task), 6);
   });
 
   it('bright-open-2025-open-t3 (ENTER start concentric with the next TP): out-and-back route matches published', () => {
@@ -210,15 +208,14 @@ describe('ESS pin (§7.2)', () => {
     expect(Math.abs(total - 101722)).toBeLessThan(60);
   });
 
-  it('feeds the leading coefficient the pinned speed-section length', () => {
-    // ssKm inside computeLeadingAggregate must be the pinned slice — equal
-    // to the independent launch→ESS optimisation minus the pre-SSS portion.
+  it('feeds the leading coefficient the §7.2 speedSectionDistance', () => {
+    // ssKm inside computeLeadingAggregate must be launchToESSDistance minus
+    // the preSpeedSectionDistance, both on the launchToESSPath.
     const task = fixture('bright-open-2023-open-t1.xctsk');
     const essIdx = getESSIndex(task);
-    const segs = getOptimizedSegmentDistances(task);
-    let pre = 0;
-    for (let i = 0; i < 1; i++) pre += segs[i]; // sssIdx = 1 (TAKEOFF first)
-    const expectedSsKm = (prefixDistance(task, essIdx) - pre) / 1000;
+    const segs = getLaunchToESSSegmentDistances(task);
+    const pre = segs[0]; // sssIdx = 1 (TAKEOFF first)
+    const expectedSsKm = (independentLaunchToEssDistance(task, essIdx) - pre) / 1000;
 
     const t0 = Date.parse('2023-02-11T02:00:00Z');
     const fixes = [0, 60, 120].map((s) => ({

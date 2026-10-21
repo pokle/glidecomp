@@ -36,7 +36,7 @@
  *   land beside the path point is centre→point, which is what is used here.
  *
  * Everything here is task-shape agnostic: FAI placement rules (launch
- * centre, ESS pin, goal handling) are the caller's business — see
+ * centre, where the speed section ends, goal handling) are the caller's business — see
  * task-optimizer.ts, which owns the route construction.
  */
 
@@ -47,13 +47,10 @@ export type GeoPoint = { lat: number; lon: number };
 
 /**
  * A control zone of the §7.1.1 geodesicRouteDefinition. A cylinder with
- * radius 0 is a fixed point (the path must pass through its centre). A
- * `pinned` cylinder's path point is the boundary point nearest the
- * PRECEDING path point, ignoring whatever follows — the caller's mechanism
- * for the mid-route ESS pin (see task-optimizer.ts).
+ * radius 0 is a fixed point (the path must pass through its centre).
  */
 export type GeodesicRouteElement =
-  | { kind: 'cylinder'; center: GeoPoint; radius: number; pinned?: boolean }
+  | { kind: 'cylinder'; center: GeoPoint; radius: number }
   | { kind: 'line'; point1: GeoPoint; point2: GeoPoint };
 
 /**
@@ -204,7 +201,7 @@ export const PATHFINDER_EPSILON_M = 0.1;
 type XY = { x: number; y: number };
 
 type CartesianElement =
-  | { kind: 'cylinder'; x: number; y: number; radius: number; pinned?: boolean }
+  | { kind: 'cylinder'; x: number; y: number; radius: number }
   | { kind: 'line'; p1: XY; p2: XY };
 
 function planarDistance(a: XY, b: XY): number {
@@ -319,8 +316,8 @@ function circleTag(a: XY, b: XY, el: CartesianElement & { kind: 'cylinder' }): X
 }
 
 /**
- * The boundary point nearest an outside (or inside) point — the pinned and
- * terminal cylinder placement. Degenerate direction (point at the centre)
+ * The boundary point nearest an outside (or inside) point — the terminal
+ * cylinder placement. Degenerate direction (point at the centre)
  * falls back to due east; the choice is arbitrary and the cost identical.
  */
 function nearestOnCircle(a: XY, el: CartesianElement & { kind: 'cylinder' }): XY {
@@ -414,7 +411,7 @@ function pathFinder(start: XY, elements: CartesianElement[], end: XY | null): XY
     const a = i === 0 ? start : tags[i - 1];
     const b = i === n - 1 ? end : tags[i + 1];
     if (el.kind === 'cylinder') {
-      if (el.pinned || b === null) return nearestOnCircle(a, el);
+      if (b === null) return nearestOnCircle(a, el);
       return circleTag(a, b, el);
     }
     if (b === null) return closestPointOnSegment(a, el.p1, el.p2);
@@ -573,7 +570,6 @@ function optimizePath(route: GeodesicRouteDefinition, projection: LtmProjection)
           kind: 'cylinder' as const,
           ...projection.toCartesian(el.center.lat, el.center.lon),
           radius: el.radius,
-          pinned: el.pinned,
         }
       : {
           kind: 'line' as const,
@@ -585,7 +581,25 @@ function optimizePath(route: GeodesicRouteDefinition, projection: LtmProjection)
     ? projection.toCartesian(route.endPoint.lat, route.endPoint.lon)
     : null;
 
-  const cartesianTags = pathFinder(start, elements, end);
+  // Identical consecutive cylinders (an ESS on the goal cylinder, a
+  // turnpoint repeated) are one control zone: the shortest path tags both at
+  // the same point. Solved separately, block coordinate descent deadlocks
+  // them — each one's optimum, with the other held at the same spot, is the
+  // degenerate tie-break — so solve the merged route and share the tag.
+  const keep: number[] = [];
+  const toKept: number[] = [];
+  elements.forEach((el, i) => {
+    const prev = keep.length > 0 ? elements[keep[keep.length - 1]] : null;
+    if (prev && el.kind === 'cylinder' && prev.kind === 'cylinder' &&
+        el.x === prev.x && el.y === prev.y && el.radius === prev.radius) {
+      toKept.push(keep.length - 1);
+      return;
+    }
+    toKept.push(keep.length);
+    keep.push(i);
+  });
+  const mergedTags = pathFinder(start, keep.map((i) => elements[i]), end);
+  const cartesianTags = toKept.map((k) => mergedTags[k]);
   const geodesicTags = cartesianTags.map((t) => projection.toGeodesic(t.x, t.y));
   const corrected = projectionCorrection(geodesicTags, route.elements);
 

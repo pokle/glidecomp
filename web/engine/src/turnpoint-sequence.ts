@@ -21,6 +21,8 @@
 
 import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
+import { detectLandingIndex } from './takeoff-landing-detector';
+import { DEFAULT_THRESHOLDS } from './thresholds';
 import { ellipsoidDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
 import {
@@ -36,6 +38,7 @@ import {
 } from './goal-line';
 import {
   resolveStartGates,
+  resolveTimeTrialGate,
   gateIndexForCrossing,
   resolveTaskDeadline,
   resolveLaunchWindowOpen,
@@ -103,9 +106,10 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  * 3. Enforce the launch window's open time (§9.3): SSS crossings before
  *    takeoff.timeOpen prove the pilot was airborne before launching was
  *    allowed and cannot validate a start
- * 4. For gated races: drop SSS crossings before the first start gate
- *    (§9.2 — a start can't validate before the gate opens); when every
- *    crossing is pre-gate, resolve from them anyway and report earlyStart
+ * 4. For gated races and gated time trials: drop SSS crossings before the
+ *    first start gate (§9.2, §6.3.2 — a start can't validate before the gate
+ *    opens); when every crossing is pre-gate, or no later one leads to a
+ *    turnpoint, resolve from them anyway and report earlyStart
  * 5. For SSS: use last valid crossing before continuing to next TP
  * 6. For other TPs (ESS and goal included): use first valid crossing after
  *    previous TP reached — outward for an EXIT cylinder (one the route
@@ -116,8 +120,9 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  * 7. For ESS: always first crossing (no re-tries)
  * 8. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
  *    (most TPs reached, then most flown distance, then latest SSS)
- * 9. Snap the start time to the last gate ≤ crossing (§9.2.4.1) and time the
- *    speed section from the gate (§9.4)
+ * 9. Race: snap the start time to the last gate ≤ crossing (§9.2.4.1) and
+ *    time the speed section from the gate (§9.4). Time trial: the start time
+ *    is the pilot's own crossing
  * 10. Compute optimized leg distances and flown distance
  *
  * @param task - The competition task definition
@@ -140,11 +145,7 @@ export function resolveTurnpointSequence(
 
   const windowEndMs = stop.windowEndMs ?? stop.stopTimeMs;
   const bonusOpts = { glideRatio: stop.glideRatio, goalAltitude: stop.goalAltitude };
-  // "Still flying at the stop": the tracklog reaches the scored-window end.
-  // (Comp tracklogs end at landing; a logger left running on the ground can
-  // only earn a bonus near zero, since ground altitude ≈ landing altitude.)
-  const flyingAtStop = fixes.length > 0 &&
-    fixes[fixes.length - 1].time.getTime() >= windowEndMs;
+  const flyingAtStop = isFlyingAtStop(fixes, windowEndMs);
 
   let result: TurnpointSequenceResult;
   let bonusApplied = false;
@@ -193,6 +194,27 @@ export function resolveTurnpointSequence(
 }
 
 /**
+ * "Still flying at the stop" (§13.4.3, §13.4.6): the pilot had not landed by
+ * the scored-window end. Where the tracklog ends is not enough — a logger
+ * left running on the ground reaches the window end too, and the §13.4.6
+ * bonus is height above GOAL, not above the landing field, so a pilot landed
+ * on a hillside above goal would collect a large bonus (and drop out of the
+ * landed-before-stop count stopped-task validity uses). So the landing is
+ * detected from the track itself: flying at the stop means the track reaches
+ * the window end AND the last sustained flight indication is at or after it.
+ * A track that is still airborne at its final fixes (the detector puts the
+ * landing on one of the last two) is judged by where it ends, as before.
+ */
+function isFlyingAtStop(fixes: IGCFix[], windowEndMs: number): boolean {
+  if (fixes.length === 0 || fixes[fixes.length - 1].time.getTime() < windowEndMs) {
+    return false;
+  }
+  const landingIdx = detectLandingIndex(fixes, DEFAULT_THRESHOLDS);
+  if (landingIdx === null || landingIdx >= fixes.length - 2) return true;
+  return fixes[landingIdx].time.getTime() >= windowEndMs;
+}
+
+/**
  * The clip a stopped task places on one flight's resolution: crossings
  * after `windowEndMs` are excluded and best-progress stops scanning there
  * (null = no clip, used for the §13.4.5 complete-flight case); when
@@ -229,9 +251,9 @@ function resolveSequenceOnce(
   }));
 
   const startedInsideTP = resolveTrackStartInside(task, fixes, geometry, anchors);
-  const directionSSSCrossings = filterStartCrossingsByDirection(task, allCrossings, anchors);
-  const timing = resolveTimingWindow({ task, fixes, anchors, directionSSSCrossings, stopClip });
-  const { gates, deadlineMs, clipMs } = timing;
+  const allSSSCrossings = collectStartCrossings(allCrossings, anchors);
+  const timing = resolveTimingWindow({ task, fixes, anchors, allSSSCrossings, stopClip });
+  const { gates, timeTrialGateMs, deadlineMs, clipMs } = timing;
 
   // The crossings the sequence may be built from: everything at or before
   // the scored-flight end. The full list (allCrossings) is still returned
@@ -245,8 +267,8 @@ function resolveSequenceOnce(
   const deadlineInfo = describeTaskDeadline(deadlineMs, allCrossings, fixes);
   const crossingsByTP = groupCrossingsByTurnpoint(scoredCrossings);
 
-  const { sssCrossings, launchWindowInfo, startSelectionReason } = resolveStartCrossings({
-    task, fixes, anchors, directionSSSCrossings, timing,
+  const { sssCrossings, preGateCrossings, launchWindowInfo, startSelectionReason } = resolveStartCrossings({
+    task, fixes, anchors, allSSSCrossings, timing,
   });
 
   const startFallback = anchors.sssIsFallback
@@ -289,10 +311,24 @@ function resolveSequenceOnce(
     altitudeBonus: stopClip?.altitudeBonus ?? null,
   };
 
-  const sequence = chooseBestSequence({
+  let sequence = chooseBestSequence({
     sssCrossings, crossingsByTP, anchors, geometry,
     startedInsideTP, startSelectionReason, scan,
   });
+  // A crossing after the gate that leads nowhere — on an out-and-return,
+  // the pilot flying back INTO the start cylinder on the way to goal — is
+  // not where they "continued to fly through the remainder of the task"
+  // (§6.3). Since every crossing counts whatever its direction (§6.2.1), it
+  // must not displace a pre-gate start the pilot actually raced from: that
+  // start resolves as an early one (§13.3), as it would with no later
+  // crossing at all.
+  if (sequence.length <= 1 && preGateCrossings.length > 0) {
+    const early = chooseBestSequence({
+      sssCrossings: preGateCrossings, crossingsByTP, anchors, geometry,
+      startedInsideTP, startSelectionReason, scan,
+    });
+    if (early.length > sequence.length) sequence = early;
+  }
   const reachedTaskIndices = new Set(sequence.map(r => r.taskIndex));
 
   // Mark completed legs
@@ -314,7 +350,16 @@ function resolveSequenceOnce(
   // Flown distance, with the best-progress fix a non-goal pilot is measured to
   const { bestProgress, flownDistance } = measureSequenceDistance(scan, sequence);
 
-  const gateTaken = gates && sssReaching ? snapToStartGate(gates, sssReaching) : null;
+  // A race snaps the start to a gate (§9.2.4.1). A time trial times each
+  // pilot from their own crossing, so only a crossing before its gate — a
+  // failed start (§13.3) — takes the gate, exactly as an early racer does.
+  const gateTaken = !sssReaching
+    ? null
+    : gates
+      ? snapToStartGate(gates, sssReaching)
+      : timeTrialGateMs !== null && sssReaching.time.getTime() < timeTrialGateMs
+        ? snapToStartGate([timeTrialGateMs], sssReaching)
+        : null;
   const startGate = gateTaken?.startGate;
   const earlyStart = gateTaken?.earlyStart;
 
@@ -457,32 +502,27 @@ function resolveTrackStartInside(
 }
 
 /**
- * Filter SSS crossings by the required direction (e.g. EXIT for paragliding
- * races). If no SSS config or direction is unspecified, accept all crossings
- * for backward compat. The direction rule describes the explicit SSS
- * cylinder; in fallback mode the anchor is the first turnpoint (not a
- * configured start), so no filter applies.
+ * Every crossing of the start cylinder, in either direction. S7F 2026 §6.2.1:
+ * "The direction in which such a crossing occurs is irrelevant … pilots are
+ * not bound to those indications" — a task's declared `sss.direction` only
+ * explains the intended route, so it never discards a start. (The start is
+ * still the LAST crossing before continuing, §6.3.1.)
  */
-function filterStartCrossingsByDirection(
-  task: XCTask,
+function collectStartCrossings(
   allCrossings: CylinderCrossing[],
-  { sssIdx, sssIsFallback }: TaskAnchors,
+  { sssIdx }: TaskAnchors,
 ): CylinderCrossing[] {
-  const requiredDirection = sssIsFallback
-    ? undefined
-    : task.sss?.direction?.toLowerCase() as 'enter' | 'exit' | undefined;
-  const allSSSCrossings = sssIdx >= 0
-    ? allCrossings.filter(c => c.taskIndex === sssIdx)
-    : [];
-  return requiredDirection
-    ? allSSSCrossings.filter(c => c.direction === requiredDirection)
-    : allSSSCrossings;
+  return sssIdx >= 0 ? allCrossings.filter(c => c.taskIndex === sssIdx) : [];
 }
 
 /** The times that bound one pilot's scored flight. */
 interface TimingWindow {
   /** Sorted absolute start-gate times (§6.3.1/§9.2); null when ungated. */
   gates: number[] | null;
+  /** A time trial's start gate (§6.3.2); null for a race or when undeclared. */
+  timeTrialGateMs: number | null;
+  /** When the start opens: the first race gate or the time-trial gate. */
+  startOpenMs: number | null;
   /** The goal deadline (§9.2); null when there is none or it is mis-set. */
   deadlineMs: number | null;
   /** The launch window's open time (§9.3); null when it doesn't apply. */
@@ -495,27 +535,32 @@ interface TimingWindowParams {
   task: XCTask;
   fixes: IGCFix[];
   anchors: TaskAnchors;
-  /** SSS crossings that passed the direction rule, in time order. */
-  directionSSSCrossings: CylinderCrossing[];
+  /** Every SSS crossing, either direction, in time order. */
+  allSSSCrossings: CylinderCrossing[];
   stopClip: StopClip | null;
 }
 
 function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
-  const { task, fixes, anchors, directionSSSCrossings, stopClip } = params;
+  const { task, fixes, anchors, allSSSCrossings, stopClip } = params;
   const { sssIsFallback } = anchors;
 
-  // Start gates (RACE tasks, §6.3.1/§9.2): resolved before the timing clips
-  // below — the deadline's mis-set guard compares against the first gate.
+  // Start gates (RACE tasks, §6.3.1/§9.2; a time trial's single gate,
+  // §6.3.2): resolved before the timing clips below — the deadline's mis-set
+  // guard compares against the start's opening.
   // The reference instant (any SSS crossing, else the first fix) only
   // places the gates' time-of-day on the right calendar day. Gates describe
-  // the configured start cylinder, so — like the direction rule above —
-  // they don't apply in fallback-start mode.
-  const gateReferenceMs = directionSSSCrossings.length > 0
-    ? directionSSSCrossings[0].time.getTime()
+  // the configured start cylinder, so they don't apply in fallback-start
+  // mode.
+  const gateReferenceMs = allSSSCrossings.length > 0
+    ? allSSSCrossings[0].time.getTime()
     : (fixes.length > 0 ? fixes[0].time.getTime() : null);
   const gates = !sssIsFallback && gateReferenceMs !== null
     ? resolveStartGates(task, gateReferenceMs)
     : null;
+  const timeTrialGateMs = !sssIsFallback && gateReferenceMs !== null
+    ? resolveTimeTrialGate(task, gateReferenceMs)
+    : null;
+  const startOpenMs = gates ? gates[0] : timeTrialGateMs;
 
   // Task deadline (§9.2): crossings after the goal deadline cannot count,
   // and best-progress distance is measured only up to it (§9.3, §13.2).
@@ -526,7 +571,7 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
   let deadlineMs = fixes.length > 0
     ? resolveTaskDeadline(task, fixes[fixes.length - 1].time.getTime())
     : null;
-  if (deadlineMs !== null && gates && deadlineMs <= gates[0]) deadlineMs = null;
+  if (deadlineMs !== null && startOpenMs !== null && deadlineMs <= startOpenMs) deadlineMs = null;
 
   // Launch window open (§9.3, takeoff.timeOpen): a start crossing before
   // the window opens proves the pilot was airborne before launching was
@@ -540,7 +585,9 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
   if (windowOpenMs !== null && deadlineMs !== null && windowOpenMs >= deadlineMs) {
     windowOpenMs = null;
   }
-  if (windowOpenMs !== null && gates && windowOpenMs > gates[0]) windowOpenMs = null;
+  if (windowOpenMs !== null && startOpenMs !== null && windowOpenMs > startOpenMs) {
+    windowOpenMs = null;
+  }
 
   // The scored-flight end: the task deadline and — for a stopped task — the
   // pilot's scored-window end (§13.4.4), whichever comes first. Crossings
@@ -552,7 +599,7 @@ function resolveTimingWindow(params: TimingWindowParams): TimingWindow {
       ? deadlineMs
       : Math.min(deadlineMs, stopEndMs);
 
-  return { gates, deadlineMs, windowOpenMs, clipMs };
+  return { gates, timeTrialGateMs, startOpenMs, deadlineMs, windowOpenMs, clipMs };
 }
 
 /**
@@ -597,35 +644,43 @@ interface StartCrossingsParams {
   task: XCTask;
   fixes: IGCFix[];
   anchors: TaskAnchors;
-  directionSSSCrossings: CylinderCrossing[];
+  allSSSCrossings: CylinderCrossing[];
   timing: TimingWindow;
 }
 
 interface StartCrossings {
   /** The start crossings a sequence may be built from, in time order. */
   sssCrossings: CylinderCrossing[];
+  /**
+   * Pre-gate crossings set aside because a crossing after the gate exists
+   * (empty when none were set aside). The caller falls back to them only
+   * when no post-gate crossing leads anywhere.
+   */
+  preGateCrossings: CylinderCrossing[];
   launchWindowInfo: LaunchWindowInfo | undefined;
   /** How the chosen start reaching is explained on the report card. */
   startSelectionReason: TurnpointReaching['selectionReason'];
 }
 
 /**
- * Start validation order: deadline clip (the caller's), direction (already
- * applied), launch-window open, then gates. Pre-window crossings are dropped
+ * Start validation order: deadline clip (the caller's), launch-window open,
+ * then gates (a race's first gate, or a time trial's gate). Pre-window
+ * crossings are dropped
  * outright (§9.3 — launching before the window has no scored-with-penalty
- * provision); pre-gate crossings are kept only when EVERY crossing is
+ * provision); pre-gate crossings are used only when EVERY crossing is
  * pre-gate, the §13.3 "jumped the gun" case (HG scores the complete flight
  * with a penalty; the PG launch→SSS clamp happens in the scorer) with
- * earlyStart reporting the facts.
+ * earlyStart reporting the facts — or when no post-gate crossing leads
+ * anywhere (the caller's fallback, via `preGateCrossings`).
  */
 function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
-  const { task, fixes, anchors, directionSSSCrossings, timing } = params;
+  const { task, fixes, anchors, allSSSCrossings, timing } = params;
   const { sssIdx, sssIsFallback } = anchors;
-  const { gates, windowOpenMs, clipMs } = timing;
+  const { startOpenMs, windowOpenMs, clipMs } = timing;
 
   let sssCrossings = clipMs === null
-    ? directionSSSCrossings
-    : directionSSSCrossings.filter(c => c.time.getTime() <= clipMs);
+    ? allSSSCrossings
+    : allSSSCrossings.filter(c => c.time.getTime() <= clipMs);
   let droppedStartCrossings = 0;
   if (windowOpenMs !== null) {
     const beforeCount = sssCrossings.length;
@@ -635,9 +690,13 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
   const launchWindowInfo: LaunchWindowInfo | undefined = windowOpenMs !== null
     ? { openTime: new Date(windowOpenMs), droppedStartCrossings }
     : undefined;
-  if (gates && sssCrossings.length > 0) {
-    const legal = sssCrossings.filter(c => c.time.getTime() >= gates[0]);
-    if (legal.length > 0) sssCrossings = legal;
+  let preGateCrossings: CylinderCrossing[] = [];
+  if (startOpenMs !== null && sssCrossings.length > 0) {
+    const legal = sssCrossings.filter(c => c.time.getTime() >= startOpenMs);
+    if (legal.length > 0) {
+      preGateCrossings = sssCrossings.filter(c => c.time.getTime() < startOpenMs);
+      sssCrossings = legal;
+    }
   }
 
   // Fallback start with no crossings: if the track began outside the first
@@ -672,7 +731,7 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
     }
   }
 
-  return { sssCrossings, launchWindowInfo, startSelectionReason };
+  return { sssCrossings, preGateCrossings, launchWindowInfo, startSelectionReason };
 }
 
 /**

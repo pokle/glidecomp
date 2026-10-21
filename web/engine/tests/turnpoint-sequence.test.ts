@@ -47,6 +47,7 @@ function createTask(
     sss: {
       type: sss?.type ?? 'RACE',
       direction: sss?.direction ?? 'EXIT',
+      ...(sss?.timeGates ? { timeGates: sss.timeGates } : {}),
     },
     goal: {
       type: goal?.type ?? 'CYLINDER',
@@ -1111,9 +1112,11 @@ describe('resolveTurnpointSequence', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // BUG-05: SSS crossing direction validation
+  // The declared SSS direction does not bind pilots (S7F 2026 §6.2.1). It
+  // used to filter start crossings (BUG-05); the 2026 edition says "the
+  // direction in which such a crossing occurs is irrelevant".
   // ---------------------------------------------------------------------------
-  describe('SSS crossing direction filtering', () => {
+  describe('SSS crossing direction', () => {
     // Task: TAKEOFF → SSS (radius 3000m) → TP → GOAL
     const sssTurnpoints: TaskDef[] = [
       { name: 'TAKEOFF', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
@@ -1121,42 +1124,34 @@ describe('resolveTurnpointSequence', () => {
       { name: 'TP1', lat: 47.15, lon: 11.0, radius: 1000 },
       { name: 'GOAL', lat: 47.25, lon: 11.0, radius: 1000 },
     ];
+    /** The direction of the crossing the start reaching was built from. */
+    const startDirection = (r: ReturnType<typeof resolveTurnpointSequence>) =>
+      r.crossings.find(c => c.taskIndex === r.sssReaching!.taskIndex && c.time.getTime() === r.sssReaching!.time.getTime())
+        ?.direction;
 
-    it('uses only EXIT crossings when sss.direction is EXIT', () => {
-      const task = createTask(sssTurnpoints, { direction: 'EXIT' });
-      // Fly through all cylinders (generates both enter and exit crossings)
+    it('starts at the last crossing before continuing, whatever the declared direction', () => {
       const track = createTrackThroughCylinders(
         sssTurnpoints.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }))
       );
+      const asExit = resolveTurnpointSequence(createTask(sssTurnpoints, { direction: 'EXIT' }), track);
+      const asEnter = resolveTurnpointSequence(createTask(sssTurnpoints, { direction: 'ENTER' }), track);
 
-      const result = resolveTurnpointSequence(task, track);
-
-      // Should have started (exit crossing exists)
-      expect(result.sssReaching).not.toBeNull();
-      // The SSS crossing used should be an exit
-      const sssCrossingsUsed = result.crossings.filter(
-        c => c.taskIndex === 1 && c.direction === 'exit'
-      );
-      expect(sssCrossingsUsed.length).toBeGreaterThan(0);
+      expect(asExit.sssReaching).not.toBeNull();
+      expect(asEnter.sssReaching).not.toBeNull();
+      // Flying through the start, the last crossing before TP1 is the exit
+      // on the far side — under either declaration.
+      expect(startDirection(asExit)).toBe('exit');
+      expect(startDirection(asEnter)).toBe('exit');
+      expect(asEnter.sssReaching!.time.getTime())
+        .toBeCloseTo(asExit.sssReaching!.time.getTime(), -2);
+      expect(asEnter.madeGoal).toBe(true);
+      expect(asExit.madeGoal).toBe(true);
     });
 
-    it('uses only ENTER crossings when sss.direction is ENTER', () => {
-      const task = createTask(sssTurnpoints, { direction: 'ENTER' });
-      const track = createTrackThroughCylinders(
-        sssTurnpoints.map(d => ({ lat: d.lat, lon: d.lon, radius: d.radius }))
-      );
-
-      const result = resolveTurnpointSequence(task, track);
-
-      // Should have started (enter crossing exists)
-      expect(result.sssReaching).not.toBeNull();
-    });
-
-    it('rejects start when pilot only enters but never exits an EXIT-direction SSS (BUG-05)', () => {
+    it('an entry crossing starts an EXIT-declared task (no longer BUG-05)', () => {
       const task = createTask(sssTurnpoints, { direction: 'EXIT' });
 
-      // Create a track that enters the SSS cylinder but never exits it
-      // (pilot flies in and lands inside the cylinder)
+      // The pilot enters the start cylinder and lands inside it.
       const sss = sssTurnpoints[1];
       const track = [
         createFix(0, 47.0, 11.0, 1000),        // at takeoff
@@ -1168,9 +1163,54 @@ describe('resolveTurnpointSequence', () => {
 
       const result = resolveTurnpointSequence(task, track);
 
-      // No valid exit crossing → no SSS start
-      expect(result.sssReaching).toBeNull();
-      expect(result.sequence.length).toBe(0);
+      expect(result.sssReaching).not.toBeNull();
+      expect(startDirection(result)).toBe('enter');
+    });
+
+    it('flying back into the start on the way to goal does not replace the real start', () => {
+      // Out-and-return: launch and goal both inside a big EXIT start. The
+      // pilot leaves before the only gate (an early start), rounds TP1, and
+      // re-enters the start cylinder after the gate on the way home. That
+      // entry leads nowhere, so it is not the start (§6.3): the pre-gate
+      // exit is, scored as an early start.
+      const outAndReturn: TaskDef[] = [
+        { name: 'SSS', lat: 47.0, lon: 11.0, radius: 3000, type: 'SSS' },
+        { name: 'TP1', lat: 47.1, lon: 11.0, radius: 400 },
+        { name: 'GOAL', lat: 47.0, lon: 11.0, radius: 1000 },
+      ];
+      const task = createTask(outAndReturn, { direction: 'EXIT', timeGates: ['10:10:00Z'] });
+      const track: IGCFix[] = [];
+      // 0..10 min out to TP1 (exit at ~min 3), 10..20 min back to goal (re-entry ~min 17).
+      for (let m = 0; m <= 20; m++) {
+        const lat = m <= 10 ? 47.0 + m * 0.01 : 47.1 - (m - 10) * 0.01;
+        track.push(createFix(m, lat, 11.0, 1500));
+      }
+      const result = resolveTurnpointSequence(task, track);
+      expect(result.madeGoal).toBe(true);
+      expect(result.earlyStart).toBeDefined();
+      expect(startDirection(result)).toBe('exit');
+    });
+
+    it('an air start entered from outside scores the same declared EXIT or ENTER', () => {
+      // TAKEOFF → SSS air start 10 km north (radius 2 km) → GOAL. The pilot
+      // flies from launch into the start cylinder and on to goal without
+      // ever leaving it backwards: their only start crossing is an entry.
+      const airStart: TaskDef[] = [
+        { name: 'TAKEOFF', lat: 47.0, lon: 11.0, radius: 400, type: 'TAKEOFF' },
+        { name: 'SSS', lat: 47.09, lon: 11.0, radius: 2000, type: 'SSS' },
+        { name: 'GOAL', lat: 47.09, lon: 11.0, radius: 400, type: 'ESS' },
+      ];
+      const track: IGCFix[] = [];
+      for (let i = 0; i <= 90; i++) {
+        track.push(createFixSeconds(i * 20, 47.0 + i * 0.001, 11.0, 1500));
+      }
+      const exitTask = createTask(airStart, { direction: 'EXIT' });
+      const enterTask = createTask(airStart, { direction: 'ENTER' });
+      const asExit = resolveTurnpointSequence(exitTask, track);
+      const asEnter = resolveTurnpointSequence(enterTask, track);
+      expect(asEnter.madeGoal).toBe(true);
+      expect(asExit.madeGoal).toBe(true);
+      expect(asExit.flownDistance).toBeCloseTo(asEnter.flownDistance, 0);
     });
   });
 

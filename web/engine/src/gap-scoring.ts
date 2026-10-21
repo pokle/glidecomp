@@ -23,7 +23,7 @@ import type { TurnpointSequenceResult, StopResolutionOptions } from './turnpoint
 import { resolveTurnpointSequence } from './turnpoint-sequence';
 import { getSSSIndex, getEffectiveSSSIndex } from './xctsk-parser';
 import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './task-optimizer';
-import { resolveStartGates, resolveTaskDeadline } from './time-gates';
+import { resolveStartOpen, resolveTaskDeadline } from './time-gates';
 import { maxBy, minBy } from './array-utils';
 
 import { DEFAULT_GAP_PARAMETERS, leadingFormulaFor, resolveLeadingTimeRatio } from './gap-params';
@@ -149,6 +149,19 @@ function officialStartFromSequence(result: TurnpointSequenceResult): number | nu
 }
 
 /**
+ * The end of a resolved flight's SCORED part (epoch ms): the goal deadline
+ * (§9.2, §12.3.1) and, on a stopped task, the pilot's scored-window end
+ * (§13.4.4/§13.4.5), whichever comes first. Null when neither clips the
+ * flight. The leading scan stops here, as the sequence resolution did — no
+ * pilot earns points from flying after the stop or the deadline.
+ */
+export function scoredFlightEndMs(result: TurnpointSequenceResult): number | null {
+  const ends = [result.deadline?.time.getTime(), result.stopInfo?.windowEnd.getTime()]
+    .filter((t): t is number => t !== undefined);
+  return ends.length > 0 ? Math.min(...ends) : null;
+}
+
+/**
  * Build the compact scoring inputs for one flight from its resolved
  * turnpoint sequence. `includeTrack` attaches the fixes/sequence the
  * leading-coefficient calculation re-scans (only when leading is enabled);
@@ -179,7 +192,12 @@ export function toFlightScoringData(
         }
       : {}),
     leading: includeTrack
-      ? { kind: 'track', fixes: pilot.fixes, sequence: result.sequence }
+      ? {
+          kind: 'track',
+          fixes: pilot.fixes,
+          sequence: result.sequence,
+          scanEndMs: scoredFlightEndMs(result),
+        }
       : { kind: 'none' },
   };
 }
@@ -405,12 +423,13 @@ function computeLeadingCoefficients(
     .filter((t): t is number => t !== null);
 
   let taskFirstSSSTime = allSSSTimes.length > 0 ? minBy(allSSSTimes, t => t) : 0;
-  // §12.3.1: in a gated race the leading-coefficient time axis starts at
-  // the first start gate, not at the field's first actual crossing. Any
-  // pilot's crossing works as the day reference for the gate times.
+  // §12.3.1: in a gated race or time trial the leading-coefficient time axis
+  // starts at the first start gate ("as defined for the task"), not at the
+  // field's first actual crossing. Any pilot's crossing works as the day
+  // reference for the gate times.
   if (allSSSTimes.length > 0) {
-    const gates = resolveStartGates(scoringTask, taskFirstSSSTime);
-    if (gates) taskFirstSSSTime = gates[0];
+    const startOpen = resolveStartOpen(scoringTask, taskFirstSSSTime);
+    if (startOpen !== null) taskFirstSSSTime = startOpen;
   }
 
   // Pass 1: the per-pilot aggregates. null = this pilot earns no leading
@@ -431,6 +450,7 @@ function computeLeadingCoefficients(
       : computeLeadingAggregate(
           lead.fixes, scoringTask, lead.sequence,
           f.sssTimeMs, f.essTimeMs, leadingFormulaFor(params.scoring),
+          lead.scanEndMs ?? null,
         );
   });
 

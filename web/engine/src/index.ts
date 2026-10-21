@@ -73,6 +73,8 @@ export {
   calculateOptimizedTaskLine,
   computeTurnpointDirections,
   getOptimizedSegmentDistances,
+  calculateLaunchToESSLine,
+  getLaunchToESSSegmentDistances,
   type TurnpointDirection,
 } from './task-optimizer';
 export {
@@ -226,6 +228,8 @@ export {
   parseTimeOfDayUTC,
   resolveLaunchWindowOpen,
   resolveStartGates,
+  resolveStartOpen,
+  resolveTimeTrialGate,
   resolveTaskDeadline,
   resolveTimeOfDayNear,
 } from './time-gates';
@@ -334,6 +338,7 @@ export {
   stoppedMinimumRunSeconds,
   taskForDistanceOrigin,
   toFlightScoringData,
+  scoredFlightEndMs,
   type AvailablePoints,
   type DistanceOrigin,
   type FlightLeadingInput,

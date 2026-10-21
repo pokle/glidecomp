@@ -79,7 +79,7 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   if (!result.sssReaching) {
     out.push({
       id: 'no-start',
-      text: 'No valid start — the track never crossed the start cylinder in the required direction, so only pre-start progress can score.',
+      text: 'No valid start — the track never crossed the start cylinder, so only pre-start progress can score.',
       emphasis: 'warning',
     });
   } else {

@@ -16,6 +16,7 @@ import {
   toFlightScoringData,
   manualOpenDistanceGeometry,
   computeLeadingAggregate,
+  scoredFlightEndMs,
   resolveScoredWindowEnds,
   type IGCFix,
   type FlightScoringData,
@@ -370,7 +371,8 @@ async function scoreGapTask(
             kind: "aggregate",
             aggregate: computeLeadingAggregate(
               fixes, scoringTask, result.sequence,
-              base.sssTimeMs, base.essTimeMs, leadingFormula
+              base.sssTimeMs, base.essTimeMs, leadingFormula,
+              scoredFlightEndMs(result)
             ),
           },
         }

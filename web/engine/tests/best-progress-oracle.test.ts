@@ -24,7 +24,7 @@
  *
  * The cases cover each remaining-route shape the search handles: a dogleg
  * around a big cylinder, a multi-turnpoint course from two different
- * last-reached turnpoints, a LINE goal, an ESS pinned before goal, an EXIT
+ * last-reached turnpoints, a LINE goal, an ESS before goal, an EXIT
  * cylinder still to leave, and the §13.4.6 stopped-task altitude bonus.
  * Tracks are seeded random walks with circling, so they are reproducible.
  */
@@ -241,7 +241,7 @@ const lineGoal: XCTask = {
   goal: { type: 'LINE' },
 };
 
-/** The ESS sits mid-route, so the remaining route pins it. */
+/** The ESS sits mid-route — an ordinary element of the remaining route. */
 const E1 = at(A, 15000, 80);
 const E2 = at(E1, 12000, 10);
 const essMid: XCTask = {
@@ -354,27 +354,33 @@ for (let s = 0; s < 3; s++) {
 /**
  * What the search returned for each case before SEC-45 (commit 8749808):
  * [fixIndex, distanceToGoal]. Never regenerate these to make a change pass.
+ *
+ * One deliberate re-baseline since: the zigzag and ESS mid-route tasks have
+ * an ESS before goal, which the 2024 rules pinned to the incoming leg.
+ * S7F 2026 §7.2 has no pin (scoring change 057), so their remaining
+ * distances dropped by the pin's excess — 388 m and 19–20 m. Every case
+ * still picks the same fix.
  */
 const GOLDEN: Record<string, [number, number]> = {
   'dogleg #0': [740, 33963.51089305842],
   'dogleg #1': [986, 36693.95803222534],
   'dogleg #2': [1077, 37859.156666610535],
   'dogleg #3': [644, 37715.007666592195],
-  'zigzag from start #0': [981, 62069.41274641034],
-  'zigzag from Z2 #0': [827, 32950.78186994061],
-  'zigzag from start #1': [965, 59897.6180610265],
-  'zigzag from Z2 #1': [900, 33581.82844481482],
-  'zigzag from start #2': [831, 61325.580612251804],
-  'zigzag from Z2 #2': [834, 34117.52852551578],
+  'zigzag from start #0': [981, 61681.83333009019],
+  'zigzag from Z2 #0': [827, 32561.60553369594],
+  'zigzag from start #1': [965, 59510.039256900294],
+  'zigzag from Z2 #1': [900, 33194.595896269464],
+  'zigzag from start #2': [831, 60938.001903041935],
+  'zigzag from Z2 #2': [834, 33731.07197839687],
   'line goal #0': [589, 30258.768700171528],
   'line goal, last leg #0': [711, 12194.41309272342],
   'line goal #1': [556, 30276.963929127065],
   'line goal, last leg #1': [483, 12291.59525582712],
   'line goal #2': [724, 28897.89771483394],
   'line goal, last leg #2': [433, 14032.275502497905],
-  'ESS mid-route #0': [1300, 19625.136539400235],
-  'ESS mid-route #1': [971, 17169.605317279504],
-  'ESS mid-route #2': [1002, 20501.180841870537],
+  'ESS mid-route #0': [1300, 19605.9023529942],
+  'ESS mid-route #1': [971, 17149.655565517947],
+  'ESS mid-route #2': [1002, 20482.64649971331],
   'exit cylinder next #0': [910, 27568.673562287207],
   'exit cylinder next #1': [987, 26261.464095502983],
   'exit cylinder next #2': [878, 26982.61739847906],

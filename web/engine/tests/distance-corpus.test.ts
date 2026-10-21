@@ -4,15 +4,15 @@
  * Two suites:
  *
  * 1. The bundled tasks (web/samples/comps — always present, runs in CI):
- *    the S7F §7.2 structural property on every task — the task path's
- *    launch→ESS prefix equals an independent launchToESS optimisation,
- *    which is what the §7.2 ESS pin guarantees by construction.
+ *    the S7F 2026 §7.2 structural property on every task — the speed
+ *    section's own route (calculateLaunchToESSLine) equals an independent
+ *    launchToESS optimisation.
  *
  * 2. The archive back-catalogue (pokle/glidecomp-archive): the same
  *    invariant over every archived task, plus task-distance parity against
  *    the AirScore-published `task_dist` for the modern-generation comps
  *    (2025 onward — earlier years were scored by a legacy AirScore whose
- *    optimiser did not fully converge, did not pin the ESS, and measured
+ *    optimiser did not fully converge, and measured
  *    an identical concentric ESS/goal to the goal CENTRE, so their
  *    published distances are not a reference for the current spec).
  *    Skipped silently when the archive is not checked out — point
@@ -24,7 +24,7 @@ import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import {
   calculateOptimizedTaskDistance,
-  getOptimizedSegmentDistances,
+  getLaunchToESSSegmentDistances,
 } from '../src/task-optimizer';
 import { parseXCTask, getESSIndex, type XCTask } from '../src/xctsk-parser';
 
@@ -49,14 +49,12 @@ function loadTask(root: string, dir: string): XCTask | null {
   }
 }
 
-/** §7.2: the task path's launch→ESS prefix must equal the independent
- * launchToESS optimisation — the property the ESS pin establishes. */
-function assertPrefixMatchesIndependent(task: XCTask, label: string): void {
+/** §7.2: the launchToESS route must equal the independent launchToESS
+ * optimisation of the task truncated at its ESS. */
+function assertLaunchToEssMatchesIndependent(task: XCTask, label: string): void {
   const essIdx = getESSIndex(task);
-  if (essIdx <= 0 || essIdx >= task.turnpoints.length - 1) return; // pin is a no-op
-  const segs = getOptimizedSegmentDistances(task);
-  let prefix = 0;
-  for (let i = 0; i < essIdx; i++) prefix += segs[i];
+  if (essIdx <= 0 || essIdx >= task.turnpoints.length - 1) return; // ESS is the goal
+  const prefix = getLaunchToESSSegmentDistances(task).reduce((a, b) => a + b, 0);
   const independent = calculateOptimizedTaskDistance({
     ...task,
     turnpoints: task.turnpoints.slice(0, essIdx + 1),
@@ -65,16 +63,16 @@ function assertPrefixMatchesIndependent(task: XCTask, label: string): void {
   // Both are 1 m-tolerance iterative optimisations of the same route.
   expect(
     Math.abs(prefix - independent),
-    `${label}: launch→ESS prefix ${prefix.toFixed(1)} vs independent ${independent.toFixed(1)}`,
+    `${label}: launch→ESS ${prefix.toFixed(1)} vs independent ${independent.toFixed(1)}`,
   ).toBeLessThan(3);
 }
 
-describe('bundled tasks: §7.2 launch→ESS prefix equals its own optimisation', () => {
+describe('bundled tasks: §7.2 launch→ESS equals its own optimisation', () => {
   for (const dir of taskDirs(SAMPLES_ROOT)) {
     it(dir, () => {
       const task = loadTask(SAMPLES_ROOT, dir);
       if (!task) return;
-      assertPrefixMatchesIndependent(task, dir);
+      assertLaunchToEssMatchesIndependent(task, dir);
     });
   }
 });
@@ -82,12 +80,12 @@ describe('bundled tasks: §7.2 launch→ESS prefix equals its own optimisation',
 const archiveDirs = taskDirs(ARCHIVE_ROOT);
 
 describe.if(archiveDirs.length > 0)('archive corpus (glidecomp-archive)', () => {
-  it('every task satisfies the §7.2 prefix property', () => {
+  it('every task satisfies the §7.2 launch→ESS property', () => {
     let checked = 0;
     for (const dir of archiveDirs) {
       const task = loadTask(ARCHIVE_ROOT, dir);
       if (!task) continue;
-      assertPrefixMatchesIndependent(task, dir);
+      assertLaunchToEssMatchesIndependent(task, dir);
       checked++;
     }
     expect(checked).toBeGreaterThan(100);
@@ -101,14 +99,6 @@ describe.if(archiveDirs.length > 0)('archive corpus (glidecomp-archive)', () => 
       // published (its fixed-pass search did not converge on this
       // geometry); the per-waypoint cumulatives bracket the published ones.
       'forbes-flatlands-2025-open-t5': 'legacy optimiser convergence (engine 989 m shorter)',
-      // Scored by legacy AirScore, which optimises the whole route globally
-      // instead of pinning the ESS (§7.2): the engine matches the
-      // published cumulatives to metres up to the ESS, then the pin
-      // deliberately kinks the path (+403 m total). Same class of
-      // divergence as forbes-flatlands-2025-open-t5. (Originally suspected
-      // to be the issue-#577 ENTER-start geometry; the sweep that fixed
-      // #577 showed it is not.)
-      'dalby-big-air-2026-floater-t2': 'legacy optimiser does not pin the ESS (engine +403 m)',
       'forbes-flatlands-2026-open-t5': 'task.xctsk does not match the flown task (95 km apart)',
     };
     let checked = 0;
