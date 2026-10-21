@@ -624,6 +624,18 @@ These are the standing imperatives. Each links to the reference that explains it
     `charts/day-profile/DayProfilePanel.tsx` onto ONE shared comp-zone time axis
     rather than per-metric; tables stay the accessible exact reading, and a new
     series kind must be **ignored, not crash**, in older UIs.
+  - **Across years, claim a constant instrument — never comparable scores**
+    ([#602](https://github.com/pokle/glidecomp/issues/602)). Every task, 2019
+    or 2026, is rescored under the current S7F edition, so the analysis
+    measures every year with ONE ruler. It does not make the races
+    comparable: pilots flew to the incentives of their own edition (leading
+    weight, time exponent, leading off entirely), and one ruler cannot undo
+    that. Wherever a page, doc or PR describes analysis over more than one
+    year — a cross-comp profile, a skill trajectory, an archive-wide
+    finding — say "one constant measuring instrument across years", not
+    "scores comparable across years". Formula-independent metrics (climb,
+    glide, gaggle) carry the claim best; anything built on GAP points or
+    rank carries the edition caveat with it.
   - Storage is stale-first (`task_analysis`, migration 0019) with two
     departures from scores: revalidation is **lazy** (triggered by a read — it's
     expensive and few people read it) and the cold path **never computes
