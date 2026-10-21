@@ -110,7 +110,9 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  *    first start gate (§9.2, §6.3.2 — a start can't validate before the gate
  *    opens); when every crossing is pre-gate, or no later one leads to a
  *    turnpoint, resolve from them anyway and report earlyStart
- * 5. For SSS: use last valid crossing before continuing to next TP
+ * 5. For SSS in a race with a single start gate: the first crossing after
+ *    the gate (§9.2.4 — no re-start); otherwise the last valid crossing
+ *    before continuing to next TP
  * 6. For other TPs (ESS and goal included): use first valid crossing after
  *    previous TP reached — outward for an EXIT cylinder (one the route
  *    arrives at from inside, see computeTurnpointDirections) — or, when the
@@ -118,8 +120,9 @@ export { detectCylinderCrossings } from './turnpoint-sequence-crossings';
  *    reaching (nested/overlapping cylinders), credit it at that same moment
  *    (presence-based reaching, §9)
  * 7. For ESS: always first crossing (no re-tries)
- * 8. For multi-gate/elapsed-time: iterate SSS crossings, keep best path
- *    (most TPs reached, then most flown distance, then latest SSS)
+ * 8. For multi-gate races, time trials and ungated races: iterate SSS
+ *    crossings, keep best path (most TPs reached, then most flown distance,
+ *    then latest SSS)
  * 9. Race: snap the start time to the last gate ≤ crossing (§9.2.4.1) and
  *    time the speed section from the gate (§9.4). Time trial: the start time
  *    is the pilot's own crossing
@@ -311,10 +314,26 @@ function resolveSequenceOnce(
     altitudeBonus: stopClip?.altitudeBonus ?? null,
   };
 
-  let sequence = chooseBestSequence({
-    sssCrossings, crossingsByTP, anchors, geometry,
-    startedInsideTP, startSelectionReason, scan,
-  });
+  // A race with a single start gate has no re-start: "a control zone's
+  // validation time is always the first crossing time after the start gate
+  // time" (S7F 2026 §9.2.4). The best-path search is the multi-gate and
+  // time-trial rule, and here it would let a later crossing — a pilot who
+  // went back into the cylinder and out again — replace the first one,
+  // moving the reported start and the leading window that opens at it
+  // (§12.3.1). The first crossing never reaches fewer turnpoints than a
+  // later one: every later reaching is the first after the one before it.
+  const singleGateMs = gates?.length === 1 ? gates[0] : null;
+  let sequence = singleGateMs !== null && sssCrossings[0].time.getTime() >= singleGateMs
+    ? buildForwardPath({
+        sssCrossing: sssCrossings[0], crossingsByTP,
+        sssIdx: anchors.sssIdx, essIdx: anchors.essIdx, goalIdx: anchors.goalIdx,
+        startedInsideTP, directions: geometry.directions,
+        startSelectionReason: 'first_after_gate',
+      })
+    : chooseBestSequence({
+        sssCrossings, crossingsByTP, anchors, geometry,
+        startedInsideTP, startSelectionReason, scan,
+      });
   // A crossing after the gate that leads nowhere — on an out-and-return,
   // the pilot flying back INTO the start cylinder on the way to goal — is
   // not where they "continued to fly through the remainder of the task"
@@ -837,7 +856,9 @@ interface BestSequenceParams {
 }
 
 /**
- * For multi-gate/elapsed-time starts: iterate the SSS crossings, try each,
+ * For multi-gate races, time trials and ungated races (a single-gate race
+ * takes its first crossing after the gate instead, §9.2.4): iterate the SSS
+ * crossings, try each,
  * and keep the best path — most TPs reached, then most flown distance, then
  * latest SSS (step 8 of the algorithm on {@link resolveTurnpointSequence}).
  */

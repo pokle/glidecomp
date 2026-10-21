@@ -141,6 +141,9 @@ export interface TurnpointReaching {
    * Why this crossing was selected over other candidates.
    * Designed to be explainable to pilots:
    * - 'last_before_next': SSS rule — last crossing before continuing to next TP
+   *   (multi-gate races, time trials and ungated races)
+   * - 'first_after_gate': SSS rule for a race with a single start gate — the
+   *   first crossing after the gate, whatever came later (S7F 2026 §9.2.4)
    * - 'first_after_previous': Standard rule — first crossing after previous TP reached
    * - 'first_crossing': ESS rule — always first crossing, no re-tries
    * - 'already_inside': Presence rule — the pilot was already inside this
@@ -154,7 +157,7 @@ export interface TurnpointReaching {
    * - 'track_start': No-SSS fallback only — the track began outside the first
    *   turnpoint's cylinder with no crossing, so the first fix anchors the start
    */
-  selectionReason: 'last_before_next' | 'first_after_previous' | 'first_crossing' | 'already_inside' | 'already_outside' | 'track_start';
+  selectionReason: 'last_before_next' | 'first_after_gate' | 'first_after_previous' | 'first_crossing' | 'already_inside' | 'already_outside' | 'track_start';
 
   /**
    * How many candidate crossings existed for this task position.
