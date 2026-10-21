@@ -251,6 +251,44 @@ describe('resolveTurnpointSequence with start gates', () => {
     );
   });
 
+  it('a single-gate race takes the first crossing after the gate, not a re-start (§9.2.4)', () => {
+    // Exit at ~10:35 (after the 10:30 gate), back inside, out again at ~10:50.
+    const task = gatedTask({ timeGates: ['10:30:00Z'] });
+    const result = resolveTurnpointSequence(task, flightExitingAt(35, 50));
+    const startCrossings = result.crossings.filter((c) => c.taskIndex === 0);
+    expect(startCrossings.length).toBeGreaterThan(2);
+    const firstAfterGate = startCrossings.find((c) => c.time.getTime() >= gate1)!;
+    expect(result.sssReaching!.time.getTime()).toBe(firstAfterGate.time.getTime());
+    expect(result.sssReaching!.time.getTime()).toBeLessThan(gate1 + 40 * 60 * 1000);
+    expect(result.sssReaching!.selectionReason).toBe('first_after_gate');
+    // The start time still snaps to the gate, and the pilot still finishes.
+    expect(result.startGate!.time.getTime()).toBe(gate1);
+    expect(result.essReaching).not.toBeNull();
+  });
+
+  it('a multi-gate race still takes the re-start (§9.2.4)', () => {
+    const result = resolveTurnpointSequence(gatedTask(), flightExitingAt(35, 50));
+    expect(result.sssReaching!.time.getTime()).toBeGreaterThan(gate2);
+    expect(result.sssReaching!.selectionReason).toBe('last_before_next');
+    expect(result.startGate!.index).toBe(1);
+  });
+
+  it('a single-gate race: a pre-gate crossing is not "first", and direction is irrelevant', () => {
+    // Exit at ~10:20 (before the gate), back inside after it, out at ~10:50.
+    // The first crossing after the gate is the RE-ENTRY: a crossing counts
+    // whichever way it goes (§6.2.1), so that is where the start validates.
+    const task = gatedTask({ timeGates: ['10:30:00Z'] });
+    const result = resolveTurnpointSequence(task, flightExitingAt(20, 50));
+    const reEntry = result.crossings.find(
+      (c) => c.taskIndex === 0 && c.time.getTime() >= gate1,
+    )!;
+    expect(reEntry.direction).toBe('enter');
+    expect(result.earlyStart).toBeUndefined();
+    expect(result.sssReaching!.time.getTime()).toBe(reEntry.time.getTime());
+    expect(result.sssReaching!.selectionReason).toBe('first_after_gate');
+    expect(result.essReaching).not.toBeNull();
+  });
+
   it('leaves time-trial tasks on the actual-crossing clock', () => {
     const result = resolveTurnpointSequence(
       gatedTask({ type: 'ELAPSED-TIME' }), flightExitingAt(40),

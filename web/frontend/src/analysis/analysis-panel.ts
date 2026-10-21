@@ -1093,6 +1093,10 @@ export function createAnalysisPanel(options: AnalysisPanelOptions): AnalysisPane
           reasonStr = `Last of ${reaching.candidateCount} crossings`;
         } else if (reaching.selectionReason === 'last_before_next') {
           reasonStr = 'Start';
+        } else if (reaching.selectionReason === 'first_after_gate' && reaching.candidateCount > 1) {
+          reasonStr = `First crossing after the start gate, of ${reaching.candidateCount}`;
+        } else if (reaching.selectionReason === 'first_after_gate') {
+          reasonStr = 'Start';
         } else if (reaching.selectionReason === 'first_after_previous' && reaching.candidateCount > 1) {
           reasonStr = `First of ${reaching.candidateCount} crossings`;
         } else if (reaching.selectionReason === 'first_crossing' && reaching.candidateCount > 1) {

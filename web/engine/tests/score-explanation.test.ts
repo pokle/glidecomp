@@ -208,6 +208,48 @@ describe('explainGapScore — flight narrative', () => {
     }
   });
 
+  it('a single-gate race says the first crossing after the gate is the start (§9.2.4)', () => {
+    // Started at the first exit (10 min), came back in and out again: in a
+    // single-gate race the later exit is no re-start.
+    const sss = reaching(1, 10, 'first_after_gate', 3);
+    const base = makeReentryResult();
+    const result: TurnpointSequenceResult = {
+      ...base,
+      crossings: [
+        { ...crossing(1, 10, 'exit'), time: sss.time },
+        crossing(1, 20, 'enter'),
+        crossing(1, 30, 'exit'),
+        ...base.crossings.slice(3),
+      ],
+      sssReaching: sss,
+      sequence: [sss, ...base.sequence.slice(1)],
+      startGate: { time: at(5), index: 0, gateCount: 1 },
+    };
+    const explanation = explainGapScore({
+      task: makeTask(),
+      result,
+      entry: makeGoalEntry(),
+      classContext: makeClassContext(),
+      params: { scoring: 'PG' },
+    });
+
+    const flight = section(explanation, 'flight');
+    const summary = flight.items.find((i) => i.id === 'start-multiple')!;
+    expect(summary.text).toContain('single start gate');
+    expect(summary.text).toContain('§9.2.4');
+    expect(summary.text).not.toContain('latest crossing');
+    const chosen = flight.items.find((i) => i.id === 'start-chosen')!;
+    expect(chosen.text).toContain('the first one after the start gate');
+    // The re-start story ("a shorter, later run") does not apply.
+    expect(chosen.text).not.toContain('re-start');
+
+    const scored = flight.items.filter(
+      (i) => i.id.startsWith('start-crossing-') && i.text.includes('scored start'),
+    );
+    expect(scored).toHaveLength(1);
+    expect(scored[0].anchor!.timeMs).toBe(at(10).getTime());
+  });
+
   it('always lists the scored start, eliding the middle, when it lies beyond the crossing cap', () => {
     // 20 boundary crossings; the scored start is the LAST one — the classic
     // "milled around the start cylinder" case the narrative exists for. It

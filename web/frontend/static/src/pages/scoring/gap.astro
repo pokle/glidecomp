@@ -1235,7 +1235,10 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 GlideComp scores race-to-goal start gates as the specification requires. The start
                 time of each pilot is the last gate at or before their start-cylinder crossing
                 (<SpecRef section="9.2.4.1" />). A crossing before the first gate cannot validate a
-                start (<SpecRef section="9.2" />). Early starts obey the
+                start (<SpecRef section="9.2" />). With a single gate, the start is the first
+                crossing after the gate, and a later crossing does not replace it. With more than
+                one gate, the start is the last crossing before the pilot continued along the
+                course, so a pilot can go back for a later gate (<SpecRef section="9.2.4" />). Early starts obey the
                 <SpecRef section="13.3" label="§12.2" /> rules: paragliders are scored
                 launch→start, and hang gliders get the jump-the-gun penalty. The
                 leading-coefficient clock runs from the first gate (<SpecRef section="12.3.1" />).
@@ -1412,15 +1415,6 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                   fraction of a second. That is more precise, but time points can differ by a
                   fraction of a point from a scorer that works in whole seconds. Tracked in
                   <a href="https://github.com/pokle/glidecomp/issues/586" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #586</a>.
-                </li>
-                <li>
-                  <strong>Single start gate: which start crossing counts (<SpecRef section="9.2" />):</strong>
-                  with a single gate, the specification takes the first crossing after the gate.
-                  GlideComp tries every crossing and keeps the best flight, for every task type.
-                  The start time snaps to the gate either way, so time points never differ. For a
-                  pilot who crossed, returned, and crossed again, the reported crossing and the
-                  leading points can differ. Tracked in
-                  <a href="https://github.com/pokle/glidecomp/issues/587" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #587</a>.
                 </li>
                 <li>
                   <strong>Optional leading and arrival points:</strong> the specification always

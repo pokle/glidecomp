@@ -95,9 +95,14 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
       // Careful wording: the scored crossing can be the first one (later
       // crossings were just flying back through the cylinder mid-task) or a
       // later one (a re-start superseded an earlier start).
+      // A single-gate race has no re-start (S7F 2026 §9.2.4): the first
+      // crossing after the gate is the start, whatever came later.
+      const firstAfterGate = sss.selectionReason === 'first_after_gate';
       out.push({
         id: 'start-multiple',
-        text: `Crossed the start cylinder boundary ${startCrossings.length} times. The scored start is the latest crossing from which the flight still makes its best run along the course — re-starting supersedes an earlier start, while simply flying back through the cylinder later in the task changes nothing.`,
+        text: firstAfterGate
+          ? `Crossed the start cylinder boundary ${startCrossings.length} times. This race has a single start gate, so the scored start is the first crossing after the gate — a later crossing, whether flying back through the cylinder or going back for another start, changes nothing (FAI S7F §9.2.4).`
+          : `Crossed the start cylinder boundary ${startCrossings.length} times. The scored start is the latest crossing from which the flight still makes its best run along the course — re-starting supersedes an earlier start, while simply flying back through the cylinder later in the task changes nothing.`,
         emphasis: 'muted',
       });
       // The scored start is usually one of the LAST crossings for a pilot
@@ -164,7 +169,15 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
       const later = startCrossings.filter(
         (c) => c.time.getTime() > sss.time.getTime(),
       );
-      if (later.length === 0) {
+      if (firstAfterGate) {
+        out.push({
+          id: 'start-chosen',
+          text: result.startGate
+            ? `The ${fmt(sss.time)} crossing is the scored start — the first one after the start gate opened at ${fmt(result.startGate.time)}.`
+            : `The ${fmt(sss.time)} crossing is the scored start — the first one after the start gate opened.`,
+          emphasis: 'muted',
+        });
+      } else if (later.length === 0) {
         out.push({
           id: 'start-chosen',
           text: `The ${fmt(sss.time)} crossing is the scored start — the last one made, so it supersedes every earlier crossing.`,
