@@ -25,6 +25,7 @@ import { detectLandingIndex } from './takeoff-landing-detector';
 import { DEFAULT_THRESHOLDS } from './thresholds';
 import { ellipsoidDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
+import { effectiveAltitudeLimits, goalAltitudeFactor, resolveElevatedGoal, withinAltitudeLimits } from './elevated-goal';
 import {
   calculateOptimizedTaskLine,
   computeTurnpointDirections,
@@ -67,10 +68,12 @@ import type {
   TurnpointSequenceResult,
   TurnpointSequenceResultJSON,
   NextTPMeasure,
+  ElevatedGoalInfo,
 } from './turnpoint-sequence-types';
 
 export { MIN_CYLINDER_TOLERANCE_M } from './turnpoint-sequence-types';
 export type {
+  ElevatedGoalInfo,
   CylinderCrossing,
   TurnpointReaching,
   BestProgress,
@@ -285,6 +288,7 @@ function resolveSequenceOnce(
     ...(anchors.essIsFallback ? { essFallback: 'last_turnpoint' as const } : {}),
     ...(deadlineInfo ? { deadline: deadlineInfo } : {}),
     ...(launchWindowInfo ? { launchWindow: launchWindowInfo } : {}),
+    ...(anchors.elevatedGoal ? { elevatedGoal: anchors.elevatedGoal } : {}),
   };
 
   if (sssCrossings.length === 0) {
@@ -327,7 +331,7 @@ function resolveSequenceOnce(
     ? buildForwardPath({
         sssCrossing: sssCrossings[0], crossingsByTP,
         sssIdx: anchors.sssIdx, essIdx: anchors.essIdx, goalIdx: anchors.goalIdx,
-        startedInsideTP, directions: geometry.directions,
+        startedInsideTP, directions: geometry.directions, altitudeLimits: geometry.altitudeLimits,
         startSelectionReason: 'first_after_gate',
       })
     : chooseBestSequence({
@@ -390,6 +394,20 @@ function resolveSequenceOnce(
     speedSectionTime = (essReaching.time.getTime() - startMs) / 1000;
   }
 
+  // §13.1: a goal pilot under an Elevated Goal keeps GoalAltitudeFactor of
+  // their time points, by the altitude of the goal reaching. Every crossing
+  // validates goal (§9.2.3.2) — only the points depend on the altitude.
+  const goalReaching = madeGoal ? sequence[sequence.length - 1] : null;
+  const elevatedGoalInfo = anchors.elevatedGoal
+    ? goalReaching
+      ? {
+          ...anchors.elevatedGoal,
+          crossingAltitude: goalReaching.altitude,
+          goalAltitudeFactor: goalAltitudeFactor(goalReaching.altitude, anchors.elevatedGoal),
+        }
+      : anchors.elevatedGoal
+    : undefined;
+
   return {
     crossings: allCrossings,
     sequence,
@@ -405,6 +423,7 @@ function resolveSequenceOnce(
     ...(startGate ? { startGate } : {}),
     ...(earlyStart ? { earlyStart } : {}),
     ...optionalFields,
+    ...(elevatedGoalInfo ? { elevatedGoal: elevatedGoalInfo } : {}),
   };
 }
 
@@ -426,6 +445,8 @@ interface TaskGeometry {
   segmentDistances: number[];
   /** The optimized task distance — the sum of the segments. */
   taskDistance: number;
+  /** Per task index: the §6.2.1 altitude limits, or null for none. */
+  altitudeLimits: Array<{ lower: number; upper: number } | null>;
 }
 
 /**
@@ -447,7 +468,8 @@ function computeTaskGeometry(task: XCTask): TaskGeometry {
     ));
   }
   const taskDistance = segmentDistances.reduce((sum, d) => sum + d, 0);
-  return { optimizedLine, directions, segmentDistances, taskDistance };
+  const altitudeLimits = task.turnpoints.map((_, i) => effectiveAltitudeLimits(task, i));
+  return { optimizedLine, directions, segmentDistances, taskDistance, altitudeLimits };
 }
 
 /** Where the scored flight starts and ends on the route. */
@@ -464,6 +486,8 @@ interface TaskAnchors {
    * (§9.2.3) and remaining-distance for the goal position use line geometry.
    */
   goalLine: GoalLine | null;
+  /** The task's Elevated Goal (§6.2.3.2), or null; see ElevatedGoalInfo. */
+  elevatedGoal: ElevatedGoalInfo | null;
 }
 
 function resolveTaskAnchors(task: XCTask): TaskAnchors {
@@ -479,10 +503,22 @@ function resolveTaskAnchors(task: XCTask): TaskAnchors {
   // every goal pilot ties on distance alone. See getEffectiveESSIndex.
   const explicitESSIdx = getESSIndex(task);
   const essIdx = getEffectiveESSIndex(task);
-  const essIsFallback = explicitESSIdx < 0 && essIdx >= 0;
+  // An Elevated Goal is the ESS by rule (§6.2.3.2), not by fallback.
+  const elevatedGoal = resolveElevatedGoal(task);
+  const essIsFallback = explicitESSIdx < 0 && essIdx >= 0 && !elevatedGoal;
   const goalIdx = getGoalIndex(task);
   const goalLine = computeGoalLine(task);
-  return { sssIdx, sssIsFallback, essIdx, essIsFallback, goalIdx, goalLine };
+  return {
+    sssIdx, sssIsFallback, essIdx, essIsFallback, goalIdx, goalLine,
+    elevatedGoal: elevatedGoal
+      ? {
+          ...elevatedGoal,
+          ...(explicitESSIdx >= 0 && explicitESSIdx !== goalIdx
+            ? { replacedEssIndex: explicitESSIdx }
+            : {}),
+        }
+      : null,
+  };
 }
 
 /**
@@ -531,7 +567,11 @@ function collectStartCrossings(
   allCrossings: CylinderCrossing[],
   { sssIdx }: TaskAnchors,
 ): CylinderCrossing[] {
-  return sssIdx >= 0 ? allCrossings.filter(c => c.taskIndex === sssIdx) : [];
+  // A start crossing outside the start's altitude limits (§9.2.1) is not a
+  // start at all — it validates nothing, so it opens no sequence.
+  return sssIdx >= 0
+    ? allCrossings.filter(c => c.taskIndex === sssIdx && !c.altitudeRejected)
+    : [];
 }
 
 /** The times that bound one pilot's scored flight. */
@@ -731,7 +771,11 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
       first.latitude, first.longitude,
       startTP.waypoint.lat, startTP.waypoint.lon, startTP.radius,
     );
-    if (!startedInside) {
+    // With altitude limits (§9.2.1) the stand-in crossing is held to them
+    // like any other: a first fix outside them starts nothing.
+    const limits = effectiveAltitudeLimits(task, sssIdx);
+    const withinLimits = !limits || withinAltitudeLimits(fixAltitude(first), limits);
+    if (!startedInside && withinLimits) {
       sssCrossings = [{
         taskIndex: sssIdx,
         fixIndex: 0,
@@ -879,7 +923,7 @@ function chooseBestSequence(params: BestSequenceParams): TurnpointReaching[] {
     const sssCrossing = sssCrossings[i];
     const candidateSequence = buildForwardPath({
       sssCrossing, crossingsByTP, sssIdx, essIdx, goalIdx,
-      startedInsideTP, directions: geometry.directions, startSelectionReason,
+      startedInsideTP, directions: geometry.directions, altitudeLimits: geometry.altitudeLimits, startSelectionReason,
     });
 
     const tpsReached = candidateSequence.length;

@@ -15,6 +15,7 @@ import {
   type TurnpointDirection,
 } from './task-optimizer';
 import { computeGoalLine, distanceToGoalLine } from './goal-line';
+import { withinAltitudeLimits } from './elevated-goal';
 import type {
   CylinderCrossing,
   TurnpointReaching,
@@ -50,6 +51,9 @@ interface BuildForwardPathParams {
   goalIdx: number;
   startedInsideTP: boolean[];
   directions: TurnpointDirection[];
+  /** Per task index: the §6.2.1 altitude limits, or null for none
+   * ({@link effectiveAltitudeLimits}). Omitted = no turnpoint has any. */
+  altitudeLimits?: ReadonlyArray<{ lower: number; upper: number } | null>;
   startSelectionReason?: TurnpointReaching['selectionReason'];
 }
 
@@ -89,9 +93,14 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
     goalIdx,
     startedInsideTP,
     directions,
+    altitudeLimits,
     startSelectionReason = 'last_before_next',
   } = params;
   const sequence: TurnpointReaching[] = [];
+  const altitudeOutOfLimits = (tpIdx: number, altitude: number): boolean => {
+    const limits = altitudeLimits?.[tpIdx];
+    return limits != null && !withinAltitudeLimits(altitude, limits);
+  };
 
   // Add SSS reaching
   sequence.push(reachingAt(
@@ -134,9 +143,13 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
     const insideAtPrevReaching = lastCrossingBefore
       ? lastCrossingBefore.direction === 'enter'
       : startedInsideTP[tpIdx];
-    const satisfiedAtPrevReaching = isExit
+    // With altitude limits (§9.2.1), being on the right side is not enough:
+    // the reaching inherits the previous one's moment AND altitude, which
+    // must lie within this turnpoint's limits too.
+    const prevAltitude = sequence[sequence.length - 1].altitude;
+    const satisfiedAtPrevReaching = (isExit
       ? !insideAtPrevReaching
-      : insideAtPrevReaching;
+      : insideAtPrevReaching) && !altitudeOutOfLimits(tpIdx, prevAltitude);
 
     if (satisfiedAtPrevReaching) {
       const prev = sequence[sequence.length - 1];
@@ -170,6 +183,7 @@ export function buildForwardPath(params: BuildForwardPathParams): TurnpointReach
     // rescues the identical-cylinder case.
     let validCrossing: CylinderCrossing | null = null;
     for (const crossing of tpCrossings) {
+      if (crossing.altitudeRejected) continue; // §9.2.1: outside the limits
       if (crossing.time.getTime() >= prevReachingTime && (!isExit || crossing.direction === 'exit')) {
         validCrossing = crossing;
         break;

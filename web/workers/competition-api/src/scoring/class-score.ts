@@ -142,6 +142,8 @@ function excludedPilotEntry(
     early_start_outcome: null,
     jump_the_gun_penalty: null,
     stopped_altitude_bonus: null,
+    goal_altitude_factor: null,
+    time_points_before_goal_altitude: null,
     leading_coefficient: null,
     arrival_position: null,
     ess_time_ms: null,
@@ -245,6 +247,8 @@ export function buildClassScore(
     early_start_outcome: p.pilotScore.earlyStartOutcome ?? null,
     jump_the_gun_penalty: p.pilotScore.jumpTheGunPenalty ?? null,
     stopped_altitude_bonus: p.pilotScore.stoppedAltitudeBonus ?? null,
+    goal_altitude_factor: p.pilotScore.goalAltitudeFactor ?? null,
+    time_points_before_goal_altitude: p.pilotScore.timePointsBeforeGoalAltitude ?? null,
     // Only meaningful where leading is scored; elsewhere the engine leaves it
     // at 0 (or Infinity for a pilot with no valid start), and publishing that
     // would invite the page to explain a number that decided nothing.

@@ -13,6 +13,7 @@ import type { TurnpointSequenceResult } from '../turnpoint-sequence';
 import type { ManualFlightGeometry } from '../manual-flight';
 import { calculateOptimizedTaskLine, computeTurnpointDirections, type TurnpointDirection } from '../task-optimizer';
 import { computeGoalLine } from '../goal-line';
+import { effectiveAltitudeLimits } from '../elevated-goal';
 import type {
   ScoreExplanationItem,
   ScoreExplanationSection,
@@ -143,7 +144,9 @@ function buildStartItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
             ? `${c.direction === 'enter' ? 'Entered' : 'Exited'} the start cylinder — this is the scored start`
             : `${c.direction === 'enter' ? 'Entered' : 'Exited'} the start cylinder`,
           value: fmt(c.time),
-          detail: c.toleranceCredited ? TOLERANCE_NOTE : undefined,
+          detail: c.altitudeRejected
+            ? ALTITUDE_LIMITS_NOTE
+            : c.toleranceCredited ? TOLERANCE_NOTE : undefined,
           emphasis: scored ? 'normal' : 'muted',
           anchor: {
             kind: scored ? 'start' : 'start_candidate',
@@ -346,6 +349,68 @@ function buildTurnpointReachingItems(ctx: FlightNarrativeCtx): ScoreExplanationI
   return out;
 }
 
+/** Why an out-of-limits crossing is listed but did not count (§9.2.1). */
+const ALTITUDE_LIMITS_NOTE =
+  "Outside this cylinder's altitude limits, so it is not a valid crossing (FAI S7F §9.2.1).";
+
+/**
+ * The 2026 altitude rules as they shaped this flight (issue #600):
+ * - an Elevated Goal that took over a declared ESS (§6.2.3.2), and
+ * - a turnpoint the pilot crossed only outside its altitude limits
+ *   (§9.2.1) — the reason the sequence stopped there, and the one fact a
+ *   pilot who "tagged it" cannot see on the map.
+ */
+function buildAltitudeItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
+  const { task, result, fmt } = ctx;
+  const out: ScoreExplanationItem[] = [];
+  const replaced = result.elevatedGoal?.replacedEssIndex;
+  if (replaced !== undefined) {
+    out.push({
+      id: 'elevated-goal-ess',
+      text: `This task's goal is an elevated goal, which is also the end of the speed section — so the ESS marked on ${turnpointLabel(task, replaced)} does not end it (FAI S7F §6.2.3.2).`,
+      emphasis: 'muted',
+    });
+  }
+  // Only the turnpoint right after the last one reached can be what stopped
+  // the sequence; an out-of-limits crossing further along says nothing about
+  // why the pilot did not get there.
+  if (result.sequence.length > 0 && !result.madeGoal) {
+    const last = result.sequence[result.sequence.length - 1];
+    const i = last.taskIndex + 1;
+    const limits = effectiveAltitudeLimits(task, i);
+    const c = limits
+      ? result.crossings.find(
+          (x) => x.taskIndex === i && x.altitudeRejected && x.time.getTime() >= last.time.getTime(),
+        )
+      : undefined;
+    if (limits && c) {
+      const name = turnpointName(task, i);
+      out.push({
+        id: `altitude-rejected-${i}`,
+        text: `Crossed ${turnpointLabel(task, i)}${name ? ` (${name})` : ''} at ${Math.round(c.altitude)} m — outside its ${limitsPhrase(limits)} altitude limits, so it was not reached (FAI S7F §9.2.1).`,
+        value: fmt(c.time),
+        emphasis: 'warning',
+        anchor: {
+          kind: 'turnpoint',
+          latitude: c.latitude,
+          longitude: c.longitude,
+          altitude: c.altitude,
+          timeMs: c.time.getTime(),
+        },
+      });
+    }
+  }
+  return out;
+}
+
+/** "1,200–2,500 m", "below 2,500 m", "above 1,200 m" — 5 m tolerance aside. */
+function limitsPhrase(l: { lower: number; upper: number }): string {
+  const m = (v: number) => `${Math.round(v).toLocaleString('en-AU')} m`;
+  if (!Number.isFinite(l.upper)) return `above ${m(l.lower)}`;
+  if (l.lower <= 0) return `below ${m(l.upper)}`;
+  return `${Math.round(l.lower).toLocaleString('en-AU')}–${m(l.upper)}`;
+}
+
 function buildDeadlineItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
   const { task, result, entry, fmt } = ctx;
   const out: ScoreExplanationItem[] = [];
@@ -533,6 +598,7 @@ export function buildFlightSection(
   const items: ScoreExplanationItem[] = [
     ...buildStartItems(ctx),
     ...buildTurnpointReachingItems(ctx),
+    ...buildAltitudeItems(ctx),
     ...buildDeadlineItems(ctx),
     ...buildStopItems(ctx),
     ...buildBestProgressItems(ctx),

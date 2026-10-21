@@ -124,8 +124,17 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             <li>
               <strong>Goal</strong> — The final turnpoint. If you reach goal, you completed the
               task. In PG, you must reach goal to get time points. ESS alone is not sufficient.
+              The task can make goal an <a href="#elevated-goal" class="underline hover:text-foreground">elevated
+              goal</a>, which is also the ESS.
             </li>
           </ul>
+          <p class="text-muted-foreground">
+            A turnpoint can also have <strong>altitude limits</strong> (<SpecRef section="6.2.1" />).
+            Then a crossing counts only when your altitude is between the limits, within 5 m
+            (<SpecRef section="9.2.1" />). A crossing above or below them does not reach the
+            turnpoint. The report card says so when this happens. The goal cannot have altitude
+            limits.
+          </p>
           <p class="text-muted-foreground">
             Your <strong>speed section time</strong> starts when you cross SSS. It stops when you
             reach ESS. Your <strong>flown distance</strong> is the distance along the optimised
@@ -441,6 +450,25 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
             the specification requires. The report card shows the gate you took and your crossing
             time.
           </p>
+          <div id="elevated-goal" class="scroll-mt-20">
+            <h3 class="text-base font-semibold mb-1">Elevated goal (<SpecRef section="6.2.3.2" />, <SpecRef section="13.1" />)</h3>
+            <p class="text-muted-foreground">
+              A task can set goal at a height above the goal turnpoint's altitude. The standard
+              height is 300 m, and the maximum is 1000 m. The task file states it in XCTrack's
+              <code>finishAltitude</code> field. An elevated goal is also the end of the speed
+              section. A crossing at any altitude reaches goal. But if you cross below the set
+              height, you keep only part of your time points. Your other points do not change.
+            </p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{AR} = \frac{\text{crossing altitude} - \text{goal altitude}}{\text{elevation}}`)}></p>
+            <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{GoalAltitudeFactor} = 0.8 + 0.6\,\text{AR} - 0.6\,\text{AR}^2 + 0.2\,\text{AR}^3`)}></p>
+            <p class="text-muted-foreground">
+              At or below the goal turnpoint's altitude, the factor is 0.8. At or above the set
+              height, it is 1. Your time points are multiplied by it. For example, you cross 60 m
+              above goal under a 300 m elevated goal. Then AR is 0.2, and you keep about 90% of
+              your time points. GlideComp applies an elevated goal only when the goal turnpoint
+              has an altitude: without one, there is nothing to measure the height from.
+            </p>
+          </div>
         </div>
       </section>
 

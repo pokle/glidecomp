@@ -295,6 +295,11 @@ export interface ScoreEntryInput {
   /** Stopped tasks (S7F §13.4.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. */
   stopped_altitude_bonus?: number | null;
+  /** Elevated Goal tasks (S7F 2026 §13.1): the GoalAltitudeFactor (< 1) a
+   * goal pilot's time points were multiplied by for crossing below the
+   * goal's elevation, and the time points before it. Null otherwise. */
+  goal_altitude_factor?: number | null;
+  time_points_before_goal_altitude?: number | null;
   /** The pilot's leading coefficient (S7F §13.4), lower is better — the sole
    * input to leading points. Null/absent when leading isn't scored, or on a
    * payload cached before it was published. */

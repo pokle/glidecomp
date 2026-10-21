@@ -48,6 +48,11 @@ export interface PilotScoreEntry {
   /** Stopped tasks (S7F §13.4.6): altitude-bonus metres folded into
    * flown_distance for a pilot still flying at the stop. Null otherwise. */
   stopped_altitude_bonus: number | null;
+  /** Elevated Goal tasks (S7F 2026 §13.1): the GoalAltitudeFactor (< 1) a
+   * goal pilot's time points were multiplied by for crossing below the
+   * goal's elevation, and the time points before it. Null otherwise. */
+  goal_altitude_factor: number | null;
+  time_points_before_goal_altitude: number | null;
   /**
    * The pilot's leading coefficient (S7F §13.4) — lower is better. It is the
    * sole input to leading points, and without it the score-details page can
@@ -352,6 +357,8 @@ export interface CachedFlightAnalysis {
   landedBeforeStop?: boolean;
   /** Stopped tasks: §13.4.6 altitude bonus folded into flownDistance (m). */
   stoppedAltitudeBonus?: number;
+  /** Elevated Goal tasks: the goal pilot's §13.1 GoalAltitudeFactor. */
+  goalAltitudeFactor?: number;
   /** Present only for leading-enabled comps — the per-track leading scan,
    * cached so a new upload doesn't force a re-scan of the whole field. Its
    * validity is tied to the task geometry + leading formula in the cache key. */

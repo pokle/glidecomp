@@ -4,7 +4,7 @@
  * "lat, lon" format), live validation, and xctsk (de)serialization helpers
  * shared with the task detail page. Kept DOM-free so it's unit-testable.
  */
-import type { Turnpoint, TurnpointType, UnitPreferences, XCTask } from "@glidecomp/engine";
+import type { AltitudeLimits, Turnpoint, TurnpointType, UnitPreferences, XCTask } from "@glidecomp/engine";
 import { formatDistance, toXctskJSON } from "@glidecomp/engine";
 import { csvEscape } from "./csv";
 
@@ -28,6 +28,13 @@ export interface RouteRow {
   coords: string;
   radius: string | number;
   altitude: string | number;
+  /**
+   * S7F 2026 §6.2.1 altitude limits (m AMSL), when the organiser set any —
+   * a crossing counts only within them ± 5 m. Carried on the row so editing
+   * a route never drops them; ignored (and not saved) on the goal, which
+   * cannot have them (§6.2.3).
+   */
+  altitudeLimits?: AltitudeLimits;
   /** Optimized distance (m) from the previous turnpoint; display-only. */
   leg: number | null;
   /**
@@ -175,6 +182,7 @@ export function turnpointToRow(tp: Turnpoint, id: number): RouteRow {
     coords: formatCoords(tp.waypoint.lat, tp.waypoint.lon),
     radius: tp.radius,
     altitude: tp.waypoint.altSmoothed ?? "",
+    ...(tp.altitudeLimits ? { altitudeLimits: { ...tp.altitudeLimits } } : {}),
     leg: null,
     dir: null,
   };
@@ -315,6 +323,19 @@ export function buildRoute(
       }
     }
 
+    // Altitude limits (§6.2.1): not on the goal — the last turnpoint, or
+    // anything typed Goal — which cannot carry them (§6.2.3).
+    const isGoalRow = i === kept.length - 1 || row.type === "GOAL";
+    const limits = !isGoalRow ? row.altitudeLimits : undefined;
+    const lower = limits?.lower;
+    const upper = limits?.upper;
+    const hasLimits = lower !== undefined || upper !== undefined;
+    if (lower !== undefined && upper !== undefined && lower >= upper) {
+      errors.push(
+        `${label} (${name || "unnamed"}): the lower altitude limit must be below the upper one`
+      );
+    }
+
     if (coords) {
       // Keep the long name only when it adds something beyond the code.
       const description = String(row.description ?? "").trim();
@@ -328,6 +349,14 @@ export function buildRoute(
           lon: coords.lon,
           ...(altitude !== undefined ? { altSmoothed: altitude } : {}),
         },
+        ...(hasLimits
+          ? {
+              altitudeLimits: {
+                ...(lower !== undefined ? { lower } : {}),
+                ...(upper !== undefined ? { upper } : {}),
+              },
+            }
+          : {}),
       });
       rowIds.push(row.id);
     } else {

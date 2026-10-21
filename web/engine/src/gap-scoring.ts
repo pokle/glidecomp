@@ -190,6 +190,9 @@ export function toFlightScoringData(
     ...(result.earlyStart
       ? { earlyStartSeconds: result.earlyStart.secondsEarly }
       : {}),
+    ...(result.elevatedGoal?.goalAltitudeFactor !== undefined
+      ? { goalAltitudeFactor: result.elevatedGoal.goalAltitudeFactor }
+      : {}),
     ...(result.stopInfo
       ? {
           landedBeforeStop: !result.stopInfo.flyingAtStop,
@@ -712,6 +715,14 @@ export function scoreFlights(
     if (stopTimeReduction > 0 && f.madeGoal) {
       timePts = Math.max(0, timePts - stopTimeReduction);
     }
+    // §13.1 Underflying Elevated Goal: a goal pilot who crossed below the
+    // goal's elevation keeps GoalAltitudeFactor (0.8–1) of their time points.
+    // Arrival and the other components are untouched.
+    const goalAltFactor = f.madeGoal && f.goalAltitudeFactor !== undefined && f.goalAltitudeFactor < 1
+      ? f.goalAltitudeFactor
+      : null;
+    const timePtsBeforeGoalAltitude = timePts;
+    if (goalAltFactor !== null) timePts *= goalAltFactor;
 
     const leadPts = calculateLeadingPoints(
       leadingCoefficients[idx], minLC, availablePoints.leading,
@@ -770,6 +781,12 @@ export function scoreFlights(
         : {}),
       ...(f.stoppedAltitudeBonus && f.stoppedAltitudeBonus > 0
         ? { stoppedAltitudeBonus: f.stoppedAltitudeBonus }
+        : {}),
+      ...(goalAltFactor !== null
+        ? {
+            goalAltitudeFactor: goalAltFactor,
+            timePointsBeforeGoalAltitude: roundToTenth(timePtsBeforeGoalAltitude),
+          }
         : {}),
     };
   });

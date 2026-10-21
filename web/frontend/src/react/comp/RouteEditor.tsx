@@ -266,6 +266,10 @@ export function RouteEditor({
   const [goalType, setGoalType] = useState<GoalConfig["type"]>(
     xctsk?.goal?.type ?? "CYLINDER"
   );
+  // Elevated Goal height (m) — the .xctsk goal.finishAltitude; NaN = off.
+  const [goalElevation, setGoalElevation] = useState<number>(() =>
+    elevationFromTask(xctsk ?? undefined)
+  );
   const [goalDeadline, setGoalDeadline] = useState<string>(() => {
     const hhmm = xctsk?.goal?.deadline ? gateToHHMM(xctsk.goal.deadline) : null;
     return hhmm ? toDisplayTime(hhmm) : "";
@@ -292,6 +296,7 @@ export function RouteEditor({
       direction,
       goalType,
       goalDeadline,
+      goalElevation,
       pendingWaypoints,
     ]);
   const initialSnapshotRef = useRef<string | null>(null);
@@ -585,6 +590,7 @@ export function RouteEditor({
     setGoalType(task.goal?.type ?? "CYLINDER");
     const deadline = task.goal?.deadline ? gateToHHMM(task.goal.deadline) : null;
     setGoalDeadline(deadline ? toDisplayTime(deadline) : "");
+    setGoalElevation(elevationFromTask(task));
     toast.success(`Loaded ${task.turnpoints.length} turnpoints from ${sourceLabel}`);
   }
 
@@ -665,8 +671,9 @@ export function RouteEditor({
     task.goal = {
       type: goalType,
       ...(goalDeadline ? { deadline: `${toUtcTime(goalDeadline)}:00Z` } : {}),
-      ...(base?.goal?.finishAltitude !== undefined
-        ? { finishAltitude: base.goal.finishAltitude }
+      // XCTrack's own field for the Elevated Goal height (S7F §6.2.3.2).
+      ...(Number.isFinite(goalElevation) && goalElevation > 0
+        ? { finishAltitude: Math.round(goalElevation) }
         : {}),
     };
     return task;
@@ -863,6 +870,9 @@ export function RouteEditor({
       deadline={goalDeadline}
       onDeadlineChange={setGoalDeadline}
       timeZoneLabel={timeZoneLabel}
+      elevation={goalElevation}
+      onElevationChange={setGoalElevation}
+      goalAltitudeKnown={!missingAltitude(rows[rows.length - 1]?.altitude ?? "")}
     />
   );
   const addedType = inferAddedType(rows, { openDistance });
@@ -1193,6 +1203,7 @@ export function RouteEditor({
               coords: editingRow.coords,
               radius: editingRow.radius,
               altitude: editingRow.altitude,
+              altitudeLimits: editingRow.altitudeLimits,
             }}
             waypointRecords={waypointRecords}
             wpLoading={wpLoading}
@@ -1236,4 +1247,10 @@ export function RouteEditor({
         />
     </div>
   );
+}
+
+/** A task's Elevated Goal height (m), or NaN when it has none. */
+function elevationFromTask(task: XCTask | undefined): number {
+  const fa = task?.goal?.finishAltitude;
+  return typeof fa === "number" && fa > 0 ? fa : NaN;
 }

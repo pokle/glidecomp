@@ -9,6 +9,7 @@ import { ellipsoidDistance } from './geo';
 import { toText } from './text';
 import type { IGCTask, IGCTaskPoint } from './igc-parser';
 import { DEFAULT_WAYPOINT_RADIUS_M, findWaypoint, type WaypointRecord } from './waypoints';
+import { resolveElevatedGoal, type AltitudeLimits } from './elevated-goal';
 
 /**
  * Default turnpoint radius in meters, used when a task or IGC declaration
@@ -31,6 +32,13 @@ export interface Turnpoint {
   type?: TurnpointType;
   radius: number;
   waypoint: Waypoint;
+  /**
+   * Optional S7F 2026 §6.2.1 altitude limits (m AMSL): a crossing counts only
+   * within them ± 5 m. NOT an XCTrack field — the .xctsk format has none yet —
+   * so GlideComp stores it under this key, and other tools ignore it. Ignored
+   * on the goal (§6.2.3). See elevated-goal.ts.
+   */
+  altitudeLimits?: AltitudeLimits;
 }
 
 export interface SSSConfig {
@@ -135,6 +143,21 @@ function decodePolyline(encoded: string): number[] {
 }
 
 /**
+ * Read a stored `altitudeLimits` object: finite numbers only, and nothing at
+ * all when neither limit survives — stored JSON is data, not types.
+ */
+function parseAltitudeLimits(raw: unknown): { altitudeLimits?: AltitudeLimits } {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const r = raw as Record<string, unknown>;
+  const limits: AltitudeLimits = {};
+  if (typeof r.lower === 'number' && Number.isFinite(r.lower)) limits.lower = r.lower;
+  if (typeof r.upper === 'number' && Number.isFinite(r.upper)) limits.upper = r.upper;
+  return limits.lower === undefined && limits.upper === undefined
+    ? {}
+    : { altitudeLimits: limits };
+}
+
+/**
  * Parse xctsk v1 format (full JSON)
  */
 function parseV1(data: Record<string, unknown>): XCTask {
@@ -160,6 +183,7 @@ function parseV1(data: Record<string, unknown>): XCTask {
               lon: wp.lon as number,
               altSmoothed: wp.altSmoothed as number | undefined,
             },
+            ...parseAltitudeLimits(tpObj.altitudeLimits),
           });
         }
       }
@@ -471,6 +495,12 @@ export function toXctskJSON(task: XCTask): Record<string, unknown> {
     if (tp.type) {
       tpObj.type = tp.type;
     }
+    if (tp.altitudeLimits) {
+      const limits: Record<string, number> = {};
+      if (tp.altitudeLimits.lower !== undefined) limits.lower = tp.altitudeLimits.lower;
+      if (tp.altitudeLimits.upper !== undefined) limits.upper = tp.altitudeLimits.upper;
+      if (Object.keys(limits).length > 0) tpObj.altitudeLimits = limits;
+    }
     return tpObj;
   });
 
@@ -559,9 +589,15 @@ export function getESSIndex(task: XCTask): number {
  * this, a mis-set task with pilots in goal would allocate time points that
  * nobody could earn, and every goal pilot would tie on distance alone.
  *
+ * An Elevated Goal (§6.2.3.2) IS the end of the speed section, so it wins
+ * over a declared ESS.
+ *
  * Returns -1 when the task has fewer than two turnpoints (no course to race).
  */
 export function getEffectiveESSIndex(task: XCTask): number {
+  // S7F 2026 §6.2.3.2: "When an elevated goal is declared, it implicitly
+  // also serves as the End of Speed Section" — whatever ESS the route marks.
+  if (task.turnpoints.length >= 2 && resolveElevatedGoal(task)) return getGoalIndex(task);
   const explicit = getESSIndex(task);
   if (explicit >= 0) return explicit;
   return task.turnpoints.length >= 2 ? getGoalIndex(task) : -1;

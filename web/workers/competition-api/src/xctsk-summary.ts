@@ -16,17 +16,28 @@ interface Waypoint {
   description?: string;
   lat?: number;
   lon?: number;
+  altSmoothed?: number;
 }
 interface Turnpoint {
   type?: string;
   radius?: number;
   waypoint?: Waypoint;
+  altitudeLimits?: { lower?: number; upper?: number };
 }
 interface TaskLike {
   taskType?: string;
   turnpoints?: Turnpoint[];
   sss?: { type?: string; direction?: string; timeGates?: string[] };
-  goal?: { type?: string; deadline?: string };
+  goal?: { type?: string; deadline?: string; finishAltitude?: number };
+}
+
+/** Mirrors the engine's resolveElevatedGoal (S7F 2026 §6.2.3.2): a positive
+ * goal.finishAltitude over a goal waypoint with a known altitude. */
+function hasElevatedGoal(task: TaskLike | null): boolean {
+  const fa = task?.goal?.finishAltitude;
+  const tps = task?.turnpoints ?? [];
+  const alt = tps[tps.length - 1]?.waypoint?.altSmoothed;
+  return typeof fa === "number" && fa > 0 && typeof alt === "number" && Number.isFinite(alt);
 }
 
 function asTask(value: unknown): TaskLike | null {
@@ -60,7 +71,10 @@ export function speedSectionTypeWarnings(
   if (tps.length < 2) return { missing_sss: false, missing_ess: false };
   return {
     missing_sss: !tps.some((tp) => tp?.type === "SSS"),
-    missing_ess: !tps.some((tp) => tp?.type === "ESS"),
+    // An Elevated Goal IS the end of the speed section (S7F 2026
+    // §6.2.3.2), so a route with one has declared its ESS.
+    missing_ess:
+      !tps.some((tp) => tp?.type === "ESS") && !hasElevatedGoal(task),
   };
 }
 
@@ -250,6 +264,12 @@ export function summarizeXctskChange(
       ) {
         changes.push(`${label}: moved`);
       }
+      // Altitude limits (S7F 2026 §6.2.1) decide which crossings count, so
+      // a change is a scoring change in its own right — reported alongside
+      // whatever else moved on the turnpoint, not instead of it.
+      const oL = limitsText(o.altitudeLimits);
+      const nL = limitsText(n.altitudeLimits);
+      if (oL !== nL) changes.push(`${label}: altitude limits ${oL} → ${nL}`);
     }
   }
 
@@ -280,9 +300,30 @@ export function summarizeXctskChange(
     );
   }
 
+  const oFa = elevatedText(oldTask.goal?.finishAltitude);
+  const nFa = elevatedText(newTask.goal?.finishAltitude);
+  if (oFa !== nFa) changes.push(`elevated goal ${oFa} → ${nFa}`);
+
   if (changes.length === 0) return null;
 
   const MAX_SHOWN = 3;
   if (changes.length <= MAX_SHOWN) return changes.join("; ");
   return `${changes.slice(0, MAX_SHOWN).join("; ")}; +${changes.length - MAX_SHOWN} more`;
+}
+
+/** "1200–2500 m", "≤ 2500 m", "≥ 1200 m" or "none", for the audit sentence. */
+function limitsText(l: Turnpoint["altitudeLimits"]): string {
+  const lo = typeof l?.lower === "number" ? l.lower : null;
+  const hi = typeof l?.upper === "number" ? l.upper : null;
+  if (lo === null && hi === null) return "none";
+  if (lo === null) return `≤ ${hi} m`;
+  if (hi === null) return `≥ ${lo} m`;
+  return `${lo}–${hi} m`;
+}
+
+/** "300 m above goal" or "off" — an elevated goal's height (§6.2.3.2). */
+function elevatedText(fa: number | undefined): string {
+  if (typeof fa !== "number" || !(fa > 0)) return "off";
+  // The engine scores at most 1000 m (S7F 2026 §6.2.3.2); say so here too.
+  return fa > 1000 ? `${fa} m above goal (scored as 1000 m)` : `${fa} m above goal`;
 }

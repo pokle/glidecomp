@@ -246,6 +246,43 @@ describe("buildRoute", () => {
   });
 });
 
+describe("altitude limits (S7F 2026 §6.2.1, issue #600)", () => {
+  const route = (limits: RouteRow["altitudeLimits"], goalLimits?: RouteRow["altitudeLimits"]) =>
+    buildRoute(
+      [
+        row({ id: 1, name: "Start", type: "SSS" }),
+        row({ id: 2, name: "TP1", coords: "-36.65, 147.75", altitudeLimits: limits }),
+        row({ id: 3, name: "Goal", type: "GOAL", coords: "-36.7, 147.7", altitudeLimits: goalLimits }),
+      ],
+      { openDistance: false }
+    );
+
+  it("carries a turnpoint's limits into the task, and only the ones set", () => {
+    const r = route({ upper: 2500 });
+    expect(r.errors).toEqual([]);
+    expect(r.turnpoints[1].altitudeLimits).toEqual({ upper: 2500 });
+    expect("altitudeLimits" in r.turnpoints[0]).toBe(false);
+  });
+
+  it("never saves limits on the goal, which cannot have them", () => {
+    expect("altitudeLimits" in route(undefined, { lower: 500 }).turnpoints[2]).toBe(false);
+  });
+
+  it("rejects a lower limit at or above the upper one", () => {
+    expect(route({ lower: 2000, upper: 1500 }).errors[0]).toMatch(/lower altitude limit must be below/);
+    expect(route({ lower: 1500, upper: 1500 }).errors).toHaveLength(1);
+  });
+
+  it("round-trips through a row, so editing a route keeps them", () => {
+    const tp: Turnpoint = {
+      radius: 400,
+      waypoint: { name: "TP1", lat: -36.6, lon: 147.8 },
+      altitudeLimits: { lower: 800, upper: 2400 },
+    };
+    expect(turnpointToRow(tp, 1).altitudeLimits).toEqual({ lower: 800, upper: 2400 });
+  });
+});
+
 describe("gate helpers", () => {
   it("gateToHHMM normalises xctsk gate formats", () => {
     expect(gateToHHMM("13:30:00Z")).toBe("13:30");

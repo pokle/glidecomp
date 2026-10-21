@@ -1,5 +1,6 @@
 /**
- * Goal settings — cylinder vs line, and the optional deadline.
+ * Goal settings — cylinder vs line, the optional deadline, and the
+ * optional Elevated Goal height.
  *
  * Shared by the route page's Goal disclosure and the last turnpoint's sheet,
  * so opening the goal and expanding the page panel edit the same state.
@@ -8,6 +9,7 @@ import type { GoalConfig } from "@glidecomp/engine";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { TimePicker } from "@/react/rac/date-picker";
 import { Explain } from "@/react/rac/explain";
+import { AltitudeField } from "./fields";
 
 export function GoalSettings({
   goalType,
@@ -15,12 +17,21 @@ export function GoalSettings({
   deadline,
   onDeadlineChange,
   timeZoneLabel,
+  elevation,
+  onElevationChange,
+  goalAltitudeKnown,
 }: {
   goalType: GoalConfig["type"];
   onGoalTypeChange: (type: GoalConfig["type"]) => void;
   deadline: string;
   onDeadlineChange: (value: string) => void;
   timeZoneLabel: string;
+  /** Elevated Goal height above the goal turnpoint (m), NaN when off —
+   *  the .xctsk `goal.finishAltitude` (S7F 2026 §6.2.3.2, issue #600). */
+  elevation: number;
+  onElevationChange: (metres: number) => void;
+  /** Does the goal turnpoint have an altitude to measure the height from? */
+  goalAltitudeKnown: boolean;
 }) {
   return (
     <>
@@ -46,6 +57,18 @@ export function GoalSettings({
           />
           {deadline ? null : "(optional)"}
         </span>
+      </div>
+      <div className="mt-3">
+        <AltitudeField
+          label="Elevated goal, height above goal"
+          valueM={elevation}
+          onChange={onElevationChange}
+          description={
+            goalAltitudeKnown
+              ? "Optional (FAI S7F §6.2.3.2): 300 m is the standard height, 1,000 m the most. Any crossing reaches goal, but a pilot who crosses lower keeps only 80–100% of their time points. An elevated goal is also the end of the speed section."
+              : "Optional (FAI S7F §6.2.3.2). Needs the goal turnpoint's altitude: without it, the height has nothing to be measured from and the goal is scored as an ordinary one."
+          }
+        />
       </div>
       {goalType === "LINE" ? (
         // Geometry an organiser reads once, so it sits on the ⓘ rather
