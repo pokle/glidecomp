@@ -189,6 +189,57 @@ describe('altitude limits (§6.2.1, §9.2.1)', () => {
   });
 });
 
+describe('altitude limits — review cases', () => {
+  it('a fallback start (no SSS) outside the start limits starts nothing', () => {
+    const t = task();
+    delete t.turnpoints[0].type;
+    t.turnpoints[0].altitudeLimits = { upper: 1000 };
+    // Begins OUTSIDE the first cylinder, so the start would fall back to the
+    // first fix — at 1500 m, above the limit.
+    const fixes = glide(() => 1500).slice(6);
+    const r = resolveTurnpointSequence(t, fixes);
+    expect(r.sssReaching).toBeNull();
+    expect(r.madeGoal).toBe(false);
+  });
+
+  it('already inside a cylinder, but at the wrong altitude, is not reached', () => {
+    // TP1 is a 12 km cylinder that contains the start, so presence-based
+    // reaching would credit it at the start — but the start is at 1500 m
+    // and TP1 only counts below 1000 m.
+    const t = task({ tp1Limits: { upper: 1000 } });
+    t.turnpoints[1].radius = 12_000;
+    const r = resolveTurnpointSequence(t, glide(() => 1500));
+    expect(r.lastTurnpointReached).toBe(0);
+    expect(r.madeGoal).toBe(false);
+  });
+
+  it('the report card names only the turnpoint that stopped the sequence', () => {
+    const t = task({ tp1Limits: { upper: 2000 } });
+    const fixes = glide(() => 2500);
+    const r = resolveTurnpointSequence(t, fixes);
+    const flight = explainGapScore({
+      task: t,
+      result: r,
+      entry: {
+        pilot_name: 'p', rank: 1, made_goal: false, reached_ess: false,
+        flown_distance: r.flownDistance, speed_section_time: null,
+        distance_points: 100, distance_linear_points: 100, distance_difficulty_points: 0,
+        time_points: 0, leading_points: 0, arrival_points: 0,
+        penalty_points: 0, penalty_reason: null, total_score: 100,
+      },
+      classContext: {
+        available_points: { distance: 500, time: 300, leading: 100, arrival: 0, total: 900 },
+        task_validity: { launch: 1, distance: 1, time: 1, task: 1 },
+        pilots: [],
+      },
+      params: { ...defaultsFor('hg') },
+    } as Parameters<typeof explainGapScore>[0]).sections.find((s) => s.id === 'flight')!;
+    const items = flight.items.filter((i) => i.id.startsWith('altitude-rejected-'));
+    expect(items.map((i) => i.id)).toEqual(['altitude-rejected-1']);
+    expect(items[0].text).toContain('below 2,000 m');
+  });
+});
+
 describe('Elevated Goal scoring (§9.2.3.2, §13.1)', () => {
   const eg = task({ finishAltitude: 300 });
   /** Cross the goal cylinder's edge (400 m short of its centre) `aboveGoal`
@@ -307,5 +358,51 @@ describe('Elevated Goal scoring (§9.2.3.2, §13.1)', () => {
     const formula = time.items.find((i) => i.id === 'time-formula')!;
     expect(formula.detail).toContain('(elevated goal, §13.1)');
     expect(formula.detail).not.toContain('≈');
+  });
+});
+
+describe('Elevated Goal on the report card — degrading', () => {
+  const eg = task({ finishAltitude: 300 });
+  const arrivingLow = glide((m) => GOAL_ALT + 60 + (19_600 - m) * 0.1);
+  function timeSection(t: XCTask, publishedFactor: number | null) {
+    const r = resolveTurnpointSequence(t, arrivingLow);
+    return explainGapScore({
+      task: t,
+      result: r,
+      entry: {
+        pilot_name: 'p', rank: 1, made_goal: true, reached_ess: true,
+        flown_distance: r.flownDistance, speed_section_time: r.speedSectionTime,
+        distance_points: 400, distance_linear_points: 400, distance_difficulty_points: 0,
+        time_points: publishedFactor === null ? 300 : 300 * publishedFactor,
+        leading_points: 0, arrival_points: 0, penalty_points: 0, penalty_reason: null,
+        total_score: 700, goal_altitude_factor: publishedFactor,
+      },
+      classContext: {
+        available_points: { distance: 400, time: 300, leading: 0, arrival: 0, total: 700 },
+        task_validity: { launch: 1, distance: 1, time: 1, task: 1 },
+        pilots: [{
+          pilot_name: 'p', rank: 1, made_goal: true, reached_ess: true,
+          flown_distance: r.flownDistance, speed_section_time: r.speedSectionTime,
+          time_points: 300, total_score: 700,
+        }],
+      },
+      params: { ...defaultsFor('hg'), useLeading: false },
+    } as Parameters<typeof explainGapScore>[0]).sections.find((s) => s.id === 'time')!;
+  }
+
+  it('an old payload without the factor is not told it kept full points', () => {
+    const item = timeSection(eg, null).items.find((i) => i.id === 'elevated-goal')!;
+    expect(item.text).toContain('computed before this was applied');
+    expect(item.text).not.toContain('keeps full time points');
+  });
+
+  it('names the 1000 m cap when the task asked for more', () => {
+    const high = task({ finishAltitude: 1500 });
+    const r = resolveTurnpointSequence(high, arrivingLow);
+    const item = timeSection(high, r.elevatedGoal!.goalAltitudeFactor!).items.find(
+      (i) => i.id === 'elevated-goal',
+    )!;
+    expect(item.text).toContain('the task sets 1,500 m');
+    expect(item.text).toContain('at most 1,000 m');
   });
 });

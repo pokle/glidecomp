@@ -131,6 +131,18 @@ describe("altitude limits on the stored route (§6.2.1)", () => {
       (await getAudit(compId)).some((d) => d.includes("altitude limits none → 800–2500 m"))
     ).toBe(true);
 
+    // The goal cannot have altitude limits (§6.2.3).
+    const goalLimited = {
+      ...xctsk,
+      turnpoints: xctsk.turnpoints.map((tp, i) =>
+        i === xctsk.turnpoints.length - 1 ? { ...tp, altitudeLimits: { upper: 900 } } : tp
+      ),
+    };
+    const goalRes = await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
+      xctsk: goalLimited,
+    });
+    expect(goalRes.status).toBe(400);
+
     for (const bad of [{}, { lower: 2500, upper: 800 }, { upper: "high" }, { lower: 1, extra: 2 }]) {
       const res = await authRequest("PATCH", `/api/comp/${compId}/task/${taskId}`, {
         xctsk: withLimits(bad),

@@ -34,9 +34,17 @@ AND the goal waypoint has an altitude to measure from; a value over 1000 m is
 scored as 1000 m. A track-less (manual) goal flight has no crossing altitude,
 so its time points stand in full.
 
+On a stopped task (§13.4.5) the factor multiplies the time points after the
+stopped-task reduction: (T − reduction) × factor. Neither §13.1 nor §13.4.5
+says which comes first; this order keeps the factor a share of what the pilot
+actually earned.
+
 The report card's time section names the crossing altitude, the goal
 altitude and the elevation, and prints AR and the factor; the equation folds
 the factor in so it reconciles with the published points.
+
+A payload scored before the factor was published says so, rather than tell
+a low pilot they kept full points.
 
 ### Altitude limits (§6.2.1, §6.2.2, §9.2.1, §9.2.2)
 
@@ -51,9 +59,15 @@ An out-of-limits crossing is still detected — it moves the pilot across the
 cylinder's boundary all the same — but it is flagged and never credits the
 turnpoint, as a start or as a reaching. A turnpoint reached by being already
 inside it at the previous reaching also needs that reaching's altitude to be
-within the limits. The report card lists an out-of-limits start crossing as
-such, and says when the sequence stopped at a turnpoint the pilot crossed
+within the limits, and a start that falls back to the first fix (a task with
+no SSS) needs that fix within the limits too. The API refuses limits on the
+goal. The report card lists an out-of-limits start crossing as such, and says
+when the sequence stopped at the next turnpoint because the pilot crossed it
 only outside its limits.
+
+Not yet done: the task map, replay and analysis still draw an out-of-limits
+crossing as an ordinary tag, and still label a turnpoint "ESS" when an
+elevated goal has replaced it.
 
 Issue [#600](https://github.com/pokle/glidecomp/issues/600), the last
 follow-up of the single-edition strategy record

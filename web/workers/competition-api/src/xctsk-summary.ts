@@ -323,5 +323,7 @@ function limitsText(l: Turnpoint["altitudeLimits"]): string {
 
 /** "300 m above goal" or "off" — an elevated goal's height (§6.2.3.2). */
 function elevatedText(fa: number | undefined): string {
-  return typeof fa === "number" && fa > 0 ? `${fa} m above goal` : "off";
+  if (typeof fa !== "number" || !(fa > 0)) return "off";
+  // The engine scores at most 1000 m (S7F 2026 §6.2.3.2); say so here too.
+  return fa > 1000 ? `${fa} m above goal (scored as 1000 m)` : `${fa} m above goal`;
 }

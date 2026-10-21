@@ -175,7 +175,7 @@ export function buildTimeSection(
     // and its arithmetic, then folded into the equations below.
     const elevated = entry.made_goal ? result.elevatedGoal : undefined;
     const gaf = entry.goal_altitude_factor ?? 1;
-    const egItem = elevated ? elevatedGoalItem(elevated, gaf) : null;
+    const egItem = elevated ? elevatedGoalItem(elevated, entry.goal_altitude_factor) : null;
     if (egItem) items.push(egItem);
     const gafEq = gaf < 1
       ? ` × ${trimZeros(gaf.toFixed(4), 2)} (elevated goal, §13.1)`
@@ -271,14 +271,31 @@ function metres(m: number): string {
  */
 function elevatedGoalItem(
   eg: NonNullable<TurnpointSequenceResult['elevatedGoal']>,
-  publishedFactor: number,
+  published: number | null | undefined,
 ): ScoreExplanationItem | null {
-  if (eg.crossingAltitude === undefined) return null;
+  if (eg.crossingAltitude === undefined || eg.goalAltitudeFactor === undefined) return null;
   const top = eg.goalAltitude + eg.elevation;
   const above = eg.crossingAltitude - eg.goalAltitude;
+  // The task file asked for more than the 1000 m the spec allows (§6.2.3.2).
+  const capped = eg.declaredElevation !== undefined
+    ? ` (the task sets ${metres(eg.declaredElevation)}; FAI S7F §6.2.3.2 allows at most ${metres(eg.elevation)})`
+    : '';
   const where =
     `You crossed the elevated goal at ${metres(eg.crossingAltitude)}; it is set ` +
-    `${metres(eg.elevation)} above the ${metres(eg.goalAltitude)} goal, at ${metres(top)}`;
+    `${metres(eg.elevation)}${capped} above the ${metres(eg.goalAltitude)} goal, at ${metres(top)}`;
+  // A payload scored before the factor was published carries none (null or
+  // absent) — and a factor of 1 is never published. The wording follows the
+  // crossing itself; a published score that does not reflect it says so
+  // rather than contradict the points beside it.
+  const publishedFactor = published ?? 1;
+  const stale = Math.abs(publishedFactor - eg.goalAltitudeFactor) > 1e-9;
+  if (stale) {
+    return {
+      id: 'elevated-goal',
+      text: `${where}. That earns ${trimZeros(eg.goalAltitudeFactor.toFixed(4), 2)} of your time points (FAI S7F §13.1), but the published score was computed before this was applied.`,
+      emphasis: 'warning',
+    };
+  }
   if (publishedFactor >= 1) {
     return {
       id: 'elevated-goal',

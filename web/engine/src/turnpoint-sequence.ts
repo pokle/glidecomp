@@ -25,7 +25,7 @@ import { detectLandingIndex } from './takeoff-landing-detector';
 import { DEFAULT_THRESHOLDS } from './thresholds';
 import { ellipsoidDistance, isInsideCylinder } from './geo';
 import { getSSSIndex, getEffectiveSSSIndex, getESSIndex, getEffectiveESSIndex, getGoalIndex } from './xctsk-parser';
-import { effectiveAltitudeLimits, goalAltitudeFactor, resolveElevatedGoal } from './elevated-goal';
+import { effectiveAltitudeLimits, goalAltitudeFactor, resolveElevatedGoal, withinAltitudeLimits } from './elevated-goal';
 import {
   calculateOptimizedTaskLine,
   computeTurnpointDirections,
@@ -771,7 +771,11 @@ function resolveStartCrossings(params: StartCrossingsParams): StartCrossings {
       first.latitude, first.longitude,
       startTP.waypoint.lat, startTP.waypoint.lon, startTP.radius,
     );
-    if (!startedInside) {
+    // With altitude limits (§9.2.1) the stand-in crossing is held to them
+    // like any other: a first fix outside them starts nothing.
+    const limits = effectiveAltitudeLimits(task, sssIdx);
+    const withinLimits = !limits || withinAltitudeLimits(fixAltitude(first), limits);
+    if (!startedInside && withinLimits) {
       sssCrossings = [{
         taskIndex: sssIdx,
         fixIndex: 0,

@@ -503,6 +503,11 @@ export const xctskSchema = z
     cylinderTolerance: z.number().min(0).max(0.1).optional(),
   })
   .strict()
+  // §6.2.3: goal cannot carry altitude limits (the elevated goal is how a
+  // goal sets an altitude) — refuse rather than store what never scores.
+  .refine((v) => v.turnpoints[v.turnpoints.length - 1]?.altitudeLimits === undefined, {
+    message: "The goal (last turnpoint) cannot have altitude limits",
+  })
   .refine(
     (v) => JSON.stringify(v).length <= MAX_XCTSK_BYTES,
     {

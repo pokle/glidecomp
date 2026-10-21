@@ -371,33 +371,34 @@ function buildAltitudeItems(ctx: FlightNarrativeCtx): ScoreExplanationItem[] {
       emphasis: 'muted',
     });
   }
-  const reached = new Set(result.sequence.map((r) => r.taskIndex));
-  const lastReached = result.sequence.length > 0
-    ? result.sequence[result.sequence.length - 1].time.getTime()
-    : -Infinity;
-  for (let i = 0; i < task.turnpoints.length; i++) {
-    if (reached.has(i)) continue;
+  // Only the turnpoint right after the last one reached can be what stopped
+  // the sequence; an out-of-limits crossing further along says nothing about
+  // why the pilot did not get there.
+  if (result.sequence.length > 0 && !result.madeGoal) {
+    const last = result.sequence[result.sequence.length - 1];
+    const i = last.taskIndex + 1;
     const limits = effectiveAltitudeLimits(task, i);
-    if (!limits) continue;
-    const c = result.crossings.find(
-      (x) => x.taskIndex === i && x.altitudeRejected && x.time.getTime() >= lastReached,
-    );
-    if (!c) continue;
-    const name = turnpointName(task, i);
-    out.push({
-      id: `altitude-rejected-${i}`,
-      text: `Crossed ${turnpointLabel(task, i)}${name ? ` (${name})` : ''} at ${Math.round(c.altitude)} m — outside its ${limitsPhrase(limits)} altitude limits, so it was not reached (FAI S7F §9.2.1).`,
-      value: fmt(c.time),
-      emphasis: 'warning',
-      anchor: {
-        kind: 'turnpoint',
-        latitude: c.latitude,
-        longitude: c.longitude,
-        altitude: c.altitude,
-        timeMs: c.time.getTime(),
-      },
-    });
-    break; // the first one stopped the sequence; later ones follow from it
+    const c = limits
+      ? result.crossings.find(
+          (x) => x.taskIndex === i && x.altitudeRejected && x.time.getTime() >= last.time.getTime(),
+        )
+      : undefined;
+    if (limits && c) {
+      const name = turnpointName(task, i);
+      out.push({
+        id: `altitude-rejected-${i}`,
+        text: `Crossed ${turnpointLabel(task, i)}${name ? ` (${name})` : ''} at ${Math.round(c.altitude)} m — outside its ${limitsPhrase(limits)} altitude limits, so it was not reached (FAI S7F §9.2.1).`,
+        value: fmt(c.time),
+        emphasis: 'warning',
+        anchor: {
+          kind: 'turnpoint',
+          latitude: c.latitude,
+          longitude: c.longitude,
+          altitude: c.altitude,
+          timeMs: c.time.getTime(),
+        },
+      });
+    }
   }
   return out;
 }
