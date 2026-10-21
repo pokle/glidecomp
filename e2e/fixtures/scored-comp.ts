@@ -65,7 +65,8 @@ export interface ScoredClass {
   task_validity: { launch: number; distance: number; time: number; task: number };
   validity_inputs?: { num_present: number; num_flying: number };
   /** The parameters the class was ACTUALLY scored with (migration 0021). */
-  gap_params?: { nominalTime: number; nominalDistance: number };
+  gap_params?: { nominalTime: number; nominalDistance: number; hgClass2?: boolean };
+  available_points?: { arrival: number; time: number; total: number };
   pilots: ScoredPilot[];
 }
 

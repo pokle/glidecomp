@@ -53,6 +53,20 @@ export interface GAPParameters {
   /** Whether to compute arrival points (default true for HG, ignored for PG) */
   useArrival: boolean;
   /**
+   * The field being scored flies FAI hang-gliding Class 2 (rigid wings with
+   * movable aerodynamic surfaces). S7F 2026 §11 sets its ArrivalWeight to 0
+   * — a rule since the 2023 edition — and the time weight absorbs the share
+   * (TimeWeight = 1 − Distance − Leading − Arrival), exactly as for an HG
+   * task with arrival switched off.
+   *
+   * A property of ONE field, not of the competition: the backend sets it per
+   * pilot class from the comp's stored {@link HG_CLASS2_CLASSES_KEY} list, so
+   * a Class 1 and a Class 2 field scored in the same task each get their own
+   * weights. It is never a stored comp parameter itself. No effect on
+   * paragliding, which has no arrival points at all.
+   */
+  hgClass2?: boolean;
+  /**
    * S7F 2026 §6.1/§11 "LeadingTimeRatio": the fraction (0–0.26) of the
    * non-distance weight allocated to leading points, for both disciplines.
    * Defaults per discipline (§11): 26% for PG, 17.5% for HG. For PG, when
@@ -316,4 +330,58 @@ export function resolveCompGapParams(
     }
   }
   return merged;
+}
+
+// ---------------------------------------------------------------------------
+// Hang-gliding Class 2 (S7F 2026 §11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether arrival points are scored for a field: hang gliding, arrival
+ * switched on, and not an FAI Class 2 field (S7F 2026 §11). The one
+ * predicate the weights, the arrival order and the report card share, so
+ * they cannot disagree about whether arrival was on offer.
+ */
+export function scoresArrival(
+  params: Pick<GAPParameters, 'scoring' | 'useArrival' | 'hgClass2'>,
+): boolean {
+  return params.scoring === 'HG' && params.useArrival && params.hgClass2 !== true;
+}
+
+/**
+ * The stored gap_params key listing the comp's pilot classes that fly FAI
+ * hang-gliding Class 2 (issue #601). A comp-level list of class NAMES,
+ * because GlideComp's pilot classes are the organiser's own results
+ * subdivisions ("Open", "Sport", "Rigid"…) and only the organiser knows
+ * which of them is a Class 2 field. The backend turns it into
+ * {@link GAPParameters.hgClass2} per class at scoring time.
+ */
+export const HG_CLASS2_CLASSES_KEY = 'hgClass2Classes';
+
+/**
+ * Read the Class 2 class list out of a stored gap_params blob. Stored JSON
+ * is data, not types: anything that is not an array of strings degrades to
+ * "no Class 2 classes" (the 2026 default for every class), and non-string
+ * members are dropped — a corrupt row must never switch arrival off.
+ */
+export function storedHgClass2Classes(stored: unknown): string[] {
+  if (stored === null || typeof stored !== 'object') return [];
+  const list: unknown = (stored as Record<string, unknown>)[HG_CLASS2_CLASSES_KEY];
+  if (!Array.isArray(list)) return [];
+  return list.filter((c): c is string => typeof c === 'string');
+}
+
+/**
+ * The parameters to score ONE pilot class with: the comp/task parameters,
+ * plus {@link GAPParameters.hgClass2} when the class is in the comp's Class 2
+ * list. The flag is only ever set true, so a published payload for a Class 1
+ * field carries no new key at all.
+ */
+export function gapParamsForClass(
+  params: GAPParameters,
+  pilotClass: string,
+  hgClass2Classes: readonly string[],
+): GAPParameters {
+  if (params.scoring !== 'HG' || !hgClass2Classes.includes(pilotClass)) return params;
+  return { ...params, hgClass2: true };
 }

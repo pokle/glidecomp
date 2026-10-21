@@ -11,6 +11,7 @@
 import {
   resolveTurnpointSequence,
   scoreFlights,
+  gapParamsForClass,
   scoreOpenDistanceFlights,
   openDistanceForFlight,
   toFlightScoringData,
@@ -486,10 +487,15 @@ async function scoreGapTask(
         ? await equalizeStoppedWindows(classPilots, stopBase, r2, scoringTask, resolveGapFlight)
         : classPilots.map((p) => p.flight);
 
+      // One field's parameters: the comp/task set, plus the §11 Class 2
+      // flag when the organiser marked this class as Class 2 (issue #601).
+      const classParams = gapParamsForClass(
+        config.fullGapParams, pilotClass, config.hgClass2Classes,
+      );
       const result = scoreFlights(
         scoringTask,
         classFlights,
-        config.gapParams,
+        classParams,
         numPresentIn(config, pilotClass, classPilots.length),
         config.stopCtx ? { stopTimeMs: config.stopCtx.stopTimeMs } : undefined
       );
@@ -500,8 +506,8 @@ async function scoreGapTask(
         alphabet,
         excluded,
         {
-          gap_params: config.fullGapParams,
-          validity_inputs: validityInputs(result, config.fullGapParams),
+          gap_params: classParams,
+          validity_inputs: validityInputs(result, classParams),
         }
       );
     }

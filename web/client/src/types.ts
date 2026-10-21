@@ -28,6 +28,9 @@ export type DistanceOriginValue = "takeoff" | "start";
  */
 export type CompGapParams = Omit<GAPParameters, "nominalDistance"> & {
   nominalDistance: number | null;
+  /** Pilot classes flown as FAI HG Class 2 — no arrival points (S7F §11,
+   * issue #601). Read it with the engine's `storedHgClass2Classes`. */
+  hgClass2Classes?: string[];
 };
 
 export interface CompDetailData {

@@ -14,6 +14,7 @@ import {
   NOMINAL_LAUNCH,
   NOMINAL_GOAL,
   defaultLeadingTimeRatio,
+  scoresArrival,
 } from './gap-params';
 
 /** Coefficients of a cubic c0 + c1·x + c2·x² + c3·x³. */
@@ -242,6 +243,8 @@ export interface WeightInputs {
   useLeading?: boolean;
   /** Arrival points enabled (HG only). Default true. */
   useArrival?: boolean;
+  /** The field flies FAI HG Class 2: ArrivalWeight is 0 (§11). */
+  hgClass2?: boolean;
   /**
    * §11 LeadingTimeRatio (0–0.26). Defaults to the discipline default
    * (26% PG, 17.5% HG).
@@ -261,6 +264,7 @@ export function calculateWeights(inputs: WeightInputs): WeightFractions {
     scoring,
     useLeading = true,
     useArrival = true,
+    hgClass2 = false,
     numReachedESS,
   } = inputs;
   const gr = goalRatio;
@@ -270,8 +274,9 @@ export function calculateWeights(inputs: WeightInputs): WeightFractions {
   const dw = 0.9 - 1.665 * gr + 1.713 * gr * gr - 0.587 * gr * gr * gr;
 
   // Arrival weight (§11): HG only, when enabled — 12.5% of the non-distance
-  // weight. (HG Class 2 would be 0; the engine does not model HG classes.)
-  const aw = (scoring === 'HG' && useArrival) ? (1 - dw) / 8 : 0;
+  // weight, except Class 2, whose ArrivalWeight is 0. The share is not
+  // redistributed explicitly: time is the remainder below, so it absorbs it.
+  const aw = scoresArrival({ scoring, useArrival, hgClass2 }) ? (1 - dw) / 8 : 0;
 
   // Leading weight (§11): LeadingTimeRatio of the non-distance weight, both
   // disciplines — except that for PG, when nobody makes goal, time points

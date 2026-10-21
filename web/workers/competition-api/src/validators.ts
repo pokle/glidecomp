@@ -160,6 +160,17 @@ const gapParamsSchema = z
     // Optional; the scorer defaults to the spec's recommended 0.8. The spec
     // fixes PG at 0 — the engine ignores the value for PG comps.
     essNotGoalFactor: z.number().min(0).max(1).optional(),
+    // HG Class 2 (S7F 2026 §11, issue #601): the comp's pilot classes that
+    // fly FAI hang-gliding Class 2, which score no arrival points. Optional;
+    // absent or empty means every class is scored with arrival as configured.
+    // The update route checks each name is one of the comp's pilot classes.
+    hgClass2Classes: z
+      .array(pilotClassString)
+      .max(20)
+      .refine((arr) => new Set(arr).size === arr.length, {
+        message: "Duplicate Class 2 classes",
+      })
+      .optional(),
     // ---- Legacy keys from pre-2026 editions ----
     // Accepted so older clients and re-submitted stored payloads don't
     // hard-fail, then STRIPPED: the 2026 edition fixes these values

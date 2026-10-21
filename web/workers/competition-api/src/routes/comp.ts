@@ -20,6 +20,7 @@ import {
   defaultsFor,
   resolveCompGapParams,
   resolveLeadingTimeRatio,
+  storedHgClass2Classes,
   type GAPParameters,
 } from "@glidecomp/engine";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
@@ -29,6 +30,9 @@ const MAX_COMPS_PER_ACCOUNT = 50;
 
 type GapParamInput = Partial<Omit<GAPParameters, "nominalDistance">> & {
   nominalDistance?: number | null;
+  /** Pilot classes flown as FAI HG Class 2 (issue #601) — see
+   * `storedHgClass2Classes`. Comp-level, so not a GAPParameters key. */
+  hgClass2Classes?: string[];
 };
 
 type CompCategory = "hg" | "pg";
@@ -174,6 +178,24 @@ function describeGapParamChanges(
   }
   if (o.useArrival !== n.useArrival) {
     out.push(n.useArrival ? "Enabled arrival points" : "Disabled arrival points");
+  }
+  // FAI HG Class 2 (S7F §11, issue #601): each class moved in or out of the
+  // list changes that class's arrival weight, so each is its own line — and
+  // a line here is also what makes planPatch bump the scores. Only HG reads
+  // it; on a PG comp the list scores nothing, so it is not described.
+  if (oldCategory === "hg" || newCategory === "hg") {
+    const oC2 = new Set(storedHgClass2Classes(oldGap));
+    const nC2 = new Set(storedHgClass2Classes(newGap));
+    for (const cls of nC2) {
+      if (!oC2.has(cls)) {
+        out.push(`Marked class "${cls}" as FAI hang-gliding Class 2 (no arrival points, S7F §11)`);
+      }
+    }
+    for (const cls of oC2) {
+      if (!nC2.has(cls)) {
+        out.push(`Unmarked class "${cls}" as FAI hang-gliding Class 2 (arrival points as configured)`);
+      }
+    }
   }
   // §11 Leading Time Ratio — changes every pilot's leading↔time split, so
   // it is individually audit-logged. Read through the same clamp-and-default
@@ -416,6 +438,15 @@ export const compRoutes = new Hono<AuthedEnv>()
       if (!pilotClasses.includes(defaultClass)) {
         return c.json(
           { error: "default_pilot_class must be one of pilot_classes" },
+          400
+        );
+      }
+      const unknownClass2 = storedHgClass2Classes(body.gap_params ?? null).filter(
+        (cls) => !pilotClasses.includes(cls)
+      );
+      if (unknownClass2.length > 0) {
+        return c.json(
+          { error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknownClass2.join(", ")})` },
           400
         );
       }
@@ -838,6 +869,22 @@ export const compRoutes = new Hono<AuthedEnv>()
           >,
           nextCategory
         );
+      }
+
+      // The Class 2 list names pilot classes, so it must name THIS comp's —
+      // against the classes as they will be after this same save.
+      const class2 = patch.gap_params ? storedHgClass2Classes(patch.gap_params) : [];
+      if (class2.length > 0) {
+        const classesAfter =
+          body.pilot_classes ??
+          (JSON.parse(current.pilot_classes as string) as string[]);
+        const unknown = class2.filter((cls) => !classesAfter.includes(cls));
+        if (unknown.length > 0) {
+          return c.json(
+            { error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknown.join(", ")})` },
+            400
+          );
+        }
       }
 
       const plan = planPatch(

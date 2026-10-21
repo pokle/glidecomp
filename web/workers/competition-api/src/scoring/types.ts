@@ -259,6 +259,9 @@ export interface TaskScoringGeometry {
   category: "hg" | "pg";
   gapParams: Partial<GAPParameters>;
   fullGapParams: GAPParameters;
+  /** Pilot classes flown as FAI HG Class 2 — no arrival points (S7F §11).
+   * Apply with `gapParamsForClass`, never by reading fullGapParams alone. */
+  hgClass2Classes: string[];
   distanceOrigin: GAPParameters["distanceOrigin"];
   useLeading: boolean;
   leadingFormula: LeadingFormula;

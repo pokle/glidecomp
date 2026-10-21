@@ -32,6 +32,8 @@ import { join, resolve } from 'path';
 import {
   scoreTask,
   resolveCompGapParams,
+  gapParamsForClass,
+  storedHgClass2Classes,
   type GAPParameters,
   type GapTaskScoreResult,
 } from '../engine/src/gap-scoring';
@@ -114,7 +116,11 @@ function scoreOneComp(compDir: string): TaskRow[] {
       gapParams.nominalDistance = calculateOptimizedTaskDistance(task) * 0.7;
     }
 
-    const result = scoreTask(task, pilots, gapParams);
+    // Per class, as the backend scores it: a class listed in the comp's
+    // hgClass2Classes is an FAI HG Class 2 field (S7F §11, issue #601).
+    const result = scoreTask(
+      task, pilots, gapParamsForClass(gapParams, spec.pilot_class, storedHgClass2Classes(stored)),
+    );
     rows.push({
       comp: manifest.slug,
       pilotClass: spec.pilot_class,

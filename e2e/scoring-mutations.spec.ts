@@ -205,6 +205,52 @@ test.describe("a scoring input changes: audit entry + recomputed scores", () => 
     expect(winnerAfter!.total_score).toBeLessThan(winnerBefore.total_score);
   });
 
+  // FAI S7F §11, issue #601: a class flying HG Class 2 scores no arrival
+  // points. The list lives in the comp's gap_params, so it rides the same
+  // settings save, and must be audited and rescore like any GAP knob.
+  test("comp settings: marking a class as FAI Class 2 is logged and drops its arrival points", async ({
+    page,
+  }) => {
+    const before = openClass(await readFreshScore(admin, fixture));
+    expect(
+      before.available_points?.arrival,
+      "the field must reach ESS, or arrival is 0 already and this proves nothing"
+    ).toBeGreaterThan(0);
+
+    await devLogin(page);
+    await page.goto(`${BASE_URL}/comp/${fixture.compId}/settings/scoring`);
+    await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
+    // Outside the Advanced disclosure: marking Class 2 follows the FAI rules.
+    const classes = page.getByRole("group", { name: "FAI Class 2 classes" });
+    // Click the ROW (rac gotcha #13: the real input is visually hidden).
+    await classes.locator("label").filter({ hasText: /^open$/ }).click();
+    await expect(classes.getByRole("checkbox", { name: "open" })).toBeChecked();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("main").getByRole("link", { name: /^Scoring/ })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    await expectAuditEntry(
+      page,
+      fixture.compId,
+      /Marked class "open" as FAI hang-gliding Class 2 \(no arrival points, S7F §11\)/
+    );
+    const after = openClass(await readFreshScore(admin, fixture));
+    expect(after.gap_params?.hgClass2).toBe(true);
+    expect(after.available_points?.arrival).toBe(0);
+    // The day is worth the same; its arrival share went to time.
+    expect(after.available_points!.total).toBeCloseTo(before.available_points!.total, 0);
+    expect(after.available_points!.time).toBeGreaterThan(before.available_points!.time);
+
+    // Put it back, so the tests after this one score the usual way.
+    const res = await admin.get(`/api/comp/${fixture.compId}`);
+    const comp = (await res.json()) as { gap_params: Record<string, unknown> };
+    const restored = await admin.patch(`/api/comp/${fixture.compId}`, {
+      data: { gap_params: { ...comp.gap_params, hgClass2Classes: [] } },
+    });
+    expect(restored.ok(), await restored.text()).toBeTruthy();
+  });
+
   test("pilot status: Did Not Fly is logged and changes launch validity", async ({
     page,
   }) => {
