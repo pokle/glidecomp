@@ -170,6 +170,16 @@ export function buildTimeSection(
         emphasis: 'warning',
       });
     }
+    // Elevated Goal (S7F 2026 §13.1): a goal pilot's time points carry the
+    // GoalAltitudeFactor of their crossing altitude — stated with its inputs
+    // and its arithmetic, then folded into the equations below.
+    const elevated = entry.made_goal ? result.elevatedGoal : undefined;
+    const gaf = entry.goal_altitude_factor ?? 1;
+    const egItem = elevated ? elevatedGoalItem(elevated, gaf) : null;
+    if (egItem) items.push(egItem);
+    const gafEq = gaf < 1
+      ? ` × ${trimZeros(gaf.toFixed(4), 2)} (elevated goal, §13.1)`
+      : '';
     // The ×factor the engine applied (1 when no reduction) — folded into the
     // printed equations so they reconcile with the published points.
     const factor = essReduction ? essNotGoalFactor : 1;
@@ -182,7 +192,7 @@ export function buildTimeSection(
     if (entry.speed_section_time <= bestTime) {
       const { availStr, reconciles } = reconcileWithAvailable(
         ap.time, 0, 0, entry.time_points,
-        (_d, avail) => Math.max(0, avail * factor - stopReduction),
+        (_d, avail) => Math.max(0, avail * factor - stopReduction) * gaf,
       );
       items.push({
         id: 'time-formula',
@@ -190,10 +200,12 @@ export function buildTimeSection(
           ? 'Fastest through the speed section — full available time points, before the goal-validation reduction'
           : stopReduction > 0
             ? 'Fastest through the speed section — full available time points, before the stopped-task reduction'
-            : 'Fastest through the speed section — full available time points.',
+            : gaf < 1
+              ? 'Fastest through the speed section — full available time points, before the elevated-goal reduction'
+              : 'Fastest through the speed section — full available time points.',
         value: pts(entry.time_points),
-        detail: essReduction || stopReduction > 0
-          ? `${availStr} available${factorEq}${stopEq} ${reconciles ? '=' : '≈'} ${fmtPoints(entry.time_points)}`
+        detail: essReduction || stopReduction > 0 || gaf < 1
+          ? `${withGoalAltitude(`${availStr} available${factorEq}${stopEq}`, stopEq, gafEq)} ${reconciles ? '=' : '≈'} ${fmtPoints(entry.time_points)}`
           : undefined,
       });
     } else {
@@ -202,13 +214,13 @@ export function buildTimeSection(
       // decimals that the multiplication visibly holds at the 0.1-pt step.
       const { availStr, decimals, reconciles } = reconcileWithAvailable(
         ap.time, 3, 6, entry.time_points,
-        (d, avail) => Math.max(0, Number(sf.toFixed(d)) * avail * factor - stopReduction),
+        (d, avail) => Math.max(0, Number(sf.toFixed(d)) * avail * factor - stopReduction) * gaf,
       );
       items.push({
         id: 'time-formula',
         text: 'Time points fall off with the gap to the fastest time',
         value: pts(entry.time_points),
-        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^5⁄6) = ${trimZeros(sf.toFixed(decimals), 3)}; × ${availStr} available${factorEq}${stopEq} ${eqResult(reconciles, entry.time_points)} (times in hours)`,
+        detail: `speed fraction = max(0, 1 − ((T − Tbest) ÷ √Tbest)^5⁄6) = ${trimZeros(sf.toFixed(decimals), 3)}; ${withGoalAltitude(`× ${availStr} available${factorEq}${stopEq}`, stopEq, gafEq)} ${eqResult(reconciles, entry.time_points)} (times in hours)`,
       });
     }
   }
@@ -236,4 +248,60 @@ function winnableComponents(ap: ClassContextInput['available_points']): string {
       ? names[0]
       : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   return `${list.charAt(0).toUpperCase()}${list.slice(1)} points`;
+}
+
+/**
+ * Append the §13.1 factor to a printed equation. It applies after the
+ * §13.4.5 subtraction, so with one present the rest is bracketed first.
+ */
+function withGoalAltitude(eq: string, stopEq: string, gafEq: string): string {
+  if (!gafEq) return eq;
+  return stopEq ? `(${eq.trim()})${gafEq}` : `${eq}${gafEq}`;
+}
+
+/** Whole metres with a thousands separator: "1,240 m". */
+function metres(m: number): string {
+  return `${Math.round(m).toLocaleString('en-AU')} m`;
+}
+
+/**
+ * The Elevated Goal row (S7F 2026 §13.1): where the pilot crossed goal
+ * against the goal's elevation, and — below it — the GoalAltitudeFactor
+ * with its substituted arithmetic.
+ */
+function elevatedGoalItem(
+  eg: NonNullable<TurnpointSequenceResult['elevatedGoal']>,
+  publishedFactor: number,
+): ScoreExplanationItem | null {
+  if (eg.crossingAltitude === undefined) return null;
+  const top = eg.goalAltitude + eg.elevation;
+  const above = eg.crossingAltitude - eg.goalAltitude;
+  const where =
+    `You crossed the elevated goal at ${metres(eg.crossingAltitude)}; it is set ` +
+    `${metres(eg.elevation)} above the ${metres(eg.goalAltitude)} goal, at ${metres(top)}`;
+  if (publishedFactor >= 1) {
+    return {
+      id: 'elevated-goal',
+      text: `${where}. Crossing at or above it keeps full time points (FAI S7F §13.1).`,
+      emphasis: 'muted',
+    };
+  }
+  const f = trimZeros(publishedFactor.toFixed(4), 2);
+  if (above <= 0) {
+    return {
+      id: 'elevated-goal',
+      text: `${where}. At or below the goal's own altitude, only ${f} of time points are kept (FAI S7F §13.1).`,
+      emphasis: 'warning',
+    };
+  }
+  const ar = above / eg.elevation;
+  const arS = trimZeros(ar.toFixed(4), 2);
+  return {
+    id: 'elevated-goal',
+    text: `${where}. Crossing below it keeps only part of your time points (FAI S7F §13.1).`,
+    detail:
+      `AR = ${metres(above)} above goal ÷ ${metres(eg.elevation)} = ${arS}; ` +
+      `factor = 0.8 + 0.6·AR − 0.6·AR² + 0.2·AR³ = ${f}`,
+    emphasis: 'warning',
+  };
 }

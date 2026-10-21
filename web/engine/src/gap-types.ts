@@ -145,6 +145,13 @@ export interface PilotScore {
    * folded into this pilot's flownDistance. Absent when no bonus applied.
    */
   stoppedAltitudeBonus?: number;
+  /**
+   * Elevated Goal tasks only (§13.1): the GoalAltitudeFactor (< 1) this goal
+   * pilot's time points were multiplied by for crossing below the goal's
+   * elevation, and the time points before it. Absent at full factor.
+   */
+  goalAltitudeFactor?: number;
+  timePointsBeforeGoalAltitude?: number;
   /** Underlying turnpoint sequence result for transparency */
   turnpointResult: TurnpointSequenceResult;
 }
@@ -392,6 +399,13 @@ export interface FlightScoringData {
    * already folded into flownDistance, passed through for transparency.
    */
   stoppedAltitudeBonus?: number;
+  /**
+   * Elevated Goal tasks only (S7F 2026 §13.1): the GoalAltitudeFactor (0.8–1)
+   * of this goal pilot's crossing altitude, applied to their time points.
+   * Absent for a ground goal, a pilot not in goal, and a track-less pilot
+   * (there is no altitude to measure — the time points stand in full).
+   */
+  goalAltitudeFactor?: number;
   /**
    * What this flight brings to the §13.4 leading calculation — see
    * {@link FlightLeadingInput}. Only read when

@@ -134,11 +134,14 @@ export function CheckboxField({
  * for) is NaN, the same spelling RAC's NumberField uses for an empty field.
  */
 export function AltitudeField({
+  label = "Altitude",
   valueM,
   onChange,
   description,
   hint,
 }: {
+  /** What the number is; the unit is appended: "Upper limit (ft)". */
+  label?: string;
   /** Metres, or NaN when blank. */
   valueM: number;
   /** Metres, or NaN when the field is cleared. */
@@ -151,7 +154,7 @@ export function AltitudeField({
     <NumberField
       label={
         <>
-          Altitude ({getUnitLabel("altitude", units)}){hint ? <> {hint}</> : null}
+          {label} ({getUnitLabel("altitude", units)}){hint ? <> {hint}</> : null}
         </>
       }
       description={description}

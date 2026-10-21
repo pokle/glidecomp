@@ -134,7 +134,7 @@ export function radiusChipLabel(m: number): string {
 /** The editable fields of a turnpoint (everything the details dialog sets). */
 export type TurnpointDraft = Pick<
   RouteRow,
-  "name" | "description" | "type" | "coords" | "radius" | "altitude"
+  "name" | "description" | "type" | "coords" | "radius" | "altitude" | "altitudeLimits"
 >;
 
 /**
@@ -212,5 +212,7 @@ export function draftWithRecord(
     ...fresh,
     type: current.type,
     radius: rec.radius > 0 ? fresh.radius : current.radius,
+    // A waypoint has no altitude limits; the turnpoint's own stay.
+    ...(current.altitudeLimits ? { altitudeLimits: current.altitudeLimits } : {}),
   };
 }

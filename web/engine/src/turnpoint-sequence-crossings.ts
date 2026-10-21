@@ -10,6 +10,7 @@ import type { XCTask } from './xctsk-parser';
 import { fixAltitude, type IGCFix } from './igc-parser';
 import { ellipsoidDistance } from './geo';
 import { getGoalIndex } from './xctsk-parser';
+import { effectiveAltitudeLimits, withinAltitudeLimits } from './elevated-goal';
 import { computeTurnpointDirections, type TurnpointDirection } from './task-optimizer';
 import {
   computeGoalLine,
@@ -116,6 +117,12 @@ export function detectCylinderCrossings(
       continue;
     }
     const tp = task.turnpoints[tpIdx];
+    // §6.2.1/§9.2.1: with altitude limits, a crossing outside them (± 5 m)
+    // is not a potential valid crossing. It is still EMITTED — it moves the
+    // pilot across the boundary all the same, and the reaching logic reads
+    // inside/outside from the crossing list — but flagged, so nothing
+    // credits the turnpoint with it.
+    const altLimits = effectiveAltitudeLimits(task, tpIdx);
     const centerLat = tp.waypoint.lat;
     const centerLon = tp.waypoint.lon;
     // Tolerance band (§9.1.1): outerRadius = r+5, innerRadius = r−5. Entry
@@ -251,6 +258,9 @@ export function detectCylinderCrossings(
           direction,
           distanceToCenter,
           toleranceCredited,
+          ...(altLimits && !withinAltitudeLimits(crossingAlt, altLimits)
+            ? { altitudeRejected: true as const }
+            : {}),
         });
 
         lastFlipFixIdx = fixIdx;

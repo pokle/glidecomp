@@ -296,6 +296,26 @@ export function TurnpointSheet({
           onChange={(m) => patch({ altitude: Number.isFinite(m) ? m : "" })}
         />
 
+        {/* S7F 2026 §6.2.1 altitude limits (issue #600). Not on the goal,
+            which cannot have them (§6.2.3) — the elevated goal in the Goal
+            settings is how a goal sets an altitude. */}
+        {!(showGoal || draft.type === "GOAL") ? (
+          <section className="flex flex-col gap-3 border-t border-border pt-3">
+            <h3 className="text-sm font-medium">Altitude limits</h3>
+            <AltitudeField
+              label="Lower limit"
+              valueM={draft.altitudeLimits?.lower ?? NaN}
+              onChange={(m) => patch({ altitudeLimits: withLimit(draft.altitudeLimits, "lower", m) })}
+            />
+            <AltitudeField
+              label="Upper limit"
+              valueM={draft.altitudeLimits?.upper ?? NaN}
+              onChange={(m) => patch({ altitudeLimits: withLimit(draft.altitudeLimits, "upper", m) })}
+              description="Optional (FAI S7F §6.2.1). A crossing of this cylinder counts only between these altitudes, within 5 m. Leave both blank for no limits."
+            />
+          </section>
+        ) : null}
+
         {/* Type sits here, not with the identity fields: Start and Goal
             settings appear or vanish from this choice, so the switch has to
             be the thing immediately above them. */}
@@ -337,4 +357,16 @@ export function TurnpointSheet({
       </SheetBody>
     </FullScreenSheet>
   );
+}
+
+/** One limit set (or cleared, for NaN), dropping the object once both are gone. */
+function withLimit(
+  current: TurnpointDraft["altitudeLimits"],
+  which: "lower" | "upper",
+  metres: number
+): TurnpointDraft["altitudeLimits"] {
+  const next = { ...current };
+  if (Number.isFinite(metres)) next[which] = metres;
+  else delete next[which];
+  return next.lower === undefined && next.upper === undefined ? undefined : next;
 }

@@ -576,3 +576,16 @@ export {
   type WeatherSourceKind,
   type WeatherVariable,
 } from './weather';
+export {
+  resolveElevatedGoal,
+  goalAltitudeFactor,
+  goalAltitudeRatio,
+  effectiveAltitudeLimits,
+  withinAltitudeLimits,
+  DEFAULT_GOAL_ELEVATION,
+  MAX_GOAL_ELEVATION,
+  ALTITUDE_LIMIT_TOLERANCE,
+  MIN_GOAL_ALTITUDE_FACTOR,
+  type AltitudeLimits,
+  type ElevatedGoal,
+} from './elevated-goal';

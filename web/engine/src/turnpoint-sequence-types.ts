@@ -105,11 +105,42 @@ export interface CylinderCrossing {
    * crossing. Absent for cylinder turnpoints and for line crossings.
    */
   goalSemicircleCredited?: boolean;
+
+  /**
+   * True when the turnpoint has altitude limits (S7F 2026 §6.2.1) and this
+   * crossing's altitude lies outside them ± 5 m (§9.2.1): it is not a
+   * potential valid crossing, so it never credits the turnpoint. It still
+   * changes which side of the boundary the pilot is on. Absent otherwise.
+   */
+  altitudeRejected?: true;
 }
 
 // ---------------------------------------------------------------------------
 // Resolved sequence
 // ---------------------------------------------------------------------------
+
+/**
+ * The Elevated Goal facts one pilot's result carries (S7F 2026 §6.2.3.2,
+ * §13.1) — enough for the report card to print the arithmetic.
+ */
+export interface ElevatedGoalInfo {
+  /** Published goal waypoint altitude (m AMSL). */
+  goalAltitude: number;
+  /** Metres above it for full time points (capped at 1000). */
+  elevation: number;
+  /** The task file's value, when the 1000 m cap changed it. */
+  declaredElevation?: number;
+  /**
+   * The task index of a declared ESS the Elevated Goal replaced — it
+   * "implicitly also serves as the End of Speed Section". Absent when the
+   * route declared no ESS or declared it on goal.
+   */
+  replacedEssIndex?: number;
+  /** Goal pilots only: the altitude (m) of the goal reaching. */
+  crossingAltitude?: number;
+  /** Goal pilots only: §13.1 GoalAltitudeFactor applied to time points. */
+  goalAltitudeFactor?: number;
+}
 
 /**
  * A scored turnpoint reaching — one entry in the resolved sequence.
@@ -539,6 +570,12 @@ export interface TurnpointSequenceResult {
    * has an explicit ESS turnpoint.
    */
   essFallback?: 'last_turnpoint';
+
+  /**
+   * Present when the task's goal is an Elevated Goal (S7F 2026 §6.2.3.2):
+   * see {@link ElevatedGoalInfo}.
+   */
+  elevatedGoal?: ElevatedGoalInfo;
 
   /**
    * Present when the task defines an enforceable goal deadline (§9.2):

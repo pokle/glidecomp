@@ -440,11 +440,28 @@ const xctskWaypointSchema = z
   })
   .strict();
 
+// S7F 2026 §6.2.1 altitude limits, m AMSL (issue #600). GlideComp's own key —
+// the .xctsk format has none — read by the engine's elevated-goal.ts. At
+// least one limit; when both, lower below upper.
+const xctskAltitudeLimitsSchema = z
+  .object({
+    lower: z.number().min(-1000).max(30000).optional(),
+    upper: z.number().min(-1000).max(30000).optional(),
+  })
+  .strict()
+  .refine((l) => l.lower !== undefined || l.upper !== undefined, {
+    message: "altitudeLimits needs a lower or an upper limit",
+  })
+  .refine((l) => l.lower === undefined || l.upper === undefined || l.lower < l.upper, {
+    message: "altitudeLimits.lower must be below altitudeLimits.upper",
+  });
+
 const xctskTurnpointSchema = z
   .object({
     type: z.enum(["TAKEOFF", "SSS", "ESS"]).optional(),
     radius: z.number().int().min(1).max(50000),
     waypoint: xctskWaypointSchema,
+    altitudeLimits: xctskAltitudeLimitsSchema.optional(),
   })
   .strict();
 

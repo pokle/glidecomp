@@ -339,6 +339,9 @@ function toCachedAnalysis(flight: FlightScoringData): CachedFlightAnalysis {
     ...(flight.stoppedAltitudeBonus !== undefined
       ? { stoppedAltitudeBonus: flight.stoppedAltitudeBonus }
       : {}),
+    ...(flight.goalAltitudeFactor !== undefined
+      ? { goalAltitudeFactor: flight.goalAltitudeFactor }
+      : {}),
     ...(flight.leading.kind === "aggregate"
       ? { leadingAggregate: flight.leading.aggregate }
       : {}),
