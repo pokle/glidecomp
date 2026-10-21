@@ -64,6 +64,7 @@ disclosed and are being fixed first.
 | SEC-55 | The sign-in service exposed library endpoints the app never used | 2026-10-01 |
 | SEC-56 | Email sign-in codes could be guessed by a distributed attacker | 2026-10-01 |
 | SEC-63 | Dependency advisories, two critical (build and dev tooling) | 2026-10-07 |
+| SEC-67 | Dependency advisory, moderate (mobile build tooling) | 2026-10-14 |
 
 **Closed without a fix:** SEC-09 (`Math.random()` used where nothing depends on
 it being unpredictable), SEC-14 (a misleading code comment), SEC-19

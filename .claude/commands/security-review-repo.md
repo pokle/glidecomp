@@ -38,6 +38,7 @@ Before reading code, write down (in your head or as TaskCreate items) what you i
 - Pages Functions under `functions/api/`.
 - Frontend under `web/frontend/src/` — the main UI is a React SPA under `src/react/` (grep it for `dangerouslySetInnerHTML`, ref-based DOM HTML writes, and unencoded interpolation into `href`/`src`/`location.*`); the vanilla analysis page (`src/analysis/**`) and 3D replay (`src/replay/**`) are where `innerHTML`-style sinks still live. Across both: data flow from untrusted files (IGC, XCTask, share-target uploads) and API strings (pilot/team/comp/task names) into the DOM.
 - Engine package under `web/engine/src/` — parsers (`igc-parser.ts`, `xctsk-parser.ts`) and any `eval`/`Function`-style constructs.
+- Native app under `mobile/` (`src/`, `modules/`, `app.config.ts`) — everything it accepts from the operating system and other apps (deep links, opened or shared files, intent filters), what it keeps on the device, and where it sends the session.
 - Infrastructure: every `wrangler.toml` (especially `[[routes]]` blocks and binding IDs), `Containerfile`, `web/frontend/public/_redirects`, `web/frontend/public/_headers` (if present), `web/frontend/public/sw.js`.
 - Delivery pipeline: `.github/workflows/*` — which jobs can reach which secrets, whether third-party actions are pinned, and what an agent-driven workflow (`claude.yml`) can push into a deploy.
 - `package.json` + `bun.lock` via `bun audit`.
