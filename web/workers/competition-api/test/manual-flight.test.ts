@@ -7,6 +7,7 @@ import {
   createComp,
   createTask,
   uploadRequest,
+  flightIgcPayload,
 } from "./helpers";
 
 /**
@@ -28,17 +29,6 @@ const TASK_XCTSK = {
   goal: { type: "CYLINDER" },
 };
 
-/** Minimal valid gzip IGC blob (passes the upload shape check; parses to 0
- * fixes, so it is a track for reconciliation purposes without needing a real
- * tracklog). */
-function fakeIgcPayload(): Uint8Array {
-  return new Uint8Array([
-    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x73, 0x8c,
-    0x70, 0x0e, 0x31, 0x30, 0x30, 0x0c, 0x49, 0x2d, 0x2e, 0xe1, 0xe5, 0xf2,
-    0x70, 0x73, 0x09, 0x71, 0x35, 0x30, 0x34, 0x30, 0x34, 0x32, 0xe3, 0xe5,
-    0x02, 0x00, 0x19, 0xac, 0x90, 0xbb, 0x1a, 0x00, 0x00, 0x00,
-  ]);
-}
 
 async function registerPilot(
   compId: string,
@@ -227,7 +217,7 @@ describe("evidence reconciliation (track XOR manual)", () => {
     // Admin uploads a track on behalf → active track, Landed.
     const up = await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc/${cp}`,
-      fakeIgcPayload(),
+      await flightIgcPayload(),
       { user: "user-1" }
     );
     expect(up.status).toBe(201);
@@ -264,7 +254,7 @@ describe("evidence reconciliation (track XOR manual)", () => {
 
     const up = await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc/${cp}`,
-      fakeIgcPayload(),
+      await flightIgcPayload(),
       { user: "user-1" }
     );
     expect(up.status).toBe(201);
@@ -289,7 +279,7 @@ describe("setting DNF supersedes evidence (bug fix)", () => {
 
     await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc/${cp}`,
-      fakeIgcPayload(),
+      await flightIgcPayload(),
       { user: "user-1" }
     );
 
@@ -373,7 +363,7 @@ describe("restore superseded evidence", () => {
 
     await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc/${cp}`,
-      fakeIgcPayload(),
+      await flightIgcPayload(),
       { user: "user-1" }
     );
     await authRequest("PUT", `/api/comp/${compId}/task/${taskId}/pilot-status/${cp}`, {

@@ -2570,3 +2570,253 @@ describe('explainGapScore — the winner\'s headline note', () => {
     expect(old.headlineNote).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Stopped tasks and the day's offer (FAI S7F §13.4.5, engine review 7.1)
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — the day’s offer on a stopped task (S7F §13.4.5)', () => {
+  const stoppedBlock = (reduction: number): NonNullable<ClassContextInput['stopped']> => ({
+    stop_time_ms: T0 + 120 * 60_000,
+    scored_window_seconds: 7200,
+    minimum_run_seconds: 3600,
+    requirement_met: true,
+    stopped_validity: 1,
+    time_points_reduction: reduction,
+    num_landed_before_stop: 1,
+  });
+
+  /** HG, two pilots at ESS, nobody in goal at the stop: the time offer of a
+   * 7 % time weight is zeroed, arrival is still on offer. */
+  function essNoGoalContext(): ClassContextInput {
+    return {
+      task_validity: { launch: 1, distance: 0.92, time: 1, task: 0.9206 },
+      available_points: {
+        distance: 700, time: 0, leading: 136.2, arrival: 20, total: 920.6,
+      },
+      pilots: [
+        {
+          pilot_name: 'Leader', flown_distance: 60_000, speed_section_time: 3600,
+          made_goal: false, reached_ess: true, total_score: 840,
+          distance_points: 690, time_points: 0, leading_points: 130,
+          arrival_points: 20,
+        },
+        {
+          pilot_name: 'Second', flown_distance: 58_000, speed_section_time: 3900,
+          made_goal: false, reached_ess: true, total_score: 700,
+          distance_points: 600, time_points: 0, leading_points: 85,
+          arrival_points: 15,
+        },
+      ],
+      validity_inputs: {
+        ...makeValidityInputs(),
+        num_flying: 2,
+        num_in_goal: 0,
+        num_reached_ess: 2,
+        goal_ratio: 0,
+        weights: { distance: 0.76, time: 0.07, leading: 0.148, arrival: 0.022 },
+      },
+      stopped: stoppedBlock(0),
+    };
+  }
+
+  function leaderEntry(): ScoreEntryInput {
+    return {
+      ...makeGoalEntry(),
+      made_goal: false,
+      reached_ess: true,
+      speed_section_time: 3600,
+      distance_points: 690,
+      distance_linear_points: 690,
+      time_points: 0,
+      leading_points: 130,
+      arrival_points: 20,
+      total_score: 840,
+    };
+  }
+
+  function explainLeader(ctx = essNoGoalContext(), entry = leaderEntry()) {
+    return explainGapScore({
+      task: makeTask(),
+      result: { ...makeReentryResult(), madeGoal: false },
+      entry,
+      classContext: ctx,
+      params: { scoring: 'HG', useLeading: true, useArrival: true },
+    });
+  }
+
+  it('names §13.4.5, not §11, when pilots reached ESS but nobody was in goal', () => {
+    const x = explainLeader();
+    const total = section(x, 'comparison').items.find((i) => i.id === 'left-total')!;
+    expect(total.detail).toContain(
+      '64.4 of the 920.6 was never on offer to anyone: nobody was in goal when the task was stopped, so the task carried no time points (FAI S7F §13.4.5).',
+    );
+    expect(total.detail).not.toContain('nobody reached the end of the speed section');
+    expect(x.headlineNote).toContain('nobody was in goal when the task was stopped');
+    expect(x.headlineNote).toContain('(FAI S7F §13.4.5)');
+    expect(x.headlineNote).not.toContain('§11');
+  });
+
+  it('says why the time offer was zero in the day-quality and time sections', () => {
+    const x = explainLeader();
+    const v = section(x, 'validity').items;
+    expect(v.find((i) => i.id === 'no-ess-available')).toBeUndefined();
+    const row = v.find((i) => i.id === 'stopped-no-time-available')!;
+    expect(row.text).toContain('§13.4.5');
+    expect(row.detail).toContain('700 + 136.2 + 20 = 856.2 of the 920.6');
+    const t = section(x, 'time').items;
+    expect(t).toHaveLength(1);
+    expect(t[0].id).toBe('no-time-points');
+    expect(t[0].text).toContain('stopped with nobody in goal');
+    expect(t[0].text).toContain('Distance, leading and arrival points were all');
+  });
+
+  /** HG, two pilots in goal at the stop: the §13.4.5 reduction (100) moved
+   * from time to distance — the published distance includes it, the
+   * published time does not subtract it. */
+  function inGoalContext(): ClassContextInput {
+    return {
+      task_validity: { launch: 1, distance: 1, time: 1, task: 1 },
+      available_points: {
+        distance: 600, time: 300, leading: 100, arrival: 100, total: 1000,
+      },
+      pilots: [
+        {
+          pilot_name: 'Leader', flown_distance: 60_000, speed_section_time: 3600,
+          made_goal: true, reached_ess: true, total_score: 950,
+          distance_points: 600, time_points: 200, leading_points: 50,
+          arrival_points: 100,
+        },
+        {
+          pilot_name: 'Second', flown_distance: 60_000, speed_section_time: 4000,
+          made_goal: true, reached_ess: true, total_score: 800,
+          distance_points: 600, time_points: 100, leading_points: 30,
+          arrival_points: 70,
+        },
+      ],
+      validity_inputs: {
+        ...makeValidityInputs(),
+        num_flying: 2,
+        num_in_goal: 2,
+        num_reached_ess: 2,
+        goal_ratio: 1,
+        weights: { distance: 0.5, time: 0.3, leading: 0.1, arrival: 0.1 },
+      },
+      stopped: stoppedBlock(100),
+    };
+  }
+
+  it('takes the reduction off the time offer so the ledger sums to the day', () => {
+    const x = explainLeader(inGoalContext(), {
+      ...makeGoalEntry(),
+      speed_section_time: 3600,
+      distance_points: 600,
+      distance_linear_points: 600,
+      time_points: 200,
+      leading_points: 50,
+      arrival_points: 100,
+      total_score: 950,
+    });
+    const s = section(x, 'comparison');
+    // 300 − 100: the most a goal pilot's time points could come to.
+    expect(s.items.find((i) => i.id === 'left-time')!.value).toBe('full points');
+    expect(s.items.find((i) => i.id === 'left-time')!.detail).toBe('you 200 of 200 on offer');
+    const total = s.items.find((i) => i.id === 'left-total')!;
+    expect(total.detail).not.toContain('overshoot');
+    expect(total.detail).toBe('All of it is leading-points.');
+    expect(x.headlineNote).toBe(
+      'Top of the class, but not a full sweep: of the 1000 points on offer, 50 went untaken — all of it leading-points.',
+    );
+    // The split sums to the day, and says where the moved points went.
+    const v = section(x, 'validity').items;
+    expect(v.find((i) => i.id === 'available-split')!.detail).toBe(
+      'distance 600 · time 200 · leading 100 · arrival 100',
+    );
+    expect(v.find((i) => i.id === 'stopped-time-moved')!.text).toContain(
+      '100 of the 300 time points were moved to distance (FAI S7F §13.4.5)',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Penalties are shown only when one was applied (engine review 7.2)
+// ---------------------------------------------------------------------------
+
+describe('explainGapScore — no phantom penalty from rounding drift', () => {
+  // 485.6 + 420.1 − 905.6 = 0.10000000000002274 in floating point: a pilot
+  // nobody penalised used to read "Penalties −0.1 pts".
+  function driftContext(): ClassContextInput {
+    const ctx = makeClassContext();
+    ctx.available_points = { distance: 500, time: 500, leading: 0, arrival: 0, total: 1000 };
+    ctx.pilots = [
+      {
+        pilot_name: 'Leader', flown_distance: 60_000, speed_section_time: 3600,
+        made_goal: true, reached_ess: true, total_score: 990,
+        distance_points: 500, time_points: 490, leading_points: 0,
+        arrival_points: 0, penalty_points: 0, jump_the_gun_penalty: null,
+      },
+      {
+        pilot_name: 'Rohan', flown_distance: 58_000, speed_section_time: 4000,
+        made_goal: true, reached_ess: true, total_score: 905.6,
+        distance_points: 485.6, time_points: 420.1, leading_points: 0,
+        arrival_points: 0, penalty_points: 0, jump_the_gun_penalty: null,
+      },
+    ];
+    return ctx;
+  }
+  const driftEntry = (): ScoreEntryInput => ({
+    ...makeGoalEntry(),
+    distance_points: 485.6,
+    distance_linear_points: 485.6,
+    time_points: 420.1,
+    total_score: 905.6,
+  });
+
+  it('omits the penalty row from the behind-the-leader ledger', () => {
+    const s = section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: driftEntry(),
+        classContext: driftContext(),
+        params: { scoring: 'PG' },
+      }),
+      'comparison',
+    );
+    expect(s.items.find((i) => i.id === 'gap-penalty')).toBeUndefined();
+    expect(JSON.stringify(s)).not.toContain('enalt');
+  });
+
+  it('omits it from the leader’s points-left ledger too', () => {
+    const ctx = driftContext();
+    ctx.pilots[0] = { ...ctx.pilots[0], total_score: 800, time_points: 300 };
+    const x = explainGapScore({
+      task: makeTask(),
+      result: makeReentryResult(),
+      entry: driftEntry(),
+      classContext: ctx,
+      params: { scoring: 'PG' },
+    });
+    const s = section(x, 'comparison');
+    expect(s.title).toBe('The points left on the day');
+    expect(s.items.find((i) => i.id === 'left-penalty')).toBeUndefined();
+    expect(JSON.stringify(s)).not.toContain('enalt');
+    expect(x.headlineNote ?? '').not.toContain('enalt');
+  });
+
+  it('still shows a real penalty on the leader’s side', () => {
+    const ctx = driftContext();
+    ctx.pilots[0] = { ...ctx.pilots[0], total_score: 980, penalty_points: 10 };
+    const s = section(
+      explainGapScore({
+        task: makeTask(),
+        result: makeReentryResult(),
+        entry: driftEntry(),
+        classContext: ctx,
+        params: { scoring: 'PG' },
+      }),
+      'comparison',
+    );
+    expect(s.items.find((i) => i.id === 'gap-penalty')!.detail).toBe('you 0, the leader −10');
+  });
+});

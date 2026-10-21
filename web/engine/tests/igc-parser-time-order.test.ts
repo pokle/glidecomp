@@ -202,24 +202,85 @@ describe('malformed B records and the rollover heuristic', () => {
     expectNonDecreasing(content);
   });
 
-  it('applies at most one crossing, so an oscillating clock cannot span days', () => {
-    // Uncapped, 23:xx/05:xx alternation marches the day offset forward without
-    // bound: the timestamps stay monotone, so nothing downstream objects,
+  it('applies at most one crossing, so a clock that keeps wrapping cannot span days', () => {
+    // Uncapped, a clock that wraps past midnight twice marches the day offset
+    // forward: the timestamps stay monotone, so nothing downstream objects,
     // while track quality sees a flight days away from its task.
     const content = file(
-      b('230000', 1),
-      b('050000', 2),
-      b('230000', 3),
-      b('050000', 4),
-      b('230000', 5),
-      b('050000', 6)
+      b('235900', 1),
+      b('000100', 2),
+      b('110000', 3),
+      b('220000', 4),
+      b('235900', 5),
+      b('000100', 6)
     );
     const parsed = parseIGC(content);
     const days = parsed.fixes.map((f) => f.time.getUTCDate());
     expect(Math.max(...days) - Math.min(...days)).toBeLessThanOrEqual(1);
     expect(parsed.timeOrder.dayRollovers).toBe(1);
-    expect(parsed.timeOrder.suppressedDayRollovers).toBeGreaterThan(0);
+    expect(parsed.timeOrder.suppressedDayRollovers).toBe(1);
     expectNonDecreasing(content);
+  });
+
+  it('does not read an evening/morning oscillation as a crossing', () => {
+    // A six-hour wrap is not a step any logger makes across midnight.
+    const content = file(b('230000', 1), b('050000', 2), b('230000', 3), b('050000', 4));
+    const parsed = parseIGC(content);
+    expect(parsed.timeOrder.dayRollovers).toBe(0);
+    expect(new Set(parsed.fixes.map((f) => f.time.getUTCDate()))).toEqual(new Set([15]));
+    expectNonDecreasing(content);
+  });
+});
+
+describe('one corrupt hour digit (engine review 2026-10-20, 3.1)', () => {
+  it('rejects an out-of-range hour as malformed, without touching the day', () => {
+    // The review's reproduction: B0518… → B2518…. Every other field is well
+    // formed, so this is the line digit-only validation let through.
+    const content = file(b('051758', 1), b('051759', 2), b('251800', 3), b('051801', 4));
+    const parsed = parseIGC(content);
+    expect(parsed.timeOrder.malformedRecordCount).toBe(1);
+    expect(parsed.timeOrder.dayRollovers).toBe(0);
+    expect(times(content)).toEqual(['05:17:58', '05:17:59', '05:18:01']);
+    expect(parsed.fixes.map((f) => f.time.getUTCDate())).toEqual([15, 15, 15]);
+  });
+
+  it('pops a valid-looking evening hour instead of moving the rest of the flight', () => {
+    // B0518… → B2318… is a legal time, so it cannot be rejected as malformed.
+    // Under the old "≥18h then ≤6h" rule it armed a crossing and every fix
+    // after it moved 24 h forward; now it is one forward spike, popped.
+    const content = file(
+      b('051758', 1),
+      b('051759', 2),
+      b('231800', 3),
+      b('051801', 4),
+      b('051802', 5)
+    );
+    const parsed = parseIGC(content);
+    expect(parsed.timeOrder.dayRollovers).toBe(0);
+    expect(parsed.timeOrder.droppedFixCount).toBe(1);
+    expect(times(content)).toEqual(['05:17:58', '05:17:59', '05:18:01', '05:18:02']);
+    expect(parsed.fixes.map((f) => f.time.getUTCDate())).toEqual([15, 15, 15, 15]);
+    expectNonDecreasing(content);
+  });
+
+  it('pops a pre-midnight spike inside a post-midnight run without crossing', () => {
+    const content = file(b('001100', 1), b('235000', 2), b('001200', 3), b('001300', 4));
+    const parsed = parseIGC(content);
+    expect(parsed.timeOrder.dayRollovers).toBe(0);
+    expect(times(content)).toEqual(['00:11:00', '00:12:00', '00:13:00']);
+    expect(parsed.fixes.map((f) => f.time.getUTCDate())).toEqual([15, 15, 15]);
+  });
+
+  it('still crosses midnight after a logging gap of under an hour', () => {
+    const content = file(b('233000', 1), b('002000', 2), b('002100', 3));
+    const parsed = parseIGC(content);
+    expect(parsed.timeOrder.dayRollovers).toBe(1);
+    expect(parsed.fixes.map((f) => f.time.getUTCDate())).toEqual([15, 16, 16]);
+  });
+
+  it('rejects an event whose hour is out of range', () => {
+    const parsed = parseIGC(file(b('100000', 1), 'E250000PEVbad', b('100010', 2)));
+    expect(parsed.events).toHaveLength(0);
   });
 });
 

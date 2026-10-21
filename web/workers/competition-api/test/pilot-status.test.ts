@@ -7,19 +7,8 @@ import {
   createTask,
   request,
   uploadRequest,
+  flightIgcPayload,
 } from "./helpers";
-
-/** Minimal valid-looking gzip blob for IGC upload tests. */
-function fakeIgcPayload(): Uint8Array {
-  // Precomputed gzip of "AXCT001Test\r\nHFDTE010126\r\n" — the minimal
-  // content the SEC-04 IGC-shape check requires.
-  return new Uint8Array([
-    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x73, 0x8c,
-    0x70, 0x0e, 0x31, 0x30, 0x30, 0x0c, 0x49, 0x2d, 0x2e, 0xe1, 0xe5, 0xf2,
-    0x70, 0x73, 0x09, 0x71, 0x35, 0x30, 0x34, 0x30, 0x34, 0x32, 0xe3, 0xe5,
-    0x02, 0x00, 0x19, 0xac, 0x90, 0xbb, 0x1a, 0x00, 0x00, 0x00,
-  ]);
-}
 
 /**
  * Register a pilot in the given comp and return the encoded comp_pilot_id.
@@ -434,7 +423,7 @@ describe("GET pilot-status", () => {
     // uploading a track for Alice resolves her outcome to Landed.
     await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc/${cp1}`,
-      fakeIgcPayload(),
+      await flightIgcPayload(),
       { user: "user-1" }
     );
     await authRequest(
@@ -481,7 +470,7 @@ describe("uploading a track marks the pilot Landed", () => {
     // user-3 now uploads a track for themselves
     const res = await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
-      fakeIgcPayload(),
+      await flightIgcPayload(),
       { user: "user-3" }
     );
     expect(res.status).toBe(201);
@@ -514,7 +503,7 @@ describe("uploading a track marks the pilot Landed", () => {
 
     const res = await uploadRequest(
       `/api/comp/${compId}/task/${taskId}/igc`,
-      fakeIgcPayload(),
+      await flightIgcPayload(),
       { user: "user-3" }
     );
     expect(res.status).toBe(201);

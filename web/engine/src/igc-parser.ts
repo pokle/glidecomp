@@ -205,10 +205,11 @@ function parseDate(dateStr: string): Date {
  * Every field is validated before parsing — a single corrupted B record
  * (truncated line, binary garbage, non-digit fields) would otherwise feed
  * NaN coordinates or an Invalid Date into every downstream distance/climb
- * computation.
+ * computation. The time is range-checked, not just digit-checked: an hour of
+ * 25 would otherwise be read as a fix the next day.
  */
 const B_RECORD_RE =
-  /^B(\d{6})(\d{7}[NS])(\d{8}[EW])([AV])(-\d{4}|\d{5})(-\d{4}|\d{5})/;
+  /^B((?:[01]\d|2[0-3])[0-5]\d[0-5]\d)(\d{7}[NS])(\d{8}[EW])([AV])(-\d{4}|\d{5})(-\d{4}|\d{5})/;
 
 /**
  * Build a fix from an already-matched B record. Taking the match rather than
@@ -295,11 +296,11 @@ function parseCRecord(line: string): IGCTaskPoint | null {
  *         HHMMSS - UTC time
  *         TTT - Event code (e.g., PEV for pilot event)
  *
- * The time field is digit-validated for the same reason B records are: an
+ * The time field is range-validated for the same reason B records are: an
  * unvalidated HHMMSS yields an Invalid Date, and — before the record is
  * dropped for it — steers the shared midnight-rollover state.
  */
-const E_RECORD_RE = /^E(\d{6})(.{3})(.*)$/;
+const E_RECORD_RE = /^E((?:[01]\d|2[0-3])[0-5]\d[0-5]\d)(.{3})(.*)$/;
 
 function eventFromERecord(m: RegExpExecArray, baseMidnightMs: number, dayOffset: number): IGCEvent {
   return {
@@ -366,8 +367,8 @@ function parseHRecord(line: string, header: IGCHeader): void {
  * How many midnight crossings one file may contain.
  *
  * An IGC file is ONE flight, and no flight lasts 24 hours — so a second
- * ≥18h→≤6h transition is not a second crossing, it is a corrupt clock. Left
- * uncapped, an oscillating time field (23:xx, 05:xx, 23:xx, …) marches the day
+ * midnight crossing is not a second crossing, it is a corrupt clock. Left
+ * uncapped, a clock that keeps wrapping round past midnight marches the day
  * offset forward without bound, and the file ends up "spanning" days: the
  * timestamps stay monotone, so nothing downstream objects, while track
  * quality's wrong-day check sees a flight days from its task. Capping the
@@ -445,28 +446,49 @@ export function parseIGC(content: string): IGCFile {
 
   // Midnight rollover tracking: IGC B/E records only have HHMMSS with no date,
   // so flights crossing midnight UTC (common in Australia/Pacific) need day
-  // adjustment. A time jumping from late evening to early morning between
-  // consecutive timed records means the flight crossed midnight.
+  // adjustment. A record whose time of day is EARLIER than the one before it,
+  // by a step that is small once taken modulo 24 h, crossed midnight:
+  // 23:58 → 00:01 is a three-minute step, not a 24-hour rewind.
   //
-  // Driven by VALIDATED time fields only. Reading the hour straight off the
-  // line advanced this state from records that were then thrown away: a
-  // corrupt line whose hour field reads 99 armed the heuristic, so the next
-  // honest morning fix shifted the entire rest of the track a day forward,
-  // and a line whose hour field is not numeric at all set `prevHours` to NaN,
-  // which compares false against everything and disarms a genuine crossing.
-  let prevHours = -1;
+  // Driven by VALIDATED, range-checked time fields only. Reading the hour
+  // straight off the line advanced this state from records that were then
+  // thrown away, and a test of "evening, then morning" (the rule until
+  // 2026-10) turned one corrupt hour digit into a crossing: B0518… misread as
+  // B2318… armed it, the next honest 05:18 fix "crossed midnight", and the
+  // whole rest of the flight moved 24 h forward. Two guards now:
+  //
+  //   - the wrapped step must be under an hour — no logger pauses longer
+  //     than that across midnight and then resumes the same flight;
+  //   - the record before the crossing must itself have arrived by a FORWARD
+  //     step (under 12 h modulo 24 h). A pre-midnight spike in a post-midnight
+  //     run (00:11, 23:50, 00:12) arrived by a 21-minute rewind, so the step
+  //     back out of it is not a crossing — it is the spike's own correction,
+  //     and the spike is popped as one in appendFix.
+  const SEC_PER_DAY = 86_400;
+  const MAX_CROSSING_STEP_S = 3_600;
+  let prevSecOfDay = -1;
+  let prevArrivedForward = true;
   let dayOffset = 0;
   const dayOffsetFor = (hhmmss: string): number => {
-    const hours = parseInt(hhmmss.substring(0, 2), 10);
-    if (prevHours >= 18 && hours <= 6) {
-      if (dayOffset < MAX_DAY_ROLLOVERS) {
-        dayOffset++;
-        timeOrder.dayRollovers++;
-      } else {
-        timeOrder.suppressedDayRollovers++;
+    const secOfDay =
+      parseInt(hhmmss.substring(0, 2), 10) * 3600 +
+      parseInt(hhmmss.substring(2, 4), 10) * 60 +
+      parseInt(hhmmss.substring(4, 6), 10);
+    let arrivedForward = true;
+    if (prevSecOfDay >= 0) {
+      const step = (secOfDay - prevSecOfDay + SEC_PER_DAY) % SEC_PER_DAY;
+      arrivedForward = step < SEC_PER_DAY / 2;
+      if (secOfDay < prevSecOfDay && step < MAX_CROSSING_STEP_S && prevArrivedForward) {
+        if (dayOffset < MAX_DAY_ROLLOVERS) {
+          dayOffset++;
+          timeOrder.dayRollovers++;
+        } else {
+          timeOrder.suppressedDayRollovers++;
+        }
       }
     }
-    prevHours = hours;
+    prevSecOfDay = secOfDay;
+    prevArrivedForward = arrivedForward;
     return dayOffset;
   };
 

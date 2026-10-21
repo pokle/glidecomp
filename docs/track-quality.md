@@ -11,6 +11,9 @@ rendered as a sentence.
 
 **HARD** — withholds the track from scoring *and* from task analysis:
 
+- no fixes at all — a file that would not parse, or parsed without a single B
+  record (`no-fixes`, "Track holds no flight"). No override can score it:
+  there is nothing in it to score.
 - fixes outside the task's LOCAL day by more than a day
 - no fix within 100 km of any turnpoint
 

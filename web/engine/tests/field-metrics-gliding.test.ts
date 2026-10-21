@@ -422,6 +422,24 @@ describe('glide.dolphin_fraction', () => {
     expect(valueFor(out, 'sinker')).toBeNull();
     expect(valueFor(out, 'nostart')).toBeNull();
   });
+
+  it('counts straight lift strong enough to be a vario "thermal" as dolphin (review 6.1)', () => {
+    // +1.5 m/s on a dead-straight run: detectThermals calls this a thermal
+    // (vario test, no turning test), but nobody circled — it IS the dolphin
+    // flying the explanation describes.
+    const straightLift = straightFixes(0, 400, 0, 1500, 12, 1.5, 2);
+    const field = makeTestField([
+      {
+        name: 'lift',
+        fixes: straightLift,
+        turnpointResult: { sssReaching: reachingAt(straightLift, 1, 0) },
+      },
+    ]);
+    expect(field.pilots[0].thermals.length).toBeGreaterThan(0);
+    const v = valueFor(metric('glide.dolphin_fraction').compute(field), 'lift');
+    expect(v).not.toBeNull();
+    expect(v!).toBeGreaterThan(90);
+  });
 });
 
 // ---------------------------------------------------------------------------

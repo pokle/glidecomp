@@ -658,9 +658,10 @@ describe('track quality: report shape', () => {
     expect(report.hardFailed).toBe(false);
   });
 
-  it('reports an empty track as five skips, not five passes', () => {
+  it('withholds an empty track (HARD no-fixes), with the five checks skipped, not passed', () => {
     const report = assessTrackQuality([], {}, CORRYONG_CONTEXT);
-    expect(report.findings).toEqual([]);
+    expect(report.hardFailed).toBe(true);
+    expect(report.findings.map((f) => [f.id, f.severity])).toEqual([['no-fixes', 'hard']]);
     expect(report.skipped).toHaveLength(5);
     expect(report.totalFixCount).toBe(0);
     expect(report.firstFixMs).toBeNull();

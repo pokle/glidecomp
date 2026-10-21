@@ -26,7 +26,7 @@
  * ID"), and that is the part worth reading at the call site.
  */
 
-import { parseIGC, parseXCTask, assessTrackQuality, summariseFlight } from "@glidecomp/engine";
+import { parseIGC, parseXCTask, assessTrackQuality, summariseFlight, unreadableTrackReport } from "@glidecomp/engine";
 import type { IGCFile, TrackQualityReport, FlightSummary } from "@glidecomp/engine";
 import { audit, type AuditEntry } from "./audit";
 import { bumpAndRevalidateScores, type ScoreStoreContext } from "./score-store";
@@ -162,15 +162,20 @@ export function flightSummaryOf(igc: IGCFile | null): FlightSummaryWire | null {
  * the two paths drift. The bumpAndRevalidateScores the routes already call
  * recomputes and caches it within seconds.
  *
- * Returns null when there is nothing to assess (no route saved yet, or an
- * unparseable file — the latter is already handled downstream).
+ * A file that would not parse, or parsed with no fixes, is a HARD
+ * `no-fixes` verdict: it holds no flight, so it must neither mark the pilot
+ * Landed nor supersede a manual flight — and the scorer seats the pilot at 0
+ * with that reason rather than dropping them (review 2026-10-20, 2.2).
+ *
+ * Returns null only when the task row is gone or the assessment throws.
  */
 export async function assessUploadedTrack(
   db: D1Database,
   taskId: number,
   igc: IGCFile | null
 ): Promise<TrackQualityReport | null> {
-  if (!igc || igc.fixes.length === 0) return null;
+  if (!igc) return unreadableTrackReport("the file could not be read as an IGC tracklog");
+  if (igc.fixes.length === 0) return assessTrackQuality(igc.fixes, igc.header, {});
 
   const row = await db
     .prepare(

@@ -732,18 +732,21 @@ describe("rankByTotalScore — S7A §5.2.5.4 ties", () => {
     expect(ranked.map((p) => p.rank)).toEqual([1, 2, 2, 4]);
   });
 
-  test("ties are on the published whole-point total, not the raw sum", () => {
-    // 700.4 and 699.6 both display as 700 (formatScore → Math.round), so they
-    // tie; 699.4 displays as 699 and does not.
+  test("ties are on the published one-decimal total (S7F §15), not whole points", () => {
+    // 812.4 and 811.6 would both round to 812, but S7F 2026 §15 publishes
+    // competition scores to one decimal, so they are two ranks. Sums that
+    // differ only past the first decimal publish the same and do tie.
     const ranked = rankByTotalScore([
-      mk("a", 700.4),
-      mk("b", 699.6),
-      mk("c", 699.4),
+      mk("a", 812.4),
+      mk("b", 811.6),
+      mk("c", 811.64),
+      mk("d", 811.4),
     ]);
     expect(ranked.map((p) => [p.name, p.rank])).toEqual([
       ["a", 1],
-      ["b", 1],
-      ["c", 3],
+      ["c", 2],
+      ["b", 2],
+      ["d", 4],
     ]);
   });
 

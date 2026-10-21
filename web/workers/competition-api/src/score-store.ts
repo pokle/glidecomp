@@ -157,24 +157,36 @@ export async function bumpScoreInputs(
 }
 
 /** Task IDs whose scores a change to these pilots can affect: the tasks
- * where they have a track OR a manual flight (issue #306). Query BEFORE
- * deleting pilots — the cascade removes the very rows this looks at. */
+ * where they have a track, a manual flight (issue #306) OR a status row — a
+ * DNF pilot with no track still counts in launch validity's numPresent
+ * (S7F §9.1), so deleting or reclassing one changes everyone's score.
+ * Query BEFORE deleting pilots — the cascade removes the very rows this
+ * looks at. Chunked: D1 binds at most 100 parameters per statement. */
 export async function taskIdsForPilots(
   db: D1Database,
   compPilotIds: number[]
 ): Promise<number[]> {
-  if (compPilotIds.length === 0) return [];
-  const placeholders = compPilotIds.map(() => "?").join(", ");
-  const rows = await db
-    .prepare(
-      `SELECT task_id FROM task_track WHERE comp_pilot_id IN (${placeholders})
-       UNION
-       SELECT task_id FROM task_manual_flight WHERE comp_pilot_id IN (${placeholders})`
-    )
-    .bind(...compPilotIds, ...compPilotIds)
-    .all<{ task_id: number }>();
-  return rows.results.map((r) => r.task_id);
+  const ids = new Set<number>();
+  for (let i = 0; i < compPilotIds.length; i += TASK_IDS_CHUNK) {
+    const chunk = compPilotIds.slice(i, i + TASK_IDS_CHUNK);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = await db
+      .prepare(
+        `SELECT task_id FROM task_track WHERE comp_pilot_id IN (${placeholders})
+         UNION
+         SELECT task_id FROM task_manual_flight WHERE comp_pilot_id IN (${placeholders})
+         UNION
+         SELECT task_id FROM task_pilot_status WHERE comp_pilot_id IN (${placeholders})`
+      )
+      .bind(...chunk, ...chunk, ...chunk)
+      .all<{ task_id: number }>();
+    for (const r of rows.results) ids.add(r.task_id);
+  }
+  return [...ids];
 }
+
+/** Three IN lists per statement under D1's 100-parameter cap. */
+const TASK_IDS_CHUNK = 33;
 
 /** All scoreable task IDs of a comp — for comp-wide scoring-input changes
  * (scoring_format, gap_params). */
@@ -418,6 +430,21 @@ export function publicMaxAgeSeconds(
   const ageMs = nowMs - Date.parse(computedAt);
   if (!Number.isFinite(ageMs) || ageMs <= 0) return 0;
   return Math.min(Math.floor(ageMs / 1000), MAX_PUBLIC_MAX_AGE_S);
+}
+
+/**
+ * The identity of one materialized body: its state key AND the instant it
+ * was written. The state key alone is not enough — it hashes the inputs a
+ * mutation path is known to touch, and misses others the body depends on
+ * (comp/task `gap_params`, task classes, penalty reasons, a manual-flight
+ * pilot's name), so a recompute after such a change kept the ETag and
+ * clients got 304 over a changed body (review 2026-10-20, 2.4). Every write
+ * of a body stamps a fresh `computed_at`, so this pair changes whenever the
+ * served bytes can — without hashing (or, for task analysis, gunzipping) the
+ * body on every conditional request.
+ */
+export function bodyIdentity(stateKey: string, computedAt: string): string {
+  return `${stateKey}@${computedAt}`;
 }
 
 /** Wrap a state key as a quoted HTTP ETag value. */

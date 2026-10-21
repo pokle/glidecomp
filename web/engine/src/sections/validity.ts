@@ -25,7 +25,12 @@ import {
   pctWeight,
   availableTotalDetail,
 } from '../score-explanation-format';
-import { leadingWeightDetail, noEssPointsZeroed } from './shared';
+import {
+  leadingWeightDetail,
+  noEssPointsZeroed,
+  stoppedTimePointsZeroed,
+  stopTimeReduction,
+} from './shared';
 
 /**
  * The inputs behind each validity factor, as a detail sentence.
@@ -117,6 +122,24 @@ export function buildValiditySection(
   // One precision for the whole section, so the three factor rows, the task
   // validity in the summary and the equation all visibly agree.
   const decimals = validityFactorDecimals(v, ap.total);
+  const stopReduction = stopTimeReduction(classContext);
+  const stoppedNoGoal =
+    !noEssPointsZeroed(classContext, params) && stoppedTimePointsZeroed(classContext);
+  const winnableNames = [
+    'distance',
+    ...(ap.leading > 0 ? ['leading'] : []),
+    ...(ap.arrival > 0 ? ['arrival'] : []),
+  ];
+  const winnableList =
+    winnableNames.length === 1
+      ? winnableNames[0]
+      : `${winnableNames.slice(0, -1).join(', ')} and ${winnableNames[winnableNames.length - 1]}`;
+  const winnableTerms = [
+    ap.distance,
+    ...(ap.leading > 0 ? [ap.leading] : []),
+    ...(ap.arrival > 0 ? [ap.arrival] : []),
+  ];
+  const winnable = winnableTerms.reduce((a, b) => a + b, 0);
   const items: ScoreExplanationItem[] = [
     {
       id: 'launch-validity',
@@ -176,6 +199,21 @@ export function buildValiditySection(
           emphasis: 'warning' as const,
         }]
       : []),
+    // FAI S7F §13.4.5: stopped with nobody in goal, so no time points at all —
+    // pilots may have reached ESS, so this must never read as the §11 row.
+    ...(stoppedNoGoal
+      ? [{
+          id: 'stopped-no-time-available',
+          text: 'The task was stopped with nobody in goal, so it offered no time points at all (FAI S7F §13.4.5).',
+          value: pts(winnable),
+          detail:
+            `Only ${winnableList} points could be won: ` +
+            `${winnableTerms.map(fmtPoints).join(' + ')} = ` +
+            `${fmtPoints(winnable)} of the ${fmtPoints(ap.total)} the day was worth. ` +
+            `The time points are not shared out to the other components.`,
+          emphasis: 'warning' as const,
+        }]
+      : []),
     {
       id: 'available-split',
       // How many pilots got there decides the split, so say so — "the goal
@@ -188,12 +226,22 @@ export function buildValiditySection(
       // ("distance 855.9 · time 143.4" for a 999.3 day, not "856 · 144").
       detail: [
         `distance ${fmtPoints(ap.distance)}`,
-        `time ${fmtPoints(ap.time)}`,
+        // Net of a §13.4.5 reduction: it is already inside the distance figure.
+        `time ${fmtPoints(ap.time - stopReduction)}`,
         ...(ap.leading > 0 ? [`leading ${fmtPoints(ap.leading)}`] : []),
         ...(ap.arrival > 0 ? [`arrival ${fmtPoints(ap.arrival)}`] : []),
       ].join(' · '),
       emphasis: 'muted',
     },
+    // FAI S7F §13.4.5 with pilots in goal: the reduction moved from time to
+    // distance, so the split no longer follows the weights below.
+    ...(stopReduction > 0
+      ? [{
+          id: 'stopped-time-moved',
+          text: `The task was stopped: ${fmtPoints(stopReduction)} of the ${fmtPoints(ap.time)} time points were moved to distance (FAI S7F §13.4.5).`,
+          emphasis: 'muted' as const,
+        }]
+      : []),
     // The weights are the actual mechanism, and they explain why two pilots
     // with the same distance and different times separate the way they do.
     ...(vi

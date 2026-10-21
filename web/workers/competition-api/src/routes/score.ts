@@ -1,11 +1,5 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import {
-  ftvDiscardFactor,
-  calculatedFtv,
-  computeFtvForPilot,
-  type FtvTaskStatus,
-} from "@glidecomp/engine";
 import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
@@ -14,8 +8,8 @@ import { audit } from "../audit";
 import { encodeId } from "../sqids";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { computePilotAnalysis } from "../pilot-analysis";
+import { buildCompStandings } from "../comp-standings";
 import {
-  rankByTotalScore,
   shortHash,
   type OfficialResultsWire,
   type StoredOfficialResults,
@@ -33,6 +27,7 @@ import {
   scheduleTaskRevalidation,
   taskIdsForComp,
   toEtag,
+  bodyIdentity,
   type StoredTaskScore,
 } from "../score-store";
 
@@ -214,15 +209,16 @@ export const scoreRoutes = new Hono<AuthedEnv>()
       if (row && rowHasResult(row)) {
         const stale = isRowStale(row);
         if (stale) scheduleTaskRevalidation(c, [taskId]);
-        // The ETag is the identity of the served body: the stored state_key
-        // plus the staleness label riding on it — a stale-labelled body must
+        // The ETag is the identity of the served body (bodyIdentity: the
+        // stored state_key and the write's computed_at) plus the staleness
+        // label riding on it — a stale-labelled body must
         // never revalidate a fresh one (or a browser would re-serve the
         // banner after the re-score concluded). Re-score polls carry the
         // stale ETag: 304 while the row is unchanged (one D1 read, no body),
         // 200 the moment the re-score lands — even a no-op re-score whose
         // recomputed state_key is identical.
-        const etagKey =
-          (stale ? `${row.state_key}:stale` : row.state_key) + officialTag;
+        const identity = bodyIdentity(row.state_key, row.computed_at);
+        const etagKey = (stale ? `${identity}:stale` : identity) + officialTag;
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
@@ -242,7 +238,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         row?.inputs_rev ?? 0
       );
       return c.json(toTaskScoreWire(response, false, official), 200, {
-        ETag: toEtag(stateKey + officialTag),
+        ETag: toEtag(bodyIdentity(stateKey, response.computed_at) + officialTag),
         "X-Cache": "MISS",
         "Cache-Control": cacheControl(c, response.computed_at, false),
       });
@@ -329,7 +325,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           let stale = false;
           if (row && rowHasResult(row)) {
             score = JSON.parse(row.response_json) as StoredTaskScore;
-            stateKey = row.state_key;
+            stateKey = bodyIdentity(row.state_key, row.computed_at);
             stale = isRowStale(row);
             if (stale) staleTaskIds.push(task.task_id);
           } else {
@@ -340,7 +336,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
               row?.inputs_rev ?? 0
             );
             score = computed.response;
-            stateKey = computed.stateKey;
+            stateKey = bodyIdentity(computed.stateKey, computed.response.computed_at);
           }
 
           return {
@@ -367,7 +363,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
       );
 
       // Comp-level ETag: the identity of everything the response is built
-      // from — each task's stored state_key plus the team assignments, with
+      // from — each task's body identity plus the team assignments, with
       // the staleness label folded in (as on the task endpoint) so a
       // stale-labelled body never revalidates a fresh one.
       // The series-scoring settings change the scores (FTV vs sum, and the
@@ -391,147 +387,10 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         return c.body(null, 304, headers);
       }
 
-      // Aggregate per pilot per class across all tasks. `winner_score` is the
-      // class day-winner's score on that task, kept for FTV (validity units).
-      type TaskEntry = {
-        task_id: string;
-        task_date: string;
-        score: number;
-        rank: number;
-        winner_score: number;
-        ftv_status?: FtvTaskStatus;
-        ftv_counted_score?: number;
-        validity?: number;
-      };
-      type PilotTotals = {
-        pilot_name: string;
-        comp_pilot_id: string;
-        team_name: string | null;
-        total_score: number;
-        tasks: TaskEntry[];
-        calculated_ftv?: number;
-      };
-
-      const classTotals: Record<string, Record<string, PilotTotals>> = {};
-      // Per class, per task: the day-winner's score (max in the class).
-      const classTaskWinner: Record<string, Record<string, number>> = {};
-
-      for (const task of taskScores) {
-        for (const cls of task.classes) {
-          // S7F 2026 §16 (PG only): a stopped task with a task validity
-          // under 0.05 (the winner has fewer than 50 points) is excluded
-          // from the competition ranking. It stays on the task's own scores
-          // page — only the comp aggregation skips it.
-          if (
-            comp.category === "pg" &&
-            comp.scoring_format === "gap" &&
-            cls.stopped &&
-            cls.task_validity.task < 0.05
-          ) {
-            continue;
-          }
-          classTotals[cls.pilot_class] ??= {};
-          classTaskWinner[cls.pilot_class] ??= {};
-          const winnerScore = cls.pilots.reduce(
-            (max, p) => Math.max(max, p.total_score),
-            0
-          );
-          classTaskWinner[cls.pilot_class][task.task_id] = winnerScore;
-          for (const pilot of cls.pilots) {
-            if (!classTotals[cls.pilot_class][pilot.comp_pilot_id]) {
-              classTotals[cls.pilot_class][pilot.comp_pilot_id] = {
-                pilot_name: pilot.pilot_name,
-                comp_pilot_id: pilot.comp_pilot_id,
-                team_name: teamByPilot.get(pilot.comp_pilot_id) ?? null,
-                total_score: 0,
-                tasks: [],
-              };
-            }
-            const entry = classTotals[cls.pilot_class][pilot.comp_pilot_id];
-            // Default (sum-of-tasks) total; overwritten below under FTV.
-            entry.total_score += pilot.total_score;
-            entry.tasks.push({
-              task_id: task.task_id,
-              task_date: task.task_date,
-              score: pilot.total_score,
-              rank: pilot.rank,
-              winner_score: winnerScore,
-            });
-          }
-        }
-      }
-
-      // FTV (S7F §16): applies to GAP comps set to FTV with more than one task
-      // (a single task can't discard anything). Pure re-aggregation over the
-      // per-task scores already loaded above — no task is re-scored.
-      const ftvActive =
-        comp.series_scoring === "ftv" &&
-        comp.scoring_format === "gap" &&
-        taskScores.length > 1;
-      const ftvFactor = ftvActive
-        ? comp.ftv_factor ?? ftvDiscardFactor(taskScores.length)
-        : null;
-
-      if (ftvActive && ftvFactor !== null) {
-        for (const [clsKey, pilots] of Object.entries(classTotals)) {
-          const target = calculatedFtv(
-            Object.values(classTaskWinner[clsKey] ?? {}),
-            ftvFactor
-          );
-          for (const entry of Object.values(pilots)) {
-            const res = computeFtvForPilot(
-              entry.tasks.map((t) => ({
-                taskId: t.task_id,
-                score: t.score,
-                winnerScore: t.winner_score,
-              })),
-              target
-            );
-            entry.total_score = res.total;
-            entry.calculated_ftv = target;
-            const byId = new Map(res.tasks.map((t) => [t.taskId, t]));
-            for (const t of entry.tasks) {
-              const b = byId.get(t.task_id);
-              if (!b) continue;
-              t.ftv_status = b.status;
-              t.ftv_counted_score = b.countedScore;
-              t.validity = b.validity;
-            }
-          }
-        }
-      }
-
-      // Build the ranked scores per class. rankByTotalScore applies S7A
-      // §5.2.5.4 ties (equal published totals share a rank; no tie-break) to
-      // whatever total_score holds — the sum, or the FTV total set above.
-      const classScores = Object.entries(classTotals).map(
-        ([pilotClass, pilots]) => ({
-          pilot_class: pilotClass,
-          pilots: rankByTotalScore(Object.values(pilots)).map((p) => ({
-            pilot_name: p.pilot_name,
-            comp_pilot_id: p.comp_pilot_id,
-            team_name: p.team_name,
-            rank: p.rank,
-            total_score: p.total_score,
-            ...(p.calculated_ftv !== undefined
-              ? { calculated_ftv: p.calculated_ftv }
-              : {}),
-            // Drop the internal winner_score; surface FTV fields when present.
-            tasks: p.tasks.map((t) => ({
-              task_id: t.task_id,
-              task_date: t.task_date,
-              score: t.score,
-              rank: t.rank,
-              ...(t.ftv_status !== undefined
-                ? {
-                    ftv_status: t.ftv_status,
-                    ftv_counted_score: t.ftv_counted_score,
-                    validity: t.validity,
-                  }
-                : {}),
-            })),
-          })),
-        })
+      const { classScores, ftvActive, ftvFactor } = buildCompStandings(
+        comp,
+        taskScores,
+        teamByPilot
       );
 
       const result = {

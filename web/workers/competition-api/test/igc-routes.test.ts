@@ -51,10 +51,13 @@ describe("what an upload tells the client back", () => {
     const res = await uploadIgc(compId, taskId);
     const data = (await res.json()) as Record<string, any>;
 
-    // Always present, so the client has one shape to read.
-    expect(data.track_quality).toEqual({ hard_failed: false, findings: [] });
-    // This fixture has no B records, so every derived field is null rather
-    // than a confidently wrong zero — but the header it does carry is read.
+    // Always present, so the client has one shape to read. This fixture has
+    // no B records: it holds no flight, which is a HARD verdict (review
+    // 2026-10-20, 2.2) — the uploader is told it will not be scored.
+    expect(data.track_quality.hard_failed).toBe(true);
+    expect(data.track_quality.findings.map((f: { id: string }) => f.id)).toEqual(["no-fixes"]);
+    // Every derived field is null rather than a confidently wrong zero — but
+    // the header it does carry is read.
     expect(data.flight_summary).not.toBeNull();
     expect(data.flight_summary.flight_date).toBe("2026-01-01");
     expect(data.flight_summary.fix_count).toBe(0);
@@ -78,7 +81,7 @@ describe("what an upload tells the client back", () => {
     );
     expect(res.status).toBe(201);
     const data = (await res.json()) as Record<string, any>;
-    expect(data.track_quality).toEqual({ hard_failed: false, findings: [] });
+    expect(data.track_quality.hard_failed).toBe(true);
     expect(data.flight_summary.flight_date).toBe("2026-01-01");
   });
 });
