@@ -13,7 +13,7 @@ import type {
   ClassPilotInput,
 } from '../score-explanation-types';
 import { fmtPoints, duration } from '../score-explanation-format';
-import { scoredPilots } from './shared';
+import { scoredPilots, stoppedTimePointsZeroed, stopTimeReduction } from './shared';
 
 /**
  * A single loss must account for this share of the gap before the summary
@@ -49,6 +49,30 @@ function netPenalty(p: {
     (p.arrival_points ?? 0) -
     (p.total_score ?? 0)
   );
+}
+
+/**
+ * Did the scorer actually apply a penalty or bonus to this pilot? Decided from
+ * the PUBLISHED figures, never from {@link netPenalty}: the components are
+ * rounded to 0.1 independently of the total, so components − total carries up
+ * to ±0.25 of display drift (485.6 + 420.1 − 905.6 is 0.10000000000002 in
+ * floating point) on a pilot nobody penalised. Payloads that do not carry the
+ * published figures for a pilot (the class field before it did) fall back to
+ * a net effect larger than that drift.
+ */
+function hasPenalty(p: {
+  penalty_points?: number;
+  jump_the_gun_penalty?: number | null;
+  distance_points?: number;
+  time_points?: number;
+  leading_points?: number;
+  arrival_points?: number;
+  total_score?: number;
+}): boolean {
+  if (p.penalty_points === undefined) {
+    return Math.abs(netPenalty(p)) > FLOOR_VS_PUBLISHED_TOLERANCE;
+  }
+  return p.penalty_points !== 0 || (p.jump_the_gun_penalty ?? 0) > 0;
 }
 
 /** The loss the {@link DOMINANT_LOSS_RATIO} rule lets the summary name, if any. */
@@ -140,12 +164,16 @@ export function buildComparisonSection(
   const leaderPenalty = netPenalty(leader);
   const publishedPenalty =
     entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
-  if (Math.abs(minePenalty) > 0.1 || Math.abs(leaderPenalty) > 0.1) {
+  // Shown only when a penalty was actually applied (see hasPenalty) —
+  // components − total alone carries rounding drift on every pilot.
+  const minePenalised = hasPenalty(entry);
+  const leaderPenalised = hasPenalty(leader);
+  if (minePenalised || leaderPenalised) {
     rows.push({
       id: 'penalty',
       label: 'Penalties',
-      mine: Math.abs(minePenalty) > 0.1 ? -minePenalty : 0,
-      theirs: Math.abs(leaderPenalty) > 0.1 ? -leaderPenalty : 0,
+      mine: minePenalised ? -minePenalty : 0,
+      theirs: leaderPenalised ? -leaderPenalty : 0,
     });
   }
 
@@ -277,44 +305,81 @@ function listLabels(labels: string[]): string {
  */
 function shortfallsAgainstOffer(
   entry: ScoreEntryInput,
-  ap: ClassContextInput['available_points'],
+  offer: DayOffer,
 ): Array<{ label: string; lost: number }> {
   const rows = [
-    { label: 'distance-points', lost: ap.distance - entry.distance_points },
-    { label: 'time-points', lost: ap.time - entry.time_points },
-    ...(ap.leading > 0
-      ? [{ label: 'leading-points', lost: ap.leading - entry.leading_points }]
+    { label: 'distance-points', lost: offer.distance - entry.distance_points },
+    { label: 'time-points', lost: offer.time - entry.time_points },
+    ...(offer.leading > 0
+      ? [{ label: 'leading-points', lost: offer.leading - entry.leading_points }]
       : []),
-    ...(ap.arrival > 0
-      ? [{ label: 'arrival-points', lost: ap.arrival - entry.arrival_points }]
+    ...(offer.arrival > 0
+      ? [{ label: 'arrival-points', lost: offer.arrival - entry.arrival_points }]
       : []),
     // Net penalty effect (see netPenalty), so a §12.2/§13.5 floor never
-    // overstates what the deduction actually cost.
-    { label: 'penalties', lost: netPenalty(entry) },
+    // overstates what the deduction actually cost — and only when one was
+    // applied (see hasPenalty), never from rounding drift.
+    ...(hasPenalty(entry)
+      ? [{ label: 'penalties', lost: netPenalty(entry) }]
+      : []),
   ];
   return rows.filter((r) => r.lost > 0.05).sort((a, b) => b.lost - a.lost);
 }
 
 /**
- * What the day actually put on offer, and how much of its total never reached
- * a component at all.
+ * What the day actually put on offer, component by component, and how much of
+ * its total never reached a component at all.
  *
  * The four offers normally add up to the day's points, give or take display
- * rounding. Under FAI S7F §12 an HG task nobody flew to the end of the speed
- * section carries no time and no arrival points, and nothing takes their
- * place — so `unallocated` is a real slice of the day that no pilot could have
- * won, and every "you were N short of the day" sentence has to say so.
+ * rounding. Two rules break that, and both are real:
+ *
+ * - FAI S7F §11: an HG task nobody flew to the end of the speed section
+ *   carries no time and no arrival points, and nothing takes their place.
+ * - FAI S7F §13.4.5: a stopped task with nobody in goal at the stop carries no
+ *   time points, whoever reached ESS.
+ *
+ * Either way `unallocated` is a real slice of the day that no pilot could have
+ * won, and every "you were N short of the day" sentence has to say so — and
+ * name the rule that did it, because the two have different causes.
+ *
+ * A stopped task WITH pilots in goal moves its §13.4.5 reduction from time to
+ * distance: the published distance offer already includes it while the time
+ * offer still carries the pre-reduction pool, so the time offer here is net of
+ * it — the most any goal pilot's time points can come to.
  */
-function offerLedger(ap: ClassContextInput['available_points']): {
+interface DayOffer {
+  distance: number;
+  time: number;
+  leading: number;
+  arrival: number;
   offered: number;
   unallocated: number;
-} {
-  const offered =
-    ap.distance +
-    ap.time +
-    (ap.leading > 0 ? ap.leading : 0) +
-    (ap.arrival > 0 ? ap.arrival : 0);
-  return { offered, unallocated: ap.total - offered };
+  /** Why part of the day was never on offer, when part of it wasn't. */
+  zeroed: { cause: string; carried: string; cite: string } | null;
+}
+
+function dayOffer(classContext: ClassContextInput): DayOffer {
+  const ap = classContext.available_points;
+  const time = Math.max(0, ap.time - stopTimeReduction(classContext));
+  const leading = ap.leading > 0 ? ap.leading : 0;
+  const arrival = ap.arrival > 0 ? ap.arrival : 0;
+  const offered = ap.distance + time + leading + arrival;
+  const unallocated = ap.total - offered;
+  const zeroed =
+    unallocated <= 0.2
+      ? null
+      : stoppedTimePointsZeroed(classContext)
+        ? {
+            cause: 'nobody was in goal when the task was stopped',
+            carried: 'no time points',
+            cite: 'FAI S7F §13.4.5',
+          }
+        : {
+            cause: 'nobody reached the end of the speed section',
+            carried: 'no time or arrival points',
+            cite: 'FAI S7F §11',
+          };
+  return { distance: ap.distance, time, leading, arrival, offered, unallocated, zeroed };
 }
 
 /**
@@ -336,6 +401,7 @@ function buildPointsLeftSection(
   scored: ClassPilotInput[],
 ): ScoreExplanationSection | null {
   const ap = classContext.available_points;
+  const offer = dayOffer(classContext);
   const left = ap.total - entry.total_score;
   // A full sweep — nothing to explain.
   if (left <= 0.05) return null;
@@ -376,13 +442,13 @@ function buildPointsLeftSection(
   if (ap.distance > 0) {
     row('distance', 'Distance', entry.distance_points, ap.distance);
   }
-  if (ap.time > 0) {
-    const fastest = fullTaker((p) => p.time_points, ap.time);
+  if (offer.time > 0) {
+    const fastest = fullTaker((p) => p.time_points, offer.time);
     row(
       'time',
       'Time',
       entry.time_points,
-      ap.time,
+      offer.time,
       fastest
         ? ` — ${fastest.pilot_name} took the full time-points${
             fastest.speed_section_time
@@ -419,7 +485,7 @@ function buildPointsLeftSection(
   const penalties = netPenalty(entry);
   const publishedPenalty =
     entry.penalty_points + (entry.jump_the_gun_penalty ?? 0);
-  if (penalties > 0.1) {
+  if (hasPenalty(entry) && penalties > 0.05) {
     items.push({
       id: 'left-penalty',
       text: 'Penalties',
@@ -434,24 +500,24 @@ function buildPointsLeftSection(
 
   // Name what the shortfall mostly is, when one component clearly dominates —
   // the same dominance threshold as the behind-the-leader variant.
-  const losses = shortfallsAgainstOffer(entry, ap);
+  const losses = shortfallsAgainstOffer(entry, offer);
   const dominant = dominantLoss(losses, left);
   // Two ways the component offers and the day's total fail to agree, both of
   // them real. OVERSHOOT: on a day nobody makes goal the GAP weight split can
   // sum to slightly more than 1 (the time weight is clamped at zero —
   // calculateWeights), so the rows above come to more than the points actually
-  // left. UNALLOCATED: §11 zeroed the time and arrival offers on an HG task
-  // nobody flew to ESS, so part of the day was never winnable. Say which,
-  // rather than print a share the rows visibly contradict.
-  const { offered: shownOffers, unallocated } = offerLedger(ap);
+  // left. UNALLOCATED: §11 or §13.4.5 zeroed an offer (see dayOffer), so part
+  // of the day was never winnable. Say which, rather than print a share the
+  // rows visibly contradict.
+  const { offered: shownOffers, unallocated, zeroed } = offer;
   const overshoot = -unallocated;
   let leftDetail: string;
-  if (unallocated > 0.2) {
+  if (zeroed) {
     const shortOfOffer = shownOffers - entry.total_score;
     leftDetail =
       `${fmtPoints(unallocated)} of the ${fmtPoints(ap.total)} was never on offer to anyone: ` +
-      `nobody reached the end of the speed section, so the task carried no time or arrival points ` +
-      `(FAI S7F §11). ` +
+      `${zeroed.cause}, so the task carried ${zeroed.carried} ` +
+      `(${zeroed.cite}). ` +
       (shortOfOffer <= 0.05
         ? `You took all ${fmtPoints(shownOffers)} that could be won.`
         : `Against the ${fmtPoints(shownOffers)} that could be won you were ` +
@@ -480,7 +546,7 @@ function buildPointsLeftSection(
     id: 'comparison',
     title: 'The points left on the day',
     summary:
-      unallocated > 0.2
+      zeroed
         ? `Nobody out-scored you — so this compares your ${fmtPoints(
             entry.total_score,
           )} against the ${fmtPoints(shownOffers)} this task actually put on offer.`
@@ -512,7 +578,8 @@ export function buildWinnerHeadlineNote(
   const ap = classContext.available_points;
   const left = ap.total - entry.total_score;
   if (left <= 0.05) return undefined;
-  const losses = shortfallsAgainstOffer(entry, ap);
+  const offer = dayOffer(classContext);
+  const losses = shortfallsAgainstOffer(entry, offer);
   const dominant = dominantLoss(losses, left);
   // No share claim when the dominant shortfall exceeds the net left (weight
   // overshoot on a nobody-in-goal day, or a bonus) — the ledger explains it.
@@ -522,27 +589,27 @@ export function buildWinnerHeadlineNote(
         ? ` — all of it ${dominant.label}`
         : ` — mostly ${dominant.label}`
       : '';
-  // S7F §11: on an HG task nobody flew to ESS, most of the shortfall is points
-  // the day never offered anyone — so the leader's first sentence must not
-  // read as if they left them on the table. Their sweep is measured against
-  // what could actually be won, which they may well have taken in full.
-  const { offered, unallocated } = offerLedger(ap);
+  // S7F §11 / §13.4.5: when a rule zeroed an offer, most of the shortfall is
+  // points the day never offered anyone — so the leader's first sentence must
+  // not read as if they left them on the table. Their sweep is measured
+  // against what could actually be won, which they may well have taken in full.
+  const { offered, zeroed } = offer;
   const missedOfOffer = offered - entry.total_score;
   let note: string;
-  if (unallocated <= 0.2) {
+  if (!zeroed) {
     note = `Top of the class, but not a full sweep: of the ${fmtPoints(
       ap.total,
     )} points on offer, ${fmtPoints(left)} went untaken${mostly}.`;
   } else if (missedOfOffer <= 0.05) {
-    note = `Top of the class with everything that was winnable: nobody reached the end of the speed section, so the task carried no time or arrival points (FAI S7F §11) and only ${fmtPoints(
+    note = `Top of the class with everything that was winnable: ${zeroed.cause}, so the task carried ${zeroed.carried} (${zeroed.cite}) and only ${fmtPoints(
       offered,
     )} of the day's ${fmtPoints(ap.total)} could be won — all of it yours.`;
   } else {
-    note = `Top of the class, but not a full sweep: nobody reached the end of the speed section, so of the ${fmtPoints(
+    note = `Top of the class, but not a full sweep: ${zeroed.cause}, so of the ${fmtPoints(
       ap.total,
     )} points the day was worth only ${fmtPoints(
       offered,
-    )} could be won at all (FAI S7F §11) — and ${fmtPoints(
+    )} could be won at all (${zeroed.cite}) — and ${fmtPoints(
       missedOfOffer,
     )} of those went untaken${mostly}.`;
   }
@@ -552,7 +619,7 @@ export function buildWinnerHeadlineNote(
     const fastest = scored.find(
       (p) =>
         p.speed_section_time != null &&
-        Math.abs((p.time_points ?? 0) - ap.time) <= 0.05,
+        Math.abs((p.time_points ?? 0) - offer.time) <= 0.05,
     );
     const behind =
       fastest?.speed_section_time != null

@@ -27,7 +27,11 @@ import {
   reconcileWithAvailable,
   trimZeros,
 } from '../score-explanation-format';
-import { bestTimeCandidate, noEssPointsZeroed } from './shared';
+import {
+  bestTimeCandidate,
+  noEssPointsZeroed,
+  stoppedTimePointsZeroed,
+} from './shared';
 import { rankAmong, rankLabel } from './rank';
 
 export function buildTimeSection(
@@ -66,8 +70,18 @@ export function buildTimeSection(
   // points to win — a fact about the whole task, not about this pilot, and the
   // reason the section header shows nothing available.
   const noEssAtAll = noEssPointsZeroed(classContext, params);
+  // FAI S7F §13.4.5: the task was stopped with nobody in goal, so it offered
+  // no time points — even to the pilots who reached ESS, who would otherwise
+  // get a formula multiplying their speed fraction by zero with no reason.
+  const stoppedNoGoal = !noEssAtAll && stoppedTimePointsZeroed(classContext);
 
-  if (!qualifies || entry.speed_section_time === null || bestTime === null) {
+  if (stoppedNoGoal) {
+    items.push({
+      id: 'no-time-points',
+      text: `The task was stopped with nobody in goal, so it offered no time points to anyone (FAI S7F §13.4.5). ${winnableComponents(ap)} were all that could be won.`,
+      emphasis: 'warning',
+    });
+  } else if (!qualifies || entry.speed_section_time === null || bestTime === null) {
     items.push({
       id: 'no-time-points',
       text: noEssAtAll
@@ -208,4 +222,18 @@ export function buildTimeSection(
     docHref: '/scoring/gap#time-points',
     items,
   };
+}
+
+/** "Distance, leading and arrival points" — the components a day still offered. */
+function winnableComponents(ap: ClassContextInput['available_points']): string {
+  const names = [
+    'distance',
+    ...(ap.leading > 0 ? ['leading'] : []),
+    ...(ap.arrival > 0 ? ['arrival'] : []),
+  ];
+  const list =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${list.charAt(0).toUpperCase()}${list.slice(1)} points`;
 }

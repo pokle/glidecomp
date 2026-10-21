@@ -58,6 +58,38 @@ export function pilotsAtEss(classContext: ClassContextInput): number {
 }
 
 /**
+ * Did FAI S7F §13.4.5 zero this class's available time points? A stopped task
+ * with nobody in goal at the stop offers no time points at all — pilots may
+ * well have reached ESS, so this is a different finding from §11's, and the
+ * two must never borrow each other's sentence.
+ *
+ * Told apart from §11 by the published weights where the payload carries
+ * them: §11 zeroes the time WEIGHT, §13.4.5 zeroes the time POINTS of a
+ * non-zero weight. Older payloads without the weights fall back to the ESS
+ * count, which is what separates the two on HG.
+ */
+export function stoppedTimePointsZeroed(classContext: ClassContextInput): boolean {
+  const s = classContext.stopped;
+  const ap = classContext.available_points;
+  if (!s?.requirement_met || ap.total <= 0 || ap.time !== 0) return false;
+  const vi = classContext.validity_inputs;
+  const inGoal = vi?.num_in_goal ?? classContext.pilots.filter((p) => p.made_goal).length;
+  if (inGoal > 0) return false;
+  return vi ? vi.weights.time > 0 : pilotsAtEss(classContext) > 0;
+}
+
+/**
+ * The §13.4.5 time-points reduction of a stopped task with pilots in goal:
+ * every goal pilot's time points are cut by it and the same amount is added
+ * to the day's distance points. The published `available_points.time` keeps
+ * the PRE-reduction pool, so anything that adds the component offers up must
+ * take this off the time offer, or it counts the moved points twice.
+ */
+export function stopTimeReduction(classContext: ClassContextInput): number {
+  return classContext.stopped?.time_points_reduction ?? 0;
+}
+
+/**
  * Did FAI S7F §11's "nobody reaches ESS" rule zero this class's available time
  * and arrival points?
  *
