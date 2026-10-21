@@ -60,6 +60,7 @@ const HOUR_MS = 3_600_000;
 const FINDING_KM: KmOptions = { wholeAbove100: true };
 
 export type TrackQualityCheckId =
+  | 'no-fixes'
   | 'wrong-day'
   | 'wrong-place'
   | 'never-left-takeoff'
@@ -216,6 +217,12 @@ const MAX_SUSTAINED_SPEED_HG_MS = 45;
  */
 export type TrackQualityEvidence =
   | {
+      id: 'no-fixes';
+      /** Why nothing could be read: a parse failure's cause, or that the
+       * file parsed and carried no B records. */
+      reason: string;
+    }
+  | {
       id: 'wrong-day';
       firstFixMs: number;
       lastFixMs: number;
@@ -337,6 +344,35 @@ const SOFT_CHECKS: TrackQualityCheckId[] = [
   'implausible-speed',
 ];
 
+/**
+ * The verdict on a file that holds no flight at all: one that would not parse,
+ * or parsed with zero fixes. HARD, for the same reason as `wrong-day`: the
+ * file is not evidence of this flight. Before this was a finding, such a file
+ * was simply skipped at scoring time — the pilot vanished from the scores and
+ * from everyone's numFlying, which is exactly what "a withheld pilot is never
+ * deleted" forbids. As a HARD finding they are seated last at 0 with the
+ * reason, like any other withheld track.
+ */
+export function unreadableTrackReport(reason: string): TrackQualityReport {
+  return {
+    findings: [
+      {
+        id: 'no-fixes',
+        severity: 'hard',
+        title: 'Track holds no flight',
+        detail: `Nothing in this file can be scored: ${reason}. Upload the flight's IGC file again, or ask the scorekeeper to record a manual flight.`,
+        evidence: { id: 'no-fixes', reason },
+      },
+    ],
+    hardFailed: true,
+    checked: ['no-fixes'],
+    skipped: ALL_CHECKS.map((id) => ({ id, reason: 'the track has no fixes' })),
+    totalFixCount: 0,
+    firstFixMs: null,
+    lastFixMs: null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -360,12 +396,7 @@ export function assessTrackQuality(
   header: IGCHeader,
   context: TrackQualityContext
 ): TrackQualityReport {
-  if (fixes.length === 0) {
-    return {
-      ...EMPTY_TRACK_QUALITY_REPORT,
-      skipped: ALL_CHECKS.map((id) => ({ id, reason: 'the track has no fixes' })),
-    };
-  }
+  if (fixes.length === 0) return unreadableTrackReport('the file has no position fixes (B records)');
 
   const findings: TrackQualityFinding[] = [];
   const checked: TrackQualityCheckId[] = [];

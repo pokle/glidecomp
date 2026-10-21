@@ -638,7 +638,12 @@ export interface CompMetricAggregate {
   signSummary: SignSummary;
   /** Classification of signSummary — the finding, not a warning. */
   consistency: SignConsistency;
-  /** Correlation of per-pilot cross-task metric means vs comp rank. */
+  /**
+   * Correlation of each pilot's mean WITHIN-TASK percentile (0 = lowest
+   * value on that task, 1 = highest, ties averaged) vs comp rank. Ranking
+   * inside each task first keeps a day's level out of a pilot's mean, so
+   * which tasks they flew cannot masquerade as the behaviour.
+   */
   compRho: MetricCorrelation | null;
 }
 
@@ -662,10 +667,39 @@ export interface SignSummary {
  */
 export type SignConsistency = 'consistent' | 'leaning' | 'split' | 'quiet';
 
+/** Optional inputs to aggregateComp. */
+export interface CompAnalysisOptions {
+  /**
+   * The official competition ranking, by cross-task pilot key — the
+   * published standings, FTV and all. When given, every comp-level ρ is
+   * measured against it and pilots it does not rank are left out. Without
+   * it the rank is the sum of the analysed tasks' totals, which knows
+   * nothing of FTV or of tasks a pilot was scored on without an analysable
+   * track.
+   */
+  compRanking?: Record<string, { rank: number; totalScore: number }>;
+}
+
 export interface CompAnalysisReport {
   taskLabels: string[];
-  /** Comp scores: total score across tasks, rank 1 = best. */
+  /**
+   * Comp scores, rank 1 = best; equal totals share a rank. `taskCount` is
+   * the number of tasks the pilot was ANALYSED in.
+   */
   pilots: { key: string; name: string; taskCount: number; totalScore: number; rank: number }[];
   /** Registry order (union across tasks, first-seen order). */
   metrics: CompMetricAggregate[];
+  /**
+   * What `pilots[].rank` is: the official standings, or the sum of the
+   * analysed tasks' totals. Optional only for payloads built before it
+   * existed.
+   */
+  rankBasis?: 'official' | 'analysed-task-totals';
+  /**
+   * How unevenly pilots took part. `rho` is Spearman ρ between tasks
+   * analysed and comp rank (negative: pilots in more tasks rank better);
+   * null when everyone flew the same number. Optional only for payloads
+   * built before it existed.
+   */
+  participation?: { minTasks: number; maxTasks: number; rho: number | null };
 }

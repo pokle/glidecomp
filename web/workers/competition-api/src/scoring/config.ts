@@ -30,8 +30,9 @@ import {
   type TrackQualityReport,
 } from "@glidecomp/engine";
 import { qualityGeomHash } from "./geom-hash";
-import { loadTrackAnalyses } from "./track-store";
+import { isWithheld, loadTrackAnalyses } from "./track-store";
 import type {
+  DnfPilot,
   ExcludedPilot,
   ScoredTrackRow,
   ScoringTaskRow,
@@ -212,34 +213,35 @@ export async function resolveTaskScoringConfig(
   const scoredTracks = tracks.results.filter((t) => scoredClasses.has(t.pilot_class));
 
   // Launch validity (FAI S7F §10.1): "pilots present" = pilots who took off
-  // (have a track = numFlying) + pilots present who did not fly ("Did Not
-  // Fly"). Absent and Present-default pilots without a track are excluded, so
-  // numPresent per class = numFlying + numDNF. Count DNF pilots WITHOUT a
-  // track — a pilot with a track already counts as flying and never carries a
-  // DNF status (uploading a track sets them to Landed).
+  // (scored = numFlying) + pilots present who did not fly ("Did Not Fly").
+  // Absent and Present-default pilots without a track are excluded, so
+  // numPresent per class = numFlying + numDNF. A DNF pilot with an active
+  // manual flight is flying. One with an active TRACK is flying too — unless
+  // that track is withheld for data quality, in which case the DNF still
+  // stands: a rejected upload is not evidence they flew, and dropping them
+  // would move every other pilot's launch validity on the strength of a file
+  // nobody scored (review 2026-10-20, 2.3). Whether a track is withheld is
+  // only known after the per-track pass, so the count is `dnfCount()`.
   const dnfRows = await db
     .prepare(
-      `SELECT cp.pilot_class, COUNT(*) AS n
+      `SELECT tps.comp_pilot_id, cp.pilot_class, tt.task_track_id
        FROM task_pilot_status tps
        JOIN comp_pilot cp ON cp.comp_pilot_id = tps.comp_pilot_id
+       LEFT JOIN task_track tt
+         ON tt.task_id = tps.task_id
+        AND tt.comp_pilot_id = tps.comp_pilot_id
+        AND tt.active = 1
        WHERE tps.task_id = ? AND tps.status_key = 'dnf'
-         AND NOT EXISTS (
-           SELECT 1 FROM task_track tt
-           WHERE tt.task_id = tps.task_id
-             AND tt.comp_pilot_id = tps.comp_pilot_id
-             AND tt.active = 1
-         )
          AND NOT EXISTS (
            SELECT 1 FROM task_manual_flight mf
            WHERE mf.task_id = tps.task_id
              AND mf.comp_pilot_id = tps.comp_pilot_id
              AND mf.active = 1
-         )
-       GROUP BY cp.pilot_class`
+         )`
     )
     .bind(taskId)
-    .all<{ pilot_class: string; n: number }>();
-  const dnfByClass = new Map(dnfRows.results.map((r) => [r.pilot_class, r.n]));
+    .all<DnfPilot>();
+  const dnfPilots = dnfRows.results;
 
   // Data-quality verdicts (track-quality.ts). Seeded from track_analysis so
   // this function stays pure-D1 — the misses are filled by computeTaskScore,
@@ -264,7 +266,7 @@ export async function resolveTaskScoringConfig(
     ...geometry,
     scoredClasses,
     scoredTracks,
-    dnfByClass,
+    dnfPilots,
     quality: {
       geomHash: qualityHash,
       byTrackId: qualityByTrackId,
@@ -292,7 +294,7 @@ export function partitionByQuality(
   const excluded: { track: ScoredTrackRow; report: TrackQualityReport }[] = [];
   for (const track of tracks) {
     const report = quality.byTrackId.get(track.task_track_id);
-    if (report?.hardFailed && !track.quality_override) excluded.push({ track, report });
+    if (report && isWithheld(report, track)) excluded.push({ track, report });
     else scored.push(track);
   }
   return { scored, excluded };
@@ -323,4 +325,28 @@ export function excludedPilotsByClass(
     byClass.set(track.pilot_class, list);
   }
   return byClass;
+}
+
+/**
+ * Per class: pilots marked DNF who are not otherwise flying — no active
+ * manual flight, and no active track the scorer used. A DNF pilot whose only
+ * track is withheld still counts. Call AFTER the per-track pass has filled
+ * `quality.byTrackId`, like `excludedPilotsByClass`.
+ */
+export function dnfCount(
+  cfg: Pick<TaskScoringConfig, "dnfPilots" | "scoredTracks" | "quality">,
+  pilotClass: string
+): number {
+  let n = 0;
+  for (const d of cfg.dnfPilots) {
+    if (d.pilot_class !== pilotClass) continue;
+    if (d.task_track_id === null) {
+      n++;
+      continue;
+    }
+    const track = cfg.scoredTracks.find((t) => t.task_track_id === d.task_track_id);
+    const report = cfg.quality.byTrackId.get(d.task_track_id);
+    if (track && report && isWithheld(report, track)) n++;
+  }
+  return n;
 }

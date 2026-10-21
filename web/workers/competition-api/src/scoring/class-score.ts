@@ -38,11 +38,12 @@ function classLeadingTimes(times: LeadingTimes): ClassLeadingTimes {
  * S7A §5.2.5.1/§5.2.5.4: the overall competition ranking orders pilots by total
  * score descending, and "pilots with the same score are ranked in the same
  * position" — ties are permitted, with no tie-break. Equality is on the
- * *published* whole-point total (the value the UI shows via `Math.round`,
- * matching AirScore's `comp_result_decimal`), so two pilots displaying the same
- * total share a rank even when their raw sums differ by a fraction. Returns a
- * new array sorted best-first with a 1-based `rank` assigned (e.g. 1, 2, 2, 4),
- * mirroring the engine's per-task tie handling in gap-scoring.ts.
+ * *published* total, which S7F 2026 §15 gives to one decimal place (a 2025
+ * change — whole points was the older AirScore convention), so 812.4 and
+ * 811.6 are two ranks, while sums that differ only past the first decimal
+ * share one. Returns a new array sorted best-first with a 1-based `rank`
+ * assigned (e.g. 1, 2, 2, 4), mirroring the engine's per-task tie handling in
+ * gap-scoring.ts.
  */
 export function rankByTotalScore<T extends { total_score: number }>(
   pilots: T[]
@@ -53,11 +54,28 @@ export function rankByTotalScore<T extends { total_score: number }>(
   for (let i = 0; i < ranked.length; i++) {
     ranked[i].rank =
       i > 0 &&
-      Math.round(ranked[i].total_score) === Math.round(ranked[i - 1].total_score)
+      toTenth(ranked[i].total_score) === toTenth(ranked[i - 1].total_score)
         ? ranked[i - 1].rank
         : i + 1;
   }
   return ranked;
+}
+
+/** A total as published: one decimal place (S7F §15). */
+function toTenth(x: number): number {
+  return Math.round(x * 10) / 10;
+}
+
+/**
+ * Standard competition ranking (1, 2, 2, 4) over an already-sorted list:
+ * consecutive entries with equal scores share the earlier rank.
+ */
+function sharedRanks(sortedScores: number[]): number[] {
+  const ranks: number[] = [];
+  for (let i = 0; i < sortedScores.length; i++) {
+    ranks.push(i > 0 && sortedScores[i] === sortedScores[i - 1] ? ranks[i - 1] : i + 1);
+  }
+  return ranks;
 }
 
 /**
@@ -74,7 +92,7 @@ export function emptyClassScore(
     pilot_class: pilotClass,
     task_validity: noValidity(),
     available_points: noPoints(),
-    pilots: excluded.map((e, i) => excludedPilotEntry(e, i + 1, alphabet)),
+    pilots: excluded.map((e) => excludedPilotEntry(e, 1, alphabet)),
   };
 }
 
@@ -199,10 +217,15 @@ export function buildClassScore(
     };
   });
 
+  // Stable: equal finals keep the engine's order (its distance tie-break).
   withPenalties.sort((a, b) => b.finalScore - a.finalScore);
+  // Equal published totals share a rank (S7A §5.2.5.4), exactly as the
+  // engine ranks them; numbering 1..n here used to turn the engine's #2, #2,
+  // #2 into #2, #3, #4 — and every task ties at minimum distance.
+  const ranks = sharedRanks(withPenalties.map((p) => p.finalScore));
 
   const pilots: PilotScoreEntry[] = withPenalties.map((p, i) => ({
-    rank: i + 1,
+    rank: ranks[i],
     comp_pilot_id: encodeId(alphabet, p.comp_pilot_id),
     pilot_name: p.pilotScore.pilotName,
     made_goal: p.pilotScore.madeGoal,
@@ -235,8 +258,10 @@ export function buildClassScore(
     track_excluded: null,
   }));
 
+  // Withheld pilots all score 0, so they share the one rank below the field.
+  const excludedRank = pilots.length + 1;
   for (const e of excluded) {
-    pilots.push(excludedPilotEntry(e, pilots.length + 1, alphabet));
+    pilots.push(excludedPilotEntry(e, excludedRank, alphabet));
   }
 
   return {

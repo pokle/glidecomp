@@ -188,3 +188,21 @@ export async function clearCompData(): Promise<void> {
     ).bind("user-super", "Super Admin", "tushar.pokle@gmail.com", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
   ]);
 }
+
+/**
+ * A gzipped IGC that holds a flight — a few fixes at the equator/prime
+ * meridian (where the equator test tasks sit) on SAMPLE_TASK_DATE.
+ *
+ * A file with no B records is a HARD `no-fixes` verdict since review
+ * 2026-10-20 (2.2): it holds no flight, so it neither marks the pilot Landed
+ * nor supersedes a manual flight. Tests about what an ACCEPTED upload does use
+ * this; tests about the upload plumbing alone may still use a header-only file.
+ */
+export async function flightIgcPayload(): Promise<Uint8Array> {
+  const fixes = ["010000", "010010", "010020", "010030"].map(
+    (t, i) => `B${t}0000000N0000${i}000EA0100001000`
+  );
+  const text = ["AXCT001Test", "HFDTE050126", ...fixes, ""].join("\r\n");
+  const stream = new Response(text).body!.pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}

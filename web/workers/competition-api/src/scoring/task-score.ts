@@ -27,7 +27,7 @@ import { encodeId } from "../sqids";
 import { manualFlightToScoringData, manualFlightKey } from "../manual-flight-store";
 import { mapWithConcurrency, TRACK_FETCH_CONCURRENCY } from "../lib/concurrency";
 import { gapGeomHash, odGeomHash } from "./geom-hash";
-import { excludedPilotsByClass, resolveTaskScoringConfig } from "./config";
+import { dnfCount, excludedPilotsByClass, resolveTaskScoringConfig } from "./config";
 import {
   buildClassScore,
   emptyClassScore,
@@ -154,10 +154,19 @@ async function scoreEachClass<F>(
   ) => Promise<ClassScore> | ClassScore
 ): Promise<ClassScore[]> {
   const excludedByClass = excludedPilotsByClass(config.quality, config.scoredTracks);
+  // A pilot scored from an active manual flight is already seated by it. A
+  // withheld upload must not seat them a second time (review 2026-10-20,
+  // 2.3): the hard-failed file never superseded the manual flight, and two
+  // entries for one pilot would count twice in the comp total and FTV.
+  const manualPilotIds = new Set(
+    analyzedPilots.filter((p) => p.track === null).map((p) => p.comp_pilot_id)
+  );
   const classScores: ClassScore[] = [];
   for (const pilotClass of config.scoredClasses) {
     const classPilots = analyzedPilots.filter((p) => p.pilot_class === pilotClass);
-    const excluded = excludedByClass.get(pilotClass) ?? [];
+    const excluded = (excludedByClass.get(pilotClass) ?? []).filter(
+      (e) => !manualPilotIds.has(e.comp_pilot_id)
+    );
     classScores.push(
       classPilots.length === 0
         ? emptyClassScore(pilotClass, excluded, alphabet)
@@ -180,7 +189,8 @@ async function scoreEachClass<F>(
  * the one pilot's own score.
  *
  * The scorekeeper keeps the S7F lever, already built and audited: marking the
- * pilot Did Not Fly puts them into dnfByClass; Absent leaves them out. To
+ * pilot Did Not Fly counts them (`dnfCount` — a DNF stands even when their
+ * upload is withheld); Absent leaves them out. To
  * count them as present instead, the change is one term here (+ the class's
  * withheld count) — see the AirScore parity run before doing it.
  */
@@ -189,7 +199,7 @@ function numPresentIn(
   pilotClass: string,
   numFlying: number
 ): number {
-  return numFlying + (config.dnfByClass.get(pilotClass) ?? 0);
+  return numFlying + dnfCount(config, pilotClass);
 }
 
 // ---------------------------------------------------------------------------

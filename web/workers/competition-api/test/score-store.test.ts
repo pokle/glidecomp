@@ -410,12 +410,17 @@ describe("comp scores aggregation", () => {
     const midPoll = await conditionalGet(t.compScoresPath, staleEtag);
     expect([304, 200]).toContain(midPoll.status); // 200 if the re-score won the race
 
-    // Once fresh again (no-op bump → identical scores), the identity returns
-    // to the original fresh ETag: the stale poll now 200s, the fresh one 304s.
+    // Once fresh again the stale poll 200s. The new body is a new write with
+    // its own computed_at (which the body itself reports), so it has a new
+    // fresh identity — never the stale one, never the pre-bump one — and a
+    // poll carrying it 304s.
     await getFresh(t.scorePath);
     const afterHeal = await conditionalGet(t.compScoresPath, staleEtag);
     expect(afterHeal.status).toBe(200);
-    expect(afterHeal.headers.get("ETag")).toBe(etag);
+    const healedEtag = afterHeal.headers.get("ETag")!;
+    expect(healedEtag).not.toContain(":stale");
+    expect(healedEtag).not.toBe(etag);
+    expect((await conditionalGet(t.compScoresPath, healedEtag)).status).toBe(304);
   });
 
   test("a comp with no scoreable tasks reports computed_at: null", async () => {

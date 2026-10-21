@@ -20,6 +20,7 @@
 export { computeScoreStateKey } from "./state-key";
 export { shortHash } from "./geom-hash";
 export {
+  dnfCount,
   excludedPilotsByClass,
   hardFindingTitles,
   mergeStoredGapParamsJson,

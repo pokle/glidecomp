@@ -24,9 +24,18 @@ import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { audit } from "../audit";
-import { encodeId } from "../sqids";
+import { decodeId, encodeId } from "../sqids";
+import { buildCompStandings } from "../comp-standings";
 import { shortHash } from "../scoring";
-import { ifNoneMatchMatches, publicMaxAgeSeconds, toEtag } from "../score-store";
+import {
+  bodyIdentity,
+  ifNoneMatchMatches,
+  publicMaxAgeSeconds,
+  readTaskScoreRowsForComp,
+  rowHasResult,
+  toEtag,
+  type StoredTaskScore,
+} from "../score-store";
 import {
   bumpTaskAnalysisInputs,
   decodeTaskAnalysisRow,
@@ -164,7 +173,9 @@ export const analysisRoutes = new Hono<AuthedEnv>()
         // state_key alone would 304-revalidate the outdated report. The
         // staleness label rides on the ETag so a stale body can never
         // revalidate a fresh one.
-        const etagKey = `fa:${row.analysis_version}:${row.state_key}${stale ? ":stale" : ""}`;
+        // bodyIdentity adds the write's computed_at: state_key misses inputs
+        // the report depends on (gap_params among them).
+        const etagKey = `fa:${row.analysis_version}:${bodyIdentity(row.state_key, row.computed_at)}${stale ? ":stale" : ""}`;
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
@@ -241,10 +252,19 @@ export const analysisRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, name, test FROM comp WHERE comp_id = ?"
+        `SELECT comp_id, name, test, category, scoring_format, series_scoring, ftv_factor
+         FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
-        .first<{ comp_id: number; name: string; test: number }>();
+        .first<{
+          comp_id: number;
+          name: string;
+          test: number;
+          category: string | null;
+          scoring_format: string;
+          series_scoring: string;
+          ftv_factor: number | null;
+        }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
       if (!(await canViewAnalysis(c, compId, !!comp.test)))
         return c.json({ error: "Not found" }, 404);
@@ -297,7 +317,7 @@ export const analysisRoutes = new Hono<AuthedEnv>()
         // analysis_version folded in: a metrics bump recomputes the report
         // from unchanged scoring inputs, so state_key alone would let a
         // client 304-revalidate the outdated body.
-        stateKeys.push(`${row.state_key}:${row.analysis_version}`);
+        stateKeys.push(`${bodyIdentity(row.state_key, row.computed_at)}:${row.analysis_version}`);
         if (!oldestComputedAt || row.computed_at < oldestComputedAt) {
           oldestComputedAt = row.computed_at;
         }
@@ -306,6 +326,30 @@ export const analysisRoutes = new Hono<AuthedEnv>()
 
       if (scheduleIds.length > 0) {
         scheduleTaskAnalysisRevalidation(c, scheduleIds);
+      }
+
+      // The comp ρ is measured against the OFFICIAL comp ranking (engine
+      // review 2026-10-20, 5.1): the same standings the comp scores endpoint
+      // publishes, FTV and manual flights included. Built from the stored
+      // task scores only — never computed here; if any task has no stored
+      // score yet, the aggregate falls back to its own analysed totals and
+      // says so through `rankBasis`.
+      const scoreRows = await readTaskScoreRowsForComp(c.env.DB, compId);
+      const scoredTasks = tasks.results.flatMap((t) => {
+        const r = scoreRows.get(t.task_id);
+        return r && rowHasResult(r) ? [{ task: t, row: r }] : [];
+      });
+      const haveAllScores = scoredTasks.length === tasks.results.length;
+      if (haveAllScores) {
+        stateKeys.push(
+          ...scoredTasks.map(({ row }) =>
+            `score=${bodyIdentity(row.state_key, row.computed_at)}`
+          ),
+          `series=${comp.series_scoring}`,
+          `ftvf=${comp.ftv_factor ?? "auto"}`
+        );
+      } else {
+        stateKeys.push("score=incomplete");
       }
 
       const etagKey = `compfa:${compId}:${await shortHash(
@@ -372,10 +416,42 @@ export const analysisRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      const classes = [...byClass.entries()].map(([pilotClass, taskResults]) => ({
-        pilot_class: pilotClass,
-        aggregate: aggregateComp(taskResults),
-      }));
+      // Official standings per class, keyed as the task reports key pilots
+      // (`cp:<comp_pilot_id>`).
+      const rankingByClass = new Map<
+        string,
+        Record<string, { rank: number; totalScore: number }>
+      >();
+      if (haveAllScores) {
+        const { classScores } = buildCompStandings(
+          comp,
+          scoredTasks.map(({ task, row }) => ({
+            task_id: String(task.task_id),
+            task_date: task.task_date,
+            classes: (JSON.parse(row.response_json) as StoredTaskScore).classes,
+          }))
+        );
+        for (const cls of classScores) {
+          const ranking: Record<string, { rank: number; totalScore: number }> = {};
+          for (const p of cls.pilots) {
+            const id = decodeId(alphabet, p.comp_pilot_id);
+            if (id === null) continue;
+            ranking[`cp:${id}`] = { rank: p.rank, totalScore: p.total_score };
+          }
+          rankingByClass.set(cls.pilot_class, ranking);
+        }
+      }
+
+      const classes = [...byClass.entries()].map(([pilotClass, taskResults]) => {
+        const compRanking = rankingByClass.get(pilotClass);
+        return {
+          pilot_class: pilotClass,
+          aggregate: aggregateComp(
+            taskResults,
+            compRanking ? { compRanking } : undefined
+          ),
+        };
+      });
 
       return c.json(
         {

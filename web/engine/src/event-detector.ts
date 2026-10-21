@@ -363,8 +363,18 @@ export function detectFlight(
   // fix earlier than the real takeoff and leak pre-takeoff data downstream.
   const takeoffIndex = takeoffLanding.takeoff.fixIndex;
 
-  // Create a slice of fixes from takeoff onwards for analysis
-  const flightFixes = fixes.slice(takeoffIndex);
+  // Analyse the airborne slice only: takeoff THROUGH landing, as
+  // analysis/context.ts does. Running on to the end of the file analysed the
+  // ground time and the retrieve drive — a 25-minute ground tail turned the
+  // last glide into a 31-minute one at 12.9 km/h and added 68 phantom circles
+  // on the ground (engine review 2026-10-20, 4.1). The landing is the last
+  // sustained flight indication (it scans backward), so nothing airborne lies
+  // past it. The detector does not promise landing > takeoff; when it is not,
+  // the file runs to its end as before.
+  const landingIndex = takeoffLanding.landing?.fixIndex;
+  const endIndex =
+    landingIndex !== undefined && landingIndex > takeoffIndex ? landingIndex + 1 : fixes.length;
+  const flightFixes = fixes.slice(takeoffIndex, endIndex);
   const indexOffset = takeoffIndex; // To adjust indices back to original array
 
   // Detect thermals (only after takeoff)

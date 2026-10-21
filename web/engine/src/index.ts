@@ -22,6 +22,7 @@ export { summariseFlight, type FlightSummary } from './flight-summary';
 export {
   assessTrackQuality,
   EMPTY_TRACK_QUALITY_REPORT,
+  unreadableTrackReport,
   type TrackQualityCheckId,
   type TrackQualityContext,
   type TrackQualityEvidence,
@@ -437,6 +438,7 @@ export {
   type CompAnalysisReport,
   type CompMetricAggregate,
   type CompTaskResult,
+  type CompAnalysisOptions,
   type CorrelationVerdict,
   type DayTimingSeries,
   type FieldAirtimeSplit,

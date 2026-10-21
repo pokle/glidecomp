@@ -22,11 +22,14 @@ import type {
   ReportTable,
 } from '../types';
 import type { TurnpointReaching } from '../../turnpoint-sequence-types';
+
+type LatLon = { lat: number; lon: number };
 import { combineWindEstimates, mean, median } from '../stats';
 import { allNullPerPilot, na } from './util';
 import { stepFor } from '../resample';
 import { ellipsoidDistance, localEastNorth } from '../../geo';
 import { getEffectiveESSIndex, getEffectiveSSSIndex, getGoalIndex } from '../../xctsk-parser';
+import { optimizeRemainingRoute } from '../../task-optimizer';
 import { resolveGoalAltitude, stoppedGlideRatio } from '../../gap-stopped';
 
 // ---------------------------------------------------------------------------
@@ -556,9 +559,11 @@ interface ThroughAir {
  * How the wind the pilot's own last climb measured changes the glide they
  * committed to. The glide to goal takes D / vg at the pilot's made-good
  * ground speed vg, and over that time the air moves W·t, so the path through
- * the air is D·û − W·D/vg and the ratio scales by |û − W/vg|. Over the archive
- * this moves the committed ratio by 10% or more for 41% of ESS pilots
- * (docs/2026-10-20-logger-interval-evidence.md, "Final glide").
+ * the air is D·û − W·D/vg and the ratio scales by |û − W/vg|. A route that
+ * still turns at a turnpoint is summed leg by leg, each leg weighted by its
+ * length. Over the archive this moves the committed ratio by 10% or more for
+ * 41% of ESS pilots (docs/2026-10-20-logger-interval-evidence.md, "Final
+ * glide").
  *
  * Centre drift only, combined by the shared policy, like day.wind. Null when
  * the climb has too few estimates or the glide too little time or speed.
@@ -566,41 +571,60 @@ interface ThroughAir {
 function throughTheAir(
   p: PilotAnalysisContext,
   thermal: PilotAnalysisContext['thermals'][number],
-  goal: { lat: number; lon: number },
-  endMs: number | null,
+  route: { line: LatLon[]; distance: number },
+  end: { ms: number; lat: number; lon: number; inGoal: boolean },
 ): ThroughAir | null {
   const samples = p.circles.circles
     .filter((c) => c.startIndex >= thermal.startIndex && c.endIndex <= thermal.endIndex)
     .flatMap((c) => (c.windFromCenterDrift ? [c.windFromCenterDrift] : []));
-  if (samples.length < MIN_FINAL_GLIDE_WIND_CIRCLES || endMs === null) return null;
+  if (samples.length < MIN_FINAL_GLIDE_WIND_CIRCLES) return null;
   const wind = combineWindEstimates(samples);
   if (!wind) return null;
 
   const exit = p.fixes[thermal.endIndex];
-  const ess = p.score.turnpointResult.essReaching;
-  const landing = p.fixes[p.landingIndex];
-  const end =
-    p.essMs !== null && ess
-      ? { lat: ess.latitude, lon: ess.longitude }
-      : { lat: landing.latitude, lon: landing.longitude };
-  const seconds = (endMs - exit.time.getTime()) / 1000;
+  const seconds = (end.ms - exit.time.getTime()) / 1000;
   if (seconds < MIN_FINAL_GLIDE_SECONDS) return null;
-  const groundSpeed = ellipsoidDistance(exit.latitude, exit.longitude, end.lat, end.lon) / seconds;
+  // In goal, the pilot flew the route; landed out, only as far as the field.
+  const made = end.inGoal
+    ? route.distance
+    : ellipsoidDistance(exit.latitude, exit.longitude, end.lat, end.lon);
+  const groundSpeed = made / seconds;
   if (groundSpeed < MIN_FINAL_GLIDE_SPEED_MPS) return null;
 
-  const toGoal = localEastNorth(exit.latitude, exit.longitude, goal.lat, goal.lon);
-  const length = Math.hypot(toGoal.east, toGoal.north);
-  if (length <= 0) return null;
-  const ux = toGoal.east / length;
-  const uy = toGoal.north / length;
   // Wind FROM `direction` blows toward direction + 180°.
   const rad = (wind.direction * Math.PI) / 180;
   const wx = -wind.speed * Math.sin(rad);
   const wy = -wind.speed * Math.cos(rad);
-  return {
-    tailwindKmh: (wx * ux + wy * uy) * 3.6,
-    factor: Math.hypot(ux - wx / groundSpeed, uy - wy / groundSpeed),
-  };
+  let total = 0;
+  let tail = 0;
+  let air = 0;
+  for (let i = 1; i < route.line.length; i++) {
+    const a = route.line[i - 1];
+    const b = route.line[i];
+    const leg = localEastNorth(a.lat, a.lon, b.lat, b.lon);
+    const length = Math.hypot(leg.east, leg.north);
+    if (length <= 0) continue;
+    const ux = leg.east / length;
+    const uy = leg.north / length;
+    total += length;
+    tail += length * (wx * ux + wy * uy);
+    air += length * Math.hypot(ux - wx / groundSpeed, uy - wy / groundSpeed);
+  }
+  if (total <= 0) return null;
+  return { tailwindKmh: (tail / total) * 3.6, factor: air / total };
+}
+
+/**
+ * The last task index a pilot had reached at `ms` (−1 before the first).
+ * The remaining route from a fix runs through every turnpoint after it.
+ */
+function lastReachedBefore(p: PilotAnalysisContext, ms: number): number {
+  const tr = p.score.turnpointResult;
+  let last = -1;
+  for (const r of [...tr.sequence, tr.sssReaching, tr.essReaching]) {
+    if (r && r.time.getTime() <= ms && r.taskIndex > last) last = r.taskIndex;
+  }
+  return last;
 }
 
 const finalGlideInit: MetricComputer = {
@@ -618,8 +642,9 @@ const finalGlideInit: MetricComputer = {
   },
   explanation:
     'How optimistic the pilot was about their final glide. A pilot wins or loses a task by the ' +
-    'height at which they leave the last climb. At the last climb of the pilot before ESS, or ' +
-    'before the landing, we divide the distance to goal by their height above goal. That is the ' +
+    'height at which they leave the last climb. At the last climb of the pilot before goal, or ' +
+    'before the landing, we divide the distance still to fly to goal, through every turnpoint ' +
+    'not yet reached, by their height above goal. That is the ' +
     'glide ratio they committed to. 8 means they left and needed 8:1 to make goal. The value ' +
     'counts only when that climb ended within 1.5 times the length of the last course leg ' +
     'longer than 1 km from goal — when ESS and goal share a waypoint, the zero-length hop ' +
@@ -644,15 +669,36 @@ const finalGlideInit: MetricComputer = {
         perPilot.push(na(p));
         continue;
       }
-      const endMs = p.essMs ?? p.fixes[p.landingIndex]?.time.getTime() ?? null;
-      // Last post-SSS thermal whose exit is before ESS (or landing).
+      // The final glide ends at GOAL, not ESS: with ESS short of goal, most
+      // pilots climb again after ESS (Bright 2023 T1: 31 of 49), and that
+      // climb is the final one (engine review 6.2).
+      const goalReaching =
+        p.score.turnpointResult.madeGoal
+          ? p.score.turnpointResult.sequence.find((r) => r.taskIndex === goalIdx) ?? null
+          : null;
+      const landing = p.fixes[p.landingIndex];
+      const end = goalReaching
+        ? {
+            ms: goalReaching.time.getTime(),
+            lat: goalReaching.latitude,
+            lon: goalReaching.longitude,
+            inGoal: true,
+          }
+        : landing
+          ? { ms: landing.time.getTime(), lat: landing.latitude, lon: landing.longitude, inGoal: false }
+          : null;
+      if (!end) {
+        perPilot.push(na(p));
+        continue;
+      }
+      // Last post-SSS thermal whose exit is before goal (or landing).
       let last: { exitMs: number; thermal: (typeof p.thermals)[number] } | null = null;
       for (const t of p.thermals) {
         const exitFix = p.fixes[t.endIndex];
         if (!exitFix) continue;
         const exitMs = exitFix.time.getTime();
         if (exitMs < p.sssMs) continue;
-        if (endMs !== null && exitMs > endMs) continue;
+        if (exitMs > end.ms) continue;
         if (!last || exitMs > last.exitMs) last = { exitMs, thermal: t };
       }
       if (!last) {
@@ -660,26 +706,29 @@ const finalGlideInit: MetricComputer = {
         continue;
       }
       const exitFix = p.fixes[last.thermal.endIndex];
-      const distanceToGoal = ellipsoidDistance(
-        exitFix.latitude,
-        exitFix.longitude,
-        goalWp.lat,
-        goalWp.lon,
+      // The distance still to fly is the optimised route from the exit
+      // through every turnpoint not yet reached to the goal's edge — the
+      // straight line to the goal centre ignored a turnpoint still ahead
+      // (37 % of HG values) and could be a ninth of the real glide.
+      const route = optimizeRemainingRoute(
+        field.task,
+        lastReachedBefore(p, last.exitMs),
+        { lat: exitFix.latitude, lon: exitFix.longitude },
       );
       const height = last.thermal.endAltitude - goalAlt;
-      if (distanceToGoal > maxDistance || height <= 0) {
+      if (!route || route.distance > maxDistance || height <= 0) {
         perPilot.push(na(p));
         continue;
       }
-      const ratio = distanceToGoal / height;
+      const ratio = route.distance / height;
       perPilot.push({
         trackFile: p.trackFile,
         value: ratio,
-        note: `left last climb ${(distanceToGoal / 1000).toFixed(1)} km out at ${Math.round(
+        note: `left last climb ${(route.distance / 1000).toFixed(1)} km from goal at ${Math.round(
           last.thermal.endAltitude,
         )} m`,
       });
-      const air = throughTheAir(p, last.thermal, goalWp, endMs);
+      const air = throughTheAir(p, last.thermal, route, end);
       if (air) {
         if (Math.abs(air.factor - 1) >= THROUGH_AIR_CHANGE) changed++;
         const tail = Math.round(air.tailwindKmh);

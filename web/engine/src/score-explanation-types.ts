@@ -398,6 +398,11 @@ export interface ClassPilotInput {
   time_points?: number;
   leading_points?: number;
   arrival_points?: number;
+  /** The scorer's published penalty (+) or bonus (−), and the automatic
+   * jump-the-gun deduction — what says a penalty was applied at all, since
+   * components − total carries rounding drift. Absent on older payloads. */
+  penalty_points?: number;
+  jump_the_gun_penalty?: number | null;
   /** The pilot's leading coefficient (S7F §13.4), lower is better. */
   leading_coefficient?: number | null;
   /** Position in the ESS arrival order (1-based), or null. */

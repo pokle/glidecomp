@@ -455,4 +455,20 @@
 //     - race.final_glide_init gains a "Final glide through the air" table
 //       and a field-summary line: the committed ratio with the wind its last
 //       climb measured removed. The metric's own value is unchanged.
-export const TASK_ANALYSIS_VERSION = 30;
+// v31: two metrics made to measure what they say (engine review 2026-10-20).
+//     - glide.dolphin_fraction counts gain made outside CIRCLING segments,
+//       not outside detectThermals' thermals. Those are a vario test with no
+//       turning test, so straight lift read as thermalling and weak circling
+//       as dolphin flying: 84 % (HG) / 76 % (PG) of the old "dolphin" gain
+//       was made while circling, and the old value was unrelated to the
+//       described one (per-task ρ median −0.04 HG). The archive finding's
+//       sign was the opposite of the behaviour's.
+//     - race.final_glide_init divides the optimised ROUTE still to fly — from
+//       the climb's exit through every turnpoint not yet reached to the goal's
+//       edge — by height above goal, gates on that route, and looks for the
+//       last climb up to goal rather than ESS. The straight line to the goal
+//       centre ignored an unreached turnpoint for 37 % (HG) / 43 % (PG) of
+//       values. The through-the-air factor is summed leg by leg along it.
+//     The comp aggregate's new within-task ranking needs no bump: it is
+//     computed per request from the stored task reports.
+export const TASK_ANALYSIS_VERSION = 31;

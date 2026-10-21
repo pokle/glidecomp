@@ -312,8 +312,10 @@ export interface TaskQualityMemo {
 export interface TaskScoringConfig extends TaskScoringGeometry {
   scoredClasses: Set<string>;
   scoredTracks: ScoredTrackRow[];
-  /** Per class: pilots marked DNF with neither a track nor a manual flight. */
-  dnfByClass: Map<string, number>;
+  /** Pilots marked DNF with no active manual flight, with their active
+   * track if they have one — counted by `dnfCount()` once the per-track pass
+   * knows which tracks are withheld. */
+  dnfPilots: DnfPilot[];
   quality: TaskQualityMemo;
 }
 
@@ -351,4 +353,12 @@ export interface CachedFlightAnalysis {
    * cached so a new upload doesn't force a re-scan of the whole field. Its
    * validity is tied to the task geometry + leading formula in the cache key. */
   leadingAggregate?: LeadingAggregate;
+}
+
+/** A DNF-status pilot as `resolveTaskScoringConfig` loads them. */
+export interface DnfPilot {
+  comp_pilot_id: number;
+  pilot_class: string;
+  /** Their ACTIVE track, if any. */
+  task_track_id: number | null;
 }
