@@ -5,7 +5,7 @@
  * a scoring bug (docs/track-quality.md).
  */
 import { formatDistance } from '@glidecomp/engine';
-import { formatDuration, formatScore } from '@glidecomp/client/format';
+import { formatDuration, formatRankedScore } from '@glidecomp/client/format';
 import { idFromSegment, pilotPath } from '@glidecomp/client/slug';
 import type { ClassScore, PilotScoreEntry, TaskScoreData } from '@glidecomp/client/types';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -120,7 +120,7 @@ function ClassRows({
           testID={`score-row-${p.comp_pilot_id}`}
           title={`${p.rank}. ${p.pilot_name}`}
           detail={detail(p)}
-          value={formatScore(p.total_score)}
+          value={formatRankedScore(p.total_score)}
           onPress={() => open(p)}
         />
       ))}

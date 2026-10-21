@@ -108,6 +108,21 @@ export function formatScore(score: number): string {
 }
 
 /**
+ * A score printed beside a rank: one decimal, thousands separators —
+ * 812.44 → "812.4", 1000 → "1,000.0". Ranks tie on the one-decimal total
+ * (S7F 2026 §15), so a whole-point figure would show 700.4 and 699.6 as
+ * "700" in two different places with nothing to say why. Use it wherever
+ * the reader can see a rank; prose ("your 700-point total") keeps
+ * formatScore.
+ */
+export function formatRankedScore(score: number): string {
+  return (Math.round(score * 10) / 10).toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
+/**
  * Treat close_date as end-of-day local time (a date like "2026-12-31"
  * parsed by new Date() is midnight UTC, which is already past in UTC+
  * timezones).

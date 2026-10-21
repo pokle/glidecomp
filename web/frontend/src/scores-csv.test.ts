@@ -220,13 +220,13 @@ describe("buildScoresCsv", () => {
     expect(cells(lines[2])[SCORES_CSV_COLUMNS.indexOf("pilot_name")]).toBe("'=cmd|calc");
   });
 
-  test("rounds to the published points", () => {
+  test("rounds to the published one-decimal points (S7F §15)", () => {
     const csv = buildScoresCsv(
       scores(
         [
           {
             pilot_class: "open",
-            pilots: [pilot("Ada", "p1", [{ task: "t1", score: 899.6, rank: 1 }])],
+            pilots: [pilot("Ada", "p1", [{ task: "t1", score: 899.64, rank: 1 }])],
           },
         ],
         [task("t1", "Task 1")]
@@ -234,7 +234,7 @@ describe("buildScoresCsv", () => {
       { compName: "Test Cup", origin: ORIGIN }
     );
     const row = cells(csv.trimEnd().split("\n")[1]);
-    expect(row[SCORES_CSV_COLUMNS.indexOf("score")]).toBe("900");
+    expect(row[SCORES_CSV_COLUMNS.indexOf("score")]).toBe("899.6");
   });
 });
 

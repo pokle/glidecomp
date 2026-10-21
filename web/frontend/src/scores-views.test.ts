@@ -255,20 +255,21 @@ describe("shared ranks on ties", () => {
     ]);
   });
 
-  test("buildClassGroups: ties are on the published whole-point total", () => {
-    // 700.4 and 699.6 both display as 700 → tie; 699.4 displays as 699.
+  test("buildClassGroups: ties are on the published one-decimal total (S7F §15)", () => {
+    // 700.04 and 699.96 both publish as 700.0 → tie; 700.4 and 699.6 do not.
     const classScores: CompClassScore[] = [
       {
         pilot_class: "open",
         pilots: [
           pilot("A", { t1: 700.4 }),
-          pilot("B", { t1: 699.6 }),
-          pilot("C", { t1: 699.4 }),
+          pilot("B", { t1: 700.04 }),
+          pilot("C", { t1: 699.96 }),
+          pilot("D", { t1: 699.6 }),
         ],
       },
     ];
     const group = buildClassGroups(classScores).find((g) => g.label === "open")!;
-    expect(group.pilots.map((p) => p.rank)).toEqual([1, 1, 3]);
+    expect(group.pilots.map((p) => p.rank)).toEqual([1, 2, 2, 4]);
   });
 
   test("aggregateTeams: teams with equal totals share a rank", () => {

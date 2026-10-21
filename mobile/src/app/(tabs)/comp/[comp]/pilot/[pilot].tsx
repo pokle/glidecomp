@@ -4,7 +4,7 @@
  * row says how it counted — the website's FtvBreakdown, in the same words —
  * and the total still adds up in front of the reader.
  */
-import { formatScore, formatTaskDate, ordinal } from '@glidecomp/client/format';
+import { formatRankedScore, formatScore, formatTaskDate, ordinal } from '@glidecomp/client/format';
 import type { PilotTaskEntry, TaskInfo } from '@glidecomp/client/scores-views';
 import { idFromSegment, pilotPath } from '@glidecomp/client/slug';
 import type { CompScores } from '@glidecomp/client/types';
@@ -70,7 +70,7 @@ function SeriesBody({
         <Freshness computedAt={scores.computed_at} stale={scores.stale} timeZone={timeZone} />
         <Row title="Class" value={pilotClass} />
         <Row title="Place" value={`${ordinal(pilot.rank)} of ${fieldSize}`} />
-        <Row title={ftv ? 'FTV total' : 'Total'} value={formatScore(pilot.total_score)} testID="series-total" />
+        <Row title={ftv ? 'FTV total' : 'Total'} value={formatRankedScore(pilot.total_score)} testID="series-total" />
       </Group>
       {ftv ? (
         <Group title="Fixed Total Validity">
@@ -110,12 +110,12 @@ function TaskRow({
   const date = formatTaskDate(task.task_date, { day: 'numeric', month: 'short' });
   if (!entry) return <Row title={task.task_name} detail={`${date} · not flown`} />;
   let how = `${ordinal(entry.rank)} on the day`;
-  let value = formatScore(entry.score);
+  let value = formatRankedScore(entry.score);
   if (ftv && entry.ftv_status === 'discarded') {
     how = 'Discarded under FTV';
   } else if (ftv && entry.ftv_status === 'partial') {
     how = `Counted in part: ${formatScore(entry.ftv_counted_score ?? 0)} of ${formatScore(entry.score)}`;
-    value = formatScore(entry.ftv_counted_score ?? entry.score);
+    value = formatRankedScore(entry.ftv_counted_score ?? entry.score);
   }
   return (
     <Row

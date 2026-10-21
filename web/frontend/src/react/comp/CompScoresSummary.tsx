@@ -15,7 +15,7 @@ import { Link } from "react-router-dom";
 import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
 import { SectionHeader } from "../components/SectionHeader";
-import { formatScore, ordinal } from "../lib/format";
+import { formatRankedScore, ordinal } from "../lib/format";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { ScoresEmptyState, useCompScores } from "./CompScoresSection";
 import type { CompScores } from "../loaders";
@@ -85,7 +85,7 @@ export function CompScoresSummary({
                         </span>
                         <span className="min-w-0 flex-1 truncate">{p.pilot_name}</span>
                         <span className="tabular-nums">
-                          <strong>{formatScore(p.total_score)}</strong>{" "}
+                          <strong>{formatRankedScore(p.total_score)}</strong>{" "}
                           <span className="text-muted-foreground">pts</span>
                         </span>
                       </li>
