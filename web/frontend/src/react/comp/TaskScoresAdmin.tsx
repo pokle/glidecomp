@@ -35,6 +35,7 @@ import { api } from "../../comp/api";
 import { formatDistance, useUnits } from "../lib/units";
 import { toast } from "../lib/toast";
 import { manualFlightPath, pilotPath } from "../lib/slug";
+import { formatRankedScore } from "../lib/format";
 import { useCompName } from "./comp-name-context";
 import { ScoreFreshness } from "./ScoreFreshness";
 import { compressIgc } from "./types";
@@ -573,7 +574,7 @@ function ScoresRow({
           ? formatDistance(row.score.flown_distance, { decimals: 1, prefs: units }).withUnit
           : "—"
       )}
-      {!isOpenDistance ? scoreCell(row.score ? Math.round(row.score.total_score) : "—") : null}
+      {!isOpenDistance ? scoreCell(row.score ? formatRankedScore(row.score.total_score) : "—") : null}
       {showManage ? (
         <Cell className="text-right">
           <RowManage

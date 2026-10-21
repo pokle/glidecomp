@@ -71,9 +71,11 @@ function ancestorsOf(pilotClass: string): string[] {
  * Assign 1-based ranks to an already best-first-sorted list, sharing a rank on
  * ties. S7A §5.2.4/§5.2.5: pilots (and nations/teams) "with the same score are
  * ranked in the same position" — no tie-break. Equality is on the published
- * whole-point total (the value shown via formatScore → Math.round), so rows
+ * one-decimal total (S7F §15; the value shown via formatRankedScore), so rows
  * displaying the same total share a rank and the next rank skips (1, 2, 2, 4).
  */
+const oneDecimal = (x: number) => Math.round(x * 10) / 10;
+
 function assignSharedRanks<T extends { total_score: number; rank: number }>(
   sorted: T[]
 ): T[] {
@@ -81,7 +83,7 @@ function assignSharedRanks<T extends { total_score: number; rank: number }>(
   for (let i = 0; i < ranked.length; i++) {
     ranked[i].rank =
       i > 0 &&
-      Math.round(ranked[i].total_score) === Math.round(ranked[i - 1].total_score)
+      oneDecimal(ranked[i].total_score) === oneDecimal(ranked[i - 1].total_score)
         ? ranked[i - 1].rank
         : i + 1;
   }

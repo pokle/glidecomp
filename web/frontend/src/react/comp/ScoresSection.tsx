@@ -11,7 +11,7 @@ import { Link as AriaLink } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Badge } from "@/react/rac/badge";
 import { api } from "../../comp/api";
-import { formatDuration, ordinal } from "../lib/format";
+import { formatDuration, formatRankedScore, ordinal } from "../lib/format";
 import { formatTimeInZone } from "../lib/time";
 import { formatDistance, useUnits } from "../lib/units";
 import { ScoreFreshness } from "./ScoreFreshness";
@@ -374,7 +374,7 @@ function ScoreClassTable({
                   </Cell>
                 ) : null}
                 <Cell className="text-right tabular-nums">
-                  {Math.round(p.total_score)}
+                  {formatRankedScore(p.total_score)}
                 </Cell>
                 {hasOfficial ? (
                   <Cell className="text-right tabular-nums">

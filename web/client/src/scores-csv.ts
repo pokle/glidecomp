@@ -19,9 +19,9 @@
  * classScores position isn't derivable from the rows), and it repeats on each
  * of that pilot's rows, so a pivot takes it with MAX rather than SUM.
  *
- * Known rounding drift: the columns carry the PUBLISHED (rounded) points, so a
- * summed total can sit a point either side of the site's, which sums the
- * unrounded scores and rounds once at the end.
+ * Known rounding drift: the columns carry the PUBLISHED one-decimal points
+ * (S7F §15), so a summed total can sit a tenth either side of the site's,
+ * which sums the unrounded scores and rounds once at the end.
  *
  * Ids appear as fully-qualified URLs, not bare sqids: a `wuhu` in a cell tells
  * a reader nothing and takes them nowhere, while the URL is both the identity
@@ -71,6 +71,9 @@ export const SCORES_CSV_COLUMNS = [
   "score_url",
   "pilot_rank",
 ] as const;
+
+/** The published one-decimal score (S7F §15), as the ranks read it. */
+const oneDecimal = (x: number) => Math.round(x * 10) / 10;
 
 /** Blank task-side cells for a pilot with nothing scored yet. */
 const EMPTY_TASK_CELLS = ["", "", "", "", "", "", "", ""];
@@ -128,9 +131,9 @@ export function buildScoresCsv(
             taskName || entry.task_id,
             url(taskPath(scores.comp_id, compName, entry.task_id, taskName)),
             entry.task_date,
-            Math.round(entry.score),
+            oneDecimal(entry.score),
             entry.rank,
-            Math.round(entry.ftv_counted_score ?? entry.score),
+            oneDecimal(entry.ftv_counted_score ?? entry.score),
             entry.ftv_status ?? "",
             url(
               pilotPath(

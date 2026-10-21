@@ -22,7 +22,7 @@ import { useUser } from "../lib/user";
 import { formatInstant } from "../lib/time";
 import { useMounted } from "../lib/use-mounted";
 import { formatDistance, useUnits } from "../lib/units";
-import { ordinal } from "../lib/format";
+import { formatRankedScore, ordinal } from "../lib/format";
 import { pilotPath } from "../lib/slug";
 import { useCompName } from "./comp-name-context";
 import { HistoricalRulesNotice, RulesEditionBadge } from "./RulesEdition";
@@ -379,7 +379,7 @@ function ClassPodium({
             <span className="tabular-nums text-muted-foreground">
               {formatDistance(p.flown_distance, { decimals: 1, prefs: units }).withUnit}
               {!isOpenDistance ? (
-                <> · <strong className="text-foreground">{Math.round(p.total_score)}</strong> pts</>
+                <> · <strong className="text-foreground">{formatRankedScore(p.total_score)}</strong> pts</>
               ) : null}
             </span>
           </li>

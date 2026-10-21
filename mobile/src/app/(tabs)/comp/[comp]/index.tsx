@@ -7,7 +7,7 @@
  * The You group is about the reader, not about a task: it never features one
  * (stage 0, decision 1).
  */
-import { formatScore, formatTaskDate, formatTaskDateRange, ordinal, scoringFormatLabel } from '@glidecomp/client/format';
+import { formatRankedScore, formatTaskDate, formatTaskDateRange, ordinal, scoringFormatLabel } from '@glidecomp/client/format';
 import {
   compAnalysisPath,
   compPath,
@@ -90,7 +90,7 @@ function CompBody({ comp }: { comp: CompDetailData }) {
             <Row
               testID="your-score"
               title="Your score"
-              value={`${ordinal(place.pilot.rank)} · ${formatScore(place.pilot.total_score)} pts`}
+              value={`${ordinal(place.pilot.rank)} · ${formatRankedScore(place.pilot.total_score)} pts`}
               onPress={go(`${compPath(comp.comp_id, comp.name)}/pilot/${mine.comp_pilot_id}`)}
             />
           ) : null}

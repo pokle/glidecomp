@@ -31,7 +31,7 @@ import {
 } from "../../scores-views";
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
-import { formatScore, formatTaskDate, ordinal } from "../lib/format";
+import { formatRankedScore, formatTaskDate, ordinal } from "../lib/format";
 import { pilotPath } from "../lib/slug";
 import { CompNameProvider, useCompName } from "./comp-name-context";
 import type { TaskSummary } from "./types";
@@ -447,7 +447,7 @@ function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore 
       const ftvTitle = discarded
         ? `Discarded under FTV — the validity cap was already reached`
         : partial
-          ? `Counted ${formatScore(entry.ftv_counted_score ?? 0)} of ${formatScore(entry.score)} under FTV`
+          ? `Counted ${formatRankedScore(entry.ftv_counted_score ?? 0)} of ${formatRankedScore(entry.score)} under FTV`
           : undefined;
       return {
         // Discarded tasks sort as if they contributed nothing to the total.
@@ -462,7 +462,7 @@ function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore 
               title={ftvTitle}
               className={discarded ? "text-muted-foreground line-through" : undefined}
             >
-              {formatScore(entry.score)}
+              {formatRankedScore(entry.score)}
             </span>{" "}
             {partial ? (
               <span className="text-amber-600 dark:text-amber-500">
@@ -479,11 +479,11 @@ function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore 
       sort: String(p.total_score),
       node: isFtv ? (
         <span className="inline-flex items-center gap-1.5">
-          <strong>{formatScore(p.total_score)}</strong>
+          <strong>{formatRankedScore(p.total_score)}</strong>
           <FtvBreakdown pilot={p} nameById={nameById} ftvFactor={scores.ftv_factor ?? null} />
         </span>
       ) : (
-        <strong>{formatScore(p.total_score)}</strong>
+        <strong>{formatRankedScore(p.total_score)}</strong>
       ),
     },
   ]);
@@ -575,9 +575,9 @@ function FtvBreakdown({
                     ) : null}
                   </span>
                   <span className="tabular-nums">
-                    {formatScore(t.ftv_counted_score ?? t.score)}
+                    {formatRankedScore(t.ftv_counted_score ?? t.score)}
                     {t.ftv_status === "partial" ? (
-                      <span className="text-muted-foreground"> of {formatScore(t.score)}</span>
+                      <span className="text-muted-foreground"> of {formatRankedScore(t.score)}</span>
                     ) : null}
                   </span>
                 </li>
@@ -591,7 +591,7 @@ function FtvBreakdown({
                   {dropped.map((t) => (
                     <li key={t.task_id} className="flex justify-between gap-3 text-muted-foreground">
                       <span className="line-through">{name(t.task_id)}</span>
-                      <span className="tabular-nums line-through">{formatScore(t.score)}</span>
+                      <span className="tabular-nums line-through">{formatRankedScore(t.score)}</span>
                     </li>
                   ))}
                 </ul>
@@ -600,7 +600,7 @@ function FtvBreakdown({
 
             <div className="mt-3 flex justify-between gap-3 border-t border-border pt-2 font-medium">
               <span>FTV total</span>
-              <span className="tabular-nums">{formatScore(pilot.total_score)}</span>
+              <span className="tabular-nums">{formatRankedScore(pilot.total_score)}</span>
             </div>
           </div>
         </Dialog>
@@ -641,7 +641,7 @@ function Top3Table({
         if (!entry) return { sort: "", node: "—" };
         const content = (
           <>
-            {entry.pilot_name} · {isTotal ? <strong>{formatScore(entry.score)}</strong> : formatScore(entry.score)}
+            {entry.pilot_name} · {isTotal ? <strong>{formatRankedScore(entry.score)}</strong> : formatRankedScore(entry.score)}
           </>
         );
         return {
@@ -702,10 +702,10 @@ function TeamsTable({
     ...scores.tasks.map((task): CellSpec => {
       const score = team.task_scores[task.task_id];
       return score !== undefined
-        ? { sort: String(score), node: formatScore(score) }
+        ? { sort: String(score), node: formatRankedScore(score) }
         : { sort: "", node: "—" };
     }),
-    { sort: String(team.total_score), node: <strong>{formatScore(team.total_score)}</strong> },
+    { sort: String(team.total_score), node: <strong>{formatRankedScore(team.total_score)}</strong> },
   ]);
 
   return <SortableTable label="Team scores" columns={columns} rows={rows} />;

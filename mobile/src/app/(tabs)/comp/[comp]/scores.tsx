@@ -4,7 +4,7 @@
  * names are the website's (CompScoresSection), over the same pure transforms
  * in @glidecomp/client.
  */
-import { formatScore, formatTaskDate } from '@glidecomp/client/format';
+import { formatRankedScore, formatTaskDate } from '@glidecomp/client/format';
 import {
   aggregateTeams,
   buildClassGroups,
@@ -98,7 +98,7 @@ function ScoresBody({ scores, comp }: { scores: CompScores; comp: CompDetailData
               key={t.team_name}
               title={`${t.rank}. ${t.team_name}`}
               detail={t.pilots.join(', ')}
-              value={formatScore(t.total_score)}
+              value={formatRankedScore(t.total_score)}
             />
           ))}
         </Group>
@@ -118,7 +118,7 @@ function Standings({ group, compId }: { group: ClassGroup; compId: string }) {
           testID={`standing-row-${p.comp_pilot_id}`}
           title={`${p.rank}. ${p.pilot_name}`}
           detail={p.team_name ?? undefined}
-          value={formatScore(p.total_score)}
+          value={formatRankedScore(p.total_score)}
           onPress={() => router.push(`/comp/${compId}/pilot/${p.comp_pilot_id}` as never)}
         />
       ))}
@@ -138,7 +138,7 @@ function Top3({ group, scores }: { group: ClassGroup; scores: CompScores }) {
             <Note>No scores.</Note>
           ) : (
             row.entries.map((e, i) => (
-              <Row key={e.comp_pilot_id} title={`${i + 1}. ${e.pilot_name}`} value={formatScore(e.score)} />
+              <Row key={e.comp_pilot_id} title={`${i + 1}. ${e.pilot_name}`} value={formatRankedScore(e.score)} />
             ))
           )}
         </Group>
@@ -187,7 +187,7 @@ function ByTask({
           <Row
             key={pilot.comp_pilot_id}
             title={`${entry.rank}. ${pilot.pilot_name}`}
-            value={formatScore(entry.score)}
+            value={formatRankedScore(entry.score)}
             onPress={() =>
               router.push(
                 pilotPath(scores.comp_id, comp?.name, task.task_id, task.task_name, pilot.comp_pilot_id, pilot.pilot_name) as never,
