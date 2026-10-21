@@ -8,6 +8,7 @@ import {
   buildFieldContext,
   evaluateField,
   scoreTask,
+  gapParamsForClass,
   type TaskAnalysisReport,
   type PilotFlight,
 } from "@glidecomp/engine";
@@ -222,7 +223,8 @@ export async function computeTaskAnalysis(
     const result = scoreTask(
       cfg.xcTask,
       flights,
-      cfg.gapParams,
+      // The same per-class parameters the official score used (issue #601).
+      gapParamsForClass(cfg.fullGapParams, pilotClass, cfg.hgClass2Classes),
       numPresent,
       cfg.stopCtx ? { stopAnnouncementMs: Date.parse(cfg.taskRow.stop_announcement_time!) } : {}
     );

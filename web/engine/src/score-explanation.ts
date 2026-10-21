@@ -26,7 +26,7 @@
 
 import { fixAltitude } from './igc-parser';
 import type { GAPParameters } from './gap-scoring';
-import { DEFAULT_GAP_PARAMETERS } from './gap-scoring';
+import { DEFAULT_GAP_PARAMETERS, scoresArrival } from './gap-scoring';
 import type { TurnpointSequenceResult } from './turnpoint-sequence';
 import { km, pts, fmtPoints, duration, defaultFormatTime } from './score-explanation-format';
 import {
@@ -179,7 +179,7 @@ function showsArrival(
   return (
     classContext.available_points.arrival > 0 ||
     entry.arrival_points > 0 ||
-    (params.useArrival && noEssPointsZeroed(classContext, params))
+    (scoresArrival(params) && noEssPointsZeroed(classContext, params))
   );
 }
 

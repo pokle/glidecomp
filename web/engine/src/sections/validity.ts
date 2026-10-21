@@ -257,6 +257,16 @@ export function buildValiditySection(
           emphasis: 'muted' as const,
         }]
       : []),
+    // FAI S7F §11, HG Class 2 (issue #601): the weights row above has no
+    // arrival term, and an HG reader expects one — say why, and where its
+    // share went, rather than leave the absence to look like a setting.
+    ...(params.scoring === 'HG' && params.useArrival && params.hgClass2 === true
+      ? [{
+          id: 'class2-no-arrival',
+          text: 'This class flies FAI hang-gliding Class 2, which scores no arrival points; their share of the day goes to time (FAI S7F §11).',
+          emphasis: 'muted' as const,
+        }]
+      : []),
     // The PG leading-weight generation belongs HERE, where the weights are
     // decided, not down in the leading section where it used to sit.
     ...(leadingWeightDetail(params)

@@ -14,6 +14,7 @@ import {
   defaultsFor,
   resolveCompGapParams,
   resolveLeadingTimeRatio,
+  storedHgClass2Classes,
 } from "@glidecomp/engine";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
@@ -22,7 +23,7 @@ import { NumberField } from "@/react/rac/field";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
-import { ChoiceList } from "@/react/rac/choice-list";
+import { CheckList, ChoiceList } from "@/react/rac/choice-list";
 import { SwitchField, SwitchList } from "@/react/rac/switch";
 import type { ScoringFormat, SeriesScoring } from "../types";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
@@ -92,6 +93,14 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     Math.round((gp.essNotGoalFactor ?? 0.8) * 100)
   );
 
+  // FAI HG Class 2 (S7F §11, issue #601): which of the comp's pilot classes
+  // fly Class 2 and so score no arrival points. Only names still on the
+  // roster are offered, and only those are saved, so a class renamed or
+  // removed since drops out rather than being rejected by the server.
+  const [class2Classes, setClass2Classes] = useState<string[]>(() =>
+    storedHgClass2Classes(comp.gap_params).filter((c) => comp.pilot_classes.includes(c))
+  );
+
   const [saving, setSaving] = useState(false);
 
   // Dirty = any field differs from its first-render value. One snapshot
@@ -112,6 +121,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     jtgFactor,
     jtgMax,
     essNotGoal,
+    class2Classes,
   };
   const initialRef = useRef<string | null>(null);
   if (initialRef.current === null) initialRef.current = JSON.stringify(snapshot);
@@ -153,6 +163,11 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
       jumpTheGunFactor: num(jtgFactor, 2),
       jumpTheGunMaxSeconds: num(jtgMax, 300),
       essNotGoalFactor: num(essNotGoal, 80) / 100,
+      // Kept in the roster's order so the stored list (and the audit line
+      // order) doesn't depend on the order boxes were ticked in.
+      ...(wing === "hg"
+        ? { hgClass2Classes: comp.pilot_classes.filter((c) => class2Classes.includes(c)) }
+        : {}),
     };
 
     setSaving(true);
@@ -226,6 +241,20 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               />
             ) : null}
           </div>
+        ) : null}
+
+        {/* FAI HG Class 2 (S7F §11, issue #601). Outside the Advanced
+            disclosure on purpose: marking a Class 2 field is FOLLOWING the
+            FAI rules, not departing from them, so it must not sit behind the
+            "these change your scores from a standard FAI result" warning. */}
+        {scoringFormat !== "open_distance" && wing === "hg" ? (
+          <CheckList
+            label="FAI Class 2 classes"
+            value={class2Classes}
+            onChange={setClass2Classes}
+            options={comp.pilot_classes.map((c) => ({ value: c, label: c }))}
+            description="FAI S7F §11: a class flying Class 2 — rigid wings with movable aerodynamic surfaces — scores no arrival points, and their share goes to time. Tick the classes that fly Class 2."
+          />
         ) : null}
 
         {/* GAP parameters only apply to GAP scoring; hide them for open distance.

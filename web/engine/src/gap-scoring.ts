@@ -26,7 +26,12 @@ import { calculateOptimizedTaskDistance, getOptimizedSegmentDistances } from './
 import { resolveStartOpen, resolveTaskDeadline } from './time-gates';
 import { maxBy, minBy } from './array-utils';
 
-import { DEFAULT_GAP_PARAMETERS, leadingFormulaFor, resolveLeadingTimeRatio } from './gap-params';
+import {
+  DEFAULT_GAP_PARAMETERS,
+  leadingFormulaFor,
+  resolveLeadingTimeRatio,
+  scoresArrival,
+} from './gap-params';
 import type { GAPParameters, DistanceOrigin } from './gap-params';
 import {
   calculateTaskValidity,
@@ -521,7 +526,7 @@ function essArrivalOrder(
   params: GAPParameters,
 ): Map<number, number> {
   const essPositionMap = new Map<number, number>();
-  if (params.scoring === 'HG' && params.useArrival) {
+  if (scoresArrival(params)) {
     effFlights
       .map((f, idx) => ({ idx, time: f.essTimeMs }))
       .filter((entry): entry is { idx: number; time: number } => entry.time !== null)
@@ -597,6 +602,7 @@ export function scoreFlights(
     scoring: fullParams.scoring,
     useLeading: fullParams.useLeading,
     useArrival: fullParams.useArrival,
+    hgClass2: fullParams.hgClass2,
     leadingTimeRatio: resolveLeadingTimeRatio(fullParams),
     // S7F 2026 §11, HG: nobody at ESS ⇒ no time or arrival points available.
     numReachedESS,

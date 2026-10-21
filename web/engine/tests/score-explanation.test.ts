@@ -1308,6 +1308,26 @@ describe('explainGapScore — day quality inputs', () => {
     expect(weights.detail).toContain('time 55.8%');
   });
 
+  // FAI S7F §11, HG Class 2 (issue #601): the weights row has no arrival
+  // term, so the card says why rather than leave it looking like a setting.
+  it('says a Class 2 field scores no arrival points, and only for one', () => {
+    const c2 = validityFor(makeValidityInputs(), {
+      scoring: 'HG', useArrival: true, hgClass2: true,
+    }).items.find((i) => i.id === 'class2-no-arrival');
+    expect(c2?.text).toContain('Class 2');
+    expect(c2?.text).toContain('§11');
+    for (const p of [
+      { scoring: 'HG' as const, useArrival: true },
+      // Arrival switched off for the comp: the setting explains it, not Class 2.
+      { scoring: 'HG' as const, useArrival: false, hgClass2: true },
+      { scoring: 'PG' as const, useArrival: false },
+    ]) {
+      expect(
+        validityFor(makeValidityInputs(), p).items.find((i) => i.id === 'class2-no-arrival'),
+      ).toBeUndefined();
+    }
+  });
+
   it('links to the explainer — the page had no route to /scoring/gap at all', () => {
     expect(validityFor(makeValidityInputs()).docHref).toBe('/scoring/gap#task-validity');
   });

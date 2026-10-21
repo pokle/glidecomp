@@ -491,6 +491,85 @@ describe("Live Scoring", () => {
   });
 });
 
+describe("HG Class 2 (S7F §11, issue #601)", () => {
+  test("a class marked Class 2 scores no arrival points, and unmarking it rescores", async () => {
+    const taskXctsk = JSON.parse(env.SAMPLE_TASK_XCTSK);
+    const gapParams = { ...defaultsFor("hg"), nominalDistance: null };
+    const compId = await createComp({
+      category: "hg",
+      pilot_classes: ["open", "rigid"],
+      default_pilot_class: "rigid",
+      gap_params: { ...gapParams, hgClass2Classes: ["rigid"] },
+    });
+    const taskId = await createTask(compId, {
+      xctsk: taskXctsk,
+      pilot_classes: ["open", "rigid"],
+    });
+    const users = ["user-1", "user-2", "user-3"];
+    const igcEntries = sampleIgcEntries();
+    for (let i = 0; i < users.length; i++) {
+      const res = await uploadRequest(
+        `/api/comp/${compId}/task/${taskId}/igc`,
+        await compressText(igcEntries[i][1]),
+        { user: users[i] }
+      );
+      expect(res.status).toBe(201);
+    }
+
+    type Cls = {
+      pilot_class: string;
+      available_points: { arrival: number; time: number; total: number };
+      gap_params?: { hgClass2?: boolean; useArrival: boolean };
+      validity_inputs?: {
+        num_reached_ess: number;
+        weights: { distance: number; time: number; leading: number; arrival: number };
+      };
+      pilots: Array<{ pilot_name: string; arrival_points: number; distance_points: number }>;
+    };
+    const rigidScores = async () =>
+      (
+        await getFreshScores<{ stale: boolean; class_scores: Cls[] }>(
+          `/api/comp/${compId}/task/${taskId}/score`
+        )
+      ).data.class_scores.find((c) => c.pilot_class === "rigid")!;
+
+    const asClass2 = await rigidScores();
+    expect(asClass2.pilots).toHaveLength(users.length);
+    // The rule only shows when somebody reached ESS: otherwise §11's no-ESS
+    // case zeroes arrival for every class and this test would prove nothing.
+    expect(asClass2.validity_inputs!.num_reached_ess).toBeGreaterThan(0);
+    expect(asClass2.gap_params?.hgClass2).toBe(true);
+    expect(asClass2.available_points.arrival).toBe(0);
+    for (const p of asClass2.pilots) expect(p.arrival_points).toBe(0);
+    // §11: TimeWeight = 1 − Distance − Leading − Arrival with Arrival 0, so
+    // time absorbs the share instead of it going unallocated.
+    const w = asClass2.validity_inputs!.weights;
+    expect(w.arrival).toBe(0);
+    expect(w.distance + w.time + w.leading).toBeCloseTo(1, 9);
+
+    // Unmark the class: an audited, score-bumping settings change.
+    const patched = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: { ...gapParams, hgClass2Classes: [] },
+    });
+    expect(patched.status).toBe(200);
+
+    const asClass1 = await rigidScores();
+    expect(asClass1.gap_params?.hgClass2).toBeUndefined();
+    expect(asClass1.available_points.arrival).toBeGreaterThan(0);
+    const w1 = asClass1.validity_inputs!.weights;
+    expect(w1.arrival).toBeCloseTo((1 - w1.distance) / 8, 9);
+    // Same field, same day: only the arrival↔time split moved.
+    expect(w1.distance).toBeCloseTo(w.distance, 9);
+    expect(w1.leading).toBeCloseTo(w.leading, 9);
+    expect(w1.time + w1.arrival).toBeCloseTo(w.time, 9);
+    expect(asClass1.available_points.total).toBeCloseTo(asClass2.available_points.total, 1);
+    const distByName = new Map(asClass2.pilots.map((p) => [p.pilot_name, p.distance_points]));
+    for (const p of asClass1.pilots) {
+      expect(p.distance_points).toBe(distByName.get(p.pilot_name));
+    }
+  });
+});
+
 /** Build a single-Takeoff open-distance task from the sample task's launch. */
 function openDistanceTaskFromSample() {
   const sample = JSON.parse(env.SAMPLE_TASK_XCTSK) as {

@@ -19,6 +19,7 @@ import {
   taskForDistanceOrigin,
   calculateOptimizedTaskDistance,
   resolveCompGapParams,
+  storedHgClass2Classes,
   resolveTaskStop,
   resolveGoalAltitude,
   stoppedGlideRatio,
@@ -123,6 +124,10 @@ function geometryFromRow(taskRow: ScoringTaskRow): TaskScoringGeometry {
   const distanceOrigin = gapParams.distanceOrigin ?? DEFAULT_GAP_PARAMETERS.distanceOrigin;
   const useLeading = gapParams.useLeading ?? DEFAULT_GAP_PARAMETERS.useLeading;
   const fullGapParams: GAPParameters = { ...DEFAULT_GAP_PARAMETERS, ...gapParams };
+  // FAI HG Class 2 (S7F 2026 §11, issue #601): the pilot classes the
+  // organiser marked as Class 2 score with no arrival weight. A class-level
+  // fact, so it is applied per class at scoring time (gapParamsForClass).
+  const hgClass2Classes = storedHgClass2Classes(storedGapParams);
   const leadingFormula = leadingFormulaFor(fullGapParams.scoring);
   const scoringTask = taskForDistanceOrigin(xcTask, distanceOrigin);
 
@@ -153,6 +158,7 @@ function geometryFromRow(taskRow: ScoringTaskRow): TaskScoringGeometry {
     category,
     gapParams,
     fullGapParams,
+    hgClass2Classes,
     distanceOrigin,
     useLeading,
     leadingFormula,

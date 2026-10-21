@@ -602,6 +602,64 @@ describe("PATCH /api/comp/:comp_id", () => {
     expect(descriptions).not.toContain("Updated GAP scoring parameters");
   });
 
+  // ── FAI HG Class 2 (S7F §11, issue #601) ─────────────────────────────────
+  test("audits each class marked or unmarked as FAI Class 2", async () => {
+    const compId = await createComp({
+      category: "hg",
+      pilot_classes: ["open", "rigid", "sport"],
+      default_pilot_class: "open",
+    });
+    const base = { nominalTime: 5400, minimumDistance: 5000, scoring: "HG", useLeading: true, useArrival: true };
+
+    let before = await lastAuditId();
+    let res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: { ...base, hgClass2Classes: ["rigid", "sport"] },
+    });
+    expect(res.status).toBe(200);
+    let lines = await compAuditLines(before);
+    expect(lines).toContain('Marked class "rigid" as FAI hang-gliding Class 2 (no arrival points, S7F §11)');
+    expect(lines).toContain('Marked class "sport" as FAI hang-gliding Class 2 (no arrival points, S7F §11)');
+
+    before = await lastAuditId();
+    res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: { ...base, hgClass2Classes: ["rigid"] },
+    });
+    expect(res.status).toBe(200);
+    lines = await compAuditLines(before);
+    expect(lines).toEqual([
+      'Unmarked class "sport" as FAI hang-gliding Class 2 (arrival points as configured)',
+    ]);
+
+    // Re-saving the same list moves nothing, so it says nothing.
+    before = await lastAuditId();
+    res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: { ...base, hgClass2Classes: ["rigid"] },
+    });
+    expect(res.status).toBe(200);
+    expect(await compAuditLines(before)).toEqual([]);
+  });
+
+  test("rejects a Class 2 list naming a class the comp does not have", async () => {
+    const compId = await createComp({ category: "hg", pilot_classes: ["open"] });
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      gap_params: {
+        nominalTime: 5400, minimumDistance: 5000, scoring: "HG",
+        useLeading: true, useArrival: true, hgClass2Classes: ["rigid"],
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("rigid");
+
+    const created = await authRequest("POST", "/api/comp", {
+      name: "C2", category: "hg", pilot_classes: ["open"],
+      gap_params: {
+        nominalTime: 5400, minimumDistance: 5000, scoring: "HG",
+        useLeading: true, useArrival: true, hgClass2Classes: ["floater"],
+      },
+    });
+    expect(created.status).toBe(400);
+  });
+
   // ── The first settings save on an untouched comp (issue #633) ────────────
   //
   // Until somebody saves settings once, a comp's gap_params is null and the
