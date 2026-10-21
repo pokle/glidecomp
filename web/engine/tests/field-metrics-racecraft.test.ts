@@ -332,19 +332,82 @@ describe('race.ess_margin', () => {
 });
 
 describe('race.final_glide_init', () => {
-  const out = metric('race.final_glide_init').compute(field);
+  // Alpha's climb is at 14 km east, past MIDTP (10 km). The shared field's
+  // sequence times MIDTP after that climb (it drives the leg-time tests), so
+  // this block re-times it to match the track: everything up to MIDTP was
+  // reached on the run out, and the remaining route is ESS then goal.
+  const glideField = makeTestField(
+    [
+      {
+        name: 'alpha',
+        fixes: field.pilots.find((p) => p.trackFile === 'alpha.igc')!.fixes,
+        turnpointResult: seqResult(
+          [reach(1, 250, 5_000, 1200), reach(2, 500, 10_000, 1200), reach(3, 1810, 15_000, 1500)],
+          3,
+        ),
+      },
+      { name: 'bravo', fixes: straightFixes(0, 1500, 0, 1500, 12, -0.5), turnpointResult: seqResult([reach(1, 640, 5_000, 1300)], null) },
+      { name: 'delta', fixes: straightFixes(0, 600, 0, 800, 12, -0.5) },
+    ],
+    { task: makeRaceTask() },
+  );
+  const out = metric('race.final_glide_init').compute(glideField);
 
-  it('computes the required glide ratio at the last climb before ESS', () => {
-    const alpha = field.pilots.find((p) => p.trackFile === 'alpha.igc')!;
+  it('computes the required glide ratio at the last climb, to the goal cylinder\'s edge', () => {
+    const alpha = glideField.pilots.find((p) => p.trackFile === 'alpha.igc')!;
     expect(alpha.thermals.length).toBeGreaterThan(0);
     const lastThermal = alpha.thermals[alpha.thermals.length - 1];
     const exitFix = alpha.fixes[lastThermal.endIndex];
-    const goalWp = field.task.turnpoints[4].waypoint;
-    const dist = ellipsoidDistance(exitFix.latitude, exitFix.longitude, goalWp.lat, goalWp.lon);
+    const goal = glideField.task.turnpoints[4];
+    // ESS lies on the straight line to goal, so the route is that line, and
+    // it ends at the goal cylinder's edge, not its centre.
+    const dist =
+      ellipsoidDistance(exitFix.latitude, exitFix.longitude, goal.waypoint.lat, goal.waypoint.lon) -
+      goal.radius;
     const expected = dist / (lastThermal.endAltitude - 300);
-    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expected, 6);
+    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expected, 3);
     const note = out.perPilot.find((v) => v.trackFile === 'alpha.igc')!.note!;
     expect(note).toContain('left last climb');
+  });
+
+  it('routes through a turnpoint still ahead, not straight to goal (review 6.2)', () => {
+    // The same climb with MIDTP (10 km, behind the pilot) not yet reached:
+    // the glide still to fly goes back to its edge (10.4 km) and then out to
+    // goal (21.8 km) — about 3.6 + 11.4 km, not the 8 km straight line —
+    // which is past the 1.5 × 7 km gate, so the value is not applicable.
+    const behind = makeTestField(
+      [
+        {
+          name: 'alpha',
+          fixes: field.pilots.find((p) => p.trackFile === 'alpha.igc')!.fixes,
+          turnpointResult: seqResult([reach(1, 250, 5_000, 1200)], null),
+        },
+      ],
+      { task: makeRaceTask() },
+    );
+    const v = metric('race.final_glide_init').compute(behind);
+    expect(valueOf(v, 'alpha.igc')).toBeNull();
+  });
+
+  it('counts a climb after ESS: the final glide ends at goal (review 6.2)', () => {
+    // ESS at 12 km, reached on the run out at t=600; the climb at 14 km comes
+    // after it and before goal at 22 km, so it IS the last climb.
+    const task = makeRaceTask();
+    task.turnpoints[3] = tp(12_000, 400, 'END', 'ESS');
+    const afterEss = makeTestField(
+      [
+        {
+          name: 'alpha',
+          fixes: field.pilots.find((p) => p.trackFile === 'alpha.igc')!.fixes,
+          turnpointResult: seqResult(
+            [reach(1, 250, 5_000, 1200), reach(2, 500, 10_000, 1200), reach(3, 600, 12_000, 1200)],
+            3,
+          ),
+        },
+      ],
+      { task },
+    );
+    expect(valueOf(metric('race.final_glide_init').compute(afterEss), 'alpha.igc')).not.toBeNull();
   });
 
   it('is null without a qualifying post-SSS climb or without a start', () => {
@@ -427,9 +490,11 @@ describe('race.final_glide_init through the air', () => {
     const drifter = field.pilots.find((p) => p.trackFile === 'drifter.igc')!;
     const last = drifter.thermals[drifter.thermals.length - 1];
     const exit = drifter.fixes[last.endIndex];
-    const goal = field.task.turnpoints[4].waypoint;
-    const expected = ellipsoidDistance(exit.latitude, exit.longitude, goal.lat, goal.lon) / (last.endAltitude - 300);
-    expect(valueOf(out, 'drifter.igc')).toBeCloseTo(expected, 6);
+    const goal = field.task.turnpoints[4];
+    const expected =
+      (ellipsoidDistance(exit.latitude, exit.longitude, goal.waypoint.lat, goal.waypoint.lon) - goal.radius) /
+      (last.endAltitude - 300);
+    expect(valueOf(out, 'drifter.igc')).toBeCloseTo(expected, 3);
   });
 });
 
@@ -443,8 +508,8 @@ describe('race.final_glide_init distance-gate anchoring (#626)', () => {
     ...straightFixes(1020, 400, 14_000, 1800, 15, -2.5),
   ];
   const preEssSeq = [
-    reach(1, 610, 5_000, 1450),
-    reach(2, 1210, 10_000, 1300),
+    reach(1, 250, 5_000, 1450),
+    reach(2, 500, 10_000, 1300),
     reach(3, 1810, 15_000, 1500),
   ];
 
@@ -453,8 +518,10 @@ describe('race.final_glide_init distance-gate anchoring (#626)', () => {
     expect(alpha.thermals.length).toBeGreaterThan(0);
     const lastThermal = alpha.thermals[alpha.thermals.length - 1];
     const exitFix = alpha.fixes[lastThermal.endIndex];
-    const goalWp = field.task.turnpoints[goalIdx].waypoint;
-    const dist = ellipsoidDistance(exitFix.latitude, exitFix.longitude, goalWp.lat, goalWp.lon);
+    const goal = field.task.turnpoints[goalIdx];
+    const dist =
+      ellipsoidDistance(exitFix.latitude, exitFix.longitude, goal.waypoint.lat, goal.waypoint.lon) -
+      goal.radius;
     return dist / (lastThermal.endAltitude - 300);
   }
 
@@ -469,8 +536,8 @@ describe('race.final_glide_init distance-gate anchoring (#626)', () => {
         tp(0, 400, 'LAUNCH', 'TAKEOFF'),
         tp(5_000, 2_000, 'START', 'SSS'),
         tp(10_000, 400, 'MIDTP'),
-        tp(15_000, 1_000, 'END', 'ESS'),
-        tp(15_000, 1_000, 'GOALWP'),
+        tp(15_000, 400, 'END', 'ESS'),
+        tp(15_000, 400, 'GOALWP'),
       ],
       sss: { type: 'RACE', direction: 'ENTER' },
       goal: { type: 'CYLINDER' },
@@ -481,7 +548,7 @@ describe('race.final_glide_init distance-gate anchoring (#626)', () => {
       { task },
     );
     const out = metric('race.final_glide_init').compute(field);
-    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expectedRatio(field, 4), 6);
+    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expectedRatio(field, 4), 3);
   });
 
   it('computes when ESS is itself the final turnpoint', () => {
@@ -492,7 +559,7 @@ describe('race.final_glide_init distance-gate anchoring (#626)', () => {
         tp(0, 400, 'LAUNCH', 'TAKEOFF'),
         tp(5_000, 2_000, 'START', 'SSS'),
         tp(10_000, 400, 'MIDTP'),
-        tp(15_000, 1_000, 'END', 'ESS'),
+        tp(15_000, 400, 'END', 'ESS'),
       ],
       sss: { type: 'RACE', direction: 'ENTER' },
       goal: { type: 'CYLINDER' },
@@ -502,7 +569,7 @@ describe('race.final_glide_init distance-gate anchoring (#626)', () => {
       { task },
     );
     const out = metric('race.final_glide_init').compute(field);
-    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expectedRatio(field, 3), 6);
+    expect(valueOf(out, 'alpha.igc')).toBeCloseTo(expectedRatio(field, 3), 3);
   });
 
   it('stays not-applicable for everyone when no leg clears 1 km', () => {

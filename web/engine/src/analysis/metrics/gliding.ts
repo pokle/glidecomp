@@ -354,7 +354,7 @@ const glideDolphinFraction: MetricComputer = {
   explanation:
     'Dolphin flying: how much of the height that the pilot gained came outside of circling. '
     + 'The value is the share of the altitude gain after the start, '
-    + 'smoothed over 10 s, that the pilot made outside a detected thermal. There is no expected '
+    + 'smoothed over 10 s, that the pilot made while not circling. There is no expected '
     + 'direction. The sign of the correlation shows whether dolphin flying paid on this day. '
     + 'We leave out a pilot whose instrument records a position less often than every 2 '
     + 'seconds. A track that coarse cannot show this detail, and the pilot would seem to fly '
@@ -372,11 +372,15 @@ const glideDolphinFraction: MetricComputer = {
       if (end - start < 1) return na(p);
 
       const smoothed = smoothedAltitudes(p.fixes, start, end, SMOOTH_HALF_WINDOW_MS);
-      const inThermal = new Array<boolean>(end - start + 1).fill(false);
-      for (const t of p.thermals) {
-        const s = Math.max(t.startIndex, start);
-        const e = Math.min(t.endIndex, end);
-        for (let i = s; i <= e; i++) inThermal[i - start] = true;
+      // Circling, not detectThermals: a "thermal" there is a vario test
+      // with no turning test, so straight lift counted as climbing and weak
+      // circling as dolphin — 84 % (HG) of the gain this used to call
+      // dolphin was made inside circling segments (engine review 6.1).
+      const circling = new Array<boolean>(end - start + 1).fill(false);
+      for (const seg of p.circles.circlingSegments) {
+        const s = Math.max(seg.startIndex, start);
+        const e = Math.min(seg.endIndex, end);
+        for (let i = s; i <= e; i++) circling[i - start] = true;
       }
 
       let totalGain = 0;
@@ -385,7 +389,7 @@ const glideDolphinFraction: MetricComputer = {
         const delta = smoothed[i + 1 - start] - smoothed[i - start];
         if (delta <= 0) continue;
         totalGain += delta;
-        if (!inThermal[i - start] && !inThermal[i + 1 - start]) dolphinGain += delta;
+        if (!circling[i - start] && !circling[i + 1 - start]) dolphinGain += delta;
       }
       if (totalGain < MIN_DOLPHIN_TOTAL_GAIN_M) {
         return na(p);
@@ -393,7 +397,7 @@ const glideDolphinFraction: MetricComputer = {
       return {
         trackFile: p.trackFile,
         value: (100 * dolphinGain) / totalGain,
-        note: `${Math.round(dolphinGain)} of ${Math.round(totalGain)} m gained outside thermals`,
+        note: `${Math.round(dolphinGain)} of ${Math.round(totalGain)} m gained while not circling`,
       };
     });
     return { perPilot, ...(gate.summaryLine ? { fieldSummary: [gate.summaryLine] } : {}) };

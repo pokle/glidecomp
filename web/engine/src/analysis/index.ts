@@ -31,6 +31,7 @@ export type {
   TaskAnalysisReport,
   FieldThermalsSummary,
   CompTaskResult,
+  CompAnalysisOptions,
   CompMetricAggregate,
   CompAnalysisReport,
   SignSummary,
