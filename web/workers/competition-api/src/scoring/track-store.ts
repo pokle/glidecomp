@@ -7,7 +7,14 @@
  * new or changed are fetched from R2, decompressed and re-parsed.
  */
 
-import { assessTrackQuality, parseIGC, type IGCFile, type IGCFix } from "@glidecomp/engine";
+import {
+  assessTrackQuality,
+  parseIGC,
+  unreadableTrackReport,
+  type IGCFile,
+  type IGCFix,
+  type TrackQualityReport,
+} from "@glidecomp/engine";
 import type { ScoredTrackRow, TaskQualityMemo } from "./types";
 
 /** The kinds of per-track analysis rows `track_analysis` holds. */
@@ -89,6 +96,45 @@ export async function saveTrackAnalyses(
   }
 }
 
+/** One track's R2 object, read: the parsed file, or why it holds no flight.
+ * Null only when the object is missing. */
+export type IgcRead = { igc: IGCFile } | { unreadable: string };
+
+/** Fetch, decompress and parse one track's IGC from R2, keeping apart the two
+ * ways it can hold nothing to score: a missing object (null) and a file that
+ * is there but holds no flight (`unreadable`) — the latter is a HARD
+ * data-quality verdict, not a reason to drop the pilot. */
+export async function readIgcObject(
+  r2: R2Bucket,
+  igcFilename: string
+): Promise<IgcRead | null> {
+  const object = await r2.get(igcFilename);
+  if (!object) return null;
+  const compressed = await object.arrayBuffer();
+  let igcText: string;
+  try {
+    const decompressedStream = new Response(compressed).body!.pipeThrough(
+      new DecompressionStream("gzip")
+    );
+    const decompressed = await new Response(decompressedStream).arrayBuffer();
+    igcText = new TextDecoder().decode(decompressed);
+  } catch {
+    console.warn(`Undecompressable IGC: ${igcFilename}`);
+    return { unreadable: "the file could not be decompressed" };
+  }
+  let igc;
+  try {
+    igc = parseIGC(igcText);
+  } catch {
+    console.warn(`Unparseable IGC: ${igcFilename}`);
+    return { unreadable: "the file could not be read as an IGC tracklog" };
+  }
+  if (igc.fixes.length === 0) {
+    return { unreadable: "the file has no position fixes (B records)" };
+  }
+  return { igc };
+}
+
 /** Fetch, decompress and parse one track's IGC from R2 (null on failure —
  * missing object, unparseable file, or no fixes). Returns the WHOLE parsed
  * file: the data-quality checks (track-quality.ts) need the header's date,
@@ -97,24 +143,8 @@ export async function fetchIgcFile(
   r2: R2Bucket,
   igcFilename: string
 ): Promise<IGCFile | null> {
-  const object = await r2.get(igcFilename);
-  if (!object) return null;
-  const compressed = await object.arrayBuffer();
-  const decompressedStream = new Response(compressed).body!.pipeThrough(
-    new DecompressionStream("gzip")
-  );
-  const decompressed = await new Response(decompressedStream).arrayBuffer();
-  const igcText = new TextDecoder().decode(decompressed);
-  let igc;
-  try {
-    igc = parseIGC(igcText);
-  } catch {
-    // Skip unparseable tracks — admin can delete and ask pilot to re-upload
-    console.warn(`Skipping unparseable IGC: ${igcFilename}`);
-    return null;
-  }
-  if (igc.fixes.length === 0) return null;
-  return igc;
+  const read = await readIgcObject(r2, igcFilename);
+  return read && "igc" in read ? read.igc : null;
 }
 
 /** Just the fixes. Kept for the callers that genuinely want nothing else —
@@ -148,9 +178,18 @@ function qualityGate(
 ): { withheld: boolean; verdictKnown: boolean } {
   const report = quality.byTrackId.get(track.task_track_id);
   return {
-    withheld: !!report?.hardFailed && !track.quality_override,
+    withheld: !!report && isWithheld(report, track),
     verdictKnown: report !== undefined,
   };
+}
+
+/** Whether a verdict withholds this track: any HARD finding a scorekeeper has
+ * not overridden (S7A §4.4.6) — except a file that holds no flight, which no
+ * override can score, so it stays withheld (and seated) regardless. */
+export function isWithheld(report: TrackQualityReport, track: ScoredTrackRow): boolean {
+  if (!report.hardFailed) return false;
+  if (report.findings.some((f) => f.id === "no-fixes")) return true;
+  return !track.quality_override;
 }
 
 /** True when this track is already known to be withheld from scoring. */
@@ -179,11 +218,16 @@ export function canUseStored(
  * Fetch a track's IGC for scoring, learning and persisting its data-quality
  * verdict on the way (FAI S7A §4.4.2).
  *
- * Returns null when there is nothing to score: the object is missing or
- * unreadable, or the file just hard-failed and no scorekeeper has overridden
- * it. The verdict is memoized into `quality.byTrackId` — this is the only pass
- * that holds the parsed IGC, so it is the only one that can learn it — and
- * queued onto `writes` so the next pass gets it for free.
+ * Returns null when there is nothing to score: the object is missing, or the
+ * file holds no flight, or it just hard-failed and no scorekeeper has
+ * overridden it. The verdict is memoized into `quality.byTrackId` — this is
+ * the only pass that holds the parsed IGC, so it is the only one that can
+ * learn it — and queued onto `writes` so the next pass gets it for free.
+ *
+ * A file that holds no flight (unparseable, or no fixes) gets the HARD
+ * `no-fixes` verdict, overwriting any verdict stored before that finding
+ * existed, so the pilot is seated at 0 with the reason instead of vanishing
+ * from the scores. No override can score it: there is nothing to score.
  */
 export async function openTrackForScoring(
   r2: R2Bucket,
@@ -191,12 +235,28 @@ export async function openTrackForScoring(
   quality: TaskQualityMemo,
   writes: TrackAnalysisWrite[]
 ): Promise<IGCFile | null> {
-  const igc = await fetchIgcFile(r2, track.igc_filename);
-  if (!igc) return null;
+  const read = await readIgcObject(r2, track.igc_filename);
+  if (!read) return null;
+
+  if ("unreadable" in read) {
+    remember(track, quality, writes, unreadableTrackReport(read.unreadable));
+    return null;
+  }
+  const { igc } = read;
 
   if (qualityGate(track, quality).verdictKnown) return igc;
 
   const report = assessTrackQuality(igc.fixes, igc.header, quality.context);
+  remember(track, quality, writes, report);
+  return isWithheld(report, track) ? null : igc;
+}
+
+function remember(
+  track: ScoredTrackRow,
+  quality: TaskQualityMemo,
+  writes: TrackAnalysisWrite[],
+  report: TrackQualityReport
+): void {
   quality.byTrackId.set(track.task_track_id, report);
   writes.push({
     task_track_id: track.task_track_id,
@@ -205,5 +265,4 @@ export async function openTrackForScoring(
     uploaded_at: track.uploaded_at,
     payload_json: JSON.stringify(report),
   });
-  return report.hardFailed && !track.quality_override ? null : igc;
 }

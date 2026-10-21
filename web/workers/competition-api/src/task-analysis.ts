@@ -15,6 +15,7 @@ import { encodeId } from "./sqids";
 import { mapWithConcurrency, TRACK_FETCH_CONCURRENCY } from "./lib/concurrency";
 import {
   computeTaskScore,
+  dnfCount,
   hardFindingTitles,
   partitionByQuality,
   resolveTaskScoringConfig,
@@ -146,8 +147,18 @@ export async function computeTaskAnalysis(
     );
 
     const officialClass = official.classes.find((c) => c.pilot_class === pilotClass);
+    // A withheld upload beside an active manual flight: the official scores
+    // seat that pilot by the manual flight (not as withheld), so here they
+    // are a manual-flight pilot like any other.
+    const scoredByManualFlight = new Set(
+      (officialClass?.pilots ?? [])
+        .filter((p) => qualityExcludedIds.has(p.comp_pilot_id) && !p.track_excluded)
+        .map((p) => p.comp_pilot_id)
+    );
+    for (const id of scoredByManualFlight) qualityExcludedIds.delete(id);
     const excluded: { pilot_name: string; reason: string }[] = [];
     for (const e of qualityExcluded) {
+      if (scoredByManualFlight.has(encodeId(alphabet, e.track.comp_pilot_id))) continue;
       excluded.push({
         pilot_name: e.track.pilot_name,
         reason: `track failed a data-quality check: ${hardFindingTitles(e.report).join("; ")}`,
@@ -165,7 +176,10 @@ export async function computeTaskAnalysis(
     let trackless = 0;
     for (const entry of officialClass?.pilots ?? []) {
       if (qualityExcludedIds.has(entry.comp_pilot_id)) continue;
-      if (!trackFileByPilotId.has(entry.comp_pilot_id)) {
+      if (
+        !trackFileByPilotId.has(entry.comp_pilot_id) ||
+        scoredByManualFlight.has(entry.comp_pilot_id)
+      ) {
         trackless++;
         excluded.push({
           pilot_name: entry.pilot_name,
@@ -204,7 +218,7 @@ export async function computeTaskAnalysis(
     // first turnpoint's waypoint. numPresent includes the trackless
     // (manual-flight) pilots so launch validity matches the official score's.
     const numPresent =
-      flights.length + trackless + (cfg.dnfByClass.get(pilotClass) ?? 0);
+      flights.length + trackless + dnfCount(cfg, pilotClass);
     const result = scoreTask(
       cfg.xcTask,
       flights,

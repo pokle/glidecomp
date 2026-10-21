@@ -33,6 +33,7 @@ import {
   scheduleTaskRevalidation,
   taskIdsForComp,
   toEtag,
+  bodyIdentity,
   type StoredTaskScore,
 } from "../score-store";
 
@@ -214,15 +215,16 @@ export const scoreRoutes = new Hono<AuthedEnv>()
       if (row && rowHasResult(row)) {
         const stale = isRowStale(row);
         if (stale) scheduleTaskRevalidation(c, [taskId]);
-        // The ETag is the identity of the served body: the stored state_key
-        // plus the staleness label riding on it — a stale-labelled body must
+        // The ETag is the identity of the served body (bodyIdentity: the
+        // stored state_key and the write's computed_at) plus the staleness
+        // label riding on it — a stale-labelled body must
         // never revalidate a fresh one (or a browser would re-serve the
         // banner after the re-score concluded). Re-score polls carry the
         // stale ETag: 304 while the row is unchanged (one D1 read, no body),
         // 200 the moment the re-score lands — even a no-op re-score whose
         // recomputed state_key is identical.
-        const etagKey =
-          (stale ? `${row.state_key}:stale` : row.state_key) + officialTag;
+        const identity = bodyIdentity(row.state_key, row.computed_at);
+        const etagKey = (stale ? `${identity}:stale` : identity) + officialTag;
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
@@ -242,7 +244,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         row?.inputs_rev ?? 0
       );
       return c.json(toTaskScoreWire(response, false, official), 200, {
-        ETag: toEtag(stateKey + officialTag),
+        ETag: toEtag(bodyIdentity(stateKey, response.computed_at) + officialTag),
         "X-Cache": "MISS",
         "Cache-Control": cacheControl(c, response.computed_at, false),
       });
@@ -329,7 +331,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           let stale = false;
           if (row && rowHasResult(row)) {
             score = JSON.parse(row.response_json) as StoredTaskScore;
-            stateKey = row.state_key;
+            stateKey = bodyIdentity(row.state_key, row.computed_at);
             stale = isRowStale(row);
             if (stale) staleTaskIds.push(task.task_id);
           } else {
@@ -340,7 +342,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
               row?.inputs_rev ?? 0
             );
             score = computed.response;
-            stateKey = computed.stateKey;
+            stateKey = bodyIdentity(computed.stateKey, computed.response.computed_at);
           }
 
           return {
@@ -367,7 +369,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
       );
 
       // Comp-level ETag: the identity of everything the response is built
-      // from — each task's stored state_key plus the team assignments, with
+      // from — each task's body identity plus the team assignments, with
       // the staleness label folded in (as on the task endpoint) so a
       // stale-labelled body never revalidates a fresh one.
       // The series-scoring settings change the scores (FTV vs sum, and the

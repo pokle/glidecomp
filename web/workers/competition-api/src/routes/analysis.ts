@@ -26,7 +26,7 @@ import { isCompAdmin } from "../super-admin";
 import { audit } from "../audit";
 import { encodeId } from "../sqids";
 import { shortHash } from "../scoring";
-import { ifNoneMatchMatches, publicMaxAgeSeconds, toEtag } from "../score-store";
+import { bodyIdentity, ifNoneMatchMatches, publicMaxAgeSeconds, toEtag } from "../score-store";
 import {
   bumpTaskAnalysisInputs,
   decodeTaskAnalysisRow,
@@ -164,7 +164,9 @@ export const analysisRoutes = new Hono<AuthedEnv>()
         // state_key alone would 304-revalidate the outdated report. The
         // staleness label rides on the ETag so a stale body can never
         // revalidate a fresh one.
-        const etagKey = `fa:${row.analysis_version}:${row.state_key}${stale ? ":stale" : ""}`;
+        // bodyIdentity adds the write's computed_at: state_key misses inputs
+        // the report depends on (gap_params among them).
+        const etagKey = `fa:${row.analysis_version}:${bodyIdentity(row.state_key, row.computed_at)}${stale ? ":stale" : ""}`;
         const headers = {
           ETag: toEtag(etagKey),
           "X-Cache": stale ? "HIT-STALE" : "HIT",
@@ -297,7 +299,7 @@ export const analysisRoutes = new Hono<AuthedEnv>()
         // analysis_version folded in: a metrics bump recomputes the report
         // from unchanged scoring inputs, so state_key alone would let a
         // client 304-revalidate the outdated body.
-        stateKeys.push(`${row.state_key}:${row.analysis_version}`);
+        stateKeys.push(`${bodyIdentity(row.state_key, row.computed_at)}:${row.analysis_version}`);
         if (!oldestComputedAt || row.computed_at < oldestComputedAt) {
           oldestComputedAt = row.computed_at;
         }
