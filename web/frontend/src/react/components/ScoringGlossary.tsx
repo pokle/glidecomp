@@ -37,7 +37,7 @@ const TERMS: Term[] = [
     term: "Start cylinder (SSS)",
     href: "/scoring/gap#how-a-task-works",
     definition:
-      "The circle around the start turnpoint. The race clock begins when you cross it in the required direction, or at the start gate you took.",
+      "The circle around the start turnpoint. The race clock begins when you cross it (in either direction), or at the start gate you took.",
   },
   {
     term: "Speed section",
