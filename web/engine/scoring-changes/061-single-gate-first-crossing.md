@@ -22,9 +22,9 @@ single-gate race the first crossing after the gate always reaches at least as
 many turnpoints as a later one, so where both reached the same turnpoints and
 distance, the tie went to the later crossing. That honoured a re-start the
 task type does not allow. The pilot's start time snaps to the gate either way
-(§9.2.4.1), so time points never moved. But the reported start crossing did, and so did the leading
-coefficient, which counts only the fixes from the start crossing on
-(§12.3.1).
+(§9.2.4.1), so time points never moved. But the reported start crossing did,
+and so did the leading coefficient, which counts only the fixes from the start
+crossing on (§12.3.1).
 
 A single-gate race now takes the first start crossing after the gate. Because
 a crossing counts in either direction (§6.2.1, note 056), a pilot who flies
