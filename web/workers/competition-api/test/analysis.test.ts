@@ -22,6 +22,7 @@ import {
   isFieldRowStale,
   type TaskAnalysisRow,
 } from "../src/task-analysis-store";
+import { computeAndStoreTaskScore } from "../src/score-store";
 
 /** How many sample tracks each seeded task gets. Enough pilots that the
  * metrics have a field to compare against, few enough to stay quick. */
@@ -718,6 +719,51 @@ describe("comp-level aggregate", () => {
     expect(agg.metrics.length).toBeGreaterThan(0);
     for (const m of agg.metrics) {
       expect(m.perTaskRho).toHaveLength(1);
+    }
+  });
+
+  test("comp ρ is measured against the official comp ranking once every task is scored (review 5.1)", async () => {
+    const t = await seedTask();
+    await computeAndStoreTaskAnalysis(env, t.taskIdNum, 0);
+
+    type Agg = {
+      classes: Array<{
+        aggregate: {
+          rankBasis: string;
+          pilots: Array<{ key: string; rank: number; totalScore: number }>;
+        };
+      }>;
+    };
+
+    // No stored task score yet: the aggregate ranks on its own analysed
+    // totals and says so.
+    const before = (await (await adminGet(t.compPath)).json()) as Agg;
+    expect(before.classes[0].aggregate.rankBasis).toBe("analysed-task-totals");
+    const etagBefore = (await adminGet(t.compPath)).headers.get("ETag");
+
+    await computeAndStoreTaskScore(env, t.taskIdNum, 0);
+    const res = await adminGet(t.compPath);
+    // The ranking it is measured against changed, so the ETag must too.
+    expect(res.headers.get("ETag")).not.toBe(etagBefore);
+    const after = (await res.json()) as Agg;
+    const agg = after.classes[0].aggregate;
+    expect(agg.rankBasis).toBe("official");
+
+    // Same ranks as the published comp standings.
+    const scores = (await (
+      await adminGet(`/api/comp/${encodeId(env.SQIDS_ALPHABET, t.compIdNum)}/scores`)
+    ).json()) as {
+      class_scores: Array<{
+        pilots: Array<{ comp_pilot_id: string; rank: number }>;
+      }>;
+    };
+    const official = new Map(
+      scores.class_scores[0].pilots.map((p) => [p.comp_pilot_id, p.rank])
+    );
+    expect(agg.pilots.length).toBeGreaterThan(0);
+    for (const p of agg.pilots) {
+      const id = Number(p.key.slice(3));
+      expect(official.get(encodeId(env.SQIDS_ALPHABET, id))).toBe(p.rank);
     }
   });
 });
