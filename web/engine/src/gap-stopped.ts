@@ -16,8 +16,8 @@
  */
 
 import type { XCTask } from './xctsk-parser';
-import { getGoalIndex, getEffectiveESSIndex } from './xctsk-parser';
-import { getOptimizedSegmentDistances } from './task-optimizer';
+import { getGoalIndex } from './xctsk-parser';
+import { getLaunchToESSSegmentDistances } from './task-optimizer';
 import { resolveStartGates } from './time-gates';
 import { maxBy } from './array-utils';
 import { calculateStoppedTaskValidity, calculateTimePoints } from './gap-formulas';
@@ -224,12 +224,9 @@ export function resolveStoppedTaskScore(
   const numLandedBeforeStop = effFlights.reduce(
     (n, f) => n + (f.landedBeforeStop !== false ? 1 : 0), 0,
   );
-  const essIdxForDist = Math.max(0, getEffectiveESSIndex(scoringTask));
-  const segs = getOptimizedSegmentDistances(scoringTask);
-  let launchToEssDistance = 0;
-  for (let i = 0; i < essIdxForDist && i < segs.length; i++) {
-    launchToEssDistance += segs[i];
-  }
+  // The §7.2 launchToESSDistance, on its own route (not the task line).
+  const launchToEssDistance = getLaunchToESSSegmentDistances(scoringTask)
+    .reduce((sum, d) => sum + d, 0);
   const formulaValidity = calculateStoppedTaskValidity({
     pilotDistances: effFlights.map(f => Math.max(0, f.flownDistance)),
     numReachedESS,

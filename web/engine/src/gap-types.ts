@@ -323,7 +323,13 @@ export interface PilotFlight {
  */
 export type FlightLeadingInput =
   | { kind: 'aggregate'; aggregate: LeadingAggregate }
-  | { kind: 'track'; fixes: IGCFix[]; sequence: TurnpointReaching[] }
+  | {
+      kind: 'track';
+      fixes: IGCFix[];
+      sequence: TurnpointReaching[];
+      /** End of the scored flight (deadline / stop window), null = none. */
+      scanEndMs?: number | null;
+    }
   | { kind: 'none' };
 
 /**

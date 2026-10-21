@@ -561,12 +561,32 @@ describe('XCTSK Parser', () => {
       const taskJson = JSON.stringify({
         taskType: 'CLASSIC',
         t: [{ n: 'TP', lat: 47.0, lon: 11.0, r: 400 }],
-        s: { t: 0, d: 0 },
+        s: { t: 2, d: 2 },
       });
 
       const task = parseXCTask(taskJson);
       expect(task.sss?.type).toBe('ELAPSED-TIME');
       expect(task.sss?.direction).toBe('EXIT');
+    });
+
+    it('reads a missing SSS direction as ENTER, as v1 does', () => {
+      const v2 = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [{ n: 'TP', lat: 47.0, lon: 11.0, r: 400 }],
+        s: { t: 1 },
+      }));
+      const v1 = parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC', version: 1,
+        turnpoints: [{ radius: 400, waypoint: { name: 'TP', lat: 47.0, lon: 11.0 } }],
+        sss: { type: 'RACE' },
+      }));
+      expect(v2.sss?.direction).toBe('ENTER');
+      expect(v1.sss?.direction).toBe('ENTER');
+      expect(parseXCTask(JSON.stringify({
+        taskType: 'CLASSIC',
+        t: [{ n: 'TP', lat: 47.0, lon: 11.0, r: 400 }],
+        s: { t: 1, d: 1 },
+      })).sss?.direction).toBe('ENTER');
     });
 
     it('should parse goal CYLINDER type', () => {

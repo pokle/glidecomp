@@ -10,6 +10,10 @@
  * their start-cylinder crossing — not the crossing itself (§9.2.4.1). A
  * crossing after the last gate takes the last gate. A crossing before the
  * first gate is a failed ("early") start, handled by §13.3.
+ *
+ * A time trial has a single start gate too (§6.3.2): pilots may start any
+ * time after it and are timed from their own crossing, but a crossing before
+ * it is still a failed start, and the §12.3.1 leading clock starts at it.
  */
 
 import type { XCTask } from './xctsk-parser';
@@ -106,8 +110,8 @@ export function resolveLaunchWindowOpen(
  * task is not a gated race.
  *
  * Returns null when:
- * - the task's SSS is not RACE type (elapsed-time tasks are timed from the
- *   pilot's actual crossing — already spec-correct without gates), or
+ * - the task's SSS is not RACE type (a time trial's single gate does not
+ *   snap anyone's start — see {@link resolveTimeTrialGate}), or
  * - there are no parseable gates, or
  * - the only gate is "00:00:00Z" — the placeholder toXctskJSON writes to
  *   satisfy the format's non-empty-gates rule. A real midnight-UTC start
@@ -123,7 +127,45 @@ export function resolveStartGates(
   referenceMs: number,
 ): number[] | null {
   if (task.sss?.type !== 'RACE') return null;
-  const raw = task.sss.timeGates ?? [];
+  return resolveDeclaredGates(task, referenceMs);
+}
+
+/**
+ * A time trial's start gate (§6.3.2) as an absolute epoch-ms time, or null
+ * when the task is not a time trial or declares no usable gate (the same
+ * parse and lone-midnight placeholder rule as {@link resolveStartGates}).
+ * A time trial has one gate; if a file lists several, the first opens the
+ * start.
+ *
+ * Unlike a race gate it never sets the pilot's start time — each pilot is
+ * timed from their own crossing (§9.2.4.1). It bounds the start: a crossing
+ * before it is a failed start (§13.3), and it is the leading clock's origin
+ * (§12.3.1, "the first start gate time (as defined for the task)").
+ */
+export function resolveTimeTrialGate(
+  task: XCTask,
+  referenceMs: number,
+): number | null {
+  if (task.sss?.type !== 'ELAPSED-TIME') return null;
+  return resolveDeclaredGates(task, referenceMs)?.[0] ?? null;
+}
+
+/**
+ * When the task's start opens: a race's first gate, or a time trial's gate.
+ * Null when the task declares neither. This is the leading clock's origin
+ * and the instant before which no start is valid.
+ */
+export function resolveStartOpen(
+  task: XCTask,
+  referenceMs: number,
+): number | null {
+  return resolveStartGates(task, referenceMs)?.[0]
+    ?? resolveTimeTrialGate(task, referenceMs);
+}
+
+/** The task's declared gates, sorted, deduped and day-placed; null = none. */
+function resolveDeclaredGates(task: XCTask, referenceMs: number): number[] | null {
+  const raw = task.sss?.timeGates ?? [];
   const seconds = raw
     .map(parseTimeOfDayUTC)
     .filter((s): s is number => s !== null);

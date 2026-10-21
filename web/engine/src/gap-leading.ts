@@ -17,8 +17,8 @@ import type { XCTask } from './xctsk-parser';
 import type { IGCFix } from './igc-parser';
 import type { TurnpointReaching } from './turnpoint-sequence';
 import { getEffectiveSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
-import { getOptimizedSegmentDistances } from './task-optimizer';
-import { resolveStartGates } from './time-gates';
+import { getLaunchToESSSegmentDistances } from './task-optimizer';
+import { resolveStartOpen } from './time-gates';
 import { ellipsoidDistance } from './geo';
 import type { LeadingFormula } from './gap-params';
 
@@ -137,6 +137,12 @@ export interface LeadingAggregate {
  * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
  * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached
  * @param formula - 'weighted' (modern default) or 'classic'
+ * @param scanEndMs - The end of the pilot's scored flight (epoch ms), or null
+ *   when nothing clips it: the goal deadline (§12.3.1 caps `taskTime` there)
+ *   and, on a stopped task, the pilot's scored-window end (§13.4.5 — no
+ *   points from any part of the flight after the stop). Fixes after it are
+ *   not scanned. `scoredFlightEndMs()` in ./gap-scoring reads it off a
+ *   resolved sequence.
  */
 export function computeLeadingAggregate(
   fixes: IGCFix[],
@@ -145,6 +151,7 @@ export function computeLeadingAggregate(
   pilotSSSTime: number | null,
   pilotESSTime: number | null,
   formula: LeadingFormula = 'weighted',
+  scanEndMs: number | null = null,
 ): LeadingAggregate {
   const invalid: LeadingAggregate = {
     valid: false, ssKm: 0, bestDistKm: 0,
@@ -160,8 +167,10 @@ export function computeLeadingAggregate(
     return invalid;
   }
 
-  // Optimized along-course distance from each turnpoint to ESS (meters).
-  const segs = getOptimizedSegmentDistances(task);
+  // Optimized along-course distance from each turnpoint to ESS (meters),
+  // on the §7.2 launchToESSPath — the speed section's own route, which a
+  // mid-route ESS separates from the task line.
+  const segs = getLaunchToESSSegmentDistances(task);
   const cumToESS: number[] = new Array(essIdx + 1).fill(0);
   for (let j = essIdx - 1; j >= 0; j--) {
     cumToESS[j] = cumToESS[j + 1] + segs[j];
@@ -178,10 +187,10 @@ export function computeLeadingAggregate(
   // spec's time origin; for weighted it keeps the summed terms small and is
   // rebased to the field's first start in combineLeadingCoefficient.
   const pilotSSSSec = pilotSSSTime / 1000;
-  const endTime = pilotESSTime ?? Infinity;
+  const endTime = Math.min(pilotESSTime ?? Infinity, scanEndMs ?? Infinity);
 
-  // §12.3.1/§12.2: in a gated race the leading clock starts at the first
-  // gate. An early ("jump the gun") starter's own SSS crossing precedes it,
+  // §12.3.1/§12.2: in a gated race or time trial the leading clock starts at
+  // the first gate. An early ("jump the gun") starter's own SSS crossing precedes it,
   // so once combineLeadingCoefficient rebases the sum to the gate their
   // pre-gate progress would contribute NEGATIVE time — driving their LC
   // below every honest leader's and, at LC ≤ 0, zeroing the whole field's
@@ -189,8 +198,7 @@ export function computeLeadingAggregate(
   // progress counts as happening at gate-open. Gates resolve from the task
   // alone (the pilot's own crossing just anchors them on the right day), so
   // this stays field-independent and cacheable.
-  const gates = resolveStartGates(task, pilotSSSTime);
-  const clockStartMs = gates ? gates[0] : -Infinity;
+  const clockStartMs = resolveStartOpen(task, pilotSSSTime) ?? -Infinity;
 
   let prevBestKm = ssKm; // best_dist_to_ess ratchet, starts at full SS length
   let weightedTimeSum = 0;
@@ -260,6 +268,8 @@ export function computeLeadingAggregate(
     valid: true, ssKm, bestDistKm,
     reachedESS: pilotESSTime !== null,
     pilotSSSMs: pilotSSSTime,
+    // The raw last fix, not clipped at scanEndMs: resolveLeadingMaxTime
+    // caps the field's maxTime at the deadline / stop itself, and says so.
     lastFixMs: fixes[fixes.length - 1].time.getTime(),
     weightedTimeSum, weightedDeltaSum, classicSum,
   };
@@ -273,7 +283,8 @@ export function computeLeadingAggregate(
 export interface LeadingFieldTimes {
   /**
    * The leading clock's origin (`firstTaskStartTime`): the first start gate
-   * in a gated race, otherwise the first SSS crossing in the field.
+   * in a gated race or the gate of a gated time trial, otherwise the first
+   * SSS crossing in the field.
    */
   firstStartMs: number;
   /** When the last pilot reached ESS, or null when nobody did. */
@@ -435,6 +446,8 @@ export function combineLeadingCoefficient(
  * @param pilotSSSTime - The pilot's own start time (ms), or null if no start
  * @param pilotESSTime - The pilot's ESS time (ms), or null if not reached
  * @param formula - 'weighted' (modern default) or 'classic'
+ * @param scanEndMs - The end of the scored flight, as for
+ *   {@link computeLeadingAggregate}
  * @returns Normalized leading coefficient (lower is better), or Infinity
  */
 export function calculateLeadingCoefficient(
@@ -446,8 +459,11 @@ export function calculateLeadingCoefficient(
   pilotSSSTime: number | null,
   pilotESSTime: number | null,
   formula: LeadingFormula = 'weighted',
+  scanEndMs: number | null = null,
 ): number {
-  const agg = computeLeadingAggregate(fixes, task, sequence, pilotSSSTime, pilotESSTime, formula);
+  const agg = computeLeadingAggregate(
+    fixes, task, sequence, pilotSSSTime, pilotESSTime, formula, scanEndMs,
+  );
   return combineLeadingCoefficient(agg, taskFirstSSSTime, taskMaxTime, formula);
 }
 

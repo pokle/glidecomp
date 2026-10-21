@@ -10,7 +10,8 @@
  * and measured on the ellipsoid (§7.1.5) — see route-optimizer.ts.
  *
  * This module owns what the route MEANS: which turnpoint is the launch,
- * where the ESS pins, how a goal cylinder or LINE terminates the route.
+ * where the speed section ends, how a goal cylinder or LINE terminates the
+ * route.
  * route-optimizer.ts owns how a route, once defined, is solved.
  *
  * @see /docs/optimized-task-line-spec.md - Full algorithm documentation
@@ -29,29 +30,11 @@ import {
 } from './route-optimizer';
 
 import type { XCTask, Turnpoint } from './xctsk-parser';
-import { getSSSIndex, getESSIndex } from './xctsk-parser';
+import { getSSSIndex, getEffectiveESSIndex } from './xctsk-parser';
 import { computeGoalLine, type GoalLine } from './goal-line';
 
 /** A geographic point in this module's (lat, lon) convention. */
 type LatLon = { lat: number; lon: number };
-
-/**
- * The ESS index the optimizer must pin (FAI S7F §7.2): "The end
- * of speed section is taken from its center position, so that its fix is
- * pinned to the preceding points, rather than any subsequent points at a
- * different position." Only an explicit mid-route ESS pins — an ESS at the
- * last turnpoint is already the route's destination and gets the same
- * nearest-point treatment there. -1 when nothing pins.
- *
- * The pin makes the task path's launch→ESS prefix equal the §7.2
- * launchToESSPath (its own shortest-path optimisation) by construction, so
- * slicing the task path at the ESS yields the spec's launch-to-ESS and
- * speed-section distances, and the task distance deliberately kinks at ESS.
- */
-function pinnedESSIndex(task: XCTask): number {
-  const essIdx = getESSIndex(task);
-  return essIdx > 0 && essIdx < task.turnpoints.length - 1 ? essIdx : -1;
-}
 
 const centre = (tp: Turnpoint): GeoPoint => ({ lat: tp.waypoint.lat, lon: tp.waypoint.lon });
 
@@ -66,8 +49,10 @@ const centre = (tp: Turnpoint): GeoPoint => ({ lat: tp.waypoint.lat, lon: tp.way
  *   `XCTask.firstTurnpointAtBoundary` directive), that first cylinder is
  *   added as a control zone so the path begins on its boundary; the centre
  *   start point is dropped from the result by the caller.
- * - A mid-route ESS is `pinned`: its path point is the nearest boundary
- *   point to the incoming leg, ignoring everything beyond (§7.2).
+ * - A mid-route ESS is an ordinary control zone (S7F 2026 §7.2). The 2024
+ *   edition pinned its tag to the incoming leg (Annex A §3.2.4); 2026 has
+ *   no such rule, and measures the speed section on its own route instead
+ *   — see {@link calculateLaunchToESSLine}.
  * - A CYLINDER goal terminates the route via `endPoint` at the goal
  *   CENTRE with the goal cylinder as the last control zone: the cylinder's
  *   path point then falls on the boundary nearest the incoming leg (the
@@ -79,7 +64,6 @@ function buildRoute(
   startPoint: GeoPoint,
   startCylinder: Turnpoint | null,
   turnpoints: Turnpoint[],
-  pinnedIdx: number,
   goalLine: GoalLine | null
 ): GeodesicRouteDefinition {
   const elements: GeodesicRouteElement[] = [];
@@ -92,7 +76,6 @@ function buildRoute(
       kind: 'cylinder',
       center: centre(turnpoints[i]),
       radius: turnpoints[i].radius,
-      pinned: i === pinnedIdx,
     });
   }
   const goal = turnpoints[n - 1];
@@ -121,7 +104,7 @@ function taskAreaProjection(task: XCTask): LtmProjection {
   const cached = projectionCache.get(task);
   if (cached && cached.key === key) return cached.projection;
   const tps = task.turnpoints;
-  const route = buildRoute(centre(tps[0]), null, tps.slice(1), pinnedESSIndex(task) - 1, null);
+  const route = buildRoute(centre(tps[0]), null, tps.slice(1), null);
   const areaCentre = findTaskAreaCentre(route);
   const projection = createLtmProjection(areaCentre.lat, areaCentre.lon);
   projectionCache.set(task, { key, projection });
@@ -141,9 +124,8 @@ function pathDistance(path: { lat: number; lon: number }[]): number {
  * The §9.3 remaining route from an arbitrary position: the shortest path
  * of the route {point(position), un-reached control zones…, goal},
  * optimised with the §7.1.8 RouteOptimizer exactly as the task line is —
- * the position is the route's start point, the un-reached turnpoints keep
- * their types (so a mid-route ESS still pins) and the goal keeps its
- * cylinder/LINE handling. The projection is the TASK's cached one: §7.1.6
+ * the position is the route's start point, the un-reached turnpoints are
+ * its control zones and the goal keeps its cylinder/LINE handling. The projection is the TASK's cached one: §7.1.6
  * fixes the task-area centre once per task, for all of its routes.
  *
  * This is the measurement behind a landed-out pilot's flown distance
@@ -166,16 +148,11 @@ export function optimizeRemainingRoute(
   const n = task.turnpoints.length;
   if (lastReachedIndex >= n - 1) return null;
   const remaining = task.turnpoints.slice(lastReachedIndex + 1);
-  // The ESS pins in the remaining route under the same rule as in the task:
-  // it must not be the route's terminal element (the position anchors the
-  // start, so an ESS anywhere in `remaining` but last pins).
-  const essIdx = remaining.findIndex((tp) => tp.type === 'ESS');
-  const pinnedIdx = essIdx >= 0 && essIdx < remaining.length - 1 ? essIdx : -1;
   // The goal line (when the task has one) is resolved from the TASK's own
   // final leg, never from the position-anchored route — re-deriving it here
   // would tilt the line toward the pilot.
   const goalLine = computeGoalLine(task);
-  const route = buildRoute(position, null, remaining, pinnedIdx, goalLine);
+  const route = buildRoute(position, null, remaining, goalLine);
   const { path } = routeOptimizer(route, taskAreaProjection(task));
   // Drop the synthetic endPoint (the goal centre) for a cylinder goal: the
   // line ends at the goal's boundary tag, as consumers expect.
@@ -206,9 +183,8 @@ function taskGeometryKey(task: XCTask): string {
  * Calculate the optimized task line with the §7.1.8 RouteOptimizer.
  *
  * Returns one point per turnpoint: the launch CENTRE first (§7.2), then
- * each cylinder's optimal tag point, with an explicit mid-route ESS pinned
- * to the incoming leg (§7.2) — see {@link pinnedESSIndex} — and the goal's
- * boundary tag (or goal-line tag) last.
+ * each cylinder's optimal tag point, and the goal's boundary tag (or
+ * goal-line tag) last.
  *
  * @param task The competition task with turnpoint cylinders
  * @returns Array of lat/lon coordinates representing the optimized path
@@ -238,13 +214,7 @@ function computeOptimizedTaskLine(task: XCTask, goalLine: GoalLine | null): LatL
   const tps = task.turnpoints;
   const first = tps[0];
   const boundaryStart = Boolean(task.firstTurnpointAtBoundary && first.radius > 0);
-  const route = buildRoute(
-    centre(first),
-    boundaryStart ? first : null,
-    tps.slice(1),
-    pinnedESSIndex(task) - 1,
-    goalLine,
-  );
+  const route = buildRoute(centre(first), boundaryStart ? first : null, tps.slice(1), goalLine);
   const { path } = routeOptimizer(route, taskAreaProjection(task));
   // path = [startPoint, one tag per element, endPoint?]. Reduce to one point
   // per turnpoint: the start centre (or, under the boundary directive, the
@@ -316,6 +286,63 @@ export function getOptimizedSegmentDistances(task: XCTask): number[] {
   return distances;
 }
 
+const launchToESSCache = new WeakMap<XCTask, { key: string; line: LatLon[] }>();
+
+/**
+ * The §7.2 `launchToESSPath`: the optimised route from launch to the end of
+ * the speed section, solved on its own — the route
+ * {launch, …, startOfSpeedSection, …, endOfSpeedSection, endOfSpeedSection.point}
+ * — rather than read off the task line. With a mid-route ESS the two differ:
+ * the task line's ESS tag also leans toward the turnpoints after it, which
+ * the speed section never flies. One point per turnpoint up to and
+ * including the ESS (its boundary tag last), on the task's §7.1.6 centre.
+ *
+ * When the ESS is the goal (or the task declares none), this IS the task
+ * line, and is returned as such.
+ */
+export function calculateLaunchToESSLine(task: XCTask): LatLon[] {
+  const essIdx = getEffectiveESSIndex(task);
+  const n = task.turnpoints.length;
+  if (essIdx < 0 || essIdx >= n - 1) return calculateOptimizedTaskLine(task);
+  if (essIdx === 0) return calculateOptimizedTaskLine(task).slice(0, 1);
+
+  const key = taskGeometryKey(task);
+  const cached = launchToESSCache.get(task);
+  if (cached && cached.key === key) return cached.line;
+
+  const tps = task.turnpoints;
+  const first = tps[0];
+  const boundaryStart = Boolean(task.firstTurnpointAtBoundary && first.radius > 0);
+  // The ESS ends the route as a cylinder goal does: the route runs to its
+  // centre through its cylinder, which puts its tag on the boundary nearest
+  // the incoming leg; the synthetic centre is dropped.
+  const route = buildRoute(
+    centre(first), boundaryStart ? first : null, tps.slice(1, essIdx + 1), null,
+  );
+  const { path } = routeOptimizer(route, taskAreaProjection(task));
+  const tags = path.slice(1, -1);
+  const line = boundaryStart ? tags : [path[0], ...tags];
+  launchToESSCache.set(task, { key, line });
+  return line;
+}
+
+/**
+ * Segment distances (metres) along {@link calculateLaunchToESSLine}, one per
+ * leg up to the ESS. Their sum is the §7.2 `launchToESSDistance`; the legs
+ * from the SSS onward sum to the `speedSectionDistance`, and those before it
+ * to the `preSpeedSectionDistance`.
+ */
+export function getLaunchToESSSegmentDistances(task: XCTask): number[] {
+  const path = calculateLaunchToESSLine(task);
+  const distances: number[] = [];
+  for (let i = 1; i < path.length; i++) {
+    distances.push(
+      ellipsoidDistance(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon)
+    );
+  }
+  return distances;
+}
+
 /** Which way a pilot must cross a turnpoint cylinder's boundary. */
 export type TurnpointDirection = 'enter' | 'exit';
 
@@ -339,8 +366,11 @@ export type TurnpointDirection = 'enter' | 'exit';
  *
  * Two positions use conventions instead of inference:
  * - The SSS keeps its declared direction (`task.sss.direction`) — pilots
- *   cross the start cylinder both ways while waiting for the gate, and the
- *   declaration says which crossings arm the start.
+ *   cross the start cylinder both ways while waiting for the gate, so the
+ *   route alone can't say which way the task setter meant. The declaration
+ *   only picks the edge of the tolerance band a start is detected at; it
+ *   no longer decides which crossings count (S7F 2026 §6.2.1 — every
+ *   crossing does, see collectStartCrossings in turnpoint-sequence.ts).
  * - The goal (last turnpoint) is always ENTER: it is a destination, not a
  *   gate — presence inside finishes the task even when the previous
  *   turnpoint is nested inside the goal ring.

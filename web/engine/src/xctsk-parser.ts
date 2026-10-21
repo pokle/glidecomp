@@ -295,7 +295,11 @@ function parseV2(data: Record<string, unknown>): XCTask {
     const s = data.s as Record<string, unknown>;
     task.sss = {
       type: s.t === 1 ? 'RACE' : 'ELAPSED-TIME',
-      direction: s.d === 1 ? 'ENTER' : 'EXIT',
+      // XCTrack codes d as 1 = ENTER, 2 = EXIT, and marks it obsolete. An
+      // absent d is undeclared: read it as ENTER, as v1 reads a missing
+      // `direction`, so the same task means the same in both formats. (The
+      // direction never binds pilots — S7F 2026 §6.2.1.)
+      direction: s.d === 2 ? 'EXIT' : 'ENTER',
       timeGates: Array.isArray(s.g) ? s.g as string[] : undefined,
     };
   }

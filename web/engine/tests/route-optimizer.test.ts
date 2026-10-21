@@ -281,3 +281,48 @@ describe('ProjectionCorrection (§7.1.7)', () => {
     }
   });
 });
+
+describe('identical consecutive cylinders', () => {
+  // Block coordinate descent deadlocks two identical cylinders solved
+  // separately: each one's optimum, with the other held at the same spot, is
+  // the degenerate tie-break (due east). They are one control zone.
+  it('corryong-cup-2026-floater-t2: an ESS on the goal cylinder costs nothing', () => {
+    const task = parseXCTask(readFileSync(
+      resolve(__dirname, '../../samples/comps/corryong-cup-2026-floater-t2/task.xctsk'), 'utf-8',
+    ));
+    const essIdx = task.turnpoints.findIndex(tp => tp.type === 'ESS');
+    expect(essIdx).toBe(task.turnpoints.length - 2);
+    const untyped: XCTask = {
+      ...task,
+      turnpoints: task.turnpoints.map((tp, i) => (i === essIdx ? { ...tp, type: undefined } : tp)),
+    };
+    const distance = (t: XCTask) => {
+      const line = calculateOptimizedTaskLine(t);
+      let d = 0;
+      for (let i = 1; i < line.length; i++) {
+        d += ellipsoidDistance(line[i - 1].lat, line[i - 1].lon, line[i].lat, line[i].lon);
+      }
+      return d;
+    };
+    // Was 20 237 m before the merge.
+    expect(distance(untyped)).toBeCloseTo(19472.7, 0);
+    expect(distance(task)).toBeCloseTo(19472.7, 0);
+  });
+
+  it('share one tag', () => {
+    const a = { lat: -36.0, lon: 147.0 };
+    const c = destinationPoint(a.lat, a.lon, 20000, Math.PI / 4);
+    const route: GeodesicRouteDefinition = {
+      startPoint: a,
+      elements: [
+        { kind: 'cylinder', center: c, radius: 2000 },
+        { kind: 'cylinder', center: c, radius: 2000 },
+      ],
+      endPoint: destinationPoint(c.lat, c.lon, 15000, Math.PI),
+    };
+    const merged: GeodesicRouteDefinition = { ...route, elements: route.elements.slice(1) };
+    const { path, distance } = routeOptimizer(route, createLtmProjection(c.lat, c.lon));
+    expect(path[1]).toEqual(path[2]);
+    expect(distance).toBeCloseTo(routeOptimizer(merged, createLtmProjection(c.lat, c.lon)).distance, 6);
+  });
+});

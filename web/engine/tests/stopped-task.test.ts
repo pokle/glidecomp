@@ -670,3 +670,78 @@ describe('scoreTask — stopped multi-gate race (§13.4.4)', () => {
     expect(p2.turnpointResult.stopInfo!.windowEnd.getTime()).toBe(msAfterBase(35));
   });
 });
+
+describe('scoreTask — stopped task: leading points end at the stop (§13.4.5)', () => {
+  // Two pilots fly the same line up to the stop (10:15); only B keeps flying
+  // after it and reaches the ESS at ~10:15.5. Nothing after the stop may earn
+  // points, so their leading coefficients and points must be identical.
+  const field = (): PilotFlight[] => [
+    { pilotName: 'Fast', trackFile: 'fast.igc', fixes: makeTrack({ degPerMin: 0.008, minutes: 14 }) },
+    { pilotName: 'A', trackFile: 'a.igc', fixes: makeTrack({ degPerMin: 0.003, minutes: 15 }) },
+    { pilotName: 'B', trackFile: 'b.igc', fixes: makeTrack({ degPerMin: 0.003, minutes: 22 }) },
+  ];
+
+  for (const scoring of ['PG', 'HG'] as const) {
+    it(`${scoring}: flying after the stop does not change the leading coefficient`, () => {
+      const result = scoreTask(
+        makeTask(), field(), { scoring, nominalTime: 1200, useLeading: true }, undefined,
+        // HG's score-back is 15 min, PG's 5 min: both put the stop at 10:15.
+        { stopAnnouncementMs: msAfterBase(scoring === 'HG' ? 30 : 20) },
+      );
+      expect(result.stopped!.stopTimeMs).toBe(msAfterBase(15));
+      const a = result.pilotScores.find(p => p.trackFile === 'a.igc')!;
+      const b = result.pilotScores.find(p => p.trackFile === 'b.igc')!;
+      expect(b.reachedESS).toBe(false);
+      expect(Number.isFinite(a.leadingCoefficient)).toBe(true);
+      expect(b.leadingCoefficient).toBeCloseTo(a.leadingCoefficient, 9);
+      expect(b.leadingPoints).toBeCloseTo(a.leadingPoints, 9);
+    });
+  }
+  it('the goal deadline clips the leading scan the same way (§12.3.1)', () => {
+    const task: XCTask = { ...makeTask(), goal: { type: 'CYLINDER', deadline: '10:15:00Z' } };
+    const result = scoreTask(task, field(), { scoring: 'PG', nominalTime: 1200, useLeading: true });
+    const a = result.pilotScores.find(p => p.trackFile === 'a.igc')!;
+    const b = result.pilotScores.find(p => p.trackFile === 'b.igc')!;
+    expect(b.reachedESS).toBe(false);
+    expect(b.leadingCoefficient).toBeCloseTo(a.leadingCoefficient, 9);
+  });
+});
+
+describe('resolveTurnpointSequence with a stop — "flying at stop" is decided from the landing', () => {
+  // HG pilot flies north for 20 minutes, gliding 1500 m → 1300 m, then lands
+  // in a field 300 m above the 1000 m goal. The stop is at 10:30.
+  const stop = {
+    stopTimeMs: msAfterBase(30),
+    glideRatio: stoppedGlideRatio('HG'),
+    goalAltitude: 1000,
+  };
+  /** One fix every 10 s; after `landMin` the logger sits in the field until `endMin`. */
+  function landedTrack(landMin: number, endMin: number): IGCFix[] {
+    const fixes: IGCFix[] = [];
+    for (let s = 0; s <= endMin * 60; s += 10) {
+      const flying = Math.min(s, landMin * 60) / 60;
+      fixes.push(createFix(s, 46.995 + flying * 0.002, 8.0, 1500 - flying * 10));
+    }
+    return fixes;
+  }
+
+  it('a logger left running on the ground earns no altitude bonus', () => {
+    const loggerOff = resolveTurnpointSequence(makeTask(), landedTrack(20, 20), { stop });
+    const loggerOn = resolveTurnpointSequence(makeTask(), landedTrack(20, 40), { stop });
+    expect(loggerOff.stopInfo!.flyingAtStop).toBe(false);
+    expect(loggerOn.stopInfo!.flyingAtStop).toBe(false);
+    expect(loggerOn.stopInfo!.altitudeBonus).toBe(0);
+    expect(loggerOn.flownDistance).toBeCloseTo(loggerOff.flownDistance, 6);
+  });
+
+  it('a pilot who lands after the stop is still flying at it', () => {
+    const result = resolveTurnpointSequence(makeTask(), landedTrack(35, 40), { stop });
+    expect(result.stopInfo!.flyingAtStop).toBe(true);
+    expect(result.stopInfo!.altitudeBonus).toBeGreaterThan(0);
+  });
+
+  it('a track that ends airborne past the stop is flying at it', () => {
+    const result = resolveTurnpointSequence(makeTask(), landedTrack(40, 40), { stop });
+    expect(result.stopInfo!.flyingAtStop).toBe(true);
+  });
+});

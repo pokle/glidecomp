@@ -11,6 +11,8 @@ import {
   parseTimeOfDayUTC,
   resolveTimeOfDayNear,
   resolveStartGates,
+  resolveTimeTrialGate,
+  resolveStartOpen,
   gateIndexForCrossing,
 } from '../src/time-gates';
 import {
@@ -107,6 +109,33 @@ describe('resolveStartGates', () => {
     // ...but keeps a midnight gate that sits among real ones.
     expect(resolveStartGates(raceTask(['00:00:00Z', '00:15:00Z']), Date.parse('2024-01-15T00:10:00Z')))
       .toHaveLength(2);
+  });
+});
+
+describe('resolveTimeTrialGate / resolveStartOpen (§6.3.2)', () => {
+  const ref = Date.parse('2024-01-15T10:00:00Z');
+
+  it('a time trial has one gate; a race has none here', () => {
+    expect(resolveTimeTrialGate(raceTask(['10:30:00Z'], 'ELAPSED-TIME'), ref))
+      .toBe(Date.parse('2024-01-15T10:30:00Z'));
+    expect(resolveTimeTrialGate(raceTask(['10:30:00Z']), ref)).toBeNull();
+    // A file listing several: the first opens the start.
+    expect(resolveTimeTrialGate(raceTask(['10:45:00Z', '10:30:00Z'], 'ELAPSED-TIME'), ref))
+      .toBe(Date.parse('2024-01-15T10:30:00Z'));
+  });
+
+  it('applies the same no-gates rules as a race', () => {
+    for (const gates of [undefined, [], ['bogus'], ['00:00:00Z']]) {
+      expect(resolveTimeTrialGate(raceTask(gates, 'ELAPSED-TIME'), ref)).toBeNull();
+    }
+  });
+
+  it('the start opens at the first race gate or the time-trial gate', () => {
+    expect(resolveStartOpen(raceTask(['10:45:00Z', '10:30:00Z']), ref))
+      .toBe(Date.parse('2024-01-15T10:30:00Z'));
+    expect(resolveStartOpen(raceTask(['10:30:00Z'], 'ELAPSED-TIME'), ref))
+      .toBe(Date.parse('2024-01-15T10:30:00Z'));
+    expect(resolveStartOpen(raceTask(undefined, 'ELAPSED-TIME'), ref)).toBeNull();
   });
 });
 
@@ -222,14 +251,34 @@ describe('resolveTurnpointSequence with start gates', () => {
     );
   });
 
-  it('leaves elapsed-time tasks on the actual-crossing clock', () => {
+  it('leaves time-trial tasks on the actual-crossing clock', () => {
     const result = resolveTurnpointSequence(
       gatedTask({ type: 'ELAPSED-TIME' }), flightExitingAt(40),
     );
     expect(result.startGate).toBeUndefined();
+    expect(result.earlyStart).toBeUndefined();
     expect(result.speedSectionTime).toBeCloseTo(
       (result.essReaching!.time.getTime() - result.sssReaching!.time.getTime()) / 1000, 3,
     );
+  });
+
+  it('a time trial: a crossing before its gate is an early start (§6.3.2, §13.3)', () => {
+    const task = gatedTask({ type: 'ELAPSED-TIME', timeGates: ['10:30:00Z'] });
+    const result = resolveTurnpointSequence(task, flightExitingAt(20));
+    expect(result.earlyStart).toBeDefined();
+    expect(result.earlyStart!.firstGateTime.getTime()).toBe(gate1);
+    expect(result.earlyStart!.secondsEarly).toBeGreaterThan(500);
+    expect(result.earlyStart!.secondsEarly).toBeLessThan(700);
+    // Like an early racer, the clock is anchored to the gate.
+    expect(result.startGate!.time.getTime()).toBe(gate1);
+  });
+
+  it('a time trial: a pre-gate crossing is ignored when a later start exists', () => {
+    const task = gatedTask({ type: 'ELAPSED-TIME', timeGates: ['10:30:00Z'] });
+    const result = resolveTurnpointSequence(task, flightExitingAt(20, 50));
+    expect(result.earlyStart).toBeUndefined();
+    expect(result.startGate).toBeUndefined();
+    expect(result.sssReaching!.time.getTime()).toBeGreaterThan(gate2);
   });
 
   it('leaves races without usable gates on the actual-crossing clock', () => {
@@ -443,5 +492,32 @@ describe('early starter leading coefficient (§12.3.1)', () => {
     expect(honest.leadingCoefficient).toBeGreaterThan(0);
     const bestLeading = Math.max(...result.pilotScores.map(p => p.leadingPoints));
     expect(bestLeading).toBeGreaterThan(0);
+  });
+});
+
+describe('time trial: gate validates starts and anchors the leading clock (§6.3.2, §12.3.1)', () => {
+  const ttTask = gatedTask({ type: 'ELAPSED-TIME', timeGates: ['10:30:00Z'] });
+  const params = {
+    scoring: 'HG' as const, useLeading: true, useDistanceDifficulty: false,
+    nominalDistance: 8000, minimumDistance: 1000, nominalTime: 600,
+  };
+
+  it('a pilot who leaves before the gate is a jump-the-gun, not a valid start', () => {
+    const result = scoreTask(ttTask, [
+      { pilotName: 'Early', trackFile: 'early.igc', fixes: flightExitingAt(25) },
+      { pilotName: 'Honest', trackFile: 'honest.igc', fixes: flightExitingAt(40) },
+    ], params);
+    const early = result.pilotScores.find(p => p.trackFile === 'early.igc')!;
+    const honest = result.pilotScores.find(p => p.trackFile === 'honest.igc')!;
+    expect(early.earlyStartOutcome).toBeDefined();
+    expect(honest.earlyStartOutcome).toBeUndefined();
+  });
+
+  it('the leading clock starts at the gate, not the first crossing', () => {
+    const result = scoreTask(ttTask, [
+      { pilotName: 'A', trackFile: 'a.igc', fixes: flightExitingAt(40) },
+      { pilotName: 'B', trackFile: 'b.igc', fixes: flightExitingAt(50) },
+    ], params);
+    expect(result.leadingTimes!.firstStartMs).toBe(gate1);
   });
 });

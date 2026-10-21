@@ -46,8 +46,8 @@ set, split across two modules:
   extended to line control zones per Annex B, §7.1.6 FindTaskAreaCentre,
   §7.1.7 ProjectionCorrection and the composed §7.1.8 RouteOptimizer.
 - **`web/engine/src/task-optimizer.ts`** — what a task's route MEANS: which
-  point is the launch, where the ESS pins, how a cylinder or LINE goal
-  terminates the route. It builds the §7.1.1 route definition and hands it to
+  point is the launch, where the speed section ends, how a cylinder or LINE
+  goal terminates the route. It builds the §7.1.1 route definition and hands it to
   RouteOptimizer.
 
 The pipeline per route: project every control zone into a Cartesian plane
@@ -66,7 +66,7 @@ by a coarse angular scan plus golden-section refinement — the closed-form PCP
 quartic is not used, the paper's own printed coefficients being unreliable;
 the minimum is the same point).
 
-Three placements are fixed by rule rather than searched (FAI S7F §7.2):
+Two placements are fixed by rule rather than searched (FAI S7F §7.2):
 
 **First turnpoint (launch):** the turnpoint's **centre**, whatever its type or
 radius — Annex A §2.2: "the distance is measured from the center of the launch
@@ -77,16 +77,23 @@ exception is the trimmed task behind `distanceOrigin: 'start'`
 (`XCTask.firstTurnpointAtBoundary`), whose scored distance begins at the start
 crossing, so its first turnpoint keeps the boundary measurement.
 
-**Mid-route ESS:** pinned to the incoming leg — Annex A §3.2.4: the ESS fix is
-the nearest boundary point toward the previous optimised point, never dragged
-toward goal. The task path deliberately kinks at ESS, which makes its
-launch→ESS prefix equal the §6.4.2 `launchToESSPath` (a standalone
-optimisation) by construction — so slicing the task path at the ESS yields the
-spec's launch-to-ESS and speed-section distances.
-
 **Last turnpoint (goal):** the nearest boundary point toward the previous
 optimised point (constructed from the goal centre's bearing to it), or the
 closest point on a LINE goal.
+
+**Mid-route ESS:** an ordinary control zone of the task route (S7F 2026 §7.2).
+The 2024 edition pinned it to the incoming leg (Annex A §3.2.4), which made the
+task path's launch→ESS prefix equal the `launchToESSPath`; 2026 removed the pin
+and defines the speed section on its own route instead.
+`calculateLaunchToESSLine()` / `getLaunchToESSSegmentDistances()` solve that
+route — launch to the ESS, with the ESS terminating it like a cylinder goal —
+and the speed-section length (leading points) and launch→ESS distance
+(stopped-task validity) are read from it, never from the task line.
+
+**Identical consecutive cylinders** (an ESS on the goal cylinder) are merged
+into one control zone before PathFinder runs and share its tag: solved
+separately, the block-coordinate sweep deadlocks them on the degenerate
+tie-break point.
 
 **Crossed cylinders:** when the prev→next leg passes straight through a
 cylinder, every chord point ties on distance; §7.1.3 places the tag at the
@@ -183,8 +190,8 @@ export function getOptimizedSegmentDistances(
 /**
  * The FAI S7F §8.6.1 remaining route from an arbitrary position: the
  * shortest path of {point(position), un-reached zones…, goal}, optimised
- * with the same §6.4.1 algorithm (ESS pin included, goal line taken from
- * the TASK's final leg). Behind a landed-out pilot's flown distance
+ * with the same §6.4.1 algorithm (goal line taken from the TASK's final
+ * leg). Behind a landed-out pilot's flown distance
  * (taskDistance − remaining) and a manual flight's made-good distance.
  */
 export function optimizeRemainingRoute(
@@ -248,7 +255,7 @@ position, but the task's cached projection) are not cached.
 Tests are in `web/engine/tests/task-optimizer.test.ts`, with the S7F §6.4
 rules covered by three dedicated files:
 
-- `spec-distances.test.ts` — the launch-centre rule, the ESS pin and the
+- `spec-distances.test.ts` — the launch-centre rule, the mid-route ESS and the
   concentric-ENTER-start out-and-back route against three curated archive
   fixtures (`tests/fixtures/*.xctsk`), asserting AirScore's published
   per-waypoint cumulative distances.
@@ -282,6 +289,17 @@ rules covered by three dedicated files:
 - **Andoyer-Lambert Formula**: WGS84 ellipsoid distance approximation (~2 ppm accuracy vs Vincenty)
 
 ## Change Log
+
+### 2026-10-21: Mid-route ESS no longer pinned (S7F 2026 §7.2)
+- The 2024 Annex A §3.2.4 ESS pin is gone: a mid-route ESS is an ordinary
+  control zone of the task route and of every pilot's remaining route
+- The speed section is measured on its own launch→ESS route
+  (`calculateLaunchToESSLine`), which leading points and stopped-task
+  validity read
+- Identical consecutive cylinders are merged before PathFinder runs
+- Task distances on tasks with a mid-route ESS drop by the pin's excess
+  (+150 m to +627 m on the bundled tasks) — see
+  `web/engine/scoring-changes/057-mid-route-ess-unpinned.md`
 
 ### 2026-08-10: S7F 2026 §7.1 PathFinder route optimisation (issue #599)
 - Adopted the 2026 edition's normative algorithm set in
