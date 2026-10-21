@@ -348,6 +348,14 @@ Cross-package needs (shared thermals for P1+P4, grid for P4+P5, working band for
 | Site guide & **cross-comp pilot profile** surfaces | Cross-comp + UI | Both of the above |
 | Horserace as a visual animation | CLI is text; the table ships now (#21) | UI surface (would make a great task-page feature) |
 
+*Cross-year note (2026-10-22, #602):* the cross-comp rows above span years,
+and GlideComp rescores every year under the current S7F edition. What that
+buys is one constant measuring instrument across years — not scores
+comparable across years: pilots flew to their own edition's incentives. When
+these surfaces are built, describe them that way, and prefer the
+formula-independent metrics (climb, glide, gaggle) for trajectories; a
+trajectory of GAP points or GAP rank must carry the edition caveat.
+
 *Naming note:* that deferred row originally read "pilot report card". It is a
 **cross-comp pilot profile** — a pilot's behavioural history across every comp
 they've flown. It is not the per-task GAP explainer at
