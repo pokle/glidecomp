@@ -199,3 +199,54 @@ describe('Thermal entry/exit event coordinates', () => {
     expect(entry!.latitude).not.toBe(exit!.latitude);
   });
 });
+
+describe('detectFlight stops at the landing (engine review 2026-10-20, 4.1)', () => {
+  /** Takeoff, a 10-minute straight glide, landing. */
+  function flight(): IGCFix[] {
+    const fixes: IGCFix[] = [];
+    for (let i = 0; i < 10; i++) fixes.push(createFix(i, 47.0, 11.0, 1500));
+    for (let i = 0; i < 120; i++) {
+      fixes.push(createFix(10 + i * 5, 47.0 + i * 0.0006, 11.0 + i * 0.0006, 1500 - i * 6));
+    }
+    return fixes;
+  }
+
+  /** The flight, then 25 minutes on the ground at 1 Hz with GPS jitter that
+   * wanders in small loops — the shape that used to read as circling. */
+  function flightWithGroundTail(): IGCFix[] {
+    const fixes = flight();
+    const last = fixes[fixes.length - 1];
+    const t0 = (last.time.getTime() - fixes[0].time.getTime()) / 1000;
+    for (let s = 1; s <= 25 * 60; s++) {
+      const a = (s / 20) * 2 * Math.PI;
+      fixes.push(
+        createFix(t0 + s, last.latitude + 0.00001 * Math.sin(a), last.longitude + 0.00001 * Math.cos(a), 786)
+      );
+    }
+    return fixes;
+  }
+
+  it('reports nothing after the landing it detects', () => {
+    const fixes = flightWithGroundTail();
+    const { events } = detectFlight(fixes);
+    const landing = events.find((e) => e.type === 'landing');
+    expect(landing).toBeDefined();
+    const after = events.filter(
+      (e) => e.type !== 'landing' && e.time.getTime() > landing!.time.getTime()
+    );
+    expect(after).toEqual([]);
+    // Unsliced, the 25 minutes of jitter loops read as ~75 circles.
+    expect(events.filter((e) => e.type === 'circle_complete').length).toBeLessThanOrEqual(1);
+  });
+
+  it('ends the last glide at the landing, not at the end of the file', () => {
+    const fixes = flightWithGroundTail();
+    const { events, segments } = detectFlight(fixes);
+    const landing = events.find((e) => e.type === 'landing')!;
+    for (const g of segments.glides) {
+      expect(g.endTime.getTime()).toBeLessThanOrEqual(landing.time.getTime());
+    }
+    // ~10 minutes of flying, not 35 minutes of flying and sitting.
+    expect(Math.max(...segments.glides.map((g) => g.duration))).toBeLessThan(15 * 60);
+  });
+});
