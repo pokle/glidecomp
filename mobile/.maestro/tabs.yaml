@@ -15,8 +15,9 @@ appId: com.glidecomp.app.dev
 - tapOn: "My flights"
 # Signed out it offers Sign in; signed in, the competition flights and the
 # account's library (stage 6).
-- assertVisible:
-    id: "my-flights"
+# (An iOS grouped list is a SwiftUI Form and exposes no testID of its own,
+# so this asserts the screen's words.)
+- assertVisible: "Sign in to see your competition flights.*|Competition flights|Tracks|Tasks"
 - takeScreenshot: my-flights
 
 - tapOn: "Me"
