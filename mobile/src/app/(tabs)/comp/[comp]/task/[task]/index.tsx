@@ -106,6 +106,13 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
         ) : (
           <Note>Route not set yet.</Note>
         )}
+        {comp?.is_admin ? (
+          <Row
+            testID="edit-route"
+            title={task.xctsk ? 'Edit route' : 'Set the route'}
+            onPress={go(`${base}/route-edit`)}
+          />
+        ) : null}
       </Group>
 
       <Group title="The day">

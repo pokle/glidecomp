@@ -1,7 +1,7 @@
 # Native iOS and Android app — implementation plan
 
 Date: 2026-10-05
-Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stage 6 in review.
+Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stages 6 and 7 in review.
 Implementation happens on the owner's Mac.
 
 Builds the app described in
@@ -644,6 +644,42 @@ phone — the IA's Q7, Q8 and Q10.
   apply a penalty, upload on someone's behalf, recompute — all from the phone.
 - Every one of those appears in Activity as a readable sentence.
 - Two people (organiser and pilot) on two phones see the changes arrive.
+
+**As built (2026-10-22).** Where stage 7 departs from the list above:
+
+- **The website's organiser logic moved to `@glidecomp/client`, not copied**,
+  as stage 3's report card did: the roster CSV (`roster-csv`) and CIVL fill
+  rules (`civl-rankings`), the route editor's rows, validation and stored
+  shape (`route-editor`, `turnpoint-draft`, `quick-task`), Check altitudes'
+  verdicts (`altitude-check`), the Terrain-RGB decoder (`terrain-elevation`,
+  with the inflater passed in — fflate on the phone), the comp form fields
+  (`comp-fields`) and the Scoring settings form's values, reset and PATCH body
+  (`scoring-settings`). The website's old module paths re-export them, and its
+  ScoringSettings now saves through the shared mapping.
+- **One new assembly function**, `assembleRouteTask`, is the website
+  RouteEditor's save without its toasts; the app's route editor saves through
+  it. The website's editor still assembles inline — moving it onto the shared
+  function is a follow-up, not part of this stage.
+- **The route editor is a list of turnpoints with a sheet each**, the draft
+  drawn on the report card's map above it, and the start and goal below.
+  Quick entry, file import and XContest codes stay on the website.
+- **Waypoints gained Upload a waypoint file and Check altitudes**, not a
+  per-waypoint editor: the plan named Check altitudes; editing a single
+  waypoint stays on the website. Check altitudes needs signal (it reads
+  Mapbox terrain tiles); everything else here works from the phone's cache
+  and writes when there is signal.
+- **Pilots & tracks** lists the pilots of the task's classes, needing
+  attention first (no track, or a track a hard data-quality check withheld,
+  read from the published scores). State is a line of text, not yet the IA's
+  coloured glyph. Upload on behalf opens the Submit sheet with the pilot
+  chosen.
+- **The organiser's notes** are migration 0037: a `comp.organiser_notes`
+  column edited through the existing comp PATCH (so the same audit field
+  table, with an excerpt like the weather notes; no score bump), shown on the
+  comp view in the app and under the organiser line on the website's comp
+  page. Editing them on the website is a follow-up.
+- **Recompute scores** is a row in the comp view's Organiser group, beside
+  Add task and Organiser's notes.
 
 ---
 

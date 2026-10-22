@@ -13,7 +13,7 @@ import {
   type PatchFieldTable,
 } from "../lib/patch-fields";
 import type { z } from "zod";
-import { audit, auditAll, describeChange } from "../audit";
+import { audit, auditAll, describeChange, excerpt } from "../audit";
 import { bumpAndRevalidateScores, taskIdsForComp } from "../score-store";
 import { speedSectionTypeWarnings, hasLineGoal, taskRouteSummary } from "../xctsk-summary";
 import {
@@ -275,6 +275,7 @@ function serializeComp(alphabet: string, row: Record<string, unknown>) {
     ftv_factor: (row.ftv_factor as number | null) ?? null,
     open_igc_upload: !!(row.open_igc_upload as number),
     open_registration: !!(row.open_registration as number),
+    organiser_notes: (row.organiser_notes as string | null) ?? "",
   };
 }
 
@@ -417,6 +418,18 @@ function compFieldTable(
         now
           ? "Enabled open registration (a pilot joins by uploading a track)"
           : "Disabled open registration (only an admin can add pilots)",
+    },
+    // Like the task's weather notes: the audit line quotes an excerpt, and
+    // notes never bump scores — no score reads them.
+    organiser_notes: {
+      column: "organiser_notes",
+      fromDb: (v) => (v as string | null) ?? "",
+      describe: (was, now) => {
+        const text = (now as string).trim();
+        if (text.length === 0) return "Cleared the organiser's notes";
+        const had = (was as string).trim().length > 0;
+        return `${had ? "Updated" : "Added"} the organiser's notes: "${excerpt(text)}"`;
+      },
     },
   };
 }
@@ -671,7 +684,7 @@ export const compRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, settings_reviewed
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, organiser_notes, settings_reviewed
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -801,7 +814,7 @@ export const compRoutes = new Hono<AuthedEnv>()
       // The pre-update row: what the audit diffs compare against, and what
       // the consistency check below reads for the fields the body omits.
       const current = await c.env.DB.prepare(
-        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration
+        `SELECT name, category, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, organiser_notes
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -934,7 +947,7 @@ export const compRoutes = new Hono<AuthedEnv>()
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration
+        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, organiser_notes
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)

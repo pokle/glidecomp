@@ -4,11 +4,12 @@
  * website's read-only WaypointList — coordinates, altitude, radius — so the
  * two lists read alike.
  */
+import { formatCoords as coordsText } from '@glidecomp/client/route-editor';
 import { formatAltitude, formatCylinderRadius, type UnitPreferences, type WaypointFileRecord } from '@glidecomp/engine';
 
 /** "lat, lon" to six places: the coordinates as the website prints and filters them. */
 export function formatCoords(w: Pick<WaypointFileRecord, 'latitude' | 'longitude'>): string {
-  return `${w.latitude.toFixed(6)}, ${w.longitude.toFixed(6)}`;
+  return coordsText(w.latitude, w.longitude);
 }
 
 /** Case-insensitive substring match across code, name and coordinates. */

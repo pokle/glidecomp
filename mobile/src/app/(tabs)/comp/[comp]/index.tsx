@@ -18,14 +18,15 @@ import {
 } from '@glidecomp/client/slug';
 import type { CompDetailData } from '@glidecomp/client/types';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 
 import { useComp, useCompScores, useRegistrations } from '@/api/queries';
 import { useUserId } from '@/auth/session';
 import { findSeriesPilot } from '@/lib/yours';
 import { wingLabel } from '@/lib/labels';
 import { groupTasksByDay } from '@/lib/task-days';
-import { GroupedList, Group, Note, Row } from '@/ui/grouped-list';
+import { rescoreComp, writeErrorText } from '@/api/organiser';
+import { ActionRow, GroupedList, Group, Note, Row } from '@/ui/grouped-list';
 import { QueryGate, StaleBanner } from '@/ui/QueryStates';
 
 export default function CompScreen() {
@@ -75,6 +76,9 @@ function CompBody({ comp }: { comp: CompDetailData }) {
         {comp.test && comp.is_admin ? (
           <Row title="Hidden" detail="Only this competition’s organisers can see it." />
         ) : null}
+        {comp.organiser_notes?.trim() ? (
+          <Row testID="organiser-notes" title="Organiser’s notes" detail={comp.organiser_notes.trim()} />
+        ) : null}
       </Group>
 
       {/* The reader's own entry. Inline, not a component: Android's list
@@ -121,6 +125,21 @@ function CompBody({ comp }: { comp: CompDetailData }) {
         ))
       )}
 
+      {/* The organiser's day, from the hill (stage 7). Hidden, not disabled,
+          for everyone else. */}
+      {comp.is_admin ? (
+        <Group title="Organiser" testID="comp-organiser">
+          <Row testID="add-task" title="Add task" onPress={go(`${compPath(comp.comp_id, comp.name)}/task/new`)} />
+          <Row
+            testID="edit-organiser-notes"
+            title="Organiser’s notes"
+            detail={comp.organiser_notes?.trim() ? 'Edit the notes on this competition' : 'Add a note for every pilot'}
+            onPress={go(`${compPath(comp.comp_id, comp.name)}/notes`)}
+          />
+          <ActionRow testID="recompute-scores" title="Recompute scores" onPress={() => void recompute(comp)} />
+        </Group>
+      ) : null}
+
       <Group title="Results">
         <Row title="Scores" onPress={go(compScoresPath(comp.comp_id, comp.name))} />
         <Row title="Analysis" onPress={go(compAnalysisPath(comp.comp_id, comp.name))} />
@@ -147,4 +166,18 @@ function CompBody({ comp }: { comp: CompDetailData }) {
       </Group>
     </GroupedList>
   );
+}
+
+/**
+ * Recompute scores: what the website's Recompute does. The server marks every
+ * task stale and re-scores in the background; Scores shows the new numbers
+ * when they land.
+ */
+async function recompute(comp: CompDetailData) {
+  try {
+    await rescoreComp(comp.comp_id);
+    Alert.alert('Recomputing scores', 'Every task is being scored again. Scores updates when it’s done.');
+  } catch (err) {
+    Alert.alert('Couldn’t recompute', writeErrorText(err));
+  }
 }

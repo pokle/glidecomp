@@ -8,6 +8,7 @@
  * sub-page: it is an action, not a setting, and burying it a level down
  * would only make it easier to press by accident next to a Save button.
  */
+import { accessSummary, scoringSummary } from "@glidecomp/client/scoring-settings";
 import { useNavigate } from "react-router-dom";
 import { NavActionRow, NavList, NavRow } from "@/react/rac/nav-list";
 import { SettingsPage } from "@/react/components/SettingsPage";
@@ -52,20 +53,6 @@ export function SettingsGroupPage({
     case "scoring":
       return <ScoringSettings {...props} />;
   }
-}
-
-function scoringSummary(comp: CompDetailData): string {
-  if (comp.scoring_format === "open_distance") return "Open distance";
-  return comp.series_scoring === "ftv" ? "GAP · FTV" : "GAP";
-}
-
-function accessSummary(comp: CompDetailData): string {
-  return [
-    comp.test ? "Hidden" : null,
-    (comp.open_registration ?? true) ? "Open registration" : "Admins add pilots",
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 export function CompSettingsIndex({

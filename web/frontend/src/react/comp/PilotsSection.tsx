@@ -49,6 +49,7 @@ import { Card } from "@/react/rac/card";
 import {
   classifyImportRows,
   emptyRow,
+  importedRows,
   exportCsvContent,
   normalizeRow,
   parseImportedCsv,
@@ -610,11 +611,7 @@ function EditPilotsDialog({
     }
 
     const classified = classifyImportRows(result.rows, pilots);
-    const imported: ParsedRow[] = classified.map((cr) =>
-      cr.action === "match" && cr.matchedId
-        ? { ...cr.parsed, comp_pilot_id: cr.matchedId }
-        : cr.parsed
-    );
+    const imported: ParsedRow[] = importedRows(classified);
     await tableRef.current?.setData(imported);
 
     const matched = classified.filter((cr) => cr.action === "match").length;

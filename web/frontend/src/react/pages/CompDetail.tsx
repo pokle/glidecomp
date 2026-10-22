@@ -239,6 +239,17 @@ function CompDetailView({
               ))}
             </p>
           ) : null}
+          {/* The organiser's standing notes (migration 0037), written from
+              the app on the hill. Plain text; line breaks kept. Absent on a
+              payload cached before the column existed. */}
+          {comp.organiser_notes?.trim() ? (
+            <p
+              className="mt-2 max-w-prose whitespace-pre-line text-sm"
+              data-testid="organiser-notes"
+            >
+              {comp.organiser_notes.trim()}
+            </p>
+          ) : null}
         </div>
         {/* Submitting is the one thing a pilot comes to a live comp to DO, so
             it leads. It goes to /submit with the comp prefilled rather than

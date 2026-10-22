@@ -57,6 +57,12 @@ export interface CompDetailData {
   open_igc_upload: boolean;
   /** Off means only an admin can add pilots; on means a pilot joins by uploading. */
   open_registration: boolean;
+  /**
+   * The organiser's standing notes to the whole competition (migration
+   * 0037): not a scoring input. Optional because a payload cached before
+   * the column existed has none; read it as "".
+   */
+  organiser_notes?: string;
   tasks: TaskSummary[];
   /** Real `comp_admin` rows only — never includes a site super admin unless
    *  they also hold a row. Use `is_admin` for "may the viewer administer?". */
