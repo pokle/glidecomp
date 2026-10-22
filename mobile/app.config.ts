@@ -114,6 +114,17 @@ const universalLinks = production || setting('UNIVERSAL_LINKS') === '1';
  * Without it the app offers notifications and says they are not set up.
  */
 const easProjectId = setting('EAS_PROJECT_ID');
+
+/**
+ * Crash reports (stage 10, mobile/RELEASING.md). The DSN only says where
+ * reports go; it is not a secret. Without it the app sends none.
+ * `SENTRY_ORG`/`SENTRY_PROJECT` (and the secret `SENTRY_AUTH_TOKEN`, an EAS
+ * secret) let a store build upload its source maps, so a report's stack
+ * names our files rather than the bundle's offsets.
+ */
+const sentryDsn = setting('SENTRY_DSN');
+const sentryOrg = setting('SENTRY_ORG');
+const sentryProject = setting('SENTRY_PROJECT');
 const LINK_HOST = 'glidecomp.com';
 const ANDROID_LINK_PATHS: { path?: string; pathPrefix?: string }[] = [
   { path: '/comp' },
@@ -129,6 +140,10 @@ const config: ExpoConfig = {
   slug: 'glidecomp',
   scheme: production ? 'glidecomp' : 'glidecomp-dev',
   version: '0.1.0',
+  // EAS Update (stage 10): an update reaches only builds whose native side it
+  // matches, which the fingerprint hashes. See mobile/RELEASING.md.
+  runtimeVersion: { policy: 'fingerprint' },
+  ...(easProjectId ? { updates: { url: `https://u.expo.dev/${easProjectId}` } } : {}),
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   ios: {
@@ -196,6 +211,9 @@ const config: ExpoConfig = {
     '@rnmapbox/maps',
     'expo-secure-store',
     ['expo-notifications', { defaultChannel: 'default' }],
+    ...(sentryDsn && sentryOrg && sentryProject
+      ? [['@sentry/react-native/expo', { organization: sentryOrg, project: sentryProject }] as [string, unknown]]
+      : []),
     ...(appleSignIn ? ['expo-apple-authentication'] : []),
     ...(googleIosUrlScheme
       ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, unknown]]
@@ -206,6 +224,7 @@ const config: ExpoConfig = {
     googleWebClientId,
     googleIosClientId,
     appleSignIn,
+    sentryDsn,
     ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
   },
   experiments: {

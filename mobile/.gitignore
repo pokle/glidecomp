@@ -48,3 +48,4 @@ scripts/out/
 
 # Gradle output of the local Expo modules
 modules/*/android/build/
+store/screenshots/

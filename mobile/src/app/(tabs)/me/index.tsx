@@ -12,10 +12,13 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { router, Stack, useTheme } from 'expo-router';
 import { useState } from 'react';
 import { Alert, useColorScheme } from 'react-native';
+import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 
 import { API_ORIGIN, WRITES_ALLOWED } from '@/api/config';
 import { useProfile } from '@/api/queries';
 import { APPLE_AVAILABLE, GOOGLE_AVAILABLE, signInWithApple, signInWithGoogle, SignInError } from '@/auth/providers';
+import { CRASH_REPORTS } from '@/crash-reports';
 import { finishProviderSignIn } from '@/auth/sign-in';
 import { deleteAccount, signOut, useIdentity } from '@/auth/session';
 import { ago } from '@/lib/ago';
@@ -179,6 +182,17 @@ export default function Me() {
             title="Data from"
             value={API_ORIGIN.replace(/^https?:\/\//, '')}
             detail={WRITES_ALLOWED ? undefined : 'Read-only: a development build never writes to it'}
+          />
+          <Row
+            testID="version-row"
+            title="Version"
+            value={Constants.expoConfig?.version ?? '–'}
+            detail={Updates.updateId && !Updates.isEmbeddedLaunch ? `Update ${Updates.updateId.slice(0, 8)}, ${Updates.channel ?? 'no channel'}` : 'As installed'}
+          />
+          <Row
+            title="Crash reports"
+            value={CRASH_REPORTS ? 'On' : 'Off'}
+            detail={CRASH_REPORTS ? 'Sent without your name, email or account' : undefined}
           />
           <Row title="Engine check" onPress={() => router.push('/me/engine-check')} />
         </Group>

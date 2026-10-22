@@ -1,7 +1,7 @@
 # Native iOS and Android app — implementation plan
 
 Date: 2026-10-05
-Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stages 6–9 in review.
+Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stages 6–9 in review; stage 10's code-side preparation in review, its beta waiting on the store accounts.
 Implementation happens on the owner's Mac.
 
 Builds the app described in
@@ -824,6 +824,35 @@ usable at the largest text size.
 **Owner checks:** a beta at one competition — at least one organiser and a
 handful of pilots — with their feedback triaged before the store release.
 
+**As built (code-side preparation, 2026-10-22):** everything that can be
+written before the accounts exist. The beta itself, the store submissions and
+the demo account are the owner's.
+
+- **`mobile/RELEASING.md`** is the checklist: what ships as an EAS Update and
+  what needs a store build, the build profiles, every build setting, a release
+  step by step, a JavaScript fix during a competition (updates only — never a
+  store build on the hill), crash reports, the listings and the beta
+  (feedback as GitHub issues labelled `mobile-beta`).
+- **`mobile/eas.json`**: `development` (a Debug build), `preview` (the
+  development variant, internal distribution, writing to production) and
+  `production` (`APP_VARIANT=production`, build numbers kept by EAS, Play's
+  internal track). Each profile is a channel of its own.
+- **EAS Update** (`expo-updates`): the runtime version is the fingerprint
+  policy, so an update can only reach a build with the same native side; the
+  update URL comes from `EAS_PROJECT_ID`. Me → This build says the version
+  and which update is running.
+- **Crash reports**: Sentry's free tier (`@sentry/react-native`), only in a
+  non-development build that has `SENTRY_DSN`. Every event and breadcrumb
+  goes through `src/lib/crash-scrub.ts` — no identity, no bodies, headers or
+  cookies, no query strings or fragments, no email addresses, no console
+  breadcrumbs — and its test proves an email cannot get out. Source maps
+  upload when `SENTRY_ORG`/`SENTRY_PROJECT` and the secret
+  `SENTRY_AUTH_TOKEN` are set.
+- **Store copy** in `mobile/store/` (listing, privacy answers, review notes),
+  as drafts for the owner to approve; **screenshots** from
+  `bun run screenshots` (`.maestro/store/screenshots.yaml`), kept out of
+  `bun run e2e`.
+
 ---
 
 ## 5. Backend changes this plan needs
@@ -851,7 +880,7 @@ Kept deliberately small; each follows the existing "part of done" rules.
 | Expo | Free tier to start; US$19 a month if build queues hurt |
 | Expo push notifications | Free |
 | Mapbox | Within the existing account's free mobile tier at this scale — checked in stage 0 |
-| Crash reporting | A free tier |
+| Crash reporting | Sentry's free tier (5,000 errors a month) |
 
 ---
 
