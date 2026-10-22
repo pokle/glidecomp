@@ -33,7 +33,9 @@ export default function WeatherScreen() {
     <View style={{ flex: 1 }}>
       <Stack.Screen options={{ title: 'Weather' }} />
       <StaleBanner query={weather} />
-      <QueryGate query={weather} loading="Loading the day’s weather…" notFound="This task doesn’t exist, or isn’t public.">
+      <QueryGate query={weather} loading="Loading the day’s weather…"
+        repair
+        notFound="This task doesn’t exist, or isn’t public.">
         {(data) => (
           <WeatherBody
             data={data}

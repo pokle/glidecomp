@@ -60,6 +60,7 @@ export default function CompWaypoints() {
       <QueryGate
         query={waypoints}
         loading="Loading the waypoints…"
+        repair
         notFound="This competition doesn’t exist, or isn’t public.">
         {(data) => (
           <WaypointsBody

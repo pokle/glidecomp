@@ -434,6 +434,20 @@ whatever you have chosen to share under your username.
 curl -H "x-api-key: $API_KEY" https://glidecomp.com/api/user/tracks
 ```
 
+## App notifications
+
+What the native app uses for its opt-in, per-competition notifications
+(migration 0038). A device registers its Expo push token; an account follows
+the competitions it wants to hear about. Not competition data: nothing here is
+audited or touches scores.
+
+| Method | Path | |
+|---|---|---|
+| `PUT` | `/api/user/push-token` | Register this device: `{ "token": "ExponentPushToken[…]", "platform": "ios" \| "android" }`. A token another account held moves to you |
+| `DELETE` | `/api/user/push-token` | Forget this device: `{ "token": … }` (the app does this on sign-out) |
+| `GET` | `/api/comp/:comp_id/notify` | Whether you follow this competition: `{ "enabled": true }` |
+| `PUT` | `/api/comp/:comp_id/notify` | Follow it, or stop: `{ "enabled": false }` |
+
 ## Site endpoints
 
 Served by Pages Functions rather than the API workers, so they sit at the site
@@ -446,6 +460,8 @@ a crawler, and they are a contract all the same.
 | `GET` | `/civl-rankings.csv` | The CIVL monthly world ranking, as CSV |
 | `GET` | `/comp/:comp_id/scores.csv` | The scores page's downloadable twin |
 | `GET` | `/api/civl-rankings.csv` | The same ranking data, under `/api/` |
+| `GET` | `/.well-known/apple-app-site-association` | iOS universal links: which paths open the app (404 until `APPLE_TEAM_ID` is set) |
+| `GET` | `/.well-known/assetlinks.json` | Android App Links: the same, for Android (404 until `ANDROID_CERT_SHA256` is set) |
 
 ### CIVL world rankings
 

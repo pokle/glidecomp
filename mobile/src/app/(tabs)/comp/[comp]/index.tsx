@@ -20,12 +20,14 @@ import type { CompDetailData } from '@glidecomp/client/types';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Alert, View } from 'react-native';
 
-import { useComp, useCompScores, useRegistrations } from '@/api/queries';
+import { WRITES_ALLOWED } from '@/api/config';
+import { useComp, useCompNotify, useCompScores, useRegistrations } from '@/api/queries';
 import { useUserId } from '@/auth/session';
 import { findSeriesPilot } from '@/lib/yours';
 import { wingLabel } from '@/lib/labels';
 import { groupTasksByDay } from '@/lib/task-days';
-import { rescoreComp, writeErrorText } from '@/api/organiser';
+import { rescoreComp, setCompNotify, writeErrorText } from '@/api/organiser';
+import { ensurePushToken } from '@/notifications/push';
 import { ActionRow, GroupedList, Group, Note, Row } from '@/ui/grouped-list';
 import { QueryGate, StaleBanner } from '@/ui/QueryStates';
 
@@ -39,6 +41,7 @@ export default function CompScreen() {
       <QueryGate
         query={comp}
         loading="Loading the competition…"
+        repair
         notFound="This competition doesn’t exist, or isn’t public.">
         {(data) => <CompBody comp={data} />}
       </QueryGate>
@@ -47,7 +50,9 @@ export default function CompScreen() {
 }
 
 function CompBody({ comp }: { comp: CompDetailData }) {
-  const registrations = useRegistrations(useUserId());
+  const userId = useUserId();
+  const notify = useCompNotify(comp.comp_id, userId);
+  const registrations = useRegistrations(userId);
   const mine = registrations.data?.find((r) => r.comp_id === comp.comp_id);
   // Asked only of a registered pilot's comp view, for "Your score".
   const scores = useCompScores(comp.comp_id, { enabled: !!mine });
@@ -156,6 +161,17 @@ function CompBody({ comp }: { comp: CompDetailData }) {
           />
         ) : null}
         <Row title="Activity" onPress={go(`${compPath(comp.comp_id, comp.name)}/activity`)} />
+        {/* Opt-in, per competition (stage 9). Signed in only: a notification
+            is addressed to an account. */}
+        {userId && WRITES_ALLOWED ? (
+          <Row
+            testID="comp-notify"
+            title="Notifications"
+            detail="Your track received, a penalty, a route set, scores recomputed"
+            value={notify.data ? (notify.data.enabled ? 'On' : 'Off') : undefined}
+            onPress={() => void toggleNotify(comp.comp_id, !notify.data?.enabled)}
+          />
+        ) : null}
         {comp.is_admin ? (
           <Row
             testID="organiser-settings"
@@ -179,5 +195,31 @@ async function recompute(comp: CompDetailData) {
     Alert.alert('Recomputing scores', 'Every task is being scored again. Scores updates when it’s done.');
   } catch (err) {
     Alert.alert('Couldn’t recompute', writeErrorText(err));
+  }
+}
+
+/**
+ * Turn a competition's notifications on or off. Turning them on is the moment
+ * to ask the phone for permission — never at launch.
+ */
+async function toggleNotify(compId: string, on: boolean) {
+  try {
+    if (on) {
+      const ready = await ensurePushToken();
+      if (!ready.ok) {
+        Alert.alert(
+          'Notifications aren’t available',
+          ready.reason === 'denied'
+            ? 'GlideComp isn’t allowed to send notifications. Turn them on in the phone’s Settings, then try again.'
+            : ready.reason === 'simulator'
+              ? 'A simulator can’t receive notifications. Try it on a phone.'
+              : 'This build isn’t set up for notifications yet.',
+        );
+        return;
+      }
+    }
+    await setCompNotify(compId, on);
+  } catch (err) {
+    Alert.alert('Couldn’t change notifications', writeErrorText(err));
   }
 }

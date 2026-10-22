@@ -5,7 +5,7 @@
  *
  * Its wording is the website's, so a pilot reads one set of sentences.
  */
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import type { TextInput } from 'react-native';
 
@@ -32,8 +32,11 @@ function verifyError(err: ErrorLike): string {
 }
 
 export default function EmailSignIn() {
-  const [step, setStep] = useState<'email' | 'code'>('email');
-  const [email, setEmail] = useState('');
+  // The sign-in email's link (stage 9) opens here with the code and address
+  // already in hand, from https://glidecomp.com/signin/app#otp=…&email=….
+  const linked = useLocalSearchParams<{ otp?: string; email?: string }>();
+  const [step, setStep] = useState<'email' | 'code'>(linked.otp && linked.email ? 'code' : 'email');
+  const [email, setEmail] = useState(linked.email ?? '');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +97,17 @@ export default function EmailSignIn() {
       setBusy(false);
     }
   }
+
+  // Opened from the email's link: the code is already here, so check it once.
+  const usedLink = useRef(false);
+  useEffect(() => {
+    const otp = linked.otp?.replace(/\D/g, '').slice(0, 6);
+    if (usedLink.current || !otp || otp.length !== 6 || !linked.email) return;
+    usedLink.current = true;
+    setCode(otp);
+    void verify(otp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linked.otp, linked.email]);
 
   return (
     <FormScreen testID="email-sign-in-screen">

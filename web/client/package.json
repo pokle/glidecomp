@@ -42,6 +42,10 @@
       "types": "./src/api.ts",
       "default": "./src/api.ts"
     },
+    "./app-links": {
+      "types": "./src/app-links.ts",
+      "default": "./src/app-links.ts"
+    },
     "./audit": {
       "types": "./src/audit.ts",
       "default": "./src/audit.ts"
@@ -73,6 +77,10 @@
     "./met": {
       "types": "./src/met.ts",
       "default": "./src/met.ts"
+    },
+    "./not-found-search": {
+      "types": "./src/not-found-search.ts",
+      "default": "./src/not-found-search.ts"
     },
     "./quick-task": {
       "types": "./src/quick-task.ts",

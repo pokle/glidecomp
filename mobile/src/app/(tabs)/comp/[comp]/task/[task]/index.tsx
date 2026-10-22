@@ -34,6 +34,7 @@ export default function TaskScreen() {
       <QueryGate
         query={task}
         loading="Loading the task…"
+        repair
         notFound="This task doesn’t exist, or isn’t public.">
         {(data) => <TaskBody task={data} comp={comp.data} />}
       </QueryGate>

@@ -16,6 +16,8 @@ import { ApiError, authRequest, getJson } from '@/api/client';
 import { queryClient } from '@/api/query-client';
 import { decideIdentity, initialIdentity, type Identity, type MeOutcome } from '@/lib/identity';
 
+import { forgetPushToken } from '@/notifications/push';
+
 import { authClient, secureStorage } from './client';
 import { clearStoredSession, hasStoredSession } from './session-fetch';
 
@@ -124,6 +126,8 @@ export async function completeSignIn(user: AuthUser | undefined): Promise<void> 
  * still signs this phone out; the server's copy then lapses on its own.
  */
 export async function signOut(): Promise<void> {
+  // Before the session goes: the server only lets an account forget its own token.
+  await forgetPushToken();
   try {
     await authClient.signOut();
   } catch {

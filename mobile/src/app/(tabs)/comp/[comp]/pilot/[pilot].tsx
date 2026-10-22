@@ -26,7 +26,9 @@ export default function PilotSeriesScreen() {
   return (
     <View style={{ flex: 1 }}>
       <StaleBanner query={scores} />
-      <QueryGate query={scores} loading="Loading the scores…" notFound="This competition doesn’t exist, or isn’t public.">
+      <QueryGate query={scores} loading="Loading the scores…"
+        repair
+        notFound="This competition doesn’t exist, or isn’t public.">
         {(data) => (
           <SeriesBody scores={data} pilotId={pilotId} compName={comp.data?.name} timeZone={comp.data?.timezone ?? null} />
         )}

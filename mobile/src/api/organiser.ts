@@ -265,3 +265,9 @@ export async function lookupRankings(compId: string, rows: ParsedRow[]): Promise
     }),
   );
 }
+
+/** Follow, or stop following, a competition's notifications (stage 9). */
+export async function setCompNotify(compId: string, enabled: boolean): Promise<void> {
+  await write(() => api.api.comp[':comp_id'].notify.$put({ ...comp(compId), json: { enabled } }));
+  void queryClient.invalidateQueries({ queryKey: ['compNotify', compId] });
+}

@@ -6,6 +6,7 @@ import { QueryProvider } from '@/api/query-client';
 import { startIdentityChecks } from '@/auth/session';
 import { applyAppearance } from '@/settings/appearance';
 import { startUnitsSync } from '@/settings/units-sync';
+import { startNotificationTaps } from '@/notifications/push';
 import { startSubmissionQueue } from '@/submit/queue';
 
 // Before the first frame, so a reader who chose dark never sees a light flash.
@@ -24,10 +25,12 @@ export default function RootLayout() {
     const stopIdentity = startIdentityChecks();
     const stopUnits = startUnitsSync();
     const stopQueue = startSubmissionQueue();
+    const stopTaps = startNotificationTaps();
     return () => {
       stopIdentity();
       stopUnits();
       stopQueue();
+      stopTaps();
     };
   }, []);
   return (

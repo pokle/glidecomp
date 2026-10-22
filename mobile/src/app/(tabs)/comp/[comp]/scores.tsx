@@ -49,7 +49,9 @@ export default function CompScoresScreen() {
         }}
       />
       <StaleBanner query={scores} />
-      <QueryGate query={scores} loading="Loading the scores…" notFound="This competition doesn’t exist, or isn’t public.">
+      <QueryGate query={scores} loading="Loading the scores…"
+        repair
+        notFound="This competition doesn’t exist, or isn’t public.">
         {(data) => <ScoresBody scores={data} comp={comp.data} />}
       </QueryGate>
     </View>

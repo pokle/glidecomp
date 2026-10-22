@@ -96,6 +96,32 @@ const IGC_TYPES = ['com.glidecomp.igc'];
  * also claim every photo on the phone. A SEND is turned into a VIEW by
  * modules/share-intake, so both arrive the same way.
  */
+/**
+ * Universal links (stage 9): glidecomp.com links open the app. The paths are
+ * the shared list in @glidecomp/client/app-links, which the website's
+ * association files are built from too.
+ *
+ * iOS needs the Associated Domains capability on the bundle id, which a free
+ * Personal Team cannot have — the same reason Sign in with Apple is gated. So
+ * it is on for store builds, and for a development build only when
+ * UNIVERSAL_LINKS=1 says the signing team has it.
+ */
+const universalLinks = production || setting('UNIVERSAL_LINKS') === '1';
+
+/**
+ * Notifications (stage 9) need the Expo project's id, which names the app to
+ * Expo's push service. Not a secret; it comes from `eas init` on the Mac.
+ * Without it the app offers notifications and says they are not set up.
+ */
+const easProjectId = setting('EAS_PROJECT_ID');
+const LINK_HOST = 'glidecomp.com';
+const ANDROID_LINK_PATHS: { path?: string; pathPrefix?: string }[] = [
+  { path: '/comp' },
+  { pathPrefix: '/comp/' },
+  { path: '/submit' },
+  { path: '/signin/app' },
+];
+
 const IGC_MIME_TYPES = ['application/octet-stream', 'application/x-igc', 'application/vnd.fai.igc', 'text/plain', 'text/x-igc'];
 
 const config: ExpoConfig = {
@@ -111,6 +137,7 @@ const config: ExpoConfig = {
     // layout rather than a stretched one.
     supportsTablet: false,
     usesAppleSignIn: appleSignIn,
+    ...(universalLinks ? { associatedDomains: [`applinks:${LINK_HOST}`] } : {}),
     infoPlist: {
       CFBundleDocumentTypes: [
         {
@@ -155,12 +182,20 @@ const config: ExpoConfig = {
         category: ['DEFAULT'],
         data: IGC_MIME_TYPES.map((mimeType) => ({ mimeType })),
       },
+      // App Links: verified against https://glidecomp.com/.well-known/assetlinks.json.
+      {
+        action: 'VIEW',
+        autoVerify: true,
+        category: ['BROWSABLE', 'DEFAULT'],
+        data: ANDROID_LINK_PATHS.map((p) => ({ scheme: 'https', host: LINK_HOST, ...p })),
+      },
     ],
   },
   plugins: [
     'expo-router',
     '@rnmapbox/maps',
     'expo-secure-store',
+    ['expo-notifications', { defaultChannel: 'default' }],
     ...(appleSignIn ? ['expo-apple-authentication'] : []),
     ...(googleIosUrlScheme
       ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, unknown]]
@@ -171,6 +206,7 @@ const config: ExpoConfig = {
     googleWebClientId,
     googleIosClientId,
     appleSignIn,
+    ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
   },
   experiments: {
     typedRoutes: true,

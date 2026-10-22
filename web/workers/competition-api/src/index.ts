@@ -25,6 +25,7 @@ import { analysisRoutes } from "./routes/analysis";
 import { weatherRoutes } from "./routes/weather";
 import { auditRoutes } from "./routes/audit";
 import { userFilesRoutes } from "./routes/user-files";
+import { notificationRoutes } from "./routes/notifications";
 import { visualizationRoutes } from "./routes/visualization";
 import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
@@ -152,6 +153,7 @@ const routes = app
   .route("/", weatherRoutes)
   .route("/", auditRoutes)
   .route("/", userFilesRoutes)
+  .route("/", notificationRoutes)
   .route("/", adminRoutes)
   .route("/", cacheRoutes)
   .route("/", civlRankingsRoutes);
