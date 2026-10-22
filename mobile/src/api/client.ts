@@ -87,6 +87,24 @@ export async function getJson<T>(
   return (await res.json()) as T;
 }
 
+/**
+ * As getJson, but a 422 is an answer with a body worth reading — the
+ * analysis endpoint's "this task cannot be analysed, and here is why" — so
+ * it comes back as `{ unprocessable }` instead of throwing.
+ */
+export async function getJsonOrReason<T>(
+  request: (signal: AbortSignal) => Responds,
+  signal?: AbortSignal,
+): Promise<{ ok: T } | { unprocessable: string | null }> {
+  const res = await fetchWithRetry(() => attempt(request, signal), { signal });
+  if (res.status === 422) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    return { unprocessable: body?.error ?? null };
+  }
+  if (!res.ok) throw new ApiError(res.status);
+  return { ok: (await res.json()) as T };
+}
+
 /** The same rules as getJson, for a body that is a file rather than JSON. */
 export async function getBytes(
   request: (signal: AbortSignal) => Responds,

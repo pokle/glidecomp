@@ -1,7 +1,7 @@
 # Native iOS and Android app — implementation plan
 
 Date: 2026-10-05
-Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stages 6 and 7 in review.
+Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stages 6–8 in review.
 Implementation happens on the owner's Mac.
 
 Builds the app described in
@@ -702,6 +702,30 @@ phone — the IA's Q7, Q8 and Q10.
 
 **Owner checks:** each section against the website's for two tasks; the
 pending state on a task whose analysis is cold.
+
+**As built (2026-10-22).** Where stage 8 departs from the list above:
+
+- **The website's reading of a report moved to `@glidecomp/client`**: the
+  wire types and the ranking (`analysis`: `rankMetrics`, `winningLabel`,
+  `metricsByFamily`, `compAnalysisRows`, `consistencyWords`,
+  `reportCellText`), the unit conversion and words (`analysis-units`), the
+  contents list's facts (`analysis-basis`), the section list
+  (`analysis-sections`), and the excluded-pilot and debrief helpers. The
+  website's modules re-export them.
+- **Each section is grouped rows, with tables as the reading.** A report
+  table becomes one row per line (its first cell the title, the rest as
+  "header value" pairs), so nothing scrolls sideways. A behaviour opens its
+  own screen with every pilot's reading in rank order.
+- **Charts: the day profile only** — climb (median with the middle half of
+  the field), wind and the day's moments on one time axis. The website's
+  other analysis charts (rank scatter, distributions, horserace, waterfall,
+  thermal roses, consistency map) are not drawn yet; their tables carry
+  them. An unknown series kind is ignored, and tested to be.
+- **Similar pilots** starts on the reader's own track when they flew the
+  task, and shows every behaviour; choosing a subset of behaviours stays on
+  the website.
+- **The 3D replay** is a "3D replay" row on the task view's Route group,
+  opening glidecomp.com in the in-app browser, as planned.
 
 ---
 

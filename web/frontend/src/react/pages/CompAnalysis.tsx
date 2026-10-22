@@ -12,6 +12,7 @@
  * functions/comp/[[path]].ts): the server seeds the most-recently-cached
  * report, or a pending placeholder while the first compute runs.
  */
+import { compAnalysisRows, hasAnyCorrelation } from "@glidecomp/client/analysis";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";
@@ -184,27 +185,11 @@ export function CompAnalysis() {
   // separation leads — matching the intro copy, and matching the CLI's comp
   // report so the two can't disagree about the order. The bar column plots
   // that same mean, so the bars descend with the rows.
-  const signedStrength = (m: CompMetricAggregate) =>
-    m.meanSignedRho === null ? -1 : Math.abs(m.meanSignedRho);
-  const rankedMetrics = useMemo(() => {
-    if (!active) return [];
-    return active.aggregate.metrics
-      .filter((m) => !m.outcome && hasAnyCorrelation(m))
-      .sort((a, b) => signedStrength(b) - signedStrength(a));
-  }, [active]);
-  const outcomeMetrics = useMemo(() => {
-    if (!active) return [];
-    return active.aggregate.metrics
-      .filter((m) => m.outcome && hasAnyCorrelation(m))
-      .sort((a, b) => signedStrength(b) - signedStrength(a));
-  }, [active]);
-  // The day-describing metrics (wind by hour, climb strength by hour) have no
-  // per-pilot value, so every cell of their row was an em dash — a row of
-  // nothing to read, three deep at the bottom of the table. They are counted
-  // in a footnote instead and still carry their full method prose in the
-  // glossary below.
-  const uncorrelated = useMemo(
-    () => (active ? active.aggregate.metrics.filter((m) => !hasAnyCorrelation(m)) : []),
+  const { ranked: rankedMetrics, outcomes: outcomeMetrics, uncorrelated } = useMemo(
+    () =>
+      active
+        ? compAnalysisRows(active.aggregate)
+        : { ranked: [], outcomes: [], uncorrelated: [] },
     [active]
   );
 
@@ -498,9 +483,6 @@ export function CompAnalysis() {
 /** Whether a metric produced any coefficient at all — comp-level or on a
  * single task. The day-describing metrics (wind, climb strength) never do:
  * they have no per-pilot value. */
-function hasAnyCorrelation(m: CompMetricAggregate): boolean {
-  return m.compRho !== null || m.perTaskRho.some((rho) => rho !== null);
-}
 
 /** Did this task's coefficient clear its own noise floor? Null when the task
  * produced no coefficient at all. */

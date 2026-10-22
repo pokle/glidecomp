@@ -277,7 +277,7 @@ change, it is a scoring change like any other and owes a note in
 
 | Rule | In the app |
 |---|---|
-| Australian English; propose UI wording first | Unchanged. Every stage lists its new copy for approval in the PR. Placeholder copy (`StageNote`) is temporary and replaced by the stage named in it. |
+| Australian English; propose UI wording first | Unchanged. Every stage lists its new copy for approval in the PR. |
 | Decisions explainable; the report card's rules (a)–(d) | The engine's explainers, unchanged; GAP parameters from the published `ClassScore.gap_params`; emphasis charts only; the cleaning chart from the downloaded tracklog. |
 | Registration is never guessed | The submit sheet resolves through `POST /api/comp/:comp_id/registration/resolve` and asks; `409 identity_ambiguous` means ask again. Names only order the picker. |
 | Every submission emails the pilot | The sheet says so up front; the server sends it. |
@@ -405,6 +405,18 @@ the organiser's notes (migration 0037, through the comp PATCH).
   `fromAltitudeInput`), radii always metres; Check altitudes is metric, as the
   waypoint file is. Gate and deadline times are typed in the comp's zone and
   stored as UTC.
+
+## Analysis (stage 8)
+
+`src/analysis/use-analysis.ts` is the one place a screen gets a task's
+analysis: the report fetched once and polled while `pending`, the chosen
+class in the route's `class` parameter (so it survives the walk between
+screens, as the website's `?class=` does), and the report in the reader's
+units (`displayReport`) — render from that, never from the raw class report.
+`AnalysisFrame` wears the pending, can't-be-analysed and class-choice states
+for every screen, and takes the screen's groups as an ARRAY (Android's list,
+again). Report tables go through `tableGroup()`; series through
+`charts/DayProfileChart.tsx`, which ignores a kind it does not know.
 
 ## The track map
 

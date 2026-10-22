@@ -14,6 +14,30 @@
       "types": "./src/altitude-check.ts",
       "default": "./src/altitude-check.ts"
     },
+    "./analysis": {
+      "types": "./src/analysis.ts",
+      "default": "./src/analysis.ts"
+    },
+    "./analysis-basis": {
+      "types": "./src/analysis-basis.ts",
+      "default": "./src/analysis-basis.ts"
+    },
+    "./analysis-debrief": {
+      "types": "./src/analysis-debrief.ts",
+      "default": "./src/analysis-debrief.ts"
+    },
+    "./analysis-exclusions": {
+      "types": "./src/analysis-exclusions.ts",
+      "default": "./src/analysis-exclusions.ts"
+    },
+    "./analysis-sections": {
+      "types": "./src/analysis-sections.ts",
+      "default": "./src/analysis-sections.ts"
+    },
+    "./analysis-units": {
+      "types": "./src/analysis-units.ts",
+      "default": "./src/analysis-units.ts"
+    },
     "./api": {
       "types": "./src/api.ts",
       "default": "./src/api.ts"

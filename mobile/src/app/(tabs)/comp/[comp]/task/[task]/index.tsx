@@ -9,6 +9,7 @@ import { formatTaskDate, isPastCloseDate, ordinal } from '@glidecomp/client/form
 import { idFromSegment, pilotPath, taskPath, taskRoutePath, taskWeatherPath } from '@glidecomp/client/slug';
 import type { CompDetailData, TaskDetailData } from '@glidecomp/client/types';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useMemo } from 'react';
 import { View } from 'react-native';
 
@@ -96,6 +97,14 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
             {distance != null ? (
               <Row title="Distance" value={formatDistance(distance, { prefs, decimals: 1 }).withUnit} />
             ) : null}
+            {task.track_count > 0 ? (
+              <Row
+                testID="replay-row"
+                title="3D replay"
+                detail="Opens on glidecomp.com"
+                onPress={() => void openReplay(task.comp_id, task.task_id)}
+              />
+            ) : null}
             <Row
               testID="send-to-instrument-row"
               title="Send to instrument"
@@ -125,6 +134,10 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
 
       <Group title="Results">
         <Row title="Task scores" onPress={go(`${base}/scores`)} />
+        {/* The task analysis is GAP's, and needs a route to measure against. */}
+        {comp?.scoring_format !== 'open_distance' && task.xctsk ? (
+          <Row testID="task-analysis-row" title="Task analysis" onPress={go(`${base}/analysis`)} />
+        ) : null}
       </Group>
 
       {registered ? (
@@ -146,6 +159,17 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
         </Group>
       ) : null}
     </GroupedList>
+  );
+}
+
+/**
+ * The 3D replay stays on the website for now (plan stage 8), opened in the
+ * in-app browser so Back returns to the task. A native replay is a later
+ * decision, not part of the plan.
+ */
+async function openReplay(compId: string, taskId: string) {
+  await WebBrowser.openBrowserAsync(
+    `https://glidecomp.com/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}`,
   );
 }
 

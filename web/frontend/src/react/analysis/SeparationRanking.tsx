@@ -53,46 +53,8 @@ import {
 } from "./types";
 
 /** A metric paired with the correlation it earned. */
-interface RankedMetric {
-  metric: Pick<
-    MetricReport,
-    | "id"
-    | "label"
-    | "unit"
-    | "family"
-    | "direction"
-    | "explanation"
-    | "perPilot"
-    // Carried so the findings digest, which ranks off this same function, can
-    // name each entry in the direction that actually won.
-    | "winning"
-  >;
-  correlation: MetricCorrelation;
-}
-
-/**
- * The behavioural ranking. Outcome-derived metrics (time behind the leader,
- * …) correlate with rank by construction, so they are excluded here — from
- * the headline table, the top-3 family auto-open, and the auto-selected
- * scatter — and presented apart as eval sanity checks.
- */
-export function rankMetrics(metrics: MetricReport[]): RankedMetric[] {
-  return metrics
-    .filter((m) => !m.outcome)
-    .flatMap((m) => (m.correlation ? [{ metric: m, correlation: m.correlation }] : []))
-    .sort((a, b) => b.correlation.absRho - a.correlation.absRho);
-}
-
-/** The strongest correlation among a set of metrics — the badge on each
- * family, which needs the whole correlation (not just |ρ|) to name its
- * verdict. Outcome-derived metrics don't count: a family must not owe its
- * headline to a metric that correlates by construction. */
-export function bestCorrelation(metrics: MetricReport[]): MetricCorrelation | null {
-  return metrics.reduce<MetricCorrelation | null>((best, m) => {
-    if (!m.correlation || m.outcome) return best;
-    return best === null || m.correlation.absRho > best.absRho ? m.correlation : best;
-  }, null);
-}
+export { rankMetrics, bestCorrelation, type RankedMetric } from "@glidecomp/client/analysis";
+import { rankMetrics, bestCorrelation, type RankedMetric } from "@glidecomp/client/analysis";
 
 /** Just the magnitude of {@link bestCorrelation}. */
 export function bestAbsRho(metrics: MetricReport[]): number | null {
