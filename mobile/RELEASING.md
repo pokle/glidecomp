@@ -37,6 +37,7 @@ build.
 | Setting | Needed for |
 |---|---|
 | `EAS_PROJECT_ID` | Notifications and EAS Update (from `eas init`) |
+| `PUSH_NOTIFICATIONS=1` | iOS notifications in a **development** build — only when the signing team has the Push Notifications capability (a free Personal Team does not). Store builds have it on; leave it unset for `bun run ios` on a Personal Team |
 | `REACT_NATIVE_MAPBOX_PUBLIC_TOKEN` | The maps |
 | `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID` | Google sign-in |
 | `SENTRY_DSN` | Crash reports |

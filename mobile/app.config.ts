@@ -125,6 +125,16 @@ const easProjectId = setting('EAS_PROJECT_ID');
 const sentryDsn = setting('SENTRY_DSN');
 const sentryOrg = setting('SENTRY_ORG');
 const sentryProject = setting('SENTRY_PROJECT');
+
+/**
+ * Push on iOS needs the Push Notifications capability (the `aps-environment`
+ * entitlement), which a free Personal Team cannot have either — a build that
+ * asked for it fails to get a provisioning profile. So remote notifications
+ * are on for store builds, and for a development build only when
+ * PUSH_NOTIFICATIONS=1 says the signing team has the capability. Android
+ * needs no capability; this changes nothing there.
+ */
+const pushNotifications = production || setting('PUSH_NOTIFICATIONS') === '1';
 const LINK_HOST = 'glidecomp.com';
 const ANDROID_LINK_PATHS: { path?: string; pathPrefix?: string }[] = [
   { path: '/comp' },
@@ -210,7 +220,10 @@ const config: ExpoConfig = {
     'expo-router',
     '@rnmapbox/maps',
     'expo-secure-store',
-    ['expo-notifications', { defaultChannel: 'default' }],
+    // Listed even when push is off: prebuild applies the plugin to any app
+    // with the package installed, and with its defaults it adds the
+    // entitlement regardless.
+    ['expo-notifications', { defaultChannel: 'default', enableRemoteNotifications: pushNotifications }],
     ...(sentryDsn && sentryOrg && sentryProject
       ? [['@sentry/react-native/expo', { organization: sentryOrg, project: sentryProject }] as [string, unknown]]
       : []),
@@ -225,6 +238,7 @@ const config: ExpoConfig = {
     googleIosClientId,
     appleSignIn,
     sentryDsn,
+    pushNotifications,
     ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
   },
   experiments: {
