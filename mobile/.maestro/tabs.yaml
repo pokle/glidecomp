@@ -13,7 +13,10 @@ appId: com.glidecomp.app.dev
 - takeScreenshot: comps
 
 - tapOn: "My flights"
-- assertVisible: "Your flights arrive in stage 6."
+# Signed out it offers Sign in; signed in, the competition flights and the
+# account's library (stage 6).
+- assertVisible:
+    id: "my-flights"
 - takeScreenshot: my-flights
 
 - tapOn: "Me"
