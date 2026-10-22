@@ -795,7 +795,9 @@ usable at the largest text size.
   sent: scores land in the background with no request to hang it on. The
   sender never tells the account that caused the change, and a device that
   uninstalled the app is forgotten on Expo's answer. Needs the Expo project
-  id (`EAS_PROJECT_ID`) in the build.
+  id (`EAS_PROJECT_ID`) in the build, and on iOS the Push Notifications
+  capability: on in store builds, and in a development build only with
+  `PUSH_NOTIFICATIONS=1`, because a free Personal Team cannot have it.
 - **iPad's split view is not built** — it needs an iPad to build against.
   The app keeps the phone layout there (`supportsTablet: false`); see
   `mobile/AUDIT.md`.

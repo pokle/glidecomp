@@ -21,7 +21,10 @@ import { write } from '@/api/organiser';
 
 const TOKEN_KEY = 'push-token';
 
-const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
+const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string }; pushNotifications?: boolean } | undefined;
+const projectId = extra?.eas?.projectId;
+/** iOS push needs the capability, which a Personal Team build goes without (app.config.ts). */
+const capable = Platform.OS !== 'ios' || extra?.pushNotifications === true;
 
 /** A notification that arrives while the app is open still shows. */
 Notifications.setNotificationHandler({
@@ -42,7 +45,7 @@ export type PushReady = { ok: true } | { ok: false; reason: 'simulator' | 'denie
  */
 export async function ensurePushToken(): Promise<PushReady> {
   if (!Device.isDevice) return { ok: false, reason: 'simulator' };
-  if (!projectId) return { ok: false, reason: 'unconfigured' };
+  if (!projectId || !capable) return { ok: false, reason: 'unconfigured' };
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Competition news',

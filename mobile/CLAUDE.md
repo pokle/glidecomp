@@ -437,7 +437,11 @@ again). Report tables go through `tableGroup()`; series through
   permission is asked when a comp's are first turned on; signing out
   forgets the device's token first. A tap opens `data.url`, an app route.
   Needs `EAS_PROJECT_ID` in the build, and a device (a simulator has no
-  push token).
+  push token). On iOS it also needs the Push Notifications capability, which
+  a free Personal Team cannot have, so remote notifications are on only in
+  store builds and with `PUSH_NOTIFICATIONS=1` (like `APPLE_SIGN_IN` and
+  `UNIVERSAL_LINKS`); without it a Personal Team build says notifications
+  aren't set up.
 
 ## The track map
 
