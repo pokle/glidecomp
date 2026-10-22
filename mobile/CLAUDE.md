@@ -115,6 +115,14 @@ production. That matters from stage 4, when the app first writes.
   latest beta patch and run `bunx expo install --fix`, then rebuild.
   (`expo install --check` asks for Jest 29; `jest-expo` 58 itself requires 30.
   Keep 30.)
+- **`Cannot find native module 'ExpoApplication'` (or any `Expo…`) at
+  launch, then `Cannot read property 'ErrorBoundary' of undefined`.** The
+  pod is built in but its module was never registered: newer `expo-*`
+  modules declare themselves with the `@ExpoModule` Swift macro, which only
+  `expo-modules-autolinking` 58.0.14 and later can find (expo-notifications
+  brings expo-application 58.1 that way). The second error is the router
+  reading a screen file whose import threw. Same cure as above — move `expo`
+  forward, `bunx expo install --fix`, then `bunx expo prebuild --clean`.
 
 ## Layout
 
