@@ -96,6 +96,12 @@ function TaskBody({ task, comp }: { task: TaskDetailData; comp: CompDetailData |
             {distance != null ? (
               <Row title="Distance" value={formatDistance(distance, { prefs, decimals: 1 }).withUnit} />
             ) : null}
+            <Row
+              testID="send-to-instrument-row"
+              title="Send to instrument"
+              detail="Task file, waypoint files or a QR code"
+              onPress={go(`${base}/send`)}
+            />
           </>
         ) : (
           <Note>Route not set yet.</Note>

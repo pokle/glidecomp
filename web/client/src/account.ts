@@ -85,3 +85,65 @@ export interface PilotFlight {
   class_size: number | null;
   total_score: number | null;
 }
+
+// ── The personal library (`/api/user/tracks`, `/api/user/tasks`) ────────────
+
+/** GET /api/user/tracks — one track in the account's own library. */
+export interface LibraryTrack {
+  track_id: string;
+  filename: string;
+  display_name: string;
+  pilot: string | null;
+  glider: string | null;
+  flight_date: string | null;
+  /** Bytes stored (gzipped), which is what the allowance counts. */
+  file_size: number;
+  stored_at: string;
+  last_accessed_at: string;
+}
+
+/** GET /api/user/tasks — one task in the account's own library. */
+export interface LibraryTask {
+  task_code: string;
+  display_name: string;
+  stored_at: string;
+  last_accessed_at: string;
+}
+
+/**
+ * The library's allowance. Mirrors the competition worker's quotas
+ * (`routes/user-files.ts`, MAX_USER_*), which are what actually refuse an
+ * upload; these only say how close the reader is.
+ */
+export const LIBRARY_LIMITS = {
+  tracks: 500,
+  tasks: 200,
+  bytes: 200 * 1024 * 1024,
+} as const;
+
+export interface StorageUsage {
+  usedBytes: number;
+  /** The fullest of the three allowances, 0–1 (or past 1, over the limit). */
+  fraction: number;
+  /** "3.2 of 200 MB", with the counts only once they are within 20% of their limits. */
+  summary: string;
+}
+
+/**
+ * How much of the library's allowance is used. The byte allowance is the one
+ * people meet in practice; the counts are high, so they are mentioned only
+ * when they are near.
+ */
+export function storageUsage(usedBytes: number, trackCount: number, taskCount: number): StorageUsage {
+  const fraction = Math.max(
+    usedBytes / LIBRARY_LIMITS.bytes,
+    trackCount / LIBRARY_LIMITS.tracks,
+    taskCount / LIBRARY_LIMITS.tasks
+  );
+  const usedMB = usedBytes / (1024 * 1024);
+  const limitMB = LIBRARY_LIMITS.bytes / (1024 * 1024);
+  const parts = [`${usedMB < 10 ? usedMB.toFixed(1) : Math.round(usedMB)} of ${limitMB} MB`];
+  if (trackCount / LIBRARY_LIMITS.tracks >= 0.8) parts.push(`${trackCount} of ${LIBRARY_LIMITS.tracks} tracks`);
+  if (taskCount / LIBRARY_LIMITS.tasks >= 0.8) parts.push(`${taskCount} of ${LIBRARY_LIMITS.tasks} tasks`);
+  return { usedBytes, fraction, summary: parts.join(" · ") };
+}

@@ -10,6 +10,7 @@ import { Platform, PlatformColor, StyleSheet, View } from 'react-native';
 
 import { actionStyle } from './action-style';
 import { checkMark } from './check-mark';
+import { mapPin } from './map-pin';
 import { secondary } from './secondary-text';
 import { testIdModifiers } from './test-id';
 import { trailing } from './trailing';
@@ -40,11 +41,16 @@ export interface RowProps {
   onPress?: () => void;
   /** An option row: selected options carry a check mark and no chevron. */
   selected?: boolean;
+  /**
+   * A row whose tap shows its subject on the map (the waypoints list): the
+   * pin at its leading edge names the action, which the whole row performs.
+   */
+  pin?: boolean;
   testID?: string;
 }
 
-export function Row({ title, detail, value, onPress, selected, testID }: RowProps) {
-  const chevron = onPress && selected === undefined && Platform.OS === 'ios';
+export function Row({ title, detail, value, onPress, selected, pin, testID }: RowProps) {
+  const chevron = onPress && selected === undefined && !pin && Platform.OS === 'ios';
   const items: ReactNode[] = [];
   if (value) items.push(secondary(value));
   if (chevron) items.push(<Icon name="chevron.right" size={13} color={PlatformColor('tertiaryLabel')} />);
@@ -52,6 +58,7 @@ export function Row({ title, detail, value, onPress, selected, testID }: RowProp
   return (
     <ListItem
       onPress={onPress}
+      leading={pin ? mapPin() : undefined}
       supportingText={detail ? secondary(detail) : undefined}
       trailing={items.length > 0 ? trailing(items) : undefined}
       testID={testID}

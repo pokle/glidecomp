@@ -6,15 +6,12 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/react/rac/button";
 import { Tabs, TabList, Tab, TabPanel } from "@/react/rac/tabs";
+import {
+  ACTIVITY_FILTERS as FILTERS,
+  activityQuery,
+  type ActivityFilter,
+} from "@glidecomp/client/audit";
 import { formatAuditTime, type AuditEntry, type AuditResponse } from "./types";
-
-const FILTERS: Array<{ value: string; label: string }> = [
-  { value: "", label: "All" },
-  { value: "task", label: "Tasks" },
-  { value: "pilot", label: "Pilots" },
-  { value: "track", label: "Tracks" },
-  { value: "comp", label: "Settings" },
-];
 
 // RAC tab keys can't be "" (falsy keys confuse selection) — the All filter
 // rides on a sentinel key that maps back to the empty subject_type filter.
@@ -22,13 +19,10 @@ const ALL_KEY = "all";
 
 async function fetchAuditPage(
   compId: string,
-  filter: string,
+  filter: ActivityFilter,
   before: number | null
 ): Promise<AuditResponse | null> {
-  const params = new URLSearchParams();
-  params.set("limit", "25");
-  if (filter) params.set("subject_type", filter);
-  if (before !== null) params.set("before", String(before));
+  const params = new URLSearchParams(activityQuery(filter, before));
   const res = await fetch(`/api/comp/${encodeURIComponent(compId)}/audit?${params}`, {
     credentials: "include",
   });
@@ -49,7 +43,7 @@ export function ActivitySection({
    */
   collapsible?: boolean;
 }) {
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState<ActivityFilter>("");
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [nextBefore, setNextBefore] = useState<number | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -143,7 +137,7 @@ export function ActivitySection({
       <Tabs
         className="mt-2"
         selectedKey={selectedKey}
-        onSelectionChange={(key) => setFilter(key === ALL_KEY ? "" : String(key))}
+        onSelectionChange={(key) => setFilter(key === ALL_KEY ? "" : (String(key) as ActivityFilter))}
       >
         <TabList aria-label="Activity filter">
           {FILTERS.map((f) => (

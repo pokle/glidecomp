@@ -119,8 +119,8 @@ production. That matters from stage 4, when the app first writes.
 ## Layout
 
 - `src/app/` — Expo Router routes. `(tabs)/` holds the four tabs; each real
-  tab is its own native stack. `submit.tsx` is the Submit sheet, presented over
-  the tabs from the root stack. **Route shapes are the website's URLs**
+  tab is its own native stack. `submit.tsx` is the Submit sheet and `qr.tsx`
+  the full-screen QR, both presented over the tabs from the root stack. **Route shapes are the website's URLs**
   (`/comp/<comp>/task/<task>/route`, `…/weather`), so `compPath()` and
   `taskPath()` from `@glidecomp/client/slug` build the app's own routes, and
   universal links (stage 9) map one to one.
@@ -135,8 +135,8 @@ production. That matters from stage 4, when the app first writes.
   charts, the track data cleaning chart and the weather charts. They draw in
   the screen's own points (`useWidth`), not a scaled viewBox, so their type is
   the platform's real size; colours are the website's tokens (`palette.ts`).
-- `src/map/` — the track map (`@rnmapbox/maps`), the only file that imports
-  the map library.
+- `src/map/` — the track map and the waypoints map (`@rnmapbox/maps`), the
+  only folder that imports the map library.
 - `src/lib/` — pure logic behind the screens, unit-tested in `__tests__/`.
 - `src/settings/` — what the reader chooses: units (synced to the account
   while signed in, `units-sync.ts`) and appearance (this phone only).
@@ -144,7 +144,8 @@ production. That matters from stage 4, when the app first writes.
   (`queue.ts`), files from outside the app (`incoming.ts`), and the receipt
   the sheet and Me → Track uploads share (`receipt.tsx`). See "Submitting a
   track" below.
-- `src/components/` — other shared components.
+- `src/components/` — other shared components, among them
+  `SendToInstrument` and `QrCode` (stage 6; see "Sending to an instrument").
 - `src/engine-check/` — stage 1's on-device proof that the engine runs (Me →
   Engine check).
 - `modules/` — local Expo modules, autolinked. `share-intake` (Android only)
@@ -361,6 +362,24 @@ of its own. The server's side is [docs/track-submission.md](../docs/track-submis
   Dev from the Files app. On the simulator, a new document type only shows in
   the share sheet once LaunchServices has re-read the app: reboot the
   simulator after the first install of a build that adds one.
+
+## Sending to an instrument
+
+One screen, `src/components/SendToInstrument.tsx`, behind three doors: a
+task's Route group (`…/task/<task>/send`), the Waypoints screen's Send
+button (`…/waypoints/send`) and a task in My flights' library
+(`/flights/task/<code>`). What it offers and what each file holds come from
+`@glidecomp/client/instrument`, over the engine's exporters, so a file from
+the phone is the file the website's worker serves, name and all.
+
+- **Written on the phone, then shared** (`src/lib/send-file.ts`): no request,
+  so it works offline once the task has been read. iOS chooses the apps a
+  share sheet offers by type: GPX and KML go as their own types, the rest as
+  `public.data`, and the receiving app goes by the extension.
+- **The QR is `/qr`, a full-screen modal**, black on white in either theme,
+  kept awake while it is up. It takes the source's ids as route parameters
+  (`comp`, `task`, `code`, `swap`) and reads the task from the cache rather
+  than carrying a 3 KB payload through the router.
 
 ## The track map
 
