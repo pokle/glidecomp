@@ -4,12 +4,13 @@
  * names and nothing from @expo/ui directly, so if the beta API changes
  * shape, this file is the only one that does.
  */
-import { FieldGroup, Host, Icon, ListItem, RNHostView, TextInput } from '@expo/ui';
+import { Icon, ListItem, RNHostView, TextInput } from '@expo/ui';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { Platform, PlatformColor, StyleSheet, View } from 'react-native';
 
 import { actionStyle } from './action-style';
 import { checkMark } from './check-mark';
+import { ListRoot, ROW_COLORS, Section } from './list-shell';
 import { mapPin } from './map-pin';
 import { secondary } from './secondary-text';
 import { testIdModifiers } from './test-id';
@@ -17,19 +18,16 @@ import { trailing } from './trailing';
 
 /** The scrolling list itself; fills the screen. */
 export function GroupedList({ children, testID }: PropsWithChildren<{ testID?: string }>) {
-  return (
-    <Host style={styles.fill}>
-      <FieldGroup testID={testID}>{children}</FieldGroup>
-    </Host>
-  );
+  return <ListRoot testID={testID}>{children}</ListRoot>;
 }
 
 /**
- * One titled group of rows. The section component itself, not a wrapper:
- * Android's FieldGroup recognises a section by its exact component type and
- * wraps anything else in an implicit section of its own (nested cards).
+ * One titled group of rows: FieldGroup.Section on iOS, the app's own Material
+ * section on Android (list-shell.android.tsx, which says why). Still a direct
+ * child of GroupedList, never a wrapper or a fragment: on iOS the Form
+ * recognises a section by its exact component type.
  */
-export const Group = FieldGroup.Section;
+export const Group = Section;
 
 export interface RowProps {
   title: string;
@@ -61,6 +59,7 @@ export function Row({ title, detail, value, onPress, selected, pin, testID }: Ro
       leading={pin ? mapPin() : undefined}
       supportingText={detail ? secondary(detail) : undefined}
       trailing={items.length > 0 ? trailing(items) : undefined}
+      colors={ROW_COLORS}
       testID={testID}
       modifiers={testIdModifiers(testID)}>
       {title}
@@ -89,7 +88,7 @@ export function ActionRow({
     <ListItem
       onPress={onPress}
       testID={testID}
-      colors={style.colors}
+      colors={ROW_COLORS ? { ...ROW_COLORS, ...style.colors } : style.colors}
       modifiers={[...(style.modifiers ?? []), ...(testIdModifiers(testID) ?? [])]}>
       {title}
     </ListItem>
@@ -133,7 +132,7 @@ export function FieldRow({
 
 /** A sentence in a group, not a row: an empty state, an explanation. */
 export function Note({ children }: { children: string }) {
-  return <ListItem>{children}</ListItem>;
+  return <ListItem colors={ROW_COLORS}>{children}</ListItem>;
 }
 
 /**
@@ -149,6 +148,9 @@ export function Embedded({ children, testID }: { children: ReactElement; testID?
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
   embedded: { paddingVertical: 8 },
 });
+
+// Not ListItems, so the Android section insets them (list-shell.android.tsx).
+Embedded.needsInset = true;
+FieldRow.needsInset = true;
