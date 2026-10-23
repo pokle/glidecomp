@@ -4,12 +4,13 @@
  * names and nothing from @expo/ui directly, so if the beta API changes
  * shape, this file is the only one that does.
  */
-import { Icon, ListItem, RNHostView, TextInput } from '@expo/ui';
+import { Icon, ListItem, RNHostView } from '@expo/ui';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { Platform, PlatformColor, StyleSheet, View } from 'react-native';
 
 import { actionStyle } from './action-style';
 import { checkMark } from './check-mark';
+import { FieldRow } from './field-row';
 import { ListRoot, ROW_COLORS, Section } from './list-shell';
 import { mapPin } from './map-pin';
 import { secondary } from './secondary-text';
@@ -95,41 +96,6 @@ export function ActionRow({
   );
 }
 
-/**
- * A text field as a row of the list — the platform's own (SwiftUI's
- * TextField in a Form row; Material's on Android). Uncontrolled: it starts
- * from `defaultValue` and reports every change. The label is the
- * placeholder, which is also what VoiceOver and TalkBack read.
- */
-export function FieldRow({
-  label,
-  defaultValue,
-  onChangeText,
-  email = false,
-  testID,
-}: {
-  label: string;
-  defaultValue?: string;
-  onChangeText: (text: string) => void;
-  /** An email address: the email keyboard, and the phone's autofill. */
-  email?: boolean;
-  testID?: string;
-}) {
-  return (
-    <TextInput
-      placeholder={label}
-      defaultValue={defaultValue}
-      onChangeText={onChangeText}
-      autoCapitalize="none"
-      autoCorrect={false}
-      keyboardType={email ? 'email-address' : 'default'}
-      autoComplete={email ? 'email' : 'off'}
-      testID={testID}
-      modifiers={testIdModifiers(testID)}
-    />
-  );
-}
-
 /** A sentence in a group, not a row: an empty state, an explanation. */
 export function Note({ children }: { children: string }) {
   return <ListItem colors={ROW_COLORS}>{children}</ListItem>;
@@ -151,6 +117,7 @@ const styles = StyleSheet.create({
   embedded: { paddingVertical: 8 },
 });
 
-// Not ListItems, so the Android section insets them (list-shell.android.tsx).
+export { FieldRow };
+
+// Not a ListItem, so the Android section insets it (list-shell.android.tsx).
 Embedded.needsInset = true;
-FieldRow.needsInset = true;
