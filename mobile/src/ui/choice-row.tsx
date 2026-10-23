@@ -6,6 +6,7 @@
 import { ListItem, Picker } from '@expo/ui';
 
 import type { ChoiceRowProps } from './choice-row.types';
+import { ROW_COLORS } from './list-shell';
 import { testIdModifiers } from './test-id';
 
 export function ChoiceRow<T extends string>({ title, value, choices, onChange, testID, stacked }: ChoiceRowProps<T>) {
@@ -18,6 +19,7 @@ export function ChoiceRow<T extends string>({ title, value, choices, onChange, t
   );
   return (
     <ListItem
+      colors={ROW_COLORS}
       modifiers={testIdModifiers(testID)}
       trailing={stacked ? undefined : picker}
       supportingText={stacked ? picker : undefined}>

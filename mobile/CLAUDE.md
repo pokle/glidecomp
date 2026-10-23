@@ -191,18 +191,26 @@ type-checking only. Responses are cast to the wire types, as on the website.
 
 ## Lists and the screens' states
 
-- **Lists are `@expo/ui`'s universal `FieldGroup`/`ListItem`** — a SwiftUI
-  Form on iOS, Material 3 on Android — behind `src/ui/grouped-list.tsx`
-  (`GroupedList`, `Group`, `Row`, `Note`). Screens use those, never `@expo/ui`
-  directly. Two things that file depends on:
-  - `Group` **is** `FieldGroup.Section`, not a wrapper. Android's
-    `FieldGroup` recognises a section by its exact component type and wraps
-    anything else in an implicit section of its own (cards inside cards).
-  - **So every `Group` is a direct child of `GroupedList`** — never returned
-    from a component of your own, nor from a fragment. Android does not see
-    through either: a fragment's second `Group` was dropped altogether (stage
-    4 lost the Me tab's Profile and Danger zone that way, on Android only). Inline the group, or build it
-    with a plain function you CALL (`compGroup({...})` on the Comps tab).
+- **Lists are the platforms' own grouped lists** behind `src/ui/grouped-list.tsx`
+  (`GroupedList`, `Group`, `Row`, `Note`); screens use those, never `@expo/ui`
+  directly. The frame differs by platform (`src/ui/list-shell*.tsx`):
+  - **iOS** is `@expo/ui`'s universal `FieldGroup` — a SwiftUI Form — and
+    `Group` IS `FieldGroup.Section`.
+  - **Android** draws its own Material 3 connected list (Compose `LazyColumn`,
+    one card per row). `FieldGroup.Section` wraps every child in a ListItem
+    card of its own, and our rows are ListItems, so every row was a card
+    inside a card from stage 2 until 2026-10-23. Rows therefore draw no
+    background on Android (`ROW_COLORS`); the section paints the card. A row
+    that is not a ListItem (`Embedded`, `FieldRow`) is marked `needsInset`
+    and gets the ListItem's insets from the section.
+  - **Every `Group` is still a direct child of `GroupedList`** — never
+    returned from a component of your own. The iOS Form recognises a section
+    by its exact component type and wraps anything else in an implicit
+    section of its own, and a fragment's second `Group` was once dropped on
+    Android (stage 4 lost the Me tab's Profile and Danger zone that way).
+    Inline the group, or build it with a plain function you CALL
+    (`compGroup({...})` on the Comps tab). Rows inside a `Group` may sit in a
+    fragment; both sections open it.
   - Android's list item only styles a **bare string**: text that is wrapped
     (even in a fragment) fails with "Text strings must be rendered within a
     `<Text>`". The `.ios.tsx`/`.tsx` pairs in `src/ui/` return SwiftUI views
