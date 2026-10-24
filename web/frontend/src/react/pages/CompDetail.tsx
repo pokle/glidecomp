@@ -64,6 +64,7 @@ import {
 import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { CompDetailLoaderData, CompScores } from "../loaders";
+import { LinkifiedText } from "../components/LinkifiedText";
 
 export function CompDetail() {
   const { compId: compParam } = useParams<{ compId: string }>();
@@ -239,15 +240,15 @@ function CompDetailView({
               ))}
             </p>
           ) : null}
-          {/* The organiser's standing notes (migration 0037), written from
-              the app on the hill. Plain text; line breaks kept. Absent on a
+          {/* The organiser's standing notes (migration 0037), edited in
+              Settings → General. Plain text; line breaks kept. Absent on a
               payload cached before the column existed. */}
           {comp.organiser_notes?.trim() ? (
             <p
               className="mt-2 max-w-prose whitespace-pre-line text-sm"
               data-testid="organiser-notes"
             >
-              {comp.organiser_notes.trim()}
+              <LinkifiedText text={comp.organiser_notes.trim()} />
             </p>
           ) : null}
         </div>

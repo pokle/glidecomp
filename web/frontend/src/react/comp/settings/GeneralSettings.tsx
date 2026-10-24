@@ -1,19 +1,21 @@
 /**
- * General settings sub-page: Name, Wing, Timezone. Fields and their copy
- * carried over verbatim from the old settings dialog; only this group's
- * fields go in the PATCH (the server diffs per field).
+ * General settings sub-page: Name, Wing, Timezone and the organiser's notes
+ * (migration 0037). Only this group's fields go in the PATCH (the server
+ * diffs per field).
  *
  * Close Date lives on the Access page: what it controls is when track
  * submissions stop being accepted, which is the same question as who may
  * submit at all.
  */
 import { useState } from "react";
+import { TextField as AriaTextField } from "react-aria-components";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { SearchableChoiceList } from "@/react/rac/choice-list";
+import { Description, Label, TextArea } from "@/react/rac/field";
 import { CategoryField, NameField } from "../fields";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
 
@@ -34,6 +36,9 @@ function timezoneOptions(current: string | null) {
   ];
 }
 
+/** Mirrors MAX_ORGANISER_NOTES in the competition worker's validators. */
+const MAX_ORGANISER_NOTES = 4000;
+
 export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const savedCategory = comp.category === "hg" ? "hg" : "pg";
 
@@ -42,12 +47,15 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   // "auto" = no explicit zone: the server derives one from the task
   // location (and re-derives when saved as auto).
   const [timezone, setTimezone] = useState(comp.timezone ?? "auto");
+  const savedNotes = comp.organiser_notes ?? "";
+  const [notes, setNotes] = useState(savedNotes);
   const [saving, setSaving] = useState(false);
 
   const dirty =
     name !== comp.name ||
     category !== savedCategory ||
-    timezone !== (comp.timezone ?? "auto");
+    timezone !== (comp.timezone ?? "auto") ||
+    notes.trim() !== savedNotes.trim();
 
   async function save() {
     setSaving(true);
@@ -58,6 +66,7 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           name: name.trim(),
           category,
           timezone: timezone === "auto" ? null : timezone,
+          organiser_notes: notes.trim(),
         },
       });
       if (!res.ok) {
@@ -89,6 +98,26 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           searchPlaceholder="Type to search, e.g. Melbourne"
           description="Comp-local zone for displaying times (start gates, replay clock, score narratives). Auto derives it from the task location. Scoring runs on UTC and is unaffected."
         />
+
+        <AriaTextField
+          value={notes}
+          onChange={setNotes}
+          maxLength={MAX_ORGANISER_NOTES}
+          className="flex flex-col gap-2"
+        >
+          <Label>Notes for every pilot</Label>
+          <TextArea
+            rows={6}
+            placeholder={
+              "e.g. Briefing 9:30 at the launch shelter.\n" +
+              "Retrieve leaves from the pub at 6."
+            }
+          />
+          <Description>
+            Shown under the organisers on the competition's page. Plain text.
+            Up to 4,000 characters.
+          </Description>
+        </AriaTextField>
       </SettingsForm>
     </SettingsPage>
   );

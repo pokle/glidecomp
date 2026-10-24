@@ -169,6 +169,46 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
   );
 });
 
+test("General edits the organiser's notes, and the comp page shows them with safe links", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await page.goto(`/comp/${compId}/settings/general`);
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+
+  const notes = page.getByLabel("Notes for every pilot");
+  await expect(notes).toHaveValue("");
+  await notes.fill(
+    "Briefing 9:30 at the launch shelter.\n" +
+      "Tracking: https://puretrack.io/g/e2e.\n" +
+      "Not a link: javascript:alert(1)"
+  );
+
+  const [patch] = await Promise.all([
+    page.waitForRequest(
+      (r) => r.method() === "PATCH" && r.url().includes("/api/comp/")
+    ),
+    page.getByRole("button", { name: "Save" }).click(),
+  ]);
+  expect((patch.postDataJSON() as Record<string, unknown>).organiser_notes).toBe(
+    "Briefing 9:30 at the launch shelter.\nTracking: https://puretrack.io/g/e2e.\nNot a link: javascript:alert(1)"
+  );
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+
+  await page.goto(`/comp/${compId}`);
+  const shown = page.getByTestId("organiser-notes");
+  await expect(shown).toContainText("Briefing 9:30 at the launch shelter.");
+  // The web address is a link, minus the full stop that ends its sentence,
+  // opening in a new tab that cannot reach back; the script stays text.
+  const links = shown.getByRole("link");
+  await expect(links).toHaveCount(1);
+  await expect(links).toHaveText("https://puretrack.io/g/e2e");
+  await expect(links).toHaveAttribute("href", "https://puretrack.io/g/e2e");
+  await expect(links).toHaveAttribute("target", "_blank");
+  await expect(links).toHaveAttribute("rel", "noopener noreferrer nofollow ugc");
+  await expect(shown).toContainText("Not a link: javascript:alert(1)");
+});
+
 test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
   page,
 }) => {
