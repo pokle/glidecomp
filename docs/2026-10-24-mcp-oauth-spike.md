@@ -38,8 +38,20 @@ the way a real MCP client would:
 9. The access token is refused as a `session_data` cookie. A garbage bearer
    token gets a `401`.
 
-Not tested here: any real client (Claude Code, Claude.ai, ChatGPT). See
-"Reaching it from ChatGPT" below.
+**Claude Code CLI, tested by the owner on 24 October:** it worked end to end
+against `http://localhost:3000/mcp`.
+
+- **Google sign-in resumes the request.** After "Continue with Google", the
+  consent page appeared and the connection completed.
+- **"Sign in (dev)" did nothing**, for a reason the spike didn't cause.
+  `/api/auth/dev-login` signs up with password `dev`, then signs in with it.
+  An account that already exists without a password (made by Google or an
+  email code) gets `401 INVALID_EMAIL_OR_PASSWORD`, which `signInAsDev()`
+  only logs to the console. Reproduced here; `master` has the same bug.
+- Email-code sign-in was not tried.
+
+Still untested: the hosted clients (Claude.ai, ChatGPT). See "Reaching it
+from ChatGPT" below.
 
 ## What the spike changed
 
