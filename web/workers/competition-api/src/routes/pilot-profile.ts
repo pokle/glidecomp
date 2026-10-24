@@ -17,7 +17,6 @@ import { requireAuth, forwardAuthHeaders } from "../middleware/auth";
 import { updatePilotSchema, validated } from "../validators";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { audit } from "../audit";
-import { visibleCompsFilter } from "../comp-visibility";
 
 // ── GET /api/comp/pilot/flights row/response shapes ──
 
@@ -41,14 +40,6 @@ interface RankRow {
   rank: number;
   total_score: number;
   class_size: number;
-}
-
-/** One registration in GET /api/comp/pilot/registrations; ids are sqid-encoded. */
-interface RegistrationEntry {
-  comp_id: string;
-  comp_pilot_id: string;
-  registered_pilot_name: string;
-  pilot_class: string;
 }
 
 /** One serialized flight in the response; ids are sqid-encoded. */
@@ -320,53 +311,6 @@ export const pilotProfileRoutes = new Hono<AuthedEnv>()
     });
 
     return c.json({ flights: entries });
-  })
-
-  // ── GET /api/comp/pilot/registrations ── The comps this account is on
-  //
-  // Every `comp_pilot` row linked to the caller's pilot, one per comp: what the
-  // native app keys its "Yours" group, the comp view's "You" group and the
-  // task view's "Your track" off (mobile plan, stage 4). Flights alone cannot
-  // say it — a pilot is registered before they have flown anything.
-  //
-  // Read-only, and visibility is the comp routes' own: a `test` comp is listed
-  // only for its admins, so this is never how a hidden comp is discovered.
-  .get("/api/comp/pilot/registrations", requireAuth, async (c) => {
-    const user = c.var.user;
-    const alphabet = c.env.SQIDS_ALPHABET;
-    const pilotRow = await c.env.DB.prepare(
-      "SELECT pilot_id FROM pilot WHERE user_id = ?"
-    )
-      .bind(user.id)
-      .first<{ pilot_id: number }>();
-    if (!pilotRow) return c.json({ registrations: [] as RegistrationEntry[] });
-
-    const visible = await visibleCompsFilter(c.env.DB, user, "c");
-    const rows = (
-      await c.env.DB.prepare(
-        `SELECT cp.comp_id, cp.comp_pilot_id, cp.registered_pilot_name, cp.pilot_class
-         FROM comp_pilot cp
-         JOIN comp c ON c.comp_id = cp.comp_id
-         WHERE cp.pilot_id = ? AND ${visible.sql}
-         ORDER BY cp.comp_id DESC
-         LIMIT 500`
-      )
-        .bind(pilotRow.pilot_id, ...visible.binds)
-        .all<{
-          comp_id: number;
-          comp_pilot_id: number;
-          registered_pilot_name: string;
-          pilot_class: string;
-        }>()
-    ).results;
-
-    const registrations: RegistrationEntry[] = rows.map((r) => ({
-      comp_id: encodeId(alphabet, r.comp_id),
-      comp_pilot_id: encodeId(alphabet, r.comp_pilot_id),
-      registered_pilot_name: r.registered_pilot_name,
-      pilot_class: r.pilot_class,
-    }));
-    return c.json({ registrations });
   })
 
   // ── PATCH /api/comp/pilot ── Update current user's pilot profile

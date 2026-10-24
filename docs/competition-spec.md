@@ -297,7 +297,6 @@ Pilot profile (the `pilot` table) is managed via the competition-api worker:
 |--------|-------|------|-------------|
 | GET | `/api/comp/pilot` | User | Get the current user's pilot profile. |
 | GET | `/api/comp/pilot/flights` | User | List the caller's flights across every comp (the dashboard's "My flights"). |
-| GET | `/api/comp/pilot/registrations` | User | List the caller's roster rows, one per comp — the app's "Yours", "You" and "Your track". A hidden `test` comp is listed only to its admins. |
 | PATCH | `/api/comp/pilot` | User | Update own profile (name, civl_id, sporting_body_ids, phone, glider). |
 
 #### Route families added since v3.0

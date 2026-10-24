@@ -105,9 +105,6 @@ export default defineConfig(async () => {
             SAMPLE_TASK_XCTSK,
             SAMPLE_IGC_FILES,
             TEST_SESSION_SIGNING_JWK: JSON.stringify(privateJwk),
-            // wrangler.toml names Expo's push endpoint for real deployments;
-            // the tests must never reach it (push.ts no-ops on an empty one).
-            PUSH_ENDPOINT: "",
           },
           r2Buckets: ["R2"],
           kvNamespaces: ["glidecomp_scores_cache"],

@@ -155,8 +155,6 @@ export async function clearCompData(): Promise<void> {
     // makes the next test's first mutation do somebody else's work.
     env.DB.prepare("DELETE FROM search_doc"),
     env.DB.prepare("DELETE FROM search_dirty"),
-    // The app's push tokens (migration 0038) are keyed by account, not comp.
-    env.DB.prepare("DELETE FROM push_token"),
     // Anonymous-submission budgets are keyed by comp/pilot/IP, not by comp id
     // alone, so they outlive the rows they were charged against and would make
     // one test's uploads count against the next one's.

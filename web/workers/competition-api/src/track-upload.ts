@@ -35,7 +35,6 @@ import type { AuthUser, Env } from "./env";
 import { applyStatusOnTrackUpload } from "./routes/pilot-status";
 import { validateAndDecompressIgc, IgcValidationException } from "./igc-validation";
 import { noticeOnUpload, type NoticeSubmitter } from "./track-notice-email";
-import { followers, pilotAccount, pushLater } from "./push";
 import { organisersOf } from "./submission-gate";
 
 /** Above this a task stops being a competition and starts being a denial of service. */
@@ -602,15 +601,6 @@ export async function ingestTrackSubmission(
       audit: auditTrack,
     }
   );
-
-  // And the app (stage 9): the same pilot, on their phone, if they follow
-  // this competition — never the account that just did the upload, which is
-  // reading the receipt already. Beside the email, never instead of it.
-  pushLater(c, pilotAccount(db, compPilotId).then((uid) => followers(db, compId, { only: uid, except: sub.actor?.id })), {
-    title: `Track received: ${sub.task.name}`,
-    body: `${sub.comp.name}: ${filedForName}’s track is in${stored.replaced ? ", replacing the one before" : ""}.`,
-    url: `/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
-  });
 
   return {
     ok: true,

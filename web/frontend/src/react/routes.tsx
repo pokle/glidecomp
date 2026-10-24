@@ -59,9 +59,6 @@ const Dashboard = lazy(() =>
 const Onboarding = lazy(() =>
   import("./pages/Onboarding").then((m) => ({ default: m.Onboarding }))
 );
-const SignInAppLink = lazy(() =>
-  import("./pages/SignInAppLink").then((m) => ({ default: m.SignInAppLink }))
-);
 const SignIn = lazy(() =>
   import("./pages/SignIn").then((m) => ({ default: m.SignIn }))
 );
@@ -169,8 +166,6 @@ export function AppRoutes() {
           <Route path="/app" element={<Navigate to="/u/me" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/signin" element={<SignIn />} />
-          {/* The app's sign-in link, opened away from the app (stage 9). */}
-          <Route path="/signin/app" element={<SignInAppLink />} />
           <Route element={<Shell />}>
             <Route path="/u/:username" element={<Dashboard />} />
             {/* Inside Shell: /submit is a destination with somewhere to go

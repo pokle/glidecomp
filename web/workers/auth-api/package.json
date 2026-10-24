@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@better-auth/api-key": "^1.7.10",
-    "@better-auth/expo": "1.7.10",
     "@glidecomp/worker-kit": "workspace:*",
     "better-auth": "^1.7.10",
     "hono": "^4.13.13",

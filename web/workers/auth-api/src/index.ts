@@ -457,12 +457,11 @@ app.get("/api/auth/dev-last-otp", (c) => {
   if (!email) {
     return c.json({ error: "email query param is required" }, 400);
   }
-  const recorded = getDevOtp(email);
-  if (!recorded) {
+  const otp = getDevOtp(email);
+  if (!otp) {
     return c.json({ error: "No OTP recorded for this email" }, 404);
   }
-  // `forApp`: which email production would have sent (otp-email.ts).
-  return c.json(recorded);
+  return c.json({ otp });
 });
 
 // API key create/list/delete are handled by the @better-auth/api-key plugin
@@ -570,29 +569,17 @@ app.post("/api/auth/sign-in/email-otp", async (c, next) => {
   }
 });
 
-// ── Social sign-in: what the app may ask for, and what nobody may (stage 4) ──
+// ── Social sign-in: what nobody may ask for ──
 //
-// The app signs in with Google and Apple NATIVELY: the platform's own sign-in
-// sheet hands it an ID token, and it posts that here. Better Auth checks the
-// token's signature and audience (auth.ts) and answers with the session
-// cookie in the RESPONSE — never in a URL.
+// The website signs in with Google through Better Auth's redirect flow. Two
+// things that endpoint would otherwise accept are refused here:
 //
-// Better Auth's Expo integration has a second way, which this refuses: a
-// browser round trip that ends by redirecting to the app's custom scheme
-// with the session cookie in the query string. Any app on a phone can
-// register a custom scheme, so that hands the session to whichever app
-// claims `glidecomp://` (RFC 8252 §8.1). Its entry point,
-// /expo-authorization-proxy, is not served (endpoints.ts); the checks below
-// close the rest of it:
-//
-// - every callback URL must be a web address or a path, so the expo()
-//   plugin's after-hook — which appends the cookie only when a callback
-//   redirects to a custom scheme — has nothing to act on;
-// - Apple is ID-token only. Its web flow would need a client secret this
-//   worker does not hold, and would fail later with a 500;
-// - an ID token's `user` (the name Apple hands the app on first sign-in) is
-//   refused: it would name the new account around /set-name's checks — the
-//   same hole SEC-55 closed on the email-OTP route. Onboarding asks instead.
+// - a callback URL that is not a web address or a path on this site. A
+//   custom scheme can be registered by any app on a phone, so a redirect to
+//   one would hand the session to whichever app claims it (RFC 8252 §8.1);
+// - an ID token's `user` (a provider-supplied name): it would name a new
+//   account around /set-name's checks — the same hole SEC-55 closed on the
+//   email-OTP route. Onboarding asks instead.
 
 const CALLBACK_FIELDS = ["callbackURL", "newUserCallbackURL", "errorCallbackURL"] as const;
 
@@ -624,8 +611,6 @@ app.post("/api/auth/sign-in/social", async (c, next) => {
     if ("user" in idToken) {
       return c.json({ code: "BAD_REQUEST", message: "Unexpected field" }, 400);
     }
-  } else if (body.provider === "apple") {
-    return c.json({ code: "BAD_REQUEST", message: "Sign in with Apple needs an ID token" }, 400);
   }
   await next();
 });

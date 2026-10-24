@@ -62,14 +62,6 @@ export type ProfileFieldKey = (typeof PROFILE_FIELDS)[number]["key"];
 /** GET /api/comp/pilot — the account's pilot profile; unset fields are null. */
 export type PilotProfile = Record<ProfileFieldKey, string | null>;
 
-/** GET /api/comp/pilot/registrations — one roster row this account holds. */
-export interface PilotRegistration {
-  comp_id: string;
-  comp_pilot_id: string;
-  registered_pilot_name: string;
-  pilot_class: string;
-}
-
 /** GET /api/comp/pilot/flights — one flight (track or manual) this account flew. */
 export interface PilotFlight {
   comp_id: string;

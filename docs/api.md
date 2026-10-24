@@ -395,12 +395,11 @@ It's what the "did you mean…" repair on a dead `/comp` URL runs on. Accepts
 | `GET` | `/api/auth/token` | **Always 404.** Better Auth's bearer-JWT endpoint, deliberately not served |
 | `POST` | `/api/auth/email-otp/send-verification-otp` | Email a sign-in code (`{"email", "type": "sign-in"}`). Limited per address as well as per client: past the limit it still answers `{"success":true}`, but no code is sent |
 | `POST` | `/api/auth/sign-in/email-otp` | Exchange a code for a session (`{"email", "otp"}`). Ten wrong codes for one address in an hour, from anywhere, and that address gets `429` until the hour is up |
-| `POST` | `/api/auth/sign-in/social` | Start Google sign-in on the website (`{"provider": "google", "callbackURL"}`), or sign in from the app with the ID token Google or Apple gave it (`{"provider", "idToken": {"token"}}`). A callback URL that is not a web address or a path is a `400`, and so is Apple without an ID token — see [auth.md](auth.md#the-native-app) |
+| `POST` | `/api/auth/sign-in/social` | Start Google sign-in (`{"provider": "google", "callbackURL"}`). A callback URL that is not a web address or a path is a `400` |
 | `ALL` | `/api/auth/*` | The rest of what Better Auth serves here, and nothing more: Google's callback (`/callback/:id`), the session (`/get-session`, `/sign-out`), API-key management (`/api-key/create`, `/api-key/list`, `/api-key/delete`; browser only, `403` with a key) and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)). Any other path under `/api/auth/` is a 404 |
 | `GET` | `/api/comp/pilot` | Your pilot profile (CIVL id, wing, nationality) |
 | `PATCH` | `/api/comp/pilot` | Update it. Changing `name` renames the account too, so with a key that is a `403`; the other fields are fine |
 | `GET` | `/api/comp/pilot/flights` | Every comp flight of yours, across competitions |
-| `GET` | `/api/comp/pilot/registrations` | The competitions you are on the roster of (one row each, with your registered name and class) |
 
 ```bash
 curl -H "x-api-key: $API_KEY" https://glidecomp.com/api/comp/pilot
@@ -434,20 +433,6 @@ whatever you have chosen to share under your username.
 curl -H "x-api-key: $API_KEY" https://glidecomp.com/api/user/tracks
 ```
 
-## App notifications
-
-What the native app uses for its opt-in, per-competition notifications
-(migration 0038). A device registers its Expo push token; an account follows
-the competitions it wants to hear about. Not competition data: nothing here is
-audited or touches scores.
-
-| Method | Path | |
-|---|---|---|
-| `PUT` | `/api/user/push-token` | Register this device: `{ "token": "ExponentPushToken[…]", "platform": "ios" \| "android" }`. A token another account held moves to you |
-| `DELETE` | `/api/user/push-token` | Forget this device: `{ "token": … }` (the app does this on sign-out) |
-| `GET` | `/api/comp/:comp_id/notify` | Whether you follow this competition: `{ "enabled": true }` |
-| `PUT` | `/api/comp/:comp_id/notify` | Follow it, or stop: `{ "enabled": false }` |
-
 ## Site endpoints
 
 Served by Pages Functions rather than the API workers, so they sit at the site
@@ -460,8 +445,6 @@ a crawler, and they are a contract all the same.
 | `GET` | `/civl-rankings.csv` | The CIVL monthly world ranking, as CSV |
 | `GET` | `/comp/:comp_id/scores.csv` | The scores page's downloadable twin |
 | `GET` | `/api/civl-rankings.csv` | The same ranking data, under `/api/` |
-| `GET` | `/.well-known/apple-app-site-association` | iOS universal links: which paths open the app (404 until `APPLE_TEAM_ID` is set) |
-| `GET` | `/.well-known/assetlinks.json` | Android App Links: the same, for Android (404 until `ANDROID_CERT_SHA256` is set) |
 
 ### CIVL world rankings
 

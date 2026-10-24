@@ -42,10 +42,6 @@
       "types": "./src/api.ts",
       "default": "./src/api.ts"
     },
-    "./app-links": {
-      "types": "./src/app-links.ts",
-      "default": "./src/app-links.ts"
-    },
     "./audit": {
       "types": "./src/audit.ts",
       "default": "./src/audit.ts"
@@ -65,10 +61,6 @@
     "./format": {
       "types": "./src/format.ts",
       "default": "./src/format.ts"
-    },
-    "./instrument": {
-      "types": "./src/instrument.ts",
-      "default": "./src/instrument.ts"
     },
     "./map-geometry": {
       "types": "./src/map-geometry.ts",
@@ -153,10 +145,6 @@
     "./track-cleaning": {
       "types": "./src/track-cleaning.ts",
       "default": "./src/track-cleaning.ts"
-    },
-    "./transport": {
-      "types": "./src/transport.ts",
-      "default": "./src/transport.ts"
     },
     "./turnpoint-draft": {
       "types": "./src/turnpoint-draft.ts",

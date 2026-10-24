@@ -20,16 +20,8 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
   each `web/workers/*` and `web/engine`, or you will miss most of the tree (on
   2026-09-13 the root listed 7 rows; `web/frontend` alone listed 23 more).
   Take the list from the root `package.json`'s `workspaces` rather than from
-  this sentence — it now includes `mobile` (the Expo app), `web/client` and
+  this sentence — it now includes `web/client` and
   `web/samples`, and will grow again.
-- **The `mobile` workspace's Expo SDK and native packages are not a weekly
-  bump.** `expo`, every `expo-*`, `react-native`, `@rnmapbox/maps`,
-  `react-native-*` and the app's `react` move together through
-  `bunx expo install --fix` (see [mobile/CLAUDE.md](../../mobile/CLAUDE.md)),
-  and only a native rebuild on a device proves them — nothing this routine runs
-  does. Take the pure-JS ones (`@tanstack/*`, `@babel/runtime`, test
-  libraries) and keep `better-auth` / `@better-auth/expo` at the same version
-  as `web/workers/auth-api`; leave the rest for a focused PR and list them.
 - **A `patchedDependencies` entry is keyed by an exact version.** When the
   package moves past it, bun prints `warn: patches/<pkg>@<ver>.patch no longer
   applies` and silently runs the unpatched code. Treat that warning as a
