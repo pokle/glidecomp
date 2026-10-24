@@ -29,6 +29,7 @@ import {
   type PreviewRole,
 } from "../lib/user";
 import { useScrollRestoration } from "../lib/scroll-restoration";
+import { toast } from "../lib/toast";
 
 declare const __GIT_SHA__: string;
 
@@ -155,7 +156,13 @@ export function Shell() {
             ) : !loading ? (
               <div className="flex items-center gap-2">
                 {DEV_SIGN_IN_ENABLED ? (
-                  <Button variant="outline" onPress={() => void signInAsDev()}>
+                  <Button
+                    variant="outline"
+                    onPress={async () => {
+                      const { error } = await signInAsDev();
+                      if (error) toast.error(error);
+                    }}
+                  >
                     Sign in (dev)
                   </Button>
                 ) : null}
