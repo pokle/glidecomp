@@ -2,6 +2,7 @@ import { betterAuth, type BetterAuthPlugin } from "better-auth";
 import { emailOTP, jwt, oAuthProxy } from "better-auth/plugins";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { apiKey } from "@better-auth/api-key";
+import { mcp } from "@better-auth/mcp";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 import { AUTH_COOKIE_PREFIX } from "@glidecomp/worker-kit/session-cookie";
@@ -106,6 +107,24 @@ export const API_KEY_HEADER = "x-api-key";
  * it ran. Change all three together.
  */
 export const API_KEY_LIFETIME_DAYS = 90;
+
+/**
+ * The scopes an MCP client may ask for, beyond OpenID's own: reading what the
+ * account can see, and creating or editing tasks and their routes in comps it
+ * administers. A later capability gets a scope of its own rather than a wider
+ * one of these (docs/2026-10-24-mcp-oauth-plan.md §5).
+ */
+export const MCP_SCOPES = ["comp:read", "task:write"] as const;
+
+/**
+ * The MCP server's resource identifier (RFC 8707 / RFC 9728): every access
+ * token is audience-bound to it. Derived from BETTER_AUTH_URL so dev
+ * (http://localhost:3000/mcp, loopback HTTP is allowed) and production
+ * (https://glidecomp.com/mcp) each name their own.
+ */
+export function mcpResource(env: { BETTER_AUTH_URL: string }): string {
+  return `${new URL(env.BETTER_AUTH_URL).origin}/mcp`;
+}
 
 /** How long an isolate trusts its copy of the `jwks` table. */
 const JWKS_CACHE_MS = 5 * 60 * 1000;
@@ -295,6 +314,23 @@ function buildAuth(env: AuthEnv) {
         // Nothing mints one (index.ts 404s /token); nothing would verify one.
         disableSettingJwtHeader: true,
         adapter: cachedJwksAdapter(env.glidecomp_auth),
+      }),
+      // The OAuth 2.1 authorisation server for the MCP endpoint
+      // (docs/2026-10-24-mcp-oauth-plan.md). SPIKE: phase 0 — the options
+      // here are what the spike connects clients with, not a reviewed config.
+      mcp({
+        resource: mcpResource(env),
+        loginPage: "/signin",
+        consentPage: "/oauth/consent",
+        scopes: ["openid", "profile", "offline_access", ...MCP_SCOPES],
+        clientRegistrationDefaultScopes: ["openid", "profile", "offline_access", "comp:read"],
+        clientRegistrationAllowedScopes: ["openid", "profile", "offline_access", ...MCP_SCOPES],
+        accessTokenExpiresIn: 15 * 60,
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        // Native MCP clients (Claude Code, Cursor) register a loopback
+        // callback without saying `application_type`; "web" would refuse it.
+        clientRegistrationDefaultApplicationType: "infer",
       }),
       ...(isLocalDev(env)
         ? []

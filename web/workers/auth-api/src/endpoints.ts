@@ -51,7 +51,43 @@ const SERVED: ReadonlyArray<readonly [method: "GET" | "POST", path: RegExp]> = [
   ["GET", /^\/api-key\/list$/],
   ["POST", /^\/api-key\/delete$/],
   ["GET", /^\/ok$/],
+  // The OAuth 2.1 provider behind the MCP endpoint (mcp() in auth.ts,
+  // docs/2026-10-24-mcp-oauth-plan.md §3). SPIKE: only what an MCP client's
+  // sign-in uses — authorise, consent (and resuming after sign-in), the token
+  // exchange, dynamic registration, revocation and userinfo, plus the client's
+  // public name for the consent page. The provider's client-management and
+  // introspection endpoints stay unserved.
+  ["GET", /^\/oauth2\/authorize$/],
+  ["POST", /^\/oauth2\/consent$/],
+  ["POST", /^\/oauth2\/continue$/],
+  ["POST", /^\/oauth2\/token$/],
+  ["POST", /^\/oauth2\/register$/],
+  ["POST", /^\/oauth2\/revoke$/],
+  ["GET", /^\/oauth2\/userinfo$/],
+  ["POST", /^\/oauth2\/userinfo$/],
+  ["GET", /^\/oauth2\/public-client$/],
+  // OpenID discovery relative to the issuer (which carries the base path).
+  ["GET", /^\/\.well-known\/openid-configuration$/],
 ];
+
+/**
+ * The discovery documents MCP clients fetch from the ORIGIN root rather than
+ * under /api/auth: RFC 8414 authorisation-server metadata (at the issuer's
+ * path, /api/auth), and RFC 9728 protected-resource metadata (bare, and at the
+ * resource's path, /mcp). The mcp() plugin answers them from its onRequest
+ * hook; index.ts routes exactly these to the handler.
+ */
+const DISCOVERY: ReadonlyArray<RegExp> = [
+  /^\/\.well-known\/oauth-authorization-server(\/api\/auth)?$/,
+  /^\/\.well-known\/openid-configuration(\/api\/auth)?$/,
+  /^\/\.well-known\/oauth-protected-resource(\/mcp)?$/,
+];
+
+/** Whether a root-level discovery request belongs to Better Auth. */
+export function isDiscoveryPath(method: string, pathname: string): boolean {
+  const verb = method.toUpperCase();
+  return (verb === "GET" || verb === "HEAD") && DISCOVERY.some((p) => p.test(pathname));
+}
 
 /** Whether the Better Auth catch-all may handle this request. */
 export function isServedAuthEndpoint(method: string, pathname: string): boolean {

@@ -156,7 +156,8 @@ export const DEV_SIGN_IN_ENABLED = import.meta.env.DEV;
  */
 export async function signInAsDev(
   name = "Tushar Pokle",
-  email = "tushar.pokle@gmail.com"
+  email = "tushar.pokle@gmail.com",
+  next = "/comp"
 ): Promise<void> {
   writePreviewRole("actual");
   const res = await fetch("/api/auth/dev-login", {
@@ -169,7 +170,7 @@ export async function signInAsDev(
     console.error("dev sign-in failed", res.status, await res.text().catch(() => ""));
     return;
   }
-  window.location.href = "/comp";
+  window.location.href = next;
 }
 
 export function UserProvider({

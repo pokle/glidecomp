@@ -21,6 +21,7 @@
 /settings  /app  200
 /onboarding  /app  200
 /signin  /app  200
+/oauth/consent  /app  200
 /admin/users  /app  200
 /admin/cache  /app  200
 

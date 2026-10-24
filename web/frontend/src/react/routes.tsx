@@ -59,6 +59,10 @@ const Dashboard = lazy(() =>
 const Onboarding = lazy(() =>
   import("./pages/Onboarding").then((m) => ({ default: m.Onboarding }))
 );
+// SPIKE (docs/2026-10-24-mcp-oauth-plan.md): an MCP client's consent screen.
+const OAuthConsent = lazy(() =>
+  import("./pages/OAuthConsent").then((m) => ({ default: m.OAuthConsent }))
+);
 const SignIn = lazy(() =>
   import("./pages/SignIn").then((m) => ({ default: m.SignIn }))
 );
@@ -166,6 +170,7 @@ export function AppRoutes() {
           <Route path="/app" element={<Navigate to="/u/me" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/signin" element={<SignIn />} />
+          <Route path="/oauth/consent" element={<OAuthConsent />} />
           <Route element={<Shell />}>
             <Route path="/u/:username" element={<Dashboard />} />
             {/* Inside Shell: /submit is a destination with somewhere to go

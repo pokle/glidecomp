@@ -26,6 +26,7 @@ function stubEnv() {
       AUTH_API: make("AUTH_API"),
       COMPETITION_API: make("COMPETITION_API"),
       AIRSCORE_API: make("AIRSCORE_API"),
+      MCP_API: make("MCP_API"),
     },
   };
 }
@@ -63,6 +64,11 @@ describe("dev-router dispatch", () => {
     ["/api/civl-rankings.csv", "COMPETITION_API"],
     // airscore-api
     ["/api/airscore/task/1/2", "AIRSCORE_API"],
+    // mcp-api, and the OAuth discovery its clients fetch from the root (SPIKE)
+    ["/mcp", "MCP_API"],
+    ["/.well-known/oauth-protected-resource/mcp", "AUTH_API"],
+    ["/.well-known/oauth-authorization-server/api/auth", "AUTH_API"],
+    ["/.well-known/openid-configuration/api/auth", "AUTH_API"],
   ];
 
   for (const [path, binding] of cases) {
@@ -107,6 +113,7 @@ describe("dev-router readiness", () => {
       AUTH_API: make("AUTH_API"),
       COMPETITION_API: make("COMPETITION_API"),
       AIRSCORE_API: make("AIRSCORE_API"),
+      MCP_API: make("MCP_API"),
     };
   }
 
@@ -118,17 +125,17 @@ describe("dev-router readiness", () => {
     return { status: res.status, body: await res.json() };
   }
 
-  it("200s when all three Workers answer", async () => {
+  it("200s when every Worker answers", async () => {
     const { status, body } = await probe();
     expect(status).toBe(200);
     expect(body).toEqual({
       ready: true,
-      workers: { AUTH_API: "ok", COMPETITION_API: "ok", AIRSCORE_API: "ok" },
+      workers: { AUTH_API: "ok", COMPETITION_API: "ok", AIRSCORE_API: "ok", MCP_API: "ok" },
     });
   });
 
   it("503s while ANY single Worker is still loading, and names it", async () => {
-    for (const worker of ["AUTH_API", "COMPETITION_API", "AIRSCORE_API"]) {
+    for (const worker of ["AUTH_API", "COMPETITION_API", "AIRSCORE_API", "MCP_API"]) {
       const { status, body } = await probe([worker]);
       // 503 matters specifically: Playwright treats 200–403 as "server is up",
       // so anything in that range would end the wait early.
@@ -148,6 +155,8 @@ describe("dev-router readiness", () => {
       AIRSCORE_API: {
         fetch: () => Promise.resolve(new Response("nope", { status: 404 })),
       },
+      // mcp-api 401s an unauthenticated probe, which is a sign of life too.
+      MCP_API: { fetch: () => Promise.resolve(new Response("", { status: 401 })) },
     };
     const res = await router.fetch(
       new Request("http://localhost:8790/__ready"),
@@ -163,6 +172,7 @@ describe("dev-router readiness", () => {
         fetch: () => Promise.resolve(new Response("boom", { status: 500 })),
       },
       AIRSCORE_API: { fetch: () => Promise.resolve(new Response("ok")) },
+      MCP_API: { fetch: () => Promise.resolve(new Response("ok")) },
     };
     const res = await router.fetch(
       new Request("http://localhost:8790/__ready"),
