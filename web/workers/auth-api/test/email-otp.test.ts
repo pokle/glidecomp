@@ -151,6 +151,35 @@ describe("email OTP sign-in", () => {
     const maxAge = /max-age=(\d+)/i.exec(sessionCookie!)?.[1];
     expect(Number(maxAge)).toBe(60 * 60 * 24 * 60);
   });
+
+  test("dev-login signs into an account an email code created", async () => {
+    // The reverse of the Google-first case above: the account exists with no
+    // password, which dev-login used to answer with 401 — a dead "Sign in
+    // (dev)" button for anyone who had signed in by code or Google first.
+    const email = "otp-then-dev-login@example.com";
+    await sendOtp(email, "203.0.113.5");
+    const otp = await fetchDevOtp(email);
+    const otpRes = await signInWithOtp(email, otp, "203.0.113.5");
+    expect(otpRes.status).toBe(200);
+    const otpMe = (await (
+      await request("GET", "/api/auth/me", { cookie: cookieHeader(otpRes) })
+    ).json()) as { user: { id: string } };
+
+    const devRes = await request("POST", "/api/auth/dev-login", {
+      body: { name: "Code First", email },
+    });
+    expect(devRes.status).toBe(200);
+    const devMe = (await (
+      await request("GET", "/api/auth/me", { cookie: cookieHeader(devRes) })
+    ).json()) as { user: { id: string } | null };
+    expect(devMe.user?.id).toBe(otpMe.user.id);
+
+    // And again, now that the account carries the dev password.
+    const again = await request("POST", "/api/auth/dev-login", {
+      body: { name: "Code First", email },
+    });
+    expect(again.status).toBe(200);
+  });
 });
 
 describe("per-IP send rate limit", () => {
