@@ -300,7 +300,7 @@ export default defineConfig({
               path === '/comp' ||
               path.startsWith('/comp/') ||
               path === '/scores' ||
-              /^\/(submit|profile|settings|onboarding|signin|signin\/app)\/?$/.test(path) ||
+              /^\/(submit|profile|settings|onboarding|signin|signin\/app|oauth\/consent)\/?$/.test(path) ||
               /^\/admin\/(users|cache)\/?$/.test(path));
           // Old static-page URLs 301 to their clean SPA/Astro routes.
           const movedTo: Record<string, string> = {
@@ -391,6 +391,12 @@ export default defineConfig({
     // web/scripts/dev-workers.sh for why there is only one target now.
     proxy: {
       '/api': { target: DEV_API_ORIGIN, changeOrigin: true },
+      // The MCP endpoint and its OAuth discovery documents, which MCP clients
+      // fetch from the origin root. Pages Functions in production; the
+      // dev-router dispatches them here (docs/2026-10-24-mcp-oauth-plan.md).
+      '/mcp': { target: DEV_API_ORIGIN, changeOrigin: true },
+      '/.well-known/oauth-': { target: DEV_API_ORIGIN, changeOrigin: true },
+      '/.well-known/openid-configuration': { target: DEV_API_ORIGIN, changeOrigin: true },
       // /civl-rankings.csv is a Pages Function in production
       // (functions/civl-rankings.csv.ts), and Pages Functions don't run under
       // `bun run dev`. Rewriting to the worker path it forwards to keeps the

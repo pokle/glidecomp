@@ -30,6 +30,10 @@ service = "competition-api"
 binding = "AIRSCORE_API"
 service = "airscore-api"
 
+[[services]]
+binding = "MCP_API"
+service = "mcp-api"
+
 [dev]
 port = 8790
 inspector_port = 9232

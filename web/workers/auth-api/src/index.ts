@@ -13,10 +13,12 @@ import {
   createAuth,
   getDevOtp,
   isLocalDev,
+  mcpResource,
   runWithExecutionCtx,
   type AuthEnv,
 } from "./auth";
-import { isServedAuthEndpoint, requiresBrowserSession } from "./endpoints";
+import { bearerJwt, verifyAccessToken } from "@glidecomp/worker-kit/access-token";
+import { isDiscoveryPath, isServedAuthEndpoint, requiresBrowserSession } from "./endpoints";
 import {
   normalizeEmail,
   otpSendAllowed,
@@ -147,6 +149,40 @@ async function refreshSessionCache(c: Context<{ Bindings: AuthEnv }>): Promise<v
 // no D1 read for identity.
 app.get("/api/auth/me", async (c) => {
   const auth = createAuth(c.env);
+
+  // An MCP access token (docs/2026-10-24-mcp-oauth-plan.md §3), forwarded by
+  // mcp-api through competition-api. SPIKE: verified here against our own
+  // JWKS and answered with the grant beside the user; the plan's consent
+  // check (so Disconnect bites within one request) is done, the rate limit
+  // and the route fence in competition-api are not.
+  const bearer = bearerJwt(c.req.header("authorization"));
+  if (bearer) {
+    const origin = new URL(c.env.BETTER_AUTH_URL).origin;
+    const grant = await verifyAccessToken(bearer, {
+      issuer: `${origin}/api/auth`,
+      audience: mcpResource(c.env),
+      fetchJwks: () => auth.handler(new Request(`${origin}/api/auth/jwks`)),
+    });
+    if (!grant) return c.json({ user: null });
+    const ctx = await auth.$context;
+    const consent = grant.clientId
+      ? await ctx.adapter.findOne({
+          model: "oauthConsent",
+          where: [
+            { field: "userId", value: grant.userId },
+            { field: "clientId", value: grant.clientId },
+          ],
+        })
+      : null;
+    if (!consent) return c.json({ user: null });
+    const user = await ctx.internalAdapter.findUserById(grant.userId);
+    if (!user) return c.json({ user: null });
+    return c.json({
+      user,
+      grant: { kind: "oauth", client_id: grant.clientId, scopes: grant.scopes },
+    });
+  }
+
   let session;
   try {
     const result = await auth.api.getSession({
@@ -633,6 +669,14 @@ app.post("/api/auth/sign-in/social", async (c, next) => {
 // Better Auth catch-all handler — for the endpoints endpoints.ts lists, and
 // nothing else (SEC-55). The ExecutionContext lets sendVerificationOTP hand
 // the outbound email to waitUntil instead of blocking the response on it.
+// OAuth discovery for MCP clients, at the origin root (endpoints.ts says which
+// paths). In production a Pages Function forwards these here; in dev the Vite
+// proxy and dev-router do.
+app.on(["GET", "HEAD"], "/.well-known/*", async (c) => {
+  if (!isDiscoveryPath(c.req.method, c.req.path)) return c.notFound();
+  return createAuth(c.env).handler(c.req.raw);
+});
+
 app.all("/api/auth/*", async (c) => {
   if (!isServedAuthEndpoint(c.req.method, c.req.path)) return c.notFound();
   const auth = createAuth(c.env);

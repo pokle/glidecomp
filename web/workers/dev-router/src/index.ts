@@ -27,6 +27,7 @@ interface Env {
   AUTH_API: Fetcher;
   COMPETITION_API: Fetcher;
   AIRSCORE_API: Fetcher;
+  MCP_API: Fetcher;
 }
 
 /**
@@ -55,6 +56,13 @@ const ROUTES: Array<[string, keyof Env]> = [
   ["/api/user", "COMPETITION_API"],
   ["/api/u", "COMPETITION_API"],
   ["/api/admin", "COMPETITION_API"],
+  // The MCP endpoint and the OAuth discovery its clients fetch from the origin
+  // root (docs/2026-10-24-mcp-oauth-plan.md). In production these are Pages
+  // Functions too: functions/mcp.ts and functions/.well-known/.
+  ["/mcp", "MCP_API"],
+  ["/.well-known/oauth-authorization-server", "AUTH_API"],
+  ["/.well-known/oauth-protected-resource", "AUTH_API"],
+  ["/.well-known/openid-configuration", "AUTH_API"],
 ];
 
 /**
@@ -83,6 +91,7 @@ async function readiness(env: Env): Promise<Response> {
     ["AUTH_API", "/api/auth/me"],
     ["COMPETITION_API", "/api/comp"],
     ["AIRSCORE_API", "/api/airscore"],
+    ["MCP_API", "/mcp"],
   ];
 
   const workers = Object.fromEntries(

@@ -62,6 +62,10 @@ const Onboarding = lazy(() =>
 const SignInAppLink = lazy(() =>
   import("./pages/SignInAppLink").then((m) => ({ default: m.SignInAppLink }))
 );
+// SPIKE (docs/2026-10-24-mcp-oauth-plan.md): an MCP client's consent screen.
+const OAuthConsent = lazy(() =>
+  import("./pages/OAuthConsent").then((m) => ({ default: m.OAuthConsent }))
+);
 const SignIn = lazy(() =>
   import("./pages/SignIn").then((m) => ({ default: m.SignIn }))
 );
@@ -171,6 +175,7 @@ export function AppRoutes() {
           <Route path="/signin" element={<SignIn />} />
           {/* The app's sign-in link, opened away from the app (stage 9). */}
           <Route path="/signin/app" element={<SignInAppLink />} />
+          <Route path="/oauth/consent" element={<OAuthConsent />} />
           <Route element={<Shell />}>
             <Route path="/u/:username" element={<Dashboard />} />
             {/* Inside Shell: /submit is a destination with somewhere to go
