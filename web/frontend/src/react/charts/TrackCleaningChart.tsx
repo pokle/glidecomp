@@ -53,13 +53,13 @@ import {
   zoomWindow,
   type CleaningRange,
   type Point,
-} from "@glidecomp/client/track-cleaning";
+} from "./track-cleaning";
 import { formatTimeInZone } from "../lib/time";
 import { extent, linearScale, niceTicks } from "./scale";
 import { AxisUnit } from "./AxisTitle";
 import { CHART_LABEL_PX, useChartLabelSize } from "./use-chart-label-size";
 
-// The pure helpers moved to @glidecomp/client so the app draws the same frame.
+// The pure helpers live in track-cleaning.ts.
 export { bandRect, channelHealth, decimateSeries, zoomWindow, type CleaningRange };
 
 const W = 560;

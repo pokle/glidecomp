@@ -8,7 +8,7 @@
 
 import * as mapboxgl from 'mapbox-gl';
 import { Threebox } from 'threebox-plugin';
-import { taskMapFeatures, trackLineFeatures } from '@glidecomp/client/map-geometry';
+import { taskMapFeatures, trackLineFeatures } from './map-geometry';
 import { getBoundingBox, getEventStyle, calculateGlideMarkers, calculateGlidePositions, getSegmentLengthMeters, calculateBearing, ellipsoidDistance, type IGCFix, type XCTask, type FlightEvent, type GlideContext, type TurnpointSequenceResult, type PilotScore } from '@glidecomp/engine';
 import type { MapProvider, MapBounds, MapCamera, MapPickDetails, LoadedTrack, OpenDistanceLine, BestProgressRoute } from './map-provider';
 import { config } from './config';
@@ -77,7 +77,6 @@ function buildTrackFeatures(
   altRange: number,
   minAlt: number,
 ): GeoJSON.Feature[] {
-  // Shared with the app: @glidecomp/client/map-geometry.
   return trackLineFeatures(fixes, { minAlt, maxAlt: minAlt + altRange, altRange });
 }
 
@@ -2712,7 +2711,7 @@ export function createMapBoxProvider(
             return;
           }
 
-          // The features are shared with the app (@glidecomp/client/map-geometry).
+          // The features come from map-geometry.ts.
           // A LINE goal replaces the last turnpoint's circle with its control
           // semicircle and draws the line itself on task-goal-line.
           const f = taskMapFeatures(task, config.getUnits());

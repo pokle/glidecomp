@@ -8,8 +8,8 @@ import type { IGCFix, XCTask, FlightEvent, FlightSegments, PilotScore } from '@g
 import type { MapAnnotationLayer } from './map-annotations';
 
 /** A loaded track with metadata for multi-track display */
-// Shared with the report card in @glidecomp/client (mobile plan, stage 3).
-import type { BestProgressRoute, OpenDistanceLine } from "@glidecomp/client/report-card";
+// Shared with the report card.
+import type { BestProgressRoute, OpenDistanceLine } from "../react/score-detail/report-card";
 export type { BestProgressRoute, OpenDistanceLine };
 
 export interface LoadedTrack {

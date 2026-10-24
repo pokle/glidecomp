@@ -1,12 +1,12 @@
 /**
  * The pure half of the report card's "Track data cleaning" chart — which
  * altimeters a file carries, the frame for one repair, decimation that keeps
- * the glitches, and band geometry — shared by the website's SVG
- * (`charts/TrackCleaningChart.tsx`) and the app's. Report-card rule (d): the
+ * the glitches, and band geometry — for `charts/TrackCleaningChart.tsx`,
+ * and unit-testable without rendering it. Report-card rule (d): the
  * frame always covers the RAW excursion, never only the cleaned line.
  */
 import type { IGCFix } from "@glidecomp/engine";
-import type { AltitudeCleaningData } from "./types";
+import type { AltitudeCleaningData } from "../comp/types";
 
 export type CleaningRange = AltitudeCleaningData["ranges"][number];
 

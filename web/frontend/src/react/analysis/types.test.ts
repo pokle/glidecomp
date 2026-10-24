@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import type { CompAnalysisReport, CompMetricAggregate, MetricReport } from "@glidecomp/engine";
 import {
   compAnalysisRows,
@@ -7,7 +7,7 @@ import {
   reportCellText,
   rhoText,
   winningLabel,
-} from "./analysis";
+} from "./types";
 
 const metric = (id: string, absRho: number | null, outcome = false): MetricReport =>
   ({

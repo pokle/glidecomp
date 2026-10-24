@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { getOptimizedSegmentDistances, type XCTask } from "@glidecomp/engine";
 import { assertAnalysisMatchesScore, expectedScoredDistance } from "./report-card";
 
@@ -26,9 +26,9 @@ function check(
 }
 
 describe("the report card's score/analysis check (issue #742)", () => {
-  let errors: ReturnType<typeof spyOn>;
+  let errors: MockInstance;
   beforeEach(() => {
-    errors = spyOn(console, "error").mockImplementation(() => {});
+    errors = vi.spyOn(console, "error").mockImplementation(() => {});
   });
   afterEach(() => errors.mockRestore());
 

@@ -1,6 +1,6 @@
 /**
- * The competition and task form fields' shared rules, so the website's
- * dialogs and the app's organiser screens take the same input the same way.
+ * The competition and task form fields' shared rules, so every dialog takes
+ * the same input the same way.
  */
 
 /**

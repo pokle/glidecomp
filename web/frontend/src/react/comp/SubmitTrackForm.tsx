@@ -83,7 +83,7 @@ export interface SubmitTrackResult {
   timezone: string | null;
 }
 
-// Moved to @glidecomp/client/submit with the rest of the flow's rules; kept
+// Lives in submit-track.ts with the rest of the flow's rules; kept
 // importable from here.
 export { igcPilotNameFromText };
 

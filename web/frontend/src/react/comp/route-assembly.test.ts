@@ -1,7 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { assembleRouteTask, type RouteRow } from "./route-editor";
 import { parsePilotClasses } from "./comp-fields";
-import { importedRows, type ImportClassifiedRow, type ParsedRow } from "./roster-csv";
+import { importedRows, type ImportClassifiedRow, type ParsedRow } from "./csv";
 
 const row = (id: number, name: string, coords: string, type: RouteRow["type"] = ""): RouteRow => ({
   id,

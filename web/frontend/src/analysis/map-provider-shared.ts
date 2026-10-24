@@ -21,7 +21,7 @@ import {
   formatTurnpointLabel as formatTurnpointLabelIn,
   computeSegmentLabels as computeSegmentLabelsIn,
   type SegmentLabelData,
-} from '@glidecomp/client/map-geometry';
+} from './map-geometry';
 
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ export function calculateAltitudeGradient(fixes: IGCFix[]): [number, string][] {
   return stops;
 }
 
-// The pure geometry is shared with the app (@glidecomp/client/map-geometry).
+// The pure geometry lives in map-geometry.ts.
 export {
   TRACK_OUTLINE_COLOR,
   HIGHLIGHT_COLOR,
@@ -104,7 +104,7 @@ export {
   type AltitudeRange,
   type TrackSegment,
   type SegmentLabelData,
-} from '@glidecomp/client/map-geometry';
+} from './map-geometry';
 
 /** Build the display label for a turnpoint: "NAME, R Xkm, A Ym, ROLE" */
 export function formatTurnpointLabel(tp: Turnpoint, index: number): string {

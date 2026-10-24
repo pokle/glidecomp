@@ -14,7 +14,7 @@ import {
   scoringDefaults,
   scoringFormValues,
   scoringPatch,
-} from "@glidecomp/client/scoring-settings";
+} from "./scoring-settings";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { Button } from "@/react/rac/button";
@@ -32,7 +32,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
 
   // Every field starts at the EFFECTIVE value the scorer uses (the wing's
   // official defaults under the comp's saved overrides, issue #343); see
-  // @glidecomp/client/scoring-settings, which the app's form shares.
+  // scoring-settings.ts.
   const [init] = useState(() => scoringFormValues(comp));
   const [scoringFormat, setScoringFormat] = useState<ScoringFormat>(init.scoringFormat);
   const [seriesScoring, setSeriesScoring] = useState<SeriesScoring>(init.seriesScoring);

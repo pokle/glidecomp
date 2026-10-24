@@ -2,9 +2,8 @@
  * The Scoring settings form, as values: what each field starts at (the
  * EFFECTIVE parameters the scorer uses — the wing's official CIVL GAP
  * defaults under the comp's saved overrides, issue #343), what Reset puts
- * back, and the PATCH body a save sends. Shared by the website's
- * ScoringSettings and the app's (mobile plan stage 7), so the two cannot save
- * a scoring formula differently.
+ * back, and the PATCH body a save sends. Pure, so ScoringSettings' rules are
+ * unit-testable.
  */
 import {
   defaultsFor,
@@ -12,7 +11,7 @@ import {
   resolveLeadingTimeRatio,
   storedHgClass2Classes,
 } from "@glidecomp/engine";
-import type { CompDetailData, ScoringFormat, SeriesScoring } from "./types";
+import type { CompDetailData, ScoringFormat, SeriesScoring } from "../types";
 
 export interface ScoringFormValues {
   scoringFormat: ScoringFormat;

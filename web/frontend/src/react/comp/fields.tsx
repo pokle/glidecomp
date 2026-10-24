@@ -4,7 +4,7 @@
  * call site. Everything here is built on the RAC kit (src/react/rac/) — the
  * last Base UI pieces (the two selects) converted with the CompDetail page.
  */
-import { PILOT_CLASS_EXAMPLES } from "@glidecomp/client/comp-fields";
+import { PILOT_CLASS_EXAMPLES } from "./comp-fields";
 import { useState } from "react";
 import {
   Button as AriaButton,
@@ -222,7 +222,7 @@ export function CategoryField({
   );
 }
 
-// The presets live in @glidecomp/client/comp-fields, shared with the app.
+// The presets live in comp-fields.ts.
 
 export function PilotClassesField({
   value,

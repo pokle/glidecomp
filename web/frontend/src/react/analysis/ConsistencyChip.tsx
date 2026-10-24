@@ -20,8 +20,8 @@ import type { CompMetricAggregate, SignConsistency } from "./types";
  * that they were too few: with three tasks and a noise floor to clear, that
  * verdict is common, and "no clear task" and "one clear task only" are
  * different situations for a reader deciding whether to believe the row. */
-export { consistencyWords } from "@glidecomp/client/analysis";
-import { consistencyWords } from "@glidecomp/client/analysis";
+export { consistencyWords } from "./types";
+import { consistencyWords } from "./types";
 
 function ariaText(m: CompMetricAggregate): string {
   const s = m.signSummary;
