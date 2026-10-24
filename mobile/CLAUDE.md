@@ -129,7 +129,7 @@ production. That matters from stage 4, when the app first writes.
 
 - `src/app/` — Expo Router routes. `(tabs)/` holds the four tabs; each real
   tab is its own native stack. `submit.tsx` is the Submit sheet and `qr.tsx`
-  the full-screen QR, both presented over the tabs from the root stack. **Route shapes are the website's URLs**
+  the QR screen, both presented over the tabs from the root stack. **Route shapes are the website's URLs**
   (`/comp/<comp>/task/<task>/route`, `…/weather`), so `compPath()` and
   `taskPath()` from `@glidecomp/client/slug` build the app's own routes, and
   universal links (stage 9) map one to one.
@@ -396,8 +396,11 @@ the phone is the file the website's worker serves, name and all.
   so it works offline once the task has been read. iOS chooses the apps a
   share sheet offers by type: GPX and KML go as their own types, the rest as
   `public.data`, and the receiving app goes by the extension.
-- **The QR is `/qr`, a full-screen modal**, black on white in either theme,
-  kept awake while it is up. It takes the source's ids as route parameters
+- **The QR is `/qr`, pushed over the tabs with the native header**, black on
+  white in either theme, kept awake while it is up. It was a full-screen
+  modal with its own Done button until a real iPhone put that button under
+  the battery icon: a screen with only a close button is a push, so the
+  system back button and edge swipe get the reader out. It takes the source's ids as route parameters
   (`comp`, `task`, `code`, `swap`) and reads the task from the cache rather
   than carrying a 3 KB payload through the router.
 
@@ -421,6 +424,10 @@ the organiser's notes (migration 0037, through the comp PATCH).
   `Toggle`, `DangerButton`), not the native grouped list: they are typed
   into, and the list's rows are not inputs. A sheet over a form (the route
   editor's turnpoint) is an RN `Modal` with `presentationStyle="pageSheet"`.
+  Android has no page sheet, so there the modal fills the screen edge to
+  edge, under the status and navigation bars: a modal that draws its own
+  top bar pads it by the safe-area insets on Android, or its buttons sit
+  under the clock.
 - **Units**: altitudes typed in the reader's unit (`toAltitudeInput` /
   `fromAltitudeInput`), radii always metres; Check altitudes is metric, as the
   waypoint file is. Gate and deadline times are typed in the comp's zone and
