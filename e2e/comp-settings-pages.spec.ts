@@ -169,6 +169,34 @@ test("the index groups the settings; a group save PATCHes only its own fields", 
   );
 });
 
+test("General edits the organiser's notes, and the comp page shows them", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await page.goto(`/comp/${compId}/settings/general`);
+  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
+
+  const notes = page.getByLabel("Notes for every pilot");
+  await expect(notes).toHaveValue("");
+  await notes.fill("Briefing 9:30 at the launch shelter.\nRetrieve leaves from the pub at 6.");
+
+  const [patch] = await Promise.all([
+    page.waitForRequest(
+      (r) => r.method() === "PATCH" && r.url().includes("/api/comp/")
+    ),
+    page.getByRole("button", { name: "Save" }).click(),
+  ]);
+  expect((patch.postDataJSON() as Record<string, unknown>).organiser_notes).toBe(
+    "Briefing 9:30 at the launch shelter.\nRetrieve leaves from the pub at 6."
+  );
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+
+  await page.goto(`/comp/${compId}`);
+  await expect(page.getByTestId("organiser-notes")).toContainText(
+    "Briefing 9:30 at the launch shelter."
+  );
+});
+
 test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
   page,
 }) => {

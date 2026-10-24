@@ -239,8 +239,8 @@ function CompDetailView({
               ))}
             </p>
           ) : null}
-          {/* The organiser's standing notes (migration 0037), written from
-              the app on the hill. Plain text; line breaks kept. Absent on a
+          {/* The organiser's standing notes (migration 0037), edited in
+              Settings → General. Plain text; line breaks kept. Absent on a
               payload cached before the column existed. */}
           {comp.organiser_notes?.trim() ? (
             <p
