@@ -1,9 +1,7 @@
 /**
  * The report card's derivation: the four API payloads (comp, task, task
- * score, pilot analysis) in, the narrative the page renders out. Moved here
- * from the website's PilotScoreDetail so the website and the app call ONE
- * function — two report-card implementations would drift (mobile plan,
- * stage 3). Pure: no fetch, no DOM. The engine's explain* functions do the
+ * score, pilot analysis) in, the narrative PilotScoreDetail renders out.
+ * Pure: no fetch, no DOM. The engine's explain* functions do the
  * work; this picks the right one and assembles what the page needs.
  */
 import {
@@ -23,7 +21,7 @@ import {
   type ScoreExplanation,
   type XCTask,
 } from "@glidecomp/engine";
-import { formatTimeInZone } from "./time";
+import { formatTimeInZone } from "../lib/time";
 import type {
   AltitudeCleaningData,
   ClassScore,
@@ -33,7 +31,7 @@ import type {
   TaskDetailData,
   TaskScoreData,
   TrackQualityData,
-} from "./types";
+} from "../comp/types";
 
 /** An open-distance pilot's scored straight line, for the map. */
 export interface OpenDistanceLine {

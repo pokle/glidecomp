@@ -17,17 +17,16 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../comp/api";
 import { fetchWithRetry } from "../comp/types";
-import { MIN_SEARCH_CHARS, type SearchResults } from "@glidecomp/client/search";
+import { MIN_SEARCH_CHARS, type SearchResults } from "./search";
 
-// The wire types and the minimum query length moved to @glidecomp/client,
-// shared with the app (mobile plan, stage 2).
+// The wire types and the minimum query length live in ./search.
 export {
   MIN_SEARCH_CHARS,
   type SearchComp,
   type SearchPilot,
   type SearchResults,
   type SearchTask,
-} from "@glidecomp/client/search";
+} from "./search";
 
 
 /** Quiet time before a query is sent. Long enough that ordinary typing sends

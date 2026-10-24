@@ -53,8 +53,8 @@ import {
 } from "./types";
 
 /** A metric paired with the correlation it earned. */
-export { rankMetrics, bestCorrelation, type RankedMetric } from "@glidecomp/client/analysis";
-import { rankMetrics, bestCorrelation, type RankedMetric } from "@glidecomp/client/analysis";
+export { rankMetrics, bestCorrelation, type RankedMetric } from "./types";
+import { rankMetrics, bestCorrelation, type RankedMetric } from "./types";
 
 /** Just the magnitude of {@link bestCorrelation}. */
 export function bestAbsRho(metrics: MetricReport[]): number | null {

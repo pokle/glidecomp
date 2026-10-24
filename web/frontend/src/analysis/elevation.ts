@@ -1,10 +1,8 @@
 /**
  * Ground-elevation lookup from Mapbox Terrain-RGB DEM tiles, for the website.
  *
- * The decoder and the sampling moved to @glidecomp/client/terrain-elevation
- * (mobile plan stage 7) so the app's Check altitudes reads the same pixels the
- * same way; read that file for why the PNG is decoded by hand rather than
- * through a canvas. What stays here is the browser's half: the inflater
+ * The decoder and the sampling live in terrain-elevation.ts; read that file
+ * for why the PNG is decoded by hand rather than through a canvas. What stays here is the browser's half: the inflater
  * (`DecompressionStream`) and the build's token. Still browser-only, and
  * callers import it dynamically so it stays out of the SSR bundle.
  */
@@ -13,7 +11,7 @@ import {
   fetchElevations as fetchWith,
   type LatLon,
   type TerrainPixels,
-} from "@glidecomp/client/terrain-elevation";
+} from "./terrain-elevation";
 
 export {
   decodeTerrainRgb,
@@ -23,7 +21,7 @@ export {
   type LatLon,
   type TerrainPixels,
   type TilePoint,
-} from "@glidecomp/client/terrain-elevation";
+} from "./terrain-elevation";
 
 // Uint8Array<ArrayBuffer> (not the ArrayBufferLike default): the stream
 // APIs will not take a view that might be over a SharedArrayBuffer.

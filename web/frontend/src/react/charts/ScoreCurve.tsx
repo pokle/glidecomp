@@ -42,7 +42,7 @@ import {
   curvePilotLabel,
   formatChartX,
   placeCurveLabels,
-} from "@glidecomp/client/score-curve-layout";
+} from "./score-curve-layout";
 import { AxisUnit, XAxisTitle } from "./AxisTitle";
 import { CHART_LABEL_PX, useChartLabelSize } from "./use-chart-label-size";
 
@@ -134,7 +134,7 @@ export function ScoreCurve({ chart }: { chart: ScoreCurveChart }) {
   const xTicks = niceTicks(xDomain, 4);
   const yTicks = niceTicks([0, yMax || 1], 3);
 
-  // Who gets named, and where: shared with the app's chart.
+  // Who gets named, and where (score-curve-layout.ts).
   const labels = placeCurveLabels({ points, x, y, fontSize, width: W, plot });
 
   const label = (p: ScoreChartPilot) => curvePilotLabel(xUnit, p);

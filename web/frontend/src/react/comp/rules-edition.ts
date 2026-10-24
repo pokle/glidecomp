@@ -1,7 +1,7 @@
 /**
  * Which edition of the FAI S7F scored a task, and whether the task predates
- * it (docs/2026-08-09-s7f-2026-migration-plan.md). Shared by the website's
- * RulesEdition badge and notice and the app's report card.
+ * it (docs/2026-08-09-s7f-2026-migration-plan.md), for the RulesEdition
+ * badge and notice.
  */
 
 /**

@@ -12,7 +12,7 @@
  * functions/comp/[[path]].ts): the server seeds the most-recently-cached
  * report, or a pending placeholder while the first compute runs.
  */
-import { compAnalysisRows, hasAnyCorrelation } from "@glidecomp/client/analysis";
+import { compAnalysisRows, hasAnyCorrelation } from "../analysis/types";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "../components/NotFound";

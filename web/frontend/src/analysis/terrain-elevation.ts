@@ -44,12 +44,9 @@
  * makes this path unit-testable against a real recorded tile, which the canvas
  * version could not be, and drops the OffscreenCanvas requirement.
  *
- * The platform supplies the inflater and, if it likes, the fetch: the website
+ * The caller supplies the inflater and, if it likes, the fetch: elevation.ts
  * uses `DecompressionStream` (and imports this dynamically, out of the SSR
- * bundle), the app `fflate` — Hermes has no `DecompressionStream`, the same
- * reason the engine takes an inflater for `.xctskz` files. Moved here from the
- * website's analysis/elevation.ts so the app's Check altitudes reads the
- * same pixels the same way (mobile plan stage 7).
+ * bundle), and a test can pass a recorded tile.
  */
 
 /** zlib-wrapped deflate in, raw bytes out — a PNG's IDAT stream. */

@@ -40,11 +40,9 @@ export async function signOut() {
   return result;
 }
 
-// The account's shape and the onboarding gate moved to @glidecomp/client,
-// shared with the app (mobile plan, stage 4); re-exported so the website's
-// imports do not change.
-export { needsOnboarding, type AuthUser } from "@glidecomp/client/account";
-import type { AuthUser } from "@glidecomp/client/account";
+// The account's shape and the onboarding gate live in ./account.
+export { needsOnboarding, type AuthUser } from "./account";
+import type { AuthUser } from "./account";
 
 /**
  * Last-known account state, mirrored into localStorage so the *static* Astro

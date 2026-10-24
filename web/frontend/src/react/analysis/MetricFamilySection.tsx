@@ -176,4 +176,4 @@ export function MetricFamilySection({
   );
 }
 
-export { metricsByFamily } from "@glidecomp/client/analysis";
+export { metricsByFamily } from "./types";

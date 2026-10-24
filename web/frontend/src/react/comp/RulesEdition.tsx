@@ -10,10 +10,10 @@
  * was published gets plain "FAI S7F" with no edition claim.
  */
 import { Alert, AlertDescription } from "@/react/rac/alert";
-import { predatesS7f2026, rulesEditionLabel } from "@glidecomp/client/rules-edition";
+import { predatesS7f2026, rulesEditionLabel } from "./rules-edition";
 
-// The date check and the label are shared with the app.
-export { S7F_2026_EFFECTIVE, predatesS7f2026 } from "@glidecomp/client/rules-edition";
+// The date check and the label live in rules-edition.ts.
+export { S7F_2026_EFFECTIVE, predatesS7f2026 } from "./rules-edition";
 
 /**
  * The badge itself: "FAI S7F 2026" (or plain "FAI S7F" when the payload

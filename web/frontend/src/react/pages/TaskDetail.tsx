@@ -55,7 +55,7 @@ import { CompNameProvider } from "../comp/comp-name-context";
 import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
-import { goalSummary, startConfigSummary } from "@glidecomp/client/route";
+import { goalSummary, startConfigSummary } from "../comp/route";
 import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 // Comp admins only, so its code has no business in every pilot's bundle.
 const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
