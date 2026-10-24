@@ -33,15 +33,28 @@ interface FencedRoute {
 const SEG = "[^/]+";
 
 /**
+ * The fixed words competition-api serves directly under /api/comp/. A comp id
+ * is a short run of lowercase letters, so `pilot` or `search` would pass for
+ * one, and `/api/comp/:comp_id` would quietly admit the account's own pilot
+ * profile. Every such word is excluded from COMP; `search` is then let in by a
+ * route of its own. web/scripts/mcp-fence-routes.test.ts fails if a route adds
+ * a word that isn't listed here.
+ */
+export const STATIC_COMP_SEGMENTS = ["lookup", "open-now", "pilot", "sample-3dvis", "search"] as const;
+
+/** A comp id segment: any segment except the fixed words above. */
+const COMP = `(?!(?:${STATIC_COMP_SEGMENTS.join("|")})(?:/|$))${SEG}`;
+
+/**
  * Every route an MCP access token may reach, and the scope it needs. Grow it
  * deliberately, beside the tool that calls the route.
  */
 export const MCP_ROUTES: readonly FencedRoute[] = [
   { method: "GET", path: /^\/api\/comp$/, scope: "comp:read" },
   { method: "GET", path: /^\/api\/comp\/search$/, scope: "comp:read" },
-  { method: "GET", path: new RegExp(`^/api/comp/${SEG}$`), scope: "comp:read" },
-  { method: "GET", path: new RegExp(`^/api/comp/${SEG}/waypoints$`), scope: "comp:read" },
-  { method: "GET", path: new RegExp(`^/api/comp/${SEG}/task/${SEG}$`), scope: "comp:read" },
+  { method: "GET", path: new RegExp(`^/api/comp/${COMP}$`), scope: "comp:read" },
+  { method: "GET", path: new RegExp(`^/api/comp/${COMP}/waypoints$`), scope: "comp:read" },
+  { method: "GET", path: new RegExp(`^/api/comp/${COMP}/task/${SEG}$`), scope: "comp:read" },
 ];
 
 /** The route a token may use for this request, if any. */

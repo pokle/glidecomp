@@ -59,7 +59,7 @@ const Dashboard = lazy(() =>
 const Onboarding = lazy(() =>
   import("./pages/Onboarding").then((m) => ({ default: m.Onboarding }))
 );
-// SPIKE (docs/2026-10-24-mcp-oauth-plan.md): an MCP client's consent screen.
+// An MCP client asking to act as the organiser (docs/2026-10-24-mcp-oauth-plan.md §8).
 const OAuthConsent = lazy(() =>
   import("./pages/OAuthConsent").then((m) => ({ default: m.OAuthConsent }))
 );

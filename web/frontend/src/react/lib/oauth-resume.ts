@@ -1,6 +1,6 @@
 /**
  * Resuming an MCP client's OAuth request after sign-in
- * (docs/2026-10-24-mcp-oauth-plan.md §8). SPIKE: phase 0.
+ * (docs/2026-10-24-mcp-oauth-plan.md §8).
  *
  * auth-api's mcp() provider sends a signed-out organiser to /signin with the
  * authorisation request in the query, signed (`sig`, `exp`, `ba_iat`). Once

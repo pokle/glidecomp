@@ -136,9 +136,13 @@ replay detection writes a table of its own.
 with a comment: `GET|POST /oauth2/authorize`, `POST /oauth2/token`,
 `POST /oauth2/register`, `POST /oauth2/revoke`, `POST /oauth2/consent`,
 `POST /oauth2/continue` (resumes the request after sign-in),
-`GET /oauth2/get-consents`, `POST /oauth2/delete-consent`, and `GET /jwks`
+`GET /oauth2/public-client` (the consent page's client name), and `GET /jwks`
 (already served). Leave `/oauth2/create-client`, `/update-client`,
-`/introspect` and the rest of the provider's ~20 endpoints answering 404.
+`/introspect`, the consent-management endpoints and the rest of the provider's
+~20 endpoints answering 404. *(Phase 1: Settings uses GlideComp's own
+`/api/auth/connected-assistants` routes instead, because the provider's
+`delete-consent` removes the consent row and leaves the refresh tokens
+working.)*
 
 **Discovery.** MCP clients look at the origin root, so add Pages Functions
 beside `functions/.well-known/apple-app-site-association.ts`:
@@ -241,9 +245,10 @@ for. When it comes, it takes its own scope.
 
 ## 6. Abuse and budgets
 
-- **Registration:** `/oauth2/register` gets a per-IP budget through
-  `web/workers/shared/src/rate-limit.ts` (say 10 an hour). A daily cron deletes
-  clients that never received a consent within 24 hours. With unauthenticated
+- **Registration:** `/oauth2/register` gets a per-IP budget (Better Auth's
+  limiter, 10 an hour). competition-api's nightly retention purge, which
+  already clears the other auth tables, deletes clients that never received a
+  consent within 24 hours. With unauthenticated
   DCR, client rows are free to create, so they must also be cheap to remove.
 - **Calls:** `/me` counts OAuth calls per grant, as the apiKey plugin counts
   per key (`API_KEY_RATE_LIMIT`, 60 a minute). `429` with `Retry-After`, never
@@ -352,7 +357,11 @@ client supports only CIMD, phase 1 grows a CIMD transport question first.
 - Migration 0040, `mcp()` config, the SEC-55 additions, the discovery
   Functions, `/me`'s access-token branch with the consent check, the SEC-57
   extension, `/oauth/consent`, Settings → Connected assistants, and the
-  registration budget and cleanup cron.
+  registration budget and cleanup.
+- **The competition-api fence, moved forward from phase 2.** Once phase 1 is
+  live a token can be minted, and without the fence it would be a full REST
+  credential, writes included. The allowlist starts with phase 2's read
+  routes.
 - Tests (auth-api): authorize → consent → token with PKCE → `/me` answers with
   the grant; Disconnect → `/me` answers `user: null` on the next call; token
   confusion both ways; unknown scope refused; registration budget.
@@ -361,7 +370,6 @@ client supports only CIMD, phase 1 grows a CIMD transport question first.
 
 - The worker, the `functions/mcp.ts` proxy, the service bindings, the deploy
   step, the dev-router route.
-- The competition-api fence for the GET routes.
 - Tests: each tool against a seeded comp (vitest-pool-workers); the fence
   refusing an unlisted route; a hidden comp invisible to a non-admin's token.
 - **e2e** `e2e/mcp.spec.ts`, added to its shard in `e2e/fixtures/shards.ts`:

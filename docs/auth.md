@@ -271,6 +271,44 @@ the first, revoke its owner's other keys, or delete the account. The list is
 `API_KEY_HEADER` in `src/auth.ts`, which the plugin is configured with too, so
 the guard and the plugin cannot disagree about what makes a key session.
 
+**MCP access tokens.** An organiser's own assistant (Claude, ChatGPT, Claude
+Code) signs in through an OAuth 2.1 provider, `mcp()` from
+`@better-auth/mcp` in `src/auth.ts`
+([plan](2026-10-24-mcp-oauth-plan.md)). Clients register themselves (dynamic
+registration, `OAUTH_REGISTER_RATE_LIMIT` per client address), send the
+organiser to `/signin` and then `/oauth/consent`, and exchange the code with
+PKCE for a 15-minute access token (`MCP_ACCESS_TOKEN_LIFETIME_S`) and a refresh
+token. There is no `client_credentials` grant: every token has a person behind
+it.
+
+- **The token** is a JWT (`typ: at+jwt`) signed by the same key set as the
+  session-cache cookie, audience-bound to the MCP resource
+  (`mcpResource()`, `https://glidecomp.com/mcp`), with issuer
+  `https://glidecomp.com/api/auth`. The two JWTs are told apart by claims,
+  never by key: `verifySessionCookie()` insists on the session-cache `typ` and
+  `aud`, and `verifyAccessToken()` (`@glidecomp/worker-kit/access-token`) on
+  the token's.
+- **`/me` answers for it** with the user and a `grant` (client and scopes),
+  but only while the organiser's consent for that client stands, and within
+  `OAUTH_GRANT_BUDGET` per grant (`src/mcp-grants.ts`). A JWT cannot be
+  recalled, so the consent check is what makes Disconnect take effect on the
+  next request.
+- **competition-api fences it** (`middleware/mcp-fence.ts`): a request
+  carrying one reaches only the allowlisted routes, with the scope each needs,
+  and a token `/me` won't vouch for is a `401`, never the signed-out view.
+- **Settings → Connected assistants** lists grants and disconnects them
+  (`/api/auth/connected-assistants`), revoking refresh tokens too — the
+  provider's own delete-consent would leave them working. Granting, consenting
+  and these routes are browser-only, like account management: an API key that
+  could walk authorise → consent would mint a grant that outlived the key.
+- **Discovery** is served at the origin root by Pages Functions
+  (`functions/.well-known/`) forwarding to `isDiscoveryPath()` in
+  `src/endpoints.ts`; the provider's endpoints are in the SEC-55 allowlist
+  there.
+- **Retention**: competition-api's nightly purge (`data-retention.ts`)
+  removes expired or revoked refresh tokens, and clients that registered and
+  were never consented to.
+
 ## Configuration
 
 ### Cloudflare Secrets (Production)
