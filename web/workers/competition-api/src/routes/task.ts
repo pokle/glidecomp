@@ -14,7 +14,6 @@ import {
   type PatchFieldTable,
 } from "../lib/patch-fields";
 import type { z } from "zod";
-import { followers, pushLater } from "../push";
 import { bumpAndRevalidateScores } from "../score-store";
 import { summarizeXctskChange, describeTaskSummary } from "../xctsk-summary";
 import { timezoneForXctsk } from "@glidecomp/engine/timezone";
@@ -518,17 +517,6 @@ export const taskRoutes = new Hono<AuthedEnv>()
 
       if (body.xctsk) {
         await deriveCompTimezone(c.env.DB, c.var.user, compId, body.xctsk);
-      }
-
-      // The route went up for the first time: tell the comp's followers, so a
-      // pilot can load it into their instrument (stage 9). Not on every edit —
-      // a corrected radius is not news on the phone, and the task page shows it.
-      if (body.xctsk && !task.xctsk) {
-        pushLater(c, followers(c.env.DB, compId, { except: c.var.user.id }), {
-          title: `${taskName}: route set`,
-          body: "Open it to see the route, or to send it to your instrument.",
-          url: `/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}`,
-        });
       }
 
       // Return updated task

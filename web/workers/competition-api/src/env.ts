@@ -16,14 +16,6 @@ export type Env = {
   EMAIL?: EmailSendBinding;
   /** The canonical site origin, used to build links inside emails. */
   SITE_ORIGIN?: string;
-  /**
-   * Expo's push endpoint (https://exp.host/--/api/v2/push/send), for the
-   * app's notifications (push.ts). Absent in local dev and the worker tests,
-   * where sending no-ops — the same seam as EMAIL.
-   */
-  PUSH_ENDPOINT?: string;
-  /** Optional Expo access token, when the project enforces push security. A secret. */
-  EXPO_ACCESS_TOKEN?: string;
 };
 
 /** Who is signed in — the same shape whether the session cookie cache or the

@@ -53,41 +53,21 @@ export function buildOtpSignInUrl(
   return `${origin}/signin#otp=${encodeURIComponent(otp)}&email=${encodeURIComponent(email)}`;
 }
 
-/**
- * The app's own sign-in link (mobile plan stage 9): `/signin/app`, the one
- * sign-in path the app claims as a universal link. `/signin` itself is never
- * claimed, so the website's sign-in links stay in the browser on a phone that
- * has the app. Code and address ride in the fragment, as for the website.
- */
-export function buildAppSignInUrl(baseURL: string, email: string, otp: string): string {
-  const origin = baseURL.replace(/\/+$/, "");
-  return `${origin}/signin/app#otp=${encodeURIComponent(otp)}&email=${encodeURIComponent(email)}`;
-}
-
-/**
- * `forApp`: the code was asked for by the native app. Its email never links
- * the website's sign-in — that would sign the pilot in on the website, not in
- * the app they are standing in — but the app's own `/signin/app`, which opens
- * the app on a phone that has it (and, anywhere else, a page saying to type
- * the code into the app).
- */
 export function buildOtpEmail(opts: {
   email: string;
   otp: string;
   baseURL: string;
-  forApp?: boolean;
 }): OtpEmailMessage {
-  const { email, otp, baseURL, forApp = false } = opts;
-  const url = forApp ? buildAppSignInUrl(baseURL, email, otp) : buildOtpSignInUrl(baseURL, email, otp);
+  const { email, otp, baseURL } = opts;
+  const url = buildOtpSignInUrl(baseURL, email, otp);
 
   const text = [
     `Your GlideComp sign-in code is:`,
     ``,
     `    ${otp}`,
     ``,
-    ...(forApp
-      ? [`Type it into the GlideComp app to sign in, or tap this on the same phone:`, url]
-      : [`Or click to sign in directly:`, url]),
+    `Or click to sign in directly:`,
+    url,
     ``,
     `This code expires in ${OTP_EXPIRY_MINUTES} minutes and can be used once.`,
     `If you didn't request it, you can ignore this email — no one can sign in`,
@@ -100,16 +80,9 @@ export function buildOtpEmail(opts: {
   <div style="max-width:420px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">
     <p style="margin:0 0 8px;font-size:16px;">Your GlideComp sign-in code is:</p>
     <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">${escapeHtml(otp)}</p>
-    ${
-      forApp
-        ? `<p style="margin:0 0 12px;font-size:16px;">Type it into the GlideComp app to sign in, or tap this on the same phone:</p>
     <p style="margin:0 0 24px;">
-      <a href="${escapeHtml(url)}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-size:15px;">Open the GlideComp app</a>
-    </p>`
-        : `<p style="margin:0 0 24px;">
       <a href="${escapeHtml(url)}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-size:15px;">Sign in to GlideComp</a>
-    </p>`
-    }
+    </p>
     <p style="margin:0;font-size:13px;color:#555555;">
       This code expires in ${OTP_EXPIRY_MINUTES} minutes and can be used once.
       If you didn't request it, you can ignore this email &mdash; no one can

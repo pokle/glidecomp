@@ -10,7 +10,6 @@ import {
   validated,
 } from "../validators";
 import { audit } from "../audit";
-import { followers, pilotAccount, pushLater } from "../push";
 import { bumpAndRevalidateScores } from "../score-store";
 import {
   findUnclaimedRegistrations,
@@ -794,19 +793,6 @@ export const igcRoutes = new Hono<AuthedEnv>()
         subject_name: track.registered_pilot_name,
         description,
       });
-
-      // The pilot, on their phone, when they follow this comp (stage 9).
-      if (body.penalty_points !== track.old_points) {
-        const alphabet = c.env.SQIDS_ALPHABET;
-        pushLater(c, pilotAccount(c.env.DB, compPilotId).then((uid) => followers(c.env.DB, compId, { only: uid, except: c.var.user.id })), {
-          title: body.penalty_points === 0 ? "Penalty removed" : "Penalty applied",
-          body:
-            body.penalty_points === 0
-              ? "The organiser removed your penalty on this task."
-              : `${body.penalty_points} points${body.penalty_reason ? `: ${body.penalty_reason}` : ""}.`,
-          url: `/comp/${encodeId(alphabet, compId)}/task/${encodeId(alphabet, taskId)}/pilot/${encodeId(alphabet, compPilotId)}`,
-        });
-      }
 
       return c.json({ success: true });
     }

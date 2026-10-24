@@ -49,9 +49,6 @@ describe("isServedAuthEndpoint", () => {
     ["GET", "/api/auth/api-key/get"],
     ["POST", "/api/auth/api-key/update"],
     ["GET", "/api/auth/token"],
-    // The Expo plugin's browser hand-off, which ends with the session cookie
-    // in a custom-scheme URL (index.ts, guardSocialSignIn's note).
-    ["GET", "/api/auth/expo-authorization-proxy"],
     // Right path, wrong method; and nothing outside the base path.
     ["GET", "/api/auth/sign-out"],
     ["GET", "/api/auth/sign-in/social"],
