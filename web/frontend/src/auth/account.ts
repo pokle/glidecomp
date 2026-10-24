@@ -1,10 +1,8 @@
 /**
- * The signed-in account, as both clients read it: who it is, whether it has
- * still to be onboarded, the pilot profile's fields, and the comps it is on.
- *
- * Moved from the website (src/auth/client.ts, react/pages/Settings.tsx) for
- * the app's Me tab (mobile plan, stage 4), so the two ask one onboarding
- * question and label one set of fields.
+ * The signed-in account: who it is, whether it has still to be onboarded,
+ * the pilot profile's fields, and the comps it is on. Pure, so the shell,
+ * Settings and the dashboard ask one onboarding question and label one set of
+ * fields.
  */
 
 /** GET /api/auth/me → `user`. */
@@ -18,7 +16,7 @@ export interface AuthUser {
 
 /**
  * Has this account still to be onboarded? The ONE definition of the gate —
- * Shell, the dashboard, the analysis page, onboarding itself and the app all
+ * Shell, the dashboard, the analysis page and onboarding itself all
  * ask here, so they can't drift apart and strand someone in a redirect loop.
  *
  * Both halves matter, and each is the sole signal for a different sign-up

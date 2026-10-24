@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { defaultsFor } from "@glidecomp/engine";
 import { accessSummary, scoringDefaults, scoringFormValues, scoringPatch, scoringSummary } from "./scoring-settings";
 

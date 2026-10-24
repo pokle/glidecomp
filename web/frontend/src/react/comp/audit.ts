@@ -1,15 +1,14 @@
 /**
  * The activity log (`GET /api/comp/:comp_id/audit`): its filters, the query
  * a page of it is asked with, and its entries grouped by day. Pure, so the
- * website's Activity section and the app's Activity screen offer the same
- * filters and ask the same question.
+ * Activity section's rules are unit-testable.
  */
 import type { AuditEntry } from "./types";
 
 /** A filter's `subject_type`, or "" for every entry. */
 export type ActivityFilter = "" | AuditEntry["subject_type"];
 
-/** The filters, in the order both clients show them (IA §12). */
+/** The filters, in the order the Activity section shows them (IA §12). */
 export const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "", label: "All" },
   { value: "task", label: "Tasks" },

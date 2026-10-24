@@ -18,5 +18,5 @@ export const MARGIN = { left: 44, right: 20 };
 export const PLOT_LEFT = MARGIN.left;
 export const PLOT_RIGHT = W - MARGIN.right;
 
-// The wind-glyph helpers are shared with the app (@glidecomp/client/met).
-export { degToCompass, windArrowPath, windArrowTransform, windLabel } from "@glidecomp/client/met";
+// The wind-glyph helpers live in met-shared.ts.
+export { degToCompass, windArrowPath, windArrowTransform, windLabel } from "./met-shared";

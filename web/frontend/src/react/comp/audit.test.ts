@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { ACTIVITY_FILTERS, activityQuery, groupActivityByDay } from "./audit";
 import type { AuditEntry } from "./types";
 

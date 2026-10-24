@@ -8,7 +8,7 @@
  * sub-page: it is an action, not a setting, and burying it a level down
  * would only make it easier to press by accident next to a Save button.
  */
-import { accessSummary, scoringSummary } from "@glidecomp/client/scoring-settings";
+import { accessSummary, scoringSummary } from "./scoring-settings";
 import { useNavigate } from "react-router-dom";
 import { NavActionRow, NavList, NavRow } from "@/react/rac/nav-list";
 import { SettingsPage } from "@/react/components/SettingsPage";

@@ -307,7 +307,7 @@ describe("the size limits are the server's own", () => {
   test("an ordinary all-day tracklog is refused HERE, not by a bare 400", () => {
     // 3 MB of raw IGC gzips to roughly 350 KB, so a compressed-only check
     // waves it through and the server then refuses it on the decompressed cap.
-    // This is the case that actually happens, and the case both clients
+    // This is the case that actually happens, and the case the form
     // silently missed.
     const reason = tooLargeReason(3 * MB, 350 * 1024);
     expect(reason).not.toBeNull();

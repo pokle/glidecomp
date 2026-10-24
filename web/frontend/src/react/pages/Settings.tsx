@@ -28,7 +28,7 @@ import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useGoToSignIn, useUser } from "../lib/user";
 import { type ThemePreference, useTheme } from "../lib/theme";
 import { setUnit, useUnits, type UnitPreferences } from "../lib/units";
-import { ID_FIELDS, NAME_CONTACT_FIELDS, PROFILE_FIELDS } from "@glidecomp/client/account";
+import { ID_FIELDS, NAME_CONTACT_FIELDS, PROFILE_FIELDS } from "../../auth/account";
 
 interface ApiKey {
   id: string;
@@ -308,8 +308,8 @@ function UnitsSection() {
 }
 
 // Names and contact details on one side, pilot registration IDs on the other —
-// two groups that lay out multi-column on wider screens. The field lists are
-// shared with the app's Me tab (@glidecomp/client/account).
+// two groups that lay out multi-column on wider screens. The field lists live
+// in auth/account.ts.
 
 type ProfileValues = Record<(typeof PROFILE_FIELDS)[number]["key"], string>;
 

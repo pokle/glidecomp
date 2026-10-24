@@ -67,12 +67,12 @@ import { TaskInCompScores } from "../comp/TaskInCompScores";
 import { HistoricalRulesNotice, RulesEditionBadge } from "../comp/RulesEdition";
 import type { MapFocus } from "../comp/ScoreDetailMap";
 import { useInitialData } from "../lib/initial-data";
-// The derivation lives in @glidecomp/client so the app runs the same one.
+// The derivation lives in score-detail/report-card.ts, pure and unit-tested.
 import {
   buildReportCard as buildDetailData,
   ScorePendingError,
   type ReportCard as DetailData,
-} from "@glidecomp/client/report-card";
+} from "../score-detail/report-card";
 import type { PilotScoreLoaderData } from "../loaders";
 
 // Lazy so mapbox (and its CSS) loads only with this page's map.

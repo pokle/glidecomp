@@ -1,8 +1,6 @@
 /**
  * Which pilots the report card's score curve names, and where each name goes
- * — shared by the website's SVG (`charts/ScoreCurve.tsx`) and the app's
- * (`mobile/src/charts/ScoreCurve.tsx`), so the two name the same anchors.
- * Pure geometry: the caller has already mapped data to its own pixels.
+ * (`charts/ScoreCurve.tsx`). Pure geometry: the caller has already mapped data to its own pixels.
  */
 import type { ScoreChartPilot, ScoreCurveChart } from "@glidecomp/engine";
 

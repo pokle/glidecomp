@@ -26,7 +26,7 @@ import { compPath, taskPath, pilotPath } from "../lib/slug";
 import { api } from "../../comp/api";
 import { needsOnboarding } from "../../auth/client";
 import { Tree, TreeItem, TreeItemContent, TreeChevron } from "../rac/tree";
-import { storageUsage } from "@glidecomp/client/account";
+import { storageUsage } from "../../auth/account";
 
 export function Dashboard() {
   const { username } = useParams<{ username: string }>();

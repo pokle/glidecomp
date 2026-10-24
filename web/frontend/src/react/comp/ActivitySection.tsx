@@ -10,7 +10,7 @@ import {
   ACTIVITY_FILTERS as FILTERS,
   activityQuery,
   type ActivityFilter,
-} from "@glidecomp/client/audit";
+} from "./audit";
 import { formatAuditTime, type AuditEntry, type AuditResponse } from "./types";
 
 // RAC tab keys can't be "" (falsy keys confuse selection) — the All filter
