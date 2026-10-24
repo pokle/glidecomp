@@ -51,7 +51,54 @@ const SERVED: ReadonlyArray<readonly [method: "GET" | "POST", path: RegExp]> = [
   ["GET", /^\/api-key\/list$/],
   ["POST", /^\/api-key\/delete$/],
   ["GET", /^\/ok$/],
+  // The OAuth 2.1 provider behind /mcp (mcp() in auth.ts,
+  // docs/2026-10-24-mcp-oauth-plan.md §3): only what an MCP client's sign-in
+  // uses. Authorise; consent, and resuming the request after sign-in; the
+  // token exchange; registration (open, and rate-limited); revocation;
+  // userinfo; and the client's public name, for the consent page. The
+  // provider's client-management, consent-management and introspection
+  // endpoints stay unserved — Settings → Connected assistants uses
+  // GlideComp's own routes in index.ts.
+  ["GET", /^\/oauth2\/authorize$/],
+  ["POST", /^\/oauth2\/consent$/],
+  ["POST", /^\/oauth2\/continue$/],
+  ["POST", /^\/oauth2\/token$/],
+  ["POST", /^\/oauth2\/register$/],
+  ["POST", /^\/oauth2\/revoke$/],
+  ["GET", /^\/oauth2\/userinfo$/],
+  ["POST", /^\/oauth2\/userinfo$/],
+  ["GET", /^\/oauth2\/public-client$/],
+  // OpenID discovery relative to the issuer, which carries the base path.
+  ["GET", /^\/\.well-known\/openid-configuration$/],
 ];
+
+/**
+ * The discovery documents MCP clients fetch from the ORIGIN root rather than
+ * under /api/auth: RFC 9728 protected-resource metadata (bare, and at the
+ * resource's path, /mcp), and RFC 8414 / OpenID authorisation-server metadata.
+ * The issuer is `<origin>/api/auth`, so RFC 8414 puts that metadata at
+ * `/.well-known/oauth-authorization-server/api/auth`; some clients only try
+ * the bare path, so it is served there too (index.ts rewrites it). The mcp()
+ * plugin answers all of them from its onRequest hook.
+ */
+const DISCOVERY: ReadonlyArray<RegExp> = [
+  /^\/\.well-known\/oauth-authorization-server(\/api\/auth)?$/,
+  /^\/\.well-known\/openid-configuration(\/api\/auth)?$/,
+  /^\/\.well-known\/oauth-protected-resource(\/mcp)?$/,
+];
+
+/** A bare authorisation-server discovery path, rewritten to the issuer's. */
+export function issuerDiscoveryPath(pathname: string): string {
+  return /^\/\.well-known\/(oauth-authorization-server|openid-configuration)$/.test(pathname)
+    ? `${pathname}${BASE_PATH}`
+    : pathname;
+}
+
+/** Whether a root-level discovery request belongs to Better Auth. */
+export function isDiscoveryPath(method: string, pathname: string): boolean {
+  const verb = method.toUpperCase();
+  return (verb === "GET" || verb === "HEAD") && DISCOVERY.some((p) => p.test(pathname));
+}
 
 /** Whether the Better Auth catch-all may handle this request. */
 export function isServedAuthEndpoint(method: string, pathname: string): boolean {
@@ -62,7 +109,8 @@ export function isServedAuthEndpoint(method: string, pathname: string): boolean 
 }
 
 /**
- * Routes an API key may not use, whatever it is otherwise allowed (SEC-57).
+ * Routes an API key (or an MCP access token) may not use, whatever it is
+ * otherwise allowed (SEC-57).
  *
  * The apiKey plugin turns an `x-api-key` header into a full session, so
  * without this a key could mint further keys (which outlive revoking it),
@@ -79,9 +127,16 @@ const BROWSER_SESSION_ONLY: ReadonlyArray<RegExp> = [
   /^\/delete-account$/,
   /^\/set-username$/,
   /^\/set-name$/,
+  // Granting an MCP client access, and seeing or revoking those grants. A key
+  // that could walk authorize → consent would mint a grant whose refresh
+  // token outlives the key — the same escape as a key minting a key.
+  /^\/oauth2\/authorize$/,
+  /^\/oauth2\/consent$/,
+  /^\/oauth2\/continue$/,
+  /^\/connected-assistants(\/|$)/,
 ];
 
-/** Whether this path refuses a request that carries an API key. */
+/** Whether this path refuses a request that carries an API key or an MCP access token. */
 export function requiresBrowserSession(pathname: string): boolean {
   if (!pathname.startsWith(`${BASE_PATH}/`)) return false;
   const path = pathname.slice(BASE_PATH.length);

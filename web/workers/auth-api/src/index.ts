@@ -16,7 +16,14 @@ import {
   runWithExecutionCtx,
   type AuthEnv,
 } from "./auth";
-import { isServedAuthEndpoint, requiresBrowserSession } from "./endpoints";
+import { bearerJwt } from "@glidecomp/worker-kit/access-token";
+import { disconnectAssistant, listConnectedAssistants, resolveAccessToken } from "./mcp-grants";
+import {
+  isDiscoveryPath,
+  isServedAuthEndpoint,
+  issuerDiscoveryPath,
+  requiresBrowserSession,
+} from "./endpoints";
 import {
   normalizeEmail,
   otpSendAllowed,
@@ -73,12 +80,13 @@ app.use("/api/auth/*", async (c, next) => {
 // browser never sends it (CORS does not allow it cross-origin, and the app
 // does not set it). Registered ahead of every route it guards.
 app.use("/api/auth/*", async (c, next) => {
-  if (c.req.raw.headers.has(API_KEY_HEADER) && requiresBrowserSession(c.req.path)) {
+  const credential = c.req.raw.headers.has(API_KEY_HEADER) || bearerJwt(c.req.header("authorization"));
+  if (credential && requiresBrowserSession(c.req.path)) {
     return c.json(
       {
         code: "BROWSER_SESSION_REQUIRED",
         error:
-          "An API key cannot manage the account. Sign in to GlideComp in a browser to manage API keys, change your name or username, or delete your account.",
+          "An API key or a connected assistant cannot manage the account. Sign in to GlideComp in a browser to manage API keys and connected assistants, change your name or username, or delete your account.",
       },
       403
     );
@@ -147,6 +155,24 @@ async function refreshSessionCache(c: Context<{ Bindings: AuthEnv }>): Promise<v
 // no D1 read for identity.
 app.get("/api/auth/me", async (c) => {
   const auth = createAuth(c.env);
+
+  // An MCP access token (docs/2026-10-24-mcp-oauth-plan.md §3), forwarded by
+  // competition-api's resolveUser like an API key. Answered with the grant
+  // beside the user, so competition-api can fence what the token reaches;
+  // honoured only while its consent stands (mcp-grants.ts). A bearer value
+  // that isn't JWT-shaped (an API key sent as `Authorization: Bearer glc_…`)
+  // falls through to the session lookup below.
+  const bearer = bearerJwt(c.req.header("authorization"));
+  if (bearer) {
+    const answer = await resolveAccessToken(c.env, bearer);
+    if (answer.status === "limited") {
+      c.header("Retry-After", String(answer.retryAfterSeconds));
+      return c.json({ user: null, error: "Rate limit exceeded" }, 429);
+    }
+    if (answer.status === "none") return c.json({ user: null });
+    return c.json({ user: answer.user, grant: answer.grant });
+  }
+
   let session;
   try {
     const result = await auth.api.getSession({
@@ -634,6 +660,33 @@ app.post("/api/auth/sign-in/social", async (c, next) => {
 // Better Auth catch-all handler — for the endpoints endpoints.ts lists, and
 // nothing else (SEC-55). The ExecutionContext lets sendVerificationOTP hand
 // the outbound email to waitUntil instead of blocking the response on it.
+// Settings → Connected assistants: the MCP clients this account has let act
+// as it (mcp-grants.ts). Browser sessions only — requiresBrowserSession lists
+// these, so neither an API key nor an access token can see or revoke grants.
+app.get("/api/auth/connected-assistants", async (c) => {
+  const session = await createAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+  if (!session) return c.json({ error: "Not authenticated" }, 401);
+  return c.json({ assistants: await listConnectedAssistants(c.env.glidecomp_auth, session.user.id) });
+});
+
+app.delete("/api/auth/connected-assistants/:clientId", async (c) => {
+  const session = await createAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+  if (!session) return c.json({ error: "Not authenticated" }, 401);
+  const removed = await disconnectAssistant(c.env.glidecomp_auth, session.user.id, c.req.param("clientId"));
+  if (!removed) return c.json({ error: "Not connected" }, 404);
+  return c.json({ ok: true });
+});
+
+// OAuth discovery for MCP clients, at the origin root (endpoints.ts says which
+// paths). In production a Pages Function forwards these here; in dev the Vite
+// proxy and dev-router do.
+app.on(["GET", "HEAD"], "/.well-known/*", async (c) => {
+  if (!isDiscoveryPath(c.req.method, c.req.path)) return c.notFound();
+  const url = new URL(c.req.url);
+  url.pathname = issuerDiscoveryPath(url.pathname);
+  return createAuth(c.env).handler(new Request(url, c.req.raw));
+});
+
 app.all("/api/auth/*", async (c) => {
   if (!isServedAuthEndpoint(c.req.method, c.req.path)) return c.notFound();
   const auth = createAuth(c.env);

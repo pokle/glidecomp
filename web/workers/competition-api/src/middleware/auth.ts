@@ -61,25 +61,65 @@ export function forwardAuthHeaders(headers: Headers): Headers {
  * rate-limited API key, and retrying that would both lie about the limit and
  * push the caller further past it.
  */
-async function resolveUser(
-  env: Env,
-  headers: Headers
-): Promise<AuthUser | null> {
+async function resolveUser(env: Env, headers: Headers): Promise<AuthUser | null> {
+  return (await resolveIdentity(env, headers)).user;
+}
+
+/**
+ * What auth-api said about this request's credential. Beside the user:
+ * `grant` when the credential is an MCP access token (the client it was
+ * issued to and the scopes the organiser consented to — middleware/mcp-fence.ts
+ * acts on it), and `retryAfterSeconds` when auth-api answered 429.
+ */
+export interface Identity {
+  user: AuthUser | null;
+  grant: McpGrant | null;
+  retryAfterSeconds?: number;
+}
+
+/** The grant behind an MCP access token, as auth-api's /me reports it. */
+export interface McpGrant {
+  kind: "oauth";
+  client_id: string;
+  client_name: string | null;
+  scopes: string[];
+}
+
+/**
+ * One answer per request. The MCP fence and the route's own auth middleware
+ * both need it, and each /me hop for an access token is charged against the
+ * grant's budget — asking twice would spend two of its calls on one request.
+ */
+const identities = new WeakMap<Headers, Promise<Identity>>();
+
+export function resolveIdentity(env: Env, headers: Headers): Promise<Identity> {
+  let answer = identities.get(headers);
+  if (!answer) {
+    answer = fetchIdentity(env, headers);
+    identities.set(headers, answer);
+    // A failure is not an answer to keep (#481): the next caller asks again.
+    answer.catch(() => identities.delete(headers));
+  }
+  return answer;
+}
+
+async function fetchIdentity(env: Env, headers: Headers): Promise<Identity> {
   const forward = forwardAuthHeaders(headers);
 
-  if (![...forward.keys()].length) return null;
+  if (![...forward.keys()].length) return { user: null, grant: null };
 
   // A browser's session usually answers for itself: auth-api's signed
   // `session_data` cookie, checked here with the PUBLIC key it publishes, so
   // no hop and no D1 read (@glidecomp/worker-kit/session-cookie). Only a
   // verified user is an answer. A missing, expired or unverifiable cookie
-  // falls through to the hop below, which is the authority. API keys always
-  // take the hop: they have no cookie, and auth-api owns their rate limit.
+  // falls through to the hop below, which is the authority. API keys and MCP
+  // access tokens always take the hop: they have no cookie, and auth-api owns
+  // their rate limits and the consent behind a token.
   if (!forward.has("x-api-key") && !forward.has("authorization")) {
     const cached = await verifySessionCookie(forward.get("cookie"), () =>
       env.AUTH_API.fetch(new Request("https://auth/api/auth/jwks"))
     );
-    if (cached) return cached;
+    if (cached) return { user: cached, grant: null };
   }
 
   let lastErr: unknown;
@@ -93,10 +133,16 @@ async function resolveUser(
       if (res.status >= 500) {
         throw new Error(`auth-api /me responded ${res.status}`);
       }
-      const data = (await res.json()) as { user?: AuthUser | null };
+      const data = (await res.json()) as { user?: AuthUser | null; grant?: McpGrant | null };
       // Projected to the fields the cookie path yields too, so c.var.user
       // has one shape whichever path answered.
-      return data.user ? toSessionUser(data.user) : null;
+      return {
+        user: data.user ? toSessionUser(data.user) : null,
+        grant: data.grant?.kind === "oauth" ? data.grant : null,
+        ...(res.status === 429
+          ? { retryAfterSeconds: Number(res.headers.get("retry-after")) || 60 }
+          : {}),
+      };
     } catch (err) {
       lastErr = err;
       if (attempt < AUTH_ATTEMPTS - 1) {

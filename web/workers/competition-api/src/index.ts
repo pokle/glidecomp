@@ -30,6 +30,7 @@ import { adminRoutes } from "./routes/admin";
 import { cacheRoutes } from "./routes/cache";
 import { civlRankingsRoutes } from "./routes/civl-rankings";
 import { purgeExpiredAuthData } from "./data-retention";
+import { mcpFence } from "./middleware/mcp-fence";
 
 const app = new Hono<AuthedEnv>();
 
@@ -85,6 +86,11 @@ app.use(
     onError: (c) => c.json({ error: "Request body too large" }, 413),
   })
 );
+
+// MCP access tokens reach only the routes an MCP tool calls, with the scope
+// each needs (middleware/mcp-fence.ts). Ahead of every route, so none can be
+// reached around it.
+app.use("*", mcpFence);
 
 // Surface uncaught handler errors as JSON instead of Hono's bare
 // "Internal Server Error" body. Logs the stack server-side (visible in
@@ -180,7 +186,8 @@ export default {
       const purged = await purgeExpiredAuthData(env.DB);
       console.log(
         `[retention] purged ${purged.sessions} sessions, ` +
-          `${purged.verifications} sign-in codes, ${purged.rateLimits} rate-limit rows`
+          `${purged.verifications} sign-in codes, ${purged.rateLimits} rate-limit rows, ` +
+          `${purged.refreshTokens} MCP refresh tokens, ${purged.oauthClients} unused MCP clients`
       );
     }
     const drained = await drainSearchIndex(env.DB, DRAIN_PASSES_PER_CRON);
