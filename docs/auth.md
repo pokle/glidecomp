@@ -322,11 +322,14 @@ same accounts through the same worker. What is different:
   in with Google carries its own. `googleAudiences()` accepts a token
   addressed to any of them or to `GOOGLE_CLIENT_ID`; the redirect flow still
   uses `GOOGLE_CLIENT_ID` alone.
-- **A code the app asks for gets its own email**: the code and "Type it into
-  the GlideComp app to sign in.", without the website's sign-in link, which
-  would sign the pilot in on the website. The worker tells by the request's
-  origin (`isAppOrigin`); the dev-only `/dev-last-otp` reports it as
-  `forApp`. A link that opens the app waits for universal links (stage 9).
+- **A code the app asks for gets its own email**: the code, and a link to
+  `/signin/app#otp=…&email=…` (`buildAppSignInUrl`) rather than the website's
+  `/signin`, which would sign the pilot in on the website. `/signin/app` is
+  the one sign-in path the app claims as a universal link (stage 9), so on
+  the phone the link opens the app with the code in hand; anywhere else the
+  website's `/signin/app` page shows the code and says to type it into the
+  app. The worker tells by the request's origin (`isAppOrigin`); the dev-only
+  `/dev-last-otp` reports it as `forApp`.
 - **A failure to ask is not an answer** (#481) holds on the phone too: the
   last confirmed user is kept beside the cookie, a launch with no signal opens
   signed in as them, and only a real answer from `/me` signs anyone out

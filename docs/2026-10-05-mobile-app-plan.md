@@ -1,7 +1,7 @@
 # Native iOS and Android app — implementation plan
 
 Date: 2026-10-05
-Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stages 6–8 in review.
+Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stages 6–9 in review.
 Implementation happens on the owner's Mac.
 
 Builds the app described in
@@ -764,6 +764,48 @@ pending state on a task whose analysis is cold.
 app opens at that screen; turn on VoiceOver and submit a track; the app is
 usable at the largest text size.
 
+**As built (2026-10-22).** Where stage 9 departs from the list above:
+
+- **The association files are Pages Functions, not static files**
+  (`functions/.well-known/`), built from `@glidecomp/client/app-links` — the
+  same list the app's `+native-intent.tsx` maps links with, and
+  `app.config.ts`'s Android filters are tested against. The Apple Team ID and
+  the Android signing fingerprints come from Pages variables
+  (`APPLE_TEAM_ID`, `ANDROID_CERT_SHA256`), so each file is a 404 until the
+  developer accounts exist rather than a guess committed to the repo. The
+  Functions set `application/json` themselves, so `_headers` is unchanged;
+  `_routes.json` sends `/.well-known/*` to them.
+- **What is claimed**: `/comp`, `/comp/*` (but not `scores.csv`, which iOS
+  excludes and the app hands back to the in-app browser on Android),
+  `/submit` and `/signin/app`. iOS needs the Associated Domains capability,
+  which a free Personal Team cannot have, so development builds claim links
+  only with `UNIVERSAL_LINKS=1`, as Sign in with Apple is gated.
+- **A dead link offers what its words name now**: the app's `+not-found`
+  screen and the comp, task, scores, waypoints, analysis and report-card
+  screens use the website's `not-found-search` (moved to
+  `@glidecomp/client`) against `GET /api/comp/lookup`.
+- **The sign-in email** links `/signin/app#otp=…&email=…`; the app signs in
+  from it, and the website's `/signin/app` page shows the code and says to
+  type it into the app.
+- **Notifications** (migration 0038, `routes/notifications.ts`, `push.ts`):
+  opt-in per competition from a "Notifications" row on the comp view, which
+  asks the phone for permission the first time. Four messages: your track
+  received, a penalty applied (or removed) on your track, a task's route
+  set for the first time, scores recomputed. "Your track scored" is not
+  sent: scores land in the background with no request to hang it on. The
+  sender never tells the account that caused the change, and a device that
+  uninstalled the app is forgotten on Expo's answer. Needs the Expo project
+  id (`EAS_PROJECT_ID`) in the build, and on iOS the Push Notifications
+  capability: on in store builds, and in a development build only with
+  `PUSH_NOTIFICATIONS=1`, because a free Personal Team cannot have it.
+- **iPad's split view is not built** — it needs an iPad to build against.
+  The app keeps the phone layout there (`supportsTablet: false`); see
+  `mobile/AUDIT.md`.
+- **The accessibility audit and performance measurement** are split: what
+  code can check is a test (`__tests__/accessibility-lint.test.ts`); what a
+  phone must judge, and how to measure performance, is the checklist in
+  `mobile/AUDIT.md`.
+
 ---
 
 ### Stage 10 — Beta at a real comp, then the stores
@@ -796,8 +838,9 @@ Kept deliberately small; each follows the existing "part of done" rules.
 | 4 | auth-api: Sign in with Apple (ID token only; no secret) | — | — |
 | 4 | competition-api: `GET /api/comp/pilot/registrations` (read-only) | — | — |
 | 7 | competition-api: comp-level organiser's notes (migration, `PATCH`) | Yes | No — not a scoring input |
-| 9 | Static: `.well-known` files for universal links | — | — |
-| 9 | competition-api: push-token storage and notification sends | — | — |
+| 9 | Pages Functions: `.well-known` association files for universal links | — | — |
+| 9 | auth-api: the app's sign-in email links `/signin/app` | — | — |
+| 9 | competition-api: push tokens and comp follows (migration 0038), notification sends | — | — |
 
 ---
 

@@ -78,6 +78,8 @@ export const PAGES_FUNCTION_ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/sitemap.xml', source: 'functions/sitemap.xml.ts' },
   { method: 'GET', path: '/civl-rankings.csv', source: 'functions/civl-rankings.csv.ts' },
   { method: 'GET', path: '/comp/:comp_id/scores.csv', source: 'functions/comp/[[path]].ts' },
+  { method: 'GET', path: '/.well-known/apple-app-site-association', source: 'functions/.well-known/apple-app-site-association.ts' },
+  { method: 'GET', path: '/.well-known/assetlinks.json', source: 'functions/.well-known/assetlinks.json.ts' },
 ];
 
 /**
@@ -93,7 +95,7 @@ export function documentedEndpoints(md: string): Set<string> {
     if (!line.trimStart().startsWith('|')) continue;
     const methods = [...line.matchAll(/`(GET|POST|PUT|PATCH|DELETE|ALL)`/g)].map((m) => m[1]);
     if (methods.length === 0) continue;
-    const path = line.match(/`(\/(?:api|internal|comp|sitemap|civl)[^`]*)`/)?.[1];
+    const path = line.match(/`(\/(?:api|internal|comp|sitemap|civl|\.well-known)[^`]*)`/)?.[1];
     if (!path) continue;
     for (const m of methods) out.add(`${m} ${path}`);
   }

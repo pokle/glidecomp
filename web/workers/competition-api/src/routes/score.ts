@@ -6,6 +6,7 @@ import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth"
 import { isCompAdmin } from "../super-admin";
 import { audit } from "../audit";
 import { encodeId } from "../sqids";
+import { followers, pushLater } from "../push";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { computePilotAnalysis } from "../pilot-analysis";
 import { buildCompStandings } from "../comp-standings";
@@ -510,6 +511,13 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         subject_id: compId,
         subject_name: comp.name,
         description: `Triggered a manual re-score of ${taskIds.length} task${taskIds.length === 1 ? "" : "s"}`,
+      });
+
+      // Followers hear that the scores are moving (stage 9).
+      pushLater(c, followers(c.env.DB, compId, { except: c.var.user.id }), {
+        title: `${comp.name}: scores recomputed`,
+        body: "The organiser is recomputing every task's scores. Open the scores for the new standings.",
+        url: `/comp/${encodeId(c.env.SQIDS_ALPHABET, compId)}/scores`,
       });
 
       return c.json({ ok: true, task_count: taskIds.length });

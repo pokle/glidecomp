@@ -30,7 +30,9 @@ export default function TaskScoresScreen() {
     <View style={{ flex: 1 }}>
       <Stack.Screen options={{ title: 'Task scores' }} />
       <StaleBanner query={score} />
-      <QueryGate query={score} loading="Loading the scores…" notFound="This task doesn’t exist, or isn’t public.">
+      <QueryGate query={score} loading="Loading the scores…"
+        repair
+        notFound="This task doesn’t exist, or isn’t public.">
         {(data) => (
           <TaskScoresBody
             data={data}

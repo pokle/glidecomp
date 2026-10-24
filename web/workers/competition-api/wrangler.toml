@@ -75,6 +75,13 @@ service = "airscore-api"
 # in cloudflare console, or in web/workers/competition-api/.dev.vars
 SQIDS_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 
+# The app's push notifications (src/push.ts, mobile plan stage 9): Expo's
+# push service. Messages only ever go to accounts that turned a
+# competition's notifications on in the app. The worker tests override this
+# to empty (vitest.config.ts), so they never send. EXPO_ACCESS_TOKEN is an
+# optional secret, for when the Expo project enforces push security.
+PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send"
+
 # Secrets (set via `wrangler secret put` or .dev.vars):
 # (none yet — auth is via service binding)
 

@@ -12,6 +12,8 @@ import { router, useTheme } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { LinkRepair } from '@/components/LinkRepair';
+
 import type { ReportCardState } from '@/lib/use-report-card';
 
 export function ReportCardGate({
@@ -54,7 +56,9 @@ export function ReportCardGate({
         </View>
       );
     case 'not-found':
-      return message('No score for this pilot on this task.', 'not-found');
+      // A report card is the most-shared link of all: a dead one offers what
+      // its words name now (stage 9).
+      return <LinkRepair message="No score for this pilot on this task." />;
     case 'unavailable':
       return message(`${state.message}.`, 'unavailable');
     case 'error':

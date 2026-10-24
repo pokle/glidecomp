@@ -31,7 +31,9 @@ export default function RouteScreen() {
     <View style={{ flex: 1 }}>
       <Stack.Screen options={{ title: 'Turnpoints' }} />
       <StaleBanner query={task} />
-      <QueryGate query={task} loading="Loading the route…" notFound="This task doesn’t exist, or isn’t public.">
+      <QueryGate query={task} loading="Loading the route…"
+        repair
+        notFound="This task doesn’t exist, or isn’t public.">
         {(data) => {
           const xctsk = data.xctsk;
           if (!xctsk) {

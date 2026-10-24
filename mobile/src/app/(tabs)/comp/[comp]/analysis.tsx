@@ -35,7 +35,9 @@ export default function CompAnalysisScreen() {
     <View style={{ flex: 1 }}>
       <Stack.Screen options={{ title: 'Analysis', headerLargeTitle: false }} />
       <StaleBanner query={analysis} />
-      <QueryGate query={analysis} loading="Loading the analysis…" notFound="This competition doesn’t exist, or isn’t public.">
+      <QueryGate query={analysis} loading="Loading the analysis…"
+        repair
+        notFound="This competition doesn’t exist, or isn’t public.">
         {(data) => {
           const active = data.classes.find((c) => c.pilot_class === cls) ?? data.classes[0];
           const rows = active ? compAnalysisRows(active.aggregate) : null;

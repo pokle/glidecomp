@@ -83,13 +83,18 @@ describe("buildOtpEmail for a code the app asked for", () => {
   test("carries the code and says to type it into the app", () => {
     expect(msg.subject).toContain("123456");
     expect(msg.text).toContain("123456");
-    expect(msg.text).toContain("Type it into the GlideComp app to sign in.");
-    expect(msg.html).toContain("Type it into the GlideComp app to sign in.");
+    expect(msg.text).toContain("Type it into the GlideComp app to sign in");
+    expect(msg.html).toContain("Type it into the GlideComp app to sign in");
+  });
+
+  test("links the app's own /signin/app, with the code in the fragment", () => {
+    const link = "https://glidecomp.com/signin/app#otp=123456&email=";
+    expect(msg.text).toContain(link);
+    expect(msg.html).toContain(link.replace("&", "&amp;"));
   });
 
   test("has no link to the website's sign-in, which would sign in the website", () => {
-    expect(msg.text).not.toContain("/signin");
-    expect(msg.html).not.toContain("/signin");
-    expect(msg.html).not.toContain("<a ");
+    expect(msg.text).not.toMatch(/\/signin#/);
+    expect(msg.html).not.toMatch(/\/signin#/);
   });
 });

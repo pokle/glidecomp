@@ -517,3 +517,19 @@ export function useCompAnalysis(compId: string) {
     refetchInterval: (query) => ((query.state.data?.pending_task_count ?? 0) > 0 ? ANALYSIS_POLL_MS : false),
   });
 }
+
+// ── Notifications (stage 9) ─────────────────────────────────────────────────
+
+/** Whether this account follows a competition's notifications. Not kept on the phone. */
+export function useCompNotify(compId: string, userId: string | null) {
+  return useQuery({
+    queryKey: ['compNotify', compId, userId],
+    enabled: userId !== null,
+    meta: { persist: false },
+    queryFn: ({ signal }) =>
+      getJson<{ enabled: boolean }>(
+        (s) => api.api.comp[':comp_id'].notify.$get({ param: { comp_id: compId } }, { init: { signal: s } }),
+        signal,
+      ),
+  });
+}

@@ -115,6 +115,14 @@ production. That matters from stage 4, when the app first writes.
   latest beta patch and run `bunx expo install --fix`, then rebuild.
   (`expo install --check` asks for Jest 29; `jest-expo` 58 itself requires 30.
   Keep 30.)
+- **`Cannot find native module 'ExpoApplication'` (or any `Expo…`) at
+  launch, then `Cannot read property 'ErrorBoundary' of undefined`.** The
+  pod is built in but its module was never registered: newer `expo-*`
+  modules declare themselves with the `@ExpoModule` Swift macro, which only
+  `expo-modules-autolinking` 58.0.14 and later can find (expo-notifications
+  brings expo-application 58.1 that way). The second error is the router
+  reading a screen file whose import threw. Same cure as above — move `expo`
+  forward, `bunx expo install --fix`, then `bunx expo prebuild --clean`.
 
 ## Layout
 
@@ -144,6 +152,9 @@ production. That matters from stage 4, when the app first writes.
   (`queue.ts`), files from outside the app (`incoming.ts`), and the receipt
   the sheet and Me → Track uploads share (`receipt.tsx`). See "Submitting a
   track" below.
+- `src/notifications/` — push notifications (stage 9).
+- `src/analysis/` — the task analysis's shared hook, frame and table rows
+  (stage 8).
 - `src/components/` — other shared components, among them
   `SendToInstrument` and `QrCode` (stage 6; see "Sending to an instrument").
 - `src/engine-check/` — stage 1's on-device proof that the engine runs (Me →
@@ -425,6 +436,28 @@ units (`displayReport`) — render from that, never from the raw class report.
 for every screen, and takes the screen's groups as an ARRAY (Android's list,
 again). Report tables go through `tableGroup()`; series through
 `charts/DayProfileChart.tsx`, which ignores a kind it does not know.
+
+## Links and notifications (stage 9)
+
+- **Universal links**: `@glidecomp/client/app-links` is the one list of the
+  glidecomp.com paths that open the app, how each maps to a route
+  (`appRouteForUrl`, used by `+native-intent.tsx`), and the association files
+  (`functions/.well-known/`). `app.config.ts` repeats the Android paths — the
+  config loader cannot follow a workspace import — and
+  `__tests__/app-links-config.test.ts` keeps the copy honest. iOS claims
+  links only in store builds and with `UNIVERSAL_LINKS=1`.
+- **A dead link** shows `LinkRepair` (`QueryGate`'s `repair`, the report
+  card's gate, and `+not-found.tsx`): the website's not-found search against
+  `GET /api/comp/lookup`.
+- **Notifications** (`src/notifications/push.ts`): opt-in per comp; the
+  permission is asked when a comp's are first turned on; signing out
+  forgets the device's token first. A tap opens `data.url`, an app route.
+  Needs `EAS_PROJECT_ID` in the build, and a device (a simulator has no
+  push token). On iOS it also needs the Push Notifications capability, which
+  a free Personal Team cannot have, so remote notifications are on only in
+  store builds and with `PUSH_NOTIFICATIONS=1` (like `APPLE_SIGN_IN` and
+  `UNIVERSAL_LINKS`); without it a Personal Team build says notifications
+  aren't set up.
 
 ## The track map
 

@@ -10,6 +10,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ApiError, isNotFound } from '@/api/client';
+import { LinkRepair } from '@/components/LinkRepair';
 import { ago } from '@/lib/ago';
 
 /** Whether the phone has a network, as the query layer sees it. */
@@ -66,15 +67,21 @@ interface GateProps<T> {
   loading: string;
   /** "This competition doesn’t exist, or isn’t public." */
   notFound: string;
+  /**
+   * A public page a link can point at (comp, task, report card): a real 404
+   * offers what the dead link's words name now, rather than only saying so.
+   */
+  repair?: boolean;
   children: (data: T) => ReactNode;
 }
 
 /** Renders `children` once there is data — from the network or the phone. */
-export function QueryGate<T>({ query, loading, notFound, children }: GateProps<T>) {
+export function QueryGate<T>({ query, loading, notFound, repair = false, children }: GateProps<T>) {
   const { colors } = useTheme();
   if (query.data !== undefined) return <>{children(query.data)}</>;
   if (query.isError) {
     const missing = isNotFound(query.error);
+    if (missing && repair) return <LinkRepair message={notFound} />;
     return (
       <View style={styles.centre} testID={missing ? 'not-found' : 'load-error'}>
         <Text style={[styles.message, { color: colors.text }]}>
