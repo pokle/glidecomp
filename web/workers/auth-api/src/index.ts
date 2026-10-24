@@ -429,13 +429,29 @@ app.post("/api/auth/dev-login", async (c) => {
   const auth = createAuth(c.env);
   const password = "dev";
 
-  // Sign up (ignore error if user already exists)
-  try {
+  const ctx = await auth.$context;
+  const existing = await ctx.internalAdapter.findUserByEmail(email);
+  if (!existing) {
     await auth.api.signUpEmail({
       body: { email, password, name },
     });
-  } catch {
-    // User already exists — that's fine
+  } else {
+    // An account a Google or email-code sign-in created has no password, so
+    // signing in with the dev one would answer 401. Give it the dev password
+    // the way Better Auth's own set-password route does.
+    const credential = await ctx.internalAdapter.findCredentialAccount(existing.user.id);
+    if (!credential) {
+      await ctx.internalAdapter.linkAccount({
+        userId: existing.user.id,
+        providerId: "credential",
+        accountId: existing.user.id,
+        password: await ctx.password.hash(password),
+      });
+    } else if (!credential.password) {
+      await ctx.internalAdapter.updateAccount(credential.id, {
+        password: await ctx.password.hash(password),
+      });
+    }
   }
 
   // Sign in via Better Auth to get a properly signed session cookie
