@@ -29,6 +29,14 @@ parameters; the roster; tracks, penalties and pilot status; scores and
 analysis; MCP Apps (interactive views inside the chat); pilots as a user group.
 Each needs its own scope, added on purpose (§5), not a wider existing one.
 
+> **Since [#771](https://github.com/pokle/glidecomp/pull/771) (25 October 2026)**
+> there is no `@glidecomp/client` package: the typed API client, `slug.ts`,
+> `quick-task.ts` and `route-editor.ts` live in the website again
+> (`web/frontend/src/react/`). Where this plan says `@glidecomp/client`, phase 2
+> has to choose: import those DOM-free modules into `mcp-api` from the website's
+> tree, or give the few that `mcp-api` needs a shared home again. Phase 1 uses
+> none of them.
+
 ## 1. The shape
 
 ```
