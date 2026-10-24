@@ -447,6 +447,7 @@ a crawler, and they are a contract all the same.
 | `GET` | `/civl-rankings.csv` | The CIVL monthly world ranking, as CSV |
 | `GET` | `/comp/:comp_id/scores.csv` | The scores page's downloadable twin |
 | `GET` | `/api/civl-rankings.csv` | The same ranking data, under `/api/` |
+| `POST` | `/mcp` | The MCP endpoint (Streamable HTTP) an organiser's own assistant reads GlideComp through. Needs an OAuth access token from the provider under `/api/auth/oauth2/*`, never an API key; a request without one gets `401` and a challenge pointing at the metadata below — see [mcp.md](mcp.md) |
 | `GET` | `/.well-known/oauth-protected-resource/mcp` | RFC 9728 metadata for the MCP endpoint: its resource identifier and authorisation server |
 | `GET` | `/.well-known/oauth-authorization-server/api/auth` | RFC 8414 metadata for that authorisation server (also at `/.well-known/oauth-authorization-server`, for clients that only look there) |
 | `GET` | `/.well-known/openid-configuration/api/auth` | The same, as OpenID discovery |

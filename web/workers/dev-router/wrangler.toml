@@ -7,7 +7,8 @@
 #   wrangler dev -c web/workers/dev-router/wrangler.toml \
 #                -c web/workers/auth-api/wrangler.toml \
 #                -c web/workers/competition-api/wrangler.toml \
-#                -c web/workers/airscore-api/wrangler.toml
+#                -c web/workers/airscore-api/wrangler.toml \
+#                -c web/workers/mcp-api/wrangler.toml
 #
 # Every worker in that session shares ONE Miniflare instance, so the D1 SQLite
 # file has a single writer — the fix for the cross-process `D1_ERROR: internal
@@ -29,6 +30,10 @@ service = "competition-api"
 [[services]]
 binding = "AIRSCORE_API"
 service = "airscore-api"
+
+[[services]]
+binding = "MCP_API"
+service = "mcp-api"
 
 [dev]
 port = 8790

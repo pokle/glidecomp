@@ -40,6 +40,10 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
   R2. Reached via Pages Functions proxies in `functions/api/`. In local dev they
   all run in ONE `wrangler dev` session behind the `dev-router` Worker on port
   **8790** — see [docs/local-dev.md](docs/local-dev.md).
+- **`web/workers/mcp-api`** — the MCP endpoint at `/mcp`, through which an
+  organiser's own assistant (Claude, ChatGPT, Claude Code) reads GlideComp as
+  them, signed in with OAuth via auth-api's `mcp()` provider. It owns no data
+  — see the assistant rule below and [docs/mcp.md](docs/mcp.md).
 
 ## Build & Development
 
@@ -208,6 +212,19 @@ These are the standing imperatives. Each links to the reference that explains it
   - **A 4xx is a real answer** and must NOT be retried (`/api/auth/me` answers
     429 for a rate-limited API key).
   - Coverage: `e2e/transient-api-failure.spec.ts`.
+- **An assistant reaches GlideComp only through doors opened on purpose**
+  ([docs/mcp.md](docs/mcp.md)). Two rules keep an OAuth access token from
+  becoming a full REST credential:
+  - **mcp-api calls competition-api, never D1.** Each tool is an existing
+    route called over the service binding with the caller's own token, so
+    visibility, admin checks, `audit()` and the score bump all happen where
+    they already do, and a hidden `test` comp stays hidden without mcp-api
+    knowing the rule exists.
+  - **A route an assistant may reach is added to the fence on purpose.**
+    `MCP_ROUTES` in `competition-api/src/middleware/mcp-fence.ts` lists every
+    route an access token may call, with the scope each needs; anything else
+    answers 403. A new tool means a new row there, and a new kind of change
+    means a new scope, never a wider existing one.
 - **The search index maintains itself — do NOT add a call site for it.**
   `GET /api/comp/search` answers over an FTS5 index of competitions, tasks
   (including their routes' turnpoints) and pilots
@@ -664,3 +681,4 @@ These are the standing imperatives. Each links to the reference that explains it
 | Information architecture + design language | [docs/2026-07-08-information-architecture-v2.md](docs/2026-07-08-information-architecture-v2.md) |
 | 3D replay | [docs/3d-flight-replay-notes.md](docs/3d-flight-replay-notes.md) |
 | Database | [docs/database.md](docs/database.md) |
+| MCP endpoint for organisers' own assistants | [docs/mcp.md](docs/mcp.md) |

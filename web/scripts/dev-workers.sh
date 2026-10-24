@@ -157,6 +157,7 @@ while true; do
     --config web/workers/auth-api/wrangler.toml \
     --config web/workers/competition-api/wrangler.toml \
     --config web/workers/airscore-api/wrangler.toml \
+    --config web/workers/mcp-api/wrangler.toml \
     --persist-to web/.wrangler/state \
     --port "$PORT" \
     --inspector-port "$INSPECTOR_PORT" \

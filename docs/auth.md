@@ -296,6 +296,11 @@ it.
 - **competition-api fences it** (`middleware/mcp-fence.ts`): a request
   carrying one reaches only the allowlisted routes, with the scope each needs,
   and a token `/me` won't vouch for is a `401`, never the signed-out view.
+- **mcp-api asks `/me` too** (`web/workers/mcp-api/src/gate.ts`), once per
+  MCP request, rather than checking the signature itself: only `/me` knows the
+  consent and the budget. Anything but an OAuth grant — a session, an API key
+  sent as a bearer value — gets the RFC 9728 `401` challenge, so the client
+  starts sign-in. See [mcp.md](mcp.md).
 - **Settings → Connected assistants** lists grants and disconnects them
   (`/api/auth/connected-assistants`), revoking refresh tokens too — the
   provider's own delete-consent would leave them working. Granting, consenting
@@ -467,7 +472,7 @@ trustedOrigins: ["https://*.glidecomp.pages.dev"],
 
 ### Branch deploys do NOT deploy workers
 
-The unified `deploy.yml` workflow runs on every branch, but for non-master branches it only deploys Cloudflare Pages — the Worker deploy steps (auth-api, airscore-api, competition-api) are gated on `github.ref_name == 'master'`. Workers are therefore only deployed from `master`. This prevents branches from overwriting production workers with untested code.
+The unified `deploy.yml` workflow runs on every branch, but for non-master branches it only deploys Cloudflare Pages — the Worker deploy steps (auth-api, airscore-api, competition-api, mcp-api) are gated on `github.ref_name == 'master'`. Workers are therefore only deployed from `master`. This prevents branches from overwriting production workers with untested code.
 
 ## Cross-worker auth verification
 

@@ -432,6 +432,17 @@ jobs:
           workingDirectory: web/workers/competition-api
           command: deploy
 
+      # After auth-api and competition-api, which it binds to; before Pages,
+      # whose /mcp Function binds to it.
+      - name: Deploy MCP API Worker
+        if: github.ref_name == 'master'
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web/workers/mcp-api
+          command: deploy
+
       # Pages deploy for every branch. `--branch=master` promotes to production
       # (glidecomp.com); any other branch gets its preview alias.
       - name: Deploy to Cloudflare Pages

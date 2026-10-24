@@ -1,6 +1,7 @@
 # MCP for organisers, signed in with OAuth — 2026-10-24
 
-*Plan. Nothing here is built yet.*
+*Plan. Phases 1 ([#773](https://github.com/pokle/glidecomp/pull/773)) and 2 are built;
+phase 3 is not. How to connect: [mcp.md](mcp.md).*
 
 An organiser should be able to connect the assistant they already use (Claude,
 ChatGPT, Claude Code) to GlideComp, sign in once in a browser, and then ask it
@@ -35,7 +36,9 @@ Each needs its own scope, added on purpose (§5), not a wider existing one.
 > (`web/frontend/src/react/`). Where this plan says `@glidecomp/client`, phase 2
 > has to choose: import those DOM-free modules into `mcp-api` from the website's
 > tree, or give the few that `mcp-api` needs a shared home again. Phase 1 uses
-> none of them.
+> none of them. **Phase 2 chose the first:** `mcp-api` imports `lib/slug.ts`,
+> `lib/time.ts`, `comp/route.ts` and `comp/quick-task.ts` by relative path, as
+> `functions/sitemap.xml.ts` already imports `slug.ts`.
 
 ## 1. The shape
 
@@ -385,6 +388,14 @@ client supports only CIMD, phase 1 grows a CIMD transport question first.
     flow headlessly against the dev stack, through sign-in and consent in
     Playwright;
   - it lists the tools, searches, and reads a task.
+- *As built:* the tool tests run under `bun test` against fake AUTH_API and
+  COMPETITION_API bindings (`web/workers/mcp-api/test/`), because mcp-api owns
+  no data of its own; the real routes and their visibility rules are covered in
+  competition-api's `mcp-fence.test.ts`, which gained the non-admin case. The
+  e2e client speaks OAuth and JSON-RPC by hand through Playwright's request API
+  rather than the SDK client, so the spec pins the wire format itself — the
+  401 challenge, PKCE, `resource`, the 2025-11-25 protocol revision — and it
+  ends by disconnecting in Settings and watching the next call get a 401.
 
 **Phase 3 — task and route writes.** The four write tools, the fence and the
 scope check for task POST/PATCH, and the audit "via" suffix.

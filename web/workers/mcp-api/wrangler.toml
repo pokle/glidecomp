@@ -1,0 +1,25 @@
+# mcp-api — the MCP endpoint at https://glidecomp.com/mcp
+# (docs/2026-10-24-mcp-oauth-plan.md, docs/mcp.md).
+#
+# Reached only through the Pages Function functions/mcp.ts over a service
+# binding, never at a workers.dev or preview URL. It holds no data of its own:
+# every tool is a competition-api route, called with the caller's own access
+# token, and auth-api decides who that token speaks for.
+name = "mcp-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-10"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[[services]]
+binding = "AUTH_API"
+service = "auth-api"
+
+[[services]]
+binding = "COMPETITION_API"
+service = "competition-api"
+
+[dev]
+port = 8791
+inspector_port = 9233

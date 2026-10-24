@@ -13,3 +13,8 @@ service = "auth-api"
 [[services]]
 binding = "COMPETITION_API"
 service = "competition-api"
+
+# The MCP endpoint (/mcp) — available in Pages Functions as env.MCP_API
+[[services]]
+binding = "MCP_API"
+service = "mcp-api"
