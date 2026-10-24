@@ -19,6 +19,7 @@ Run from `mobile/` (or `bun run --cwd mobile <script>`):
 | `bun run test` | Jest (unit and component) |
 | `bun run typecheck` | `tsc` over the app |
 | `bun run e2e` | Maestro flows in `.maestro/`, against a booted simulator with the app installed |
+| `bun run screenshots` | The store screenshots (`.maestro/store/`), not part of `e2e` |
 
 From the root, `bun run test:mobile` and `bun run typecheck:mobile` run the
 same; both are part of `test:all` / `typecheck:all`, so CI runs them.
@@ -458,6 +459,20 @@ again). Report tables go through `tableGroup()`; series through
   store builds and with `PUSH_NOTIFICATIONS=1` (like `APPLE_SIGN_IN` and
   `UNIVERSAL_LINKS`); without it a Personal Team build says notifications
   aren't set up.
+
+## Releases (stage 10)
+
+**[RELEASING.md](RELEASING.md)** is the checklist: EAS Update for
+JavaScript, a store build for anything native, never a store build during a
+competition. The runtime version is the fingerprint, so an update cannot
+reach a build it does not match.
+
+- **Crash reports** go to Sentry only from a non-development build with
+  `SENTRY_DSN`, and only through `src/lib/crash-scrub.ts`. A new kind of
+  data in a report (a context, a tag, a breadcrumb's field) gets a scrubbing
+  rule and a test case there first.
+- **Store copy** is in `store/`, as proposed wording: changing it follows the
+  root rule — propose first.
 
 ## The track map
 

@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { withCrashReports } from '@/crash-reports';
 import { QueryProvider } from '@/api/query-client';
 import { startIdentityChecks } from '@/auth/session';
 import { applyAppearance } from '@/settings/appearance';
@@ -19,7 +20,7 @@ applyAppearance();
  */
 export const unstable_settings = { anchor: '(tabs)' };
 
-export default function RootLayout() {
+function RootLayout() {
   const scheme = useColorScheme();
   useEffect(() => {
     const stopIdentity = startIdentityChecks();
@@ -61,3 +62,5 @@ export default function RootLayout() {
     </QueryProvider>
   );
 }
+
+export default withCrashReports(RootLayout);
