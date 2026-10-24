@@ -191,7 +191,14 @@ export function SignIn() {
             {lastMethod === "google" ? <LastUsedPill /> : null}
           </Button>
           {DEV_SIGN_IN_ENABLED ? (
-            <Button variant="outline" onPress={() => void signInAsDev(undefined, undefined, next)}>
+            <Button
+              variant="outline"
+              onPress={async () => {
+                setError(null);
+                const { error: err } = await signInAsDev(undefined, undefined, next);
+                if (err) setError(err);
+              }}
+            >
               Sign in (dev)
             </Button>
           ) : null}

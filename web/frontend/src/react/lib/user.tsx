@@ -153,24 +153,41 @@ export const DEV_SIGN_IN_ENABLED = import.meta.env.DEV;
  * then reloads into the app. The default identity matches the repo's
  * super-admin allowlist (`SUPER_ADMIN_EMAILS`) so the dev session has admin
  * rights, which is what local testing usually needs.
+ *
+ * Resolves with `{ error }` when the sign-in failed, for the caller to show:
+ * a failure that only reached the console made the button look dead.
  */
 export async function signInAsDev(
   name = "Tushar Pokle",
   email = "tushar.pokle@gmail.com",
   next = "/comp"
-): Promise<void> {
+): Promise<{ error: string | null }> {
   writePreviewRole("actual");
-  const res = await fetch("/api/auth/dev-login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ name, email }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/dev-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name, email }),
+    });
+  } catch {
+    return { error: "Dev sign-in failed: the auth worker did not answer. Is it running?" };
+  }
   if (!res.ok) {
-    console.error("dev sign-in failed", res.status, await res.text().catch(() => ""));
-    return;
+    const body = await res.text().catch(() => "");
+    console.error("dev sign-in failed", res.status, body);
+    let detail = body;
+    try {
+      const parsed = JSON.parse(body) as { message?: string; error?: string };
+      detail = parsed.message ?? parsed.error ?? body;
+    } catch {
+      // Not JSON: show the text as it came.
+    }
+    return { error: `Dev sign-in failed (${res.status})${detail ? `: ${detail}` : "."}` };
   }
   window.location.href = next;
+  return { error: null };
 }
 
 export function UserProvider({
