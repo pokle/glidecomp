@@ -1,7 +1,7 @@
 # Native iOS and Android app — implementation plan
 
 Date: 2026-10-05
-Status: stage 0 decisions made (2026-10-06); stages 1–4 merged; stage 5 in review.
+Status: stage 0 decisions made (2026-10-06); stages 1–5 merged; stage 6 in review.
 Implementation happens on the owner's Mac.
 
 Builds the app described in
@@ -572,6 +572,41 @@ task into my instrument?", and the personal library.
 - Load today's task into a real instrument from the phone, by file and by QR.
 - Export waypoints for two instrument types and import them.
 - The activity log matches the website's, filter by filter.
+
+**As built (2026-10-22).** Where stage 6 departs from the list above:
+
+- **What the two clients share moved to `@glidecomp/client`**:
+  `instrument` (which files a task or a waypoint set offers, each named as the
+  competition worker names it, and the `XCTSK:` QR with its too-big check),
+  `audit` (the activity filters, the page query, and grouping by the
+  competition's calendar day) and `storageUsage` in `account` (the library's
+  allowance). The website's Activity section and library page now read them,
+  so its filters and storage line cannot drift from the app's.
+- **Files are written on the phone, not fetched.** The website hands a phone
+  the worker's hosted file; the app writes the same file from the engine's
+  exporters and gives it to the share sheet, so Send to instrument works with
+  no signal once the task has been read. GPX and KML go with their own iOS
+  types (flight apps claim them); every other format goes as plain data and
+  the receiving app reads the extension.
+- **One Send to instrument screen, three doors**: the task view's Route group,
+  the Waypoints screen's Send button, and a task in My flights' library. It
+  carries the website's "swap code & name" as a "Label on the device" choice
+  that applies to the files and the QR alike.
+- **The QR is a takeover** (`/qr`, a full-screen modal): black on white
+  whatever the theme, as large as the screen, and the screen kept awake while
+  it is up. It finds its task again from the route's parameters rather than
+  carrying the payload, so it reads from the phone's cache offline. Drawn
+  with `react-native-svg` from `qrcode`'s module matrix: no native code.
+- **The waypoints list is read-only in this stage**, so nothing opens and the
+  whole row flies the map; the pin names the action. Editing, Upload file and
+  Check altitudes are the organiser's, in stage 7.
+- **Activity is one filter menu, not chips**, the same choice row the scores
+  screen uses; "Show older" fetches the next page rather than an endless
+  scroll. The comp view keeps its Activity row rather than the IA's
+  three-entry digest: the comp view is already long on a phone.
+- **My flights' library is read and handed on, not managed.** A track opens
+  the share sheet with its IGC file; a task opens Send to instrument.
+  Uploading to and deleting from the library stay on the website for now.
 
 ---
 

@@ -14,7 +14,15 @@ appId: com.glidecomp.app.dev
 - extendedWaitUntil:
     visible: "Wing"
     timeout: 20000
-- assertVisible: "Results"
+# Results sits below the tasks, so a comp with a few days of them pushes it
+# off screen; the first task is then back up.
+- scrollUntilVisible:
+    element: "Results"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "task-row-.*"
+    direction: UP
 - tapOn:
     id: "task-row-.*"
     index: 0

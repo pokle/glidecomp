@@ -4,11 +4,13 @@
  * exactly as the website does: the Hono types prove the route exists, the
  * interfaces say what a screen may rely on.
  */
-import type { PilotFlight, PilotProfile, PilotRegistration } from '@glidecomp/client/account';
+import type { LibraryTask, LibraryTrack, PilotFlight, PilotProfile, PilotRegistration } from '@glidecomp/client/account';
+import { activityQuery, type ActivityFilter } from '@glidecomp/client/audit';
 import type { SearchResults } from '@glidecomp/client/search';
 import type { IdentifierKind, OpenCompsResponse, RegistrationState } from '@glidecomp/client/submit';
 import { MIN_SEARCH_CHARS } from '@glidecomp/client/search';
 import type {
+  AuditResponse,
   CompDetailData,
   CompListEntry,
   CompScores,
@@ -18,7 +20,8 @@ import type {
   TaskScoreData,
 } from '@glidecomp/client/types';
 import type { TaskWeatherData } from '@glidecomp/client/weather';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import type { WaypointFileRecord, XCTask } from '@glidecomp/engine';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { igcText } from '@/lib/igc-text';
 
@@ -291,4 +294,98 @@ export function useRoster(compId: string | null, { enabled = true }: { enabled?:
         )
       ).pilots,
   });
+}
+
+// ── The pilot's day before and after the flight (stage 6) ──────────────────
+
+/**
+ * A competition's waypoint set — the file the organiser uploaded, as the
+ * engine reads it. Kept on the phone like every read, so the waypoints and
+ * their export work on a hill with no signal.
+ */
+export function useCompWaypoints(compId: string) {
+  return useQuery({
+    queryKey: ['waypoints', compId],
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ waypoints: WaypointFileRecord[]; updated_at: string | null }>(
+          (s) => api.api.comp[':comp_id'].waypoints.$get({ param: { comp_id: compId } }, { init: { signal: s } }),
+          signal,
+        )
+      ).waypoints,
+  });
+}
+
+/**
+ * The activity log, a page at a time, newest first. Each filter is its own
+ * list (the server filters), so switching back to one shows what it had.
+ */
+export function useActivity(compId: string, filter: ActivityFilter) {
+  return useInfiniteQuery({
+    queryKey: ['activity', compId, filter],
+    initialPageParam: null as number | null,
+    getNextPageParam: (last: AuditResponse) => (last.has_more ? last.next_before : null),
+    queryFn: ({ signal, pageParam }) =>
+      getJson<AuditResponse>(
+        (s) =>
+          api.api.comp[':comp_id'].audit.$get(
+            { param: { comp_id: compId }, query: activityQuery(filter, pageParam) },
+            { init: { signal: s } },
+          ),
+        signal,
+      ),
+  });
+}
+
+/** The tracks in this account's own library, most recently used first. */
+export function useLibraryTracks(userId: string | null) {
+  return useQuery({
+    queryKey: ['libraryTracks', userId],
+    enabled: userId !== null,
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ tracks: LibraryTrack[] }>(
+          (s) => api.api.user.tracks.$get(undefined, { init: { signal: s } }),
+          signal,
+        )
+      ).tracks,
+  });
+}
+
+/** The tasks in this account's own library. */
+export function useLibraryTasks(userId: string | null) {
+  return useQuery({
+    queryKey: ['libraryTasks', userId],
+    enabled: userId !== null,
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ tasks: LibraryTask[] }>(
+          (s) => api.api.user.tasks.$get(undefined, { init: { signal: s } }),
+          signal,
+        )
+      ).tasks,
+  });
+}
+
+/** One library task with its route, for sending to an instrument. */
+export function useLibraryTask(userId: string | null, code: string) {
+  return useQuery({
+    queryKey: ['libraryTask', userId, code],
+    enabled: userId !== null,
+    queryFn: ({ signal }) =>
+      getJson<LibraryTask & { xctsk: XCTask | null }>(
+        (s) => api.api.user.tasks[':task_code'].$get({ param: { task_code: code } }, { init: { signal: s } }),
+        signal,
+      ),
+  });
+}
+
+/**
+ * A library track's IGC file, fetched only when the reader shares it. Not
+ * kept on the phone: it is a file to hand on, not a page to read offline.
+ */
+export async function libraryTrackBytes(trackId: string): Promise<Uint8Array> {
+  return getBytes((s) =>
+    api.api.user.tracks[':track_id'].$get({ param: { track_id: trackId } }, { init: { signal: s } }),
+  );
 }

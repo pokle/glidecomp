@@ -14,6 +14,10 @@
       "types": "./src/api.ts",
       "default": "./src/api.ts"
     },
+    "./audit": {
+      "types": "./src/audit.ts",
+      "default": "./src/audit.ts"
+    },
     "./chart-scale": {
       "types": "./src/chart-scale.ts",
       "default": "./src/chart-scale.ts"
@@ -21,6 +25,10 @@
     "./format": {
       "types": "./src/format.ts",
       "default": "./src/format.ts"
+    },
+    "./instrument": {
+      "types": "./src/instrument.ts",
+      "default": "./src/instrument.ts"
     },
     "./map-geometry": {
       "types": "./src/map-geometry.ts",

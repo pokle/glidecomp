@@ -451,3 +451,19 @@ touch screen does differently:
 - **Not drawn** — the glide chevrons and labels, the track point HUD, the
   speed overlay, 3D and annotations: they belong to the analysis page, which
   the website's report card links to and the app does not have yet.
+
+## Native app (waypoints map)
+
+The app's Waypoints screen (`mobile/src/map/WaypointMap.tsx`) draws a
+competition's waypoint set as the "Pickable Waypoint Markers" above: the same
+slate dots and code labels (zoom ≥ 10), fitted to the whole set on load (40 pt
+padding). What differs on a touch screen:
+
+- **The list flies the map.** The screen is read-only, so a row's whole width
+  is the locate target, not only its pin; the flight keeps the zoom when it is
+  already 13 or closer, and a second tap on the same row re-centres.
+- **A tap on a dot** (44 pt hit box) picks it out in the highlight colour and
+  shows its code, name and altitude in a card at the foot of the map; a tap
+  elsewhere clears it. Nothing is added or edited from the map yet.
+- **No geolocate or place search** — the map shows a set that exists; the
+  editors that need them are stage 7's.

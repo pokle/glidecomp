@@ -26,12 +26,7 @@ import { compPath, taskPath, pilotPath } from "../lib/slug";
 import { api } from "../../comp/api";
 import { needsOnboarding } from "../../auth/client";
 import { Tree, TreeItem, TreeItemContent, TreeChevron } from "../rac/tree";
-
-// Mirrors the server-side limits in
-// web/workers/competition-api/src/routes/user-files.ts (MAX_USER_*).
-const MAX_USER_TRACKS = 500;
-const MAX_USER_TASKS = 200;
-const MAX_USER_BYTES = 200 * 1024 * 1024;
+import { storageUsage } from "@glidecomp/client/account";
 
 export function Dashboard() {
   const { username } = useParams<{ username: string }>();
@@ -532,14 +527,7 @@ function AddFilesButton({
 
 function storageFraction(tracks: StoredTrack[], tasks: StoredTask[]) {
   const usedBytes = tracks.reduce((sum, t) => sum + (t.fileSize ?? t.content?.length ?? 0), 0);
-  return {
-    usedBytes,
-    fraction: Math.max(
-      usedBytes / MAX_USER_BYTES,
-      tracks.length / MAX_USER_TRACKS,
-      tasks.length / MAX_USER_TASKS
-    ),
-  };
+  return storageUsage(usedBytes, tracks.length, tasks.length);
 }
 
 /**
@@ -561,15 +549,9 @@ function NearQuotaWarning({ tracks, tasks }: { tracks: StoredTrack[]; tasks: Sto
 }
 
 function StorageSection({ tracks, tasks }: { tracks: StoredTrack[]; tasks: StoredTask[] }) {
-  const { usedBytes, fraction } = storageFraction(tracks, tasks);
-  const usedMB = usedBytes / (1024 * 1024);
-  const limitMB = MAX_USER_BYTES / (1024 * 1024);
-  // The byte quota is the one users hit in practice; counts only matter
-  // near their (high) limits, so mention them only when relevant.
-  const parts = [`${usedMB < 10 ? usedMB.toFixed(1) : Math.round(usedMB)} of ${limitMB} MB`];
-  if (tracks.length / MAX_USER_TRACKS >= 0.8)
-    parts.push(`${tracks.length} of ${MAX_USER_TRACKS} tracks`);
-  if (tasks.length / MAX_USER_TASKS >= 0.8) parts.push(`${tasks.length} of ${MAX_USER_TASKS} tasks`);
+  // The byte allowance is the one people meet in practice; the summary
+  // mentions the counts only near their (high) limits.
+  const { fraction, summary } = storageFraction(tracks, tasks);
 
   return (
     <Card>
@@ -581,14 +563,14 @@ function StorageSection({ tracks, tasks }: { tracks: StoredTrack[]; tasks: Store
         // floor of 1% keeps a nearly-empty bar visible.
         <div className="mt-2 max-w-60">
           <p className="text-right text-sm text-muted-foreground tabular-nums">
-            {parts.join(" · ")}
+            {summary}
           </p>
           <ProportionMeter
             className="mt-1"
             value={Math.min(100, Math.max(1, fraction * 100))}
             total={100}
             label="Storage used"
-            valueLabel={parts.join(" · ")}
+            valueLabel={summary}
           />
         </div>
       ) : (

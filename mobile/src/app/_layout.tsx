@@ -50,6 +50,9 @@ export default function RootLayout() {
             title: 'Submit a track',
           }}
         />
+        {/* A takeover (IA §3): the QR owns the screen while a briefing
+            room scans it, over whichever tab sent it. */}
+        <Stack.Screen name="qr" options={{ presentation: 'fullScreenModal', headerShown: false }} />
       </Stack>
     </ThemeProvider>
     </QueryProvider>
