@@ -131,6 +131,14 @@ export async function auditAll(
  *   describeChange("name", undefined, "Bells Beach 2026")
  *     → `Set name to "Bells Beach 2026"`
  */
+/** First line (or 80 characters) of a block of prose, whitespace collapsed —
+ * enough for an audit reader to recognise the change without the log entry
+ * becoming the document. */
+export function excerpt(text: string, max = 80): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1)}…`;
+}
+
 export function describeChange(
   field: string,
   oldValue: unknown,

@@ -6,12 +6,16 @@
  */
 import type { LibraryTask, LibraryTrack, PilotFlight, PilotProfile, PilotRegistration } from '@glidecomp/client/account';
 import { activityQuery, type ActivityFilter } from '@glidecomp/client/audit';
+import type { CompPilot as RosterPilot } from '@glidecomp/client/roster-csv';
 import type { SearchResults } from '@glidecomp/client/search';
 import type { IdentifierKind, OpenCompsResponse, RegistrationState } from '@glidecomp/client/submit';
 import { MIN_SEARCH_CHARS } from '@glidecomp/client/search';
 import type {
   AuditResponse,
   CompDetailData,
+  ManualFlightEntry,
+  PilotStatusEntry,
+  TrackInfo,
   CompListEntry,
   CompScores,
   PilotAnalysisData,
@@ -137,9 +141,15 @@ export function useTaskScore(compId: string, taskId: string) {
 }
 
 /** The pilot's resolved flight on a task: what the report card narrates. */
-export function usePilotAnalysis(compId: string, taskId: string, pilotId: string) {
+export function usePilotAnalysis(
+  compId: string,
+  taskId: string,
+  pilotId: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: ['pilotAnalysis', compId, taskId, pilotId],
+    enabled,
     queryFn: ({ signal }) =>
       getJson<PilotAnalysisData>(
         (s) =>
@@ -388,4 +398,70 @@ export async function libraryTrackBytes(trackId: string): Promise<Uint8Array> {
   return getBytes((s) =>
     api.api.user.tracks[':track_id'].$get({ param: { track_id: trackId } }, { init: { signal: s } }),
   );
+}
+
+// ── The organiser's (stage 7) ───────────────────────────────────────────────
+
+/** Every track on a task, active or superseded: Pilots & tracks. */
+export function useTaskTracks(compId: string, taskId: string) {
+  return useQuery({
+    queryKey: ['taskTracks', compId, taskId],
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ tracks: TrackInfo[] }>(
+          (s) => api.api.comp[':comp_id'].task[':task_id'].igc.$get({ param: { comp_id: compId, task_id: taskId } }, { init: { signal: s } }),
+          signal,
+        )
+      ).tracks,
+  });
+}
+
+/** Pilots marked absent or did not fly on a task. */
+export function usePilotStatuses(compId: string, taskId: string) {
+  return useQuery({
+    queryKey: ['pilotStatuses', compId, taskId],
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ statuses: PilotStatusEntry[] }>(
+          (s) =>
+            api.api.comp[':comp_id'].task[':task_id']['pilot-status'].$get(
+              { param: { comp_id: compId, task_id: taskId } },
+              { init: { signal: s } },
+            ),
+          signal,
+        )
+      ).statuses,
+  });
+}
+
+/** Manual flights recorded on a task (FAI S7F §9.2.2). */
+export function useManualFlights(compId: string, taskId: string) {
+  return useQuery({
+    queryKey: ['manualFlights', compId, taskId],
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ manual_flights: ManualFlightEntry[] }>(
+          (s) =>
+            api.api.comp[':comp_id'].task[':task_id']['manual-flight'].$get(
+              { param: { comp_id: compId, task_id: taskId } },
+              { init: { signal: s } },
+            ),
+          signal,
+        )
+      ).manual_flights,
+  });
+}
+
+/** The roster with every field an organiser edits (the server sends PII only to organisers). */
+export function useRosterDetail(compId: string) {
+  return useQuery({
+    queryKey: ['roster', compId, 'detail'],
+    queryFn: async ({ signal }) =>
+      (
+        await getJson<{ pilots: RosterPilot[] }>(
+          (s) => api.api.comp[':comp_id'].pilot.$get({ param: { comp_id: compId } }, { init: { signal: s } }),
+          signal,
+        )
+      ).pilots,
+  });
 }

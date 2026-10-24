@@ -59,7 +59,8 @@ import { useOnline } from '@/ui/QueryStates';
 const SELF = 'self';
 
 export default function SubmitSheet() {
-  const params = useLocalSearchParams<{ comp?: string; task?: string; retry?: string }>();
+  // `pilot`: an organiser's "Upload on behalf" from Pilots & tracks names the pilot.
+  const params = useLocalSearchParams<{ comp?: string; task?: string; retry?: string; pilot?: string }>();
   const identity = useIdentity();
   const user = identity.kind === 'signed-in' ? identity.user : null;
   const units = useUnits();
@@ -84,7 +85,7 @@ export default function SubmitSheet() {
   );
   const [identifierValue, setIdentifierValue] = useState(retryAnon?.identifierValue ?? last?.identifierValue ?? '');
   const [onBehalfOf, setOnBehalfOf] = useState(
-    retrying?.as.kind === 'on-behalf' ? retrying.as.compPilotId : SELF,
+    retrying?.as.kind === 'on-behalf' ? retrying.as.compPilotId : (params.pilot ?? SELF),
   );
   const [choosingPilot, setChoosingPilot] = useState(false);
   const [pilotFilter, setPilotFilter] = useState('');

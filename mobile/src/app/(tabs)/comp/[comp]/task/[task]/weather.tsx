@@ -8,7 +8,7 @@
 import { sampleProvenance } from '@glidecomp/client/met';
 import { idFromSegment } from '@glidecomp/client/slug';
 import { sourceKindLabel, type TaskWeatherData } from '@glidecomp/client/weather';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { useComp, useTask, useTaskWeather } from '@/api/queries';
@@ -34,13 +34,28 @@ export default function WeatherScreen() {
       <Stack.Screen options={{ title: 'Weather' }} />
       <StaleBanner query={weather} />
       <QueryGate query={weather} loading="Loading the day’s weather…" notFound="This task doesn’t exist, or isn’t public.">
-        {(data) => <WeatherBody data={data} timeZone={comp.data?.timezone ?? null} />}
+        {(data) => (
+          <WeatherBody
+            data={data}
+            timeZone={comp.data?.timezone ?? null}
+            editNotes={comp.data?.is_admin ? () => router.push(`/comp/${params.comp}/task/${params.task}/weather-notes` as never) : null}
+          />
+        )}
       </QueryGate>
     </View>
   );
 }
 
-function WeatherBody({ data, timeZone }: { data: TaskWeatherData; timeZone: string | null }) {
+function WeatherBody({
+  data,
+  timeZone,
+  editNotes,
+}: {
+  data: TaskWeatherData;
+  timeZone: string | null;
+  /** The organiser's way to the notes editor; null for everyone else. */
+  editNotes: (() => void) | null;
+}) {
   const prefs = useUnits();
   const notes = data.notes.trim();
   const w = data.weather;
@@ -49,6 +64,7 @@ function WeatherBody({ data, timeZone }: { data: TaskWeatherData; timeZone: stri
     <GroupedList testID="weather">
       <Group title="Organiser’s notes">
         <Note>{notes || 'No notes from the organisers for this day.'}</Note>
+        {editNotes ? <Row testID="edit-weather-notes" title={notes ? 'Edit notes' : 'Add notes'} onPress={editNotes} /> : null}
       </Group>
       {w && rows.length > 0 ? (
         <>

@@ -389,6 +389,31 @@ the phone is the file the website's worker serves, name and all.
   (`comp`, `task`, `code`, `swap`) and reads the task from the cache rather
   than carrying a 3 KB payload through the router.
 
+## The organiser (stage 7)
+
+Every organiser screen writes through `src/api/organiser.ts`: one function
+per existing competition-api route, each refetching what it can have changed
+(`refreshComp`). A refusal comes back as a `WriteError` carrying the server's
+own sentence; screens show it through `useFormSave` (`src/ui/use-form-save.ts`),
+which also holds the unsaved-changes guard and the destructive confirm.
+Nothing here audits or bumps scores itself: the server does both for every
+route the app calls, which is why the app adds no route of its own except
+the organiser's notes (migration 0037, through the comp PATCH).
+
+- **Hide, never disable**: every organiser row is behind `is_admin`.
+- **The logic is the website's** (see "Shared with the website"): the route
+  editor's rows and assembly, the roster CSV and CIVL fill, Check altitudes'
+  verdicts and the terrain decoder, the scoring form. If a rule needs
+  changing, change it in `@glidecomp/client` so both clients move together.
+- **Forms are React Native** (`src/ui/form.tsx`: `Field`, `Choices`,
+  `Toggle`, `DangerButton`), not the native grouped list: they are typed
+  into, and the list's rows are not inputs. A sheet over a form (the route
+  editor's turnpoint) is an RN `Modal` with `presentationStyle="pageSheet"`.
+- **Units**: altitudes typed in the reader's unit (`toAltitudeInput` /
+  `fromAltitudeInput`), radii always metres; Check altitudes is metric, as the
+  waypoint file is. Gate and deadline times are typed in the comp's zone and
+  stored as UTC.
+
 ## The track map
 
 `@rnmapbox/maps` draws the report card's map, following

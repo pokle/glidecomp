@@ -4,6 +4,7 @@
  * call site. Everything here is built on the RAC kit (src/react/rac/) — the
  * last Base UI pieces (the two selects) converted with the CompDetail page.
  */
+import { PILOT_CLASS_EXAMPLES } from "@glidecomp/client/comp-fields";
 import { useState } from "react";
 import {
   Button as AriaButton,
@@ -221,19 +222,7 @@ export function CategoryField({
   );
 }
 
-/**
- * Ready-made class sets offered as one-click presets under the Pilot Classes
- * field, per wing. `open` (one ranking) leads both as the simple-club default;
- * the wing-specific variants follow:
- * - HG: `open, sport` (topless vs the kingposted Sport Class) and
- *   `open, sport, floater` (adding a lower-performance floater tier).
- * - PG: `open, sport` (open/CCC wings vs the ≤EN-C sport class) and
- *   `open, serial` (competition wings vs serial-certified gliders).
- */
-const PILOT_CLASS_EXAMPLES: Record<"hg" | "pg", string[]> = {
-  hg: ["open", "open, sport", "open, sport, floater"],
-  pg: ["open", "open, sport", "open, serial"],
-};
+// The presets live in @glidecomp/client/comp-fields, shared with the app.
 
 export function PilotClassesField({
   value,

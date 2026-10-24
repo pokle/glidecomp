@@ -10,6 +10,10 @@
       "types": "./src/account.ts",
       "default": "./src/account.ts"
     },
+    "./altitude-check": {
+      "types": "./src/altitude-check.ts",
+      "default": "./src/altitude-check.ts"
+    },
     "./api": {
       "types": "./src/api.ts",
       "default": "./src/api.ts"
@@ -21,6 +25,14 @@
     "./chart-scale": {
       "types": "./src/chart-scale.ts",
       "default": "./src/chart-scale.ts"
+    },
+    "./civl-rankings": {
+      "types": "./src/civl-rankings.ts",
+      "default": "./src/civl-rankings.ts"
+    },
+    "./comp-fields": {
+      "types": "./src/comp-fields.ts",
+      "default": "./src/comp-fields.ts"
     },
     "./format": {
       "types": "./src/format.ts",
@@ -38,6 +50,10 @@
       "types": "./src/met.ts",
       "default": "./src/met.ts"
     },
+    "./quick-task": {
+      "types": "./src/quick-task.ts",
+      "default": "./src/quick-task.ts"
+    },
     "./report-card": {
       "types": "./src/report-card.ts",
       "default": "./src/report-card.ts"
@@ -46,9 +62,17 @@
       "types": "./src/retry.ts",
       "default": "./src/retry.ts"
     },
+    "./roster-csv": {
+      "types": "./src/roster-csv.ts",
+      "default": "./src/roster-csv.ts"
+    },
     "./route": {
       "types": "./src/route.ts",
       "default": "./src/route.ts"
+    },
+    "./route-editor": {
+      "types": "./src/route-editor.ts",
+      "default": "./src/route-editor.ts"
     },
     "./rules-edition": {
       "types": "./src/rules-edition.ts",
@@ -66,6 +90,10 @@
       "types": "./src/scores-views.ts",
       "default": "./src/scores-views.ts"
     },
+    "./scoring-settings": {
+      "types": "./src/scoring-settings.ts",
+      "default": "./src/scoring-settings.ts"
+    },
     "./search": {
       "types": "./src/search.ts",
       "default": "./src/search.ts"
@@ -77,6 +105,10 @@
     "./submit": {
       "types": "./src/submit.ts",
       "default": "./src/submit.ts"
+    },
+    "./terrain-elevation": {
+      "types": "./src/terrain-elevation.ts",
+      "default": "./src/terrain-elevation.ts"
     },
     "./time": {
       "types": "./src/time.ts",
@@ -93,6 +125,10 @@
     "./transport": {
       "types": "./src/transport.ts",
       "default": "./src/transport.ts"
+    },
+    "./turnpoint-draft": {
+      "types": "./src/turnpoint-draft.ts",
+      "default": "./src/turnpoint-draft.ts"
     },
     "./types": {
       "types": "./src/types.ts",

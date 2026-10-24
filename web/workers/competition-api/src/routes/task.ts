@@ -5,7 +5,7 @@ import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
 import { createTaskSchema, updateTaskSchema, validated } from "../validators";
-import { audit, auditAll, describeChange } from "../audit";
+import { audit, auditAll, describeChange, excerpt } from "../audit";
 import {
   boolFromDb,
   boolToDb,
@@ -20,14 +20,6 @@ import { timezoneForXctsk } from "@glidecomp/engine/timezone";
 import { deleteTrackFiles, trackFileKeys } from "../track-files";
 
 const MAX_TASKS_PER_COMP = 50;
-
-/** First line (or 80 characters) of a block of prose, whitespace collapsed —
- * enough for an audit reader to recognise the change without the log entry
- * becoming the document. */
-function excerpt(text: string, max = 80): string {
-  const oneLine = text.replace(/\s+/g, " ").trim();
-  return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1)}…`;
-}
 
 /**
  * Validate a task's geometry against the competition's scoring format.

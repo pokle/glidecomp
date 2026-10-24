@@ -116,6 +116,7 @@ const optionalPlain = () => plainText(z.string().max(MAX_TEXT)).nullable().optio
 /** Character cap on a task's weather notes. Room for a few paragraphs of
  * debrief prose without letting the field become a document store. */
 export const MAX_WEATHER_NOTES = 4000;
+export const MAX_ORGANISER_NOTES = 4000;
 
 const pilotClassString = requiredName();
 
@@ -248,6 +249,8 @@ export const updateCompSchema = z.object({
   open_igc_upload: z.boolean().optional(),
   open_registration: z.boolean().optional(),
   admin_emails: z.array(z.string().email().max(MAX_TEXT)).min(1).optional(),
+  // The comp-level sibling of a task's weather notes (migration 0037).
+  organiser_notes: proseText(z.string().max(MAX_ORGANISER_NOTES)).optional(),
 });
 
 // ── Pilot status (per-task) validators ──

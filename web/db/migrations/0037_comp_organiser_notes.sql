@@ -1,0 +1,11 @@
+-- ── comp.organiser_notes ───────────────────────────────────────────────────
+--
+-- The organiser's standing word to the whole competition: "Briefing 9:30 at
+-- the launch shelter", "Retrieve leaves from the pub at 6". The comp-level
+-- sibling of task.weather_notes (0023), written from a phone on the hill
+-- (docs/2026-10-05-mobile-app-plan.md, stage 7) and shown on the comp card on
+-- the website and in the app.
+--
+-- Free text and NOT a scoring input: no score depends on it, so an edit is
+-- audit-logged like every organiser mutation but never marks scores stale.
+ALTER TABLE comp ADD COLUMN organiser_notes TEXT NOT NULL DEFAULT '';

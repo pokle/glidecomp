@@ -10,8 +10,9 @@ import { compPath, pilotPath, taskPath, taskRoutePath } from '@glidecomp/client/
 import type { CompListEntry } from '@glidecomp/client/types';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
+import { WRITES_ALLOWED } from '@/api/config';
 import { useComps, useRegistrations, useSearch } from '@/api/queries';
 import { useUserId } from '@/auth/session';
 import { groupComps } from '@/lib/comp-groups';
@@ -21,11 +22,24 @@ import { QueryGate, StaleBanner } from '@/ui/QueryStates';
 export default function Comps() {
   const [query, setQuery] = useState('');
   const searching = query.trim().length >= MIN_SEARCH_CHARS;
+  const signedIn = useUserId() !== null && WRITES_ALLOWED;
   return (
     <View style={{ flex: 1 }}>
       <Stack.Screen
         options={{
           title: 'Comps',
+          // Anyone signed in may start a competition; it makes them its organiser.
+          headerRight: () =>
+            signedIn ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="New competition"
+                hitSlop={12}
+                testID="new-comp-button"
+                onPress={() => router.push('/comp/new' as never)}>
+                <Text style={{ fontSize: 17, color: '#007AFF' }}>New</Text>
+              </Pressable>
+            ) : null,
           headerSearchBarOptions: {
             placeholder: 'Comps, tasks, pilots, turnpoints',
             autoCapitalize: 'none',

@@ -11,11 +11,10 @@
  */
 import { useRef, useState } from "react";
 import {
-  defaultsFor,
-  resolveCompGapParams,
-  resolveLeadingTimeRatio,
-  storedHgClass2Classes,
-} from "@glidecomp/engine";
+  scoringDefaults,
+  scoringFormValues,
+  scoringPatch,
+} from "@glidecomp/client/scoring-settings";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { Button } from "@/react/rac/button";
@@ -28,78 +27,32 @@ import { SwitchField, SwitchList } from "@/react/rac/switch";
 import type { ScoringFormat, SeriesScoring } from "../types";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
 
-/** NaN-safe read of a NumberField value, mirroring the old parse fallbacks. */
-function num(value: number, fallback: number): number {
-  return Number.isNaN(value) ? fallback : value;
-}
-
 export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const wing: "hg" | "pg" = comp.category === "pg" ? "pg" : "hg";
 
-  // GAP scoring parameters — fall back to the official per-category FAI
-  // defaults when the comp hasn't saved any (issue #343), so the Advanced
-  // section always starts from the correct official values.
-  // nominalDistance stays blank when unset so the scorer auto-computes
-  // it per task (70% of task distance), matching historical behavior.
-  // Resolve the *effective* params the scorer uses (official per-category
-  // defaults + saved overrides), so every field's initial value matches what
-  // the scoreboard is computed from.
-  // Strip nominalDistance (nullable "auto") before merging — the page keys
-  // its own nominalDistance field off the stored value, and the engine type
-  // wants number | undefined, not the CompGapParams number | null.
-  const { nominalDistance: _gpNd, ...gpStored } = comp.gap_params ?? {};
-  void _gpNd;
-  const gp = resolveCompGapParams(wing, comp.gap_params ? gpStored : null);
-
-  const [scoringFormat, setScoringFormat] = useState<ScoringFormat>(
-    comp.scoring_format ?? "gap"
-  );
-  const [seriesScoring, setSeriesScoring] = useState<SeriesScoring>(
-    comp.series_scoring ?? "total"
-  );
-  // "" = automatic (derive 0.2/0.25 from the task count); otherwise the stored
-  // discard fraction as a percentage string.
-  const [ftvFactorPct, setFtvFactorPct] = useState(
-    comp.ftv_factor != null ? String(Math.round(comp.ftv_factor * 100)) : ""
-  );
-
-  // Blank (NaN) = "auto" (the scorer uses 70% of each task's distance). Key
-  // off the *stored* value, not the per-category default, so a comp that never
-  // pinned a nominal distance shows auto — matching the documented default and
-  // the scorer's auto behaviour.
-  const [nominalDistance, setNominalDistance] = useState(
-    comp.gap_params?.nominalDistance != null
-      ? Math.round(comp.gap_params.nominalDistance / 1000)
-      : NaN
-  );
-  const [nominalTime, setNominalTime] = useState(Math.round(gp.nominalTime / 60));
-  const [minimumDistance, setMinimumDistance] = useState(gp.minimumDistance / 1000);
-  const [useLeading, setUseLeading] = useState(gp.useLeading);
-  const [useArrival, setUseArrival] = useState(gp.useArrival);
-  const [useDifficulty, setUseDifficulty] = useState(gp.useDistanceDifficulty ?? true);
-  // S7F 2026 §11 Leading Time Ratio, shown as a percentage (0–26). One
-  // decimal place — the HG default is 17.5%, and whole-percent rounding
-  // would silently save 18%.
-  const [leadingTimeRatio, setLeadingTimeRatio] = useState(
-    Math.round(resolveLeadingTimeRatio(gp) * 1000) / 10
-  );
-  const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(
-    gp.distanceOrigin ?? "takeoff"
-  );
-  const [jtgFactor, setJtgFactor] = useState(gp.jumpTheGunFactor ?? 2);
-  const [jtgMax, setJtgMax] = useState(gp.jumpTheGunMaxSeconds ?? 300);
+  // Every field starts at the EFFECTIVE value the scorer uses (the wing's
+  // official defaults under the comp's saved overrides, issue #343); see
+  // @glidecomp/client/scoring-settings, which the app's form shares.
+  const [init] = useState(() => scoringFormValues(comp));
+  const [scoringFormat, setScoringFormat] = useState<ScoringFormat>(init.scoringFormat);
+  const [seriesScoring, setSeriesScoring] = useState<SeriesScoring>(init.seriesScoring);
+  const [ftvFactorPct, setFtvFactorPct] = useState(init.ftvFactorPct);
+  // Blank (NaN) = "auto" (the scorer uses 70% of each task's distance).
+  const [nominalDistance, setNominalDistance] = useState(init.nominalDistance);
+  const [nominalTime, setNominalTime] = useState(init.nominalTime);
+  const [minimumDistance, setMinimumDistance] = useState(init.minimumDistance);
+  const [useLeading, setUseLeading] = useState(init.useLeading);
+  const [useArrival, setUseArrival] = useState(init.useArrival);
+  const [useDifficulty, setUseDifficulty] = useState(init.useDifficulty);
+  // S7F 2026 §11 Leading Time Ratio as a percentage, one decimal place.
+  const [leadingTimeRatio, setLeadingTimeRatio] = useState(init.leadingTimeRatio);
+  const [distanceOrigin, setDistanceOrigin] = useState<"takeoff" | "start">(init.distanceOrigin);
+  const [jtgFactor, setJtgFactor] = useState(init.jtgFactor);
+  const [jtgMax, setJtgMax] = useState(init.jtgMax);
   // ESS-but-not-goal (S7F 2026 §13.2), shown as a percentage of points kept.
-  const [essNotGoal, setEssNotGoal] = useState(
-    Math.round((gp.essNotGoalFactor ?? 0.8) * 100)
-  );
-
-  // FAI HG Class 2 (S7F §11, issue #601): which of the comp's pilot classes
-  // fly Class 2 and so score no arrival points. Only names still on the
-  // roster are offered, and only those are saved, so a class renamed or
-  // removed since drops out rather than being rejected by the server.
-  const [class2Classes, setClass2Classes] = useState<string[]>(() =>
-    storedHgClass2Classes(comp.gap_params).filter((c) => comp.pilot_classes.includes(c))
-  );
+  const [essNotGoal, setEssNotGoal] = useState(init.essNotGoal);
+  // FAI HG Class 2 (S7F §11, issue #601).
+  const [class2Classes, setClass2Classes] = useState<string[]>(init.class2Classes);
 
   const [saving, setSaving] = useState(false);
 
@@ -133,59 +86,26 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
    * Nothing is saved until the admin submits.
    */
   function resetToDefaults() {
-    const d = defaultsFor(wing);
-    setNominalDistance(NaN);
-    setNominalTime(Math.round(d.nominalTime / 60));
-    setMinimumDistance(d.minimumDistance / 1000);
+    const d = scoringDefaults(wing, snapshot);
+    setNominalDistance(d.nominalDistance);
+    setNominalTime(d.nominalTime);
+    setMinimumDistance(d.minimumDistance);
     setUseLeading(d.useLeading);
     setUseArrival(d.useArrival);
-    setUseDifficulty(d.useDistanceDifficulty);
-    setLeadingTimeRatio(Math.round(resolveLeadingTimeRatio(d) * 1000) / 10);
+    setUseDifficulty(d.useDifficulty);
+    setLeadingTimeRatio(d.leadingTimeRatio);
     setDistanceOrigin(d.distanceOrigin);
-    setJtgFactor(d.jumpTheGunFactor);
-    setJtgMax(d.jumpTheGunMaxSeconds);
-    setEssNotGoal(Math.round(d.essNotGoalFactor * 100));
+    setJtgFactor(d.jtgFactor);
+    setJtgMax(d.jtgMax);
+    setEssNotGoal(d.essNotGoal);
   }
 
   async function save() {
-    // Build GAP scoring parameters. Scoring class follows the comp's wing.
-    // nominalDistance is null when blank so the scorer auto-computes it per task.
-    const gapParams = {
-      scoring: (wing === "pg" ? "PG" : "HG") as "PG" | "HG",
-      nominalDistance: Number.isNaN(nominalDistance) ? null : nominalDistance * 1000,
-      nominalTime: num(nominalTime, 90) * 60,
-      minimumDistance: num(minimumDistance, 5) * 1000,
-      useLeading,
-      useArrival,
-      leadingTimeRatio: num(leadingTimeRatio, wing === "pg" ? 26 : 17.5) / 100,
-      distanceOrigin,
-      useDistanceDifficulty: useDifficulty,
-      jumpTheGunFactor: num(jtgFactor, 2),
-      jumpTheGunMaxSeconds: num(jtgMax, 300),
-      essNotGoalFactor: num(essNotGoal, 80) / 100,
-      // Kept in the roster's order so the stored list (and the audit line
-      // order) doesn't depend on the order boxes were ticked in.
-      ...(wing === "hg"
-        ? { hgClass2Classes: comp.pilot_classes.filter((c) => class2Classes.includes(c)) }
-        : {}),
-    };
-
     setSaving(true);
     try {
       const res = await api.api.comp[":comp_id"].$patch({
         param: { comp_id: compId },
-        json: {
-          scoring_format: scoringFormat,
-          // FTV is a GAP-only aggregation; open-distance comps sum tasks.
-          series_scoring: scoringFormat === "gap" ? seriesScoring : "total",
-          ftv_factor:
-            scoringFormat === "gap" && seriesScoring === "ftv" && ftvFactorPct
-              ? Number(ftvFactorPct) / 100
-              : null,
-          // GAP parameters only exist for GAP scoring; an open-distance comp
-          // omits them so nothing the format doesn't use gets written.
-          ...(scoringFormat !== "open_distance" ? { gap_params: gapParams } : {}),
-        },
+        json: scoringPatch(snapshot, comp) as never,
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };

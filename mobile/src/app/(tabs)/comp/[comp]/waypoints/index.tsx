@@ -3,7 +3,7 @@
  * above it — the website's shape since it dropped the grid (CLAUDE.md,
  * "Mobile first"). Read-only here, so nothing opens: the whole row flies the
  * map to its waypoint, and the pin at its edge says that is what it does.
- * Organisers' editing and Check altitudes come with stage 7.
+ * Organisers get Check altitudes and Upload a waypoint file above the list.
  *
  * Altitudes are in the reader's unit (a read-only row is an altitude printed
  * to a reader); a zero is a known altitude and an absent one says so;
@@ -15,7 +15,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useCompWaypoints } from '@/api/queries';
+import { useComp, useCompWaypoints } from '@/api/queries';
 import { filterWaypoints, waypointDetail, waypointTitle } from '@/lib/waypoint-rows';
 import { WaypointMap } from '@/map/WaypointMap';
 import { useUnits } from '@/settings/units';
@@ -28,6 +28,7 @@ const MAP_HEIGHT = 220;
 export default function CompWaypoints() {
   const { comp: segment } = useLocalSearchParams<{ comp: string }>();
   const waypoints = useCompWaypoints(idFromSegment(segment));
+  const isAdmin = !!useComp(idFromSegment(segment)).data?.is_admin;
   const [query, setQuery] = useState('');
   const hasAny = (waypoints.data?.length ?? 0) > 0;
   return (
@@ -60,13 +61,28 @@ export default function CompWaypoints() {
         query={waypoints}
         loading="Loading the waypoints…"
         notFound="This competition doesn’t exist, or isn’t public.">
-        {(data) => <WaypointsBody waypoints={data} query={query} />}
+        {(data) => (
+          <WaypointsBody
+            waypoints={data}
+            query={query}
+            organiser={isAdmin ? (screen) => router.push(`/comp/${segment}/waypoints/${screen}` as never) : null}
+          />
+        )}
       </QueryGate>
     </View>
   );
 }
 
-function WaypointsBody({ waypoints, query }: { waypoints: WaypointFileRecord[]; query: string }) {
+function WaypointsBody({
+  waypoints,
+  query,
+  organiser,
+}: {
+  waypoints: WaypointFileRecord[];
+  query: string;
+  /** The organiser's way to Upload and Check altitudes; null for everyone else. */
+  organiser: ((screen: 'upload' | 'altitudes') => void) | null;
+}) {
   const prefs = useUnits();
   const shown = useMemo(() => filterWaypoints(waypoints, query), [waypoints, query]);
   const [focus, setFocus] = useState<{ index: number; key: number } | null>(null);
@@ -77,6 +93,7 @@ function WaypointsBody({ waypoints, query }: { waypoints: WaypointFileRecord[]; 
       <GroupedList testID="waypoints">
         <Group>
           <Note>No waypoints yet.</Note>
+          {organiser ? <Row testID="waypoints-upload" title="Upload a waypoint file" onPress={() => organiser('upload')} /> : null}
         </Group>
       </GroupedList>
     );
@@ -93,6 +110,12 @@ function WaypointsBody({ waypoints, query }: { waypoints: WaypointFileRecord[]; 
         <WaypointMap waypoints={waypoints} focus={focus} />
       </View>
       <GroupedList testID="waypoints">
+        {organiser ? (
+          <Group title="Organiser" testID="waypoints-organiser">
+            <Row testID="waypoints-check" title="Check altitudes" detail="Against the terrain map; nothing changes until you apply" onPress={() => organiser('altitudes')} />
+            <Row testID="waypoints-upload" title="Upload a waypoint file" detail="Replaces these waypoints" onPress={() => organiser('upload')} />
+          </Group>
+        ) : null}
         <Group title={heading}>
           {shown.length === 0 ? <Note>No waypoint matches that filter.</Note> : null}
           {shown.map((i) => {

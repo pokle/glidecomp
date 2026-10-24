@@ -14,6 +14,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -154,6 +155,92 @@ export function FormMessage({ kind, children, testID }: { kind: 'status' | 'erro
   );
 }
 
+/**
+ * One of a few values, as a row of buttons — the form's segmented control.
+ * Each choice is a 44 pt target and says whether it is the selected one.
+ */
+export function Choices<T extends string>({
+  label,
+  value,
+  choices,
+  onChange,
+  testID,
+}: {
+  label: string;
+  value: T;
+  choices: readonly { value: T; label: string }[];
+  onChange: (value: T) => void;
+  testID?: string;
+}) {
+  const { colors } = useTheme();
+  const palette = useChartPalette();
+  return (
+    <View style={styles.field} testID={testID}>
+      <Text style={[styles.label, { color: palette.muted }]}>{label}</Text>
+      <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel={label}>
+        {choices.map((c) => {
+          const on = c.value === value;
+          return (
+            <Pressable
+              key={c.value}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on, checked: on }}
+              onPress={() => onChange(c.value)}
+              testID={testID ? `${testID}-${c.value}` : undefined}
+              style={[
+                styles.choice,
+                { borderColor: on ? colors.primary : colors.border, backgroundColor: on ? colors.primary : 'transparent' },
+              ]}>
+              <Text style={[styles.choiceText, { color: on ? '#fff' : colors.text }]}>{c.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/** An on/off setting: the platform's own switch, with its label and an optional line under it. */
+export function Toggle({
+  label,
+  hint,
+  value,
+  onChange,
+  testID,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  testID?: string;
+}) {
+  const { colors } = useTheme();
+  const palette = useChartPalette();
+  return (
+    <View style={styles.toggle}>
+      <View style={styles.toggleText}>
+        <Text style={[styles.toggleLabel, { color: colors.text }]}>{label}</Text>
+        {hint ? <Text style={[styles.hint, { color: palette.muted }]}>{hint}</Text> : null}
+      </View>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} testID={testID} />
+    </View>
+  );
+}
+
+/** A destructive action at the foot of a form: Delete task, Remove pilot. */
+export function DangerButton({ title, onPress, testID }: { title: string; onPress: () => void; testID?: string }) {
+  const { dark } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      testID={testID}
+      style={({ pressed }) => [styles.danger, { borderColor: ERROR_INK[dark ? 'dark' : 'light'], opacity: pressed ? 0.6 : 1 }]}>
+      <Text style={[styles.primaryText, { color: ERROR_INK[dark ? 'dark' : 'light'] }]}>{title}</Text>
+    </Pressable>
+  );
+}
+
 /** Quieter explanatory text under a field or a button. */
 export function FormHint({ children }: { children: string }) {
   const palette = useChartPalette();
@@ -175,4 +262,11 @@ const styles = StyleSheet.create({
   textButtonText: { fontSize: 17 },
   message: { fontSize: 15, lineHeight: 20 },
   hint: { fontSize: 13, lineHeight: 18 },
+  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  choice: { minHeight: 44, minWidth: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, justifyContent: 'center' },
+  choiceText: { fontSize: 15, fontWeight: '500' },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  toggleText: { flex: 1, gap: 2 },
+  toggleLabel: { fontSize: 17 },
+  danger: { minHeight: 50, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });
