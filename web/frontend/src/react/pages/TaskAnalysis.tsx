@@ -40,6 +40,7 @@
  * placeholder while the first compute runs; the client hydrates from the same
  * data and takes over polling.
  */
+import { STRATEGY_VERDICTS, winningLabel } from "@glidecomp/client/analysis";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/react/rac/card";
 import { Badge } from "@/react/rac/badge";
@@ -61,29 +62,6 @@ import type { MetricReport } from "../analysis/types";
 /** How many behaviours the strategies box names. The same top-3 the metric
  *  families use for what to open by default. */
 const STRATEGY_COUNT = 3;
-
-/**
- * Verdicts loud enough to name on the contents page: weak and above. Below
- * that the box would be claiming a strategy the section itself un-says.
- */
-const STRATEGY_VERDICTS = new Set(["strong", "moderate", "weak"]);
-
-/**
- * The behaviour written as the thing that WON.
- *
- * The ranking orders by |ρ| and the verdict is computed from |ρ| and n, so
- * neither says which WAY a behaviour won — and a neutral label under the words
- * "winning strategies" can assert the exact opposite of the finding. ρ < 0
- * means larger values went with better ranks. Falls back to the neutral label
- * when a metric has no honest wording for that side, and on any report stored
- * before the field existed (served while it revalidates).
- */
-function winningLabel(
-  metric: Pick<MetricReport, "label" | "winning">,
-  rho: number
-): string {
-  return (rho < 0 ? metric.winning?.more : metric.winning?.less) ?? metric.label;
-}
 
 export function TaskAnalysis() {
   const bundle = useTaskAnalysis();

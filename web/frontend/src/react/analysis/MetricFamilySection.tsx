@@ -176,15 +176,4 @@ export function MetricFamilySection({
   );
 }
 
-/** Group a report's metrics by family, preserving registry order. */
-export function metricsByFamily(
-  metrics: MetricReport[]
-): Map<MetricFamily, MetricReport[]> {
-  const map = new Map<MetricFamily, MetricReport[]>();
-  for (const m of metrics) {
-    const list = map.get(m.family) ?? [];
-    list.push(m);
-    map.set(m.family, list);
-  }
-  return map;
-}
+export { metricsByFamily } from "@glidecomp/client/analysis";

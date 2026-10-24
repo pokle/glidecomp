@@ -5,6 +5,7 @@
  * interfaces say what a screen may rely on.
  */
 import type { LibraryTask, LibraryTrack, PilotFlight, PilotProfile, PilotRegistration } from '@glidecomp/client/account';
+import type { CompAnalysisData, TaskAnalysisData } from '@glidecomp/client/analysis';
 import { activityQuery, type ActivityFilter } from '@glidecomp/client/audit';
 import type { CompPilot as RosterPilot } from '@glidecomp/client/roster-csv';
 import type { SearchResults } from '@glidecomp/client/search';
@@ -29,7 +30,7 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-qu
 
 import { igcText } from '@/lib/igc-text';
 
-import { api, apiFetch, getBytes, getJson } from './client';
+import { api, apiFetch, getBytes, getJson, getJsonOrReason } from './client';
 import { API_ORIGIN } from './config';
 
 export function useComps() {
@@ -463,5 +464,56 @@ export function useRosterDetail(compId: string) {
           signal,
         )
       ).pilots,
+  });
+}
+
+// ── Analysis (stage 8) ──────────────────────────────────────────────────────
+//
+// Stale-first on the server, with two departures from scores: revalidation is
+// lazy (a read triggers it), and the cold path never computes while you wait
+// — it answers `pending` and schedules the work. Poll until it lands, as the
+// website does.
+
+const ANALYSIS_POLL_MS = 5_000;
+
+/** One task's analysis, every class; a task that cannot be analysed says why. */
+export function useTaskAnalysis(compId: string, taskId: string) {
+  return useQuery({
+    queryKey: ['taskAnalysis', compId, taskId],
+    queryFn: async ({ signal }): Promise<TaskAnalysisData> => {
+      const out = await getJsonOrReason<TaskAnalysisData>(
+        (s) =>
+          api.api.comp[':comp_id'].task[':task_id'].analysis.$get(
+            { param: { comp_id: compId, task_id: taskId } },
+            { init: { signal: s } },
+          ),
+        signal,
+      );
+      if ('ok' in out) return out.ok;
+      return {
+        task_id: taskId,
+        comp_id: compId,
+        classes: [],
+        computed_at: null,
+        stale: false,
+        pending: false,
+        error: out.unprocessable ?? 'This task cannot be analysed',
+      };
+    },
+    // Pending: the first compute is running. Stale: a re-analysis is; check back slower.
+    refetchInterval: (query) => (query.state.data?.pending ? ANALYSIS_POLL_MS : query.state.data?.stale ? 15_000 : false),
+  });
+}
+
+/** The competition's analysis: an aggregation over its stored task analyses. */
+export function useCompAnalysis(compId: string) {
+  return useQuery({
+    queryKey: ['compAnalysis', compId],
+    queryFn: ({ signal }) =>
+      getJson<CompAnalysisData>(
+        (s) => api.api.comp[':comp_id'].analysis.$get({ param: { comp_id: compId } }, { init: { signal: s } }),
+        signal,
+      ),
+    refetchInterval: (query) => ((query.state.data?.pending_task_count ?? 0) > 0 ? ANALYSIS_POLL_MS : false),
   });
 }
