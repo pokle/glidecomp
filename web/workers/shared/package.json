@@ -20,6 +20,10 @@
     "./session-cookie": {
       "types": "./src/session-cookie.ts",
       "default": "./src/session-cookie.ts"
+    },
+    "./access-token": {
+      "types": "./src/access-token.ts",
+      "default": "./src/access-token.ts"
     }
   },
   "devDependencies": {

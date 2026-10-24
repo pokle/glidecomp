@@ -1,0 +1,19 @@
+# mcp-api — the MCP endpoint (docs/2026-10-24-mcp-oauth-plan.md).
+# SPIKE: phase 0. No [[routes]] and no deploy step: it runs only in the local
+# multi-worker dev session (web/scripts/dev-workers.sh), reached through the
+# dev-router. In production a Pages Function (functions/mcp.ts) would forward
+# /mcp here over a service binding, as functions/api/ does for the others.
+name = "mcp-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-10"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[[services]]
+binding = "AUTH_API"
+service = "auth-api"
+
+[[services]]
+binding = "COMPETITION_API"
+service = "competition-api"
