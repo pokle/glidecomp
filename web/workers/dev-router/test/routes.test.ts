@@ -63,6 +63,11 @@ describe("dev-router dispatch", () => {
     ["/api/civl-rankings.csv", "COMPETITION_API"],
     // airscore-api
     ["/api/airscore/task/1/2", "AIRSCORE_API"],
+    // auth-api — OAuth discovery at the origin root, for MCP clients
+    ["/.well-known/oauth-authorization-server", "AUTH_API"],
+    ["/.well-known/oauth-authorization-server/api/auth", "AUTH_API"],
+    ["/.well-known/oauth-protected-resource/mcp", "AUTH_API"],
+    ["/.well-known/openid-configuration/api/auth", "AUTH_API"],
   ];
 
   for (const [path, binding] of cases) {

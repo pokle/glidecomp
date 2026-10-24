@@ -4,7 +4,12 @@
  */
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
-import { purgeExpiredAuthData, RATE_LIMIT_RETENTION_MS } from "../src/data-retention";
+import {
+  purgeExpiredAuthData,
+  RATE_LIMIT_RETENTION_MS,
+  REVOKED_TOKEN_RETENTION_MS,
+  UNUSED_CLIENT_GRACE_MS,
+} from "../src/data-retention";
 
 const NOW = new Date("2026-10-01T03:43:00.000Z");
 const iso = (msFromNow: number) => new Date(NOW.getTime() + msFromNow).toISOString();
@@ -15,6 +20,9 @@ beforeEach(async () => {
     env.DB.prepare(`DELETE FROM "session"`),
     env.DB.prepare(`DELETE FROM "verification"`),
     env.DB.prepare(`DELETE FROM "rateLimit"`),
+    env.DB.prepare(`DELETE FROM "oauthRefreshToken"`),
+    env.DB.prepare(`DELETE FROM "oauthConsent"`),
+    env.DB.prepare(`DELETE FROM "oauthClient"`),
     env.DB.prepare(`DELETE FROM "user" WHERE id = 'retention-user'`),
     env.DB.prepare(
       `INSERT INTO "user" (id, name, email, createdAt, updatedAt)
@@ -71,5 +79,57 @@ describe("purgeExpiredAuthData", () => {
 
     expect(counts.rateLimits).toBe(1);
     expect(await ids("rateLimit")).toEqual(["recent"]);
+  });
+
+  describe("MCP OAuth rows", () => {
+    const client = (clientId: string, createdAt: string, userId: string | null = null) =>
+      env.DB.prepare(
+        `INSERT INTO "oauthClient" (id, "clientId", "redirectUris", "userId", "createdAt", "updatedAt")
+         VALUES (?, ?, '["http://127.0.0.1/cb"]', ?, ?, ?)`
+      ).bind(`row-${clientId}`, clientId, userId, createdAt, createdAt);
+    const refresh = (id: string, clientId: string, expiresAt: string, revoked: string | null = null) =>
+      env.DB.prepare(
+        `INSERT INTO "oauthRefreshToken" (id, token, "clientId", "userId", "expiresAt", "revoked", scopes, "createdAt")
+         VALUES (?, ?, ?, 'retention-user', ?, ?, '["comp:read"]', ?)`
+      ).bind(id, `tok-${id}`, clientId, expiresAt, revoked, iso(0));
+
+    test("deletes expired refresh tokens and ones revoked over a day ago, keeps live and freshly revoked ones", async () => {
+      await env.DB.batch([
+        client("kept", iso(-30 * 24 * HOUR)),
+        refresh("expired", "kept", iso(-HOUR)),
+        refresh("revoked-long-ago", "kept", iso(24 * HOUR), iso(-REVOKED_TOKEN_RETENTION_MS - HOUR)),
+        refresh("revoked-just-now", "kept", iso(24 * HOUR), iso(-HOUR)),
+        refresh("live", "kept", iso(24 * HOUR)),
+      ]);
+
+      const counts = await purgeExpiredAuthData(env.DB, NOW);
+
+      expect(counts.refreshTokens).toBe(2);
+      expect(await ids("oauthRefreshToken")).toEqual(["live", "revoked-just-now"]);
+    });
+
+    test("deletes self-registered clients nobody consented to after a day, and nothing else", async () => {
+      const old = iso(-UNUSED_CLIENT_GRACE_MS - HOUR);
+      await env.DB.batch([
+        client("abandoned", old),
+        client("too-new", iso(-HOUR)),
+        client("owned", old, "retention-user"),
+        client("consented", old),
+        env.DB.prepare(
+          `INSERT INTO "oauthConsent" (id, "clientId", "userId", scopes, "createdAt", "updatedAt")
+           VALUES ('c1', 'consented', 'retention-user', '["comp:read"]', ?, ?)`
+        ).bind(old, old),
+        client("live-token", old),
+        refresh("lt", "live-token", iso(24 * HOUR)),
+      ]);
+
+      const counts = await purgeExpiredAuthData(env.DB, NOW);
+
+      expect(counts.oauthClients).toBe(1);
+      const left = await env.DB.prepare(`SELECT "clientId" FROM "oauthClient" ORDER BY "clientId"`).all<{
+        clientId: string;
+      }>();
+      expect(left.results.map((r) => r.clientId)).toEqual(["consented", "live-token", "owned", "too-new"]);
+    });
   });
 });

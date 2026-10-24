@@ -105,6 +105,7 @@ export function Settings() {
       <AppearanceSection />
       <UnitsSection />
       <ApiKeysSection />
+      <ConnectedAssistantsSection />
       {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
       <DangerZoneSection />
     </section>
@@ -727,6 +728,119 @@ function ApiKeysSection() {
           </DialogFooter>
         </Dialog>
       </Modal>
+    </Card>
+  );
+}
+
+/** One MCP client this account has let act as it (auth-api's mcp-grants.ts). */
+interface ConnectedAssistant {
+  client_id: string;
+  name: string | null;
+  scopes: string[];
+  connected_at: string | null;
+}
+
+/** "24 Oct 2026" — the date a grant was made, in the copy's own format. */
+function connectedOn(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// Settings → Connected assistants (docs/2026-10-24-mcp-oauth-plan.md §8): the
+// MCP clients (Claude, ChatGPT, …) this account has let act as it, each with
+// Disconnect. Disconnecting revokes the grant on the next request, refresh
+// tokens included, so the copy can say "straight away".
+function ConnectedAssistantsSection() {
+  const [assistants, setAssistants] = useState<ConnectedAssistant[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/auth/connected-assistants", { credentials: "include" });
+      if (!res.ok) {
+        setLoadError("Failed to load connected assistants.");
+        return;
+      }
+      const data = (await res.json()) as { assistants: ConnectedAssistant[] };
+      setAssistants(data.assistants);
+    } catch {
+      setLoadError("Network error loading connected assistants.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function handleDisconnect(clientId: string) {
+    setDisconnectingId(clientId);
+    try {
+      const res = await fetch(`/api/auth/connected-assistants/${encodeURIComponent(clientId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok && res.status !== 404) {
+        toast.error("Failed to disconnect. Please try again.");
+        return;
+      }
+      await load();
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setDisconnectingId(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Connected assistants"
+        description="Assistants you've let act as you. Disconnecting one stops it straight away."
+      />
+      <div>
+        {loadError ? (
+          <p role="alert">{loadError}</p>
+        ) : assistants === null ? (
+          <Loading>Loading connected assistants…</Loading>
+        ) : assistants.length === 0 ? (
+          <p className="rounded-lg border border-dashed px-4 py-6 text-center text-muted-foreground">
+            No assistants connected. To connect one, add{" "}
+            <span className="font-mono break-all">{`${window.location.origin}/mcp`}</span> to it as a connector.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-lg border" aria-label="Connected assistants">
+            {assistants.map((a) => {
+              const name = a.name || "Unnamed assistant";
+              const on = connectedOn(a.connected_at);
+              const can = a.scopes.includes("task:write") ? "can change tasks" : "can see competitions";
+              return (
+                <li key={a.client_id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <p>
+                    <span className="font-medium">{name}</span>
+                    <span className="text-muted-foreground">
+                      {on ? ` · connected ${on}` : ""} · {can}
+                    </span>
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    isPending={disconnectingId === a.client_id}
+                    pendingLabel={`Disconnecting ${name}`}
+                    onPress={() => void handleDisconnect(a.client_id)}
+                  >
+                    Disconnect
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }

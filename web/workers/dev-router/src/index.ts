@@ -55,6 +55,12 @@ const ROUTES: Array<[string, keyof Env]> = [
   ["/api/user", "COMPETITION_API"],
   ["/api/u", "COMPETITION_API"],
   ["/api/admin", "COMPETITION_API"],
+  // The OAuth discovery documents MCP clients fetch from the origin root
+  // (docs/2026-10-24-mcp-oauth-plan.md). Pages Functions in production:
+  // functions/.well-known/.
+  ["/.well-known/oauth-authorization-server", "AUTH_API"],
+  ["/.well-known/oauth-protected-resource", "AUTH_API"],
+  ["/.well-known/openid-configuration", "AUTH_API"],
 ];
 
 /**

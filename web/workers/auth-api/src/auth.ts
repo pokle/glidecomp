@@ -2,11 +2,13 @@ import { betterAuth, type BetterAuthPlugin } from "better-auth";
 import { emailOTP, jwt, oAuthProxy } from "better-auth/plugins";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { apiKey } from "@better-auth/api-key";
+import { mcp } from "@better-auth/mcp";
 import { Kysely } from "kysely";
 import { D1Dialect } from "kysely-d1";
 import { AUTH_COOKIE_PREFIX } from "@glidecomp/worker-kit/session-cookie";
 import {
   API_KEY_RATE_LIMIT,
+  OAUTH_REGISTER_RATE_LIMIT,
   OTP_SEND_RATE_LIMIT,
   OTP_VERIFY_RATE_LIMIT,
   normalizeEmail,
@@ -106,6 +108,34 @@ export const API_KEY_HEADER = "x-api-key";
  * it ran. Change all three together.
  */
 export const API_KEY_LIFETIME_DAYS = 90;
+
+/**
+ * The scopes an MCP client may ask for, beyond OpenID's own: reading what the
+ * account can see, and creating or editing tasks and their routes in comps it
+ * administers. A later capability gets a scope of its own rather than a wider
+ * one of these (docs/2026-10-24-mcp-oauth-plan.md §5).
+ */
+export const MCP_SCOPES = ["comp:read", "task:write"] as const;
+
+/** OpenID's own scopes, which every MCP client asks for beside ours. */
+const OIDC_SCOPES = ["openid", "profile", "offline_access"] as const;
+
+/**
+ * How long an MCP access token lives. Short, because a JWT cannot be recalled
+ * once issued; /me's consent check is what makes Disconnect bite at once, and
+ * clients refresh quietly.
+ */
+export const MCP_ACCESS_TOKEN_LIFETIME_S = 15 * 60;
+
+/**
+ * The MCP server's resource identifier (RFC 8707 / RFC 9728): every access
+ * token is audience-bound to it. Derived from BETTER_AUTH_URL so dev
+ * (http://localhost:3000/mcp, loopback HTTP is allowed) and production
+ * (https://glidecomp.com/mcp) each name their own.
+ */
+export function mcpResource(env: { BETTER_AUTH_URL: string }): string {
+  return `${new URL(env.BETTER_AUTH_URL).origin}/mcp`;
+}
 
 /** How long an isolate trusts its copy of the `jwks` table. */
 const JWKS_CACHE_MS = 5 * 60 * 1000;
@@ -296,6 +326,32 @@ function buildAuth(env: AuthEnv) {
         disableSettingJwtHeader: true,
         adapter: cachedJwksAdapter(env.glidecomp_auth),
       }),
+      // The OAuth 2.1 authorisation server behind /mcp, so an organiser's
+      // own assistant (Claude, ChatGPT, …) can act as them
+      // (docs/2026-10-24-mcp-oauth-plan.md §3). Access tokens are JWTs
+      // signed by jwt() above and audience-bound to mcpResource(); /me
+      // answers for one only while its consent stands, and competition-api
+      // fences what it may reach.
+      mcp({
+        resource: mcpResource(env),
+        loginPage: "/signin",
+        consentPage: "/oauth/consent",
+        scopes: [...OIDC_SCOPES, ...MCP_SCOPES],
+        clientRegistrationDefaultScopes: [...OIDC_SCOPES, "comp:read"],
+        clientRegistrationAllowedScopes: [...OIDC_SCOPES, ...MCP_SCOPES],
+        // No client_credentials: every token has a person behind it, who
+        // consented and can disconnect it.
+        grantTypes: ["authorization_code", "refresh_token"],
+        accessTokenExpiresIn: MCP_ACCESS_TOKEN_LIFETIME_S,
+        // MCP clients register themselves (RFC 7591), so registration is open;
+        // OAUTH_REGISTER_RATE_LIMIT bounds it, and competition-api's nightly
+        // retention purge removes clients nobody consented to.
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        // Native clients (Claude Code, Cursor) register a loopback callback
+        // without saying `application_type`; the "web" default refuses them.
+        clientRegistrationDefaultApplicationType: "infer",
+      }),
       ...(isLocalDev(env)
         ? []
         : [
@@ -390,6 +446,10 @@ function buildAuth(env: AuthEnv) {
         "/sign-in/email-otp": {
           window: OTP_VERIFY_RATE_LIMIT.window,
           max: OTP_VERIFY_RATE_LIMIT.max,
+        },
+        "/oauth2/register": {
+          window: OAUTH_REGISTER_RATE_LIMIT.window,
+          max: OAUTH_REGISTER_RATE_LIMIT.max,
         },
       },
     },

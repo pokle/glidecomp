@@ -32,6 +32,7 @@ import {
 } from "../../auth/last-sign-in";
 import { DEV_SIGN_IN_ENABLED, signInAsDev, useUser } from "../lib/user";
 import { safeNext } from "../lib/safe-next";
+import { oauthResumePath } from "@/react/lib/oauth-resume";
 
 const RESEND_COOLDOWN_S = 60;
 
@@ -62,7 +63,9 @@ function parseOtpHash(hash: string): { otp: string; email: string } | null {
 export function SignIn() {
   const { user, loading } = useUser();
   const [searchParams] = useSearchParams();
-  const next = safeNext(searchParams.get("next"));
+  // An MCP client's authorisation request outranks `next`: signing in is the
+  // middle of that flow, not the end of it (lib/oauth-resume.ts).
+  const next = oauthResumePath(searchParams) ?? safeNext(searchParams.get("next"));
 
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
@@ -192,7 +195,7 @@ export function SignIn() {
               variant="outline"
               onPress={async () => {
                 setError(null);
-                const { error: err } = await signInAsDev();
+                const { error: err } = await signInAsDev(undefined, undefined, next);
                 if (err) setError(err);
               }}
             >

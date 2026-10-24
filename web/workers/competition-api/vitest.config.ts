@@ -140,6 +140,36 @@ export default defineConfig(async () => {
                 meCalls.set(hopKey, (meCalls.get(hopKey) ?? 0) + 1);
               }
 
+              // An MCP access token, shaped like a JWT so it takes the
+              // token path: `Bearer mcp.<user>.<scopes>`, scopes joined by
+              // "_" with ":" written "-" (mcp.user-1.comp-read_task-write).
+              // auth-api answers with the user AND the grant, which is what
+              // middleware/mcp-fence.ts acts on. `mcp.limited.*` is a grant
+              // over its budget; an unknown user is a withdrawn consent.
+              const mcp = (request.headers.get("authorization") ?? "").match(
+                /^Bearer mcp\.([^.]+)\.([^.]+)$/
+              );
+              if (mcp && pathname === "/api/auth/me") {
+                const [, who, scopeCode] = mcp;
+                if (who === "limited") {
+                  return Response.json(
+                    { user: null, error: "Rate limit exceeded" },
+                    { status: 429, headers: { "Retry-After": "17" } }
+                  );
+                }
+                const tokenUser = TEST_USERS[who] ?? null;
+                if (!tokenUser) return Response.json({ user: null });
+                return Response.json({
+                  user: tokenUser,
+                  grant: {
+                    kind: "oauth",
+                    client_id: "client-1",
+                    client_name: "Test assistant",
+                    scopes: scopeCode.split("_").map((s) => s.replace("-", ":")),
+                  },
+                });
+              }
+
               const fail = cookie.match(/test-auth-fail=([^;:]+):(\d+)/);
               if (fail) {
                 const [, key, count] = fail;

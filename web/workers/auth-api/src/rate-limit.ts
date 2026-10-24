@@ -41,6 +41,22 @@ export const API_KEY_RATE_LIMIT = {
  * stop that guesser on its own, because it counts per client address (per /64
  * for IPv6), and a free IPv6 /48 is 65,536 of those.
  */
+/**
+ * MCP client registrations per client address (Better Auth's per-IP limiter,
+ * a customRule in auth.ts; `window` in seconds). Registration is open by
+ * design — MCP clients register themselves — so this bounds how fast one
+ * caller can fill oauthClient with rows; competition-api's nightly retention
+ * purge removes the ones nobody consented to.
+ */
+export const OAUTH_REGISTER_RATE_LIMIT = { window: 60 * 60, max: 10 } as const;
+
+/**
+ * Calls one MCP grant (a user and the client they connected) may make, the
+ * same ceiling an API key has. Charged by /me, which every competition-api
+ * request carrying an access token passes through.
+ */
+export const OAUTH_GRANT_BUDGET = { max: 60, windowMs: 60_000 } as const;
+
 export const OTP_SEND_RATE_LIMIT = { window: 60, max: 3 } as const;
 export const OTP_VERIFY_RATE_LIMIT = { window: 60, max: 5 } as const;
 

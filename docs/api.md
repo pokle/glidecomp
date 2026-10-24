@@ -393,10 +393,12 @@ It's what the "did you mean…" repair on a dead `/comp` URL runs on. Accepts
 | `GET` | `/api/auth/preferences` | Units, timezone and display preferences |
 | `PUT` | `/api/auth/preferences` | Update them |
 | `GET` | `/api/auth/token` | **Always 404.** Better Auth's bearer-JWT endpoint, deliberately not served |
+| `GET` | `/api/auth/connected-assistants` | The MCP clients (Claude, ChatGPT, …) you have let act as you, with the scopes you consented to. **Browser only:** `403` with a key or an access token |
+| `DELETE` | `/api/auth/connected-assistants/:clientId` | Disconnect one: its consent goes and its refresh tokens are revoked, so its next request fails. **Browser only** |
 | `POST` | `/api/auth/email-otp/send-verification-otp` | Email a sign-in code (`{"email", "type": "sign-in"}`). Limited per address as well as per client: past the limit it still answers `{"success":true}`, but no code is sent |
 | `POST` | `/api/auth/sign-in/email-otp` | Exchange a code for a session (`{"email", "otp"}`). Ten wrong codes for one address in an hour, from anywhere, and that address gets `429` until the hour is up |
 | `POST` | `/api/auth/sign-in/social` | Start Google sign-in (`{"provider": "google", "callbackURL"}`). A callback URL that is not a web address or a path is a `400` |
-| `ALL` | `/api/auth/*` | The rest of what Better Auth serves here, and nothing more: Google's callback (`/callback/:id`), the session (`/get-session`, `/sign-out`), API-key management (`/api-key/create`, `/api-key/list`, `/api-key/delete`; browser only, `403` with a key) and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)). Any other path under `/api/auth/` is a 404 |
+| `ALL` | `/api/auth/*` | The rest of what Better Auth serves here, and nothing more: Google's callback (`/callback/:id`), the session (`/get-session`, `/sign-out`), API-key management (`/api-key/create`, `/api-key/list`, `/api-key/delete`; browser only, `403` with a key), the OAuth 2.1 provider MCP clients sign in through (`/oauth2/authorize`, `/oauth2/consent` and `/oauth2/continue`, browser only; `/oauth2/token`, `/oauth2/register` (rate-limited per client address), `/oauth2/revoke`, `/oauth2/userinfo`, `/oauth2/public-client`, `/.well-known/openid-configuration` — see [the MCP plan](2026-10-24-mcp-oauth-plan.md)) and `/api/auth/jwks` (the public keys that verify the session cookie cache — see [auth.md](auth.md#cross-worker-auth-verification)). Any other path under `/api/auth/` is a 404 |
 | `GET` | `/api/comp/pilot` | Your pilot profile (CIVL id, wing, nationality) |
 | `PATCH` | `/api/comp/pilot` | Update it. Changing `name` renames the account too, so with a key that is a `403`; the other fields are fine |
 | `GET` | `/api/comp/pilot/flights` | Every comp flight of yours, across competitions |
@@ -445,6 +447,9 @@ a crawler, and they are a contract all the same.
 | `GET` | `/civl-rankings.csv` | The CIVL monthly world ranking, as CSV |
 | `GET` | `/comp/:comp_id/scores.csv` | The scores page's downloadable twin |
 | `GET` | `/api/civl-rankings.csv` | The same ranking data, under `/api/` |
+| `GET` | `/.well-known/oauth-protected-resource/mcp` | RFC 9728 metadata for the MCP endpoint: its resource identifier and authorisation server |
+| `GET` | `/.well-known/oauth-authorization-server/api/auth` | RFC 8414 metadata for that authorisation server (also at `/.well-known/oauth-authorization-server`, for clients that only look there) |
+| `GET` | `/.well-known/openid-configuration/api/auth` | The same, as OpenID discovery |
 
 ### CIVL world rankings
 

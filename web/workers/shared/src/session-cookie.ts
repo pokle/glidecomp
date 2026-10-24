@@ -328,3 +328,10 @@ export async function verifySessionCookie(
     return undefined;
   }
 }
+
+/**
+ * The isolate's auth-api key set, for the one other JWT the kit verifies: an
+ * MCP access token (access-token.ts). Same keys, same cache — the two tokens
+ * are told apart by their `typ` and `aud`, never by the key.
+ */
+export { keyFor as jwksKeyFor };
