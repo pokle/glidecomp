@@ -1,6 +1,8 @@
 # MCP over OAuth: phase 0 spike findings — 2026-10-24
 
-*Findings from phase 0 of [the plan](2026-10-24-mcp-oauth-plan.md). The code
+*Findings from phase 0 of [the plan](2026-10-24-mcp-oauth-plan.md). Rebased onto
+master after #769 removed the native app: the migration is now 0040, and the
+flow below was re-run on the rebased stack. The code
 on this branch is a spike: unreviewed and untested beyond what is below. It is
 not for merging.*
 
@@ -63,7 +65,7 @@ from ChatGPT" below.
 | `web/workers/mcp-api` | New worker: bearer gate (`requireBearerAuth`), MCP SDK v2 `createMcpHandler`, and 4 read tools that call competition-api over the binding with the caller's token |
 | dev-router, `dev-workers.sh`, Vite proxy | `/mcp` and the discovery paths reach the workers in dev |
 | `web/frontend` | `/oauth/consent` (the plan's proposed copy, not yet agreed); `/signin` resumes an authorisation request; dev sign-in keeps its destination |
-| Better Auth | 1.7.10 → 1.7.12 in auth-api, the website and the app (`@better-auth/mcp` needs `^1.7.12`) |
+| Better Auth | 1.7.10 → 1.7.12 in auth-api and the website (`@better-auth/mcp` needs `^1.7.12`) |
 
 `bun run typecheck:all` is clean. auth-api's suite passes (229 tests).
 dev-router's suite passes, now pinning the new routes.
