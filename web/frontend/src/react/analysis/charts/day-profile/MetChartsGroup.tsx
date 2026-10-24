@@ -16,7 +16,7 @@ import type { TimeAxis } from "./time-axis";
 import { MetWindChart } from "./MetWindChart";
 import { MetSkyChart } from "./MetSkyChart";
 import { MetThermalChart } from "./MetThermalChart";
-import { sampleProvenance } from "@glidecomp/client/met";
+import { sampleProvenance } from "./met-shared";
 
 export function MetChartsGroup({
   weather,

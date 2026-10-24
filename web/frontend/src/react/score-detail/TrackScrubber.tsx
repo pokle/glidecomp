@@ -5,10 +5,9 @@
  * one of its sub-components inlined below the page itself.
  */
 import type { IGCFix } from "@glidecomp/engine";
-import { nearestFixIndexByTime } from "@glidecomp/client/map-geometry";
+import { nearestFixIndexByTime } from "../../analysis/map-geometry";
 import { formatTimeInZone } from "../lib/time";
 
-// The fix lookup is shared with the app's map.
 export { nearestFixIndexByTime };
 
 /**

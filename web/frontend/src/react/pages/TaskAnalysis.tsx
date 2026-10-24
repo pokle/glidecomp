@@ -40,7 +40,7 @@
  * placeholder while the first compute runs; the client hydrates from the same
  * data and takes over polling.
  */
-import { STRATEGY_VERDICTS, winningLabel } from "@glidecomp/client/analysis";
+import { STRATEGY_VERDICTS, winningLabel } from "../analysis/types";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/react/rac/card";
 import { Badge } from "@/react/rac/badge";

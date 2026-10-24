@@ -28,7 +28,6 @@
   },
   "include": [
     "web/engine/src/**/*",
-    "web/client/src/**/*",
     "web/frontend/src/**/*",
     "web/workers/**/*",
     "web/engine/tests/**/*",

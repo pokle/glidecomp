@@ -68,9 +68,8 @@ async function getJson<T>(f: FetchFn, path: string): Promise<T> {
 // ── /comp ──────────────────────────────────────────────────────────────────
 
 /** One row of GET /api/comp (presentational fields only). */
-// Moved to @glidecomp/client, shared with the app (mobile plan, stage 2).
-export type { CompListEntry } from "@glidecomp/client/types";
-import type { CompListEntry } from "@glidecomp/client/types";
+export type { CompListEntry } from "./comp/types";
+import type { CompListEntry } from "./comp/types";
 
 export interface CompetitionsLoaderData {
   comps: CompListEntry[];
@@ -82,9 +81,8 @@ export function loadCompetitions(f: FetchFn): Promise<CompetitionsLoaderData> {
 
 // ── /comp/:compId ────────────────────────────────────────────────────────────
 
-// Moved to @glidecomp/client, shared with the app (mobile plan, stage 3).
-export type { CompScores } from "@glidecomp/client/types";
-import type { CompScores } from "@glidecomp/client/types";
+export type { CompScores } from "./comp/types";
+import type { CompScores } from "./comp/types";
 
 
 export interface CompDetailLoaderData {

@@ -1,11 +1,10 @@
 /**
  * How a task's route is described in words: turnpoint roles, the start
- * configuration and the goal. Shared by the website's task page and route
- * editor and the app's task screens, so a pilot reads the same sentence on
- * both. Pure: no DOM, deterministic for a given zone (it renders in SSR).
+ * configuration and the goal. Shared by the task page and the route editor,
+ * so a pilot reads the same sentence on both. Pure: no DOM, deterministic for a given zone (it renders in SSR).
  */
 import type { GoalConfig, SSSConfig } from "@glidecomp/engine";
-import { utcToZonedHHMM, zoneNameWithOffset } from "./time";
+import { utcToZonedHHMM, zoneNameWithOffset } from "../lib/time";
 
 export const TYPE_LABELS: Record<string, string> = {
   TAKEOFF: "Takeoff",
