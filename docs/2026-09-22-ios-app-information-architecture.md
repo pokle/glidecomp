@@ -95,9 +95,15 @@ decided per screen:
 
 | Shape | For | Examples |
 |---|---|---|
-| **Push** | Navigating *into* data that exists and stays | Comp, task, scores, a waypoint, a pilot, a settings group |
+| **Push** | Navigating *into* data that exists and stays | Comp, task, scores, a waypoint, a pilot, a settings group, QR for a briefing screen |
 | **Sheet** | A bounded task with a completion, that you can abandon | Create comp, create task, submit a track, altitude review, filters, share |
-| **Takeover** (full-screen cover) | A tool with its own controls that owns the whole device | Analysis map, 3D replay, maximised waypoint map, QR for a briefing screen |
+| **Takeover** (full-screen cover) | A tool with its own controls that owns the whole device | Analysis map, 3D replay, maximised waypoint map |
+
+The QR started as a takeover and became a push over the tabs: a takeover's
+own close button has to dodge the status bar and the Dynamic Island by hand,
+and on a real iPhone the QR's Done button ended up under the battery icon,
+with no way out. A takeover with only a close button is better as a push,
+which has the system back button and the edge swipe.
 
 A sheet **must** be dismissable with a swipe and with the hardware/system back
 gesture, and must warn before discarding unsaved edits. The web learned this

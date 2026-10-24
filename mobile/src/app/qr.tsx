@@ -1,8 +1,8 @@
 /**
- * A task or waypoint QR, full screen (IA §3: a takeover — it owns the device
- * while a briefing room scans it). Black on white whatever the theme, as big
- * as the screen allows, and the screen kept awake while it is up. Tap Done,
- * or swipe it away, to go back.
+ * A task or waypoint QR, pushed over the tabs so it has the whole screen
+ * below the header while a briefing room scans it. Black on white whatever
+ * the theme, as big as the screen allows, and the screen kept awake while it
+ * is up. The header's back button, or the edge swipe, goes back.
  *
  * It finds its source again from the route's params rather than carrying
  * the payload: `?comp&task` is a task, `?comp` a competition's waypoints,
@@ -12,8 +12,8 @@
  */
 import { instrumentQr, type InstrumentSource } from '@glidecomp/client/instrument';
 import { useKeepAwake } from 'expo-keep-awake';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useComp, useCompWaypoints, useLibraryTask, useTask } from '@/api/queries';
@@ -27,13 +27,8 @@ export default function QrScreen() {
   const params = useLocalSearchParams<Params>();
   const swap = params.swap === '1';
   return (
-    <SafeAreaView style={styles.screen} testID="qr-screen">
-      <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.bar}>
-        <Pressable accessibilityRole="button" hitSlop={12} onPress={() => router.back()} testID="qr-done">
-          <Text style={styles.done}>Done</Text>
-        </Pressable>
-      </View>
+    // The header owns the top inset; this keeps the code clear of the home indicator.
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screen} testID="qr-screen">
       {params.code ? (
         <LibraryTaskQr code={params.code} swap={swap} />
       ) : params.comp && params.task ? (
@@ -106,8 +101,6 @@ function Message({ text }: { text: string }) {
 // Fixed colours, not the theme's: the code must be dark on light to scan.
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#ffffff' },
-  bar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, minHeight: 44, alignItems: 'center' },
-  done: { fontSize: 17, fontWeight: '600', color: '#007AFF' },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, gap: 12 },
   title: { fontSize: 20, fontWeight: '600', color: '#1d1d1f', textAlign: 'center' },
   caption: { fontSize: 15, color: '#3c3c43', textAlign: 'center' },
