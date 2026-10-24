@@ -56,9 +56,8 @@ discovery metadata, and binds every access token to the MCP resource
 
 **A new `mcp-api` worker is the protected resource, and it only speaks the
 public API.** Every tool is a call to an existing competition-api route over a
-service binding, through `@glidecomp/client`'s typed `createApi()`, as the
-native app does. Every rule that already holds in those routes still holds,
-with nothing restated: `audit()`, `bumpAndRevalidateScores()`, the xctsk
+service binding, through `@glidecomp/client`'s typed `createApi()`. Every
+rule that already holds in those routes still holds, with nothing restated: `audit()`, `bumpAndRevalidateScores()`, the xctsk
 validator, hidden `test` comps 404ing for non-admins, and #481's retry rules.
 **mcp-api never reads D1.** A tool that needs something no route offers adds a
 route to competition-api under that worker's "part of done" rules.
@@ -129,7 +128,7 @@ window at the MCP default of 30 s.
 
 **Schema.** Generate the provider's tables (`oauthClient`, `oauthAccessToken`,
 `oauthRefreshToken`, `oauthConsent`, `oauthClientAssertion`) with Better Auth's
-generator, then hand-review them into `web/db/migrations/0039_oauth_provider.sql`.
+generator, then hand-review them into `web/db/migrations/0040_oauth_provider.sql`.
 The generator's output is a draft, never committed blind. Check whether DPoP
 replay detection writes a table of its own.
 
@@ -226,9 +225,9 @@ know which calls to confirm.
 | `preview_route` | nothing (pure) | **Writes nothing.** Takes a quick-task line ("same as task 2 but goal CORRY, start 13:30" becomes `ELLIOT 400m to, PINEMT 400m sss 13:30, TOWONG 400m, CORRY 400m goal`) or a list of turnpoints. Runs `quickTaskApply()` against the comp's waypoints, then `buildRoute()` / `assembleRouteTask()`. Returns each token's match **with its runners-up**, unmatched tokens, start problems, the optimised distance, and the tidied line (`spelledText`) |
 | `set_task_route` | `PATCH …/task/:task_id` with `xctskForPatch()` | Takes the tidied line, which must name every waypoint **exactly**, plus the `route_rev` the agent last read. Refuses a fuzzy token, and refuses if the stored route has changed since that read (someone edited it in the browser). Returns the new route and a link to the task page |
 
-The route tools reuse the shared code the website's and the app's route
-editors run, in `@glidecomp/client` (`quick-task.ts`, `route-editor.ts`), so
-all three read a line the same way.
+The route tools reuse the shared code the website's route editor runs, in
+`@glidecomp/client` (`quick-task.ts`, `route-editor.ts`), so both read a line
+the same way.
 
 **The rule for waypoint matching mirrors the one for pilot names: a fuzzy match
 may propose, never dispose** (`CLAUDE.md`, "Names may propose, never
@@ -350,7 +349,7 @@ client supports only CIMD, phase 1 grows a CIMD transport question first.
 
 **Phase 1 — authorisation server.**
 
-- Migration 0039, `mcp()` config, the SEC-55 additions, the discovery
+- Migration 0040, `mcp()` config, the SEC-55 additions, the discovery
   Functions, `/me`'s access-token branch with the consent check, the SEC-57
   extension, `/oauth/consent`, Settings → Connected assistants, and the
   registration budget and cleanup cron.
