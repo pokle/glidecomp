@@ -592,7 +592,8 @@ task into my instrument?", and the personal library.
   the Waypoints screen's Send button, and a task in My flights' library. It
   carries the website's "swap code & name" as a "Label on the device" choice
   that applies to the files and the QR alike.
-- **The QR is a takeover** (`/qr`, a full-screen modal): black on white
+- **The QR is a takeover** (`/qr`, a full-screen modal; since changed to a
+  push over the tabs with a back button, see IA §3): black on white
   whatever the theme, as large as the screen, and the screen kept awake while
   it is up. It finds its task again from the route's parameters rather than
   carrying the payload, so it reads from the phone's cache offline. Drawn

@@ -22,7 +22,8 @@ import { fromAltitudeInput, toAltitudeInput } from '@glidecomp/client/units';
 import type { WaypointFileRecord } from '@glidecomp/engine';
 import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useUnits } from '@/settings/units';
 import { Choices, DangerButton, Field, FormCard, FormHint, FormMessage, FormScreen, PrimaryButton } from '@/ui/form';
@@ -46,6 +47,12 @@ export function TurnpointSheet({
 }) {
   const prefs = useUnits();
   const { colors } = useTheme();
+  // Android has no page sheet: the modal fills the screen, edge to edge like
+  // the app, so it draws under the status and navigation bars and must clear
+  // them itself — or Cancel and Done sit under the clock. iOS's page sheet
+  // already starts below the status bar.
+  const insets = useSafeAreaInsets();
+  const edge = Platform.OS === 'android' ? insets : { top: 0, bottom: 0 };
   const [draft, setDraft] = useState<TurnpointDraft>(initial);
   const [altitude, setAltitude] = useState(() =>
     initial.altitude === '' || !Number.isFinite(Number(initial.altitude))
@@ -76,7 +83,7 @@ export function TurnpointSheet({
 
   return (
     <Modal animationType="slide" presentationStyle="pageSheet" onRequestClose={onCancel}>
-      <View style={[styles.bar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.bar, { backgroundColor: colors.card, borderColor: colors.border, paddingTop: edge.top, minHeight: 56 + edge.top }]}>
         <Pressable accessibilityRole="button" hitSlop={12} onPress={onCancel} testID="turnpoint-cancel">
           <Text style={[styles.barButton, { color: colors.primary }]}>Cancel</Text>
         </Pressable>
@@ -170,6 +177,7 @@ export function TurnpointSheet({
         {problem ? <FormMessage kind="error">{problem}</FormMessage> : null}
         <PrimaryButton title="Done" onPress={done} />
         {onRemove ? <DangerButton title="Remove turnpoint" onPress={onRemove} testID="turnpoint-remove" /> : null}
+        <View style={{ height: edge.bottom }} />
       </FormScreen>
     </Modal>
   );

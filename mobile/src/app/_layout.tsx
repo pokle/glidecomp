@@ -54,9 +54,11 @@ function RootLayout() {
             title: 'Submit a track',
           }}
         />
-        {/* A takeover (IA §3): the QR owns the screen while a briefing
-            room scans it, over whichever tab sent it. */}
-        <Stack.Screen name="qr" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+        {/* A push over the tabs, not a full-screen modal: the modal's own
+            Done button sat under the status bar's battery on a real phone,
+            leaving no way out. The native header's back button and the edge
+            swipe always work. */}
+        <Stack.Screen name="qr" options={{ headerShown: true, title: 'QR code', headerBackTitle: 'Back' }} />
       </Stack>
     </ThemeProvider>
     </QueryProvider>
