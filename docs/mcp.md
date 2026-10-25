@@ -77,6 +77,14 @@ competitions you organise — and nothing more.
 Every answer carries the GlideComp page's URL, so the assistant can link you
 to it rather than retell it.
 
+Every answer gives its data twice: as `structuredContent`, and as the same
+JSON in a text block after a one-line summary (`answer()` in
+`mcp-api/src/tools.ts`). The text copy is not redundant. Claude, ChatGPT and
+Gemini all give the model only the text blocks, and while the text was only
+the summary line they said "8 competitions matched" and could name none of
+them. A test in `mcp-api.test.ts` calls every tool and fails if its text lacks
+the JSON.
+
 ### Tasks and routes
 
 Only with `task:write`, and only in competitions you organise.

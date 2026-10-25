@@ -394,6 +394,28 @@ describe("the tools", () => {
     expect(r.structuredContent!.waypoints).toEqual([{ code: "CORRY", name: "Corryong goal", lat: -36.1958, lon: 147.8975 }]);
   });
 
+  // Many clients (Claude, ChatGPT and Gemini among them) hand the model only the
+  // text blocks, so the data must be there too, not only in structuredContent.
+  test("every tool's text carries its data as JSON, not only the summary line", async () => {
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["whoami", {}],
+      ["search", { query: "corryong cup" }],
+      ["list_competitions", {}],
+      ["get_competition", { comp_id: "abcde" }],
+      ["get_task", { comp_id: "abcde", task_id: "fghij" }],
+      ["list_waypoints", { comp_id: "abcde" }],
+      ["create_task", { comp_id: "abcde", name: "Task 2", task_date: "2026-01-06" }],
+      ["update_task", { comp_id: "abcde", task_id: "fghij", name: "Task 1b" }],
+      ["preview_route", { comp_id: "abcde", task_id: "fghij", line: "ELL to, ELLIOT 5k sss, towo, CORRY goal" }],
+      ["set_task_route", { comp_id: "abcde", task_id: "fghij", line: "ELLIOT, CORRY", route_rev: "stale" }],
+    ];
+    for (const [name, args] of calls) {
+      const r = await callTool(makeEnv().env, name, args);
+      expect(r.structuredContent, name).toBeDefined();
+      expect(r.content.map((c) => c.text), name).toContain(JSON.stringify(r.structuredContent));
+    }
+  });
+
   test("a comp the account can't see is a tool error the model can read, not a protocol failure", async () => {
     const { env } = makeEnv();
     const r = await callTool(env, "get_competition", { comp_id: "hidden" });
