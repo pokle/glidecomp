@@ -4,6 +4,51 @@ One entry per run of the monthly standards routine
 ([`.claude/commands/standards-check.md`](../../.claude/commands/standards-check.md)),
 newest first. The register it works from is [`registry.json`](registry.json).
 
+## 2026-10-25: first scheduled run
+
+Ran the same day as the baseline, so no fingerprinted source had moved. The
+two owner items were already raised as #779 and #780 before this run, so
+nothing new was opened. This run landed the two safe fixes the baseline
+listed.
+
+| Standard | Follows | Latest | Status |
+|---|---|---|---|
+| Model Context Protocol | 2025-11-25 | 2026-07-28 | behind (revision): #779 |
+| OAuth 2.1 (IETF draft) | 13 | 16 | behind: #780 |
+| FAI S7F | 2026 V1.0 | | research: nothing newer |
+| FAI S7A | 2025 edition (was not pinned) | | research: nothing newer |
+| IGC flight recorder format | 2008 file format; spec 2024 + AL9 | | research: nothing newer |
+| All other entries | | | current |
+
+### Changes
+
+- **MCP 2026-07-28 (#779), OAuth 2.1 draft 16 (#780).** Both issues are open
+  and nothing has happened since they were filed, so no comment was added.
+- **S7A: both pages now link the 2025 edition.** `/scoring/gap` linked the
+  2022 PDF for §5.2.4–5.2.5 (female and nation sub-rankings). The 2025 PDF
+  (effective 1 May 2025) keeps §4.4.2, §4.4.6, §5.2.4 and §5.2.5 at the same
+  numbers and titles, so the link moved to it. A `…_2026.pdf` URL answers 404:
+  2025 is the current S7A. The register's `follows` is now "2025 edition".
+  PR'd.
+- **S7F 2024 clause numbers corrected to 2026.** Stopped tasks §12.3 → §13.4
+  (`README.md` twice, `docs/database.md`). Launch validity §9.1 → §10.1
+  (`CLAUDE.md` twice). Checked against the 2026 transcription's headings.
+  PR'd.
+- **FAI research.** Searches for S7F 2026 V1.1 / 2027, S7A 2026/2027 and an
+  IGC AL10 found nothing new. The AL9 PDF's amendment table still leaves AL10
+  blank.
+
+### Lessons
+
+- `CLAUDE.md`'s report-card rule (c) still cites "§12.1, §12.3.5", the 2024
+  numbers for ESS-not-goal and the stopped-task time reduction. The 2026
+  edition inserted §13.1 (Elevated Goal), so the mapping is not a plain +1. Read
+  `score-explanation-charts.ts` to see which reductions it actually excludes
+  before renumbering. Left for the next run.
+- To probe whether a new S7A/S7F edition exists, `curl` the expected filename
+  under `/sites/default/files/civl/documents/`. A 404 there is quick evidence
+  that the edition has not been published.
+
 ## 2026-10-25: baseline
 
 The first run, made when the routine was written. It recorded a `seen` value

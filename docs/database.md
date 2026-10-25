@@ -115,7 +115,7 @@ of the notable ones.
 | `0014_manual_flights` | Manual flight reports for track-less pilots (supersede, never delete) |
 | `0015_comp_waypoints` | The comp's region waypoint file |
 | `0017_rate_limit` | Persistent rate-limit buckets, for the email-OTP sign-in limits |
-| `0018_task_stop` | Stopped tasks (`stop_announcement_time`, FAI S7F §12.3) |
+| `0018_task_stop` | Stopped tasks (`stop_announcement_time`, FAI S7F §13.4) |
 | `0019_task_field_analysis` | Stale-first store for the behavioural-metric reports |
 | `0021_task_gap_params` | Per-task GAP parameters, merged over the comp's (imported AirScore comps publish a different formula per task) |
 | `0022_comp_series_scoring` | FTV series scoring (`series_scoring`, `ftv_factor`) |
