@@ -10,6 +10,15 @@ yours.
 You sign in once, in a browser, and choose what the assistant may do. Nobody
 copies an API key into a config file, and you can disconnect it at any time.
 
+The same guide, for organisers, is on the site at
+[glidecomp.com/assistant](https://glidecomp.com/assistant) (linked from the
+footer's Resources column and from Settings). Assistants that look can find
+the endpoint by themselves: `/llms.txt` names it, and the MCP Server Card at
+`/mcp/server-card` is listed in both `/.well-known/ai-catalog.json` (the AI
+Catalog spec) and `/.well-known/ard.json` (Agentic Resource Discovery), two
+related specs whose clients look in different places. Each file is checked
+against its spec in `web/workers/mcp-api/test/discovery.test.ts`.
+
 How it is built, and why: [the plan](2026-10-24-mcp-oauth-plan.md).
 
 ## Connect
@@ -108,7 +117,7 @@ permission, which you'll be asked for.
 
 ## Disconnect
 
-**Settings → Connected assistants** lists every assistant you have allowed,
+**Settings → Connected AI Assistants** lists every assistant you have allowed,
 and what it can do. **Disconnect** stops it on its very next request; to use
 it again, you sign in and allow it again.
 

@@ -21,6 +21,7 @@ import { compPath, compWaypointsPath, taskPath } from "../../../frontend/src/rea
 import type { Caller } from "./gate";
 import { planRoute, type RoutePlan } from "./route-plan";
 import { routeRevision, summariseRoute } from "./route-summary";
+import { SERVER_INFO } from "./server-card";
 
 export interface ToolsEnv {
   COMPETITION_API: Fetcher;
@@ -65,7 +66,7 @@ const ID = z.string().min(1).max(64).describe("An id exactly as GlideComp return
 
 export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, origin: string): McpServer {
   const server = new McpServer(
-    { name: "glidecomp", title: "GlideComp", version: "1.0.0" },
+    SERVER_INFO,
     {
       jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
       instructions:

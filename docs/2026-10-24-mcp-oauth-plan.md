@@ -449,7 +449,7 @@ API-key tools — including to anonymous callers, who could read only what was
 already public. #774's first master deploy replaced its code under the same
 name. If those routes are still attached to `mcp-api` in the dashboard, they
 now send `/mcp` straight to the new worker rather than through
-`functions/mcp.ts`; either path runs the same gate. Deleting the two routes
+`functions/mcp/[[path]].ts`; either path runs the same gate. Deleting the two routes
 leaves one path. Removing a worker from the repo means deleting it from
 Cloudflare too.
 

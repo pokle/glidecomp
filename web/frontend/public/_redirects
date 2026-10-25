@@ -8,7 +8,7 @@
 # rewrite to /app.html into a 308 redirect to /app, which drops the original
 # path (e.g. /comp) and lands the SPA on /app with no matching route. Serving
 # the clean /app keeps the request URL intact so react-router routes correctly.
-# The static content pages (/, /about, /legal, /scoring, /scoring/*) are real
+# The static content pages (/, /about, /assistant, /legal, /scoring, /scoring/*) are real
 # prerendered files (built by ./static with Astro) and are served directly.
 # /comp and /comp/* are NOT listed here: they are owned by the SSR Pages
 # Function (functions/comp/[[path]].ts, routed via _routes.json), which

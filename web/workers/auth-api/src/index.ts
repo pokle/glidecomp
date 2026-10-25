@@ -660,7 +660,7 @@ app.post("/api/auth/sign-in/social", async (c, next) => {
 // Better Auth catch-all handler — for the endpoints endpoints.ts lists, and
 // nothing else (SEC-55). The ExecutionContext lets sendVerificationOTP hand
 // the outbound email to waitUntil instead of blocking the response on it.
-// Settings → Connected assistants: the MCP clients this account has let act
+// Settings → Connected AI Assistants: the MCP clients this account has let act
 // as it (mcp-grants.ts). Browser sessions only — requiresBrowserSession lists
 // these, so neither an API key nor an access token can see or revoke grants.
 app.get("/api/auth/connected-assistants", async (c) => {

@@ -35,6 +35,7 @@ interface CompRow {
 const STATIC_PATHS = [
   "/",
   "/about",
+  "/assistant",
   "/legal",
   "/scoring",
   "/scoring/gap",

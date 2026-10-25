@@ -303,7 +303,7 @@ it.
   consent and the budget. Anything but an OAuth grant — a session, an API key
   sent as a bearer value — gets the RFC 9728 `401` challenge, so the client
   starts sign-in. See [mcp.md](mcp.md).
-- **Settings → Connected assistants** lists grants and disconnects them
+- **Settings → Connected AI Assistants** lists grants and disconnects them
   (`/api/auth/connected-assistants`), revoking refresh tokens too — the
   provider's own delete-consent would leave them working. Granting, consenting
   and these routes are browser-only, like account management: an API key that

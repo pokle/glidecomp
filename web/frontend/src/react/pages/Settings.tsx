@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Form } from "react-aria-components";
+import { useLocation } from "react-router-dom";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card, CardGrid, CardHeader } from "@/react/rac/card";
 import {
@@ -74,10 +75,19 @@ function SavedFlash({ nonce }: { nonce: number }) {
 export function Settings() {
   const { user, loading, isSuperAdmin, previewRole } = useUser();
   const goToSignIn = useGoToSignIn();
+  const location = useLocation();
 
   useEffect(() => {
     document.title = "GlideComp - Settings";
   }, []);
+
+  // Deep links like /settings#connected-ai-assistants (from /assistant): the
+  // sections render only once the user resolves, after the browser's own
+  // jump to the anchor has already missed, so scroll once they exist.
+  useEffect(() => {
+    if (!user || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView();
+  }, [user, location.hash]);
 
   if (loading) return <p role="status">Loading…</p>;
 
@@ -87,7 +97,7 @@ export function Settings() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">Sign in to manage your account</p>
-          <Button className="mt-4" onPress={() => goToSignIn("/settings")}>
+          <Button className="mt-4" onPress={() => goToSignIn(`/settings${location.hash}`)}>
             Sign in
           </Button>
         </div>
@@ -104,8 +114,8 @@ export function Settings() {
       <ProfileSection />
       <AppearanceSection />
       <UnitsSection />
-      <ApiKeysSection />
       <ConnectedAssistantsSection />
+      <ApiKeysSection />
       {isSuperAdmin && previewRole === "actual" ? <SuperadminSection /> : null}
       <DangerZoneSection />
     </section>
@@ -749,11 +759,16 @@ function connectedOn(iso: string | null): string | null {
     : d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// Settings → Connected assistants (docs/2026-10-24-mcp-oauth-plan.md §8): the
-// MCP clients (Claude, ChatGPT, …) this account has let act as it, each with
-// Disconnect. Disconnecting revokes the grant on the next request, refresh
-// tokens included, so the copy can say "straight away".
+// Settings → Connected AI Assistants (docs/mcp.md): the MCP clients (Claude,
+// ChatGPT, …) this account has let act as it, each with Disconnect.
+// Disconnecting revokes the grant on the next request, refresh tokens
+// included, so the copy can say "straight away". Above API Keys: connecting an
+// assistant is the way most people will reach GlideComp from outside it. The
+// address to connect is always shown, not only while the list is empty — the
+// second assistant needs it as much as the first.
 function ConnectedAssistantsSection() {
+  const mcpUrl = `${window.location.origin}/mcp`;
+  const [copied, setCopied] = useState(false);
   const [assistants, setAssistants] = useState<ConnectedAssistant[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
@@ -797,9 +812,11 @@ function ConnectedAssistantsSection() {
   }
 
   return (
-    <Card>
+    // The anchor /assistant's "Disconnect" section links to; scroll-mt clears
+    // the sticky header.
+    <Card id="connected-ai-assistants" className="scroll-mt-20">
       <CardHeader
-        title="Connected assistants"
+        title="Connected AI Assistants"
         description="Assistants you've let act as you. Disconnecting one stops it straight away."
       />
       <div>
@@ -809,11 +826,10 @@ function ConnectedAssistantsSection() {
           <Loading>Loading connected assistants…</Loading>
         ) : assistants.length === 0 ? (
           <p className="rounded-lg border border-dashed px-4 py-6 text-center text-muted-foreground">
-            No assistants connected. To connect one, add{" "}
-            <span className="font-mono break-all">{`${window.location.origin}/mcp`}</span> to it as a connector.
+            No assistants connected yet.
           </p>
         ) : (
-          <ul className="divide-y rounded-lg border" aria-label="Connected assistants">
+          <ul className="divide-y rounded-lg border" aria-label="Connected AI Assistants">
             {assistants.map((a) => {
               const name = a.name || "Unnamed assistant";
               const on = connectedOn(a.connected_at);
@@ -840,6 +856,26 @@ function ConnectedAssistantsSection() {
             })}
           </ul>
         )}
+        <p className="mt-4 text-sm text-muted-foreground">
+          To connect one, add <span className="font-mono break-all text-foreground">{mcpUrl}</span>{" "}
+          <Button
+            variant="outline"
+            size="sm"
+            className="align-middle"
+            onPress={() => {
+              void navigator.clipboard.writeText(mcpUrl).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              });
+            }}
+          >
+            {copied ? "Copied!" : "Copy"}
+          </Button>{" "}
+          to it as a connector.{" "}
+          <a href="/assistant" className="font-medium text-foreground underline underline-offset-2">
+            How to connect your assistant
+          </a>
+        </p>
       </div>
     </Card>
   );

@@ -37,6 +37,9 @@ const metaDescription =
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <link rel="icon" href="/icon.svg" />
+    <!-- Agentic Resource Discovery: where an assistant finds GlideComp's MCP
+         server (docs/mcp.md). ARD clients MUST honour this relation. -->
+    <link rel="ard" href="/.well-known/ard.json" />
     <link
       rel="preload"
       href={bodyFont}

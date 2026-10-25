@@ -62,7 +62,7 @@ const ROUTES: Array<[string, keyof Env]> = [
   ["/.well-known/oauth-authorization-server", "AUTH_API"],
   ["/.well-known/oauth-protected-resource", "AUTH_API"],
   ["/.well-known/openid-configuration", "AUTH_API"],
-  // The MCP endpoint itself; functions/mcp.ts in production.
+  // The MCP endpoint and its server card; functions/mcp/[[path]].ts in production.
   ["/mcp", "MCP_API"],
 ];
 

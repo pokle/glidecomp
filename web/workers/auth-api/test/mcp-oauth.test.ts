@@ -316,7 +316,7 @@ describe("tokens are not sessions, and sessions are not tokens", () => {
   });
 });
 
-describe("Settings → Connected assistants", () => {
+describe("Settings → Connected AI Assistants", () => {
   test("lists the grant, and Disconnect stops the token and its refresh token at once", async () => {
     const cookie = await loginAs("disconnect@example.com");
     const conn = await connect(cookie);

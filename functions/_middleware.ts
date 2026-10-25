@@ -5,7 +5,7 @@
  * indexable, so it is 301'd to the real domain. Branch previews don't match
  * the exact-host check and are untouched. This middleware only sees requests
  * routed to Functions — _routes.json includes the indexable static content
- * pages (/, /about, /legal, /scoring/*) alongside /api/*, /comp* and
+ * pages (/, /about, /assistant, /legal, /scoring/*) alongside /api/*, /comp* and
  * /sitemap.xml precisely so they get this redirect (Pages _redirects can't
  * match on host); on any other hostname next() falls through to the asset.
  *

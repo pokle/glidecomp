@@ -1,0 +1,30 @@
+# GlideComp
+
+> Scoring and flight analysis for hang gliding and paragliding competitions
+
+GlideComp has a remote MCP server at https://glidecomp.com/mcp (Streamable HTTP). If someone asks you to connect to GlideComp, or to use GlideComp from their assistant, this is the URL.
+
+It signs in with OAuth 2.1, so there is no API key: the person signs in to GlideComp in a browser and chooses what the assistant may do. The client discovers the sign-in from the 401 response at /mcp.
+
+## Connect an AI assistant
+
+- [Use GlideComp from your AI assistant](https://glidecomp.com/assistant): how to connect, what it can do, how to disconnect.
+- [MCP server card](https://glidecomp.com/mcp/server-card): the MCP Server Card (SEP-2127) for https://glidecomp.com/mcp.
+- [Agentic Resource Discovery manifest](https://glidecomp.com/.well-known/ard.json): lists the server card.
+- [AI Catalog](https://glidecomp.com/.well-known/ai-catalog.json): lists the server card.
+
+## Pages
+
+- [Competitions](https://glidecomp.com/comp): every public competition, its tasks, scores and analysis.
+- [Scoring guide](https://glidecomp.com/scoring): how GlideComp scores a task.
+- [GAP scoring](https://glidecomp.com/scoring/gap): the FAI CIVL GAP formula, step by step.
+- [Open distance](https://glidecomp.com/scoring/open-distance)
+- [Track data cleaning](https://glidecomp.com/scoring/data-cleaning): how a track's GPS and barometric data are cleaned before scoring.
+- [Track validity](https://glidecomp.com/scoring/track-validity): which tracks are scored, and why one may be withheld.
+- [About](https://glidecomp.com/about)
+- [Privacy and terms](https://glidecomp.com/legal)
+
+## Optional
+
+- [Source code](https://github.com/pokle/glidecomp)
+- [Scoring changes](https://github.com/pokle/glidecomp/tree/master/web/engine/scoring-changes): every change to how points are calculated, and who it affects.

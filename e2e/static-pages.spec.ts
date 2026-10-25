@@ -28,6 +28,7 @@ import { test, expect, type APIRequestContext } from "./fixtures/test";
 const PAGES = [
   { path: "/", heading: "See where the race was really won." },
   { path: "/about", heading: "About GlideComp" },
+  { path: "/assistant", heading: "Use GlideComp from your AI assistant" },
   { path: "/legal", heading: "Privacy Policy &amp; Terms" },
   { path: "/scoring", heading: "Scoring" },
   { path: "/scoring/gap", heading: "How GAP Scoring Works" },
@@ -52,6 +53,9 @@ test.describe("prerendered content (no browser)", () => {
       // A crawler reads these two before anything else.
       expect(body).toMatch(/<title>[^<]*GlideComp[^<]*<\/title>/);
       expect(body).toMatch(/<meta name="description" content="[^"]{40,}"/);
+      // Agentic Resource Discovery: an assistant reading any page can find
+      // the MCP server's manifest (docs/mcp.md).
+      expect(body).toContain('<link rel="ard" href="/.well-known/ard.json">');
     });
   }
 
@@ -71,6 +75,15 @@ test.describe("prerendered content (no browser)", () => {
     // fails here while passing against the built output — a difference in the
     // dev server, not in the page.
     expect(body).not.toMatch(/katex(\.min)?\.js/i);
+  });
+
+  test("the assistant guide links every discovery file, for a developer to find", async ({ request }) => {
+    const body = await html(request, "/assistant");
+    for (const href of ["/llms.txt", "/mcp/server-card", "/.well-known/ard.json", "/.well-known/ai-catalog.json"]) {
+      expect(body, href).toContain(`href="${href}"`);
+    }
+    // …and Disconnect lands on the Settings section, not the top of Settings.
+    expect(body).toContain('href="/settings#connected-ai-assistants"');
   });
 
   test("the scoring index links to every guide and to the published changelog", async ({

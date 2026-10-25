@@ -57,7 +57,7 @@ const SERVED: ReadonlyArray<readonly [method: "GET" | "POST", path: RegExp]> = [
   // token exchange; registration (open, and rate-limited); revocation;
   // userinfo; and the client's public name, for the consent page. The
   // provider's client-management, consent-management and introspection
-  // endpoints stay unserved — Settings → Connected assistants uses
+  // endpoints stay unserved — Settings → Connected AI Assistants uses
   // GlideComp's own routes in index.ts.
   ["GET", /^\/oauth2\/authorize$/],
   ["POST", /^\/oauth2\/consent$/],

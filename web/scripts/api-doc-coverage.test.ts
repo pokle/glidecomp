@@ -80,7 +80,8 @@ export const PAGES_FUNCTION_ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/comp/:comp_id/scores.csv', source: 'functions/comp/[[path]].ts' },
   // Forwards to the mcp-api Worker, but at the site root rather than under
   // /api/, so the proxy rule above doesn't cover it.
-  { method: 'POST', path: '/mcp', source: 'functions/mcp.ts' },
+  { method: 'POST', path: '/mcp', source: 'functions/mcp/[[path]].ts' },
+  { method: 'GET', path: '/mcp/server-card', source: 'functions/mcp/[[path]].ts' },
 ];
 
 /**

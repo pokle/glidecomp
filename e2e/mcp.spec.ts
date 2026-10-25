@@ -208,9 +208,12 @@ test("an organiser connects an assistant, it reads their comp and sets a route, 
     expect(e.description).toMatch(new RegExp(`\\(via ${CLIENT_NAME}\\)$`));
   }
 
-  // Disconnect, the way the organiser would: Settings → Connected assistants.
-  await page.goto("/settings");
-  const row = page.getByRole("list", { name: "Connected assistants" }).getByRole("listitem").filter({ hasText: CLIENT_NAME });
+  // Disconnect, the way the organiser would: Settings → Connected AI Assistants.
+  // Arriving the way /assistant's "Disconnect" link sends you: straight to
+  // the section, which sits well below the fold on a phone.
+  await page.goto("/settings#connected-ai-assistants");
+  await expect(page.locator("#connected-ai-assistants")).toBeInViewport();
+  const row = page.getByRole("list", { name: "Connected AI Assistants" }).getByRole("listitem").filter({ hasText: CLIENT_NAME });
   await expect(row).toContainText("can change tasks");
   await row.getByRole("button", { name: "Disconnect" }).click();
   await expect(row).toHaveCount(0);

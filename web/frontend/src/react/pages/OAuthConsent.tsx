@@ -135,7 +135,7 @@ export function OAuthConsent() {
           marked "via {name}".
         </p>
         <p className="text-sm text-muted-foreground">
-          You can disconnect it at any time in Settings → Connected assistants.
+          You can disconnect it at any time in Settings → Connected AI Assistants.
         </p>
         {error ? (
           <p role="alert" className="text-destructive">
