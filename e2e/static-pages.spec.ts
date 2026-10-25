@@ -53,6 +53,9 @@ test.describe("prerendered content (no browser)", () => {
       // A crawler reads these two before anything else.
       expect(body).toMatch(/<title>[^<]*GlideComp[^<]*<\/title>/);
       expect(body).toMatch(/<meta name="description" content="[^"]{40,}"/);
+      // Agentic Resource Discovery: an assistant reading any page can find
+      // the MCP server's manifest (docs/mcp.md).
+      expect(body).toContain('<link rel="ard" href="/.well-known/ard.json">');
     });
   }
 

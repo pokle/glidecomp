@@ -497,20 +497,4 @@ describe("the server card (SEP-2127)", () => {
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get("access-control-allow-methods")).toBe("GET");
   });
-
-  test("the site's AI Catalog lists it, at the URL production serves it from", async () => {
-    const { cardFor } = await import("../src/server-card");
-    const catalog = JSON.parse(
-      await Bun.file(new URL("../../../frontend/public/.well-known/ai-catalog.json", import.meta.url)).text()
-    ) as { specVersion: string; entries: Array<{ identifier: string; type: string; url: string }> };
-    expect(catalog.specVersion).toBe("1.0");
-    const prod = cardFor("https://glidecomp.com");
-    expect(catalog.entries).toEqual([
-      {
-        identifier: "urn:air:glidecomp.com:mcp:glidecomp",
-        type: "application/mcp-server-card+json",
-        url: `${prod.remotes[0]!.url}/server-card`,
-      },
-    ]);
-  });
 });

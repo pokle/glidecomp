@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "identifier": "urn:air:glidecomp.com:mcp:glidecomp",
+      "displayName": "GlideComp",
+      "type": "application/mcp-server-card+json",
+      "url": "https://glidecomp.com/mcp/server-card",
+      "description": "Hang gliding and paragliding competitions: find comps, read tasks, set routes.",
+      "tags": ["hang gliding", "paragliding", "competition", "scoring", "task", "route"],
+      "representativeQueries": [
+        "What's the route for task 3 at the Corryong Cup?",
+        "Which tasks fly through Mt Elliot?",
+        "Make a task for tomorrow: Elliot, Towong, then goal at Corryong, start at 1:30."
+      ]
+    }
+  ]
+}

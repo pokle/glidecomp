@@ -14,7 +14,10 @@ The same guide, for organisers, is on the site at
 [glidecomp.com/assistant](https://glidecomp.com/assistant) (linked from the
 footer's Resources column and from Settings). Assistants that look can find
 the endpoint by themselves: `/llms.txt` names it, and the MCP Server Card at
-`/mcp/server-card` is listed in `/.well-known/ai-catalog.json`.
+`/mcp/server-card` is listed in both `/.well-known/ai-catalog.json` (the AI
+Catalog spec) and `/.well-known/ard.json` (Agentic Resource Discovery), two
+related specs whose clients look in different places. Each file is checked
+against its spec in `web/workers/mcp-api/test/discovery.test.ts`.
 
 How it is built, and why: [the plan](2026-10-24-mcp-oauth-plan.md).
 
