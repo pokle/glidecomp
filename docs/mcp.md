@@ -75,7 +75,9 @@ competitions you organise — and nothing more.
 | `list_waypoints` | The competition's waypoints, filtered by code or name |
 
 Every answer carries the GlideComp page's URL, so the assistant can link you
-to it rather than retell it.
+to it rather than retell it. Competitions and tasks also go out as
+`resource_link` blocks after the text, so a client that shows them gives you
+the links even when the model leaves them out.
 
 Every answer gives its data twice: as `structuredContent`, and as the same
 JSON in a text block after a one-line summary (`answer()` in
