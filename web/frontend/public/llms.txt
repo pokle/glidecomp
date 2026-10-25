@@ -1,0 +1,35 @@
+# GlideComp
+
+> Scoring and flight analysis for hang gliding and paragliding competitions — every point explained, every track compared. Competition results, scores and flight analysis are public.
+
+## Connect an AI assistant (MCP)
+
+GlideComp has a remote MCP server at https://glidecomp.com/mcp (Streamable HTTP). If someone asks you to connect to GlideComp, or to use GlideComp from their assistant, this is the URL.
+
+It signs in with OAuth 2.1, so there is no API key: the person signs in to GlideComp in a browser and chooses what the assistant may do. The client discovers the sign-in from the 401 response at /mcp.
+
+- Claude Code: run `claude mcp add --transport http glidecomp https://glidecomp.com/mcp`, then `/mcp` and choose GlideComp to sign in.
+- Claude, ChatGPT and other assistants with custom connectors: the person adds a connector with the URL https://glidecomp.com/mcp in the assistant's settings.
+- [Use GlideComp from your AI assistant](https://glidecomp.com/assistant): how to connect, what it can do, how to disconnect.
+- [Server card](https://glidecomp.com/mcp/server-card): the MCP Server Card (SEP-2127), also listed in [/.well-known/ai-catalog.json](https://glidecomp.com/.well-known/ai-catalog.json).
+
+Permissions the person can grant:
+
+- `comp:read`: find competitions, read tasks, routes and waypoints, as the person can see them.
+- `task:write`: create tasks, and change a task's name, date, classes and route, in competitions the person organises. Every change is recorded in the competition's public audit log under the person's name, marked with the assistant's name.
+
+## Pages
+
+- [Competitions](https://glidecomp.com/comp): every public competition, its tasks, scores and analysis.
+- [Scoring guide](https://glidecomp.com/scoring): how GlideComp scores a task.
+- [GAP scoring](https://glidecomp.com/scoring/gap): the FAI CIVL GAP formula, step by step.
+- [Open distance](https://glidecomp.com/scoring/open-distance)
+- [Track data cleaning](https://glidecomp.com/scoring/data-cleaning): how a track's GPS and barometric data are cleaned before scoring.
+- [Track validity](https://glidecomp.com/scoring/track-validity): which tracks are scored, and why one may be withheld.
+- [About](https://glidecomp.com/about)
+- [Privacy and terms](https://glidecomp.com/legal)
+
+## Optional
+
+- [Source code](https://github.com/pokle/glidecomp)
+- [Scoring changes](https://github.com/pokle/glidecomp/tree/master/web/engine/scoring-changes): every change to how points are calculated, and who it affects.

@@ -1,0 +1,10 @@
+{
+  "specVersion": "1.0",
+  "entries": [
+    {
+      "identifier": "urn:air:glidecomp.com:mcp:glidecomp",
+      "type": "application/mcp-server-card+json",
+      "url": "https://glidecomp.com/mcp/server-card"
+    }
+  ]
+}

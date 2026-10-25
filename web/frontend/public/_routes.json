@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Send /api/* to the proxy Functions, /comp + /comp/* to the SSR Function (functions/comp/[[path]].ts — unmatched shapes fall back to the SPA shell), and /sitemap.xml and /civl-rankings.csv to their Functions. The static content pages (/, /about, /legal, /scoring/*) are also included so functions/_middleware.ts can 301 the glidecomp.pages.dev prod alias to glidecomp.com (Pages _redirects can't match hosts); on the real domain the middleware next()s straight through to the static asset. /mcp goes to functions/mcp.ts, which forwards it to the mcp-api worker. The OAuth discovery documents MCP clients fetch from the root (/.well-known/oauth-authorization-server, oauth-protected-resource and openid-configuration) go to functions/.well-known/, which forwards them to auth-api. Everything else (JS/CSS/images/fonts, SPA shell rewrites) is a static asset. Checked in explicitly because Cloudflare's auto-generated routes manifest has stranded new prefixes (/api/user/, /api/u/) at 404 on preview deployments — see the user-files migration PR.",
+  "description": "Send /api/* to the proxy Functions, /comp + /comp/* to the SSR Function (functions/comp/[[path]].ts — unmatched shapes fall back to the SPA shell), and /sitemap.xml and /civl-rankings.csv to their Functions. The static content pages (/, /about, /legal, /scoring/*) are also included so functions/_middleware.ts can 301 the glidecomp.pages.dev prod alias to glidecomp.com (Pages _redirects can't match hosts); on the real domain the middleware next()s straight through to the static asset. /mcp and /mcp/* (the MCP server card at /mcp/server-card) go to functions/mcp/[[path]].ts, which forwards them to the mcp-api worker. The OAuth discovery documents MCP clients fetch from the root (/.well-known/oauth-authorization-server, oauth-protected-resource and openid-configuration) go to functions/.well-known/, which forwards them to auth-api. Everything else (JS/CSS/images/fonts, SPA shell rewrites) is a static asset. Checked in explicitly because Cloudflare's auto-generated routes manifest has stranded new prefixes (/api/user/, /api/u/) at 404 on preview deployments — see the user-files migration PR.",
   "include": [
     "/api/*",
     "/comp",
@@ -20,7 +20,8 @@
     "/.well-known/oauth-protected-resource/*",
     "/.well-known/openid-configuration",
     "/.well-known/openid-configuration/*",
-    "/mcp"
+    "/mcp",
+    "/mcp/*"
   ],
   "exclude": []
 }

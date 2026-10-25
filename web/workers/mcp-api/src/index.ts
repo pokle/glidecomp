@@ -11,13 +11,17 @@
  */
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { gate, type GateEnv } from "./gate";
+import { SERVER_CARD_PATH, serverCard } from "./server-card";
 import { buildServer, type ToolsEnv } from "./tools";
 
 export type Env = GateEnv & ToolsEnv;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (new URL(request.url).pathname !== "/mcp") return new Response("Not found", { status: 404 });
+    const { pathname } = new URL(request.url);
+    // Public, and before the gate: a client reads it to learn where to sign in.
+    if (pathname === SERVER_CARD_PATH) return serverCard(request, env);
+    if (pathname !== "/mcp") return new Response("Not found", { status: 404 });
 
     const admitted = await gate(request, env);
     if (admitted instanceof Response) return admitted;

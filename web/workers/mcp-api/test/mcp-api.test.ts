@@ -463,3 +463,54 @@ async function routeRevOfOriginal(): Promise<string> {
   const { routeRevision } = await import("../src/route-summary");
   return routeRevision(XCTSK);
 }
+
+describe("the server card (SEP-2127)", () => {
+  const card = (init: RequestInit = {}) => {
+    const { env } = makeEnv();
+    return worker.fetch(new Request(`${ORIGIN}/mcp/server-card`, init), env);
+  };
+
+  test("is public, says where to connect, and names no tools", async () => {
+    const res = await card();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/mcp-server-card+json");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-expose-headers")).toBe("ETag");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.$schema).toBe("https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json");
+    expect(body.name).toMatch(/^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/);
+    expect(body.description.length).toBeLessThanOrEqual(100);
+    expect(body.websiteUrl).toBe(`${ORIGIN}/assistant`);
+    expect(body.remotes).toEqual([
+      { type: "streamable-http", url: `${ORIGIN}/mcp`, supportedProtocolVersions: expect.arrayContaining(["2025-11-25"]) },
+    ]);
+    expect("tools" in body).toBe(false);
+  });
+
+  test("answers a matching If-None-Match with 304, and refuses anything but GET", async () => {
+    const etag = (await card()).headers.get("etag")!;
+    expect(etag).toMatch(/^"[0-9a-f]+"$/);
+    expect((await card({ headers: { "if-none-match": etag } })).status).toBe(304);
+    expect((await card({ method: "POST" })).status).toBe(405);
+    const preflight = await card({ method: "OPTIONS" });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-methods")).toBe("GET");
+  });
+
+  test("the site's AI Catalog lists it, at the URL production serves it from", async () => {
+    const { cardFor } = await import("../src/server-card");
+    const catalog = JSON.parse(
+      await Bun.file(new URL("../../../frontend/public/.well-known/ai-catalog.json", import.meta.url)).text()
+    ) as { specVersion: string; entries: Array<{ identifier: string; type: string; url: string }> };
+    expect(catalog.specVersion).toBe("1.0");
+    const prod = cardFor("https://glidecomp.com");
+    expect(catalog.entries).toEqual([
+      {
+        identifier: "urn:air:glidecomp.com:mcp:glidecomp",
+        type: "application/mcp-server-card+json",
+        url: `${prod.remotes[0]!.url}/server-card`,
+      },
+    ]);
+  });
+});

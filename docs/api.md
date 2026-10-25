@@ -448,6 +448,9 @@ a crawler, and they are a contract all the same.
 | `GET` | `/comp/:comp_id/scores.csv` | The scores page's downloadable twin |
 | `GET` | `/api/civl-rankings.csv` | The same ranking data, under `/api/` |
 | `POST` | `/mcp` | The MCP endpoint (Streamable HTTP) an organiser's own assistant reads GlideComp through. Needs an OAuth access token from the provider under `/api/auth/oauth2/*`, never an API key; a request without one gets `401` and a challenge pointing at the metadata below — see [mcp.md](mcp.md) |
+| `GET` | `/mcp/server-card` | The MCP Server Card (SEP-2127): the endpoint's name, description and URL, and the protocol versions it speaks, so a client can find `/mcp` from the domain alone. Public, CORS-open, cached for an hour with an `ETag` |
+| `GET` | `/.well-known/ai-catalog.json` | The site's AI Catalog: lists the server card above. A static file |
+| `GET` | `/llms.txt` | A plain-text guide to the site for language models, naming the MCP endpoint first. A static file |
 | `GET` | `/.well-known/oauth-protected-resource/mcp` | RFC 9728 metadata for the MCP endpoint: its resource identifier and authorisation server |
 | `GET` | `/.well-known/oauth-authorization-server/api/auth` | RFC 8414 metadata for that authorisation server (also at `/.well-known/oauth-authorization-server`, for clients that only look there) |
 | `GET` | `/.well-known/openid-configuration/api/auth` | The same, as OpenID discovery |
