@@ -1,0 +1,383 @@
+{
+  "$comment": "The standards GlideComp follows, and how to tell when one moves. Read by web/scripts/standards-check.ts and the monthly routine .claude/commands/standards-check.md. `follows` is what the tree implements; `statedIn` lists the few files that pin that edition and must change when it does; `searchFor` gives fixed strings that find the code following the standard today (search with them rather than keep a list of files, which would rot); `seen` is what the last run saw (written by --record). See docs/standards/review-log.md.",
+  "standards": [
+    {
+      "id": "fai-s7f",
+      "name": "FAI Sporting Code Section 7F: XC Scoring (CIVL GAP)",
+      "follows": "2026 V1.0",
+      "statedIn": [
+        "docs/reference/fai-s7f-xc-scoring-2026/INGESTION.md",
+        "docs/reference/fai-s7f-xc-scoring-2026/s7f-xc-scoring-2026.md",
+        "web/engine/src/gap-params.ts",
+        "web/frontend/src/react/comp/rules-edition.ts",
+        "web/workers/competition-api/src/scoring/class-score.ts"
+      ],
+      "searchFor": [
+        "S7F 2026 §",
+        "s7f-2026",
+        "sporting_code_s7_f_-_xc_scoring_2026"
+      ],
+      "check": {
+        "kind": "research",
+        "queries": [
+          "FAI Sporting Code Section 7F XC Scoring {next} edition",
+          "Sporting Code S7F XC Scoring {year} V1.1",
+          "FAI CIVL {year} edition of Section 7 published",
+          "CIVL plenary {year} Section 7F changes"
+        ]
+      },
+      "onChange": "Owner, always. A new edition (effective 1 May) or errata is a scoring decision: which comps it applies to and from when. It needs a transcription under docs/reference/ (follow fai-s7f-xc-scoring-2024/INGESTION.md and extract_s7f.py), a note in web/engine/scoring-changes/ measured over the archive, and the owner's go-ahead. Raise an issue with the edition's red-marked changes summarised and the engine files each touches. Edition-coupled data to regenerate with a new edition: SpecRef.astro's SPEC_DESTS (section to PDF page), the PDF links in gap-types.ts, gap-scoring.ts, /scoring/gap and /about, the rules_edition payload value and the label in rules-edition.ts, and every § citation (docs/2026-08-09-s7f-2026-migration-plan.md has the renumbering table from the last migration)."
+    },
+    {
+      "id": "fai-s7a",
+      "name": "FAI Sporting Code Section 7A: General (hang gliding and paragliding)",
+      "follows": "not pinned: /scoring/track-validity links the 2025 edition, /scoring/gap the 2022 one",
+      "statedIn": [
+        "web/frontend/static/src/pages/scoring/track-validity.astro",
+        "web/frontend/static/src/pages/scoring/gap.astro"
+      ],
+      "searchFor": [
+        "S7A §4.4",
+        "S7A §5.2.5",
+        "sporting_code_s7_a_"
+      ],
+      "check": {
+        "kind": "research",
+        "queries": [
+          "FAI Sporting Code Section 7A {next} edition",
+          "FAI Sporting Code Section 7A {year} changes track log verification"
+        ]
+      },
+      "onChange": "Owner. GlideComp relies on S7A §4.4.2 and §4.4.6 (track-log verification and the organiser override), §5.2.5.1 (FTV discard factor) and §5.2.5.4 (tied ranks). A change to those can change which tracks are scored or how comps total; raise an issue naming the clauses that moved and the code they touch. Pointing both pages' S7A links at the same, current PDF is a safe link fix when the clauses they cite didn't move."
+    },
+    {
+      "id": "igc-format",
+      "name": "IGC flight recorder file format (FAI IGC technical specification)",
+      "follows": "IGC file format as documented in 2008 (igc-parser.ts cites the xp-soaring mirror); the FAI specification it belongs to was at the 2024 edition with AL9 when the register was written",
+      "statedIn": [
+        "web/engine/src/igc-parser.ts"
+      ],
+      "searchFor": [
+        "igc_format_2008",
+        "HFDTEDATE"
+      ],
+      "check": {
+        "kind": "research",
+        "queries": [
+          "FAI IGC technical specification GNSS flight recorder {year} amendment",
+          "IGC file format specification new edition {year}"
+        ]
+      },
+      "onChange": "Owner if the record formats the parser reads change (A, H, I, B, C, E, G records, time or date fields). A new optional record type the parser can ignore is worth a log line only."
+    },
+    {
+      "id": "xctrack-task-format",
+      "name": "XCTrack task format (.xctsk v1, QR v2)",
+      "follows": "task file v1 and QR code v2",
+      "statedIn": [
+        "web/engine/src/xctsk-parser.ts"
+      ],
+      "searchFor": [
+        "Competition_Interfaces.html",
+        "XCTSK:"
+      ],
+      "check": {
+        "kind": "hash",
+        "url": "https://xctrack.org/Competition_Interfaces.html"
+      },
+      "onChange": "Read the snapshot diff. A new optional field or a clarification is safe to PR with a parser test. Anything that changes how a task's geometry, start gates or goal is read changes scores: owner, with a scoring-changes note.",
+      "seen": {
+        "value": "4244c8531f7ce4da",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "mcp-protocol",
+      "name": "Model Context Protocol",
+      "follows": "2025-11-25",
+      "statedIn": [
+        "docs/mcp.md",
+        "e2e/mcp.spec.ts",
+        "web/workers/mcp-api/test/mcp-api.test.ts"
+      ],
+      "searchFor": [
+        "SUPPORTED_PROTOCOL_VERSIONS",
+        "mcp-protocol-version"
+      ],
+      "check": {
+        "kind": "redirect",
+        "url": "https://modelcontextprotocol.io/specification/latest",
+        "pattern": "/specification/(\\d{4}-\\d{2}-\\d{2})"
+      },
+      "onChange": "Owner. The revisions the endpoint speaks come from @modelcontextprotocol/server's SUPPORTED_PROTOCOL_VERSIONS (the card advertises the same list), so adopting a new revision is an SDK upgrade plus a read of the revision's changelog (transport, auth, tool annotations). Raise an issue; coordinate with the dependency routine.",
+      "seen": {
+        "value": "2026-07-28",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "mcp-server-card",
+      "name": "MCP Server Card (SEP-2127) schema",
+      "follows": "v1 schema (SEP-2127 Final)",
+      "statedIn": [
+        "web/workers/mcp-api/src/server-card.ts",
+        "docs/mcp.md"
+      ],
+      "searchFor": [
+        "application/mcp-server-card+json",
+        "server-card.schema.json"
+      ],
+      "check": {
+        "kind": "same-as",
+        "url": "https://raw.githubusercontent.com/modelcontextprotocol/ext-server-card/main/schema.json",
+        "local": "web/workers/mcp-api/test/fixtures/server-card.schema.json"
+      },
+      "onChange": "Safe to PR if the card still validates: replace the vendored schema with upstream, run `bun test web/workers/mcp-api`, and adjust cardFor() only for a new optional field. A new required field, a removed field the card uses, or a changed $schema URL (a v2 schema) is a major change: owner.",
+      "seen": {
+        "value": "b2828f16874e89f3",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "ard-spec",
+      "name": "Agentic Resource Discovery (ARD) specification",
+      "follows": "0.91",
+      "statedIn": [
+        "docs/api.md",
+        "docs/mcp.md",
+        "web/workers/mcp-api/test/discovery.test.ts"
+      ],
+      "searchFor": [
+        "rel=\"ard\"",
+        ".well-known/ard.json"
+      ],
+      "check": {
+        "kind": "regex",
+        "url": "https://agenticresourcediscovery.org/spec/",
+        "pattern": "Version\\W+v?(\\d+(?:\\.\\d+)+)"
+      },
+      "onChange": "Safe to PR for a minor version whose changes are optional fields, recommendations or wording, provided ard.json still validates against the refreshed schema (ard-schema). A changed well-known path, link relation, required field or identifier format is a major change: owner.",
+      "seen": {
+        "value": "0.91",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "ard-schema",
+      "name": "ARD entry and manifest JSON Schema",
+      "follows": "v0.91 schema",
+      "statedIn": [
+        "web/workers/mcp-api/test/discovery.test.ts"
+      ],
+      "searchFor": [
+        "ard-entry.schema.json"
+      ],
+      "check": {
+        "kind": "same-as",
+        "url": "https://raw.githubusercontent.com/ards-project/ard-spec/main/spec/schemas/ard-entry.schema.json",
+        "local": "web/workers/mcp-api/test/fixtures/ard-entry.schema.json"
+      },
+      "onChange": "Safe to PR if ard.json still validates: replace the vendored schema and run `bun test web/workers/mcp-api`. If it no longer validates, the fix to ard.json is safe only when it is mechanical (a renamed or newly required field we can fill from what the file already says); otherwise owner.",
+      "seen": {
+        "value": "5489174e83abb921",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "ai-catalog",
+      "name": "AI Catalog specification",
+      "follows": "1.0",
+      "statedIn": [
+        "web/frontend/public/.well-known/ai-catalog.json",
+        "docs/api.md"
+      ],
+      "searchFor": [
+        "application/ai-catalog+json",
+        "ai-catalog.json"
+      ],
+      "check": {
+        "kind": "hash",
+        "url": "https://raw.githubusercontent.com/Agent-Card/ai-catalog/main/specification/ai-catalog.md"
+      },
+      "onChange": "Read the snapshot diff. Safe to PR for editorial changes and new optional members. A new specVersion, a renamed or required member, or a changed well-known path or media type: update ai-catalog.json and the discovery test if mechanical, otherwise owner.",
+      "seen": {
+        "value": "05a18c1154f62e3b",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "mcp-discovery",
+      "name": "MCP Server Card discovery (ext-server-card docs/discovery.md)",
+      "follows": "SEP-2127 Final (6 October 2026)",
+      "statedIn": [
+        "docs/mcp.md",
+        "web/workers/mcp-api/src/server-card.ts"
+      ],
+      "searchFor": [
+        "/server-card",
+        "application/mcp-server-card+json"
+      ],
+      "check": {
+        "kind": "hash",
+        "url": "https://raw.githubusercontent.com/modelcontextprotocol/ext-server-card/main/docs/discovery.md"
+      },
+      "onChange": "Read the snapshot diff. Card location, required headers (CORS, cache, ETag), media types and the catalog's path are what we implement. A mechanical change to headers or media types is safe to PR with its test; a moved card location or catalog path is the owner's call.",
+      "seen": {
+        "value": "b058f6587630cb90",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "llms-txt",
+      "name": "llms.txt format",
+      "follows": "llmstxt.org proposal (2024)",
+      "statedIn": [
+        "web/workers/mcp-api/test/discovery.test.ts"
+      ],
+      "searchFor": [
+        "llmstxt.org",
+        "llms.txt"
+      ],
+      "check": {
+        "kind": "hash",
+        "url": "https://llmstxt.org/"
+      },
+      "onChange": "Read the snapshot diff. A format rule change (sections, link lists, the Optional section) is safe to PR: reshape llms.txt and the llms.txt test together, keeping its words. New wording addressed to people is the owner's.",
+      "seen": {
+        "value": "59279b2eccb6c032",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "wcag",
+      "name": "Web Content Accessibility Guidelines",
+      "follows": "2.2",
+      "statedIn": [
+        "docs/accessibility-standard.md",
+        "CLAUDE.md"
+      ],
+      "searchFor": [
+        "WCAG 2.2"
+      ],
+      "check": {
+        "kind": "regex",
+        "url": "https://www.w3.org/TR/wcag/",
+        "pattern": "Web Content Accessibility Guidelines \\(WCAG\\) (\\d+(?:\\.\\d+)?)"
+      },
+      "onChange": "Owner. A new WCAG Recommendation is a policy decision for docs/accessibility-standard.md and CLAUDE.md, not a code change. Raise an issue summarising the new success criteria and which surfaces they'd touch.",
+      "seen": {
+        "value": "2.2",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "oauth-2-1",
+      "name": "OAuth 2.1 (IETF draft draft-ietf-oauth-v2-1)",
+      "follows": "13",
+      "statedIn": [
+        "docs/auth.md",
+        "docs/2026-10-24-mcp-oauth-plan.md"
+      ],
+      "searchFor": [
+        "OAuth 2.1",
+        "code_challenge_method"
+      ],
+      "check": {
+        "kind": "regex",
+        "url": "https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/",
+        "pattern": "draft-ietf-oauth-v2-1-(\\d+)"
+      },
+      "onChange": "Owner, but usually informational: `follows` is the draft revision the MCP authorisation spec we implement (2025-11-25) cites, and the provider itself is Better Auth's mcp() plugin. A newer draft is a log line until the MCP spec adopts it; publication as an RFC, or a newer MCP revision citing a newer draft, is an issue.",
+      "seen": {
+        "value": "16",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "rfc-9728",
+      "name": "RFC 9728 OAuth 2.0 Protected Resource Metadata",
+      "follows": "none",
+      "statedIn": [
+        "web/workers/auth-api/src/endpoints.ts"
+      ],
+      "searchFor": [
+        "RFC 9728",
+        "oauth-protected-resource"
+      ],
+      "check": {
+        "kind": "regex",
+        "url": "https://www.rfc-editor.org/rfc/rfc9728.json",
+        "pattern": "\"obsoleted_by\":\\s*\\[([^\\]]*)\\]"
+      },
+      "onChange": "`follows: none` means not obsoleted. If an RFC obsoletes it, owner: read what changed for the 401 challenge and the metadata document.",
+      "seen": {
+        "value": "none",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "rfc-8414",
+      "name": "RFC 8414 OAuth 2.0 Authorization Server Metadata",
+      "follows": "none",
+      "statedIn": [
+        "web/workers/auth-api/src/endpoints.ts"
+      ],
+      "searchFor": [
+        "RFC 8414",
+        "oauth-authorization-server"
+      ],
+      "check": {
+        "kind": "regex",
+        "url": "https://www.rfc-editor.org/rfc/rfc8414.json",
+        "pattern": "\"obsoleted_by\":\\s*\\[([^\\]]*)\\]"
+      },
+      "onChange": "`follows: none` means not obsoleted. If an RFC obsoletes it, owner.",
+      "seen": {
+        "value": "none",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "rfc-8707",
+      "name": "RFC 8707 Resource Indicators for OAuth 2.0",
+      "follows": "none",
+      "statedIn": [
+        "web/workers/auth-api/src/auth.ts"
+      ],
+      "searchFor": [
+        "RFC 8707"
+      ],
+      "check": {
+        "kind": "regex",
+        "url": "https://www.rfc-editor.org/rfc/rfc8707.json",
+        "pattern": "\"obsoleted_by\":\\s*\\[([^\\]]*)\\]"
+      },
+      "onChange": "`follows: none` means not obsoleted. If an RFC obsoletes it, owner.",
+      "seen": {
+        "value": "none",
+        "checkedAt": "2026-10-25"
+      }
+    },
+    {
+      "id": "rfc-7591",
+      "name": "RFC 7591 OAuth 2.0 Dynamic Client Registration",
+      "follows": "none",
+      "statedIn": [
+        "web/workers/auth-api/src/auth.ts"
+      ],
+      "searchFor": [
+        "RFC 7591"
+      ],
+      "check": {
+        "kind": "regex",
+        "url": "https://www.rfc-editor.org/rfc/rfc7591.json",
+        "pattern": "\"obsoleted_by\":\\s*\\[([^\\]]*)\\]"
+      },
+      "onChange": "`follows: none` means not obsoleted. If an RFC obsoletes it, owner.",
+      "seen": {
+        "value": "none",
+        "checkedAt": "2026-10-25"
+      }
+    }
+  ]
+}

@@ -678,6 +678,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Track data quality | [docs/track-quality.md](docs/track-quality.md) |
 | Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
 | CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |
+| Standards register + monthly check | [docs/standards/review-log.md](docs/standards/review-log.md), `/standards-check` |
 | RAC component kit conventions | [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md) |
 | Accessibility standard | [docs/accessibility-standard.md](docs/accessibility-standard.md) |
 | Map interaction spec | [docs/mapbox-interactions-spec.md](docs/mapbox-interactions-spec.md) |

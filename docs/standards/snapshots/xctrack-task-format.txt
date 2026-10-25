@@ -1,0 +1,192 @@
+XCTrack - Competition 
+
+ Competition 
+
+ Purpose of this page 
+ The information below is published here to document some communication interfaces of the XCTrack, which are about to be stable as much as possible and hopefully used to interchange data with other programs or flying devices. 
+ Displaying the file 
+ On tools.xcontest.org there is a small web application that lets you see
+and print the content of the XCTSK file in a human readable form. 
+ Task transfer 
+ To simplify task input into the flight instrument on the task briefing, XCTrack supports sharing the
+task using several means. You can share the task using: 
+
+ QR code 
+ General android sharing - bluetooth, email, google drive etc. 
+ Cloud sharing (see tools.xcontest.org for API description 
+
+ The MIME type for sending the data should be application/xctsk . 
+ Task definition format 
+ For transfer between devices and for storing the task XCTrack uses the following format.
+The format is UTF-8 encoded JSON object with the following properties. 
+ {
+ &quot;taskType&quot;:&quot;CLASSIC&quot;, string,required
+ &quot;version&quot;: 1, number,required
+ &quot;earthModel&quot;: string, optional - one of &quot;WGS84&quot;(default) / &quot;FAI_SPHERE&quot;
+ &quot;turnpoints&quot;:[ array of objects,required
+ {
+ &quot;type&quot;: string - one of &quot;TAKEOFF&quot; / &quot;SSS&quot; / &quot;ESS&quot;
+ &quot;radius&quot;: number,required
+ &quot;waypoint&quot;: {
+ &quot;name&quot;: string,required
+ &quot;description&quot;: string,optional
+ &quot;lat&quot;: number,required
+ &quot;lon&quot;: number,required
+ &quot;altSmoothed&quot;: number,required
+ }
+ &quot;extensions&quot;: [{..},{..}] optional extensions; if used, they MUST be in the same order as
+ the &quot;extensions&quot; field on the root object. The &quot;id&quot; field is not
+ repeated here. Use short key/value to save space in the QR code.
+ },
+ ...
+ ],
+ &quot;takeoff&quot;:{
+ &quot;timeOpen&quot;: time,optional
+ &quot;timeClose&quot;: time,optional
+ },
+ &quot;sss&quot;:{ optional (since 0.9.1)
+ &quot;type&quot;: string - one of &quot;RACE&quot; / &quot;ELAPSED-TIME&quot;, required
+ &quot;direction&quot;: string - one of &quot;ENTER&quot; / &quot;EXIT&quot;; obsolete (see bellow)
+ &quot;timeGates&quot;:[...] array of times, required
+ },
+ &quot;goal&quot;:{ optional (since 0.9.1)
+ &quot;type&quot;: string - one of &quot;CYLINDER&quot;/&quot;LINE&quot;, optional (default CYLINDER)
+ &quot;deadline&quot;: time, optional (default 23:00 local UTC equivalent)
+ &quot;finishAltitude&quot;: number, optional, meters AGL - elevated goal altitude
+ }
+ &quot;extensions&quot; : [ optional, list of manufacturer extensions
+ {&quot;id&quot;:&quot;XCT1&quot;, ...}, each extension is a JSON object with obligatory &quot;id&quot; key
+ {&quot;id&quot;:&quot;...&quot;,...} that should idenitify the extension (i.e. manufacturer + version)
+ ] The key/values should be kept short as they can be used in QR code as well
+} 
+
+ taskType - the type of task used, right now only type CLASSIC is used - for other task types different set of the following attributes can be defined 
+ version natural number corresponding to the version of the format for specific taskType - now fixed to 1 
+ earthModel - settings for distance computation for cylinder sizes; either WGS84 or a FAI sphere 
+ extensions - list of possible manufacturer extensions; each extension must have an id that identifies the manufacturer
+and version. In order to support backward compatibility and extensibility more extensions can be specified. 
+ turnpoints[i].type one of TAKEOFF / SSS / ESS - if present, sets the special meaning of this turnpoint 
+ TAKEOFF type can be used only for the first turnpoint and is not required. If present, means that the first turnpoint is not used for navigation 
+ SSS and ESS turnpoints must appear exactly once and SSS turnpoint must appear before ESS 
+ the last turnpoint is always goal. If the last turnpoint is marked ESS than it is identical to goal and shares his line/cylinder settings. Otherwise ESS is always cylinder. 
+ turnpoints[i].waypoint.name and - turnpoints[i].waypoint.description correspond to the name/description of the waypoint in the waypoints file 
+ turnpoints[i].waypoint.lat , turnpoints[i].waypoint.lon - numbers corresponding to wgs84 latitude and longitude in degrees, with positive value for east and north hemisphere 
+ turnpoints[i].waypoint.altSmoothed - altitude of the waypoint in meters AMSL 
+ turnpoints[i].radius - radius of the turnpoint in meters 
+ turnpoints[i].extensions - list of manufacturer extensions of a turnpoint. The extensions must be in the same order as the
+ extensions field and should use short keys/values in order to save space. The keys/values are the same for both the
+long JSON and short QR code versions. 
+ takeoff.timeOpen , takeoff.timeClose - takeoff window open/close times (see below how the times are stored) 
+ sss.type - RACE for the race to goal start type or time gates, ELAPSED-TIME for elapsed-time start type 
+ sss.direction - direction of crossing the start cylinder, one of ENTER or EXIT ; this has been obsolete. Devices must ignore this field when reading a task and should produce some value when exporting a task in order to stay compatibile with older devices 
+ sss.timeGates - in most cases array with just one window opening time. For time gates start, array of times for each gate, ordered chronologically 
+ sss.timeClose - start close time 
+ goal.type - line or cylinder. In the case of line, the radius of the turnpoint corresponds to the 1/2 of the total length of the goal line. Ground orientation of the line is always perpendicular to the azimuth to the center of last turnpoint 
+ goal.deadline - time corresponding to both the task deadline and goal deadline 
+ goal.finishAltitude - meters AGL (computed from the altitude of the last turnpoint). Tasks may contain requirement to enter the goal sector
+at certain atlitude, otherwise there are penalty points 
+
+ Time format 
+ Times are stored in UTC as 9 characters long JSON string of the form HH:MM:SSZ . The Z character at the end has no real meaning and its main purpose is to remind all the implementators and pilots who may read the task (e.g. if stored in the file) that the time is in UTC. 
+ Task definition format 2 - for QR codes 
+ The QR code needs efficient data representation; QR codes containing too much data are hard
+to scan on the phones in direct sunlight. Therefore we are using the following representation
+for QR codes only: 
+ {
+ &quot;taskType&quot;: &quot;CLASSIC&quot;,
+ &quot;version&quot;: 2,
+ &quot;t&quot;: [ List of turnpoints
+ {
+ &quot;z&quot;: string, required - polyline encoded coordinates with altitude and radius
+ &quot;n&quot;: string, required - name of the turnpoint
+ &quot;d&quot;: string, optional - turnpoint description
+ &quot;t&quot;: number, optional, one of 2 (SSS), 3 (ESS)
+ &quot;x&quot;: list of extensions, optional
+ },
+ ...
+ ],
+ &quot;s&quot;: { Start type, optional (since 0.9.1)
+ &quot;g&quot;: [..] array of times, required - Time gates, start open time
+ &quot;d&quot;: number, OBSOLETE, one of 1 (ENTRY), 2 (EXIT) (ignored when reading task, should be part of exported task for backwards compatibility)
+ &quot;t&quot;: number, required, one of 1 (RACE), 2 (ELAPSED-TIME)
+ },
+ &quot;g&quot;: { Goal type, optional (since 0.9.1)
+ &quot;d&quot;: time, optional - Deadline (default 23:00 local time UTC equivalent 
+ &quot;t&quot;: number, optional on of 1 (LINE), 2 (CYLINDER) (default 2)
+ &quot;fa&quot;: number, optional, finish altitude
+ }
+ &quot;e&quot;: number, optional, 0 (wgs84, default), 1(fai sphere)
+ &quot;to&quot;: time, optional - Take-off open time
+ &quot;tc&quot;: time, optional - Take-off close time
+ &quot;x&quot;:[{&quot;id&quot;:..},..] optional, list of extensions
+} 
+ The turnpoint coordinates are 4 numbers (longitude, latitude, altitude, radius)
+compressed using Google’s polyline algorithm .
+See our implementation in this snippet .
+As google polyline algorithm is lossy, this can result in a difference of
+0.8m. Given the FAI tolerance of minimum of 5m, this should be well within the
+tolerance margin. 
+ XC / Waypoints task 
+ Simple route from waypoints without cylinders. QR format is subset of competition task v2 with further simplifications: 
+ {
+ &quot;T&quot;: &quot;W&quot;, taskType: Waypoints
+ &quot;V&quot;: 2, version: 2
+ &quot;t&quot;: [ list of turnpoints
+ {
+ &quot;z&quot;: string, required - polyline encoded coordinates with altitude
+ &quot;n&quot;: string, required - name of the turnpoint
+ },
+ ...
+ ]
+} 
+ QR Code 
+ The QR code is a JSON in either of the 2 formats preceded by a string XCTSK: .
+It is recommended to use the format 2 as it requires significantly less space. 
+ The QR code can be also compressed using zlib format and converted using base64
+encoding to ascii. This must be prefixed with a string ‘XCTSKZ:’. It is recommended
+that the software accepts both XCTSK and XCTSKZ and is able to produce QR code
+in both formats. In the future we prefer to use the XCTSKZ encoding. 
+
+ XCTrack 
+
+ Overview 
+
+ Download .apk 
+
+ Manual (Tips and Tricks) 
+
+ Maps in XCTrack 
+
+ FAQ 
+
+ Android Devices 
+
+ ActiveLook glasses 
+
+ External Devices 
+
+ Privacy 
+
+ Help us 
+
+ Translate XCTrack! 
+
+ Report bugs! 
+
+ Development 
+
+ Change Log 
+
+ Credits 
+
+ Interfaces 
+
+ Validator 
+
+ Competition 
+
+ XCTrack Open Data 
+
+ JavaScript Interface 
+
+ Generated by Hakyll .
