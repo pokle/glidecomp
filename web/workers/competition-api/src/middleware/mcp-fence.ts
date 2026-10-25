@@ -27,7 +27,19 @@ interface FencedRoute {
   method: "GET" | "POST" | "PATCH";
   path: RegExp;
   scope: string;
+  /**
+   * For a write: the JSON body fields a token may send. The route itself may
+   * take more — a task PATCH also stops the task, closes it to submissions and
+   * carries the weather notes — but the organiser consented to "create tasks
+   * and change their routes", and a token is a bearer credential that can call
+   * this API directly, not only through mcp-api's tools. So the fence, not the
+   * tool, is what keeps a write inside the scope's words.
+   */
+  fields?: readonly string[];
 }
+
+/** What `task:write` may change on a task: its name, date, classes and route. */
+const TASK_FIELDS = ["name", "task_date", "pilot_classes", "xctsk"] as const;
 
 /** A path segment: an id or a slug, never a slash. */
 const SEG = "[^/]+";
@@ -55,6 +67,8 @@ export const MCP_ROUTES: readonly FencedRoute[] = [
   { method: "GET", path: new RegExp(`^/api/comp/${COMP}$`), scope: "comp:read" },
   { method: "GET", path: new RegExp(`^/api/comp/${COMP}/waypoints$`), scope: "comp:read" },
   { method: "GET", path: new RegExp(`^/api/comp/${COMP}/task/${SEG}$`), scope: "comp:read" },
+  { method: "POST", path: new RegExp(`^/api/comp/${COMP}/task$`), scope: "task:write", fields: TASK_FIELDS },
+  { method: "PATCH", path: new RegExp(`^/api/comp/${COMP}/task/${SEG}$`), scope: "task:write", fields: TASK_FIELDS },
 ];
 
 /** The route a token may use for this request, if any. */
@@ -68,6 +82,17 @@ export function grantAllows(grant: McpGrant, method: string, pathname: string): 
   const route = fencedRoute(method, pathname);
   if (!route) return "route";
   return grant.scopes.includes(route.scope) ? "ok" : "scope";
+}
+
+/**
+ * The body fields a write sends that the route's grant doesn't cover, or null
+ * when it sends none. A body that isn't a JSON object is left to the route's
+ * validator, which refuses it in its own words.
+ */
+export function fieldsOutsideGrant(route: FencedRoute, body: unknown): string[] | null {
+  if (!route.fields || body === null || typeof body !== "object" || Array.isArray(body)) return null;
+  const extra = Object.keys(body).filter((k) => !route.fields!.includes(k));
+  return extra.length > 0 ? extra : null;
 }
 
 export const mcpFence = createMiddleware<{ Bindings: Env }>(async (c, next) => {
@@ -99,9 +124,24 @@ export const mcpFence = createMiddleware<{ Bindings: Env }>(async (c, next) => {
       403
     );
   }
+  const route = fencedRoute(c.req.method, c.req.path)!;
   if (verdict === "scope") {
-    c.header("WWW-Authenticate", `Bearer error="insufficient_scope", scope="${fencedRoute(c.req.method, c.req.path)!.scope}"`);
+    c.header("WWW-Authenticate", `Bearer error="insufficient_scope", scope="${route.scope}"`);
     return c.json({ error: "The assistant was not given permission for this", code: "INSUFFICIENT_SCOPE" }, 403);
+  }
+  if (route.fields) {
+    // Hono caches the parsed body on c.req, so the route's validator reads
+    // this same parse rather than a drained stream.
+    const extra = fieldsOutsideGrant(route, await c.req.json().catch(() => null));
+    if (extra) {
+      return c.json(
+        {
+          error: `Connected assistants can't change ${extra.join(", ")}`,
+          code: "NOT_AVAILABLE_TO_ASSISTANTS",
+        },
+        403
+      );
+    }
   }
   await next();
 });

@@ -1,7 +1,8 @@
 # MCP for organisers, signed in with OAuth — 2026-10-24
 
-*Plan. Phases 1 ([#773](https://github.com/pokle/glidecomp/pull/773)) and 2 are built;
-phase 3 is not. How to connect: [mcp.md](mcp.md).*
+*Plan. Phases 1 ([#773](https://github.com/pokle/glidecomp/pull/773)), 2
+([#774](https://github.com/pokle/glidecomp/pull/774)) and 3 are built. How to
+connect: [mcp.md](mcp.md).*
 
 An organiser should be able to connect the assistant they already use (Claude,
 ChatGPT, Claude Code) to GlideComp, sign in once in a browser, and then ask it
@@ -406,6 +407,51 @@ scope check for task POST/PATCH, and the audit "via" suffix.
   task's scores were marked stale. That comes from the existing PATCH, but
   the test proves it.
 - Then the security review (§7).
+- *As built:*
+  - **The fence also limits a write's body.** The task PATCH takes more than a
+    name, date, classes and route: it also stops a task
+    (`stop_announcement_time`, a scoring input), closes it to submissions and
+    carries the weather notes. The consent page promises only "create tasks and
+    change their routes", and a token is a bearer credential that can call
+    `/api` directly, not only through mcp-api's tools. So `MCP_ROUTES` names the
+    body fields each write may send, and anything else is a `403`, even riding
+    along with an allowed field.
+  - **The suffix lives on the user.** competition-api's `resolveIdentity` sets
+    `user.via` to the client's name (tidied: control characters collapsed, 40
+    characters at most, because DCR names are self-declared) when the request
+    carries an OAuth grant, and `audit()` / `auditAll()` add " (via …)". No call
+    site changed. The actor stays the organiser.
+  - **The route tools are the editor, step for step** (`mcp-api/src/route-plan.ts`):
+    `quickTaskApply`, then `reconcileRoute` over the stored route, then
+    `assembleRouteTask` and `xctskForPatch`. A name is exact when it spells a
+    waypoint code, or a turnpoint the route already has. Codes are unique within
+    a comp (`cleanWaypointCodes`), so an exact code names one waypoint.
+  - **What `route_rev` doesn't cover.** It is checked against a read made inside
+    the same tool call, then the PATCH follows; an edit landing in that gap of a
+    few milliseconds would be overwritten. A conditional PATCH in competition-api
+    would close it, and isn't worth its code until two editors race in practice.
+  - **The §7 review.** PKCE S256, refusal of a plain challenge, exact
+    `redirect_uri` matching (an unregistered URI is never redirected to; a code
+    is refused with any other URI) and token confusion are now all covered in
+    auth-api's `mcp-oauth.test.ts`. The consent page cannot be framed
+    (`frame-ancestors 'none'`), shows the redirect host beside the
+    self-declared name and never fetches a client icon, and the sign-in resume
+    only builds a same-origin path. A hidden comp is invisible to another
+    organiser's token (`mcp-fence.test.ts`). Prompt injection is answered by
+    the exact-name rule, `route_rev`, the field fence, `destructiveHint` on the
+    tools that change things, and the public "(via …)" line.
+
+**Production note (25 October 2026).** #198 deleted the old server-side MCP
+worker from the repo in June but never from Cloudflare. That worker was also
+named `mcp-api` and owned the Worker routes `glidecomp.com/mcp` and
+`glidecomp.com/mcp/*`, so it went on answering `/mcp`, ahead of Pages, with its
+API-key tools — including to anonymous callers, who could read only what was
+already public. #774's first master deploy replaced its code under the same
+name. If those routes are still attached to `mcp-api` in the dashboard, they
+now send `/mcp` straight to the new worker rather than through
+`functions/mcp.ts`; either path runs the same gate. Deleting the two routes
+leaves one path. Removing a worker from the repo means deleting it from
+Cloudflare too.
 
 **Phase 4 and beyond (not planned in detail):**
 
@@ -430,9 +476,9 @@ These numbers decide whether phase 4 is worth building.
 
 ## Open questions
 
-1. **The "via \<client\>" suffix in the public audit log.** Recommended: yes.
-   The log is the transparency record, and how a change was made is part of
-   it. It also discloses which assistant an organiser uses. Your call.
+1. **The "via \<client\>" suffix in the public audit log.** *Decided: yes*,
+   built in phase 3. The log is the transparency record, and how a change was
+   made is part of it. It also discloses which assistant an organiser uses.
 2. **Scope granularity.** Is `task:write` (every comp you administer) enough?
    Or should consent also pick competitions? Per-comp grants are safer but
    need a custom consent step that the plugin does not provide.

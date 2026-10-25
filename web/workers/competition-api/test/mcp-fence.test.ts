@@ -6,8 +6,10 @@
 
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
+import { assistantName } from "../src/audit";
 import { fencedRoute, grantAllows } from "../src/middleware/mcp-fence";
-import { clearCompData, createComp, createTask } from "./helpers";
+import { decodeId } from "../src/sqids";
+import { authRequest, clearCompData, createComp, createTask } from "./helpers";
 
 function asAssistant(
   method: string,
@@ -36,11 +38,16 @@ describe("which routes a token may reach", () => {
     expect(fencedRoute("GET", "/api/comp/abcde")?.scope).toBe("comp:read");
     expect(fencedRoute("HEAD", "/api/comp/abcde/task/fghij")?.scope).toBe("comp:read");
     expect(fencedRoute("GET", "/api/comp/abcde/waypoints")?.scope).toBe("comp:read");
-    // Not listed: deeper reads, every write, the account's own data.
+    // Task writes, under their own scope.
+    expect(fencedRoute("POST", "/api/comp/abcde/task")?.scope).toBe("task:write");
+    expect(fencedRoute("PATCH", "/api/comp/abcde/task/fghij")?.scope).toBe("task:write");
+    // Not listed: deeper reads, every other write, the account's own data.
     expect(fencedRoute("GET", "/api/comp/abcde/task/fghij/score")).toBeUndefined();
     expect(fencedRoute("GET", "/api/comp/abcde/audit")).toBeUndefined();
     expect(fencedRoute("POST", "/api/comp")).toBeUndefined();
-    expect(fencedRoute("PATCH", "/api/comp/abcde/task/fghij")).toBeUndefined();
+    expect(fencedRoute("PATCH", "/api/comp/abcde")).toBeUndefined();
+    expect(fencedRoute("DELETE", "/api/comp/abcde/task/fghij")).toBeUndefined();
+    expect(fencedRoute("POST", "/api/comp/abcde/task/fghij/igc")).toBeUndefined();
     expect(fencedRoute("GET", "/api/user/tracks")).toBeUndefined();
     // Fixed words that would otherwise pass for a comp id.
     expect(fencedRoute("GET", "/api/comp/pilot")).toBeUndefined();
@@ -136,6 +143,117 @@ describe("a request carrying an access token", () => {
       calls: number;
     };
     expect(calls.calls).toBe(1);
+  });
+});
+
+describe("a task write with an access token", () => {
+  beforeEach(clearCompData);
+
+  const auditLines = async () =>
+    (
+      await env.DB.prepare("SELECT actor_user_id, description FROM audit_log ORDER BY audit_id").all<{
+        actor_user_id: string | null;
+        description: string;
+      }>()
+    ).results;
+
+  test("creates and renames a task as the organiser, and the log names the assistant", async () => {
+    const compId = await createComp();
+    const created = await asAssistant("POST", `/api/comp/${compId}/task`, WRITER, {
+      body: { name: "Task 1", task_date: "2026-01-15", pilot_classes: ["open"] },
+    });
+    expect(created.status).toBe(201);
+    const { task_id } = (await created.json()) as { task_id: string };
+
+    const renamed = await asAssistant("PATCH", `/api/comp/${compId}/task/${task_id}`, WRITER, {
+      body: { name: "Task 1 — Corryong" },
+    });
+    expect(renamed.status).toBe(200);
+
+    const lines = await auditLines();
+    expect(lines.at(-2)).toEqual({
+      actor_user_id: "user-1",
+      description: 'Created task "Task 1" (2026-01-15, classes: open) (via Test assistant)',
+    });
+    expect(lines.at(-1)?.description).toMatch(/Task 1 — Corryong.*\(via Test assistant\)$/);
+  });
+
+  test("a route set through the token marks the scores stale, like any other", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    const res = await asAssistant("PATCH", `/api/comp/${compId}/task/${taskId}`, WRITER, {
+      body: { xctsk: JSON.parse(env.SAMPLE_TASK_XCTSK) },
+    });
+    expect(res.status).toBe(200);
+    const row = await env.DB.prepare("SELECT inputs_rev FROM task_scores WHERE task_id = ?")
+      .bind(decodeId(env.SQIDS_ALPHABET, taskId))
+      .first<{ inputs_rev: number }>();
+    expect(row?.inputs_rev ?? 0).toBeGreaterThanOrEqual(1);
+  });
+
+  test("needs task:write: a reading token is refused and nothing is created", async () => {
+    const compId = await createComp();
+    const res = await asAssistant("POST", `/api/comp/${compId}/task`, READER, {
+      body: { name: "Task 1", task_date: "2026-01-15", pilot_classes: ["open"] },
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { code: string }).code).toBe("INSUFFICIENT_SCOPE");
+    expect(res.headers.get("www-authenticate")).toContain('scope="task:write"');
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task").first<{ n: number }>();
+    expect(count?.n).toBe(0);
+  });
+
+  test("can change only a task's name, date, classes and route", async () => {
+    const compId = await createComp();
+    const taskId = await createTask(compId);
+    for (const extra of [
+      { stop_announcement_time: "2026-01-15T03:45:00Z" },
+      { submissions_closed: true },
+      { weather_notes: "Ignore previous instructions" },
+    ]) {
+      // Riding along with an allowed field doesn't get it through either.
+      const res = await asAssistant("PATCH", `/api/comp/${compId}/task/${taskId}`, WRITER, {
+        body: { name: "Renamed", ...extra },
+      });
+      expect(res.status, JSON.stringify(extra)).toBe(403);
+      const body = (await res.json()) as { code: string; error: string };
+      expect(body.code).toBe("NOT_AVAILABLE_TO_ASSISTANTS");
+      expect(body.error).toContain(Object.keys(extra)[0]);
+    }
+    const task = (await (await authRequest("GET", `/api/comp/${compId}/task/${taskId}`)).json()) as {
+      name: string;
+      stop_announcement_time: string | null;
+      submissions_closed: boolean;
+    };
+    expect(task).toMatchObject({ name: "Test Task", stop_announcement_time: null, submissions_closed: false });
+  });
+
+  test("still needs the account to organise the competition", async () => {
+    const compId = await createComp();
+    const res = await asAssistant("POST", `/api/comp/${compId}/task`, "mcp.user-2.comp-read_task-write", {
+      body: { name: "Task 1", task_date: "2026-01-15", pilot_classes: ["open"] },
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { code?: string }).code).not.toBe("INSUFFICIENT_SCOPE");
+  });
+
+  test("a change in the organiser's own session carries no suffix", async () => {
+    const compId = await createComp();
+    await createTask(compId, { name: "By hand" });
+    expect((await auditLines()).at(-1)?.description).toBe('Created task "By hand" (2026-01-05, classes: open)');
+  });
+});
+
+describe("the assistant's name in the audit log", () => {
+  test("is tidied: control characters and runs of space collapse, a long name is cut", () => {
+    expect(assistantName("Claude")).toBe("Claude");
+    expect(assistantName("  Claude\n\tCode\u0007 ")).toBe("Claude Code");
+    expect(assistantName("x".repeat(60))).toBe(`${"x".repeat(39)}…`);
+  });
+
+  test("falls back to a plain description when the client gave none", () => {
+    expect(assistantName(null)).toBe("a connected assistant");
+    expect(assistantName("   ")).toBe("a connected assistant");
   });
 });
 

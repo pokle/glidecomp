@@ -3,8 +3,9 @@
 GlideComp has an [MCP](https://modelcontextprotocol.io) endpoint at
 **`https://glidecomp.com/mcp`**. Connect the assistant you already use —
 Claude, ChatGPT, Claude Code — and it can find competitions, read tasks and
-their routes, and look up waypoints, as you. GlideComp runs no model of its
-own: the assistant and its costs are yours.
+their routes, look up waypoints, and create tasks and set their routes, as
+you. GlideComp runs no model of its own: the assistant and its costs are
+yours.
 
 You sign in once, in a browser, and choose what the assistant may do. Nobody
 copies an API key into a config file, and you can disconnect it at any time.
@@ -42,10 +43,10 @@ competitions you organise — and nothing more.
 
 | Permission | On the consent page | Allows |
 |---|---|---|
-| `comp:read` | See competitions and tasks, including hidden ones you organise | The tools below |
-| `task:write` | Create tasks and change their routes in competitions you organise | Nothing yet: the task and route tools arrive in the next release |
+| `comp:read` | See competitions and tasks, including hidden ones you organise | The reading tools below |
+| `task:write` | Create tasks and change their routes in competitions you organise | The task and route tools below — a task's name, date, classes and route, and nothing else about it |
 
-### Tools
+### Reading
 
 | Tool | What it answers |
 |---|---|
@@ -59,9 +60,51 @@ competitions you organise — and nothing more.
 Every answer carries the GlideComp page's URL, so the assistant can link you
 to it rather than retell it.
 
-Some things are deliberately out of reach for now: deleting anything,
-competition settings, the roster, tracks, penalties and scores. Each will need
-its own permission, which you'll be asked for.
+### Tasks and routes
+
+Only with `task:write`, and only in competitions you organise.
+
+| Tool | What it does |
+|---|---|
+| `create_task` | Adds a task: name, date, and classes (every class, unless you say). No route yet |
+| `update_task` | Changes a task's name, date or classes. Never the route |
+| `preview_route` | Reads a route line and says what it would make. **Saves nothing** |
+| `set_task_route` | Saves a route line — only one in which every name is exact, and only if the route hasn't changed since the assistant read it |
+
+A route is written as one line, the same line the route editor's **Quick
+entry** reads: `ELLIOT 400m to, ELLIOT 5k sss exit 13:30, TOWONG 400m, CORRY
+400m goal`. Waypoint codes in flying order, a radius after a code, the role
+words `to`, `sss`, `ess` and `goal`, and the start's direction and gates
+(in the competition's time zone) after `sss`. The assistant and the editor read
+a line with the same code, so they can't read it two ways.
+
+**A guess is never saved.** Quick entry forgives typing — `ell` finds ELLIOT,
+and the editor shows its guess for you to correct with one tap. An assistant
+has no tap. So `preview_route` shows how each name was read, marks the ones
+that aren't exactly a waypoint code, and lists the other waypoints each could
+mean; `set_task_route` refuses a line until every name is exact. If two
+waypoints could be the one meant, the assistant has to ask you.
+
+**A route you changed isn't overwritten.** The assistant reads the route
+before it changes it, and the save carries that reading (`route_rev`). If the
+route changed in between — you edited it on the website, say — nothing is
+saved, and the assistant is told what the route is now.
+
+**The audit log says how a change was made.** Changes are recorded under your
+name, like any other, with the assistant's name on the end: `Created task
+"Task 3" (2026-01-05, classes: open) (via Claude)`. For a public competition,
+anyone can read that log.
+
+The name is the one the assistant gave itself when it connected, and it's
+shown on the consent page beside the address it sends you back to. An
+assistant can call itself anything, so check that address before you allow
+it.
+
+### Out of reach
+
+Deleting anything, competition settings, the roster, tracks, penalties,
+stopping a task, closing it to submissions, and scores. Each will need its own
+permission, which you'll be asked for.
 
 ## Disconnect
 
@@ -100,7 +143,10 @@ Where the code lives:
   and `/api/auth/me`, which answers for an access token only while the
   organiser's consent stands.
 - `web/workers/competition-api/src/middleware/mcp-fence.ts` — the short list of
-  routes an access token may reach, and the permission each needs. A route an
-  assistant may reach is added there on purpose.
+  routes an access token may reach, the permission each needs, and for a write
+  the fields it may send. A route an assistant may reach is added there on
+  purpose. `audit.ts` adds the "(via …)" ending.
+- `web/workers/mcp-api/src/route-plan.ts` — a route line read the way the route
+  editor reads it, plus the exact-name rule.
 - `e2e/mcp.spec.ts` — the whole flow: discovery, registration, consent,
-  tools, Disconnect.
+  reading, a task and its route, Disconnect.

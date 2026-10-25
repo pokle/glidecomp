@@ -2,7 +2,8 @@
  * An organiser's own assistant, end to end (docs/2026-10-24-mcp-oauth-plan.md,
  * docs/mcp.md): an MCP client registers itself, the organiser consents in the
  * browser, the client trades the code for a token and reads GlideComp through
- * /mcp — then Disconnect in Settings stops it on its next request.
+ * /mcp, creates a task and sets its route — then Disconnect in Settings stops
+ * it on its next request.
  *
  * The client here is Playwright's request API speaking OAuth and JSON-RPC by
  * hand, which is what keeps the spec honest about the wire: discovery from the
@@ -28,7 +29,7 @@ test.afterEach(async ({ page }) => {
   compId = null;
 });
 
-test("an organiser connects an assistant, it reads their hidden comp, and Disconnect stops it", async ({
+test("an organiser connects an assistant, it reads their comp and sets a route, and Disconnect stops it", async ({
   page,
   playwright,
   baseURL,
@@ -153,6 +154,59 @@ test("an organiser connects an assistant, it reads their hidden comp, and Discon
   const got = await rpc("tools/call", { name: "get_competition", arguments: { comp_id: compId } });
   expect(got.body.result.structuredContent).toMatchObject({ name: COMP_NAME });
   expect(got.body.result.structuredContent.url).toContain(`/comp/`);
+
+  // Writing (task:write): the comp needs waypoints for a route to name.
+  const wps = await page.request.put(`/api/comp/${compId}/waypoints`, {
+    data: {
+      waypoints: [
+        { code: "ELLIOT", name: "Mt Elliot", latitude: -36.1856, longitude: 147.9745, altitude: 1290, radius: 0 },
+        { code: "TOWONG", name: "Towong", latitude: -36.1236, longitude: 147.9893, altitude: 290, radius: 0 },
+        { code: "CORRY", name: "Corryong goal", latitude: -36.1958, longitude: 147.8975, radius: 0 },
+      ],
+    },
+  });
+  expect(wps.ok(), await wps.text()).toBe(true);
+
+  const call = async (name: string, args: Record<string, unknown>) =>
+    (await rpc("tools/call", { name, arguments: args })).body.result as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+      structuredContent: Record<string, any>;
+    };
+
+  const task = await call("create_task", { comp_id: compId, name: "Task 1", task_date: "2026-01-05" });
+  expect(task.isError, task.content[0]?.text).toBeFalsy();
+  const taskId = task.structuredContent.task_id as string;
+
+  // A loose line is read, and shown — but it can't be saved.
+  const loose = await call("preview_route", { comp_id: compId, task_id: taskId, line: "ell to, ELLIOT 5k sss, towong, corry goal" });
+  expect(loose.structuredContent.ready).toBe(false);
+  expect(loose.structuredContent.turnpoints[0]).toMatchObject({ typed: "ell", read_as: "ELLIOT", exact: false });
+  const refused = await call("set_task_route", { comp_id: compId, task_id: taskId, line: "ell to, ELLIOT 5k sss, towong, corry goal", route_rev: null });
+  expect(refused.isError).toBe(true);
+
+  // The tidied line, every name exact, is.
+  const exact = await call("preview_route", {
+    comp_id: compId,
+    task_id: taskId,
+    line: "ELLIOT 400m to, ELLIOT 5k sss exit 02:30, TOWONG 400m, CORRY 400m goal",
+  });
+  expect(exact.structuredContent.ready, exact.content[0]?.text).toBe(true);
+  const saved = await call("set_task_route", { comp_id: compId, task_id: taskId, line: exact.structuredContent.line, route_rev: null });
+  expect(saved.isError, saved.content[0]?.text).toBeFalsy();
+  expect(saved.structuredContent.route.turnpoints.map((t: { name: string }) => t.name)).toEqual(["ELLIOT", "ELLIOT", "TOWONG", "CORRY"]);
+
+  // The organiser sees it on the task page, and the log says how it was made.
+  await page.goto(saved.structuredContent.url);
+  await expect(page.getByText("TOWONG").first()).toBeVisible();
+  const audit = (await (await page.request.get(`/api/comp/${compId}/audit?subject_type=task`)).json()) as {
+    entries: Array<{ actor_name: string; description: string }>;
+  };
+  expect(audit.entries.length).toBeGreaterThanOrEqual(2);
+  for (const e of audit.entries) {
+    expect(e.actor_name).toBe(E2E_ORGANISER.name);
+    expect(e.description).toMatch(new RegExp(`\\(via ${CLIENT_NAME}\\)$`));
+  }
 
   // Disconnect, the way the organiser would: Settings → Connected assistants.
   await page.goto("/settings");

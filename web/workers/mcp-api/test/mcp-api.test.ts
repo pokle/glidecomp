@@ -39,6 +39,8 @@ function meAnswer(bearer: string): Response {
         user: USER,
         grant: { kind: "oauth", client_id: "c1", client_name: "Claude", scopes: ["openid", "comp:read", "task:write"] },
       });
+    case "tok-read":
+      return Response.json({ user: USER, grant: { kind: "oauth", client_id: "c1", client_name: "Claude", scopes: ["openid", "comp:read"] } });
     case "tok-noscope":
       return Response.json({ user: USER, grant: { kind: "oauth", client_id: "c1", client_name: "Claude", scopes: ["openid"] } });
     case "tok-limited":
@@ -69,12 +71,22 @@ const XCTSK = {
 };
 
 interface Call {
+  method: string;
   path: string;
   authorization: string | null;
+  body?: any;
 }
 
-function makeEnv(): { env: Env; compCalls: Call[] } {
+const WAYPOINTS = [
+  { code: "ELLIOT", name: "Mt Elliot", latitude: -36.1856, longitude: 147.9745, altitude: 1290 },
+  { code: "TOWONG", name: "Towong", latitude: -36.1236, longitude: 147.9893, altitude: 0 },
+  { code: "CORRY", name: "Corryong goal", latitude: -36.1958, longitude: 147.8975 },
+];
+
+function makeEnv(opts: { waypoints?: object[] } = {}): { env: Env; compCalls: Call[]; writes: () => Call[] } {
   const compCalls: Call[] = [];
+  // The task as competition-api holds it; a PATCH changes it, as the real one would.
+  let task: Record<string, any> = { task_id: "fghij", comp_id: "abcde", name: "Task 1", task_date: "2026-01-05", pilot_classes: ["open"], xctsk: XCTSK };
   const AUTH_API = {
     fetch: async (input: Request | string) => {
       const req = input instanceof Request ? input : new Request(input);
@@ -97,7 +109,20 @@ function makeEnv(): { env: Env; compCalls: Call[] } {
     fetch: async (input: Request | string) => {
       const req = input instanceof Request ? input : new Request(input);
       const url = new URL(req.url);
-      compCalls.push({ path: url.pathname + url.search, authorization: req.headers.get("authorization") });
+      const body = req.method === "GET" ? undefined : ((await req.json()) as Record<string, any>);
+      compCalls.push({
+        method: req.method,
+        path: url.pathname + url.search,
+        authorization: req.headers.get("authorization"),
+        ...(body !== undefined ? { body } : {}),
+      });
+      if (req.method === "POST" && url.pathname === "/api/comp/abcde/task") {
+        return Response.json({ task_id: "newid", comp_id: "abcde", ...body, xctsk: null }, { status: 201 });
+      }
+      if (req.method === "PATCH" && url.pathname === "/api/comp/abcde/task/fghij") {
+        task = { ...task, ...body };
+        return Response.json(task);
+      }
       switch (url.pathname) {
         case "/api/comp":
           return Response.json({
@@ -117,25 +142,21 @@ function makeEnv(): { env: Env; compCalls: Call[] } {
             comp_id: "abcde",
             name: "Corryong Cup",
             timezone: "Australia/Melbourne",
+            scoring_format: "gap",
+            pilot_classes: ["open", "sport"],
             tasks: [{ task_id: "fghij", name: "Task 1", task_date: "2026-01-05", has_xctsk: true }],
           });
         case "/api/comp/abcde/task/fghij":
-          return Response.json({ task_id: "fghij", comp_id: "abcde", name: "Task 1", task_date: "2026-01-05", xctsk: XCTSK });
+          return Response.json(task);
         case "/api/comp/abcde/waypoints":
-          return Response.json({
-            waypoints: [
-              { code: "ELLIOT", name: "Mt Elliot", latitude: -36.1856, longitude: 147.9745, altitude: 1290 },
-              { code: "TOWONG", name: "Towong", latitude: -36.1236, longitude: 147.9893, altitude: 0 },
-              { code: "CORRY", name: "Corryong goal", latitude: -36.1958, longitude: 147.8975 },
-            ],
-          });
+          return Response.json({ waypoints: opts.waypoints ?? WAYPOINTS });
         default:
           return Response.json({ error: "Competition not found" }, { status: 404 });
       }
     },
   } as unknown as Fetcher;
 
-  return { env: { AUTH_API, COMPETITION_API }, compCalls };
+  return { env: { AUTH_API, COMPETITION_API }, compCalls, writes: () => compCalls.filter((c) => c.method !== "GET") };
 }
 
 function post(body: unknown, token?: string): Request {
@@ -161,8 +182,8 @@ async function rpc(env: Env, method: string, params: unknown, bearer = token("to
   return { status: res.status, json };
 }
 
-async function callTool(env: Env, name: string, args: Record<string, unknown> = {}) {
-  const { json } = await rpc(env, "tools/call", { name, arguments: args });
+async function callTool(env: Env, name: string, args: Record<string, unknown> = {}, bearer = token("tok-ok")) {
+  const { json } = await rpc(env, "tools/call", { name, arguments: args }, bearer);
   if (!json.result) throw new Error(`tools/call ${name}: ${JSON.stringify(json)}`);
   return json.result as { content: Array<{ text: string }>; structuredContent?: Record<string, any>; isError?: boolean };
 }
@@ -217,7 +238,7 @@ describe("the gate", () => {
 });
 
 describe("the protocol", () => {
-  test("initialize answers on the 2025 protocol, and lists the read tools", async () => {
+  test("initialize answers on the 2025 protocol; a reading grant lists only the read tools", async () => {
     const { env } = makeEnv();
     const init = await rpc(env, "initialize", {
       protocolVersion: "2025-11-25",
@@ -226,12 +247,25 @@ describe("the protocol", () => {
     });
     expect(init.status).toBe(200);
     expect(init.json.result.serverInfo.name).toBe("glidecomp");
-    const { json } = await rpc(env, "tools/list", {});
+    const { json } = await rpc(env, "tools/list", {}, token("tok-read"));
     const tools = json.result.tools as Array<{ name: string; annotations?: { readOnlyHint?: boolean } }>;
     expect(tools.map((t) => t.name).sort()).toEqual(
       ["get_competition", "get_task", "list_competitions", "list_waypoints", "search", "whoami"].sort()
     );
     expect(tools.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
+  });
+
+  test("a grant with task:write adds the write tools, and says which ones change things", async () => {
+    const { env } = makeEnv();
+    const { json } = await rpc(env, "tools/list", {});
+    const tools = Object.fromEntries(
+      (json.result.tools as Array<{ name: string; annotations?: Record<string, boolean> }>).map((t) => [t.name, t.annotations])
+    );
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["create_task", "update_task", "preview_route", "set_task_route"]));
+    expect(tools.preview_route).toMatchObject({ readOnlyHint: true });
+    expect(tools.create_task).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    expect(tools.update_task).toMatchObject({ destructiveHint: true, idempotentHint: true });
+    expect(tools.set_task_route).toMatchObject({ destructiveHint: true, idempotentHint: true });
   });
 });
 
@@ -305,3 +339,127 @@ describe("the tools", () => {
     expect(r.content[0]!.text).toContain("Not found");
   });
 });
+
+describe("the write tools", () => {
+  const EXACT = "ELLIOT 400m to, ELLIOT 5k sss exit 13:30, TOWONG 400m, CORRY 400m goal";
+  const revOf = async (env: Env) =>
+    (await callTool(env, "get_task", { comp_id: "abcde", task_id: "fghij" })).structuredContent!.route.route_rev as string;
+
+  test("create_task adds a task with every class by default, and no route", async () => {
+    const { env, writes } = makeEnv();
+    const r = await callTool(env, "create_task", { comp_id: "abcde", name: "Task 2", task_date: "2026-01-06" });
+    expect(writes()).toEqual([
+      expect.objectContaining({
+        method: "POST",
+        path: "/api/comp/abcde/task",
+        body: { name: "Task 2", task_date: "2026-01-06", pilot_classes: ["open", "sport"] },
+      }),
+    ]);
+    expect(r.structuredContent).toMatchObject({ task_id: "newid", route: null, url: `${ORIGIN}/comp/corryong-cup-abcde/task/task-2-newid` });
+  });
+
+  test("update_task sends only what it was given, and never a route", async () => {
+    const { env, writes } = makeEnv();
+    const nothing = await callTool(env, "update_task", { comp_id: "abcde", task_id: "fghij" });
+    expect(nothing.isError).toBe(true);
+    await callTool(env, "update_task", { comp_id: "abcde", task_id: "fghij", name: "Task 1 (re-run)" });
+    expect(writes().map((w) => w.body)).toEqual([{ name: "Task 1 (re-run)" }]);
+  });
+
+  test("preview_route writes nothing, and shows the guesses behind a name that isn't exact", async () => {
+    const { env, writes } = makeEnv();
+    const r = await callTool(env, "preview_route", { comp_id: "abcde", task_id: "fghij", line: "ELL to, ELLIOT 5k sss, towo, CORRY goal" });
+    expect(writes()).toEqual([]);
+    const p = r.structuredContent!;
+    expect(p.ready).toBe(false);
+    expect(p.turnpoints.map((t: { typed: string; read_as: string; exact: boolean }) => [t.typed, t.read_as, t.exact])).toEqual([
+      ["ELL", "ELLIOT", false],
+      ["ELLIOT", "ELLIOT", true],
+      ["towo", "TOWONG", false],
+      ["CORRY", "CORRY", true],
+    ]);
+    expect(r.content[0]!.text).toContain('"ELL" isn\'t exactly a waypoint code');
+    expect("xctsk" in p).toBe(false);
+  });
+
+  test("preview_route on an exact line is ready, and says what it removes", async () => {
+    const { env } = makeEnv();
+    const r = await callTool(env, "preview_route", { comp_id: "abcde", task_id: "fghij", line: EXACT });
+    const p = r.structuredContent!;
+    expect(p.ready).toBe(true);
+    expect(p.removes).toEqual(["GRGGRG"]);
+    expect(p.line).toContain("13:30");
+    expect(p.distance_km).toBeGreaterThan(0);
+    expect(p.current_route_rev).toBe(await revOf(env));
+  });
+
+  test("a name matching nothing is reported, not dropped", async () => {
+    const { env } = makeEnv();
+    const p = (await callTool(env, "preview_route", { comp_id: "abcde", task_id: "fghij", line: "ELLIOT, QQQQQ, CORRY" })).structuredContent!;
+    expect(p.unmatched).toEqual(["QQQQQ"]);
+    expect(p.ready).toBe(false);
+  });
+
+  test("a name the route already has is kept as that turnpoint, whatever the waypoint file holds", async () => {
+    const { env } = makeEnv({
+      waypoints: [...WAYPOINTS, { code: "CORRY", name: "Corryong showground", latitude: -36.2, longitude: 147.9 }],
+    });
+    const p = (await callTool(env, "preview_route", { comp_id: "abcde", task_id: "fghij", line: EXACT })).structuredContent!;
+    expect(p.turnpoints.find((t: { typed: string }) => t.typed === "CORRY")).toMatchObject({ exact: true });
+    expect(p.ready).toBe(true);
+  });
+
+  test("set_task_route saves an exact line over the stored route, the way the editor would", async () => {
+    const { env, writes } = makeEnv();
+    const r = await callTool(env, "set_task_route", { comp_id: "abcde", task_id: "fghij", line: EXACT, route_rev: await revOf(env) });
+    expect(r.isError).toBeUndefined();
+    const [patch] = writes();
+    expect(Object.keys(patch!.body)).toEqual(["xctsk"]);
+    const xctsk = patch!.body.xctsk;
+    expect(xctsk.turnpoints.map((t: { waypoint: { name: string } }) => t.waypoint.name)).toEqual(["ELLIOT", "ELLIOT", "TOWONG", "CORRY"]);
+    // Reconciled, not rebuilt: the stored turnpoints keep what the line can't say.
+    expect(xctsk.turnpoints[0].waypoint.altSmoothed).toBe(1290);
+    expect(xctsk.turnpoints[2].waypoint.altSmoothed).toBe(0);
+    // 13:30 in a January Corryong is 02:30 UTC; the goal deadline survives.
+    expect(xctsk.sss).toMatchObject({ type: "RACE", direction: "EXIT", timeGates: ["02:30:00Z"] });
+    expect(xctsk.goal).toMatchObject({ deadline: "07:00:00Z" });
+    expect(r.structuredContent!.route.quick_task).toContain("13:30");
+    expect(r.structuredContent!.route.route_rev).not.toBe(await routeRevOfOriginal());
+  });
+
+  test("set_task_route refuses a stale route_rev, and saves nothing", async () => {
+    const { env, writes } = makeEnv();
+    for (const route_rev of ["0123456789abcdef", null]) {
+      const r = await callTool(env, "set_task_route", { comp_id: "abcde", task_id: "fghij", line: EXACT, route_rev });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain("changed since you read it");
+      expect(r.structuredContent!.current_route_rev).toBe(await revOf(env));
+    }
+    expect(writes()).toEqual([]);
+  });
+
+  test("set_task_route refuses a fuzzy name even with the right route_rev", async () => {
+    const { env, writes } = makeEnv();
+    const r = await callTool(env, "set_task_route", {
+      comp_id: "abcde",
+      task_id: "fghij",
+      line: "ELLIOT 400m to, ELLIOT 5k sss, towo, CORRY goal",
+      route_rev: await revOf(env),
+    });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("Nothing was saved");
+    expect(writes()).toEqual([]);
+  });
+
+  test("the write tools aren't there for a grant without task:write", async () => {
+    const { env, writes } = makeEnv();
+    const { json } = await rpc(env, "tools/call", { name: "create_task", arguments: { comp_id: "abcde", name: "x", task_date: "2026-01-06" } }, token("tok-read"));
+    expect(json.result?.isError ?? !!json.error).toBe(true);
+    expect(writes()).toEqual([]);
+  });
+});
+
+async function routeRevOfOriginal(): Promise<string> {
+  const { routeRevision } = await import("../src/route-summary");
+  return routeRevision(XCTSK);
+}
