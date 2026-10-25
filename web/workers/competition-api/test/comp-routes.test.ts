@@ -71,6 +71,33 @@ describe("POST /api/comp", () => {
     expect(row!.name).toBe("Bells 2026");
   });
 
+  test("a new comp starts hidden unless the caller asks for public", async () => {
+    const res = await authRequest("POST", "/api/comp", {
+      name: "Trying It Out",
+      category: "hg",
+    });
+    expect(res.status).toBe(201);
+    const { comp_id, test: hidden } = (await res.json()) as {
+      comp_id: string;
+      test: boolean;
+    };
+    expect(hidden).toBe(true);
+    // Hidden means hidden: an anonymous reader neither finds it in the list
+    // nor reaches it by id.
+    const list = (await (await request("GET", "/api/comp")).json()) as {
+      comps: Array<{ comp_id: string }>;
+    };
+    expect(list.comps.map((c) => c.comp_id)).not.toContain(comp_id);
+    expect((await request("GET", `/api/comp/${comp_id}`)).status).toBe(404);
+
+    const pub = await authRequest("POST", "/api/comp", {
+      name: "Public From The Start",
+      category: "hg",
+      test: false,
+    });
+    expect(((await pub.json()) as { test: boolean }).test).toBe(false);
+  });
+
   test("creates with custom pilot classes", async () => {
     const res = await authRequest("POST", "/api/comp", {
       name: "PG Open",

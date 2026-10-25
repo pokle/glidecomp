@@ -192,7 +192,7 @@ Auth verification via service binding to auth-api (Option A in `docs/auth.md`). 
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/api/comp` | User | Create competition. Caller becomes first admin. |
+| POST | `/api/comp` | User | Create competition. Caller becomes first admin. Starts hidden (`test`) unless the body sets `test: false`; the setup guide's last step, "Make public", is where the UI clears it. |
 | GET | `/api/comp` | Optional | List comps. Authenticated: includes caller's admin comps (incl. test). Public: non-test only. |
 | GET | `/api/comp/:comp_id` | Optional | Get comp details (incl. tasks summary, admin list, pilot count). Public for non-test. Test requires admin. |
 | PATCH | `/api/comp/:comp_id` | Admin | Update name, category, test flag, close_date, gap_params, **and admin list**. Reject if update would remove the last admin. |

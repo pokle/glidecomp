@@ -84,6 +84,9 @@ test.beforeAll(async ({ playwright }) => {
       category: "hg",
       // Two classes, so the CheckList has something to be a list OF.
       pilot_classes: ["open", "sport"],
+      // Public, so the visitor test reaches the admin-only notice rather than
+      // a hidden comp's 404.
+      test: false,
     },
   });
   expect(created.ok(), await created.text()).toBe(true);

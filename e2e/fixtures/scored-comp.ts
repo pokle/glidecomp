@@ -133,8 +133,9 @@ export async function createScoredComp(
   label: string,
   extraPilots: readonly string[] = []
 ): Promise<ScoredComp> {
+  // Public: the report card and the activity log are read signed out.
   const compRes = await admin.post("/api/comp", {
-    data: { name: e2eCompName(label), category: "hg", pilot_classes: ["open"] },
+    data: { name: e2eCompName(label), category: "hg", pilot_classes: ["open"], test: false },
   });
   expect(compRes.ok(), await compRes.text()).toBeTruthy();
   const { comp_id: compId } = (await compRes.json()) as { comp_id: string };

@@ -224,6 +224,7 @@ export const createCompSchema = z.object({
   name: requiredName(),
   category: z.enum(["hg", "pg"]),
   close_date: optionalPlain(),
+  // Omitted means hidden: a new comp starts as a `test` comp (see POST /api/comp).
   test: z.boolean().optional(),
   pilot_classes: pilotClassesArray.optional(),
   default_pilot_class: pilotClassString.optional(),

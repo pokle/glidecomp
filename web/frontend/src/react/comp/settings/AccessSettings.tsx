@@ -77,8 +77,9 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     <SettingsPage crumbs={underCompSettings(compId, comp.name)} title="Access">
       <SettingsForm onSave={save} saving={saving} dirty={dirty}>
         {/* The three booleans share one card, as consecutive settings rows do
-            on a phone. "Hidden?" keeps the copy TestCompField carries in the
-            dialogs, which still use the compact checkbox form. */}
+            on a phone. "Hidden?" is the only place a comp's visibility is
+            set: a new comp starts hidden, and the setup guide's "Make public"
+            step links here. */}
         <SwitchList>
           <SwitchField
             checked={test}

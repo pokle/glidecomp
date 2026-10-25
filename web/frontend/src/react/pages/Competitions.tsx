@@ -35,7 +35,7 @@ import {
 } from "@/react/rac/dialog";
 import { SearchField } from "@/react/rac/field";
 import { api } from "../../comp/api";
-import { CategoryField, NameField, PilotClassesField, TestCompField } from "../comp/fields";
+import { CategoryField, NameField, PilotClassesField } from "../comp/fields";
 import { toast } from "../lib/toast";
 import { useGoToSignIn, useUser } from "../lib/user";
 import {
@@ -237,7 +237,6 @@ function CreateCompDialog({
   const [name, setName] = useState("");
   const [category, setCategory] = useState<"hg" | "pg">("hg");
   const [pilotClasses, setPilotClasses] = useState("open");
-  const [test, setTest] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Reset the form each time the dialog opens (matches the vanilla behaviour).
@@ -246,7 +245,6 @@ function CreateCompDialog({
       setName("");
       setCategory("hg");
       setPilotClasses("open");
-      setTest(false);
     }
     onOpenChange(next);
   }
@@ -264,7 +262,8 @@ function CreateCompDialog({
           name: name.trim(),
           category,
           pilot_classes: classes.length > 0 ? classes : ["open"],
-          test,
+          // No `test`: a new comp starts hidden, and the setup guide's last
+          // step, "Make public", is where it goes public.
         },
       });
       if (!res.ok) {
@@ -316,8 +315,6 @@ function CreateCompDialog({
           />
 
           <PilotClassesField value={pilotClasses} onChange={setPilotClasses} wing={category} />
-
-          <TestCompField checked={test} onChange={setTest} />
 
           <DialogFooter>
             <Button slot="close" variant="outline">

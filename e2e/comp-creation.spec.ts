@@ -30,7 +30,7 @@ test.afterEach(async ({ page }) => {
   createdCompId = null;
 });
 
-test("dev login, create competition and task", async ({ page }) => {
+test("dev login, create competition and task", async ({ page, request }) => {
   const testUser = TEST_USER;
 
   // Step 1: Dev login — POST sets session cookie
@@ -75,11 +75,10 @@ test("dev login, create competition and task", async ({ page }) => {
   await page.getByRole("button", { name: "Start a new competition" }).click();
   const createDialog = page.getByRole("dialog");
   await createDialog.getByLabel("Name").fill(COMP_NAME);
-  // Category defaults to HG — no change needed. Mark it hidden (admins only).
-  // RAC checkboxes visually hide the real <input>, so clicking the checkbox
-  // role times out on actionability — click the visible label like a user.
-  await createDialog.getByText("Hidden?").click();
-  await expect(createDialog.getByRole("checkbox", { name: /Hidden/ })).toBeChecked();
+  // Category defaults to HG — no change needed. There is no visibility
+  // choice here: every new comp starts hidden, and going public is the setup
+  // guide's last step.
+  await expect(createDialog.getByText("Hidden?")).toHaveCount(0);
   await createDialog.getByRole("button", { name: "Create" }).click();
 
   // Client-side navigation to the competition detail page; the heading
@@ -90,14 +89,18 @@ test("dev login, create competition and task", async ({ page }) => {
   // `${name-slug}-${id}` form, so take the id off the end rather than the whole
   // segment — the API only accepts the bare sqid.
   createdCompId = idFromSegment(new URL(page.url()).pathname.split("/")[2]);
+  // Born hidden: the facts line says so, and an anonymous reader (the
+  // `request` fixture holds no session) gets a 404.
+  await expect(page.getByText(/· Hidden/)).toBeVisible();
+  expect((await request.get(`/api/comp/${createdCompId}`)).status()).toBe(404);
 
   // Step 3b: The admin-only setup guide shows on a fresh comp with step 1
   // ("Create the competition") pre-checked. The progress count is over the
-  // four *required* steps — "Review settings" is optional (issue #343: new
+  // five *required* steps — "Review settings" is optional (issue #343: new
   // comps already start from the official defaults), so it doesn't count.
   const guide = page.getByRole("region", { name: "Set up your competition" });
   await expect(guide).toBeVisible();
-  await expect(guide).toContainText("1 of 4 steps");
+  await expect(guide).toContainText("1 of 5 steps");
 
   // Saving settings (defaults untouched) counts as reviewing them, ticking the
   // optional "Review settings" step over. Being optional, it doesn't move the
@@ -114,7 +117,26 @@ test("dev login, create competition and task", async ({ page }) => {
     .getByRole("link", { name: COMP_NAME })
     .click();
   await expect(guide).toContainText("Completed: Review settings");
-  await expect(guide).toContainText("1 of 4 steps");
+  await expect(guide).toContainText("1 of 5 steps");
+
+  // The last step, "Make public", leads to the Access settings, where the
+  // "Hidden?" switch turns off. Saving ticks the step and moves the count.
+  await guide.getByRole("link", { name: "Make public" }).click();
+  await expect(page.getByRole("heading", { name: "Access", exact: true })).toBeVisible();
+  const hidden = page.getByRole("switch", { name: /Hidden\?/ });
+  await expect(hidden).toBeChecked();
+  // Click the visible label, not the input (rac gotcha #13).
+  await page.getByText("Hidden?").click();
+  await expect(hidden).not.toBeChecked();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("link", { name: /^Access/ })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: COMP_NAME })
+    .click();
+  await expect(guide).toContainText("Completed: Make public");
+  await expect(guide).toContainText("2 of 5 steps");
+  await expect(page.getByText(/· Hidden/)).toHaveCount(0);
 
   // Step 4: Create a task. Two "New Task" buttons exist on an empty comp
   // (section header + the empty-state CTA in the section body).
