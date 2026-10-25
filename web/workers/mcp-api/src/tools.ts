@@ -7,11 +7,11 @@
  * admins see their own hidden comps, and competition-api's MCP fence decides
  * which routes a token may reach at all. This worker never reads D1.
  *
- * Each answer is a short line of text for the model plus the data as
- * `structuredContent`, and everything that has a page carries its URL, so the
- * assistant links to GlideComp rather than retyping it. Text that pilots or
- * organisers wrote (names, notes) travels as data fields, never as words
- * addressed to the model.
+ * Each answer is a short line of text, then the data twice: as JSON in a
+ * second text block, and as `structuredContent` (see answer()). Everything
+ * that has a page carries its URL, so the assistant links to GlideComp rather
+ * than retyping it. Text that pilots or organisers wrote (names, notes)
+ * travels as data fields, never as words addressed to the model.
  */
 import { McpServer, type AuthInfo } from "@modelcontextprotocol/server";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/server/validators/cf-worker";
@@ -64,6 +64,26 @@ interface TaskRecord {
 }
 const ID = z.string().min(1).max(64).describe("An id exactly as GlideComp returned it (short, lowercase letters)");
 
+/**
+ * A tool's answer. The data goes out as JSON text as well as in
+ * `structuredContent`, because many clients hand the model only the text
+ * blocks: Claude, ChatGPT and Gemini all answered "8 competitions matched"
+ * with no names when the text was only the summary line. The spec asks for
+ * this ("a tool that returns structured content SHOULD also return the
+ * serialized JSON in a TextContent block"), and `outputSchema` would not fix
+ * it — nothing obliges a client to show the model `structuredContent`.
+ */
+function answer(text: string, data: Record<string, unknown>, isError?: true) {
+  return {
+    content: [
+      { type: "text" as const, text },
+      { type: "text" as const, text: JSON.stringify(data) },
+    ],
+    structuredContent: data,
+    ...(isError ? { isError } : {}),
+  };
+}
+
 export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, origin: string): McpServer {
   const server = new McpServer(
     SERVER_INFO,
@@ -104,7 +124,7 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
 
   /** A refusal of the tool's own, in words the model can act on. */
   function refusal(text: string, structuredContent?: Record<string, unknown>) {
-    return { content: [{ type: "text" as const, text }], isError: true, ...(structuredContent ? { structuredContent } : {}) };
+    return structuredContent ? answer(text, structuredContent, true) : { content: [{ type: "text" as const, text }], isError: true };
   }
 
   /** A failed call as a tool error the model can read, rather than a protocol error. */
@@ -130,21 +150,17 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
       inputSchema: z.object({}),
       annotations: READ_ONLY,
     },
-    async () => ({
-      content: [
+    async () =>
+      answer(
+        `Connected to GlideComp as ${caller.user.name} (${caller.user.email}). Allowed: ${caller.scopes.filter((s) => s.includes(":")).join(", ")}.`,
         {
-          type: "text" as const,
-          text: `Connected to GlideComp as ${caller.user.name} (${caller.user.email}). Allowed: ${caller.scopes.filter((s) => s.includes(":")).join(", ")}.`,
-        },
-      ],
-      structuredContent: {
-        name: caller.user.name,
-        email: caller.user.email,
-        username: caller.user.username ?? null,
-        scopes: caller.scopes,
-        client: caller.clientName,
-      },
-    })
+          name: caller.user.name,
+          email: caller.user.email,
+          username: caller.user.username ?? null,
+          scopes: caller.scopes,
+          client: caller.clientName,
+        }
+      )
   );
 
   server.registerTool(
@@ -168,15 +184,10 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
           url: url(compPath(c.comp_id, c.name)),
           tasks: (c.tasks ?? []).map((t) => ({ ...t, url: url(taskPath(c.comp_id, c.name, t.task_id, t.name)) })),
         }));
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: comps.length ? `${comps.length} competition(s) matched "${query}".` : `Nothing matched "${query}".`,
-            },
-          ],
-          structuredContent: { ...data, comps },
-        };
+        return answer(
+          comps.length ? `${comps.length} competition(s) matched "${query}".` : `Nothing matched "${query}".`,
+          { ...data, comps }
+        );
       } catch (err) {
         return failure(err);
       }
@@ -212,10 +223,7 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             hidden: !!c.test,
             url: url(compPath(c.comp_id, c.name)),
           }));
-        return {
-          content: [{ type: "text" as const, text: `${comps.length} competition(s).` }],
-          structuredContent: { comps },
-        };
+        return answer(`${comps.length} competition(s).`, { comps });
       } catch (err) {
         return failure(err);
       }
@@ -240,15 +248,12 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
           tasks?: Array<{ task_id: string; name: string } & Record<string, unknown>>;
         } & Record<string, unknown>>(`/api/comp/${encodeURIComponent(comp_id)}`);
         const compUrl = url(compPath(comp.comp_id, comp.name));
-        return {
-          content: [{ type: "text" as const, text: `${comp.name}: ${compUrl}` }],
-          structuredContent: {
-            ...comp,
-            url: compUrl,
-            waypoints_url: url(compWaypointsPath(comp.comp_id, comp.name)),
-            tasks: (comp.tasks ?? []).map((t) => ({ ...t, url: url(taskPath(comp.comp_id, comp.name, t.task_id, t.name)) })),
-          },
-        };
+        return answer(`${comp.name}: ${compUrl}`, {
+          ...comp,
+          url: compUrl,
+          waypoints_url: url(compWaypointsPath(comp.comp_id, comp.name)),
+          tasks: (comp.tasks ?? []).map((t) => ({ ...t, url: url(taskPath(comp.comp_id, comp.name, t.task_id, t.name)) })),
+        });
       } catch (err) {
         return failure(err);
       }
@@ -280,17 +285,12 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
           : null;
         const taskUrl = url(taskPath(comp.comp_id, comp.name, task.task_id, task.name));
         const { xctsk: _raw, ...rest } = task;
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: route
-                ? `${task.name} (${task.task_date}): ${route.quick_task}${route.distance_km !== null ? ` — ${route.distance_km} km` : ""}. ${taskUrl}`
-                : `${task.name} (${task.task_date}) has no route yet. ${taskUrl}`,
-            },
-          ],
-          structuredContent: { ...rest, competition: comp.name, timezone: comp.timezone ?? null, route, url: taskUrl },
-        };
+        return answer(
+          route
+            ? `${task.name} (${task.task_date}): ${route.quick_task}${route.distance_km !== null ? ` — ${route.distance_km} km` : ""}. ${taskUrl}`
+            : `${task.name} (${task.task_date}) has no route yet. ${taskUrl}`,
+          { ...rest, competition: comp.name, timezone: comp.timezone ?? null, route, url: taskUrl }
+        );
       } catch (err) {
         return failure(err);
       }
@@ -323,15 +323,10 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
           lon: w.longitude,
           ...(typeof w.altitude === "number" ? { altitude_m: w.altitude } : {}),
         }));
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `${waypoints.length} of ${data.waypoints.length} waypoint(s)${q ? ` matching "${query}"` : ""}.`,
-            },
-          ],
-          structuredContent: { waypoints, total: data.waypoints.length },
-        };
+        return answer(`${waypoints.length} of ${data.waypoints.length} waypoint(s)${q ? ` matching "${query}"` : ""}.`, {
+          waypoints,
+          total: data.waypoints.length,
+        });
       } catch (err) {
         return failure(err);
       }
@@ -417,22 +412,14 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             body: { name, task_date, pilot_classes: classes },
           });
           const link = taskUrl(comp, task);
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Created ${task.name} (${task.task_date}) in ${comp.name}. It has no route yet. ${link}`,
-              },
-            ],
-            structuredContent: {
-              task_id: task.task_id,
-              name: task.name,
-              task_date: task.task_date,
-              pilot_classes: task.pilot_classes ?? classes,
-              route: null,
-              url: link,
-            },
-          };
+          return answer(`Created ${task.name} (${task.task_date}) in ${comp.name}. It has no route yet. ${link}`, {
+            task_id: task.task_id,
+            name: task.name,
+            task_date: task.task_date,
+            pilot_classes: task.pilot_classes ?? classes,
+            route: null,
+            url: link,
+          });
         } catch (err) {
           return failure(err);
         }
@@ -468,16 +455,13 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             body,
           });
           const link = taskUrl(comp, task);
-          return {
-            content: [{ type: "text" as const, text: `Updated ${task.name} (${task.task_date}). ${link}` }],
-            structuredContent: {
-              task_id: task.task_id,
-              name: task.name,
-              task_date: task.task_date,
-              pilot_classes: task.pilot_classes ?? [],
-              url: link,
-            },
-          };
+          return answer(`Updated ${task.name} (${task.task_date}). ${link}`, {
+            task_id: task.task_id,
+            name: task.name,
+            task_date: task.task_date,
+            pilot_classes: task.pilot_classes ?? [],
+            url: link,
+          });
         } catch (err) {
           return failure(err);
         }
@@ -522,17 +506,14 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
               (p.removes.length ? `. Removes ${p.removes.join(", ")}.` : ".")
             : `Not ready to save:\n- ${why.join("\n- ")}`;
           const { xctsk: _body, ...shown } = p;
-          return {
-            content: [{ type: "text" as const, text }],
-            structuredContent: {
-              ...shown,
-              blockers: why,
-              start: proposed?.start ?? null,
-              distance_km: proposed?.distance_km ?? null,
-              current_route_rev: ctx.task.xctsk ? await routeRevision(ctx.task.xctsk) : null,
-              url: taskUrl(ctx.comp, ctx.task),
-            },
-          };
+          return answer(text, {
+            ...shown,
+            blockers: why,
+            start: proposed?.start ?? null,
+            distance_km: proposed?.distance_km ?? null,
+            current_route_rev: ctx.task.xctsk ? await routeRevision(ctx.task.xctsk) : null,
+            url: taskUrl(ctx.comp, ctx.task),
+          });
         } catch (err) {
           return failure(err);
         }
@@ -589,18 +570,12 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             timeZone: ctx.comp.timezone ?? null,
           });
           const link = taskUrl(ctx.comp, saved);
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text:
-                  `Saved the route of ${saved.name}: ${route.quick_task}` +
-                  (route.distance_km !== null ? ` — ${route.distance_km} km` : "") +
-                  `. ${link}`,
-              },
-            ],
-            structuredContent: { task_id: saved.task_id, name: saved.name, route, url: link },
-          };
+          return answer(
+            `Saved the route of ${saved.name}: ${route.quick_task}` +
+              (route.distance_km !== null ? ` — ${route.distance_km} km` : "") +
+              `. ${link}`,
+            { task_id: saved.task_id, name: saved.name, route, url: link }
+          );
         } catch (err) {
           return failure(err);
         }
