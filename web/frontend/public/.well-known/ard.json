@@ -5,8 +5,8 @@
       "displayName": "GlideComp",
       "type": "application/mcp-server-card+json",
       "url": "https://glidecomp.com/mcp/server-card",
-      "description": "Hang gliding and paragliding competitions: find comps, read tasks, set routes.",
-      "tags": ["hang gliding", "paragliding", "competition", "scoring", "task", "route"],
+      "description": "Scoring and flight analysis for hang gliding and paragliding competitions",
+      "tags": ["hang gliding", "paragliding", "competition", "scoring", "task", "route", "GAP", "IGC"],
       "representativeQueries": [
         "What's the route for task 3 at the Corryong Cup?",
         "Which tasks fly through Mt Elliot?",

@@ -1,20 +1,10 @@
 # GlideComp
 
-> Scoring and flight analysis for hang gliding and paragliding competitions: every point explained, every track compared. Competition results, scores and flight analysis are public.
+> Scoring and flight analysis for hang gliding and paragliding competitions
 
 GlideComp has a remote MCP server at https://glidecomp.com/mcp (Streamable HTTP). If someone asks you to connect to GlideComp, or to use GlideComp from their assistant, this is the URL.
 
 It signs in with OAuth 2.1, so there is no API key: the person signs in to GlideComp in a browser and chooses what the assistant may do. The client discovers the sign-in from the 401 response at /mcp.
-
-To connect:
-
-- Claude Code: run `claude mcp add --transport http glidecomp https://glidecomp.com/mcp`, then `/mcp` and choose GlideComp to sign in.
-- Claude, ChatGPT and other assistants with custom connectors: the person adds a connector with the URL https://glidecomp.com/mcp in the assistant's settings.
-
-The permissions a person can grant:
-
-- `comp:read`: find competitions, read tasks, routes and waypoints, as the person can see them.
-- `task:write`: create tasks, and change a task's name, date, classes and route, in competitions the person organises. Every change is recorded in the competition's public audit log under the person's name, marked with the assistant's name.
 
 ## Connect an AI assistant
 
