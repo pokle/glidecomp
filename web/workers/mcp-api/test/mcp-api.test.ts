@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import worker, { type Env } from "../src/index";
 import { resetResourceMetadata } from "../src/gate";
+import { PROTOCOL_VERSIONS } from "../src/server-card";
 
 const ORIGIN = "https://glidecomp.test";
 
@@ -483,7 +484,7 @@ describe("the server card (SEP-2127)", () => {
     expect(body.description.length).toBeLessThanOrEqual(100);
     expect(body.websiteUrl).toBe(`${ORIGIN}/assistant`);
     expect(body.remotes).toEqual([
-      { type: "streamable-http", url: `${ORIGIN}/mcp`, supportedProtocolVersions: expect.arrayContaining(["2025-11-25"]) },
+      { type: "streamable-http", url: `${ORIGIN}/mcp`, supportedProtocolVersions: expect.arrayContaining(["2026-07-28", "2025-11-25"]) },
     ]);
     expect("tools" in body).toBe(false);
   });
@@ -496,5 +497,90 @@ describe("the server card (SEP-2127)", () => {
     const preflight = await card({ method: "OPTIONS" });
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get("access-control-allow-methods")).toBe("GET");
+  });
+});
+
+/**
+ * The 2026-07-28 wire: no initialize, every request carries its revision and
+ * the client's capabilities in `_meta`, and the method (and a tool's name) in
+ * headers the transport checks against the body.
+ */
+describe("the 2026-07-28 protocol", () => {
+  async function rpc2026(env: Env, method: string, params: Record<string, unknown> = {}, bearer: string | null = token("tok-ok")) {
+    const name = typeof params.name === "string" ? params.name : undefined;
+    const res = await worker.fetch(
+      new Request(`${ORIGIN}/mcp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": "2026-07-28",
+          "mcp-method": method,
+          ...(name ? { "mcp-name": name } : {}),
+          ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params: {
+            ...params,
+            _meta: {
+              "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+              "io.modelcontextprotocol/clientCapabilities": {},
+              "io.modelcontextprotocol/clientInfo": { name: "test", version: "1" },
+            },
+          },
+        }),
+      }),
+      env
+    );
+    const text = await res.text();
+    if (res.status !== 200) return { status: res.status, headers: res.headers, json: null };
+    const json = text.trimStart().startsWith("{")
+      ? JSON.parse(text)
+      : JSON.parse(text.split("\n").find((l) => l.startsWith("data:"))!.slice(5));
+    return { status: res.status, headers: res.headers, json };
+  }
+
+  test("the gate stands in front of it too: no token is a 401 with the same challenge", async () => {
+    const { env } = makeEnv();
+    const res = await rpc2026(env, "server/discover", {}, null);
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toContain(
+      `resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/mcp"`
+    );
+  });
+
+  test("server/discover names the revisions the card advertises, and who the server is", async () => {
+    const { env } = makeEnv();
+    const { status, json } = await rpc2026(env, "server/discover");
+    expect(status).toBe(200);
+    const modern = json.result.supportedVersions as string[];
+    expect(modern).toContain("2026-07-28");
+    // The card lists the modern revisions first, then the SDK's 2025-era list.
+    expect(PROTOCOL_VERSIONS.slice(0, modern.length)).toEqual(modern);
+    expect(json.result._meta["io.modelcontextprotocol/serverInfo"].name).toBe("glidecomp");
+  });
+
+  test("tools/list answers per grant, privately cacheable only", async () => {
+    const { env } = makeEnv();
+    const read = await rpc2026(env, "tools/list", {}, token("tok-read"));
+    expect(read.json.result.resultType).toBe("complete");
+    // The list differs by grant, so no shared cache may keep it.
+    expect(read.json.result.cacheScope).toBe("private");
+    expect((read.json.result.tools as Array<{ name: string }>).map((t) => t.name).sort()).toEqual(
+      ["get_competition", "get_task", "list_competitions", "list_waypoints", "search", "whoami"].sort()
+    );
+    const write = await rpc2026(env, "tools/list", {});
+    expect((write.json.result.tools as Array<{ name: string }>).map((t) => t.name)).toContain("set_task_route");
+  });
+
+  test("a tool call reaches competition-api as the caller", async () => {
+    const { env, compCalls } = makeEnv();
+    const { json } = await rpc2026(env, "tools/call", { name: "get_competition", arguments: { comp_id: "abcde" } });
+    expect(json.result.resultType).toBe("complete");
+    expect(json.result.structuredContent).toMatchObject({ name: "Corryong Cup" });
+    expect(compCalls.some((c) => c.method === "GET" && c.path === "/api/comp/abcde")).toBe(true);
   });
 });

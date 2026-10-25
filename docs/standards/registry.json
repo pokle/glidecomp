@@ -94,13 +94,14 @@
     {
       "id": "mcp-protocol",
       "name": "Model Context Protocol",
-      "follows": "2025-11-25",
+      "follows": "2026-07-28",
       "statedIn": [
         "docs/mcp.md",
         "e2e/mcp.spec.ts",
         "web/workers/mcp-api/test/mcp-api.test.ts"
       ],
       "searchFor": [
+        "PROTOCOL_VERSIONS",
         "SUPPORTED_PROTOCOL_VERSIONS",
         "mcp-protocol-version"
       ],
@@ -109,7 +110,7 @@
         "url": "https://modelcontextprotocol.io/specification/latest",
         "pattern": "/specification/(\\d{4}-\\d{2}-\\d{2})"
       },
-      "onChange": "Owner. The revisions the endpoint speaks come from @modelcontextprotocol/server's SUPPORTED_PROTOCOL_VERSIONS (the card advertises the same list), so adopting a new revision is an SDK upgrade plus a read of the revision's changelog (transport, auth, tool annotations). Raise an issue; coordinate with the dependency routine.",
+      "onChange": "Owner. The endpoint speaks 2026-07-28 and, beside it, the 2025 revisions (2025-11-25 down to 2024-11-05); both come from @modelcontextprotocol/server's createMcpHandler. Do not read the version off the SDK's SUPPORTED_PROTOCOL_VERSIONS: in SDK v2 it lists only the 2025-era revisions. What the endpoint speaks is what its server/discover answers, and the server card advertises PROTOCOL_VERSIONS in web/workers/mcp-api/src/server-card.ts, which mcp-api.test.ts holds to server/discover. Adopting a new revision is an SDK upgrade, a read of the revision's changelog (transport, auth, tool annotations), PROTOCOL_VERSIONS, and the 2026-style wire tests in mcp-api.test.ts and e2e/mcp.spec.ts. Raise an issue; coordinate with the dependency routine.",
       "seen": {
         "value": "2026-07-28",
         "checkedAt": "2026-10-25"

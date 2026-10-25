@@ -19,6 +19,14 @@ Catalog spec) and `/.well-known/ard.json` (Agentic Resource Discovery), two
 related specs whose clients look in different places. Each file is checked
 against its spec in `web/workers/mcp-api/test/discovery.test.ts`.
 
+The endpoint speaks MCP **2026-07-28** (stateless: no `initialize`, the
+revision rides in each request's `_meta`) and, beside it, the 2025 revisions
+down to 2024-11-05, which most hosted assistants still use. Both come from
+`@modelcontextprotocol/server`'s `createMcpHandler`. The SDK's
+`SUPPORTED_PROTOCOL_VERSIONS` lists only the 2025-era ones, so the server
+card's list is `PROTOCOL_VERSIONS` in `web/workers/mcp-api/src/server-card.ts`,
+held to the endpoint's own `server/discover` by its test.
+
 How it is built, and why: [the plan](2026-10-24-mcp-oauth-plan.md).
 
 ## Connect
