@@ -33,7 +33,18 @@ moves only when a commit moves it. The routine now has each cycle compare
 - `bun run test:all`: 0 fail (999 frontend, 242 auth-api with 6 todo, 835
   competition-api, and the root suites).
 - `bun run build`: clean, 10 Astro pages, astro v7.4.2.
-- E2E_PLACEHOLDER
+- `bun run test:e2e`: **229 passed, 9 skipped** in 16.4 minutes, exit 0.
+  wrangler dev died once mid-run with the known ProxyWorker `Network
+  connection lost` error (`docs/local-dev.md`). `dev-workers.sh` restarted
+  it, and no test failed. It is not a Node 22.23.4 effect: the supervisor
+  exists because this happens in about one run in eight.
+- `bun run test:e2e:ssr`: **67/67 passed** in 1.5 minutes, exit 0.
+- **CI confirms the cache problem was real.** The first run's `setup-node`
+  log reads `Resolved .node-version as 22.23.4` and then `Attempting to
+  download 22.23.4`, so the runner image did not have it cached.
+  `node-version: 22` would have run the older cached copy, and astro 7.4.2
+  would have refused it. All six checks passed on that run (Test, four e2e
+  shards, Deploy).
 
 ## 2026-10-25
 
