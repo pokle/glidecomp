@@ -22,6 +22,16 @@ import { resourceMetadata, type GateEnv } from "./gate";
 /** Who the server says it is, on the card and in MCP's own `initialize`. */
 export const SERVER_INFO = { name: "glidecomp", title: "GlideComp", version: "1.0.0" } as const;
 
+/**
+ * Every revision /mcp answers, newest first. createMcpHandler serves the
+ * 2026-07-28 wire natively and the 2025 revisions statelessly beside it, but
+ * the SDK's SUPPORTED_PROTOCOL_VERSIONS lists only the 2025-era ones, and it
+ * exports no constant naming the modern revision. The test holds this list to
+ * what the endpoint's own `server/discover` says, so an SDK that adds a
+ * revision fails it rather than leaving the card behind.
+ */
+export const PROTOCOL_VERSIONS: readonly string[] = ["2026-07-28", ...SUPPORTED_PROTOCOL_VERSIONS];
+
 export const SERVER_CARD_PATH = "/mcp/server-card";
 const MEDIA_TYPE = "application/mcp-server-card+json";
 
@@ -48,7 +58,7 @@ export function cardFor(origin: string) {
       {
         type: "streamable-http",
         url: `${origin}/mcp`,
-        supportedProtocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS],
+        supportedProtocolVersions: [...PROTOCOL_VERSIONS],
       },
     ],
   };

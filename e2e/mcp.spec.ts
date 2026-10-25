@@ -7,7 +7,8 @@
  *
  * The client here is Playwright's request API speaking OAuth and JSON-RPC by
  * hand, which is what keeps the spec honest about the wire: discovery from the
- * 401's challenge, PKCE, the `resource` parameter, the 2025 protocol revision.
+ * 401's challenge, PKCE, the `resource` parameter, and both protocol revisions
+ * the endpoint serves (2025-11-25 and 2026-07-28).
  */
 import crypto from "node:crypto";
 import { test, expect } from "./fixtures/test";
@@ -63,7 +64,16 @@ test("an organiser connects an assistant, it reads their comp and sets a route, 
   const issuer = new URL(resource.authorization_servers[0]!);
   const as = (await (
     await client.get(`/.well-known/oauth-authorization-server${issuer.pathname}`)
-  ).json()) as { authorization_endpoint: string; token_endpoint: string; registration_endpoint: string };
+  ).json()) as {
+    issuer: string;
+    authorization_endpoint: string;
+    token_endpoint: string;
+    registration_endpoint: string;
+    authorization_response_iss_parameter_supported?: boolean;
+  };
+  // RFC 9207: the server says it names itself in the redirect (OAuth 2.1
+  // draft 16 makes sending `iss` a MUST; MCP 2026-07-28 has clients check it).
+  expect(as.authorization_response_iss_parameter_supported).toBe(true);
 
   // Dynamic registration — a native client's loopback callback, no application_type.
   const reg = await client.post(as.registration_endpoint, {
@@ -108,6 +118,9 @@ test("an organiser connects an assistant, it reads their comp and sets a route, 
   await page.getByRole("button", { name: "Allow", exact: true }).click();
   await expect.poll(() => callback?.searchParams.get("code") ?? null).not.toBeNull();
   expect(callback!.searchParams.get("state")).toBe("e2e-state");
+  // The code comes back with the issuer that minted it, compared as an exact
+  // string, as a client must before redeeming it (mix-up defence).
+  expect(callback!.searchParams.get("iss")).toBe(as.issuer);
 
   const tokenRes = await client.post(as.token_endpoint, {
     form: {
@@ -154,6 +167,52 @@ test("an organiser connects an assistant, it reads their comp and sets a route, 
   const got = await rpc("tools/call", { name: "get_competition", arguments: { comp_id: compId } });
   expect(got.body.result.structuredContent).toMatchObject({ name: COMP_NAME });
   expect(got.body.result.structuredContent.url).toContain(`/comp/`);
+
+  // The same token on the 2026-07-28 revision: no initialize; the revision and
+  // the client's capabilities ride in every request's _meta, the method and
+  // tool name in headers the transport checks against the body.
+  async function rpc2026(method: string, params: Record<string, unknown>, bearer: string | null = accessToken) {
+    const res = await client.post("/mcp", {
+      headers: {
+        ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+        accept: "application/json, text/event-stream",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": method,
+        ...(typeof params.name === "string" ? { "mcp-name": params.name } : {}),
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 1,
+        method,
+        params: {
+          ...params,
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+            "io.modelcontextprotocol/clientInfo": { name: "e2e", version: "1" },
+          },
+        },
+      },
+    });
+    const text = await res.text();
+    const body = res.status() === 200
+      ? text.trimStart().startsWith("{")
+        ? JSON.parse(text)
+        : JSON.parse(text.split("\n").find((l) => l.startsWith("data:"))?.slice(5) ?? "null")
+      : null;
+    return { status: res.status(), headers: res.headers(), body, text };
+  }
+  const discovered = await rpc2026("server/discover", {});
+  expect(discovered.status, discovered.text).toBe(200);
+  expect(discovered.body.result.supportedVersions).toContain("2026-07-28");
+  // Straight to a tool call: no handshake, and no session handed back.
+  const got2026 = await rpc2026("tools/call", { name: "get_competition", arguments: { comp_id: compId } });
+  expect(got2026.status, got2026.text).toBe(200);
+  expect(got2026.headers["mcp-session-id"]).toBeUndefined();
+  expect(got2026.body.result.structuredContent).toMatchObject({ name: COMP_NAME });
+  // Stateless: the call just served proves nothing for the next one, which
+  // must carry its own token.
+  expect((await rpc2026("tools/call", { name: "get_competition", arguments: { comp_id: compId } }, null)).status).toBe(401);
 
   // Writing (task:write): the comp needs waypoints for a route to name.
   const wps = await page.request.put(`/api/comp/${compId}/waypoints`, {
@@ -222,5 +281,9 @@ test("an organiser connects an assistant, it reads their comp and sets a route, 
   const after = await rpc("tools/list", {});
   expect(after.status).toBe(401);
   expect(after.headers["www-authenticate"]).toContain("invalid_token");
+  // On either revision: no session outlives the grant.
+  const after2026 = await rpc2026("tools/list", {});
+  expect(after2026.status).toBe(401);
+  expect(after2026.headers["www-authenticate"]).toContain("invalid_token");
   await client.dispose();
 });
