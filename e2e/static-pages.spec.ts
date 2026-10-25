@@ -77,6 +77,13 @@ test.describe("prerendered content (no browser)", () => {
     expect(body).not.toMatch(/katex(\.min)?\.js/i);
   });
 
+  test("the assistant guide links every discovery file, for a developer to find", async ({ request }) => {
+    const body = await html(request, "/assistant");
+    for (const href of ["/llms.txt", "/mcp/server-card", "/.well-known/ard.json", "/.well-known/ai-catalog.json"]) {
+      expect(body, href).toContain(`href="${href}"`);
+    }
+  });
+
   test("the scoring index links to every guide and to the published changelog", async ({
     request,
   }) => {
