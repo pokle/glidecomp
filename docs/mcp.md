@@ -73,11 +73,19 @@ competitions you organise — and nothing more.
 | `get_competition` | One competition: category, format, classes, timezone, organisers, and every task |
 | `get_task` | One task and its route: turnpoints, the route editor's one-line quick-task text, the start, the optimised distance |
 | `list_waypoints` | The competition's waypoints, filtered by code or name |
+| `get_task_qr` | The task's XCTrack `XCTSK:` QR code as a PNG, the one the task page shows. A route too long for one QR is refused |
+| `get_task_file` | The task's `.xctsk` file, the one the task page downloads: as data, as an embedded file, and as a download link |
 
 Every answer carries the GlideComp page's URL, so the assistant can link you
 to it rather than retell it. Competitions and tasks also go out as
 `resource_link` blocks after the text, so a client that shows them gives you
 the links even when the model leaves them out.
+
+The QR code is a PNG, not an SVG: many clients pass an image to the model's
+vision input, which takes raster images only. `mcp-api/src/qr-png.ts` writes
+it from the `uqr` module matrix, with the runtime's `CompressionStream` doing
+the zlib. Neither tool needed a new row in the fence: both read the task
+through the `GET` task route the other tools already use.
 
 Every answer gives its data twice: as `structuredContent`, and as the same
 JSON in a text block after a one-line summary (`answer()` in

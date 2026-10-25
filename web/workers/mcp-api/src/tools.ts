@@ -11,15 +11,26 @@
  * second text block, and as `structuredContent` (see answer()). Everything
  * that has a page carries its URL, so the assistant links to GlideComp rather
  * than retyping it; competitions and tasks also go out as `resource_link`
- * blocks, which a client can show as links whatever the model writes. Text that pilots or organisers wrote (names, notes)
+ * blocks, which a client can show as links whatever the model writes. The
+ * task's QR code goes out as an `image` block and its .xctsk file as an
+ * embedded `resource`, each beside the same data as JSON text. Text that pilots or organisers wrote (names, notes)
  * travels as data fields, never as words addressed to the model.
  */
-import { McpServer, type AuthInfo, type ResourceLink } from "@modelcontextprotocol/server";
+import { McpServer, type AuthInfo, type ContentBlock, type ResourceLink } from "@modelcontextprotocol/server";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/server/validators/cf-worker";
-import { parseXCTask, type WaypointFileRecord } from "@glidecomp/engine";
+import {
+  encodeXctskQR,
+  parseXCTask,
+  toXctskJSON,
+  xctaskTurnpointsToRecords,
+  XCTSK_QR_MAX_BYTES,
+  type WaypointFileRecord,
+  type XCTask,
+} from "@glidecomp/engine";
 import * as z from "zod";
-import { compPath, compWaypointsPath, taskPath } from "../../../frontend/src/react/lib/slug";
+import { compPath, compWaypointsPath, slugify, taskPath } from "../../../frontend/src/react/lib/slug";
 import type { Caller } from "./gate";
+import { base64, qrPng } from "./qr-png";
 import { planRoute, type RoutePlan } from "./route-plan";
 import { routeRevision, summariseRoute } from "./route-summary";
 import { SERVER_INFO } from "./server-card";
@@ -74,12 +85,12 @@ const ID = z.string().min(1).max(64).describe("An id exactly as GlideComp return
  * serialized JSON in a TextContent block"), and `outputSchema` would not fix
  * it — nothing obliges a client to show the model `structuredContent`.
  */
-function answer(text: string, data: Record<string, unknown>, links: ResourceLink[] = [], isError?: true) {
+function answer(text: string, data: Record<string, unknown>, blocks: ContentBlock[] = [], isError?: true) {
   return {
     content: [
       { type: "text" as const, text },
       { type: "text" as const, text: JSON.stringify(data) },
-      ...links,
+      ...blocks,
     ],
     structuredContent: data,
     ...(isError ? { isError } : {}),
@@ -302,6 +313,89 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             : `${task.name} (${task.task_date}) has no route yet. ${taskUrl}`,
           { ...rest, competition: comp.name, timezone: comp.timezone ?? null, route, url: taskUrl },
           [taskLink({ url: taskUrl, name: task.name }, comp.name)]
+        );
+      } catch (err) {
+        return failure(err);
+      }
+    }
+  );
+
+  /** A task and its comp, for the tools that hand out its route. */
+  async function taskWithRoute(comp_id: string, task_id: string) {
+    const cid = encodeURIComponent(comp_id);
+    const [comp, task] = await Promise.all([
+      api<{ comp_id: string; name: string }>(`/api/comp/${cid}`),
+      api<{ task_id: string; name: string; task_date: string; xctsk: XCTask | null }>(
+        `/api/comp/${cid}/task/${encodeURIComponent(task_id)}`
+      ),
+    ]);
+    const taskUrl = url(taskPath(comp.comp_id, comp.name, task.task_id, task.name));
+    return { comp, task, taskUrl, link: taskLink({ url: taskUrl, name: task.name }, comp.name) };
+  }
+
+  server.registerTool(
+    "get_task_qr",
+    {
+      title: "Get a task's QR code",
+      description:
+        "The task's route as the XCTrack QR code the task page shows (an XCTSK: code), as a PNG image " +
+        "a pilot can scan to load the task. qr_text is the text the code holds. A route too long for " +
+        "one QR is refused: use get_task_file instead.",
+      inputSchema: z.object({ comp_id: ID, task_id: ID }),
+      annotations: READ_ONLY,
+    },
+    async ({ comp_id, task_id }) => {
+      try {
+        const { task, taskUrl, link } = await taskWithRoute(comp_id, task_id);
+        const records = xctaskTurnpointsToRecords(task.xctsk?.turnpoints);
+        if (records.length === 0) return refusal(`${task.name} has no route yet, so it has no QR code. ${taskUrl}`);
+        const qrText = encodeXctskQR(records);
+        const bytes = new TextEncoder().encode(qrText).length;
+        if (bytes > XCTSK_QR_MAX_BYTES) {
+          return refusal(
+            `${task.name}'s route is ${bytes} bytes, too long for one scannable QR code. ` +
+              `Use get_task_file for the .xctsk file instead. ${taskUrl}`
+          );
+        }
+        const png = await qrPng(qrText);
+        return answer(
+          `QR code for ${task.name} (${task.task_date}), ${records.length} turnpoints. Scan it with XCTrack to load the task. ${taskUrl}`,
+          { task_id: task.task_id, name: task.name, task_date: task.task_date, qr_text: qrText, url: taskUrl },
+          [{ type: "image", data: base64(png), mimeType: "image/png" }, link]
+        );
+      } catch (err) {
+        return failure(err);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_task_file",
+    {
+      title: "Get a task's .xctsk file",
+      description:
+        "The task's route as the .xctsk file XCTrack and other flight instruments import, the same file " +
+        "the task page downloads. The file's contents are in xctsk; download_url serves it too.",
+      inputSchema: z.object({ comp_id: ID, task_id: ID }),
+      annotations: READ_ONLY,
+    },
+    async ({ comp_id, task_id }) => {
+      try {
+        const { comp, task, taskUrl, link } = await taskWithRoute(comp_id, task_id);
+        if (!task.xctsk) return refusal(`${task.name} has no route yet, so it has no .xctsk file. ${taskUrl}`);
+        const xctsk = toXctskJSON(task.xctsk);
+        const filename = `${slugify(task.name) || "task"}.xctsk`;
+        const downloadUrl = url(
+          `/api/comp/${encodeURIComponent(comp.comp_id)}/task/${encodeURIComponent(task.task_id)}/waypoints/xctsk`
+        );
+        return answer(
+          `${filename} for ${task.name} (${task.task_date}): ${downloadUrl}`,
+          { task_id: task.task_id, name: task.name, task_date: task.task_date, filename, xctsk, download_url: downloadUrl, url: taskUrl },
+          [
+            { type: "resource", resource: { uri: downloadUrl, mimeType: "application/xctsk", text: JSON.stringify(xctsk) } },
+            { type: "resource_link", uri: downloadUrl, name: filename, description: `XCTrack task file for ${task.name}`, mimeType: "application/xctsk" },
+            link,
+          ]
         );
       } catch (err) {
         return failure(err);

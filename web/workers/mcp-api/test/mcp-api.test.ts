@@ -84,7 +84,7 @@ const WAYPOINTS = [
   { code: "CORRY", name: "Corryong goal", latitude: -36.1958, longitude: 147.8975 },
 ];
 
-function makeEnv(opts: { waypoints?: object[] } = {}): {
+function makeEnv(opts: { waypoints?: object[]; xctsk?: unknown } = {}): {
   env: Env;
   compCalls: Call[];
   writes: () => Call[];
@@ -94,7 +94,7 @@ function makeEnv(opts: { waypoints?: object[] } = {}): {
   const compCalls: Call[] = [];
   const meCalls: string[] = [];
   // The task as competition-api holds it; a PATCH changes it, as the real one would.
-  let task: Record<string, any> = { task_id: "fghij", comp_id: "abcde", name: "Task 1", task_date: "2026-01-05", pilot_classes: ["open"], xctsk: XCTSK };
+  let task: Record<string, any> = { task_id: "fghij", comp_id: "abcde", name: "Task 1", task_date: "2026-01-05", pilot_classes: ["open"], xctsk: "xctsk" in opts ? opts.xctsk : XCTSK };
   const AUTH_API = {
     fetch: async (input: Request | string) => {
       const req = input instanceof Request ? input : new Request(input);
@@ -196,7 +196,16 @@ async function callTool(env: Env, name: string, args: Record<string, unknown> = 
   const { json } = await rpc(env, "tools/call", { name, arguments: args }, bearer);
   if (!json.result) throw new Error(`tools/call ${name}: ${JSON.stringify(json)}`);
   return json.result as {
-    content: Array<{ type: string; text?: string; uri?: string; name?: string; description?: string }>;
+    content: Array<{
+      type: string;
+      text?: string;
+      uri?: string;
+      name?: string;
+      description?: string;
+      data?: string;
+      mimeType?: string;
+      resource?: { uri: string; mimeType?: string; text?: string };
+    }>;
     structuredContent?: Record<string, any>;
     isError?: boolean;
   };
@@ -264,7 +273,7 @@ describe("the protocol", () => {
     const { json } = await rpc(env, "tools/list", {}, token("tok-read"));
     const tools = json.result.tools as Array<{ name: string; annotations?: { readOnlyHint?: boolean } }>;
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ["get_competition", "get_task", "list_competitions", "list_waypoints", "search", "whoami"].sort()
+      ["get_competition", "get_task", "get_task_file", "get_task_qr", "list_competitions", "list_waypoints", "search", "whoami"].sort()
     );
     expect(tools.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
   });
@@ -427,6 +436,8 @@ describe("the tools", () => {
       ["get_competition", { comp_id: "abcde" }],
       ["get_task", { comp_id: "abcde", task_id: "fghij" }],
       ["list_waypoints", { comp_id: "abcde" }],
+      ["get_task_qr", { comp_id: "abcde", task_id: "fghij" }],
+      ["get_task_file", { comp_id: "abcde", task_id: "fghij" }],
       ["create_task", { comp_id: "abcde", name: "Task 2", task_date: "2026-01-06" }],
       ["update_task", { comp_id: "abcde", task_id: "fghij", name: "Task 1b" }],
       ["preview_route", { comp_id: "abcde", task_id: "fghij", line: "ELL to, ELLIOT 5k sss, towo, CORRY goal" }],
@@ -436,6 +447,37 @@ describe("the tools", () => {
       const r = await callTool(makeEnv().env, name, args);
       expect(r.structuredContent, name).toBeDefined();
       expect(r.content.map((c) => c.text), name).toContain(JSON.stringify(r.structuredContent));
+    }
+  });
+
+  test("get_task_qr gives the task page's XCTSK: code as a PNG", async () => {
+    const r = await callTool(makeEnv().env, "get_task_qr", { comp_id: "abcde", task_id: "fghij" });
+    expect(r.isError).toBeUndefined();
+    const qrText = r.structuredContent!.qr_text as string;
+    expect(qrText.startsWith("XCTSK:")).toBe(true);
+    expect(JSON.parse(qrText.slice(6)).t.map((t: { n: string }) => t.n)).toEqual(["ELLIOT", "ELLIOT", "TOWONG", "GRGGRG", "CORRY"]);
+    const image = r.content.find((c) => c.type === "image")!;
+    expect(image.mimeType).toBe("image/png");
+    expect(Buffer.from(image.data!, "base64").subarray(1, 4).toString()).toBe("PNG");
+    expect(r.content.some((c) => c.type === "resource_link" && c.uri === `${ORIGIN}/comp/corryong-cup-abcde/task/task-1-fghij`)).toBe(true);
+  });
+
+  test("get_task_file gives the .xctsk as data, an embedded file and a download link", async () => {
+    const r = await callTool(makeEnv().env, "get_task_file", { comp_id: "abcde", task_id: "fghij" });
+    const download = `${ORIGIN}/api/comp/abcde/task/fghij/waypoints/xctsk`;
+    expect(r.structuredContent).toMatchObject({ filename: "task-1.xctsk", download_url: download });
+    expect(r.structuredContent!.xctsk).toMatchObject({ taskType: "CLASSIC" });
+    const file = r.content.find((c) => c.type === "resource")!.resource!;
+    expect(file).toMatchObject({ uri: download, mimeType: "application/xctsk" });
+    expect(JSON.parse(file.text!)).toEqual(r.structuredContent!.xctsk);
+    expect(r.content.find((c) => c.type === "resource_link" && c.uri === download)).toMatchObject({ name: "task-1.xctsk" });
+  });
+
+  test("a task with no route has no QR code and no file, and says so", async () => {
+    for (const name of ["get_task_qr", "get_task_file"]) {
+      const r = await callTool(makeEnv({ xctsk: null }).env, name, { comp_id: "abcde", task_id: "fghij" });
+      expect(r.isError, name).toBe(true);
+      expect(r.content[0]!.text, name).toContain("has no route yet");
     }
   });
 
@@ -676,7 +718,7 @@ describe("the 2026-07-28 protocol", () => {
     // The list differs by grant, so no shared cache may keep it.
     expect(read.json.result.cacheScope).toBe("private");
     expect((read.json.result.tools as Array<{ name: string }>).map((t) => t.name).sort()).toEqual(
-      ["get_competition", "get_task", "list_competitions", "list_waypoints", "search", "whoami"].sort()
+      ["get_competition", "get_task", "get_task_file", "get_task_qr", "list_competitions", "list_waypoints", "search", "whoami"].sort()
     );
     const write = await rpc2026(env, "tools/list", {});
     expect((write.json.result.tools as Array<{ name: string }>).map((t) => t.name)).toContain("set_task_route");
