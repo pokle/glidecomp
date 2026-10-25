@@ -27,6 +27,7 @@ interface Env {
   AUTH_API: Fetcher;
   COMPETITION_API: Fetcher;
   AIRSCORE_API: Fetcher;
+  MCP_API: Fetcher;
 }
 
 /**
@@ -61,6 +62,8 @@ const ROUTES: Array<[string, keyof Env]> = [
   ["/.well-known/oauth-authorization-server", "AUTH_API"],
   ["/.well-known/oauth-protected-resource", "AUTH_API"],
   ["/.well-known/openid-configuration", "AUTH_API"],
+  // The MCP endpoint itself; functions/mcp.ts in production.
+  ["/mcp", "MCP_API"],
 ];
 
 /**
@@ -89,6 +92,8 @@ async function readiness(env: Env): Promise<Response> {
     ["AUTH_API", "/api/auth/me"],
     ["COMPETITION_API", "/api/comp"],
     ["AIRSCORE_API", "/api/airscore"],
+    // 401s an unauthenticated probe, which is a sign of life.
+    ["MCP_API", "/mcp"],
   ];
 
   const workers = Object.fromEntries(

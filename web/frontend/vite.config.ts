@@ -391,6 +391,8 @@ export default defineConfig({
       // Pages Functions in production (functions/.well-known/); the
       // dev-router sends them to auth-api here.
       '/.well-known/oauth-': { target: DEV_API_ORIGIN, changeOrigin: true },
+      // The MCP endpoint (functions/mcp.ts in production).
+      '/mcp': { target: DEV_API_ORIGIN, changeOrigin: true },
       '/.well-known/openid-configuration': { target: DEV_API_ORIGIN, changeOrigin: true },
       // /civl-rankings.csv is a Pages Function in production
       // (functions/civl-rankings.csv.ts), and Pages Functions don't run under

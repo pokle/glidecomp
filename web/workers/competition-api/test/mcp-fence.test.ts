@@ -74,6 +74,19 @@ describe("a request carrying an access token", () => {
     expect((await asAssistant("GET", `/api/comp/${compId}/task/${taskId}`, READER)).status).toBe(200);
   });
 
+  test("speaks only for its own organiser: someone else's hidden comp is not found", async () => {
+    const compId = await createComp({ name: "Hidden Cup", test: true });
+    const taskId = await createTask(compId);
+    const OTHER = "mcp.user-2.comp-read";
+
+    const list = await asAssistant("GET", "/api/comp", OTHER);
+    const { comps } = (await list.json()) as { comps: Array<{ comp_id: string }> };
+    expect(comps.some((c) => c.comp_id === compId)).toBe(false);
+    expect((await asAssistant("GET", `/api/comp/${compId}`, OTHER)).status).toBe(404);
+    expect((await asAssistant("GET", `/api/comp/${compId}/task/${taskId}`, OTHER)).status).toBe(404);
+    expect((await asAssistant("GET", `/api/comp/${compId}/waypoints`, OTHER)).status).toBe(404);
+  });
+
   test("cannot reach a route outside the allowlist, even as the comp's admin", async () => {
     const compId = await createComp();
     for (const [method, path, body] of [
