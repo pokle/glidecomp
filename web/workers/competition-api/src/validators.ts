@@ -5,7 +5,7 @@ import { isValidTimezone } from "@glidecomp/engine/timezone";
 
 /**
  * zValidator with a hook that turns zod failures into the API's standard
- * `{ error: string }` shape (e.g. "admin_emails.1: Invalid email"). Without
+ * `{ error: string }` shape (e.g. "admin_emails.1: Invalid email address"). Without
  * the hook the default 400 body nests the raw ZodError object under `error`,
  * which clients expecting a string render as nothing at all — the request
  * fails silently. All routes must use this instead of bare zValidator.
