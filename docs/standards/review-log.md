@@ -4,6 +4,39 @@ One entry per run of the monthly standards routine
 ([`.claude/commands/standards-check.md`](../../.claude/commands/standards-check.md)),
 newest first. The register it works from is [`registry.json`](registry.json).
 
+## 2026-10-25: first scheduled run
+
+Run on the same day as the baseline, so only the two owner items were open.
+
+| Standard | Follows | Latest | Status |
+|---|---|---|---|
+| Model Context Protocol | 2025-11-25 | 2026-07-28 | behind (revision) |
+| OAuth 2.1 (IETF draft) | 13 | 16 | behind (major) |
+| FAI S7F / S7A / IGC | 2026 V1.0 / not pinned / 2008 | nothing newer found | research |
+| All other rows | | | current |
+
+### Changes
+
+- **MCP 2026-07-28:** raised as [#779](https://github.com/pokle/glidecomp/issues/779).
+  Read the changelog: stateless protocol, `server/discover`, DCR deprecated.
+- **OAuth 2.1 draft 16:** raised as [#780](https://github.com/pokle/glidecomp/issues/780).
+- **FAI research:** WebSearch found no S7F, S7A or IGC edition newer than what
+  we follow (S7A 2026 PDF returns 404; the latest IGC document is the 2024
+  edition with AL9). Not proof, as searches favour older PDFs.
+- **Baseline follow-ups, PR'd:** `/scoring/gap` now links the 2025 S7A (as
+  `/scoring/track-validity` does); §4.4.2, §4.4.6 and §5.2.4–5.2.5 are
+  unchanged between 2022 and 2025. Stopped-task citations in `README.md` and
+  `docs/database.md` are now §13.4, and launch validity in `CLAUDE.md` is
+  §10.1 (checked against the 2026 transcription's contents list).
+  Not touched: `CLAUDE.md` still cites "§12.1, §12.3.5" in the report-card
+  chart rule, and the engine's own `§9.1` comments; both want a clause-by-clause
+  check against the 2026 text.
+
+### Lessons
+
+- The routine's `git checkout -B claude/standards-…` conflicts with a session
+  that is told to use a fixed branch; use the session's branch.
+
 ## 2026-10-25: baseline
 
 The first run, made when the routine was written. It recorded a `seen` value

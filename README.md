@@ -28,7 +28,7 @@ The app is live at **[glidecomp.com](https://glidecomp.com)**.
 - **Flight event detection** — automatic detection of takeoff, landing, thermals, glides, start/goal crossings, and turnpoint tagging
 - **Thermal analysis** — entry/exit times, altitude gain, average climb rate
 - **Glide analysis** — distance, altitude lost, L/D ratio, plus sink detection for poor glides
-- **GAP scoring** — CIVL GAP scoring with distance, time, leading, and arrival points, including stopped tasks (S7F §12.3)
+- **GAP scoring** — CIVL GAP scoring with distance, time, leading, and arrival points, including stopped tasks (S7F §13.4)
 - **Open-distance scoring** — for tasks flown downwind from a launch cylinder rather than around a route
 - **Report card** — a per-pilot page explaining exactly how their score was arrived at, with the substituted arithmetic, each component's scoring curve drawn with the field on it, and links into the scoring guides
 - **Task analysis** — 26 cross-pilot behavioural metrics per task, ranked by Spearman correlation against finishing position, with per-comp consistency across tasks
@@ -255,7 +255,7 @@ bun run score-task -- <task.xctsk> <igc-file-or-folder>... [options]
 #   --no-use-leading           Disable leading (departure) points (`useLeading`)
 #   --no-use-arrival           Disable arrival points (`useArrival`)
 #   --no-use-distance-difficulty   Disable difficulty points (`useDistanceDifficulty`)
-# Stopped tasks (S7F §12.3):
+# Stopped tasks (S7F §13.4):
 #   --stop-time <iso-datetime> Announce a stop, e.g. 2026-01-15T03:45:00Z
 #   --score-back-time <s>      PG score-back window (default: 300)
 # Formula & advanced:
