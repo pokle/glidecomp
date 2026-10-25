@@ -27,6 +27,35 @@ export type SubjectType = "comp" | "task" | "pilot" | "track";
  */
 export const ANONYMOUS_ACTOR_NAME = "anonymous submission";
 
+/** The longest client name the audit log will print, in characters. */
+const MAX_ASSISTANT_NAME = 40;
+
+/**
+ * The name an assistant's changes are logged under: its registered
+ * `client_name`, tidied for a public one-line sentence.
+ *
+ * The name is self-declared — dynamic client registration lets a client call
+ * itself anything — so it is treated as untrusted text: control characters
+ * and runs of whitespace collapse to one space, and it is cut short. A client
+ * that named itself "Claude" is logged as "Claude", which is what the
+ * organiser saw on the consent page (beside its redirect host) and approved.
+ */
+export function assistantName(clientName: string | null | undefined): string {
+  const tidy = (clientName ?? "").replace(/[\p{Cc}\s]+/gu, " ").trim();
+  if (!tidy) return "a connected assistant";
+  return tidy.length <= MAX_ASSISTANT_NAME ? tidy : `${tidy.slice(0, MAX_ASSISTANT_NAME - 1)}…`;
+}
+
+/**
+ * The sentence as the log prints it. A change an organiser's assistant made
+ * says so — "Created task "Task 3" (via Claude)" — so a pilot reading the
+ * public log can tell how it was made. The actor stays the organiser, who
+ * granted the assistant access. One place, so no route has to remember it.
+ */
+function described(user: AuthUser | null | undefined, description: string): string {
+  return user?.via ? `${description} (via ${user.via})` : description;
+}
+
 export interface AuditEntry {
   subject_type: SubjectType;
   subject_id?: number | null;
@@ -66,7 +95,7 @@ export async function audit(
         entry.subject_type,
         entry.subject_id ?? null,
         entry.subject_name ?? null,
-        entry.description
+        described(user, entry.description)
       )
       .run();
   } catch (err) {
@@ -112,7 +141,7 @@ export async function auditAll(
             entry.subject_type,
             entry.subject_id ?? null,
             entry.subject_name ?? null,
-            entry.description
+            described(user, entry.description)
           )
       )
     );

@@ -222,9 +222,15 @@ These are the standing imperatives. Each links to the reference that explains it
     knowing the rule exists.
   - **A route an assistant may reach is added to the fence on purpose.**
     `MCP_ROUTES` in `competition-api/src/middleware/mcp-fence.ts` lists every
-    route an access token may call, with the scope each needs; anything else
-    answers 403. A new tool means a new row there, and a new kind of change
-    means a new scope, never a wider existing one.
+    route an access token may call, with the scope each needs and, for a
+    write, the body fields it may send; anything else answers 403. A new tool
+    means a new row there, and a new kind of change means a new scope, never a
+    wider existing one.
+  - **An assistant's change says so in the public log.** `audit()` adds
+    "(via <client>)" whenever the request carried an OAuth grant
+    (`user.via`); no call site does anything. And a route it sets must name
+    every waypoint exactly — a fuzzy match may propose, never dispose, as with
+    pilot names (`mcp-api/src/route-plan.ts`).
 - **The search index maintains itself — do NOT add a call site for it.**
   `GET /api/comp/search` answers over an FTS5 index of competitions, tasks
   (including their routes' turnpoints) and pilots

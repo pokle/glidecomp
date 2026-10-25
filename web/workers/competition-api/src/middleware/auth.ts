@@ -5,6 +5,7 @@ import {
   verifySessionCookie,
 } from "@glidecomp/worker-kit/session-cookie";
 import type { Env, AuthUser } from "../env";
+import { assistantName } from "../audit";
 import { isCompAdmin } from "../super-admin";
 
 const AUTH_ATTEMPTS = 3;
@@ -134,11 +135,15 @@ async function fetchIdentity(env: Env, headers: Headers): Promise<Identity> {
         throw new Error(`auth-api /me responded ${res.status}`);
       }
       const data = (await res.json()) as { user?: AuthUser | null; grant?: McpGrant | null };
+      const grant = data.grant?.kind === "oauth" ? data.grant : null;
       // Projected to the fields the cookie path yields too, so c.var.user
-      // has one shape whichever path answered.
+      // has one shape whichever path answered — plus, for an assistant, the
+      // name the audit log says the change came through.
       return {
-        user: data.user ? toSessionUser(data.user) : null,
-        grant: data.grant?.kind === "oauth" ? data.grant : null,
+        user: data.user
+          ? { ...toSessionUser(data.user), ...(grant ? { via: assistantName(grant.client_name) } : {}) }
+          : null,
+        grant,
         ...(res.status === 429
           ? { retryAfterSeconds: Number(res.headers.get("retry-after")) || 60 }
           : {}),

@@ -294,8 +294,10 @@ it.
   recalled, so the consent check is what makes Disconnect take effect on the
   next request.
 - **competition-api fences it** (`middleware/mcp-fence.ts`): a request
-  carrying one reaches only the allowlisted routes, with the scope each needs,
-  and a token `/me` won't vouch for is a `401`, never the signed-out view.
+  carrying one reaches only the allowlisted routes, with the scope each needs
+  and, for a write, only the body fields that scope covers; a token `/me`
+  won't vouch for is a `401`, never the signed-out view. Its user carries
+  `via` (the client's name), which `audit()` appends to the log line.
 - **mcp-api asks `/me` too** (`web/workers/mcp-api/src/gate.ts`), once per
   MCP request, rather than checking the signature itself: only `/me` knows the
   consent and the budget. Anything but an OAuth grant — a session, an API key

@@ -197,6 +197,54 @@ describe("the flow", () => {
     expect(res.status === 400 || location.includes("error=")).toBe(true);
   });
 
+  test("PKCE must be S256: a plain challenge is refused", async () => {
+    const cookie = await loginAs("pkce-plain@example.com");
+    const { client_id } = (await (await register()).json()) as { client_id: string };
+    const q = new URLSearchParams(authorizeUrl(client_id, "a".repeat(43)).split("?")[1]);
+    q.set("code_challenge_method", "plain");
+    const res = await authorize(`/api/auth/oauth2/authorize?${q}`, cookie);
+    const location = res.headers.get("location") ?? "";
+    expect(location).not.toContain("/oauth/consent");
+    expect(res.status === 400 || location.includes("error=")).toBe(true);
+  });
+
+  test("a redirect URI the client didn't register is never redirected to", async () => {
+    const cookie = await loginAs("redirect@example.com");
+    const { client_id } = (await (await register()).json()) as { client_id: string };
+    const { challenge } = await pkce();
+    for (const evil of ["https://evil.example/callback", `${REDIRECT}/../steal`, `${REDIRECT}?x=1`]) {
+      const q = new URLSearchParams(authorizeUrl(client_id, challenge).split("?")[1]);
+      q.set("redirect_uri", evil);
+      const res = await authorize(`/api/auth/oauth2/authorize?${q}`, cookie);
+      const location = res.headers.get("location") ?? "";
+      expect(location, evil).not.toContain("/oauth/consent");
+      expect(location.startsWith(evil.split("?")[0]!) && location !== "", evil).toBe(false);
+    }
+  });
+
+  test("the code is good only with the redirect URI it was issued for", async () => {
+    const cookie = await loginAs("redirect-code@example.com");
+    const { client_id } = (await (await register()).json()) as { client_id: string };
+    const { verifier, challenge } = await pkce();
+    const auth = await authorize(authorizeUrl(client_id, challenge), cookie);
+    const consentUrl = new URL(auth.headers.get("location")!, "http://localhost:8788");
+    const consent = await request("POST", "/api/auth/oauth2/consent", {
+      cookie,
+      headers: ORIGIN,
+      body: { accept: true, oauth_query: consentUrl.search.slice(1) },
+    });
+    const code = new URL(((await consent.json()) as { url: string }).url).searchParams.get("code")!;
+    const tok = await tokenRequest({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: "https://evil.example/callback",
+      client_id,
+      code_verifier: verifier,
+      resource: RESOURCE,
+    });
+    expect(tok.status).toBe(400);
+  });
+
   test("an access token is a short-lived at+jwt bound to the MCP resource, and /me answers with the grant", async () => {
     const cookie = await loginAs("organiser@example.com", "Org Aniser");
     const conn = await connect(cookie);

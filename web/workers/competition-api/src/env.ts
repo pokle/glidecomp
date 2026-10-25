@@ -19,8 +19,11 @@ export type Env = {
 };
 
 /** Who is signed in — the same shape whether the session cookie cache or the
- * `/me` hop answered (see toSessionUser). */
-export type AuthUser = SessionUser;
+ * `/me` hop answered (see toSessionUser). `via` is set when the request came
+ * from an organiser's connected assistant rather than the organiser's own
+ * session: the client's name, which audit() adds to the public log line
+ * (docs/2026-10-24-mcp-oauth-plan.md §4). */
+export type AuthUser = SessionUser & { via?: string };
 
 /**
  * The route-parameter ids `sqidsMiddleware` decodes off the path.
