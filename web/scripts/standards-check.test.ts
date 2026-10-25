@@ -17,7 +17,7 @@ const std = (over: Partial<Standard>): Standard => ({
   name: 'X',
   follows: '1.0',
   statedIn: [],
-  implementedIn: [],
+  searchFor: [],
   check: { kind: 'regex', url: 'https://example.test', pattern: 'v(\\S+)' },
   onChange: '',
   ...over,
@@ -87,6 +87,7 @@ describe('judge', () => {
 
 describe('the register', () => {
   const register = JSON.parse(readFileSync(REGISTER, 'utf8')) as { standards: Standard[] };
+  const root = new URL('../../', import.meta.url);
 
   test('every entry is complete, and ids are unique', () => {
     const ids = register.standards.map((s) => s.id);
@@ -95,7 +96,7 @@ describe('the register', () => {
       expect(s.name, s.id).toBeTruthy();
       expect(s.follows, s.id).toBeTruthy();
       expect(s.statedIn.length, s.id).toBeGreaterThan(0);
-      expect(s.implementedIn.length, s.id).toBeGreaterThan(0);
+      expect(s.searchFor.length, s.id).toBeGreaterThan(0);
       expect(s.onChange, s.id).toBeTruthy();
       const check = s.check;
       if (check.kind === 'regex' || check.kind === 'redirect') expect(() => new RegExp(check.pattern)).not.toThrow();
@@ -103,11 +104,25 @@ describe('the register', () => {
   });
 
   test('every path it names exists in the tree', () => {
-    const root = new URL('../../', import.meta.url);
     for (const s of register.standards) {
-      const paths = [...s.statedIn, ...s.implementedIn, ...(s.testedIn ?? [])].map((p) => p.split(/[:#]/)[0]!);
+      const paths = [...s.statedIn];
       if (s.check.kind === 'same-as') paths.push(s.check.local);
       for (const p of paths) expect(existsSync(new URL(p, root)), `${s.id}: ${p}`).toBe(true);
+    }
+  });
+
+  // A term that no longer matches means the code stopped citing the standard
+  // the way the register expects: fix the term, or ask why the code moved.
+  // The register and the routine are left out, or every term would find itself.
+  test('every search term still finds something in the tree', () => {
+    for (const s of register.standards) {
+      for (const term of s.searchFor) {
+        const found = Bun.spawnSync(
+          ['git', 'grep', '-q', '-F', '-e', term, '--', '.', ':!docs/standards', ':!.claude/commands/standards-check.md'],
+          { cwd: root.pathname }
+        );
+        expect(found.exitCode, `${s.id}: "${term}"`).toBe(0);
+      }
     }
   });
 });

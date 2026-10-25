@@ -65,10 +65,14 @@ export interface Standard {
   name: string;
   /** The edition/version/revision GlideComp implements, as the tree states it. */
   follows: string;
-  /** Where that is stated, and where it is implemented and tested. */
+  /** The few files that pin that edition, and must change when it does. */
   statedIn: string[];
-  implementedIn: string[];
-  testedIn?: string[];
+  /**
+   * Fixed strings that find the code following the standard today (`git grep -F`).
+   * Search terms instead of a list of files: a list would go stale with every
+   * refactor and look complete when it isn't.
+   */
+  searchFor: string[];
   check: Check;
   /** What a change to this standard requires here; read by the routine. */
   onChange: string;

@@ -1,5 +1,5 @@
 {
-  "$comment": "The standards GlideComp follows, and how to tell when one moves. Read by web/scripts/standards-check.ts and the monthly routine .claude/commands/standards-check.md. `follows` is what the tree implements; `seen` is what the last run saw (written by --record). See docs/standards/review-log.md.",
+  "$comment": "The standards GlideComp follows, and how to tell when one moves. Read by web/scripts/standards-check.ts and the monthly routine .claude/commands/standards-check.md. `follows` is what the tree implements; `statedIn` lists the few files that pin that edition and must change when it does; `searchFor` gives fixed strings that find the code following the standard today (search with them rather than keep a list of files, which would rot); `seen` is what the last run saw (written by --record). See docs/standards/review-log.md.",
   "standards": [
     {
       "id": "fai-s7f",
@@ -12,22 +12,10 @@
         "web/frontend/src/react/comp/rules-edition.ts",
         "web/workers/competition-api/src/scoring/class-score.ts"
       ],
-      "implementedIn": [
-        "web/engine/src/gap-scoring.ts",
-        "web/engine/src/gap-formulas.ts",
-        "web/engine/src/gap-leading.ts",
-        "web/engine/src/gap-stopped.ts",
-        "web/engine/src/gap-params.ts",
-        "web/engine/src/open-distance-scoring.ts",
-        "web/engine/src/route-optimizer.ts",
-        "web/engine/src/ftv.ts",
-        "web/engine/src/geo.ts",
-        "web/frontend/static/src/components/SpecRef.astro"
-      ],
-      "testedIn": [
-        "web/engine/tests/gap-scoring.test.ts",
-        "web/engine/tests/gap-scoring-integration.test.ts",
-        "web/engine/tests/airscore-parity.test.ts"
+      "searchFor": [
+        "S7F 2026 §",
+        "s7f-2026",
+        "sporting_code_s7_f_-_xc_scoring_2026"
       ],
       "check": {
         "kind": "research",
@@ -38,25 +26,20 @@
           "CIVL plenary {year} Section 7F changes"
         ]
       },
-      "onChange": "Owner, always. A new edition (effective 1 May) or errata is a scoring decision: which comps it applies to and from when. It needs a transcription under docs/reference/ (follow fai-s7f-xc-scoring-2024/INGESTION.md and extract_s7f.py), a note in web/engine/scoring-changes/ measured over the archive, and the owner's go-ahead. Raise an issue with the edition's red-marked changes summarised and the engine files each touches. Edition-coupled data to regenerate with a new edition: SpecRef.astro's SPEC_DESTS (section to PDF page), the PDF links in gap-types.ts, gap-scoring.ts, /scoring/gap and /about, the rules_edition payload value and the label in rules-edition.ts, and every \u00a7 citation (docs/2026-08-09-s7f-2026-migration-plan.md has the renumbering table from the last migration)."
+      "onChange": "Owner, always. A new edition (effective 1 May) or errata is a scoring decision: which comps it applies to and from when. It needs a transcription under docs/reference/ (follow fai-s7f-xc-scoring-2024/INGESTION.md and extract_s7f.py), a note in web/engine/scoring-changes/ measured over the archive, and the owner's go-ahead. Raise an issue with the edition's red-marked changes summarised and the engine files each touches. Edition-coupled data to regenerate with a new edition: SpecRef.astro's SPEC_DESTS (section to PDF page), the PDF links in gap-types.ts, gap-scoring.ts, /scoring/gap and /about, the rules_edition payload value and the label in rules-edition.ts, and every § citation (docs/2026-08-09-s7f-2026-migration-plan.md has the renumbering table from the last migration)."
     },
     {
       "id": "fai-s7a",
       "name": "FAI Sporting Code Section 7A: General (hang gliding and paragliding)",
       "follows": "not pinned: /scoring/track-validity links the 2025 edition, /scoring/gap the 2022 one",
       "statedIn": [
-        "docs/track-quality.md",
         "web/frontend/static/src/pages/scoring/track-validity.astro",
         "web/frontend/static/src/pages/scoring/gap.astro"
       ],
-      "implementedIn": [
-        "web/engine/src/track-quality.ts",
-        "web/engine/src/ftv.ts",
-        "web/workers/competition-api/src/scoring/class-score.ts"
-      ],
-      "testedIn": [
-        "web/engine/tests/track-quality.test.ts",
-        "web/engine/tests/ftv.test.ts"
+      "searchFor": [
+        "S7A §4.4",
+        "S7A §5.2.5",
+        "sporting_code_s7_a_"
       ],
       "check": {
         "kind": "research",
@@ -65,22 +48,18 @@
           "FAI Sporting Code Section 7A {year} changes track log verification"
         ]
       },
-      "onChange": "Owner. GlideComp relies on S7A \u00a74.4.2 and \u00a74.4.6 (track-log verification and the organiser override), \u00a75.2.5.1 (FTV discard factor) and \u00a75.2.5.4 (tied ranks). A change to those can change which tracks are scored or how comps total; raise an issue naming the clauses that moved and the code they touch. Pointing both pages' S7A links at the same, current PDF is a safe link fix when the clauses they cite didn't move."
+      "onChange": "Owner. GlideComp relies on S7A §4.4.2 and §4.4.6 (track-log verification and the organiser override), §5.2.5.1 (FTV discard factor) and §5.2.5.4 (tied ranks). A change to those can change which tracks are scored or how comps total; raise an issue naming the clauses that moved and the code they touch. Pointing both pages' S7A links at the same, current PDF is a safe link fix when the clauses they cite didn't move."
     },
     {
       "id": "igc-format",
       "name": "IGC flight recorder file format (FAI IGC technical specification)",
       "follows": "IGC file format as documented in 2008 (igc-parser.ts cites the xp-soaring mirror); the FAI specification it belongs to was at the 2024 edition with AL9 when the register was written",
       "statedIn": [
-        "web/engine/src/igc-parser.ts",
-        "docs/igc-analysis-tool-spec.md"
-      ],
-      "implementedIn": [
         "web/engine/src/igc-parser.ts"
       ],
-      "testedIn": [
-        "web/engine/tests/igc-parser.test.ts",
-        "web/engine/tests/igc-parser-time-order.test.ts"
+      "searchFor": [
+        "igc_format_2008",
+        "HFDTEDATE"
       ],
       "check": {
         "kind": "research",
@@ -98,11 +77,9 @@
       "statedIn": [
         "web/engine/src/xctsk-parser.ts"
       ],
-      "implementedIn": [
-        "web/engine/src/xctsk-parser.ts"
-      ],
-      "testedIn": [
-        "web/engine/tests/xctsk-parser.test.ts"
+      "searchFor": [
+        "Competition_Interfaces.html",
+        "XCTSK:"
       ],
       "check": {
         "kind": "hash",
@@ -121,15 +98,11 @@
       "statedIn": [
         "docs/mcp.md",
         "e2e/mcp.spec.ts",
-        "web/workers/mcp-api/src/server-card.ts"
+        "web/workers/mcp-api/test/mcp-api.test.ts"
       ],
-      "implementedIn": [
-        "web/workers/mcp-api/src/index.ts",
-        "web/workers/mcp-api/src/tools.ts"
-      ],
-      "testedIn": [
-        "web/workers/mcp-api/test/mcp-api.test.ts",
-        "e2e/mcp.spec.ts"
+      "searchFor": [
+        "SUPPORTED_PROTOCOL_VERSIONS",
+        "mcp-protocol-version"
       ],
       "check": {
         "kind": "redirect",
@@ -150,11 +123,9 @@
         "web/workers/mcp-api/src/server-card.ts",
         "docs/mcp.md"
       ],
-      "implementedIn": [
-        "web/workers/mcp-api/src/server-card.ts"
-      ],
-      "testedIn": [
-        "web/workers/mcp-api/test/discovery.test.ts"
+      "searchFor": [
+        "application/mcp-server-card+json",
+        "server-card.schema.json"
       ],
       "check": {
         "kind": "same-as",
@@ -176,13 +147,9 @@
         "docs/mcp.md",
         "web/workers/mcp-api/test/discovery.test.ts"
       ],
-      "implementedIn": [
-        "web/frontend/public/.well-known/ard.json",
-        "web/frontend/static/src/layouts/Base.astro"
-      ],
-      "testedIn": [
-        "web/workers/mcp-api/test/discovery.test.ts",
-        "e2e/static-pages.spec.ts"
+      "searchFor": [
+        "rel=\"ard\"",
+        ".well-known/ard.json"
       ],
       "check": {
         "kind": "regex",
@@ -202,11 +169,8 @@
       "statedIn": [
         "web/workers/mcp-api/test/discovery.test.ts"
       ],
-      "implementedIn": [
-        "web/frontend/public/.well-known/ard.json"
-      ],
-      "testedIn": [
-        "web/workers/mcp-api/test/discovery.test.ts"
+      "searchFor": [
+        "ard-entry.schema.json"
       ],
       "check": {
         "kind": "same-as",
@@ -227,12 +191,9 @@
         "web/frontend/public/.well-known/ai-catalog.json",
         "docs/api.md"
       ],
-      "implementedIn": [
-        "web/frontend/public/.well-known/ai-catalog.json",
-        "web/frontend/public/_headers"
-      ],
-      "testedIn": [
-        "web/workers/mcp-api/test/discovery.test.ts"
+      "searchFor": [
+        "application/ai-catalog+json",
+        "ai-catalog.json"
       ],
       "check": {
         "kind": "hash",
@@ -252,12 +213,9 @@
         "docs/mcp.md",
         "web/workers/mcp-api/src/server-card.ts"
       ],
-      "implementedIn": [
-        "web/workers/mcp-api/src/server-card.ts",
-        "web/frontend/public/_headers"
-      ],
-      "testedIn": [
-        "web/workers/mcp-api/test/mcp-api.test.ts"
+      "searchFor": [
+        "/server-card",
+        "application/mcp-server-card+json"
       ],
       "check": {
         "kind": "hash",
@@ -276,11 +234,9 @@
       "statedIn": [
         "web/workers/mcp-api/test/discovery.test.ts"
       ],
-      "implementedIn": [
-        "web/frontend/public/llms.txt"
-      ],
-      "testedIn": [
-        "web/workers/mcp-api/test/discovery.test.ts"
+      "searchFor": [
+        "llmstxt.org",
+        "llms.txt"
       ],
       "check": {
         "kind": "hash",
@@ -300,8 +256,8 @@
         "docs/accessibility-standard.md",
         "CLAUDE.md"
       ],
-      "implementedIn": [
-        "docs/accessibility-standard.md"
+      "searchFor": [
+        "WCAG 2.2"
       ],
       "check": {
         "kind": "regex",
@@ -322,12 +278,9 @@
         "docs/auth.md",
         "docs/2026-10-24-mcp-oauth-plan.md"
       ],
-      "implementedIn": [
-        "web/workers/auth-api/src/auth.ts",
-        "web/workers/auth-api/src/mcp-grants.ts"
-      ],
-      "testedIn": [
-        "web/workers/auth-api/test/mcp-oauth.test.ts"
+      "searchFor": [
+        "OAuth 2.1",
+        "code_challenge_method"
       ],
       "check": {
         "kind": "regex",
@@ -345,16 +298,11 @@
       "name": "RFC 9728 OAuth 2.0 Protected Resource Metadata",
       "follows": "none",
       "statedIn": [
-        "docs/auth.md",
         "web/workers/auth-api/src/endpoints.ts"
       ],
-      "implementedIn": [
-        "web/workers/auth-api/src/endpoints.ts",
-        "web/workers/mcp-api/src/gate.ts",
-        "functions/.well-known/oauth-protected-resource/[[path]].ts"
-      ],
-      "testedIn": [
-        "web/workers/auth-api/test/mcp-oauth.test.ts"
+      "searchFor": [
+        "RFC 9728",
+        "oauth-protected-resource"
       ],
       "check": {
         "kind": "regex",
@@ -374,12 +322,9 @@
       "statedIn": [
         "web/workers/auth-api/src/endpoints.ts"
       ],
-      "implementedIn": [
-        "web/workers/auth-api/src/endpoints.ts",
-        "functions/.well-known/oauth-authorization-server/[[path]].ts"
-      ],
-      "testedIn": [
-        "web/workers/auth-api/test/mcp-oauth.test.ts"
+      "searchFor": [
+        "RFC 8414",
+        "oauth-authorization-server"
       ],
       "check": {
         "kind": "regex",
@@ -399,11 +344,8 @@
       "statedIn": [
         "web/workers/auth-api/src/auth.ts"
       ],
-      "implementedIn": [
-        "web/workers/auth-api/src/auth.ts"
-      ],
-      "testedIn": [
-        "web/workers/auth-api/test/mcp-oauth.test.ts"
+      "searchFor": [
+        "RFC 8707"
       ],
       "check": {
         "kind": "regex",
@@ -423,11 +365,8 @@
       "statedIn": [
         "web/workers/auth-api/src/auth.ts"
       ],
-      "implementedIn": [
-        "web/workers/auth-api/src/auth.ts"
-      ],
-      "testedIn": [
-        "web/workers/auth-api/test/mcp-oauth.test.ts"
+      "searchFor": [
+        "RFC 7591"
       ],
       "check": {
         "kind": "regex",

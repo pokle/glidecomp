@@ -14,9 +14,10 @@ Your job is to find out which of them have moved since the last run, then:
 Leave the register and the log so the next run starts where you stopped.
 
 The register is [`docs/standards/registry.json`](../../docs/standards/registry.json):
-every standard, the edition GlideComp follows (`follows`), where that is stated
-and implemented, how to check the source (`check`), what a change requires here
-(`onChange`), and what the last run saw (`seen`). The log is
+every standard, the edition GlideComp follows (`follows`), the files that pin it
+(`statedIn`), search terms that find the code following it (`searchFor`), how
+to check the source (`check`), what a change requires here (`onChange`), and
+what the last run saw (`seen`). The log is
 [`docs/standards/review-log.md`](../../docs/standards/review-log.md).
 
 ## 1. Read the log first
@@ -62,8 +63,11 @@ For every `new`, `unreachable` and `research` row:
      fields, scoring or security semantics;
    - **minor**: errata, clarifications, new optional fields, editorial
      changes.
-3. **Find what it touches here.** Use the entry's `statedIn`, `implementedIn`
-   and `testedIn`, then grep for the clause numbers or field names involved.
+3. **Find what it touches here.** Search the tree for the entry's
+   `searchFor` terms (`git grep -F`) and for the clause numbers or field names
+   the change involves. That finds the implementation and its tests as they
+   are today; the register deliberately keeps no list of them. `statedIn`
+   lists the files that pin the edition, which an adoption must update.
 4. **Decide**, using the rules in step 4.
 
 **The FAI sources need searching.** fai.org answers scripted fetches and
@@ -194,5 +198,5 @@ version check can't see it. Don't add them back without a reason:
 This routine lives at `.claude/commands/standards-check.md`. When you find a
 missing step or a stale instruction, fix it in the same PR. Add a standard to
 the register when GlideComp starts following a new one. The register test
-(`web/scripts/standards-check.test.ts`) checks every entry is complete and
-every path in it exists.
+(`web/scripts/standards-check.test.ts`) checks every entry is complete, every
+path in it exists, and every `searchFor` term still finds something.
