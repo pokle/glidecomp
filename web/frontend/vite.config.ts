@@ -161,6 +161,7 @@ const ASTRO_DEV_BASE = '/_static';
 const STATIC_PAGE_ROUTES = new Set([
   '/',
   '/about',
+  '/assistant',
   '/legal',
   '/scoring',
   '/scoring/gap',

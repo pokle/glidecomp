@@ -98,7 +98,7 @@ export async function resolveAccessToken(
   };
 }
 
-/** One row of Settings → Connected assistants. */
+/** One row of Settings → Connected AI Assistants. */
 export interface ConnectedAssistant {
   client_id: string;
   name: string | null;

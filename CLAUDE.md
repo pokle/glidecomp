@@ -23,7 +23,7 @@ features like Email Sending; still cost-conscious, avoid services beyond that).
     with the react-aria-components kit in `src/react/rac/` and Tailwind (tokens
     in `src/react/globals.css`). Most SPA routes reach `/app.html` via
     `public/_redirects`.
-  - The **content pages** (`/`, `/about`, `/legal`, `/scoring`, `/scoring/gap`,
+  - The **content pages** (`/`, `/about`, `/assistant`, `/legal`, `/scoring`, `/scoring/gap`,
     `/scoring/open-distance`, `/scoring/data-cleaning`, `/scoring/track-validity`,
     and the `404`) — prerendered static HTML from a small Astro app in
     `web/frontend/static/`, reusing the SPA's `globals.css` tokens/fonts. KaTeX

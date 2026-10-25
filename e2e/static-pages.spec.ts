@@ -28,6 +28,7 @@ import { test, expect, type APIRequestContext } from "./fixtures/test";
 const PAGES = [
   { path: "/", heading: "See where the race was really won." },
   { path: "/about", heading: "About GlideComp" },
+  { path: "/assistant", heading: "Use GlideComp from your AI assistant" },
   { path: "/legal", heading: "Privacy Policy &amp; Terms" },
   { path: "/scoring", heading: "Scoring" },
   { path: "/scoring/gap", heading: "How GAP Scoring Works" },
