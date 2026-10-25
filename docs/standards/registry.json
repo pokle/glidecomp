@@ -31,7 +31,7 @@
     {
       "id": "fai-s7a",
       "name": "FAI Sporting Code Section 7A: General (hang gliding and paragliding)",
-      "follows": "not pinned: /scoring/track-validity links the 2025 edition, /scoring/gap the 2022 one",
+      "follows": "2025 edition (both /scoring/track-validity and /scoring/gap link it)",
       "statedIn": [
         "web/frontend/static/src/pages/scoring/track-validity.astro",
         "web/frontend/static/src/pages/scoring/gap.astro"

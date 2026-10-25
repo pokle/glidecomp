@@ -159,7 +159,7 @@ These are the standing imperatives. Each links to the reference that explains it
   settles it beforehand via `POST /api/comp/:comp_id/registration/resolve`).
   Guessing used to mean a silent SECOND roster row whenever the organiser
   mistyped an email — the pilot registered twice, one entry empty, and the
-  pilot count feeding launch validity (S7F §9.1) counting a phantom.
+  pilot count feeding launch validity (S7F §10.1) counting a phantom.
   - **Names may propose, never dispose.** `nameAffinity()` orders the picker so
     the pilot's own entry is first. Nothing branches on it, and the decision to
     ask involves no names at all. `pilot-linker.ts` and `pilot-resolver.ts`
@@ -183,7 +183,7 @@ These are the standing imperatives. Each links to the reference that explains it
   write (never before), beside `audit()`, under the same "part of done" rule.
   - Scoring inputs are: tracks/uploads, penalties, task xctsk/date/classes, comp
     `category`/`scoring_format`/`gap_params`, pilot name/class, and pilot status
-    (absent/DNF/landed feed launch validity, S7F §9.1). Roster metadata like team
+    (absent/DNF/landed feed launch validity, S7F §10.1). Roster metadata like team
     names is read live and needs no bump.
   - **One bump covers every derived table.** `bumpScoreInputs()` batches an upsert
     for `task_scores` *and* `task_analysis`, so call sites stay unaware of
