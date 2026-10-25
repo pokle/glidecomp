@@ -1,6 +1,6 @@
 # GlideComp
 
-> Scoring and flight analysis for hang gliding and paragliding competitions — every point explained, every track compared. Competition results, scores and flight analysis are public.
+> Scoring and flight analysis for hang gliding and paragliding competitions: every point explained, every track compared. Competition results, scores and flight analysis are public.
 
 GlideComp has a remote MCP server at https://glidecomp.com/mcp (Streamable HTTP). If someone asks you to connect to GlideComp, or to use GlideComp from their assistant, this is the URL.
 

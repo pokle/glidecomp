@@ -93,6 +93,23 @@ describe("/.well-known/ai-catalog.json (AI Catalog 1.0)", () => {
   });
 });
 
+describe("every discovery file", () => {
+  // Read by programs that may not decode UTF-8 kindly, and nothing in them
+  // needs more than ASCII: a stray em dash or curly quote is a typo here.
+  test("is plain ASCII", async () => {
+    const files = {
+      "llms.txt": await read("llms.txt"),
+      "ard.json": await read(".well-known/ard.json"),
+      "ai-catalog.json": await read(".well-known/ai-catalog.json"),
+      "server card": JSON.stringify(cardFor(PROD)),
+    };
+    for (const [name, text] of Object.entries(files)) {
+      const stray = [...text].filter((c) => c.charCodeAt(0) > 0x7f);
+      expect(stray, name).toEqual([]);
+    }
+  });
+});
+
 describe("/llms.txt (llmstxt.org)", () => {
   test("an H1, a summary blockquote, prose without headings, then sections of link lists", async () => {
     const lines = (await read("llms.txt")).split("\n");
