@@ -12,6 +12,7 @@
     "@cfworker/json-schema": "^4.1.1",
     "@glidecomp/engine": "workspace:*",
     "@modelcontextprotocol/server": "2.4.0",
+    "uqr": "0.1.3",
     "zod": "^4.6.7"
   },
   "devDependencies": {
