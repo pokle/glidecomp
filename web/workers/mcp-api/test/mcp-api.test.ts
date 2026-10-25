@@ -195,7 +195,11 @@ async function rpc(env: Env, method: string, params: unknown, bearer = token("to
 async function callTool(env: Env, name: string, args: Record<string, unknown> = {}, bearer = token("tok-ok")) {
   const { json } = await rpc(env, "tools/call", { name, arguments: args }, bearer);
   if (!json.result) throw new Error(`tools/call ${name}: ${JSON.stringify(json)}`);
-  return json.result as { content: Array<{ text: string }>; structuredContent?: Record<string, any>; isError?: boolean };
+  return json.result as {
+    content: Array<{ type: string; text?: string; uri?: string; name?: string; description?: string }>;
+    structuredContent?: Record<string, any>;
+    isError?: boolean;
+  };
 }
 
 beforeEach(() => resetResourceMetadata());
@@ -352,6 +356,25 @@ describe("the tools", () => {
     expect(compCalls[0]!.path).toBe("/api/comp/search?q=corryong%20cup");
     expect(r.structuredContent!.comps[0].url).toBe(`${ORIGIN}/comp/corryong-cup-abcde`);
     expect(r.structuredContent!.comps[0].tasks[0].url).toBe(`${ORIGIN}/comp/corryong-cup-abcde/task/task-1-fghij`);
+  });
+
+  // A client can show these as links whether or not the model writes the url out.
+  test("competitions and tasks also go out as resource_link blocks", async () => {
+    const links = async (name: string, args: Record<string, unknown>) =>
+      (await callTool(makeEnv().env, name, args)).content
+        .filter((c) => c.type === "resource_link")
+        .map(({ uri, name, description }) => ({ uri, name, description }));
+    const comp = { uri: `${ORIGIN}/comp/corryong-cup-abcde`, name: "Corryong Cup", description: "Competition" };
+    const task = {
+      uri: `${ORIGIN}/comp/corryong-cup-abcde/task/task-1-fghij`,
+      name: "Task 1",
+      description: "Task in Corryong Cup",
+    };
+    expect(await links("search", { query: "corryong cup" })).toEqual([comp, task]);
+    expect(await links("list_competitions", { mine: true })).toEqual([comp]);
+    expect(await links("get_competition", { comp_id: "abcde" })).toEqual([comp, task]);
+    expect(await links("get_task", { comp_id: "abcde", task_id: "fghij" })).toEqual([task]);
+    expect(await links("list_waypoints", { comp_id: "abcde" })).toEqual([]);
   });
 
   test("list_competitions can narrow to the comps the account organises", async () => {

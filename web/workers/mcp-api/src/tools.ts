@@ -10,10 +10,11 @@
  * Each answer is a short line of text, then the data twice: as JSON in a
  * second text block, and as `structuredContent` (see answer()). Everything
  * that has a page carries its URL, so the assistant links to GlideComp rather
- * than retyping it. Text that pilots or organisers wrote (names, notes)
+ * than retyping it; competitions and tasks also go out as `resource_link`
+ * blocks, which a client can show as links whatever the model writes. Text that pilots or organisers wrote (names, notes)
  * travels as data fields, never as words addressed to the model.
  */
-import { McpServer, type AuthInfo } from "@modelcontextprotocol/server";
+import { McpServer, type AuthInfo, type ResourceLink } from "@modelcontextprotocol/server";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/server/validators/cf-worker";
 import { parseXCTask, type WaypointFileRecord } from "@glidecomp/engine";
 import * as z from "zod";
@@ -73,15 +74,21 @@ const ID = z.string().min(1).max(64).describe("An id exactly as GlideComp return
  * serialized JSON in a TextContent block"), and `outputSchema` would not fix
  * it — nothing obliges a client to show the model `structuredContent`.
  */
-function answer(text: string, data: Record<string, unknown>, isError?: true) {
+function answer(text: string, data: Record<string, unknown>, links: ResourceLink[] = [], isError?: true) {
   return {
     content: [
       { type: "text" as const, text },
       { type: "text" as const, text: JSON.stringify(data) },
+      ...links,
     ],
     structuredContent: data,
     ...(isError ? { isError } : {}),
   };
+}
+
+/** A competition's or task's page, as a `resource_link` block. */
+function pageLink(uri: string, name: string, description: string): ResourceLink {
+  return { type: "resource_link", uri, name, description, mimeType: "text/html" };
 }
 
 export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, origin: string): McpServer {
@@ -103,6 +110,9 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
     }
   );
   const url = (path: string) => `${origin}${path}`;
+  const compLink = (c: { url: string; name: string }) => pageLink(c.url, c.name, "Competition");
+  const taskLink = (t: { url: string; name: string }, compName: string) =>
+    pageLink(t.url, t.name, `Task in ${compName}`);
 
   async function api<T>(path: string, write?: { method: "POST" | "PATCH"; body: unknown }): Promise<T> {
     const res = await env.COMPETITION_API.fetch(
@@ -124,7 +134,7 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
 
   /** A refusal of the tool's own, in words the model can act on. */
   function refusal(text: string, structuredContent?: Record<string, unknown>) {
-    return structuredContent ? answer(text, structuredContent, true) : { content: [{ type: "text" as const, text }], isError: true };
+    return structuredContent ? answer(text, structuredContent, [], true) : { content: [{ type: "text" as const, text }], isError: true };
   }
 
   /** A failed call as a tool error the model can read, rather than a protocol error. */
@@ -186,7 +196,8 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
         }));
         return answer(
           comps.length ? `${comps.length} competition(s) matched "${query}".` : `Nothing matched "${query}".`,
-          { ...data, comps }
+          { ...data, comps },
+          comps.flatMap((c) => [compLink(c), ...c.tasks.map((t) => taskLink(t, c.name))])
         );
       } catch (err) {
         return failure(err);
@@ -223,7 +234,7 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             hidden: !!c.test,
             url: url(compPath(c.comp_id, c.name)),
           }));
-        return answer(`${comps.length} competition(s).`, { comps });
+        return answer(`${comps.length} competition(s).`, { comps }, comps.map(compLink));
       } catch (err) {
         return failure(err);
       }
@@ -248,12 +259,12 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
           tasks?: Array<{ task_id: string; name: string } & Record<string, unknown>>;
         } & Record<string, unknown>>(`/api/comp/${encodeURIComponent(comp_id)}`);
         const compUrl = url(compPath(comp.comp_id, comp.name));
-        return answer(`${comp.name}: ${compUrl}`, {
-          ...comp,
-          url: compUrl,
-          waypoints_url: url(compWaypointsPath(comp.comp_id, comp.name)),
-          tasks: (comp.tasks ?? []).map((t) => ({ ...t, url: url(taskPath(comp.comp_id, comp.name, t.task_id, t.name)) })),
-        });
+        const tasks = (comp.tasks ?? []).map((t) => ({ ...t, url: url(taskPath(comp.comp_id, comp.name, t.task_id, t.name)) }));
+        return answer(
+          `${comp.name}: ${compUrl}`,
+          { ...comp, url: compUrl, waypoints_url: url(compWaypointsPath(comp.comp_id, comp.name)), tasks },
+          [compLink({ url: compUrl, name: comp.name }), ...tasks.map((t) => taskLink(t, comp.name))]
+        );
       } catch (err) {
         return failure(err);
       }
@@ -289,7 +300,8 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
           route
             ? `${task.name} (${task.task_date}): ${route.quick_task}${route.distance_km !== null ? ` — ${route.distance_km} km` : ""}. ${taskUrl}`
             : `${task.name} (${task.task_date}) has no route yet. ${taskUrl}`,
-          { ...rest, competition: comp.name, timezone: comp.timezone ?? null, route, url: taskUrl }
+          { ...rest, competition: comp.name, timezone: comp.timezone ?? null, route, url: taskUrl },
+          [taskLink({ url: taskUrl, name: task.name }, comp.name)]
         );
       } catch (err) {
         return failure(err);
@@ -419,7 +431,7 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             pilot_classes: task.pilot_classes ?? classes,
             route: null,
             url: link,
-          });
+          }, [taskLink({ url: link, name: task.name }, comp.name)]);
         } catch (err) {
           return failure(err);
         }
@@ -461,7 +473,7 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             task_date: task.task_date,
             pilot_classes: task.pilot_classes ?? [],
             url: link,
-          });
+          }, [taskLink({ url: link, name: task.name }, comp.name)]);
         } catch (err) {
           return failure(err);
         }
@@ -574,7 +586,8 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
             `Saved the route of ${saved.name}: ${route.quick_task}` +
               (route.distance_km !== null ? ` — ${route.distance_km} km` : "") +
               `. ${link}`,
-            { task_id: saved.task_id, name: saved.name, route, url: link }
+            { task_id: saved.task_id, name: saved.name, route, url: link },
+            [taskLink({ url: link, name: saved.name }, ctx.comp.name)]
           );
         } catch (err) {
           return failure(err);
