@@ -82,6 +82,8 @@ test.describe("prerendered content (no browser)", () => {
     for (const href of ["/llms.txt", "/mcp/server-card", "/.well-known/ard.json", "/.well-known/ai-catalog.json"]) {
       expect(body, href).toContain(`href="${href}"`);
     }
+    // …and Disconnect lands on the Settings section, not the top of Settings.
+    expect(body).toContain('href="/settings#connected-ai-assistants"');
   });
 
   test("the scoring index links to every guide and to the published changelog", async ({

@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Form } from "react-aria-components";
+import { useLocation } from "react-router-dom";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card, CardGrid, CardHeader } from "@/react/rac/card";
 import {
@@ -74,10 +75,19 @@ function SavedFlash({ nonce }: { nonce: number }) {
 export function Settings() {
   const { user, loading, isSuperAdmin, previewRole } = useUser();
   const goToSignIn = useGoToSignIn();
+  const location = useLocation();
 
   useEffect(() => {
     document.title = "GlideComp - Settings";
   }, []);
+
+  // Deep links like /settings#connected-ai-assistants (from /assistant): the
+  // sections render only once the user resolves, after the browser's own
+  // jump to the anchor has already missed, so scroll once they exist.
+  useEffect(() => {
+    if (!user || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView();
+  }, [user, location.hash]);
 
   if (loading) return <p role="status">Loading…</p>;
 
@@ -87,7 +97,7 @@ export function Settings() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">Sign in to manage your account</p>
-          <Button className="mt-4" onPress={() => goToSignIn("/settings")}>
+          <Button className="mt-4" onPress={() => goToSignIn(`/settings${location.hash}`)}>
             Sign in
           </Button>
         </div>
@@ -802,7 +812,9 @@ function ConnectedAssistantsSection() {
   }
 
   return (
-    <Card>
+    // The anchor /assistant's "Disconnect" section links to; scroll-mt clears
+    // the sticky header.
+    <Card id="connected-ai-assistants" className="scroll-mt-20">
       <CardHeader
         title="Connected AI Assistants"
         description="Assistants you've let act as you. Disconnecting one stops it straight away."
