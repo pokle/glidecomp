@@ -10,6 +10,13 @@
 and the phase-3 role-aware empty states (same file, the tasks section's
 "The organizers haven't published any tasks yet." + admin CTA).
 
+*Update 2026-10-25:* a sixth step, **Make public**, now ends the list. New
+competitions start hidden (a `test` comp), because public-by-default filled the
+public list with comps people made to try GlideComp out. The step is required,
+completes when the comp is no longer hidden, and links to the Access settings
+page, where the "Hidden?" switch lives. The create dialog's "Hidden?" checkbox
+was removed with it.
+
 ## 1. Problem
 
 Setting up a new competition is a multi-step job spread across several

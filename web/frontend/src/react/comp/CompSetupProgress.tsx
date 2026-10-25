@@ -1,6 +1,6 @@
 /**
  * Competition setup guide (docs/2026-07-12-comp-setup-progress-plan.md): an
- * admin-only checklist card near the top of /comp/:id showing the five setup
+ * admin-only checklist card near the top of /comp/:id showing the six setup
  * steps, each linked to the surface where it's done. Condition-based, not
  * stored — every signal comes from the already-fetched comp payload, and the
  * card disappears on the refresh after the last step completes. "Hide guide"
@@ -16,7 +16,7 @@ import { ProgressBar } from "@/react/rac/progress";
 import type { CompDetailData } from "./types";
 
 export interface SetupStep {
-  key: "create" | "settings" | "waypoints" | "pilots" | "task";
+  key: "create" | "settings" | "waypoints" | "pilots" | "task" | "public";
   label: string;
   complete: boolean;
   /**
@@ -62,6 +62,10 @@ export function deriveSetupSteps(comp: CompDetailData): SetupStep[] {
     { key: "waypoints", label: "Add waypoints", complete: comp.waypoint_count > 0 },
     { key: "pilots", label: "Add pilots", complete: comp.pilot_count > 0 },
     taskStep,
+    // Last, and required: a new comp starts hidden, so going public is the
+    // deliberate act that ends setup. A comp kept hidden for good (a trial
+    // run) keeps the guide until "Hide guide".
+    { key: "public", label: "Make public", complete: !comp.test },
   ];
 }
 
@@ -159,6 +163,13 @@ export function CompSetupProgress({
           <button type="button" className={linkClass} onClick={onCreateTask}>
             {step.label}
           </button>
+        );
+      case "public":
+        // The "Hidden?" switch lives on the Access settings page.
+        return (
+          <Link className={linkClass} to={`/comp/${compId}/settings/access`}>
+            {step.label}
+          </Link>
         );
     }
   }

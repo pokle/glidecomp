@@ -122,8 +122,9 @@ async function createFixture(admin: APIRequestContext): Promise<Fixture> {
   expect(superSignIn.ok(), "super admin re-login").toBeTruthy();
 
   const compName = e2eCompName("submit");
+  // Public: every submission here is anonymous, and a hidden comp 404s.
   const compRes = await admin.post("/api/comp", {
-    data: { name: compName, category: "hg", pilot_classes: ["open"] },
+    data: { name: compName, category: "hg", pilot_classes: ["open"], test: false },
   });
   expect(compRes.ok()).toBeTruthy();
   const { comp_id: compId } = (await compRes.json()) as { comp_id: string };
@@ -737,8 +738,9 @@ test.describe("submitting a track without an account", () => {
     test.beforeAll(async () => {
       // Its own comp: the shared fixture's roster would otherwise change
       // under the anonymous tests above.
+      // Public, so a signed-in pilot who is not its admin can reach it.
       const compRes = await admin.post("/api/comp", {
-        data: { name: e2eCompName("claim"), category: "hg", pilot_classes: ["open"] },
+        data: { name: e2eCompName("claim"), category: "hg", pilot_classes: ["open"], test: false },
       });
       const { comp_id } = (await compRes.json()) as { comp_id: string };
       strangerCompId = comp_id;

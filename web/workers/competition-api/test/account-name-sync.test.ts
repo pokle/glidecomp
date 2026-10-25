@@ -66,8 +66,9 @@ async function auditEntries(
 }
 
 async function createCompAs(name: string): Promise<string> {
+  // Public, so auditEntries() can read the log anonymously.
   const res = await request("POST", "/api/comp", {
-    body: { name, category: "hg" },
+    body: { name, category: "hg", test: false },
     user: USER,
   });
   const body = (await res.json()) as { comp_id: string };

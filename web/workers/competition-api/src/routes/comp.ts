@@ -503,6 +503,12 @@ export const compRoutes = new Hono<AuthedEnv>()
         (body.category === "pg" && scoringFormat === "gap" ? "ftv" : "total");
       const ftvFactor = body.ftv_factor ?? null;
 
+      // A new comp starts HIDDEN unless the caller says otherwise. Public by
+      // default meant every comp someone made to try GlideComp out sat in the
+      // public list; going public is now the setup guide's last step. The DB
+      // column default stays 0 — this INSERT always names the value.
+      const test = body.test ?? true;
+
       const compResult = await c.env.DB.prepare(
         `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -512,7 +518,7 @@ export const compRoutes = new Hono<AuthedEnv>()
           now,
           closeDate,
           body.category,
-          body.test ? 1 : 0,
+          test ? 1 : 0,
           JSON.stringify(pilotClasses),
           defaultClass,
           gapParams ? JSON.stringify(gapParams) : null,
@@ -548,7 +554,7 @@ export const compRoutes = new Hono<AuthedEnv>()
           category: body.category,
           creation_date: now,
           close_date: closeDate,
-          test: body.test ?? false,
+          test,
           pilot_classes: pilotClasses,
           default_pilot_class: defaultClass,
           gap_params: gapParams,

@@ -37,13 +37,20 @@ export function authRequest(
   return request(method, path, { body, user: "user-1" });
 }
 
-/** Create a comp and return its encoded ID. */
+/**
+ * Create a comp and return its encoded ID.
+ *
+ * PUBLIC unless overridden. The API starts a comp hidden when `test` is
+ * omitted, but most tests here read a comp as someone other than its admin,
+ * which a hidden comp would answer with a 404.
+ */
 export async function createComp(
   overrides: Record<string, unknown> = {}
 ): Promise<string> {
   const res = await authRequest("POST", "/api/comp", {
     name: "Test Comp",
     category: "hg",
+    test: false,
     ...overrides,
   });
   const data = (await res.json()) as { comp_id: string };

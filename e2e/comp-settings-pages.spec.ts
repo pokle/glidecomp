@@ -65,8 +65,10 @@ test.beforeAll(async ({ playwright }) => {
   const api = await playwright.request.newContext({ baseURL: baseUrl() });
   const login = await api.post("/api/auth/dev-login", { data: ADMIN_USER });
   expect(login.ok(), await login.text()).toBe(true);
+  // Public, so the visitor test reaches the admin-only notice rather than a
+  // hidden comp's 404.
   const created = await api.post("/api/comp", {
-    data: { name: COMP_NAME, category: "hg", pilot_classes: ["open"] },
+    data: { name: COMP_NAME, category: "hg", pilot_classes: ["open"], test: false },
   });
   expect(created.ok(), await created.text()).toBe(true);
   compId = ((await created.json()) as { comp_id: string }).comp_id;

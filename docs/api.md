@@ -105,7 +105,7 @@ endpoints return an `ETag`; send it back as `If-None-Match` to get a cheap
 | Method | Path | |
 |---|---|---|
 | `GET` | `/api/comp` | Public comps from the last 24 months, newest first |
-| `POST` | `/api/comp` | Create a competition; you become its administrator |
+| `POST` | `/api/comp` | Create a competition; you become its administrator. It starts hidden (`"test": true`) unless you send `"test": false` |
 | `GET` | `/api/comp/:comp_id` | One comp, with its tasks, pilot count and admins |
 | `PATCH` | `/api/comp/:comp_id` | Edit name, category, dates, scoring format, GAP params — **admin** |
 | `DELETE` | `/api/comp/:comp_id` | Delete the comp and everything under it — **admin** |

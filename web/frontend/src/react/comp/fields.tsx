@@ -259,20 +259,3 @@ export function PilotClassesField({
     </AriaTextField>
   );
 }
-
-export function TestCompField({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <CheckboxField
-      checked={checked}
-      onChange={onChange}
-      label="Hidden?"
-      hint="Hidden from the public and pilots — only admins can see it."
-    />
-  );
-}

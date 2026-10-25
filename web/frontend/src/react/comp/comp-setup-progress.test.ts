@@ -44,11 +44,44 @@ function task(overrides: Partial<TaskSummary> = {}): TaskSummary {
 }
 
 describe("deriveSetupSteps", () => {
-  it("a fresh comp is 1 of 5 (create pre-checked)", () => {
-    const steps = deriveSetupSteps(comp());
-    expect(steps).toHaveLength(5);
-    expect(steps.map((s) => s.complete)).toEqual([true, false, false, false, false]);
+  it("a fresh comp is 1 of 6 (create pre-checked, still hidden)", () => {
+    const steps = deriveSetupSteps(comp({ test: true }));
+    expect(steps).toHaveLength(6);
+    expect(steps.map((s) => s.complete)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
     expect(steps[0].label).toBe("Create the competition");
+  });
+
+  it("making the comp public is the last step, and it is required", () => {
+    const hidden = deriveSetupSteps(comp({ test: true }));
+    const last = hidden[hidden.length - 1];
+    expect(last.key).toBe("public");
+    expect(last.label).toBe("Make public");
+    expect(last.complete).toBe(false);
+    expect(last.optional).toBeUndefined();
+
+    const pub = deriveSetupSteps(comp({ test: false }));
+    expect(pub.find((s) => s.key === "public")?.complete).toBe(true);
+  });
+
+  it("a hidden comp keeps the guide open after every other step is done", () => {
+    const steps = deriveSetupSteps(
+      comp({
+        test: true,
+        settings_reviewed: true,
+        waypoint_count: 1,
+        pilot_count: 1,
+        tasks: [task({ has_xctsk: true })],
+      })
+    );
+    const incomplete = steps.filter((s) => !s.complete && !s.optional);
+    expect(incomplete.map((s) => s.key)).toEqual(["public"]);
   });
 
   it("each signal flips its step independently (steps can complete out of order)", () => {

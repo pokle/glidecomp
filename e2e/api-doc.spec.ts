@@ -248,15 +248,16 @@ test("every curl example in docs/api.md works against the live API", async ({
   // so key-auth is exercised on its own exactly as a reader would.
   const client = await playwright.request.newContext({ baseURL: baseURL! });
 
-  // Public (not `test: true`) on purpose: several documented curls read this
-  // comp with no credentials at all, and a hidden comp 404s anonymously. So it
+  // Public (`test: false`, since an omitted flag now means hidden) on purpose:
+  // several documented curls read this comp with no credentials at all, and a
+  // hidden comp 404s anonymously. So it
   // IS in the public comp list for the length of this test — which is why the
   // afterEach above deletes it and the name goes through e2eCompName(), the
   // marker the leftover sweep looks for. An undeleted public comp here is
   // exactly what broke SSR discovery in issue #477.
   const compRes = await client.post("/api/comp", {
     headers: authHeaders,
-    data: { name: e2eCompName(`API Doc Comp ${Date.now()}`), category: "hg" },
+    data: { name: e2eCompName(`API Doc Comp ${Date.now()}`), category: "hg", test: false },
   });
   expect(compRes.ok(), await compRes.text()).toBeTruthy();
   const compId = ((await compRes.json()) as { comp_id: string }).comp_id;
