@@ -4,6 +4,165 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-10-25
+
+**`bun audit` opens at 10 (3 high, 5 moderate, 2 low) and closes at 1 high,
+and that one cannot reach production.** None of the ten was in last week's
+count: the native app's removal (#769) took `braces` and `node-forge` with
+it, and five new advisories were published against versions already
+installed. The fix that needed source work is **zod 3 → 4 in
+competition-api**: zod 3 has no patched release, and competition-api
+validates request bodies with exactly the pattern the advisory describes.
+**astro is held at 7.4.1**, because 7.4.2 raises its Node floor to a release
+five days old that CI does not install yet.
+
+The workspace list changed again: `mobile` is gone (#769), `web/client` folded
+back into the frontend (#771), and `web/workers/mcp-api` is new (#774). The
+root `workspaces` field was the list, as the routine says.
+
+### Security Vulnerabilities Fixed
+
+| Advisory | Severity | Package | Fix |
+|----------|----------|---------|-----|
+| [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | high | `zod` `<4.6.6` | competition-api `zod` `^3.25.76` → `^4.6.7` (see Code Changes). The stale nested `shadcn/zod` and `@modelcontextprotocol/sdk/zod` copies at 4.6.5 now resolve to the hoisted 4.6.7. **One copy stays:** `@cloudflare/vitest-pool-workers@0.19.1` pins `zod` exactly at 3.25.76 (below). |
+| [GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828) | high | `body-parser` `>=2.0.0 <2.4.0` | New override `^2.4.0`. Only path: frontend → `shadcn` → `@modelcontextprotocol/sdk` → `express`, a CLI that never runs in production. 2.4.0 also adds `zstd`, which wants Node `^22.15.0`; older Node keeps answering 415, so nothing breaks. |
+| [GHSA-xjj6-f33q-929c](https://github.com/advisories/GHSA-xjj6-f33q-929c) (high), [GHSA-4qv8-2p9j-2685](https://github.com/advisories/GHSA-4qv8-2p9j-2685), [GHSA-f72v-6w45-q472](https://github.com/advisories/GHSA-f72v-6w45-q472) | high + 2 moderate | `undici` `<7.30.1` | Override `^7.29.1` → `^7.30.1`. Paths through miniflare, astro's `unifont` and shadcn: dev and build tools. |
+| [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg), [GHSA-wjr9-j795-jxcr](https://github.com/advisories/GHSA-wjr9-j795-jxcr), [GHSA-xhq7-xmqj-769h](https://github.com/advisories/GHSA-xhq7-xmqj-769h), [GHSA-333x-w4r6-6crp](https://github.com/advisories/GHSA-333x-w4r6-6crp) | 2 moderate + 2 low | `fast-uri` `<3.1.9` | Override `^3.1.8` → `^3.1.9`. |
+| [GHSA-rxp7-6hxx-x8q5](https://github.com/advisories/GHSA-rxp7-6hxx-x8q5) | moderate | `ip-address` `<=10.7.3` | Override `^10.5.1` → `^10.7.5`. |
+
+**Open, and not reachable:** `zod@3.25.76` under
+`@cloudflare/vitest-pool-workers@0.19.1`, which pins it exactly. Overriding
+zod tree-wide to 4 would break that package: its `dist/pool/index.mjs` calls
+`z.ostring()`, which zod 4 removed. It parses the vitest pool options in our
+own config, in the test runner only. It goes away with the pool-workers bump
+that the wrangler cap already holds back.
+
+**What the zod fix actually changes.** zod 4.6.6 adds a size gate: an array,
+map or set whose leading checks set an upper bound (`.max(n)`, `.length(n)`)
+is rejected on its size before any element is parsed. zod 3, and zod 4 before
+4.6.6, parse every element first and check the length afterwards.
+competition-api has that shape at the request boundary:
+`waypoints: z.array(waypointSchema).max(MAX_WAYPOINTS)` (`routes/waypoints.ts`),
+`timeGates: z.array(XCTSK_TIME).max(...)` (`validators.ts`) and the track
+coordinate array in `routes/user-files.ts`. The cost of a huge body was bounded
+by the Workers request-size limit, not by our `max()`. zod 3's last release is
+3.25.76, so the major was the only fix.
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **zod** | 3.25.76 | 4.6.7 | competition-api | The security fix above. mcp-api was already on 4.6.7. `@hono/zod-validator` 0.9.1 accepts `^3.25.0 \|\| ^4.0.0`, so it stays. |
+| **better-auth**, **@better-auth/api-key**, **@better-auth/mcp** | 1.7.12 | 1.7.13 | frontend, auth-api | Type declarations stop listing type-only exports as values. No runtime or schema change. |
+| **astro** | 7.4.0 | **7.4.1** (exact) | frontend (dev) | Bug fixes only (build-output dates, a `TSCONFIG_ERROR` with a parent tsconfig, missing styles for conditionally rendered islands, HMR). **7.4.2 is held**; see below. |
+| **vite** | 8.3.4 | 8.3.5 | frontend (dev) + root override | Bug fixes: chunk import maps, preload hashing, `%` in CSS `url()`, `server.base` matching a full segment. |
+| **tabulator-tables** | 6.6.1 | 6.7.1 | frontend | Minor. The source diff threads the event that ended an edit through every editor's `success`/`cancel` callback and the `edit-editor-clear` event, and adds `edit-editor-created`. Additive. The pilots grid e2e is the check. |
+| lucide-react | 1.59.0 | 1.61.0 | frontend | Icons added; the frontend `typecheck` finds no removed export. |
+| hono | 4.13.13 | 4.13.14 | frontend, airscore-api, auth-api, competition-api + root override | Patch. Its notes are only on GitHub releases, which this session could not read (repository-scoped access). The worker suites and both e2e runs are the check. |
+| jose | 6.2.12 | 6.2.13 | competition-api (dev), shared | Refactors: terminology, and errors keep their `cause`. |
+| @types/bun | 1.4.3 | 1.4.4 | root (dev) | Matches the container's bun 1.4.4. |
+| `anthropics/claude-code-action` | v1.0.252 | v1.0.262 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `925afb53…`. The other six actions are at the newest release in their major line. |
+
+### Code Changes Required
+
+**competition-api on zod 4.** The six files that import zod needed no source
+change: typecheck was clean, and custom messages (`.refine(…, { message })`,
+the timezone and altitude-limit rules) are unchanged. What changes is
+**zod's own default wording** in the 400 body that `validated()` builds:
+`Invalid email` is now `Invalid email address`, and likewise for zod's other
+built-ins (`Required`, `String must contain at most 128 character(s)`,
+`Unrecognized key(s) in object` and so on all read differently in zod 4).
+These reach a reader only when a request skips the frontend's own checks,
+and no frontend or e2e test asserts on one. One test did
+(`comp-routes.test.ts`, "string error names the offending field on nested
+paths"); it and the example in `validators.ts`'s comment now say
+`Invalid email address`. **If the owner wants zod 3's wording back, that is
+a zod `config({ customError })` in `validators.ts`, not a version pin.**
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `body-parser` `^2.4.0` | Added | GHSA-27r3-jxmh-p828. |
+| `undici` `^7.29.1` → `^7.30.1` | Updated | Three advisories. |
+| `fast-uri` `^3.1.8` → `^3.1.9` | Updated | Four advisories. |
+| `ip-address` `^10.5.1` → `^10.7.5` | Updated | GHSA-rxp7-6hxx-x8q5. |
+| `vite` `^8.3.4` → `^8.3.5` | Updated | Aligned with the frontend. |
+| `hono` `^4.13.13` → `^4.13.14` | Updated | Aligned with the workspaces. |
+
+The two stale nested `zod@4.6.5` keys (`shadcn/zod`,
+`@modelcontextprotocol/sdk/zod`) survived `cd web/frontend && bun update
+shadcn` unchanged, although the hoisted 4.6.7 satisfies both packages'
+`^4.2.0`. Deleting the two keys from `bun.lock` and running `bun install`
+let bun re-resolve them to the hoisted copy; `bun install --frozen-lockfile`
+then reports no changes.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **astro** | 7.4.1 | 7.4.2 | **Pinned exactly at 7.4.1 this cycle.** 7.4.2 raises the Node floor to `>=22.23.4` (Node's 2026-10-20 security release), and astro's `bin/astro.mjs` **enforces it at startup**, so this is not an advisory `engines` field. CI's `setup-node` with `node-version: 22` takes the runner's cached 22.x unless `check-latest` is on, and a release from five days ago is unlikely to be cached yet; this container runs 22.22.0, and `docker.io/node:22-slim` (Containerfile) moves on its own schedule. Lifting it means pinning CI to `22.23.4` (or `check-latest: true`) in all five `setup-node` steps and confirming the local container can run it. Do that next cycle, when the runner images have caught up, and remove the exact pin. |
+| **wrangler** | 4.116.0 | 4.152.0 | Still capped (13 cycles). `wrangler@4.152.0` depends on `miniflare 5.20261019.2-beta`, still a prerelease. Stable miniflare `latest` is 4.20260730.0. |
+| @cloudflare/vitest-pool-workers, **vitest** 5 | 0.19.1, 4.1.12 | 0.23.0, 5.0.5 | Paired with the wrangler cap. Now also holds the last `zod@3.25.76` copy. |
+| **@astrojs/mdx** | 7.0.8 | 8.1.1 | Still vestigial. It wants its own PR to delete it. |
+| **three**, **@types/three** | 0.185.x | 0.186.x | Pre-1.0 minor; focused PR. |
+| **katex** | 0.18.11 | 0.19.1 | Pre-1.0 minor; focused PR. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261025.1 | Major. |
+| kysely 0.29, jsdom, concurrently 10, @types/node 26 | — | 0.29.7, 30.1.3, 10.0.6, 26.6.5 | Majors / pre-1.0 minors. Reasons unchanged from 2026-09-27. (zod has left this row.) |
+
+### Verification
+
+- `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck`:
+  clean. competition-api's typecheck on zod 4 was clean before any source
+  edit.
+- `bun run test:all`: 1859 root/engine/airscore/dev-router/mcp-api, 999
+  frontend, 242 auth-api (6 todo), 835 competition-api. 0 fail. Before the
+  test update, competition-api had 1 failure: the zod 4 wording
+  (`Invalid email` → `Invalid email address`).
+- `bun run build`: clean, 10 Astro pages, on astro 7.4.1 under Node 22.22.0.
+- `bun run test:e2e`: **229 passed, 9 skipped** in 17.4 minutes, exit 0, on
+  the first run (with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`; the script fetched
+  the pinned Chromium, which the container lacked). No `✘` lines.
+- `bun run test:e2e:ssr`: **67/67 passed** in 1.6 minutes, exit 0, with the
+  hydration and Content-Security-Policy checks.
+- `bun audit`: 10 (3 high, 5 moderate, 2 low) before, 1 high after (the
+  test-only `zod@3.25.76` under vitest-pool-workers).
+- `bun install --frozen-lockfile`: no changes after the lockfile prune.
+- Root `package.json` `dependencies`: read first (the same three legitimate
+  entries) and checked with `git diff package.json` after every workspace
+  `bun update`. No stray additions. No `patchedDependencies` warning: both
+  patches (`kysely-d1@0.4.0`, `threebox-plugin@2.2.7`) still match locked
+  versions.
+- GitHub Actions: `git ls-remote --tags` for all seven; one re-pin.
+- No map-library bump, so no CSP grep was needed.
+
+### Lessons / Notes for Future Sessions
+
+- **"`node-version: 22` resolves to the newest 22.x" was wrong in the last two
+  entries.** `actions/setup-node` with `check-latest` off uses the runner's
+  cached version first. It did not matter while every floor was months old.
+  It matters the week a floor equals a fresh Node release, and astro checks
+  its floor at startup. The routine now says both things.
+- **An advisory against an old major can be real, not a version-string
+  match.** `zod@3.25.76` is flagged under `<4.6.6`, and it is
+  genuinely vulnerable: zod 3's `ZodArray` parses every element before it
+  checks `maxLength`. Diffing 4.6.5 against 4.6.6 (`npm pack` both) showed
+  exactly what the fix was, and from that where competition-api had the shape.
+  That took two minutes and settled whether the major was worth doing.
+- **A tree-wide override is only safe when every consumer can take it.**
+  `zod` could not be overridden to 4: one test-only package pins 3.25.76 and
+  calls an API zod 4 removed. Grep the pinned consumer's dist before forcing
+  a major.
+- **`bun update <pkg>` does not prune a stale nested copy that the hoisted
+  version already satisfies.** Removing those keys from `bun.lock` and running
+  `bun install` re-resolved them, and `--frozen-lockfile` agreed with the
+  result.
+- **The native app's removal cleared the two advisories that had no fix.**
+  `braces` and `node-forge` left with `mobile` (#769). Check `npm view
+  braces versions` again only if a new path to it appears.
+- **`cd <workspace> && bun update <pkgs>` behaved for an eighth cycle.** The
+  root diff held only the hand-edited overrides and `@types/bun`.
+
 ## 2026-10-18 — React 19.3 (focused PR, #744)
 
 This is not a weekly cycle. It is the React minor that four cycles deferred,

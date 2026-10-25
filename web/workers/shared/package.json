@@ -30,6 +30,6 @@
     "@cloudflare/workers-types": "^4.20260702.1"
   },
   "dependencies": {
-    "jose": "^6.2.12"
+    "jose": "^6.2.13"
   }
 }

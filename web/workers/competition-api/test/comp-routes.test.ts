@@ -219,7 +219,7 @@ describe("POST /api/comp", () => {
     expect(res.status).toBe(400);
     const data = (await res.json()) as { error: unknown };
     expect(typeof data.error).toBe("string");
-    expect(data.error).toBe("admin_emails.1: Invalid email");
+    expect(data.error).toBe("admin_emails.1: Invalid email address");
   });
 });
 
