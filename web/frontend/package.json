@@ -23,7 +23,7 @@
     "@types/react-dom": "~19.3.0",
     "@types/tabulator-tables": "^6.3.6",
     "@vitejs/plugin-react": "^6.1.2",
-    "astro": "7.4.1",
+    "astro": "^7.4.2",
     "jsdom": "^25.0.1",
     "sharp": "^0.35.5",
     "tailwindcss": "^4.3.3",

@@ -19,8 +19,9 @@
 # Node, not the bun image — wrangler is a Node CLI and refuses to run under the
 # Bun runtime ("Wrangler does not support the Bun runtime"), which is exactly
 # what happens on an image with bun but no node: auth-api dies at startup with
-# "Unexpected server response: 101". Node 22 matches CI (.github/workflows).
-FROM docker.io/node:22-slim
+# "Unexpected server response: 101". The tag is the version in .node-version,
+# which CI reads: bump the two together.
+FROM docker.io/node:22.23.4-slim
 
 # procps gives `ps`, which `concurrently` needs to tear down its children when
 # one dies. curl drives the readiness wait; rsync stages /src into /app.

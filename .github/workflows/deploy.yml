@@ -52,7 +52,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       # Two attempts, because the first one is a download from GitHub's release
       # CDN and that has answered 500 three times in a row (run 30809701372, 33s
@@ -124,7 +124,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         id: setup-bun
@@ -255,7 +255,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         id: setup-bun
@@ -357,7 +357,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         id: setup-bun

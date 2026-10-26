@@ -4,6 +4,48 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-10-25 — Node 22.23.4 in CI, astro 7.4.2 (focused PR)
+
+This is not a weekly cycle. It finishes the astro hold that the cycle below
+left for next week. **Take astro off that entry's "Not upgraded" table.**
+
+| What | From | To | Notes |
+|------|------|----|-------|
+| CI Node (`deploy.yml` ×4, `civl-rankings.yml`) | `node-version: 22` (the runner's cached 22.x) | `node-version-file: .node-version` → **22.23.4** | Node's 2026-10-20 security release. One file now names the version; every `setup-node` step reads it. |
+| `Containerfile` base image | `node:22-slim` | `node:22.23.4-slim` | Same number as `.node-version`; the comment says to bump them together. |
+| root `engines.node` | `>=22` | `>=22.23.4` | Advisory (bun ignores it), but now states the real floor. |
+| **astro** | 7.4.1 (exact) | ^7.4.2 | The exact pin is gone. 7.4.2's release notes are in the cycle below. |
+
+**Why an exact version rather than `check-latest: true`.** It is the same
+reasoning as the SHA-pinned actions: a run is reproducible, and a version
+moves only when a commit moves it. The routine now has each cycle compare
+`.node-version` with the newest 22.x and take a security release.
+
+### Verification
+
+- **The failure is reproduced first.** With astro 7.4.2 installed, `bunx astro
+  --version` on the container's Node 22.22.0 printed `Node.js v22.22.0 is not
+  supported by Astro! Please upgrade Node.js to a supported version:
+  ">=22.23.4"`.
+- Node 22.23.4 came from nodejs.org, was checked against `SHASUMS256.txt`, and
+  was put first on `PATH` for every check below.
+- `bun run typecheck:all` and the frontend `typecheck`: clean.
+- `bun run test:all`: 0 fail (999 frontend, 242 auth-api with 6 todo, 835
+  competition-api, and the root suites).
+- `bun run build`: clean, 10 Astro pages, astro v7.4.2.
+- `bun run test:e2e`: **229 passed, 9 skipped** in 16.4 minutes, exit 0.
+  wrangler dev died once mid-run with the known ProxyWorker `Network
+  connection lost` error (`docs/local-dev.md`). `dev-workers.sh` restarted
+  it, and no test failed. It is not a Node 22.23.4 effect: the supervisor
+  exists because this happens in about one run in eight.
+- `bun run test:e2e:ssr`: **67/67 passed** in 1.5 minutes, exit 0.
+- **CI confirms the cache problem was real.** The first run's `setup-node`
+  log reads `Resolved .node-version as 22.23.4` and then `Attempting to
+  download 22.23.4`, so the runner image did not have it cached.
+  `node-version: 22` would have run the older cached copy, and astro 7.4.2
+  would have refused it. All six checks passed on that run (Test, four e2e
+  shards, Deploy).
+
 ## 2026-10-25
 
 **`bun audit` opens at 10 (3 high, 5 moderate, 2 low) and closes at 1 high,

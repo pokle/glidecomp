@@ -380,9 +380,11 @@ exactly as it does in prod. Adding the proxy fixes both at once.
 
 ### Four load-bearing details, each learned the hard way
 
-- **Base image is `node:22-slim` + bun, not `oven/bun`.** wrangler is a Node CLI
+- **Base image is `node:<version>-slim` + bun, not `oven/bun`.** wrangler is a Node CLI
   and refuses the Bun runtime; on a bun-only image auth-api dies at startup with
-  the un-Googleable `Unexpected server response: 101`.
+  the un-Googleable `Unexpected server response: 101`. The tag is the exact
+  version in `.node-version`, which CI's `setup-node` steps read too: astro
+  refuses to start below its own Node floor, so the image and CI move together.
 - **Source is bind-mounted read-only at `/src` and rsync'd to `/app`**, never
   `COPY`d — so an edit needs a container restart, not an image rebuild.
   `node_modules` must come from the image: the host's is macOS-arm64. The rsync
