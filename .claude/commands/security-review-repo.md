@@ -34,7 +34,7 @@ Do not re-derive what's already known. The point of the log is that each round b
 
 Before reading code, write down (in your head or as TaskCreate items) what you intend to cover:
 
-- Every worker under `web/workers/*/src/` (auth-api, competition-api, airscore-api).
+- Every worker under `web/workers/*/src/` (auth-api, competition-api, airscore-api, mcp-api). For mcp-api, check that every route a tool calls is in competition-api's `MCP_ROUTES` fence with the narrowest scope, and that a write's allowed body fields match the scope's consent wording.
 - Pages Functions under `functions/api/`.
 - Frontend under `web/frontend/src/` — the main UI is a React SPA under `src/react/` (grep it for `dangerouslySetInnerHTML`, ref-based DOM HTML writes, and unencoded interpolation into `href`/`src`/`location.*`); the vanilla analysis page (`src/analysis/**`) and 3D replay (`src/replay/**`) are where `innerHTML`-style sinks still live. Across both: data flow from untrusted files (IGC, XCTask, share-target uploads) and API strings (pilot/team/comp/task names) into the DOM.
 - Engine package under `web/engine/src/` — parsers (`igc-parser.ts`, `xctsk-parser.ts`) and any `eval`/`Function`-style constructs.
@@ -72,6 +72,7 @@ Run static analysis with the full set of categories in mind. The list below is n
 - **Authn / authz**: every mutating route guarded by `requireAuth` + (where appropriate) `requireCompAdmin` / `authorizeStatusMutation`. No header- or cookie-based "trust me, I am user X" backdoors. Pay particular attention to any worker bound to a public `[[routes]]` pattern — if it trusts an internal-only header, that's a SEC-10-class bypass.
 - **Library-mounted surfaces**: auth-api hands `/api/auth/*` to Better Auth only for the endpoints listed in `web/workers/auth-api/src/endpoints.ts` (SEC-55). On any `better-auth` / `@better-auth/*` bump, list the library's endpoints (`grep -rho 'createAuthEndpoint("[^"]*"'` over its `dist/`) and check that nothing new is served, and that a listed endpoint has not grown a new input (a sign-up `name`, an `image`).
 - **Account-level brute force**: per-IP limits are not account protection — Better Auth buckets IPv6 per /64, and a free /48 is 65,536 of those. Any endpoint that checks a guessable secret needs a per-account failure budget enforced BEFORE the library acts, and must not mint a fresh secret on a request it has throttled (SEC-56). Model the attacker as distributed.
+- **Anonymous writes to the shared database**: every worker writes to the same D1, so anything an unauthenticated caller can store needs a per-row size cap AND a global ceiling, not only a per-IP rate limit. Multiply the per-address budget by the addresses in a /48 and by the row size, and compare with D1's database size limit.
 - **CORS**: no reflective `Access-Control-Allow-Origin` paired with `credentials: true`. Allowlist matches the actual production + preview hostnames.
 - **Input validation**: Zod schemas on every body, with bounded string/array/JSON sizes. No `z.record(z.unknown())` on stored fields.
 - **SQL**: every query parameterised via `.bind(...)`. No string concatenation into SQL.

@@ -21,7 +21,7 @@
 import { chargeBudgetKey } from "@glidecomp/worker-kit/rate-limit";
 import { verifyAccessToken } from "@glidecomp/worker-kit/access-token";
 import { createAuth, mcpResource, type AuthEnv } from "./auth";
-import { OAUTH_GRANT_BUDGET } from "./rate-limit";
+import { OAUTH_GRANT_BUDGET, OAUTH_REGISTRATION_LIMITS } from "./rate-limit";
 
 /** What /me says about the grant behind an access token. */
 export interface AccessGrant {
@@ -159,4 +159,22 @@ export async function disconnectAssistant(
     db.prepare(`DELETE FROM "oauthAccessToken" WHERE "userId" = ? AND "clientId" = ?`).bind(userId, clientId),
   ]);
   return (consents?.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Whether another client may register: fewer than
+ * OAUTH_REGISTRATION_LIMITS.maxPendingClients self-registered clients from the
+ * last day are still waiting for anyone to consent to them.
+ */
+export async function registrationAllowed(db: D1Database, now: Date = new Date()): Promise<boolean> {
+  const since = new Date(now.getTime() - OAUTH_REGISTRATION_LIMITS.pendingWindowMs).toISOString();
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM "oauthClient"
+        WHERE "userId" IS NULL AND "createdAt" > ?
+          AND "clientId" NOT IN (SELECT "clientId" FROM "oauthConsent")`
+    )
+    .bind(since)
+    .first<{ n: number }>();
+  return (row?.n ?? 0) < OAUTH_REGISTRATION_LIMITS.maxPendingClients;
 }
