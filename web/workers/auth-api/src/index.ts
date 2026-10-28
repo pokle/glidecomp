@@ -17,7 +17,12 @@ import {
   type AuthEnv,
 } from "./auth";
 import { bearerJwt } from "@glidecomp/worker-kit/access-token";
-import { disconnectAssistant, listConnectedAssistants, resolveAccessToken } from "./mcp-grants";
+import {
+  disconnectAssistant,
+  listConnectedAssistants,
+  registrationAllowed,
+  resolveAccessToken,
+} from "./mcp-grants";
 import {
   isDiscoveryPath,
   isServedAuthEndpoint,
@@ -26,6 +31,7 @@ import {
 } from "./endpoints";
 import {
   normalizeEmail,
+  OAUTH_REGISTRATION_LIMITS,
   otpSendAllowed,
   otpVerifyAllowed,
   registerOtpVerifyFailure,
@@ -653,6 +659,28 @@ app.post("/api/auth/sign-in/social", async (c, next) => {
     if ("user" in idToken) {
       return c.json({ code: "BAD_REQUEST", message: "Unexpected field" }, 400);
     }
+  }
+  await next();
+});
+
+// MCP client registration is open (RFC 7591), so it is bounded here before
+// the provider stores anything: a small body, a short name, and a ceiling on
+// clients nobody has consented to yet (OAUTH_REGISTRATION_LIMITS).
+app.post("/api/auth/oauth2/register", async (c, next) => {
+  const text = await c.req.raw.clone().text();
+  if (new TextEncoder().encode(text).byteLength > OAUTH_REGISTRATION_LIMITS.maxBodyBytes) {
+    return c.json({ error: "invalid_client_metadata", error_description: "Registration too large" }, 400);
+  }
+  const body = await jsonRequestBody(c.req.raw);
+  if (!body) return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Expected a JSON body" }, 415);
+  const name = body.client_name;
+  if (name !== undefined && (typeof name !== "string" || name.length > OAUTH_REGISTRATION_LIMITS.maxClientNameLength)) {
+    return c.json({ error: "invalid_client_metadata", error_description: "client_name is too long" }, 400);
+  }
+  if (!(await registrationAllowed(c.env.glidecomp_auth))) {
+    console.warn("[auth-api] MCP client registration refused: pending ceiling reached");
+    c.header("Retry-After", "3600");
+    return c.json({ error: "temporarily_unavailable", error_description: "Too many registrations; try again later" }, 429);
   }
   await next();
 });

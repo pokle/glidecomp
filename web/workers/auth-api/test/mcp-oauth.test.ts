@@ -6,6 +6,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, test } from "vitest";
 import { MCP_SCOPES } from "../src/auth";
+import { OAUTH_REGISTRATION_LIMITS } from "../src/rate-limit";
 import { loginAs, request } from "./helpers";
 
 const ORIGIN = { Origin: "http://localhost:8788" };
@@ -31,6 +32,11 @@ async function pkce(): Promise<{ verifier: string; challenge: string }> {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
   return { verifier, challenge };
+}
+
+async function clientCount(): Promise<number> {
+  const row = await env.glidecomp_auth.prepare(`SELECT COUNT(*) AS n FROM "oauthClient"`).first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 async function register(scope = ALL_SCOPES, ip = freshIp()): Promise<Response> {
@@ -174,6 +180,73 @@ describe("registration", () => {
     for (let i = 0; i < 11; i++) statuses.push((await register(ALL_SCOPES, ip)).status);
     expect(statuses.slice(0, 10).every((s) => s === 201)).toBe(true);
     expect(statuses[10]).toBe(429);
+  });
+
+  test("a registration larger than the cap is refused before anything is stored", async () => {
+    const before = await clientCount();
+    const res = await request("POST", "/api/auth/oauth2/register", {
+      headers: { "cf-connecting-ip": freshIp() },
+      body: {
+        client_name: "Test assistant",
+        redirect_uris: [REDIRECT],
+        token_endpoint_auth_method: "none",
+        client_uri: `https://example.com/${"a".repeat(OAUTH_REGISTRATION_LIMITS.maxBodyBytes)}`,
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await clientCount()).toBe(before);
+  });
+
+  test("a client name longer than the cap is refused", async () => {
+    const before = await clientCount();
+    const res = await request("POST", "/api/auth/oauth2/register", {
+      headers: { "cf-connecting-ip": freshIp() },
+      body: {
+        client_name: "C".repeat(OAUTH_REGISTRATION_LIMITS.maxClientNameLength + 1),
+        redirect_uris: [REDIRECT],
+        token_endpoint_auth_method: "none",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await clientCount()).toBe(before);
+  });
+
+  test("registration stops, from every address, once enough clients await consent", async () => {
+    const db = env.glidecomp_auth;
+    const now = new Date().toISOString();
+    // Earlier tests' registrations are waiting too; top up to the ceiling exactly.
+    const waiting = await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM "oauthClient" WHERE "userId" IS NULL AND "clientId" NOT IN (SELECT "clientId" FROM "oauthConsent")`
+      )
+      .first<{ n: number }>();
+    const fill = Array.from({ length: OAUTH_REGISTRATION_LIMITS.maxPendingClients - (waiting?.n ?? 0) }, (_, i) =>
+      db
+        .prepare(
+          `INSERT INTO "oauthClient" ("id", "clientId", "redirectUris", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind(`pending-${i}`, `pending-${i}`, JSON.stringify([REDIRECT]), now, now)
+    );
+    await db.batch(fill);
+    try {
+      const refused = await register();
+      expect(refused.status).toBe(429);
+      expect(refused.headers.get("retry-after")).toBeTruthy();
+
+      // A client someone has consented to no longer counts as waiting.
+      await db
+        .prepare(
+          `INSERT INTO "oauthConsent" ("id", "clientId", "scopes", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?)`
+        )
+        .bind("pending-consent", "pending-0", JSON.stringify(["comp:read"]), now, now)
+        .run();
+      expect((await register()).status).toBe(201);
+    } finally {
+      await db.batch([
+        db.prepare(`DELETE FROM "oauthConsent" WHERE "id" = 'pending-consent'`),
+        db.prepare(`DELETE FROM "oauthClient" WHERE "id" LIKE 'pending-%'`),
+      ]);
+    }
   });
 });
 

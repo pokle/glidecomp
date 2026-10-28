@@ -51,6 +51,22 @@ export const API_KEY_RATE_LIMIT = {
 export const OAUTH_REGISTER_RATE_LIMIT = { window: 60 * 60, max: 10 } as const;
 
 /**
+ * The ceiling on MCP client registrations, whoever sends them. The per-address
+ * limit above does not stop a caller with many addresses, and every client row
+ * lives in the one D1 database the whole site writes to, so a registration is
+ * kept small (bytes and name length), and only so many that nobody has yet
+ * consented to may be waiting at once. A client someone connects stops
+ * counting; the rest are purged after a day (data-retention.ts in
+ * competition-api).
+ */
+export const OAUTH_REGISTRATION_LIMITS = {
+  maxBodyBytes: 8 * 1024,
+  maxClientNameLength: 100,
+  maxPendingClients: 1000,
+  pendingWindowMs: 24 * 60 * 60 * 1000,
+} as const;
+
+/**
  * Calls one MCP grant (a user and the client they connected) may make, the
  * same ceiling an API key has. Charged by /me, which every competition-api
  * request carrying an access token passes through.
