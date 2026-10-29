@@ -19,10 +19,9 @@ import BackLink from "../../components/BackLink.astro";
       <section class="mb-10">
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Every GlideComp competition uses one of two scoring formats. The organiser selects
-            the format in the competition settings. Select a format below to read how it works.
-            The last two pages describe the checks that GlideComp makes on each tracklog before
-            it scores.
+            Every competition is scored in one of two formats, which the organiser picks in the
+            competition's settings. The last two guides explain what GlideComp checks and
+            repairs in each tracklog before scoring it.
           </p>
         </div>
       </section>
@@ -53,11 +52,10 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          The standard CIVL scoring, used at most paragliding and hang gliding competitions.
-          Pilots race a set course through turnpoints to a goal. A perfect task day is worth 1000
-          points. GAP shares those points between distance, time, leading and arrival, by how
-          each pilot performed against the field. Use GAP for a task with a defined route and
-          goal.
+          The FAI/CIVL standard, used at most hang gliding and paragliding competitions. Pilots
+          race a set course of turnpoints to goal. A task is worth up to 1000 points, shared out
+          for distance, time, leading and arrival according to how each pilot did against the
+          rest of the field.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how GAP works
@@ -107,11 +105,9 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          All pilots launch from the same place and fly as far as they can. There is no set goal.
-          Each task has one take-off turnpoint. Your score is the metres of open distance you
-          flew. That is the straight-line distance from the point where you leave the take-off
-          cylinder, to the furthest point you reached. Use open distance for free-distance and
-          record-style days.
+          Everyone launches from the same place and flies as far as they can, with no course and
+          no goal. Your score is the straight-line distance, in metres, from the edge of the
+          take-off cylinder to the furthest point you reached.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how open distance works
@@ -161,11 +157,11 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          A flight recorder sometimes logs an altitude that no glider can fly. GPS dropouts and
-          multipath spikes cause these errors. Before the analysis, GlideComp repairs them: it
-          compares the GPS altitude against the barometric channel, and uses physical
-          plausibility limits when there is no barometer. The pilot's report card shows every
-          repair. GlideComp never changes positions, times or the original file.
+          GPS dropouts and signal reflections sometimes log an altitude no glider could fly.
+          GlideComp repairs these spikes before analysis, by checking the GPS altitude against the
+          barometer, or against what a glider can physically do when there is no barometer. The
+          pilot's report card lists every repair. Positions, times and the original file are
+          never changed.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how data cleaning works
@@ -215,11 +211,10 @@ import BackLink from "../../components/BackLink.astro";
           </svg>
         </div>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          A pilot sometimes uploads the wrong file: a flight from another day, or from another
-          site. GlideComp compares every tracklog against the task it was submitted to. It
-          withholds a tracklog that cannot be that flight, instead of scoring it. Softer
-          observations are only flagged, and never change a score. The scorekeeper can overrule
-          every verdict.
+          Sometimes a pilot uploads the wrong file, such as a flight from another day or another
+          site. GlideComp checks every tracklog against its task, and withholds one that cannot be
+          that flight. Lesser concerns are only flagged and never change a score. The scorekeeper
+          can overrule any verdict.
         </p>
         <span class="inline-flex items-center gap-1 text-sm font-medium mt-3 text-foreground group-hover:underline">
           Read how track validity works
@@ -243,10 +238,9 @@ import BackLink from "../../components/BackLink.astro";
       <div class="mt-10 pt-6 border-t border-border">
         <h2 class="text-base font-semibold mb-2">When the scoring changes</h2>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          GlideComp corrects faults in its scoring, and moves it closer to the FAI
-          specification, as it finds them. A change re-scores every competition, so your
-          published points can move without the organiser touching anything. Every change is
-          recorded, with what moved, who it affects and why.
+          When GlideComp fixes a scoring fault or moves closer to the FAI specification, every
+          competition is rescored, so your points can change without the organiser doing
+          anything. Each change is written up with what moved, who it affects and why.
           <a
             href="https://github.com/pokle/glidecomp/tree/master/web/engine/scoring-changes"
             target="_blank"

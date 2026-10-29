@@ -14,6 +14,9 @@ import "katex/dist/katex.min.css";
 
 /** Render an inline (non-display) KaTeX expression to a static HTML string. */
 const km = (tex: string) => katex.renderToString(tex, { displayMode: false, throwOnError: false });
+
+const S7A_PDF =
+  "https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_a_-_cross_country_2025.pdf";
 ---
 
 <Base title="GlideComp - How GAP Scoring Works">
@@ -62,25 +65,22 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Most paragliding (PG) and hang gliding (HG) cross-country competitions in the world
-            use the GAP scoring system. The
-            <a href="https://www.fai.org/commission/civl" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
-              FAI/CIVL
-            </a>
-            (the international body for free-flight sports) maintains GAP.
-            <strong>Section 7F of the FAI Sporting Code</strong> gives the full definition.
+            GAP is the scoring system used by most paragliding (PG) and hang gliding (HG)
+            cross-country competitions in the world. It is maintained by
+            <a href="https://www.fai.org/commission/civl" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">FAI/CIVL</a>,
+            the international body for free-flight sports, and fully defined in
+            <strong>Section 7F of the FAI Sporting Code</strong>.
           </p>
           <p class="text-muted-foreground">
-            The name "GAP" comes from the three people who designed the system in the early
-            2000s: Gerolf Heinrichs, Angelo Crapanzano, and Paul Mollison. CIVL changed and
-            improved it many times after that.
+            The name comes from the three people who designed it in the early 2000s: Gerolf
+            Heinrichs, Angelo Crapanzano and Paul Mollison. CIVL has refined it many times since.
           </p>
           <p class="text-muted-foreground">
-            The core idea is this: <strong>a perfect task day is worth 1000 points</strong>. GAP
-            divides these 1000 points among four categories: distance, time, leading, and
-            arrival. Each pilot gets a share of the available points, related to how that pilot
-            performed against the other pilots. A task day is not ideal when few pilots launch,
-            or when nobody flies far. On such a day, the task is worth less than 1000 points.
+            The core idea: <strong>a perfect task is worth 1000 points</strong>. GAP splits those
+            points into four categories (distance, time, leading and arrival), and each pilot
+            earns a share of each depending on how they did against the rest of the field. A
+            day that falls short of ideal, because few pilots launched or nobody got far, is
+            worth less than 1000.
           </p>
         </div>
       </section>
@@ -93,52 +93,48 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            This is the structure of a competition task, for pilots who never flew one.
+            If you've never flown a competition task, here's how one is put together.
           </p>
           <p class="text-muted-foreground">
-            The task committee defines a route as a series of <strong>turnpoints</strong>. Each
-            turnpoint is a GPS coordinate with a cylinder radius around it. Pilots must fly into
-            each cylinder in the given order. A typical task has these parts:
+            The task committee sets a route as a series of <strong>turnpoints</strong>. Each is a
+            GPS position with a cylinder around it, and pilots must fly into each cylinder in
+            order. A typical task has these parts:
           </p>
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
             <li>
-              <strong>Launch</strong> — Where pilots take off. You must be at launch to get a
-              score.
+              <strong>Launch</strong>: where pilots take off. You must launch to get a score.
             </li>
             <li>
-              <strong>Start of Speed Section (SSS)</strong> — Where your timed run starts. In a
-              race to goal, your clock starts at a fixed <em>start gate</em> time. That gate is
-              the last gate at or before your crossing. In an elapsed-time task, the clock starts
-              when you cross the cylinder.
+              <strong>Start of Speed Section (SSS)</strong>: where your timed run begins. In a
+              race, your clock starts at a fixed <em>start gate</em> time: the last gate at or
+              before you crossed. In a time trial (also called elapsed time), it starts when you
+              cross the cylinder.
             </li>
             <li>
-              <strong>Turnpoints</strong> — Intermediate waypoints that you must tag in order.
-              You tag a turnpoint when you fly into its cylinder. The usual radius is 400 m to
-              2 km.
+              <strong>Turnpoints</strong>: the waypoints in between, tagged in order by flying
+              into their cylinders. Radii are usually 400 m to 2 km.
             </li>
             <li>
-              <strong>End of Speed Section (ESS)</strong> — The finish line for timing. Your
-              speed section time stops here. In many tasks, ESS is the last turnpoint before
-              goal.
+              <strong>End of Speed Section (ESS)</strong>: the finish line for timing, where your
+              clock stops. It is often the last turnpoint before goal.
             </li>
             <li>
-              <strong>Goal</strong> — The final turnpoint. If you reach goal, you completed the
-              task. In PG, you must reach goal to get time points. ESS alone is not sufficient.
-              The task can make goal an <a href="#elevated-goal" class="underline hover:text-foreground">elevated
-              goal</a>, which is also the ESS.
+              <strong>Goal</strong>: the final turnpoint. Reach it and you've completed the task.
+              In PG you must reach goal to get any time points; ESS alone isn't enough. A task can
+              also set an <a href="#elevated-goal" class="underline hover:text-foreground">elevated
+              goal</a>, which is the ESS as well.
             </li>
           </ul>
           <p class="text-muted-foreground">
             A turnpoint can also have <strong>altitude limits</strong> (<SpecRef section="6.2.1" />).
-            Then a crossing counts only when your altitude is between the limits, within 5 m
-            (<SpecRef section="9.2.1" />). A crossing above or below them does not reach the
-            turnpoint. The report card says so when this happens. The goal cannot have altitude
-            limits.
+            A crossing then counts only if your altitude is within them, give or take 5 m
+            (<SpecRef section="9.2.1" />); the report card tells you when one didn't count. Goal
+            can't have altitude limits.
           </p>
           <p class="text-muted-foreground">
-            Your <strong>speed section time</strong> starts when you cross SSS. It stops when you
-            reach ESS. Your <strong>flown distance</strong> is the distance along the optimised
-            route, through the turnpoints you reached.
+            Your <strong>speed section time</strong> runs from crossing SSS to reaching ESS. Your
+            <strong>flown distance</strong> is measured along the optimised route, through the
+            turnpoints you reached.
           </p>
         </div>
       </section>
@@ -147,63 +143,60 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
       <section id="task-validity" class="mb-14">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Task Validity</h2>
-          <SpecRef section="10" label="FAI S7F §9" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="10" label="FAI S7F §10" class="text-xs font-medium text-muted-foreground shrink-0" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Not every task day is worth the full 1000 points. If the conditions were bad, and
-            most pilots landed near launch, the scores count for less in the competition total.
-            GAP does this with <strong>task validity</strong>. Task validity is a multiplier
-            between 0 and 1 that scales the available points.
+            Not every day deserves the full 1000 points. If conditions were poor and most pilots
+            landed near launch, the day should count for less in the competition. GAP handles
+            this with <strong>task validity</strong>: a multiplier between 0 and 1 that scales the
+            points on offer.
           </p>
           <p class="text-muted-foreground">
-            Task validity is the product of three independent sub-validities:
+            Task validity is the product of three separate validities:
           </p>
 
           <div class="ml-2 space-y-4">
             <div>
               <h3 class="text-base font-semibold mb-1">Launch Validity</h3>
               <p class="text-muted-foreground">
-                Launch validity decreases when fewer pilots launch than expected. If almost all
-                pilots fly, launch validity is 1.0. "Almost all" means more than the "nominal
-                launch" threshold, usually 96%. If half of the field stays on the ground, launch
-                validity decreases a lot. A task that only a few pilots launched into therefore
-                cannot be worth too much.
+                Launch validity drops when fewer pilots launch than expected. It is 1.0 when more
+                than 96% of the pilots present launch (the specification's "nominal launch"),
+                and falls steeply if, say, half the field stays on the ground. A task only a few
+                pilots flew can't be worth much.
               </p>
               <p class="text-muted-foreground mt-2">
-                "Pilots present" are the pilots not marked <strong>Absent</strong>. They are the
-                pilots who flew and uploaded a track, plus the pilots who were present but
-                <strong>Did Not Fly</strong>. Organisers set this on the pilot roll call of each
-                task.
+                "Pilots present" means everyone not marked <strong>Absent</strong>: pilots who
+                flew and uploaded a track, plus pilots who were there but marked <strong>Did Not
+                Fly</strong>. Organisers set these on each task's roll call.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">Distance Validity</h3>
               <p class="text-muted-foreground">
-                Distance validity decreases when pilots do not fly far enough against the
-                expected task distance. It uses the spread of the distances that all pilots
-                flew. If most pilots landed near launch, the task was probably not fair, and the
-                scores decrease.
+                Distance validity drops when pilots don't get far compared with the expected task
+                distance. It looks at the spread of distances the whole field flew. If most
+                pilots landed near launch, the task probably wasn't a fair test, and it is worth
+                less.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">Time Validity</h3>
               <p class="text-muted-foreground">
-                Time validity decreases when the fastest time is much shorter than the expected
-                task duration. The expected duration is the "nominal time", usually 90 minutes.
-                A very short winning time can show that the task was too easy, or that the
-                conditions were unusual.
+                Time validity drops when the fastest time is much shorter than the expected task
+                duration, the "nominal time" (usually 90 minutes). A very short winning time
+                suggests the task was too easy or conditions were unusual.
               </p>
             </div>
           </div>
 
-          <p class="text-muted-foreground">The overall task validity is:</p>
+          <p class="text-muted-foreground">Overall task validity is:</p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Task Validity} = \text{Launch Validity} \times \text{Distance Validity} \times \text{Time Validity}`)}></p>
-          <p class="text-muted-foreground">And the total available points for the task are:</p>
+          <p class="text-muted-foreground">and the points available for the task are:</p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Available Points} = 1000 \times \text{Task Validity}`)}></p>
           <p class="text-muted-foreground">
-            On a day with good conditions, task validity is close to 1.0, and the task offers
-            almost 1000 points. On a bad day, the task can offer only 200 to 400 points.
+            On a good day, task validity is close to 1.0 and the task offers nearly 1000 points.
+            On a poor day it might offer only 200 to 400.
           </p>
         </div>
       </section>
@@ -216,55 +209,51 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            GAP divides the available points among four categories. The split depends on how many
-            pilots made goal. That fraction is the <strong>goal ratio</strong>.
+            GAP splits the available points four ways. The split depends on the fraction of
+            pilots who made goal, called the <strong>goal ratio</strong>.
           </p>
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
             <li>
-              <strong>Distance Points</strong> — Reward how far you flew. Always the largest
-              share.
+              <strong>Distance Points</strong> reward how far you flew. They are always the
+              largest share.
             </li>
             <li>
-              <strong>Time Points</strong> — Reward how fast you completed the speed section.
-              Worth more when many pilots make goal.
+              <strong>Time Points</strong> reward how fast you flew the speed section. They are
+              worth more when many pilots make goal.
             </li>
             <li>
-              <strong>Leading Points</strong> — Reward the pilots who flew at the front of the
-              pack and showed the way. They are also called "departure points". They are on by
-              default, and a competition can disable them.
+              <strong>Leading Points</strong> (also called "departure points") reward pilots who
+              flew at the front and showed the way. On by default; a competition can turn them
+              off.
             </li>
             <li>
-              <strong>Arrival Points</strong> — Reward an early arrival at ESS.
-              <strong>Hang gliding only</strong>. They are on by default for HG, and a competition
-              can disable them.
+              <strong>Arrival Points</strong> reward reaching ESS early.
+              <strong>Hang gliding only</strong>. On by default for HG; a competition can turn
+              them off.
             </li>
           </ul>
           <p class="text-muted-foreground">
-            When nobody makes goal, almost all of the points go to distance. When the goal ratio
-            increases, more points go to time and leading. If all pilots completed the task, the
-            important question is who was the fastest, not who flew the farthest.
+            When nobody makes goal, most of the points go to distance. As the goal ratio rises,
+            more go to time and leading: if everyone finished, the question is who was fastest,
+            not who flew furthest.
           </p>
           <p class="text-muted-foreground">
-            A polynomial formula calculates the weight of each component from the goal ratio. For
-            example, when the goal ratio is 0, the distance weight is approximately 0.9, which is
-            90% of the points. When 50% of the pilots make goal, the distance weight decreases to
-            approximately 0.55.
+            A polynomial sets the distance weight from the goal ratio. With nobody in goal,
+            distance takes 90% of the points; with half the field in goal, about 42%.
           </p>
           <p class="text-muted-foreground">
-            There is one exception. In <strong>hang gliding</strong>, if nobody reaches the end of
-            the speed section, the task has <strong>no time points and no arrival points at all</strong>.
-            Distance and leading keep their usual share, and the rest of the day is not shared out
-            to the other components: it is simply not awarded. A pilot's score does not change,
-            because neither component can be earned without an end-of-speed-section crossing, but
-            the scoreboard and the report card then show what could really be won. The report card
-            says so in the day-quality section, and again beside the time and arrival components.
+            One exception: in <strong>hang gliding</strong>, if nobody reaches the end of the
+            speed section, the task has <strong>no time or arrival points at all</strong>.
+            Distance and leading keep their usual shares, and the rest simply isn't awarded. No
+            pilot's score changes, since nobody could have earned either without crossing ESS,
+            but the scoreboard and report card then show what was really on offer. The report
+            card says so in its day-quality section and beside the time and arrival components.
           </p>
           <p class="text-muted-foreground">
-            That puts a ceiling on such a day. Nobody in goal means a distance weight of 0.9 and a
+            That caps such a day. With nobody in goal, the distance weight is 0.9 and the
             <a href="#leading-weight" class="underline hover:text-foreground">leading weight</a>
-            of 0.0175, so a perfect day offers at most <strong>900 points for distance and 18 for
-            leading — 918 in total</strong>. It is also the most an open-distance task can be
-            worth.
+            is 0.0175, so even a perfect day offers at most <strong>900 points for distance and
+            18 for leading, 918 in total</strong>.
           </p>
         </div>
       </section>
@@ -277,31 +266,30 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Every pilot who launches gets distance points. Distance points are therefore the
-            largest part of a usual score. For <strong>paragliding</strong>, the formula is a
-            direct proportion of the distance you flew:
+            Every pilot who launches earns distance points, which is why they make up most of a
+            typical score. In <strong>paragliding</strong>, they are simply proportional to the
+            distance you flew:
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Distance Points} = \dfrac{\text{Your Distance}}{\text{Best Distance}} \times \text{Available Distance Points}`)}></p>
           <p class="text-muted-foreground">
-            The pilot who flew the farthest gets the full distance points. Each other pilot gets
-            a share in proportion to the distance they flew. For <strong>hang gliding</strong>,
-            half of the points use this proportion. The other half uses a "difficulty" measure,
-            described below.
+            The pilot who flew furthest gets all the distance points, and everyone else gets a
+            share in proportion. In <strong>hang gliding</strong>, only half the points work this
+            way; the other half come from a "difficulty" measure, described below.
           </p>
 
           <div class="ml-2" id="minimum-distance">
             <h3 class="text-base font-semibold mb-1">Minimum Distance</h3>
             <p class="text-muted-foreground">
-              There is a <strong>minimum scored distance</strong>, usually 5 km. If you launch and
-              fly only 1 km before you land, you still get the score for 5 km. Pilots call these
-              "bomb-out points". The minimum gives each pilot a reason to launch and fly the
-              task, instead of staying on the ground.
+              There is a <strong>minimum scored distance</strong>, usually 5 km. Launch and land
+              after 1 km, and you're still scored for 5 km. Pilots call these "bomb-out points".
+              They give everyone a reason to launch and fly the task rather than stay on the
+              ground.
             </p>
             <p class="text-muted-foreground mt-2">
-              One case does not get the minimum: a tracklog that is not a flight of this task.
-              Such a tracklog is a flight on a different day, or at a different site. It is not
-              evidence that the pilot took off. It therefore scores zero instead of the minimum,
-              and the page gives the reason. See <a href="/scoring/track-validity" class="underline hover:text-foreground">how track validity checks work</a>.
+              The one exception is a tracklog that isn't a flight of this task, such as a flight
+              on a different day or at a different site. It isn't evidence that the pilot took
+              off, so it scores zero, not the minimum, and the page says why. See
+              <a href="/scoring/track-validity" class="underline hover:text-foreground">how track validity checks work</a>.
             </p>
           </div>
 
@@ -313,32 +301,32 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </span>
             </h3>
             <p class="text-muted-foreground">
-              In hang gliding, distance points have two halves (FAI rules,
-              <SpecRef section="12.1.1" label="S7F §12.1.1" />):
+              In hang gliding, distance points come in two halves
+              (<SpecRef section="12.1.1" label="S7F §12.1.1" />):
             </p>
             <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Distance Points} = \left( \tfrac{1}{2}\,\text{Linear} + \tfrac{1}{2}\,\text{Difficulty} \right) \times \text{Available Distance Points}`)}></p>
             <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
               <li>
                 <strong>The linear half</strong> is the same proportion of the best distance as
-                the formula above.
+                above.
               </li>
               <li>
-                <strong>The difficulty half</strong> uses the positions where the other pilots
-                landed. A part of the course is "harder" when few pilots flew past it. A flight
-                past a group of landed gliders is therefore worth more points. A short flight
-                into an area where all pilots already landed is worth less.
+                <strong>The difficulty half</strong> depends on where the other pilots landed. A
+                stretch of the course is "harder" the fewer pilots got past it, so flying past a
+                cluster of landed gliders earns more, and gliding a little further into a field
+                where everyone else already landed earns less.
               </li>
             </ul>
             <p class="text-muted-foreground mt-2">
-              The rulebook gives two reasons. First, for safety and retrieve, pilots must not
-              have a reason to fly a small distance past a group that landed. Second, a pilot who
-              lands usually had difficulty just before, so the last glide into a landing field is
-              "easy" distance. Pilots who reach goal always get the full distance points. The
-              report card shows the linear half and the difficulty half separately.
+              The rulebook gives two reasons. For safety and retrieves, pilots shouldn't be
+              tempted to scrape a few extra metres past a group that has landed. And a pilot who
+              lands usually struggled just before, so the final glide into a landing field is
+              "easy" distance. Pilots who reach goal always get full distance points. The report
+              card shows the linear and difficulty halves separately.
             </p>
             <p class="text-muted-foreground mt-2">
               Difficulty does <strong>not</strong> apply to paragliding. A competition can also
-              disable it in its settings and score hang gliding with the linear formula.
+              turn it off and score hang gliding with the linear formula alone.
             </p>
           </div>
 
@@ -347,33 +335,30 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               Where distance is measured from
             </h3>
             <p class="text-muted-foreground">
-              Some tasks define a separate <strong>take-off</strong> turnpoint before the start
-              (SSS). Competitions do not agree whether the take-off→start leg counts in the
-              scored distance. GlideComp has two settings, and each competition selects one:
+              Some tasks have a separate <strong>take-off</strong> turnpoint before the start
+              (SSS), and rulebooks disagree on whether the take-off→start leg counts towards
+              scored distance. Each competition picks one of two settings:
             </p>
             <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2 mt-2">
               <li>
-                <strong>Take-off</strong> (default) — GlideComp measures the distance from the
-                take-off point, through the start cylinder, to goal. The take-off is a fixed
-                launch point. This obeys the <strong>FAI CIVL GAP</strong> and
-                <strong>PWCA</strong> rules, and agrees with most scoring software, including
-                AirScore.
+                <strong>Take-off</strong> (default): distance is measured from the take-off
+                point, through the start cylinder, to goal. This follows the
+                <strong>FAI CIVL GAP</strong> and <strong>PWCA</strong> rules, and matches most
+                scoring software, including AirScore.
               </li>
               <li>
-                <strong>Start cylinder</strong> — GlideComp measures the distance from the edge
-                of the start cylinder. The take-off→start leg is <em>not</em> scored. This obeys
-                the words of some national hang-gliding rules, for example Australia's HGFA/SAFA.
-                It also agrees with the "Move Origin" option in the Davis/SeeYou scoring
-                toolchain.
+                <strong>Start cylinder</strong>: distance is measured from the edge of the start
+                cylinder, so the take-off→start leg is <em>not</em> scored. This follows the
+                wording of some national hang gliding rules, such as Australia's HGFA/SAFA, and
+                matches the "Move Origin" option in the Davis/SeeYou scoring toolchain.
               </li>
             </ul>
             <p class="text-muted-foreground mt-2">
-              The two settings differ by the distance from the route's first point to the start
-              cylinder's edge. For a task with a take-off turnpoint, that is the take-off→start
-              leg. For a task that starts at the SSS, the FAI rule still measures from the start
-              cylinder's centre, so the two settings differ by the start radius. The setting
-              does not change the speed section (SSS→ESS), and therefore does not change time
-              points or leading points.
+              The two differ by the distance from the route's first point to the edge of the
+              start cylinder. With a take-off turnpoint, that's the take-off→start leg. When the
+              route begins at the SSS, the FAI rule still measures from the start cylinder's
+              centre, so the two differ by the start radius. Neither setting changes the speed
+              section (SSS→ESS), so time and leading points are unaffected.
             </p>
           </div>
         </div>
@@ -387,86 +372,72 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Time points reward the pilots who completed the speed section quickly. These are the
-            rules:
+            Time points reward pilots who fly the speed section quickly. Who can earn them:
           </p>
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
             <li>
-              <strong>Paragliding:</strong> You must <strong>make goal</strong> to get time points
-              (<SpecRef section="13.2" label="§12.1" />). This rule removes the reason for a fast
-              final glide close to the ground.
+              <strong>Paragliding:</strong> you must <strong>make goal</strong>
+              (<SpecRef section="13.2" />). This removes any reason for a fast final glide low to
+              the ground.
             </li>
             <li>
-              <strong>Hang gliding:</strong> You must <strong>reach ESS</strong> to get time
-              points. Goal then <em>validates</em> them. By default, a pilot who crosses ESS but
-              lands before goal keeps only <strong>80%</strong> of their time and arrival points
-              (<SpecRef section="13.2" label="§12.1" />). Each competition can change this share
-              under Advanced scoring settings. The share does not change distance points or
-              leading points.
+              <strong>Hang gliding:</strong> you must <strong>reach ESS</strong>, and goal then
+              <em>validates</em> your time. By default, a pilot who crosses ESS but lands short of
+              goal keeps only <strong>80%</strong> of their time and arrival points
+              (<SpecRef section="13.2" />). Each competition can change this under Advanced
+              scoring settings. It doesn't affect distance or leading points.
             </li>
           </ul>
           <p class="text-muted-foreground">
-            If you are eligible, your time points come from your <strong>speed fraction</strong>.
-            The speed fraction is a value between 0 and 1. It measures how close your time was to
-            the time of the fastest pilot:
+            If you qualify, your time points depend on your <strong>speed fraction</strong>, a
+            number between 0 and 1 for how close you came to the fastest time:
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{SF} = \max\!\left(0,\; 1 - \left(\dfrac{\Delta t}{\sqrt{t_{\text{best}}}}\right)^{5/6} \right)`)}></p>
           <p class="text-muted-foreground">
-            In this formula, <Fragment set:html={km(String.raw`\Delta t`)} /> is the difference between your time and the best
-            time, in hours. <Fragment set:html={km(String.raw`t_{\text{best}}`)} /> is the time of the fastest pilot,
-            in hours. The <strong>5/6</strong> exponent is the current FAI S7F value, and the
-            default for both sports. A competition can select the older <strong>2/3</strong>
-            exponent instead, which is the GAP2016/2018 curve.
+            Here <Fragment set:html={km(String.raw`\Delta t`)} /> is how much slower you were than
+            the best time, and <Fragment set:html={km(String.raw`t_{\text{best}}`)} /> is the best
+            time, both in hours. The <strong>5/6</strong> exponent is fixed by the 2026
+            specification for both sports.
           </p>
           <p class="text-muted-foreground">
-            The 2/3 curve is a little more generous. Each competition sets this exponent
-            independently of the
-            <a href="#leading-points" class="underline hover:text-foreground">leading-coefficient variant</a>.
-            The report card names the exponent that GlideComp applied.
+            The best time (<SpecRef section="9.4.1" />) is the fastest time of any pilot in goal
+            for paragliding, and the fastest time of any pilot to reach ESS for hang gliding,
+            whether or not they then made goal.
           </p>
           <p class="text-muted-foreground">
-            For paragliding, the best time is the time of the fastest pilot in goal (<SpecRef section="12.2" label="§9.4.1" />).
-            For hang gliding, GlideComp agrees with AirScore. The ESS-but-not-goal share keeps
-            part of the time points by default. While it does, the best time is the time of the
-            fastest pilot to reach ESS. The speed fractions of the reduced pilots then stay on
-            the same scale. If a competition sets that share to 0%, the best time comes from the
-            goal pilots, exactly as the specification reads.
-          </p>
-          <p class="text-muted-foreground">
-            The curve is generous. Pilots close to the fastest time get almost the full points,
-            and the reduction increases slowly for slower times. If you finish 10 minutes after
-            the winner, you still get a large share of the time points.
+            The curve is forgiving. Pilots close to the fastest time get nearly full points, and
+            the drop-off is gradual, so finishing 10 minutes behind the winner still earns a
+            large share.
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Time Points} = \text{SF} \times \text{Available Time Points}`)}></p>
           <p class="text-muted-foreground">
-            In a race-to-goal task with start gates, your clock runs from the
-            <strong>start gate</strong> you took (<SpecRef section="9.2.4.1" />). That gate is the
-            last gate at or before your start-cylinder crossing. The clock does not run from the
-            crossing itself. For example, the gates are at 13:30 and 13:50, and you cross at
-            13:49. Your clock then runs from 13:30.
+            In a race with start gates, your clock runs from the <strong>start gate</strong> you
+            took (<SpecRef section="9.2.4.1" />): the last gate at or before your start-cylinder
+            crossing, not the crossing itself. If the gates are at 13:30 and 13:50 and you cross
+            at 13:49, your clock starts at 13:30.
           </p>
           <p class="text-muted-foreground">
-            An elapsed-time task uses your actual crossing time. GlideComp scores both types as
-            the specification requires. The report card shows the gate you took and your crossing
-            time.
+            A time trial uses your actual crossing time. Either way, the report card shows the
+            gate you took and when you crossed.
           </p>
           <div id="elevated-goal" class="scroll-mt-20">
             <h3 class="text-base font-semibold mb-1">Elevated goal (<SpecRef section="6.2.3.2" />, <SpecRef section="13.1" />)</h3>
             <p class="text-muted-foreground">
-              A task can set goal at a height above the goal turnpoint's altitude. The standard
-              height is 300 m, and the maximum is 1000 m. The task file states it in XCTrack's
-              <code>finishAltitude</code> field. An elevated goal is also the end of the speed
-              section. A crossing at any altitude reaches goal. But if you cross below the set
-              height, you keep only part of your time points. Your other points do not change.
+              A task can set goal at a height above the goal turnpoint's altitude: 300 m as
+              standard, 1000 m at most. The task file gives it in XCTrack's
+              <code>finishAltitude</code> field, and an elevated goal is also the end of the speed
+              section. Crossing at any altitude still reaches goal, but crossing below the set
+              height costs you some of your time points. Your other points are unaffected.
             </p>
             <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{AR} = \frac{\text{crossing altitude} - \text{goal altitude}}{\text{elevation}}`)}></p>
             <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{GoalAltitudeFactor} = 0.8 + 0.6\,\text{AR} - 0.6\,\text{AR}^2 + 0.2\,\text{AR}^3`)}></p>
             <p class="text-muted-foreground">
-              At or below the goal turnpoint's altitude, the factor is 0.8. At or above the set
-              height, it is 1. Your time points are multiplied by it. For example, you cross 60 m
-              above goal under a 300 m elevated goal. Then AR is 0.2, and you keep about 90% of
-              your time points. GlideComp applies an elevated goal only when the goal turnpoint
-              has an altitude: without one, there is nothing to measure the height from.
+              The factor is 0.8 at or below the goal turnpoint's altitude and 1 at or above the
+              set height, and your time points are multiplied by it. For example, crossing 60 m
+              above goal under a 300 m elevated goal gives an AR of 0.2, and you keep about 90%
+              of your time points. GlideComp applies an elevated goal only when the goal
+              turnpoint has an altitude, since otherwise there's nothing to measure the height
+              from.
             </p>
           </div>
         </div>
@@ -480,10 +451,9 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Leading points, also called "departure points", reward the pilots who accept the risk
-            of flight at the front of the gaggle. These pilots show the way to goal. Without this
-            reward, the best strategy is to stay in a thermal and let the other pilots find the
-            way.
+            Leading points, also called "departure points", reward pilots who take the risk of
+            flying at the front of the gaggle and showing the way to goal. Without them, the
+            best tactic would be to hang back in thermals and let others find the way.
           </p>
 
           <div class="ml-2 space-y-4">
@@ -492,29 +462,28 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 The Leading Coefficient
               </h3>
               <p class="text-muted-foreground">
-                Each pilot gets a <strong>leading coefficient (LC)</strong>. The LC is a number
-                for the time that the pilot spent close to ESS and in front of the pack. It is
-                the area below a curve of the remaining distance to ESS against time. GlideComp
-                measures that distance along the course, from the start gate opening.
+                Each pilot gets a <strong>leading coefficient (LC)</strong>, which measures how
+                much time they spent near the front and close to ESS. It is the area under a
+                curve of remaining distance to ESS over time, with distance measured along the
+                course and time from when the first start gate opens.
               </p>
               <p class="text-muted-foreground">
-                A "ratchet" keeps your best distance: the distance counts only when it decreases,
-                that is, when you fly toward ESS. A flight away from ESS therefore does not
-                remove your progress. This is the same leading coefficient as CIVL GAP and
-                AirScore.
+                A "ratchet" keeps your best progress: the distance only ever decreases as you get
+                closer to ESS, so flying away from ESS never undoes progress you've made. This is
+                the same leading coefficient CIVL GAP and AirScore use.
               </p>
               <p class="text-muted-foreground">
-                The 2026 FAI specification defines two LC variants, one for each sport (<SpecRef section="12.3.1" />).
-                <strong>Hang gliding</strong> uses the <em>classic</em> squared-distance area.
-                <strong>Paragliding</strong> uses the <em>weighted</em> area, where the middle of
-                the course counts for more — computed as the specification's exact
-                weight-envelope integral since the 2025 edition. GlideComp gives each sport the
-                variant from the specification; it is not a setting. The report card names the
-                variant that GlideComp applied.
+                The 2026 specification defines a different LC for each sport
+                (<SpecRef section="12.3.1" />). <strong>Hang gliding</strong> uses the
+                <em>classic</em> squared-distance area. <strong>Paragliding</strong> uses a
+                <em>weighted</em> area in which the middle of the course counts for more, computed
+                as the specification's exact weight-envelope integral since the 2025 edition.
+                Each sport gets its own variant; it isn't a setting. The report card names the
+                variant used.
               </p>
               <p class="text-muted-foreground">
-                A <strong>lower</strong> LC shows that you spent more time at the front. The pilot
-                with the lowest LC gets the maximum leading points.
+                A <strong>lower</strong> LC means you spent more time at the front. The pilot
+                with the lowest LC gets full leading points.
               </p>
             </div>
             <div>
@@ -522,43 +491,43 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 Pilots who land out
               </h3>
               <p class="text-muted-foreground">
-                A pilot who lands before ESS has no more track to measure, but the curve must
-                still cover the rest of the day. GlideComp holds that pilot at the best distance
-                they reached, and carries the curve on to <em>maxTime</em>
+                A pilot who lands before ESS has no more track to measure, but their curve still
+                has to cover the rest of the day. GlideComp holds them at the best distance they
+                reached and extends the curve to <em>maxTime</em>
                 (<SpecRef section="12.3.1" />):
               </p>
               <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{maxTime} = \min\!\left(\max(\text{lastOutlandingTime},\; \text{lastESSTime}),\; \text{taskDeadline}\right)`)}></p>
               <p class="text-muted-foreground">
-                That is the later of two times — when the last pilot landed out, and when the
-                last pilot reached ESS — but never later than the task deadline. A stopped task
-                ends the curve at the task stop time, because nothing after the stop is scored.
+                That is, whichever came later, the last pilot landing out or the last pilot
+                reaching ESS, but never after the task deadline. In a stopped task, the curve ends
+                at the task stop time, because nothing after the stop is scored.
               </p>
               <p class="text-muted-foreground">
-                maxTime is one time for the whole class, not for each pilot. A pilot who stays up
-                long after the winner is home therefore adds a little to the leading coefficient
-                of every pilot who landed out. Your report card gives the maxTime that your own
-                curve used, and which of these times set it.
+                maxTime is the same for the whole class, not set per pilot. So a pilot who stays
+                up long after the winner is home adds a little to the leading coefficient of
+                everyone who landed out. Your report card shows the maxTime your curve used and
+                what set it.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">How Points Are Awarded</h3>
               <p class="text-muted-foreground">
-                Leading points use a curve with the same shape as time points, but with LC values
+                Leading points follow a curve shaped like the time-points curve, using LC values
                 in place of times:
               </p>
               <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{LF} = \max\!\left(0,\; 1 - \left(\dfrac{\text{LC} - \text{LC}_{\min}}{\sqrt{\text{LC}_{\min}}}\right)^{2/3} \right)`)}></p>
               <p class="text-muted-foreground">
-                The pilot with the best LC, which is the lowest LC, gets the full leading points.
-                Each other pilot gets less, in proportion to their own LC.
+                The pilot with the best (lowest) LC gets full leading points, and everyone else
+                gets less the further their LC is from the best.
               </p>
             </div>
           </div>
 
           <p class="text-muted-foreground">
-            Leading points are <strong>on by default</strong> for both categories, which is the
-            FAI formula. A competition can disable them. PG competitions give leading points more
-            weight than HG competitions, because paragliding has no arrival points to take a
-            share of the non-distance points.
+            Leading points are <strong>on by default</strong> for both sports, as in the FAI
+            formula, and a competition can turn them off. Paragliding gives leading more weight
+            than hang gliding, because it has no arrival points competing for the non-distance
+            share.
           </p>
 
           <div>
@@ -566,26 +535,26 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               How much weight goes to leading
             </h3>
             <p class="text-muted-foreground">
-              The 2026 specification has one formula for both sports (<SpecRef section="11" />):
-              leading takes the task's <em>Leading&nbsp;Time&nbsp;Ratio</em> of the non-distance
-              weight. The ratio can be set between 0% and 26% for each task. The default is 26%
-              for paragliding and 17.5% for hang gliding.
+              The 2026 specification uses one formula for both sports (<SpecRef section="11" />):
+              leading gets the task's <em>Leading&nbsp;Time&nbsp;Ratio</em> of the non-distance
+              weight. The ratio can be set anywhere from 0% to 26%; the default is 26% for
+              paragliding and 17.5% for hang gliding.
             </p>
             <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{LeadingWeight} = (1 - \text{DistanceWeight}) \times \text{LeadingTimeRatio}`)}></p>
             <p class="text-muted-foreground">
-              <strong>Paragliding</strong> has one extra rule: if nobody makes goal, leading
-              takes <strong>all</strong> of the non-distance weight, because paragliders get no
-              time points without goal. <strong>Hang gliding</strong> has no such case: on a day
-              when nobody makes goal the distance weight is 0.9, so leading at the default ratio
-              takes 0.0175 — the 18 points of the
+              <strong>Paragliding</strong> has one extra rule: if nobody makes goal, leading gets
+              <strong>all</strong> of the non-distance weight, since no one can earn time points
+              without goal. <strong>Hang gliding</strong> has no such rule. With nobody in goal
+              the distance weight is 0.9, so leading at the default ratio gets 0.0175: the 18
+              points of the
               <a href="#scoring-components" class="underline hover:text-foreground">918-point ceiling</a>
               above.
             </p>
             <p class="text-muted-foreground">
-              Earlier editions let paragliding competitions choose between three
-              leading-weight generations. GlideComp scores every task — including historical
-              competitions — under the 2026 formula, and each scores page names the edition it
-              was scored with (see <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Specification</a>).
+              Earlier editions let paragliding competitions choose between three generations of
+              leading weight. GlideComp scores every task, historical competitions included, with
+              the 2026 formula, and each scores page names the edition it was scored under (see
+              <a href="#spec-differences" class="underline hover:text-foreground">Differences from the Official Specification</a>).
             </p>
           </div>
         </div>
@@ -599,46 +568,44 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            <strong>Hang gliding only.</strong> Arrival points reward the pilots for their order
-            of arrival at ESS. The first pilot to reach ESS gets the most arrival points. Each
-            later pilot gets less.
+            <strong>Hang gliding only.</strong> Arrival points reward the order in which pilots
+            reach ESS. The first to arrive gets the most, and each later pilot gets less.
           </p>
           <p class="text-muted-foreground">
-            <strong>Except Class 2.</strong> A hang-gliding class that flies FAI Class 2 (rigid
-            wings with movable aerodynamic surfaces) gets no arrival points. Its arrival weight is
-            0, and that share goes to time (<SpecRef section="11" label="§11" />). The organiser
+            <strong>Except Class 2.</strong> A hang gliding class flying FAI Class 2 (rigid wings
+            with movable aerodynamic surfaces) gets no arrival points: its arrival weight is 0,
+            and that share goes to time (<SpecRef section="11" label="§11" />). The organiser
             marks which classes fly Class 2 in the competition's scoring settings.
           </p>
           <p class="text-muted-foreground">
-            <strong>The order comes from the clock at ESS, not from the speed.</strong> GlideComp
-            ranks the pilots by the wall-clock time of their crossing of the end of the speed
-            section. A pilot on an earlier start gate can therefore arrive before a faster pilot
-            on a later gate, and get more arrival points. This result surprises people, but it is
-            correct. Arrival points reward <em>arrival first</em>, which is what makes the race at
-            the front worth the risk. Time points already reward speed.
+            <strong>The order comes from the clock at ESS, not from speed.</strong> Pilots are
+            ranked by the time of day they crossed the end of the speed section. So a pilot on an
+            earlier start gate can arrive ahead of a faster pilot on a later gate and earn more
+            arrival points. That surprises people, but it's intended: arrival points reward
+            <em>getting there first</em>, which is what makes racing at the front worth the risk.
+            Time points already reward speed.
           </p>
           <p class="text-muted-foreground">
-            The first arrival gets 100% of the available arrival points. Every other pilot who
-            reaches ESS keeps approximately 20% or more. That minimum is the constant term in the
-            curve below. Between the two, the decrease is fast at the start. An arrival in front
-            of half of the field is worth approximately <strong>33%</strong> of the available
-            points, not 50%.
+            The first pilot to arrive gets 100% of the available arrival points, and everyone who
+            reaches ESS gets at least about 20% (the constant term in the curve below). In
+            between, the curve falls quickly at first: arriving ahead of half the field is worth
+            about <strong>33%</strong>, not 50%.
           </p>
           <p class="text-muted-foreground">
-            In these formulas, <em>ArrivalRatio</em> is the fraction of the ESS field that you
-            arrived in front of:
+            Here <em>ArrivalRatio</em> is the fraction of the pilots reaching ESS that you arrived
+            ahead of:
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{ArrivalRatio} = 1 - \frac{\text{PositionAtESS} - 1}{\text{PilotsAtESS}}`)}></p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{ArrivalFactor} = 0.2 + 0.037\,r + 0.13\,r^2 + 0.633\,r^3`)}></p>
           <p class="text-muted-foreground">
-            The sum of the four coefficients is exactly 1. The first arrival therefore takes the
-            full available points. The report card of each pilot shows their position, their ESS
-            time and the arithmetic. The <strong>ESS</strong> column of the task's scores table
-            shows the arrival order of the whole field.
+            The four coefficients add up to exactly 1, so the first arrival gets the full
+            points. Each pilot's report card shows their position, ESS time and the arithmetic,
+            and the <strong>ESS</strong> column of the task's scores table shows the arrival
+            order for the whole field.
           </p>
           <p class="text-muted-foreground">
-            Arrival points are <strong>on by default</strong> for hang gliding. A competition can
-            disable them in its settings. They do not apply to paragliding competitions.
+            Arrival points are <strong>on by default</strong> for hang gliding, and a competition
+            can turn them off. They never apply to paragliding.
           </p>
         </div>
       </section>
@@ -651,34 +618,33 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Your total score for a task is the sum of your four component scores. The
-            specification (<SpecRef section="12" label="S7F §12" />) rounds this total to <strong>one decimal place</strong>.
-            GlideComp subtracts the penalties <em>before</em> it rounds (<SpecRef section="13.5" />), so the rounding is
-            always the last step:
+            Your task score is the sum of your four components, rounded to <strong>one decimal
+            place</strong> (<SpecRef section="12" label="S7F §12" />). Penalties are subtracted
+            <em>before</em> rounding (<SpecRef section="13.5" />), so rounding is always the last
+            step:
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block" set:html={km(String.raw`\text{Total} = \text{round}_{0.1}\!\left(\text{Distance} + \text{Time} + \text{Leading} + \text{Arrival} - \text{Penalties}\right)`)}></p>
           <p class="text-muted-foreground">
-            A pilot's score is never less than zero, whatever the size of the penalty. GlideComp
-            ranks the pilots by this total, highest first. If two pilots have the same total, the
-            pilot with the longer flown distance gets the higher rank. The scoreboard shows these
-            totals as whole points, but the ranking and the tie-breaks use the one-decimal value.
+            A score never goes below zero, however large the penalty. Pilots are ranked by total,
+            highest first, and a tie goes to the pilot who flew further. The scoreboard shows
+            whole points, but ranking and tie-breaks use the one-decimal value.
           </p>
 
           <div class="ml-2">
             <h3 class="text-base font-semibold mb-1">Practical Example</h3>
             <p class="text-muted-foreground">
-              This example is a task day with good conditions, a task validity of 0.95, and 20%
-              of the pilots in goal. Leading points and arrival points are off. The task then has
-              approximately 950 available points, divided approximately like this:
+              Take a paragliding task on a good day: task validity 0.95, 20% of pilots in goal,
+              and leading points turned off. The task offers 950 points, split roughly like
+              this:
             </p>
             <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-              <li>Distance: ~570 points available (60% weight)</li>
-              <li>Time: ~380 points available (40% weight)</li>
+              <li>Distance: ~600 points (63% weight)</li>
+              <li>Time: ~350 points (37% weight)</li>
             </ul>
             <p class="text-muted-foreground mt-2">
-              A pilot who made goal with the fastest time scores 570 + 380 = 950 points. A pilot
-              who flew 80% of the best distance and did not make goal scores approximately
-              456 + 0 = 456 points. In PG there are no time points without goal.
+              The fastest pilot in goal scores 600 + 350 = 950. A pilot who flew 80% of the best
+              distance but didn't make goal scores about 480 + 0 = 480, because in paragliding
+              there are no time points without goal.
             </p>
           </div>
         </div>
@@ -692,86 +658,91 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Bad weather can make the safety committee stop a task during the flight. GlideComp
-            then scores the task as a <strong>stopped task</strong>. The organiser records the
-            time of the stop announcement on the task. GlideComp applies the stopped-task rules
-            of the specification automatically. The report card of each affected pilot shows how.
+            If the weather turns, the safety committee can stop a task mid-flight. The organiser
+            records when the stop was announced, and GlideComp applies the specification's
+            stopped-task rules automatically. Each affected pilot's report card shows how.
           </p>
 
           <div class="ml-2 space-y-4">
             <div>
-              <h3 class="text-base font-semibold mb-1">The task stop time (<SpecRef section="12.3.1" />)</h3>
+              <h3 class="text-base font-semibold mb-1">The task stop time (<SpecRef section="13.4.1" />)</h3>
               <p class="text-muted-foreground">
-                A pilot near a scoring milestone at the announcement must not have a reason to
-                continue the flight in dangerous conditions. GlideComp therefore moves the
-                announcement back to an earlier task stop time. For paragliding, the task stop
-                time is the announcement minus the competition's <strong>score-back time</strong>.
-                The default score-back time is 5 minutes, and the competition can change it in
-                its scoring settings. For hang gliding, the score-back is one start-gate interval,
-                or 15 minutes when the task has one start gate.
+                So that nobody close to a scoring milestone has a reason to keep flying in
+                dangerous conditions, the task is scored back to a <strong>task stop
+                time</strong> before the announcement: 15 minutes earlier for hang gliding, 5
+                minutes for paragliding. Both are fixed by the specification.
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">Can the task be scored at all? (<SpecRef section="12.3.2" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Can the task be scored at all? (<SpecRef section="13.4.2" />)</h3>
               <p class="text-muted-foreground">
-                A stopped task counts only if it was long enough. The minimum length is
-                <strong> min(1 hour, half the nominal time)</strong>. GlideComp measures it from
-                the race start with one start gate, or from the last pilot's start with multiple
-                gates or elapsed time. A task stopped before that time scores zero for every
-                pilot, and the scores give the reason.
-              </p>
-            </div>
-            <div>
-              <h3 class="text-base font-semibold mb-1">Stopped-task validity (<SpecRef section="12.3.3" />)</h3>
-              <p class="text-muted-foreground">
-                A fourth validity factor is added to launch, distance and time. If one pilot or
-                more reached the end of the speed section, this factor is 1, because the race had
-                a result. If nobody reached it, the factor decreases the value of the day. The
-                decrease depends on the spread of the field, and on how many pilots already
-                landed at the stop.
-              </p>
-            </div>
-            <div>
-              <h3 class="text-base font-semibold mb-1">What part of your flight counts (<SpecRef section="12.3.4" />, <SpecRef section="12.3.5" />)</h3>
-              <p class="text-muted-foreground">
-                In a race with one start gate, every pilot is scored from the start to the task
-                stop time. A turnpoint tagged after the stop time does not count, and GlideComp
-                measures the distance only up to it. With multiple start gates, or with
-                elapsed-time starts, every pilot is scored for the same quantity of flying time.
-                That time is the time between the start of the <em>last-started</em> pilot and the
-                stop.
+                In <strong>hang gliding</strong>, a stopped task counts only if it ran long
+                enough: at least <strong>min(1 hour, half the nominal time)</strong>, measured
+                from the race start with one start gate, or from the last start any pilot took
+                with several gates or in a time trial. A task stopped sooner scores zero for
+                everyone, and the scores say why.
               </p>
               <p class="text-muted-foreground mt-2">
-                A pilot who was already past the end of the speed section at the stop is scored
-                for their <strong>complete flight</strong>. This includes goal after the stop.
-                GlideComp then subtracts a fixed quantity from the time points of every goal
-                pilot. That quantity is the time points of a hypothetical pilot who reaches ESS
-                exactly at the stop. A finish just before the stop is therefore worth no more
-                than a stop just after ESS.
+                <strong>Paragliding</strong> has no minimum. Instead, a stopped task whose winner
+                scored under 50 points (task validity below 0.05) is left out of the competition
+                total (<SpecRef section="15" label="§15" />). It still shows on its own scores
+                page.
               </p>
             </div>
             <div>
-              <h3 class="text-base font-semibold mb-1">The altitude bonus (<SpecRef section="12.3.6" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Stopped-task validity (<SpecRef section="13.4.3" />)</h3>
               <p class="text-muted-foreground">
-                A pilot who is still in the air at the stop, with height available, can glide
-                further. Their distance therefore gets an <strong>altitude bonus</strong>. At each
-                track point in the scored window, the height above goal counts as more distance,
-                at a fixed glide ratio. The ratio is <strong>4:1 for paragliders and 5:1 for hang
-                gliders</strong>, on GNSS altitude.
+                A fourth validity joins launch, distance and time. If anyone reached the end of
+                the speed section, it is 1, because the race had a result. If nobody did, it
+                lowers the day's value depending on how spread out the field was and how many
+                pilots had already landed at the stop.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">What part of your flight counts (<SpecRef section="13.4.4" />)</h3>
+              <p class="text-muted-foreground">
+                Nobody earns points for flying after the task stop time. In a race with one start
+                gate, every pilot is scored from the start to the stop time. With several gates,
+                or in a time trial, everyone gets the same amount of flying time: as much as the
+                last pilot to start had before the stop, counted from each pilot's own start. A
+                turnpoint tagged after your window doesn't count, and your distance is measured
+                only up to the end of it.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">Time points (<SpecRef section="13.4.5" />)</h3>
+              <p class="text-muted-foreground">
+                If nobody was in goal at the stop, the task has no time points. If someone was,
+                every goal pilot's time points are reduced by the same amount, and that amount is
+                added to the distance points on offer instead. The amount is the time points the
+                best of the pilots still between ESS and goal would have earned had they made
+                goal. If nobody was between ESS and goal, it is what a pilot reaching ESS exactly
+                at the stop would have earned.
+              </p>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold mb-1">The altitude bonus (<SpecRef section="13.4.6" />)</h3>
+              <p class="text-muted-foreground">
+                A pilot still in the air at the stop could have turned their height into more
+                distance, so they get an <strong>altitude bonus</strong>. Their height above goal
+                at the stop time is multiplied by a fixed glide ratio, <strong>5:1 for hang
+                gliders and 2.5:1 for paragliders</strong> (on GNSS altitude), and added to the
+                distance they had covered at that moment. If the result beats their best distance
+                so far, it is used for their distance points, including the difficulty
+                calculation in hang gliding.
               </p>
               <p class="text-muted-foreground mt-2">
-                The bonus applies to distance points only, and never gives more than the goal
-                distance. It does not change time points or leading points. A pilot who landed
-                before the stop gets no bonus.
+                The bonus never takes a pilot past goal, and it doesn't affect time or leading
+                points. A pilot who landed before the stop gets no bonus.
               </p>
             </div>
           </div>
 
           <p class="text-muted-foreground">
-            The task page marks a stopped task and shows its stop time. The competition's public
-            audit log records the stop. The report card of each pilot describes the scored window
-            and the crossings that no longer counted. It also describes the altitude bonus and the
-            reduction of the goal time points.
+            The task page marks a stopped task and shows its stop time, and the competition's
+            public audit log records the stop. Each pilot's report card shows their scored
+            window, any crossings that no longer counted, their altitude bonus, and any reduction
+            to their time points.
           </p>
         </div>
       </section>
@@ -780,45 +751,46 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
       <section id="ftv" class="mb-14 scroll-mt-20">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Series scoring &amp; Fixed Total Validity</h2>
-          <SpecRef section="14" label="FAI S7F §13–15" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="15" label="FAI S7F §15–16" class="text-xs font-medium text-muted-foreground shrink-0" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            A competition's overall scores combine each pilot's task scores. There
-            are two methods, and each competition selects one in its scoring settings.
+            A competition's overall results combine each pilot's task scores. There are two ways
+            to do it, and each competition picks one in its scoring settings.
           </p>
 
           <div class="ml-2 space-y-4">
             <div>
               <h3 class="text-base font-semibold mb-1">Sum of task scores</h3>
               <p class="text-muted-foreground">
-                Your competition score is the sum of every task score. Most hang-gliding
-                competitions and short series use this method. Pilots with the same total share a
-                place (<SpecRef section="5.2.5" label="S7A §5.2.5.4" /> permits ties).
+                Your competition score is the total of all your task scores. Most hang gliding
+                competitions and short series work this way. Pilots on the same total share a
+                place, which
+                <a href={S7A_PDF} target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">S7A §5.2.5.4</a>
+                allows.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">FTV — Fixed Total Validity (<SpecRef section="16" label="§16" />)</h3>
               <p class="text-muted-foreground">
-                This is the usual paragliding method, and the default for new paragliding
-                competitions. FTV scores you on your <strong>best</strong> tasks instead of all
-                of your tasks, so one bad day costs less. GlideComp discards a fixed fraction of
-                the competition's total validity. The fraction is <strong>20%</strong> for a
-                competition with 6 tasks or fewer, and <strong>25%</strong> for 7 tasks or more.
+                The usual paragliding method, and the default for new paragliding competitions.
+                FTV counts your <strong>best</strong> tasks rather than all of them, so one bad
+                day costs you less. A fixed fraction of the competition's total validity is
+                dropped: <strong>20%</strong> for a competition of 6 tasks or fewer,
+                <strong>25%</strong> for 7 or more.
               </p>
               <p class="text-muted-foreground mt-2">
-                Each task has a <em>validity</em>, which is approximately its winning score
-                divided by 1000. GlideComp puts your tasks in order, best performance first. It
-                then adds your scores, and the validity of each task, until the kept validity
-                reaches the fixed limit. The task that goes past the limit counts in
-                <strong>part</strong>. GlideComp <strong>discards</strong> the tasks after it. A
-                pilot who flew too few tasks to reach the limit keeps all of them.
+                Each task has a <em>validity</em>, roughly its winning score divided by 1000.
+                GlideComp sorts your tasks from your best performance down, then adds up your
+                scores, and the tasks' validities, until the kept validity reaches the limit. The
+                task that crosses the limit counts <strong>in part</strong>, and the tasks after it
+                are <strong>dropped</strong>. A pilot who flew too few tasks to reach the limit
+                keeps them all.
               </p>
               <p class="text-muted-foreground mt-2">
-                On the scores page of an FTV competition, a strike-through marks the discarded
-                tasks of each pilot. The mark "(part)" shows a task that counts in part. Open
-                a pilot's total for the full breakdown: the tasks that counted, the tasks that
-                GlideComp discarded, and the arithmetic.
+                On an FTV competition's scores page, each pilot's dropped tasks are struck
+                through, and "(part)" marks a task that counts in part. Open a pilot's total for
+                the full breakdown: which tasks counted, which were dropped, and the arithmetic.
               </p>
             </div>
           </div>
@@ -829,24 +801,24 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
       <section id="defaults" class="mb-14 scroll-mt-20">
         <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4">
           <h2 class="text-2xl font-bold">Default Competition Settings</h2>
-          <SpecRef section="11" label="FAI S7F §11–11" class="text-xs font-medium text-muted-foreground shrink-0" />
+          <SpecRef section="5" label="FAI S7F §5" class="text-xs font-medium text-muted-foreground shrink-0" />
         </div>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            When you create a competition, you select only <strong>hang gliding</strong> or
+            When you create a competition, you only choose <strong>hang gliding</strong> or
             <strong>paragliding</strong>. GlideComp then applies the official CIVL GAP defaults
-            for that category. The defaults are the current FAI Sporting Code Section 7F values. A
-            new competition therefore scores like a standard FAI/AirScore event with no other
-            work. You can change any default under <em>Advanced scoring settings</em> in the
-            competition's Settings dialog. You need to do this only if your event uses local rules
-            with different values, for example Australia's SAFA.
+            for that sport, taken from the current FAI Sporting Code Section 7F, so a new
+            competition scores like a standard FAI/AirScore event with no further setup. You can
+            change any default under <em>Advanced scoring settings</em> in the competition's
+            Settings, which you'd only need to do if your event runs local rules with different
+            values, such as Australia's SAFA.
           </p>
 
           <p class="text-muted-foreground">
-            Both categories share most of the values. The differences come from the specification,
-            which scores hang gliding and paragliding differently. Arrival points and distance
-            difficulty apply to hang gliding only. Paragliding has no arrival points, so its
-            leading weight is higher.
+            Most values are the same for both sports. Where they differ, it's because the
+            specification scores the two differently: arrival points and distance difficulty
+            are hang gliding only, and paragliding gives leading more weight because it has no
+            arrival points.
           </p>
 
           <div class="overflow-x-auto">
@@ -860,74 +832,70 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </thead>
               <tbody class="text-muted-foreground align-top">
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Nominal launch</td>
-                  <td class="py-2 pr-4 whitespace-nowrap">96%</td>
-                  <td class="py-2">Launch validity is full when more than this fraction of the pilots launch (<SpecRef section="10.1" label="§10.1" />).</td>
-                </tr>
-                <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Nominal goal</td>
-                  <td class="py-2 pr-4 whitespace-nowrap">30%</td>
-                  <td class="py-2">The share of pilots expected to make goal on a good day. It sets the distance, time and leading weight split.</td>
-                </tr>
-                <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Nominal distance</td>
                   <td class="py-2 pr-4 whitespace-nowrap">Auto</td>
-                  <td class="py-2">The expected task distance for distance validity. "Auto" is 70% of the optimised distance of each task. A fixed value applies to the full competition.</td>
+                  <td class="py-2">The expected task distance, used for distance validity. "Auto" uses 70% of each task's optimised distance; a fixed value applies to every task in the competition.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Nominal time</td>
                   <td class="py-2 pr-4 whitespace-nowrap">90 min</td>
-                  <td class="py-2">The expected winning time. A much faster winner decreases the value of the task (time validity).</td>
+                  <td class="py-2">The expected winning time. A much faster winner makes the task worth less (time validity).</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Minimum distance</td>
                   <td class="py-2 pr-4 whitespace-nowrap">5 km</td>
-                  <td class="py-2">The minimum distance for a pilot who launched, even if they land sooner ("bomb-out points").</td>
+                  <td class="py-2">The distance a pilot who launched is scored for, even if they land sooner ("bomb-out points").</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
                     <a href="#leading-points" class="underline hover:text-foreground">Leading points</a>
                   </td>
                   <td class="py-2 pr-4 whitespace-nowrap">On</td>
-                  <td class="py-2">Rewards flight at the front of the pack. On for both categories in the FAI formula. Paragliding gives them more weight, because it has no arrival points.</td>
+                  <td class="py-2">Reward flying at the front. On for both sports, as in the FAI formula.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
                     <a href="#leading-weight" class="underline hover:text-foreground">Leading time ratio</a>
                   </td>
                   <td class="py-2 pr-4 whitespace-nowrap">26% / 17.5%</td>
-                  <td class="py-2">The share of the non-distance weight that goes to leading points (<SpecRef section="11" label="§11" />), settable from 0% to 26% for each task. The defaults are the specification's: 26% for paragliding, 17.5% for hang gliding. The leading-coefficient variant and the 5/6 time-points exponent are fixed per sport by the 2026 specification and are not settings.</td>
+                  <td class="py-2">The share of the non-distance weight that goes to leading points (<SpecRef section="11" label="§11" />), from 0% to 26%. The defaults are the specification's: 26% for paragliding, 17.5% for hang gliding.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">
                     <a href="#distance-origin" class="underline hover:text-foreground">Distance origin</a>
                   </td>
                   <td class="py-2 pr-4 whitespace-nowrap">Take-off</td>
-                  <td class="py-2">GlideComp measures the scored distance from the take-off point, through the start (FAI CIVL GAP / PWCA). "Start cylinder" removes the take-off→start leg (HGFA/SAFA).</td>
+                  <td class="py-2">Scored distance is measured from the take-off point, through the start (FAI CIVL GAP / PWCA). "Start cylinder" leaves out the take-off→start leg (HGFA/SAFA).</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
+          <p class="text-muted-foreground">
+            A few values that used to be settings are now fixed by the 2026 specification:
+            nominal launch (96%), nominal goal (30%), the stopped-task score-back time, the 5/6
+            time-points exponent, and each sport's leading-coefficient variant.
+          </p>
+
           <div id="defaults-hg" class="ml-2 scroll-mt-20">
             <h3 class="text-base font-semibold mb-1">Hang gliding (HG)</h3>
             <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-              <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>on</strong> — HG scores order of arrival at ESS (<SpecRef section="12.4" label="§12.4" />).</li>
-              <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>on</strong> — HG distance points are half linear, half difficulty (<SpecRef section="12.1.1" label="§12.1.1" />).</li>
-              <li><a href="#leading-points" class="underline hover:text-foreground">Leading coefficient</a>: <strong>classic</strong> (squared-distance), with the <strong>5/6</strong> time-points exponent — the hang-gliding formulas of the 2026 specification (<SpecRef section="12.2" label="§12.2" />, <SpecRef section="12.3.1" label="§12.3.1" />).</li>
-              <li>Jump-the-gun (early start, <SpecRef section="13.3" label="§13.3" />): 1 penalty point for each <strong>2 s</strong> before the gate, up to <strong>300 s</strong>. A pilot who starts earlier than 300 s gets the minimum distance only.</li>
-              <li>ESS but not goal (<SpecRef section="13.2" label="§13.2" />): the pilot keeps <strong>80%</strong> of their time and arrival points. This is the recommended default of the specification, and local regulations can change it.</li>
+              <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>on</strong>. HG scores the order of arrival at ESS (<SpecRef section="12.4" label="§12.4" />).</li>
+              <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>on</strong>. HG distance points are half linear, half difficulty (<SpecRef section="12.1.1" label="§12.1.1" />).</li>
+              <li><a href="#leading-points" class="underline hover:text-foreground">Leading coefficient</a>: <strong>classic</strong> (squared-distance), the 2026 specification's hang gliding formula (<SpecRef section="12.3.1" label="§12.3.1" />).</li>
+              <li>Jump-the-gun (early start, <SpecRef section="13.3" label="§13.3" />): 1 penalty point for every <strong>2 s</strong> before the gate, up to <strong>300 s</strong>. A pilot who starts more than 300 s early is scored for minimum distance only.</li>
+              <li>ESS but not goal (<SpecRef section="13.2" label="§13.2" />): the pilot keeps <strong>80%</strong> of their time and arrival points. This is the specification's recommended default, and local rules can change it.</li>
             </ul>
           </div>
 
           <div id="defaults-pg" class="ml-2 scroll-mt-20">
             <h3 class="text-base font-semibold mb-1">Paragliding (PG)</h3>
             <ul class="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-              <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>off</strong> — the specification gives paragliding no arrival points.</li>
-              <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>off</strong> — paragliding distance is always the linear proportion.</li>
-              <li><a href="#leading-points" class="underline hover:text-foreground">Leading coefficient</a>: <strong>weighted</strong> (weighted-area), with the <strong>5/6</strong> time-points exponent — the paragliding formulas of the 2026 specification (<SpecRef section="12.2" label="§12.2" />, <SpecRef section="12.3.1" label="§12.3.1" />).</li>
-              <li>GlideComp scores an early start as launch→start. There is no jump-the-gun penalty, which is for HG only.</li>
-              <li>ESS but not goal (<SpecRef section="13.2" label="§13.2" />): <strong>0%</strong>. Without goal there are no time points. The specification fixes this value for paragliding, to remove the reason for a fast final glide close to the ground.</li>
+              <li><a href="#arrival-points" class="underline hover:text-foreground">Arrival points</a>: <strong>off</strong>. The specification gives paragliding none.</li>
+              <li><a href="#distance-difficulty" class="underline hover:text-foreground">Distance difficulty</a>: <strong>off</strong>. Paragliding distance is always the linear proportion.</li>
+              <li><a href="#leading-points" class="underline hover:text-foreground">Leading coefficient</a>: <strong>weighted</strong> (weighted-area), the 2026 specification's paragliding formula (<SpecRef section="12.3.1" label="§12.3.1" />).</li>
+              <li>Early start (<SpecRef section="13.3" label="§13.3" />): scored for the launch→start distance only. There is no jump-the-gun penalty, which is for HG only.</li>
+              <li>ESS but not goal (<SpecRef section="13.2" label="§13.2" />): <strong>0%</strong>, so no time points without goal. The specification fixes this for paragliding, to discourage fast final glides low to the ground.</li>
             </ul>
           </div>
         </div>
@@ -939,25 +907,24 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             GlideComp implements the core GAP formulas of the 2026 edition of the CIVL Sporting
-            Code Section 7F — and scores every task with them, including historical
-            competitions flown under earlier rules; those pages carry a notice that their
-            scores are indicative. We compare its results against real competition scores that
-            AirScore published. The validity polynomials, the weight distributions and the point formulas
-            obey the official specification. GlideComp does not implement every feature of the
-            full specification. In a small number of places, its behaviour is different on
-            purpose, or different for now. The
-            <a href="#spec-differences" class="underline hover:text-foreground">next section</a>
-            lists all of these differences.
+            Code Section 7F, and scores every task with them, including historical competitions
+            flown under earlier rules (those pages carry a notice that their scores are
+            indicative). We check its results against real competition scores published by
+            AirScore. The validity polynomials, weight split and points formulas follow the
+            official specification. GlideComp doesn't implement every feature of the
+            specification, and in a few places it deliberately, or for now, behaves differently;
+            the <a href="#spec-differences" class="underline hover:text-foreground">next section</a>
+            lists every difference.
           </p>
 
           <p class="text-muted-foreground">
-            The tables below group the features by the <strong class="text-foreground">FAI
-            competition category</strong>. Section 7F is written for <strong>Category 1</strong>
-            events, which are the FAI World and Continental championships. Organisers of
-            <strong>Category 2</strong> events and non-sanctioned events can score as they want
-            (<SpecRef section="1.1" label="S7F §1.1" />), and most local and club competitions are
-            in that group. GlideComp has everything that a Category 2 or local competition needs.
-            The only missing parts are championship sub-rankings for Category 1.
+            The tables below group features by <strong class="text-foreground">FAI competition
+            category</strong>. Section 7F is written for <strong>Category 1</strong> events, the
+            FAI World and Continental championships. Organisers of <strong>Category 2</strong>
+            and non-sanctioned events, which includes most local and club competitions, may score
+            however they like (<SpecRef section="1.1" label="S7F §1.1" />). GlideComp has
+            everything a Category 2 or local competition needs; all it lacks are the Category 1
+            championship sub-rankings.
           </p>
 
           <h3 class="text-base font-semibold mt-6 mb-2">All competition categories</h3>
@@ -996,59 +963,59 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Penalties — absolute points (<SpecRef section="13.5" label="S7F §13.5" />)</td>
-                  <td class="py-2">Implemented. The scorekeeper enters them, and the audit log records them.</td>
+                  <td class="py-2">Implemented. Entered by the scorekeeper and recorded in the audit log.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Penalties — percentage (<SpecRef section="13.5" />)</td>
-                  <td class="py-2">Not implemented. Tracked in <a href="https://github.com/pokle/glidecomp/issues/265" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #265</a> — add your voice there if you need it.</td>
+                  <td class="py-2">Not implemented. Tracked in <a href="https://github.com/pokle/glidecomp/issues/265" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #265</a>; add your voice there if you need it.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Early starts &amp; jump-the-gun (<SpecRef section="13.3" />)</td>
-                  <td class="py-2">Implemented. PG is scored launch→start. HG gets 1 point for each X s early, to a maximum of Y s. X and Y are configurable, with defaults 2 and 300.</td>
+                  <td class="py-2">Implemented. PG is scored launch→start. HG gets 1 point for every X s early, up to Y s, where X and Y are configurable (defaults 2 and 300).</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">ESS but not goal (<SpecRef section="13.2" />)</td>
-                  <td class="py-2">Implemented. PG keeps 0% of the time points. HG keeps 80% of the time and arrival points, and this share is configurable.</td>
+                  <td class="py-2">Implemented. PG keeps 0% of time points. HG keeps 80% of time and arrival points, configurable.</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Start gates / race start times (<SpecRef section="6.3.3" />, <SpecRef section="9.2.4.1" />)</td>
-                  <td class="py-2">Implemented. The start moves to the last gate at or before the crossing. The LC clock runs from the first gate (<SpecRef section="12.3.1" />).</td>
+                  <td class="py-2 pr-4">Start gates / race start times (<SpecRef section="6.3.1" />, <SpecRef section="9.2.4.1" />)</td>
+                  <td class="py-2">Implemented. The start snaps to the last gate at or before the crossing. The LC clock runs from the first gate (<SpecRef section="12.3.1" />).</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Goal lines (<SpecRef section="6.2.3.1" />, <SpecRef section="9.2.3" />)</td>
-                  <td class="py-2">Implemented. The line is perpendicular to the final leg, with the control semi-circle behind it. It must be crossed in the direction of the last leg.</td>
+                  <td class="py-2">Implemented. The line is perpendicular to the final leg, with the control semi-circle behind it, and must be crossed in the direction of the last leg.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Line tolerance (<SpecRef section="9.1.2" />)</td>
-                  <td class="py-2">Implemented for the goal line. It gets the same percentage as a cylinder, and the same 5&nbsp;m minimum, so a crossing just past the end of the line still counts.</td>
+                  <td class="py-2">Implemented for the goal line: the same 5&nbsp;m band as a cylinder, so a crossing just past the end of the line still counts.</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-4">Line-type control zones at intermediate turnpoints (<SpecRef section="6.2.2" />, <SpecRef section="9.2.2" />)</td>
-                  <td class="py-2">Not implemented. Every turnpoint before goal is a cylinder. A task file cannot describe a line anywhere but goal, so no task can ask for one. Tracked in <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.</td>
+                  <td class="py-2 pr-4">Line control zones at intermediate turnpoints (<SpecRef section="6.2.2" />, <SpecRef section="9.2.2" />)</td>
+                  <td class="py-2">Not implemented. Every turnpoint before goal is a cylinder; the task file can't describe a line anywhere but goal, so no task can ask for one. Tracked in <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Open distance task type</td>
-                  <td class="py-2">Removed from GAP by the 2025 edition — the specification now covers Race and Time Trial tasks only. GlideComp's <a href="/scoring/open-distance" class="underline hover:text-foreground">open-distance format</a> is the classic free-flight format, a separate, non-GAP scoring format.</td>
+                  <td class="py-2">Removed from GAP in the 2025 edition, which covers only Race and Time Trial tasks. GlideComp's <a href="/scoring/open-distance" class="underline hover:text-foreground">open-distance format</a> is the classic free-flight format, a separate scoring format outside GAP.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Task deadline enforcement (<SpecRef section="9.2" />, <SpecRef section="12.1" />)</td>
-                  <td class="py-2">Implemented. A crossing after the goal deadline does not count. GlideComp measures the distance of a landed-out pilot up to the deadline.</td>
+                  <td class="py-2">Implemented. A crossing after the goal deadline doesn't count, and a landed-out pilot's distance is measured only up to the deadline.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Launch window (<SpecRef section="9.3" />)</td>
-                  <td class="py-2">Partially implemented. A start crossing before the window opens cannot validate a start. See below.</td>
+                  <td class="py-2">Partly implemented. A start crossing before the window opens can't validate a start. See below.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Stopped tasks (weather calldowns, <SpecRef section="13.4" />)</td>
-                  <td class="py-2">Implemented: scored-back stop time, minimum-run check, stopped validity, scored time window, and altitude bonus. See <a href="#stopped-tasks" class="underline hover:text-foreground">Stopped Tasks</a>.</td>
+                  <td class="py-2">Implemented: score-back, minimum duration, stopped validity, scored time window, time-points reduction and altitude bonus. See <a href="#stopped-tasks" class="underline hover:text-foreground">Stopped Tasks</a>.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Multi-task series scoring</td>
-                  <td class="py-2">Implemented. A competition total is the sum of the task scores of each pilot, ranked for each class, with top-3-per-task and team scores. See the <a href="/comp" class="underline hover:text-foreground">competition scores pages</a>.</td>
+                  <td class="py-2">Implemented. Competition totals per class, with top 3 per task and team scores. See the <a href="/comp" class="underline hover:text-foreground">competition scores pages</a>.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">FTV (fixed total validity) for series</td>
-                  <td class="py-2">Implemented as an optional series-scoring method, and the default for new paragliding competitions. It discards a fixed fraction of the total validity: 20% for 6 tasks or fewer, and 25% for 7 or more. It then scores each pilot on their best tasks. See <a href="#ftv" class="underline hover:text-foreground">Fixed Total Validity</a>.</td>
+                  <td class="py-2">Implemented as an optional series method, and the default for new paragliding competitions. It drops a fixed fraction of the total validity (20% for 6 tasks or fewer, 25% for 7 or more) and scores each pilot on their best tasks. See <a href="#ftv" class="underline hover:text-foreground">Fixed Total Validity</a>.</td>
                 </tr>
               </tbody>
             </table>
@@ -1056,13 +1023,13 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
 
           <h3 class="text-base font-semibold mt-8 mb-2">FAI Category 1 (World &amp; Continental championships) only</h3>
           <p class="text-muted-foreground">
-            These sub-rankings occur only at FAI Category 1 championships. Those events have
-            national team entries and a separate women's category. GlideComp
-            <strong class="text-foreground">does not implement them, on purpose</strong>. Category
-            2 and local competitions do not use them, and the definitions are in Sporting Code
-            <a href="https://www.fai.org/sites/default/files/civl/documents/sporting_code_s7_a_-_cross_country_2025.pdf" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">Section 7A</a>
-            §5.2.4–5.2.5. They also change no scores, because each one is a filtered list of the
-            same task scores.
+            These sub-rankings only appear at FAI Category 1 championships, which have national
+            team entries and a separate women's category. GlideComp
+            <strong class="text-foreground">deliberately leaves them out</strong>: Category 2 and
+            local competitions don't use them, they're defined in Sporting Code
+            <a href={S7A_PDF} target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">Section 7A</a>
+            §5.2.4–5.2.5, and they don't change anyone's score, since each is just a filtered list
+            of the same task scores.
           </p>
           <div class="overflow-x-auto">
             <table class="w-full text-sm border-collapse">
@@ -1075,34 +1042,31 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               <tbody class="text-muted-foreground">
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Female sub-ranking (S7A §5.2.4.2, §5.2.5.2)</td>
-                  <td class="py-2">Not implemented, on purpose. It lists the female pilots again, with the scores from the overall ranking. It needs pilot gender data that GlideComp does not collect.</td>
+                  <td class="py-2">Deliberately not implemented. It re-lists the female pilots with their overall scores, and needs gender data GlideComp doesn't collect.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-4">Nation sub-ranking / national teams (S7A §5.2.4.3, §5.2.5.3)</td>
-                  <td class="py-2">Not implemented, on purpose. It ranks the nations by the sum of their best three pilots, or two pilots at the Women's Worlds. It needs national-team entries. It is not the same as GlideComp's <a href="/comp" class="underline hover:text-foreground">team scores</a>, which any competition can use.</td>
+                  <td class="py-2">Deliberately not implemented. It ranks nations by the sum of their best three pilots (two at the Women's Worlds), and needs national-team entries. It's not the same as GlideComp's <a href="/comp" class="underline hover:text-foreground">team scores</a>, which any competition can use.</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
           <p class="text-muted-foreground">
-            A new competition uses the official CIVL GAP settings for its category by default.
-            Leading points are on for both categories. Arrival points and distance difficulty are
-            on for hang gliding. The scores therefore agree with a standard FAI/AirScore event.
-            See
+            A new competition starts with the official CIVL GAP settings for its sport: leading
+            points on for both, and arrival points and distance difficulty on for hang gliding,
+            so its scores match a standard FAI/AirScore event. See
             <a href="#defaults" class="underline hover:text-foreground">Default Competition Settings</a>
-            for the full list. You can change any setting under the competition's Advanced scoring
-            settings.
+            for the full list. You can change any of them under the competition's Advanced
+            scoring settings.
           </p>
           <p class="text-muted-foreground">
-            The source code of the scoring engine is open, and it is on
-            <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
-              GitHub
-            </a>. Every change to how a flight is scored is recorded in the
-            <a href="https://github.com/pokle/glidecomp/tree/master/web/engine/scoring-changes" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
-              scoring changelog
-            </a>, which says what moved and who it affects. A change re-scores every
-            competition, including one that has already finished.
+            The scoring engine is open source on
+            <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">GitHub</a>.
+            Every change to how a flight is scored is written up in the
+            <a href="https://github.com/pokle/glidecomp/tree/master/web/engine/scoring-changes" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">scoring changelog</a>,
+            with what moved and who it affects. A change rescores every competition, including
+            ones that have already finished.
           </p>
         </div>
       </section>
@@ -1112,19 +1076,18 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
         <h2 class="text-2xl font-bold mb-4">Differences from the Official Specification</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            We compared the GlideComp scoring engine line by line against the FAI Sporting Code
-            Section 7F (2026 edition). We also compared it against the source code of
+            We compared GlideComp's scoring engine line by line with FAI Sporting Code Section 7F
+            (2026 edition) and with the source code of
             <a href="https://github.com/biuti/airscore-app" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>,
-            the CIVL-approved scoring software. The last comparison was in August 2026. The table
-            shows how the three compare on each part of the formula. The notes below the table
-            explain the important differences in more detail. A section number (§) refers to the
-            2026 edition, and links to the correct page of the
-            <SpecRef section="0" label="official PDF" />.
+            the CIVL-approved scoring software, most recently in August 2026. The table compares
+            the three on each part of the formula, and the notes below it explain the notable
+            differences. Section numbers (§) refer to the 2026 edition and link to the right page
+            of the <SpecRef section="0" label="official PDF" />.
           </p>
           <p class="text-muted-foreground">
-            The AirScore column describes its current GAP presets, which are GAP2023 unless the
-            text names another generation. AirScore also has older preset generations, which
-            behave differently where the table says so.
+            The AirScore column describes its current GAP presets, which are GAP2023 unless
+            another generation is named. AirScore's older generations behave differently where
+            the table says so.
           </p>
 
           <div class="overflow-x-auto">
@@ -1140,44 +1103,44 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               <tbody class="text-muted-foreground align-top">
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Task validity (<SpecRef section="10" />)</td>
-                  <td class="py-2 pr-3">Launch, distance and time validity from the cubic polynomials of the specification.</td>
+                  <td class="py-2 pr-3">Launch, distance and time validity from the specification's cubic polynomials.</td>
                   <td class="py-2 pr-3">As the specification.</td>
-                  <td class="py-2">As the specification in the GAP2020 and later presets, except that the pre-2025 editions printed 0.027 as the launch-validity linear coefficient. The 2025 edition corrected that decade-old typo to 0.028, which AirScore's library always used — so the three now agree.</td>
+                  <td class="py-2">As the specification in GAP2020 and later. Editions before 2025 printed the launch-validity linear coefficient as 0.027; the 2025 edition corrected that decade-old typo to 0.028, which AirScore's library always used, so all three now agree.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Weight split — hang gliding (<SpecRef section="11" />)</td>
-                  <td class="py-2 pr-3">DistW = 0.9 − 1.665·GR + 1.713·GR² − 0.587·GR³. Arrival is (1−DistW)/8. Leading is 1.4·(1−DistW)/8.</td>
+                  <td class="py-2 pr-3">DistW = 0.9 − 1.665·GR + 1.713·GR² − 0.587·GR³. Arrival is (1−DistW)/8. Leading is 1.4·(1−DistW)/8 at the default ratio.</td>
                   <td class="py-2 pr-3">As the specification.</td>
-                  <td class="py-2">As the specification, and identical in every generation.</td>
+                  <td class="py-2">As the specification, and the same in every generation.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Weight split — paragliding (<SpecRef section="11" />)</td>
-                  <td class="py-2 pr-3">Leading takes <em>LeadingTimeRatio</em> (default 26%) of the non-distance weight. It takes <strong>all</strong> of the non-distance weight when nobody makes goal.</td>
-                  <td class="py-2 pr-3">As the specification, for every task. The pre-2026 leading-weight generations (GAP2016/2018, the PWC weights of 2020–2022) are no longer implemented; historical competitions are rescored under the 2026 formula and their pages say so.</td>
-                  <td class="py-2">The gap2023 preset is the specification. The gap2020, gap2021 and gap2022 presets use the S7F 2020–2022 weights. Those weights are PWC-derived: distance 0.838 at 0% goal, and 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³ in all other cases, with leading fixed at 0.162.</td>
+                  <td class="py-2 pr-3">Leading gets <em>LeadingTimeRatio</em> (default 26%) of the non-distance weight, or <strong>all</strong> of it when nobody makes goal.</td>
+                  <td class="py-2 pr-3">As the specification, for every task. The pre-2026 leading-weight generations (GAP2016/2018, the PWC weights of 2020–2022) are no longer implemented; historical competitions are rescored with the 2026 formula and their pages say so.</td>
+                  <td class="py-2">The gap2023 preset is the specification. The gap2020, gap2021 and gap2022 presets use the PWC-derived S7F 2020–2022 weights: distance 0.838 at 0% goal, otherwise 0.805 − 1.374·GR + 1.413·GR² − 0.484·GR³, with leading fixed at 0.162.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Time-points curve (<SpecRef section="12.2" />)</td>
                   <td class="py-2 pr-3">SF = 1 − (Δt/√t<sub>best</sub>)<sup>5/6</sup>, both sports.</td>
                   <td class="py-2 pr-3">5/6 for every task. The older 2/3 curve is no longer implemented.</td>
-                  <td class="py-2">5/6 in GAP2020 and later. 2/3 in GAP2016/2018.</td>
+                  <td class="py-2">5/6 in GAP2020 and later; 2/3 in GAP2016/2018.</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-3">"Best time" (<SpecRef section="9.4.1" label="§9.4.1" />)</td>
+                  <td class="py-2 pr-3">"Best time" (<SpecRef section="9.4.1" />)</td>
                   <td class="py-2 pr-3">HG: the fastest pilot to ESS. PG: the fastest pilot who <em>also reached goal</em>.</td>
-                  <td class="py-2 pr-3">As the specification — fixed per sport since the 2026 edition.</td>
-                  <td class="py-2">The same rule (GAP2020 and later, <code>pilot_speed</code>). GlideComp follows AirScore here.</td>
+                  <td class="py-2 pr-3">As the specification.</td>
+                  <td class="py-2">The same rule (GAP2020 and later, <code>pilot_speed</code>).</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">ESS but not goal (<SpecRef section="13.2" />)</td>
-                  <td class="py-2 pr-3">PG keeps 0% of the <em>time points</em>, and HG keeps 80% by default. The §13.2 formula keeps the arrival points in full.</td>
-                  <td class="py-2 pr-3">Reduces time <strong>and arrival</strong> points by the factor.</td>
-                  <td class="py-2">Reduces time <strong>and arrival</strong> points by the factor, the same as GlideComp.</td>
+                  <td class="py-2 pr-3">PG keeps 0% of its time points. HG keeps 80% of its time <strong>and arrival</strong> points by default.</td>
+                  <td class="py-2 pr-3">As the specification.</td>
+                  <td class="py-2">Reduces time and arrival points by the factor, as the specification does.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Leading coefficient (<SpecRef section="12.3.1" />)</td>
                   <td class="py-2 pr-3">HG: classic squared-distance area. PG: weighted area. Clock from the first start gate.</td>
-                  <td class="py-2 pr-3">Both variants, fixed per sport as the specification pins them. There is no "integrated" variant.</td>
+                  <td class="py-2 pr-3">Both variants, fixed per sport as the specification sets them. No "integrated" variant.</td>
                   <td class="py-2">Classic, weighted, and the PWC 2023 "integrated" variant.</td>
                 </tr>
                 <tr class="border-b border-border/50">
@@ -1188,68 +1151,68 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Arrival points (<SpecRef section="12.4" />)</td>
-                  <td class="py-2 pr-3">Position-based only (HG).</td>
-                  <td class="py-2 pr-3">Position-based only.</td>
-                  <td class="py-2">Position-based by default. There is also an old OzGAP time-of-arrival option, at double weight.</td>
+                  <td class="py-2 pr-3">By position only (HG).</td>
+                  <td class="py-2 pr-3">By position only.</td>
+                  <td class="py-2">By position by default, with an old OzGAP time-of-arrival option at double weight.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">HG distance difficulty (<SpecRef section="12.1.1" />)</td>
                   <td class="py-2 pr-3">100 m slots. Look-ahead max(30, 30·BestDist/PilotsLandedOut). Cumulative relative difficulty.</td>
-                  <td class="py-2 pr-3">As the specification, and it reproduces AirScore's sub-slot interpolation.</td>
+                  <td class="py-2 pr-3">As the specification, reproducing AirScore's sub-slot interpolation.</td>
                   <td class="py-2">As the specification.</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-3">Stopped task: score-back (<SpecRef section="13.4" label="§13.4.1" />)</td>
-                  <td class="py-2 pr-3">Fixed values: announcement − 15 min (HG), − 5 min (PG).</td>
+                  <td class="py-2 pr-3">Stopped task: score-back (<SpecRef section="13.4.1" />)</td>
+                  <td class="py-2 pr-3">Fixed: announcement − 15 min (HG), − 5 min (PG).</td>
                   <td class="py-2 pr-3">As the specification.</td>
-                  <td class="py-2">A score-back time for each competition, with defaults of 5 min for PG and 15 min for HG — the same values the 2026 edition fixed.</td>
+                  <td class="py-2">A per-competition score-back time, defaulting to 5 min for PG and 15 min for HG: the values the 2026 edition fixed.</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-3">Stopped task: time-points reduction (<SpecRef section="13.4" label="§13.4.5" />)</td>
-                  <td class="py-2 pr-3">Every pilot is scored only to the stop. The reduction is the time points the best pilot between ESS and goal would have received; it is subtracted from each <em>goal</em> pilot and <strong>added to the available distance points</strong>.</td>
+                  <td class="py-2 pr-3">Stopped task: time-points reduction (<SpecRef section="13.4.5" />)</td>
+                  <td class="py-2 pr-3">Every pilot is scored only to the stop. The reduction is the time points the best pilot between ESS and goal would have earned; it is subtracted from each <em>goal</em> pilot and <strong>added to the available distance points</strong>.</td>
                   <td class="py-2 pr-3">As the specification.</td>
-                  <td class="py-2">It subtracts the quantity from the time points of <em>every</em> ESS pilot, and adds the quantity to the available distance points.</td>
+                  <td class="py-2">Subtracts it from <em>every</em> ESS pilot's time points, and adds it to the available distance points.</td>
                 </tr>
                 <tr class="border-b border-border/50">
-                  <td class="py-2 pr-3">Stopped task: altitude bonus (<SpecRef section="13.4" label="§13.4.6" />)</td>
-                  <td class="py-2 pr-3">Glide ratio 5 (HG) and 2.5 (PG), computed at the pilot's position at the stop time. GNSS altitude.</td>
-                  <td class="py-2 pr-3">As the specification: 5 and 2.5, at the stop position, on GNSS altitude.</td>
+                  <td class="py-2 pr-3">Stopped task: altitude bonus (<SpecRef section="13.4.6" />)</td>
+                  <td class="py-2 pr-3">Glide ratio 5 (HG) and 2.5 (PG), from the pilot's position at the stop time. GNSS altitude.</td>
+                  <td class="py-2 pr-3">As the specification.</td>
                   <td class="py-2">4 (PG) and 5 (HG) by default, configurable, over every track point. GPS altitude for PG, but barometric (QNH) altitude for HG by default.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Cylinder tolerance (<SpecRef section="9.1.1" />)</td>
                   <td class="py-2 pr-3">Fixed: 0% relative + 5 m absolute, for every competition.</td>
-                  <td class="py-2 pr-3">As the specification. A tolerance declared in a task file is ignored — every task is evaluated at the fixed band.</td>
-                  <td class="py-2">0.1% + 5 m by default in GAP2020 and later. 0.5% in GAP2016/2018.</td>
+                  <td class="py-2 pr-3">As the specification. A tolerance declared in the task file is ignored; every task uses the fixed band.</td>
+                  <td class="py-2">0.1% + 5 m by default in GAP2020 and later; 0.5% in GAP2016/2018.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Jump the gun (<SpecRef section="13.3" />)</td>
-                  <td class="py-2 pr-3">HG only: 1 point for each X s early (default 2 s), to a maximum of Y s (default 300 s). PG is scored launch→SSS.</td>
+                  <td class="py-2 pr-3">HG only: 1 point for every X s early (default 2 s), up to Y s (default 300 s). PG is scored launch→SSS.</td>
                   <td class="py-2 pr-3">As the specification, with X and Y configurable.</td>
-                  <td class="py-2">As the specification, written as 0.5 pt/s.</td>
+                  <td class="py-2">As the specification, expressed as 0.5 pt/s.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Penalties (<SpecRef section="13.5" />)</td>
-                  <td class="py-2 pr-3">Order: jump-the-gun, then percentage, then absolute. Minimum 0.</td>
+                  <td class="py-2 pr-3">Applied in order: jump-the-gun, percentage, absolute. Minimum 0.</td>
                   <td class="py-2 pr-3">Jump-the-gun and absolute penalties. <strong>No percentage penalties</strong> (<a href="https://github.com/pokle/glidecomp/issues/265" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #265</a>).</td>
-                  <td class="py-2">All three, and negative (bonus) penalties.</td>
+                  <td class="py-2">All three, plus negative (bonus) penalties.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Score rounding (<SpecRef section="12" />)</td>
-                  <td class="py-2 pr-3">Total = component sum rounded <em>once</em> to one decimal, after penalties.</td>
+                  <td class="py-2 pr-3">The component sum is rounded <em>once</em>, to one decimal, after penalties.</td>
                   <td class="py-2 pr-3">As the specification. Ranking and tie-breaks use the rounded value.</td>
-                  <td class="py-2">Full precision internally. It rounds for display only: task results to 1 decimal in GAP2020 and later, and competition totals to whole points.</td>
+                  <td class="py-2">Full precision internally, rounded for display only: task results to 1 decimal in GAP2020 and later, competition totals to whole points.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Distance computation (<SpecRef section="4.2" />)</td>
                   <td class="py-2 pr-3">WGS84 ellipsoid.</td>
-                  <td class="py-2 pr-3">WGS84 Vincenty inverse and direct — one of the three algorithms <SpecRef section="7.1.4" label="§7.1.4" /> sanctions. Route optimisation is the <SpecRef section="7.1.3" label="§7.1.3" /> PathFinder algorithm over the <SpecRef section="7.1.2" label="§7.1.2" /> local projection, with the path corrected back onto the control-zone boundaries (<SpecRef section="7.1.7" label="§7.1.7" />).</td>
-                  <td class="py-2">WGS84 Karney geodesics (geographiclib). The routes differ by metres, which gives small differences in the absolute points.</td>
+                  <td class="py-2 pr-3">WGS84 Vincenty inverse and direct, one of the three algorithms <SpecRef section="7.1.4" label="§7.1.4" /> allows. Routes are optimised with the <SpecRef section="7.1.3" label="§7.1.3" /> PathFinder algorithm over the <SpecRef section="7.1.2" label="§7.1.2" /> local projection, then corrected back onto the control-zone boundaries (<SpecRef section="7.1.7" label="§7.1.7" />).</td>
+                  <td class="py-2">WGS84 Karney geodesics (geographiclib). Routes differ by metres, which causes small differences in absolute points.</td>
                 </tr>
                 <tr class="border-b border-border/50">
                   <td class="py-2 pr-3">Series scoring / FTV</td>
-                  <td class="py-2 pr-3">Task ranking and competition totals, optionally FTV (§13–15).</td>
-                  <td class="py-2 pr-3">Competition totals by sum of task scores or FTV (S7F §16), ranked for each class (S7A ties), with top-3-per-task and teams. FTV is the default for new PG competitions.</td>
+                  <td class="py-2 pr-3">Task ranking and competition totals, optionally with FTV (§14–16).</td>
+                  <td class="py-2 pr-3">Competition totals as a sum of task scores or with FTV (S7F §16), ranked per class (S7A ties), with top 3 per task and teams. FTV is the default for new PG competitions.</td>
                   <td class="py-2">Implemented. FTV is the PG preset default, with factor 0.75.</td>
                 </tr>
               </tbody>
@@ -1257,238 +1220,185 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
           </div>
 
           <p class="text-muted-foreground">
-            The previous section lists the features that GlideComp does not implement. These are
-            the other places where the behaviour of GlideComp differs from the words of the
-            specification:
+            Features GlideComp doesn't implement are listed in the previous section. These are
+            the other places where it departs from the letter of the specification:
           </p>
 
           <div class="space-y-4 ml-2">
             <div>
-              <h3 class="text-base font-semibold mb-1">Start gates: placeholder midnight gates are ignored (<SpecRef section="6.3.3" />)</h3>
+              <h3 class="text-base font-semibold mb-1">Start gates: placeholder midnight gates are ignored (<SpecRef section="6.3.1" />)</h3>
               <p class="text-muted-foreground">
-                GlideComp scores race-to-goal start gates as the specification requires. The start
-                time of each pilot is the last gate at or before their start-cylinder crossing
-                (<SpecRef section="9.2.4.1" />). A crossing before the first gate cannot validate a
-                start (<SpecRef section="9.2" />). With a single gate, the start is the first
-                crossing after the gate, and a later crossing does not replace it. With more than
-                one gate, the start is the last crossing before the pilot continued along the
-                course, so a pilot can go back for a later gate (<SpecRef section="9.2.4" />). Early starts obey the
-                <SpecRef section="13.3" label="§12.2" /> rules: paragliders are scored
+                Otherwise, start gates work as the specification says. Each pilot's start time is
+                the last gate at or before their start-cylinder crossing
+                (<SpecRef section="9.2.4.1" />), and a crossing before the first gate can't
+                validate a start (<SpecRef section="9.2" />). With one gate, the start is the
+                first crossing after it, and a later crossing doesn't replace it. With several
+                gates, the start is the last crossing before the pilot carried on along the
+                course, so a pilot can go back for a later gate (<SpecRef section="9.2.4" />).
+                Early starts follow <SpecRef section="13.3" />: paragliders are scored
                 launch→start, and hang gliders get the jump-the-gun penalty. The
                 leading-coefficient clock runs from the first gate (<SpecRef section="12.3.1" />).
               </p>
               <p class="text-muted-foreground mt-2">
-                There is one practical difference. If the <em>only</em> gate of a race task is
-                exactly 00:00:00 UTC, GlideComp treats the task as a task with no gates. It then
-                times the task as elapsed time. Some tools write this single midnight gate to satisfy the
-                non-empty-gates rule of the file format. A real gate at midnight UTC does not
-                occur in practice.
-              </p>
-            </div>
-            <div>
-              <h3 class="text-base font-semibold mb-1">Hang gliding "best time" follows AirScore, not the letter of §9.4.1 (<SpecRef section="12.2" />, <SpecRef section="13.2" />)</h3>
-              <p class="text-muted-foreground">
-                GlideComp implements the ESS-but-not-goal rule as <SpecRef section="13.2" label="§13.2" /> requires.
-                Paragliders lose all of their time points without goal. Hang glider pilots keep
-                80% of their time and arrival points by default, and each competition can change
-                that share.
-              </p>
-              <p class="text-muted-foreground mt-2">
-                §9.4.1 defines the "best time" as the time of the fastest pilot
-                <em>who also reached goal</em>. GlideComp follows the AirScore implementation
-                instead. The ESS-but-not-goal share keeps part of the time points by default in
-                HG. While it does, the best time is the time of the fastest pilot to reach ESS,
-                with or without goal. The speed fractions of the reduced pilots are then on the same
-                scale as the speed fractions of the other pilots. When the share is 0%, which is
-                always true for paragliding, goal validates the best time exactly as the
-                specification reads.
+                The one difference: if the <em>only</em> gate of a race is exactly 00:00:00 UTC,
+                GlideComp treats the task as having no gates and times it as a time trial. Some
+                tools write a single midnight gate just to satisfy the file format's rule that the
+                gate list can't be empty, and a real gate at midnight UTC doesn't happen in
+                practice.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">One leading-weight formula, for every competition (<SpecRef section="11" />)</h3>
               <p class="text-muted-foreground">
-                The 2026 specification takes the leading weight from a
-                <em>Leading&nbsp;Time&nbsp;Ratio</em> parameter for each task, in both sports.
-                GlideComp applies this formula to <strong>every</strong> competition, including
-                historical ones that were originally published under an earlier generation.
-                Those pages carry a notice that their scores are indicative, and this is the
-                one place a GlideComp score can differ from an old published score by design
-                rather than by defect.
+                The 2026 specification sets the leading weight from a per-task
+                <em>Leading&nbsp;Time&nbsp;Ratio</em>, in both sports. GlideComp applies this
+                formula to <strong>every</strong> competition, including historical ones first
+                published under an earlier generation. Those pages carry a notice that their
+                scores are indicative. This is the one place a GlideComp score can differ from an
+                old published score by design rather than by mistake.
               </p>
               <p class="text-muted-foreground mt-2">
-                A competition sets its Leading&nbsp;Time&nbsp;Ratio (0% to 26%) in the scoring
-                settings; the defaults are the specification's own — 26% for paragliding and
-                17.5% for hang gliding.
+                A competition sets its Leading&nbsp;Time&nbsp;Ratio (0% to 26%) in its scoring
+                settings. The defaults are the specification's own: 26% for paragliding, 17.5%
+                for hang gliding.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">Line control zones are only supported at goal (<SpecRef section="6.2.2" />, <SpecRef section="9.2.2" />)</h3>
               <p class="text-muted-foreground">
-                GlideComp scores a goal line as the specification defines it. The line goes
-                through the goal waypoint, perpendicular to the final leg, with the semi-circular
-                control zone behind it. It carries the goal-line tolerance of
-                <SpecRef section="9.1.3" />, and it must be crossed in the direction of the last
-                leg. Goal is the only place where GlideComp understands a line. The specification
-                also allows a line at an intermediate turnpoint, but the .xctsk task format
-                cannot describe one, so no task can ask for it and GlideComp treats every
-                turnpoint before goal as a cylinder. Tracked in
-                <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a> —
-                add your thoughts there if this matters for your competition.
+                GlideComp scores a goal line as the specification defines it: through the goal
+                waypoint, perpendicular to the final leg, with the semi-circular control zone
+                behind it, the goal-line tolerance of <SpecRef section="9.1.3" />, and crossed in
+                the direction of the last leg. Goal is the only place GlideComp understands a
+                line. The specification also allows one at an intermediate turnpoint, but the
+                .xctsk task format can't describe it, so no task can ask for one and every
+                turnpoint before goal is treated as a cylinder. Tracked in
+                <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>;
+                add your thoughts there if it matters for your competition.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">"Open distance" means the classic format, not a GAP task type</h3>
               <p class="text-muted-foreground">
                 GlideComp's <a href="/scoring/open-distance" class="underline hover:text-foreground">open-distance competitions</a>
-                score the classic free-flight format. There is one take-off point, pilots fly as
-                far as they can, and the score is the straight-line distance from the take-off
-                cylinder edge. Earlier editions of the specification also defined an <em>open
-                distance task</em> inside GAP; the 2025 edition removed it, and the 2026
-                specification covers Race and Time Trial tasks only. A GlideComp task with
-                control zones always scores as a Race.
+                use the classic free-flight format: one take-off, pilots fly as far as they can,
+                and the score is the straight-line distance from the edge of the take-off
+                cylinder. Earlier editions of the specification also had an <em>open distance
+                task</em> within GAP, but the 2025 edition removed it, and the 2026 edition
+                covers only Race and Time Trial tasks. A GlideComp task with control zones
+                always scores as a Race.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">Launch window: only provable violations are enforced (<SpecRef section="9.3" />)</h3>
               <p class="text-muted-foreground">
-                The specification counts the turnpoints of a pilot only if that pilot launched
-                inside the launch time window. GlideComp applies the half of this rule that a
-                tracklog can prove. A start-cylinder crossing <em>before</em> the window opens
-                (<code>takeoff.timeOpen</code> in the task file) shows that the pilot was in the
-                air before launch was permitted. Such a crossing cannot validate a start, and the
-                report card gives the reason.
+                The specification counts a pilot's turnpoints only if they launched inside the
+                launch window. GlideComp enforces the half of this rule a tracklog can prove. A
+                start-cylinder crossing <em>before</em> the window opens
+                (<code>takeoff.timeOpen</code> in the task file) shows the pilot was airborne
+                before launch was allowed, so that crossing can't validate a start, and the
+                report card says why.
               </p>
               <p class="text-muted-foreground mt-2">
-                A tracklog alone cannot prove <em>when</em> the pilot launched. GlideComp does not
-                detect a pilot who launched before the window and started the course after the
-                window opened. It also does not detect a pilot who launched after the window
-                closed. Launch-time detection is not part of scoring, so the scorekeeper decides
-                these cases and can add a penalty manually.
+                A tracklog alone can't prove <em>when</em> someone launched, so GlideComp won't
+                catch a pilot who launched early but started the course after the window opened,
+                or one who launched after it closed. Launch time isn't part of scoring; the
+                scorekeeper decides these cases and can add a penalty by hand.
               </p>
             </div>
             <div>
               <h3 class="text-base font-semibold mb-1">Smaller details</h3>
               <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
                 <li>
-                  <strong>Cylinder and line tolerance (<SpecRef section="9.1.1" />, <SpecRef section="9.1.2" />):</strong> GlideComp applies the full
-                  tolerance band of the specification: a percentage plus an absolute minimum of
-                  5&nbsp;m. The band extends outward for a cylinder that you enter, and inward for
-                  the start that you exit. The default percentage is 0.5%, which is the
-                  Cat&nbsp;2 maximum. GlideComp uses it for every competition, and does not select
-                  0.1% automatically for a Cat&nbsp;1 event. The percentage is configurable for
-                  each task. A goal line gets the same percentage over its length, with the same
-                  5&nbsp;m minimum, so a crossing that lands just past the end of the line still
-                  counts — and the report card says when the band is the reason. The control
-                  semi-circle behind the line gets the cylinder calculation, as
-                  <SpecRef section="9.2.3" /> requires.
-                </li>
-                <li>
                   <strong>The two-fix rule is not a second way to reach a goal line (<SpecRef section="9.2.2" />):</strong>
-                  <SpecRef section="9.2.2" /> also validates a line from two consecutive fixes on
-                  opposite sides of it, if the speed needed to fly around the end of the line is
-                  more than 120&nbsp;km/h. GlideComp does not use this as an extra way to reach
-                  goal. A pilot whose straight path between two fixes passes outside the end of
-                  the line went around it at their own speed, so the test says nothing about
-                  them: on its own it would give goal to a pilot who crossed the line's extension
-                  a kilometre past the end. The case the test is for — a crossing so close to the
-                  end that measurement could put it on either side — is what the line tolerance
-                  above covers. A goal line is reached by crossing it (<SpecRef section="9.2.3" />),
-                  or by a fix in the control zone behind it.
+                  <SpecRef section="9.2.2" /> also accepts a line crossing from two consecutive
+                  fixes on opposite sides of it, if flying around the end of the line would have
+                  needed more than 120&nbsp;km/h. GlideComp doesn't use this as an extra way to
+                  reach goal. A pilot whose straight path between two fixes passes outside the
+                  end of the line went around it at their own speed, so the test says nothing
+                  about them; on its own it would award goal to a pilot who crossed the line's
+                  extension a kilometre past the end. The case the test is meant for, a crossing
+                  so close to the end that measurement could put it either side, is already
+                  covered by the line tolerance. A goal line is reached by crossing it
+                  (<SpecRef section="9.2.3" />) or by a fix in the control zone behind it.
                 </li>
                 <li>
-                  <strong>Mis-set task deadlines are ignored (<SpecRef section="9.2" />):</strong> GlideComp applies
-                  the goal deadline as the specification requires. A crossing after the deadline
-                  does not count, and the distance of a landed-out pilot is measured only up to it
-                  (<SpecRef section="12.1" />). There is one guard. A deadline at or before the
-                  first start gate is a task-setting mistake that gives every pilot zero. A
-                  launch-window open time at or after the deadline is the same kind of mistake.
-                  GlideComp therefore treats such
-                  a deadline as unset, like the fallbacks for a missing SSS or ESS. If the deadline
-                  changed a pilot's score, the report card shows the cutoff time and each ignored
-                  crossing.
-                </li>
-                <li>
-                  <strong>Rounding (<SpecRef section="12" />, <SpecRef section="13.5" />):</strong> GlideComp rounds the total of each
-                  pilot to one decimal place, after it subtracts the penalties, exactly as the
-                  2026 specification requires. It also keeps the component points to 0.1. The
-                  scoreboard shows the totals as whole points, but the ranking and the tie-breaks
-                  use the one-decimal value.
-                </li>
-                <li>
-                  <strong>ESS-but-not-goal reduces arrival points too (<SpecRef section="13.2" />):</strong> the
-                  §12.1 formula reduces only the <em>time</em> points of a hang glider pilot, and
-                  keeps the arrival points in full. AirScore applies the factor to the arrival
-                  points as well, and GlideComp agrees with AirScore. An ESS-but-not-goal pilot
-                  therefore keeps 80% of both by default.
+                  <strong>Mis-set task deadlines are ignored (<SpecRef section="9.2" />):</strong>
+                  the goal deadline otherwise applies as the specification says: a crossing after
+                  it doesn't count, and a landed-out pilot's distance is measured only up to it
+                  (<SpecRef section="12.1" />). The one guard is for task-setting mistakes that
+                  would give every pilot zero: a deadline at or before the first start gate, or a
+                  launch window that opens at or after the deadline. GlideComp treats such a
+                  deadline as unset, as it does a missing SSS or ESS. If the deadline changed a
+                  pilot's score, the report card shows the cutoff time and each crossing it
+                  ignored.
                 </li>
                 <li>
                   <strong>Hang gliding goal lines use the paragliding semi-circle rule (<SpecRef section="9.2.3" />):</strong>
-                  the rule that entering the control semi-circle behind the goal line counts as a
-                  crossing is a paragliding-only rule in the specification. For hang gliding, only
-                  a crossing of the line itself counts. GlideComp applies the paragliding rule to
-                  both sports. The direction of a crossing is checked for both sports: a pilot who
-                  crosses the line the wrong way does not reach goal. The effect of the deviation
-                  is very small, because a pilot who gets behind the line has almost always
-                  entered the semi-circle. Tracked in
+                  in the specification, entering the control semi-circle behind the goal line
+                  counts as a crossing only in paragliding; in hang gliding only crossing the
+                  line itself counts. GlideComp applies the paragliding rule to both sports. The
+                  direction of crossing is checked for both, so a pilot who crosses the wrong way
+                  doesn't reach goal. The effect is tiny, because a pilot who gets behind the line
+                  has almost always entered the semi-circle. Tracked in
                   <a href="https://github.com/pokle/glidecomp/issues/359" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #359</a>.
                 </li>
                 <li>
                   <strong>Leading coefficient: track points after the deadline (<SpecRef section="12.3.1" />):</strong>
-                  the specification counts a track point recorded after the task deadline at the
-                  deadline time. GlideComp counts it at its own time, which makes the leading
-                  coefficient of a pilot who kept going a little worse than the specification
-                  gives. It applies only to a pilot who was still flying toward ESS after the
-                  deadline, and who therefore earned no more distance for it. The
+                  the specification counts a track point recorded after the task deadline as if
+                  it were at the deadline. GlideComp counts it at its own time, which makes the
+                  leading coefficient slightly worse than the specification would for a pilot who
+                  kept going. It only affects a pilot still flying towards ESS after the deadline,
+                  who earned no more distance for it anyway. The
                   <a href="#leading-max-time" class="underline hover:text-foreground">end of the curve</a>
                   itself follows the specification.
                 </li>
                 <li>
                   <strong>Times carry fractions of a second (<SpecRef section="9.4" />):</strong>
                   the specification's smallest unit of time is one second. GlideComp interpolates
-                  each crossing between the two nearest fixes, so a speed-section time can carry a
-                  fraction of a second. That is more precise, but time points can differ by a
+                  each crossing between the two nearest fixes, so a speed-section time can include
+                  a fraction of a second. That's more precise, but time points can differ by a
                   fraction of a point from a scorer that works in whole seconds. Tracked in
                   <a href="https://github.com/pokle/glidecomp/issues/586" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">issue #586</a>.
                 </li>
                 <li>
                   <strong>Optional leading and arrival points:</strong> the specification always
-                  gives a leading weight, and an arrival weight in hang gliding classes 1 and 5.
-                  GlideComp uses the FAI formula by default: leading on for both categories, and
-                  arrival on for hang gliding. A competition can disable either one, which is
-                  common in club-level scoring. A competition that disables one departs from the
+                  has a leading weight, and an arrival weight for hang gliding classes 1 and 5.
+                  GlideComp follows the FAI formula by default (leading on for both sports,
+                  arrival on for hang gliding), but a competition can turn either off, as is
+                  common in club scoring. A competition that does so departs from the
                   specification.
                 </li>
                 <li>
                   <strong>Distance origin:</strong> the optional
                   <a href="#distance-origin" class="underline hover:text-foreground">"start cylinder" distance origin</a>
-                  departs from the launch-to-goal task distance of the specification (<SpecRef section="7.2" />),
-                  on purpose. It agrees with the words of some national rules, for example
-                  HGFA/SAFA. The default "take-off" setting obeys the specification.
+                  deliberately departs from the specification's launch-to-goal task distance
+                  (<SpecRef section="7.2" />), to match the wording of some national rules such
+                  as HGFA/SAFA. The default "take-off" setting follows the specification.
                 </li>
                 <li>
-                  <strong>Distance precision:</strong> GlideComp computes the distances on the
-                  WGS84 ellipsoid, as the specification requires (<SpecRef section="4.2" />).
-                  The route optimiser is the specification's own algorithm set (<SpecRef section="7.1" label="§7.1" />):
-                  the local projection, the PathFinder crossing and reflection constructions
-                  with the 0.1 m threshold, and the projection correction back onto the
-                  control-zone boundaries. One internal difference remains: the reflection case
-                  is solved with a numeric search instead of the closed form of the referenced
-                  paper — the same point, found a different way. The optimised route is
-                  therefore not bit-identical to the route of another tool such as
-                  <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>.
-                  The points of a landed-out pilot can therefore differ by a small quantity. This
-                  changes the absolute values more than the relative ranking.
+                  <strong>Distance precision:</strong> distances are computed on the WGS84
+                  ellipsoid, as the specification requires (<SpecRef section="4.2" />), and the
+                  route optimiser uses the specification's own algorithms
+                  (<SpecRef section="7.1" label="§7.1" />): the local projection, the PathFinder
+                  crossing and reflection constructions with the 0.1 m threshold, and the
+                  projection correction back onto the control-zone boundaries. One internal
+                  difference remains: the reflection case is solved by numeric search rather than
+                  the referenced paper's closed form, which finds the same point a different way.
+                  So the optimised route isn't bit-identical to another tool's, such as
+                  <a href="https://airscore.org" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">AirScore</a>,
+                  and a landed-out pilot's points can differ slightly. This affects absolute
+                  points more than rankings.
                 </li>
               </ul>
             </div>
           </div>
 
           <p class="text-muted-foreground">
-            If one of these differences is important for your competition,
-            <a href="https://github.com/pokle/glidecomp/issues" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">
-              open an issue on GitHub
-            </a>. Do the same if you find a difference that this page does not list. Scoring
-            transparency is the purpose of this project.
+            If one of these differences matters for your competition, or you find one this page
+            doesn't list,
+            <a href="https://github.com/pokle/glidecomp/issues" target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">open an issue on GitHub</a>.
+            Transparent scoring is the whole point of this project.
           </p>
         </div>
       </section>
@@ -1504,8 +1414,8 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </a>
               <br />
               <span>
-                The definitive specification. It contains all of the formulas, coefficients and
-                rules, and this includes penalties, stopped tasks and series scoring.
+                The definitive specification, with every formula, coefficient and rule, including
+                penalties, stopped tasks and series scoring.
               </span>
             </li>
             <li>
@@ -1514,7 +1424,7 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </a>
               <br />
               <span>
-                The governing body that maintains the GAP scoring rules and organises World and
+                The governing body that maintains the GAP rules and runs the World and
                 Continental championships.
               </span>
             </li>
@@ -1524,8 +1434,8 @@ const km = (tex: string) => katex.renderToString(tex, { displayMode: false, thro
               </a>
               <br />
               <span>
-                The full collection of FAI sporting codes for all air sports. Section 7 is for
-                hang gliding and paragliding.
+                The full set of FAI sporting codes for all air sports. Section 7 covers hang
+                gliding and paragliding.
               </span>
             </li>
           </ul>
