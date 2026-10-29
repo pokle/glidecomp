@@ -18,6 +18,11 @@ export default defineConfig({
   output: "static",
   base: devBase,
   trailingSlash: "ignore",
+  // Astro 7 defaults to "jsx", React's whitespace rules: a line break beside
+  // an element is dropped, so prose wrapped across source lines lost its
+  // spaces ("Subject to<a>", "Open distancefly as far…"). These pages are
+  // written as HTML, so compress losslessly instead.
+  compressHTML: true,
   // The dev toolbar's entrypoint loads from a root-level Vite URL that would
   // collide with the SPA's dev server when proxied; we don't need it here.
   devToolbar: { enabled: false },
