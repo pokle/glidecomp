@@ -57,18 +57,16 @@ import BackLink from "../../components/BackLink.astro";
         <h2 class="text-2xl font-bold mb-4">What is Open Distance?</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Open distance is the least complex way to run a competition day. All pilots take off
-            from the same launch and then fly as far as they can. There is no set course and no
-            goal. Only the distance you get from launch is important.
+            Open distance is the simplest way to run a competition day. Everyone takes off from
+            the same launch and flies as far as they can. There is no course and no goal. All that
+            counts is how far you get from launch.
           </p>
           <p class="text-muted-foreground">
-            This is the classic "free distance" or record-style format. It is different from
-            <a href="/scoring/gap" class="underline hover:text-foreground">
-              GAP scoring
-            </a>
-            , where pilots race a defined course of turnpoints to a goal. Open distance has no
-            speed section and no turnpoints to tag. It has no time, leading or arrival points.
-            Your whole score is the distance you flew.
+            This is the classic "free distance" or record-style format. Unlike
+            <a href="/scoring/gap" class="underline hover:text-foreground">GAP scoring</a>, where
+            pilots race a course of turnpoints to goal, open distance has no speed section, no
+            turnpoints to tag, and no time, leading or arrival points. Your score is simply the
+            distance you flew.
           </p>
         </div>
       </section>
@@ -78,14 +76,13 @@ import BackLink from "../../components/BackLink.astro";
         <h2 class="text-2xl font-bold mb-4">How a Task Works</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            An open-distance task defines exactly one turnpoint: the <strong>Take-off</strong>.
-            It is a cylinder around the launch. GlideComp measures the distance from this
-            cylinder. There is no start gate, there are no intermediate turnpoints, and there is
-            no goal.
+            An open-distance task has exactly one turnpoint: the <strong>Take-off</strong>, a
+            cylinder around launch. Distance is measured from its edge. There is no start gate,
+            no intermediate turnpoint and no goal.
           </p>
           <p class="text-muted-foreground">
-            You launch, leave the take-off cylinder, and fly. When you land, or when the day
-            ends, GlideComp scores your flight on the distance you travelled from the take-off.
+            You launch, leave the take-off cylinder and fly. When you land, or the day ends, your
+            flight is scored on how far you got from take-off.
           </p>
         </div>
       </section>
@@ -95,42 +92,34 @@ import BackLink from "../../components/BackLink.astro";
         <h2 class="text-2xl font-bold mb-4">How Your Distance is Measured</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Your scored distance is the straight-line distance from the point you
-            <strong>exit the take-off cylinder</strong> to the single
-            <strong>furthest point</strong> your track reached:
+            Your scored distance is how far your <strong>furthest point</strong> is from the
+            <strong>edge of the take-off cylinder</strong>, in a straight line:
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block">
-            Distance = furthest straight-line distance from the take-off exit to any point you
-            flew
+            Distance = distance from the take-off centre to your furthest point − cylinder radius
           </p>
-          <p class="text-muted-foreground">Four results follow from this:</p>
+          <p class="text-muted-foreground">This means:</p>
           <ul class="list-disc list-inside text-muted-foreground space-y-2 ml-2">
             <li>
-              <strong>The measurement starts at the take-off exit, not the centre.</strong>
-              GlideComp counts the distance from the point where your track crosses out of the
-              take-off cylinder. The radius of the cylinder is therefore not free distance.
+              <strong>The cylinder radius is not free distance.</strong> Distance starts at the
+              cylinder's edge, not its centre. Where, or how often, you crossed that edge makes no
+              difference.
             </li>
             <li>
-              <strong>Only more distance from launch counts.</strong> The score is the
-              straight-line distance from launch. A turn in a thermal to climb does not increase
-              it. Only a point further away increases it.
+              <strong>Only getting further from launch counts.</strong> Circling in a thermal, or
+              flying across the wind, adds nothing unless it takes you further away.
             </li>
             <li>
-              <strong>The furthest point counts, not the landing point.</strong> You fly out to a
-              far point, and then the wind moves you back towards launch before you land.
-              GlideComp scores the furthest point you reached, not the point where you landed.
+              <strong>Your furthest point counts, not where you landed.</strong> If you reach a
+              far point and then drift back towards launch before landing, you keep the far point.
             </li>
             <li>
-              <strong>Distances use the WGS84 ellipsoid.</strong> This is the same geodesic
-              mathematics that GlideComp uses everywhere else, so the distances agree with the
-              map.
+              <strong>Distances are measured on the WGS84 ellipsoid</strong>, the same geodesic
+              maths GlideComp uses everywhere else, so they agree with the map.
             </li>
           </ul>
           <p class="text-muted-foreground">
-            If a pilot never leaves the take-off cylinder, their distance is zero. Sometimes a
-            track starts outside the cylinder, because the pilot switched the logger on after
-            launch. GlideComp then measures the distance from the first recorded point, so the
-            flight still gets a score.
+            A pilot who never leaves the take-off cylinder scores zero.
           </p>
         </div>
       </section>
@@ -140,20 +129,19 @@ import BackLink from "../../components/BackLink.astro";
         <h2 class="text-2xl font-bold mb-4">Your Score</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            Your score for the task is your open distance in <strong>metres</strong>:
+            Your score for the task is your distance in <strong>metres</strong>:
           </p>
           <p class="bg-muted/50 rounded px-3 py-2 inline-block">
             Score = metres of open distance flown
           </p>
           <p class="text-muted-foreground">
-            GlideComp ranks the pilots by distance, furthest first. There is no 1000-point pool,
-            no task validity, and no split into distance, time, leading and arrival. Those all
-            belong to GAP. The distance you flew <em>is</em> the score.
+            Pilots are ranked by distance, furthest first. There is no 1000-point pool, no task
+            validity, and no split into distance, time, leading and arrival; those all belong to
+            GAP. The distance you flew <em>is</em> the score.
           </p>
           <p class="text-muted-foreground">
-            GlideComp subtracts an organiser's penalty from your score in metres. In a multi-day
-            competition, your total is the sum of your task scores. That total is the distance
-            you flew on all of the days.
+            A penalty from the organiser is subtracted in metres. In a multi-day competition,
+            your total is the sum of your task scores: the distance you flew across all the days.
           </p>
         </div>
       </section>
@@ -163,30 +151,24 @@ import BackLink from "../../components/BackLink.astro";
         <h2 class="text-2xl font-bold mb-4">GlideComp Implementation Notes</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            You set a competition to open distance in its scoring settings. GlideComp then scores
-            every task in that competition this way. The format has no goal and no turnpoints, so
-            each task must define exactly one turnpoint: the Take-off. While the competition is
-            on open distance, GlideComp does not save a task with a different route.
+            Choose open distance in a competition's scoring settings, and every task in that
+            competition is scored this way. Because the format has no course, each task must
+            have exactly one turnpoint, the Take-off. GlideComp won't save a task with any other
+            route while the competition is set to open distance.
           </p>
           <p class="text-muted-foreground">
-            Every scoring decision is explainable and unit-tested. The source code of the scoring
-            engine is open, and it is on
+            Every scoring decision is explained and unit-tested, and the scoring engine is open
+            source on
             <a
               href="https://github.com/pokle/glidecomp"
               target="_blank"
               rel="noopener noreferrer"
               class="underline hover:text-foreground"
-            >
-              GitHub
-            </a>
-            .
+            >GitHub</a>.
           </p>
           <p class="text-muted-foreground">
             Looking for the other format? See
-            <a href="/scoring/gap" class="underline hover:text-foreground">
-              how GAP scoring works
-            </a>
-            .
+            <a href="/scoring/gap" class="underline hover:text-foreground">how GAP scoring works</a>.
           </p>
         </div>
       </section>

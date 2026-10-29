@@ -32,9 +32,11 @@ const SPEC_DESTS: Record<string, number> = {
   "4.2": 13, // Distance between two points
   "5": 14, // Competition Parameters
   "6": 16, // Task Setting
+  "6.2.1": 16, // Turnpoint cylinder
   "6.2.2": 17, // Line control zone
   "6.2.3": 19, // Goal
   "6.2.3.1": 19, // Goal line
+  "6.2.3.2": 20, // Elevated Goal
   "6.3.1": 21, // Race (start gates)
   "6.3.2": 21, // Time Trial
   "7": 22, // Task and flight distance calculations
@@ -48,6 +50,7 @@ const SPEC_DESTS: Record<string, number> = {
   "9.1.2": 28, // Line tolerance
   "9.1.3": 28, // Goal line tolerance
   "9.2": 29, // Control zone validation
+  "9.2.1": 29, // Cylinder crossings
   "9.2.2": 30, // Line crossings
   "9.2.3": 30, // Goal crossing
   "9.2.4": 31, // Validation
@@ -71,6 +74,12 @@ const SPEC_DESTS: Record<string, number> = {
   "13.2": 44, // ESS but not goal
   "13.3": 45, // Early start
   "13.4": 45, // Stopped tasks
+  "13.4.1": 45, // Stop task time
+  "13.4.2": 46, // Minimum duration of stopped tasks
+  "13.4.3": 46, // Stopped task validity
+  "13.4.4": 46, // Scored time window
+  "13.4.5": 46, // Time points for pilots at or after ESS
+  "13.4.6": 47, // Distance points with altitude bonus
   "13.5": 48, // Penalties
   "14": 49, // Task ranking
   "15": 50, // Competition ranking

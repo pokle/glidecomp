@@ -52,19 +52,19 @@ const S7A_PDF =
         <h2 class="text-2xl font-bold mb-4">Why Tracks Get Checked</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            A pilot sometimes uploads the wrong file: a flight from another day, or from another
-            site. The mistake is easy to make and difficult to see. The file is valid IGC, it
-            opens, and it looks like a flight.
+            Sometimes a pilot uploads the wrong file, such as a flight from another day or
+            another site. It's an easy mistake to make and a hard one to spot: the file is valid
+            IGC, it opens, and it looks like a flight.
           </p>
           <p class="text-muted-foreground">
-            The scoring cannot find this mistake. Tasks often run across UTC midnight. GlideComp
-            therefore resolves the start gates and the deadlines <em>against the flight it
-            scores</em>, and not against a fixed date. A tracklog from another day therefore
-            moves the whole task onto its own day, and scores as if nothing is wrong.
+            Scoring alone won't catch it. Because tasks often run across UTC midnight, GlideComp
+            works out start gates and deadlines <em>from the flight being scored</em>, not from a
+            fixed date. So a tracklog from another day simply moves the whole task onto its own
+            day and scores as if nothing were wrong.
           </p>
           <p class="text-muted-foreground">
             <a href={S7A_PDF} target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">FAI S7A §4.4.2</a>
-            makes this the work of the software. The points that verify a flight must have
+            makes catching this the software's job: the points that verify a flight must have
             "occurred at reasonable times (e.g. on the day in question)".
           </p>
         </div>
@@ -76,34 +76,34 @@ const S7A_PDF =
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             Both checks ask one question: <strong class="text-foreground">is this file this
-            flight?</strong> Both use margins that no honest entry can reach.
+            flight?</strong> Both use margins wide enough that no honest track comes near them.
           </p>
 
           <div class="p-4 rounded-lg border border-border bg-card">
             <h3 class="text-base font-semibold mb-1">Wrong day</h3>
             <p class="text-muted-foreground">
-              GlideComp compares the fixes against the calendar day of the task, in the time zone
-              of the competition, with four more hours at each end. The check fails only when
-              <strong class="text-foreground">every</strong> fix is outside that window. An
-              overnight recorder, a dawn launch and a flight across local midnight therefore all
-              pass. An error of up to one day is flagged, not withheld. A recorder set one day
-              wrong is a common fault on a real flight.
+              GlideComp compares the fixes with the task's calendar day, in the competition's time
+              zone, padded by four hours at each end. The check fails only when
+              <strong class="text-foreground">every</strong> fix falls outside that window, so an
+              overnight recorder, a dawn launch and a flight across local midnight all pass. A
+              track up to one day further out is only flagged, not withheld, because a recorder
+              with its date set a day wrong is a common fault on a genuine flight.
             </p>
           </div>
 
           <div class="p-4 rounded-lg border border-border bg-card">
             <h3 class="text-base font-semibold mb-1">Wrong location</h3>
             <p class="text-muted-foreground">
-              No fix comes within <strong class="text-foreground">100 km</strong> of a turnpoint.
-              A long course does not make this check more strict, because the turnpoints are
-              spread along the course. Every pilot who launched starts metres from one of them.
+              No fix comes within <strong class="text-foreground">100 km</strong> of any
+              turnpoint. A long course doesn't need a bigger margin: the turnpoints are spread
+              along it, and every pilot who launched starts within metres of one.
             </p>
           </div>
 
           <p class="text-muted-foreground">
-            A track that fails either check stays out of the scoring and out of the comp and
-            task analysis. In the task analysis, its clock and its air distort the day's
-            statistics for all of the other pilots.
+            A track that fails either check is left out of scoring, and out of the comp and task
+            analysis, where its clock and its air would skew the day's statistics for everyone
+            else.
           </p>
         </div>
       </section>
@@ -113,29 +113,29 @@ const S7A_PDF =
         <h2 class="text-2xl font-bold mb-4">The Three Flags That Never Change a Score</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            These three flags describe the flying, not the file. Each one also fires on real
-            flights, so GlideComp shows them for a person to judge. They
+            These flags describe the flying, not the file. Each can also fire on a genuine
+            flight, so GlideComp shows them for a person to judge. They
             <strong class="text-foreground">never change a score</strong>.
           </p>
           <ul class="space-y-3 text-muted-foreground">
             <li>
               <strong class="text-foreground">Never left the take-off cylinder.</strong> This is
-              what a pilot looks like who launches and sinks straight back to the ground, and
-              GlideComp correctly scores them the minimum distance. It is also what a recorder
-              looks like that the pilot left running on launch.
+              what a pilot who launches and sinks straight back down looks like, and they rightly
+              get the minimum distance. It is also what a recorder left running on launch looks
+              like.
             </li>
             <li>
               <strong class="text-foreground">No sign of flight.</strong> There is no sustained
               climb (1.5 m/s for two minutes) and no sustained glide (90 seconds of descent at
-              0.8 m/s, never below 4 m/s over the ground, and approximately straight). This flag
-              catches a vario that recorded the drive up to launch. Speed alone cannot catch it,
+              0.8 m/s, never slower than 4 m/s over the ground, and roughly straight). This
+              catches a vario that recorded the drive up to launch, which speed alone can't,
               because a retrieve vehicle is faster than a paraglider.
             </li>
             <li>
-              <strong class="text-foreground">Impossible speed.</strong> The ground speed stays
-              for a full minute above approximately 119 km/h for paragliders, or 162 km/h for
-              hang gliders, with the tailwind included. The one-minute window keeps GPS jitter
-              out. This flag looks for something that is not a glider.
+              <strong class="text-foreground">Impossible speed.</strong> Ground speed stays above
+              about 119 km/h for paragliders, or 162 km/h for hang gliders, for a full minute,
+              tailwind included. The one-minute window filters out GPS jitter. This flag looks
+              for something that isn't a glider.
             </li>
           </ul>
         </div>
@@ -146,20 +146,20 @@ const S7A_PDF =
         <h2 class="text-2xl font-bold mb-4">What It Does to the Score</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            GlideComp scores a pilot who launches and lands short the
+            A pilot who launches and lands short still gets the
             <a href="/scoring/gap#minimum-distance" class="underline hover:text-foreground">minimum distance</a>,
-            approximately 5 km. That does not change. A short flight with bad luck still gets it.
+            usually 5 km. That doesn't change: bad luck on a short flight is still a flight.
           </p>
           <p class="text-muted-foreground">
-            A withheld tracklog is different, because it is not evidence that the pilot flew this
-            task. Those pilots keep their rank in the scores with
-            <strong class="text-foreground">zero points</strong>, and the reasons stay beside
-            their name. GlideComp never removes them from the scores.
+            A withheld tracklog is different, because it isn't evidence that the pilot flew this
+            task. Those pilots stay in the scores, placed last with
+            <strong class="text-foreground">zero points</strong> and the reasons beside their
+            name. GlideComp never removes them.
           </p>
           <p class="text-muted-foreground">
-            No other pilot's score moves. GlideComp leaves the pilot out of the launch-validity
-            count (<SpecRef section="10.1" label="S7F §10.1" />), instead of counting them as a
-            pilot who flew. A wrong verdict can therefore only cost that one pilot.
+            No other pilot's score moves. The withheld pilot is left out of the launch-validity
+            count (<SpecRef section="10.1" label="S7F §10.1" />) rather than counted as having
+            flown, so a wrong verdict can only ever cost that one pilot.
           </p>
         </div>
       </section>
@@ -171,15 +171,15 @@ const S7A_PDF =
           <p class="text-muted-foreground">
             Under
             <a href={S7A_PDF} target="_blank" rel="noopener noreferrer" class="underline hover:text-foreground">S7A §4.4.6</a>,
-            the decision to reject a track log belongs to the
-            <strong class="text-foreground">organiser</strong>, not to the software. A
-            scorekeeper can accept a flagged tracklog in one action. GlideComp then scores it
-            normally, its findings stay visible, and the competition's public audit log records
-            the decision.
+            rejecting a tracklog is the
+            <strong class="text-foreground">organiser's</strong> call, not the software's. A
+            scorekeeper can accept a flagged tracklog in one step. It is then scored normally,
+            its findings stay visible, and the competition's public audit log records the
+            decision.
           </p>
           <p class="text-muted-foreground">
-            If GlideComp withheld your track, upload the right file. If the file you uploaded
-            <em>is</em> the right one, speak to the scorekeeper.
+            If your track was withheld, upload the right file. If the file you uploaded
+            <em>is</em> the right one, talk to the scorekeeper.
           </p>
         </div>
       </section>
@@ -189,25 +189,24 @@ const S7A_PDF =
         <h2 class="text-2xl font-bold mb-4">Where the Thresholds Come From</h2>
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
-            A wrong zero for a pilot is worse than a bad file that gets through, so the
-            thresholds come from real competition data.
+            Wrongly zeroing a pilot is worse than letting a bad file through, so the thresholds
+            are set from real competition data.
           </p>
           <p class="text-muted-foreground">
-            In <strong class="text-foreground">4,762</strong> archived tracks, the usual flight
-            passes within 70 m of a turnpoint. The largest distance that an honest track stayed
-            from every turnpoint was 45 km. The 100 km threshold is more than twice that
-            distance.
+            Across <strong class="text-foreground">4,762</strong> archived tracks, the typical
+            flight passes within 70 m of a turnpoint. The furthest any honest track stayed from
+            every turnpoint was 45 km. The 100 km threshold is more than twice that.
           </p>
           <p class="text-muted-foreground">
-            The one-day grace has the same origin. In one archived task, three pilots of eighty
-            had recorders stamped a day late. All three flew the task and GlideComp scored them
-            normally, and one finished fourth, in goal. A rule that disqualified a one-day offset
-            gave a zero to a podium flight.
+            The one-day grace comes from the same data. In one archived task, three of eighty
+            pilots had recorders stamped a day late. All three flew the task and were scored
+            normally in the published results; one finished fourth, in goal. A rule that rejected
+            a one-day offset would have given that pilot zero.
           </p>
           <p class="text-muted-foreground">
-            In all <strong class="text-foreground">5,112</strong> tracks that GlideComp holds,
-            the checks withhold exactly one: a New Zealand flight submitted to a Victorian task
-            ten days later.
+            Across all <strong class="text-foreground">5,112</strong> tracks GlideComp holds, the
+            checks withhold exactly one: a New Zealand flight submitted to a Victorian task ten
+            days later.
           </p>
         </div>
       </section>
@@ -218,13 +217,13 @@ const S7A_PDF =
         <div class="space-y-4 text-sm leading-relaxed">
           <p class="text-muted-foreground">
             When a check fires, the pilot's report card names it, shows the numbers behind it,
-            and gives the next step. The scores table also labels a withheld track, so a zero
-            never looks like a fault.
+            and says what to do next. The scores table also labels a withheld track, so a zero
+            never looks like a glitch.
           </p>
           <p class="text-muted-foreground">
-            This is the same rule as
+            It's the same rule as
             <a href="/scoring/data-cleaning" class="underline hover:text-foreground">track data cleaning</a>:
-            everything the system did on the way to a score must be visible.
+            everything GlideComp did on the way to a score must be visible.
           </p>
         </div>
       </section>
