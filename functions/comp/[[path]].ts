@@ -527,13 +527,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const csvMatch = path.match(SCORES_CSV_PATTERN);
   if (csvMatch) return scoresCsv(env, csvMatch[1], cookie, url.origin);
 
-  // The results record: every class, team and task in one PDF, for the
-  // organiser to keep. Comp admins only — see results-record/serve.ts.
-  const pdfMatch = path.match(RESULTS_RECORD_PATTERN);
-  if (pdfMatch) {
+  // The results record: every class, team and task in one PDF to keep, or
+  // its attached data as a ZIP. Public like the CSV — see
+  // results-record/serve.ts.
+  const recordMatch = path.match(RESULTS_RECORD_PATTERN);
+  if (recordMatch) {
     return serveResultsRecord({
       fetch: compFetcher(env, cookie),
-      segment: pdfMatch[1],
+      segment: recordMatch[1],
+      format: recordMatch[2] as "pdf" | "zip",
       origin: url.origin,
       loadFonts: () => recordFonts(env, url.origin),
     });

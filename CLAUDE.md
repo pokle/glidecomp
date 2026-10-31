@@ -517,8 +517,9 @@ These are the standing imperatives. Each links to the reference that explains it
   - Coverage: the "signed out" block in `e2e/report-card.spec.ts`.
 - **The paper copy of the scores is the results record, not the page**
   ([docs/results-record.md](docs/results-record.md)). `/comp/:id/scores.pdf`
-  is a PDF laid out in code (`src/results-record/`), comp admins only, with
-  the exact data attached as CSV and JSON. Do not add print styling to the
+  is a PDF laid out in code (`src/results-record/`), public like the CSV, with
+  the exact data attached as CSV and JSON (and served alone as `scores.zip`,
+  because macOS Preview cannot open attachments). Do not add print styling to the
   scores page or the comp page's `#scores` summary. Printing the page was a
   cat-and-mouse game with every CSS change, and it is no longer a goal.
   - The attachments have **no fixed format**: field names follow the API on

@@ -56,15 +56,6 @@ export class NotFoundError extends Error {
   }
 }
 
-/** Thrown when the visitor may see the comp but not the thing asked for —
- * the results record, which only the comp's admins can download. */
-export class ForbiddenError extends Error {
-  constructor(path: string) {
-    super(`Forbidden: ${path}`);
-    this.name = "ForbiddenError";
-  }
-}
-
 async function getJson<T>(f: FetchFn, path: string): Promise<T> {
   const res = await f(path);
   // 404 = missing (or a test comp hidden from this visitor); 400 = an
@@ -190,8 +181,7 @@ const AUDIT_MAX_PAGES = 50;
  */
 export async function loadResultsRecord(
   f: FetchFn,
-  compId: string,
-  { requireAdmin = false }: { requireAdmin?: boolean } = {}
+  compId: string
 ): Promise<ResultsRecordLoaderData> {
   const cid = encodeURIComponent(compId);
   const get = (path: string) => fetchWithRetry(() => f(path));
@@ -200,9 +190,6 @@ export async function loadResultsRecord(
   if (compRes.status === 404 || compRes.status === 400) throw new NotFoundError(`/api/comp/${cid}`);
   if (!compRes.ok) throw new Error(`/api/comp/${cid} -> ${compRes.status}`);
   const comp = (await compRes.json()) as CompDetailData;
-  // Decided before the per-task fan-out, so a refused visitor costs one
-  // request rather than two per task.
-  if (requireAdmin && !comp.is_admin) throw new ForbiddenError(`/api/comp/${cid}`);
 
   const [scores, tasks, auditLog] = await Promise.all([
     (async () => {

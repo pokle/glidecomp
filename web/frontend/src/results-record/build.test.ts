@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, test } from "vitest";
-import { parseXCTask } from "@glidecomp/engine";
-import { buildResultsRecord, resultsRecordFilename } from "./build";
+import { encodeXctskQR, parseXCTask, xctaskTurnpointsToRecords } from "@glidecomp/engine";
+import { buildResultsRecord, resultsRecordFilename, routeQr } from "./build";
+import { drawTaskDiagram } from "./task-diagram-pdf";
 import { PdfWriter } from "./pdf-writer";
 import { readRecord } from "./read-pdf";
 import { fixture, NAMES, ORIGIN, readFonts } from "./test-fixture";
@@ -145,5 +146,42 @@ describe("PdfWriter.clean", () => {
     );
     expect(w.clean(NAMES.cjk)).toBe("??");
     expect(w.clean("Ελένη Øvre Ðorđe Nguyễn")).toBe("Ελένη Øvre Ðorđe Nguyễn");
+  });
+});
+
+describe("routeQr", () => {
+  const xctsk = fixture().tasks[0].task.xctsk!;
+
+  test("carries exactly what the task page's QR code does", () => {
+    const qr = routeQr(xctsk)!;
+    expect(qr.payload).toBe(encodeXctskQR(xctaskTurnpointsToRecords(xctsk.turnpoints)));
+    expect(qr.payload.startsWith("XCTSK:")).toBe(true);
+    // A square module matrix, at least a version-1 QR, sized for paper.
+    expect(qr.modules.length).toBeGreaterThanOrEqual(21);
+    for (const row of qr.modules) expect(row).toHaveLength(qr.modules.length);
+    expect(qr.size).toBeGreaterThanOrEqual(110);
+    expect(qr.size).toBeLessThanOrEqual(170);
+  });
+
+  test("a route too long for one QR gets none, as on the task page", () => {
+    const tp = xctsk.turnpoints[2];
+    const long = {
+      ...xctsk,
+      turnpoints: Array.from({ length: 120 }, (_, i) => ({
+        ...tp,
+        waypoint: { ...tp.waypoint, name: `turnpoint-number-${i}`, lat: tp.waypoint.lat + i / 1000 },
+      })),
+    };
+    expect(routeQr(long)).toBeNull();
+    expect(routeQr({ ...xctsk, turnpoints: [] })).toBeNull();
+  });
+});
+
+describe("drawTaskDiagram", () => {
+  test("draws the task page's diagram for a route, and nothing without one", async () => {
+    const w = await PdfWriter.create(readFonts());
+    const xctsk = fixture().tasks[0].task.xctsk!;
+    expect(drawTaskDiagram(w, xctsk, 40, 500, 1)).toBe(true);
+    expect(drawTaskDiagram(w, { ...xctsk, turnpoints: [] }, 40, 500, 1)).toBe(false);
   });
 });

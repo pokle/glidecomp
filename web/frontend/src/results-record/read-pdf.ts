@@ -2,8 +2,10 @@
  * Read a results record back for the tests: its attachments and bookmarks,
  * through pdf-lib's own object model (it has no text extraction — the text
  * was checked with pdftotext while building this, and the attachments are
- * what software is meant to read anyway).
+ * what software is meant to read anyway). `readZip` does the same for the
+ * ZIP of that data.
  */
+import { strFromU8, unzipSync } from "fflate";
 import {
   decodePDFRawStream,
   PDFArray,
@@ -43,4 +45,10 @@ export async function readRecord(bytes: Uint8Array) {
   const outlineCount = outlines?.lookupMaybe(PDFName.of("Count"), PDFNumber)?.asNumber() ?? 0;
 
   return { doc, attachments, bookmarks, outlineCount };
+}
+
+/** A results ZIP's files, keyed by their path inside the archive. */
+export function readZip(bytes: Uint8Array): Map<string, string> {
+  const files = unzipSync(bytes);
+  return new Map(Object.entries(files).map(([path, data]) => [path, strFromU8(data)]));
 }

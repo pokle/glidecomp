@@ -1,8 +1,9 @@
 # The results record (`/comp/:id/scores.pdf`)
 
-A competition's scores as one PDF, for the organiser to keep. It is the paper
-copy of a competition, and it replaces printing the scores page, which is no
-longer a print target.
+A competition's scores as one PDF, for an organiser (or anyone) to keep. It is
+the paper copy of a competition, and it replaces printing the scores page,
+which is no longer a print target. Its data also comes on its own as a ZIP
+(`/comp/:id/scores.zip`).
 
 ## Why it exists
 
@@ -29,15 +30,19 @@ A document laid out in code cannot change when the site's CSS changes.
 
 ## Who can get it
 
-**Comp admins only.** Keeping a record is the scorer's job. A pilot has no use
-for the control, so it would only add clutter. The link appears in two places:
+**Everyone who can see the scores page** (owner decision, 2026-10-31). The
+files say nothing the page does not, and the items sit inside the page's
+**Download** menu, so they add no clutter. The first version was admin-only;
+that was about the menu, and the menu turned out not to need it.
 
-- the scores page's **Download** menu, as "Results record (PDF)"
-- the comp page's **wrap-up card**, after the close date (see below)
+- The scores page's **Download** menu offers "Results record (PDF)" and
+  "Results data (ZIP)" to every reader.
+- The comp page's **wrap-up card** prompts the comp's admins after the close
+  date (see below). It stays admin-only: it is the scorer's to-do, not a link.
 
-The URL also refuses everyone else with a `403`, decided before any per-task
-data is fetched. A hidden `test` comp is still a `404` for anyone who cannot
-see it.
+A hidden `test` comp is still a `404` for anyone who cannot see it. The data
+is fetched with the visitor's own cookie, so the comp lookup decides that, as
+it does on the page.
 
 ## What is in it
 
@@ -56,7 +61,13 @@ task. The record contains, in this order:
 3. **Teams**, if the competition has any.
 4. **One section per task:**
    - the route: task type, gates, launch window, deadline, optimised distance,
-     and the turnpoint table with optimised legs
+     the task page's own route diagram (`task-diagram-pdf.ts`, drawn from the
+     same `buildTaskDiagram` layout and `md` preset), a scannable QR code, and
+     the turnpoint table with optimised legs
+   - the QR is the same XCTrack `XCTSK:` payload as the task page's "QR code":
+     the turnpoints and radii, without gates or the SSS/ESS roles (those are in
+     the attached `.xctsk`). Scan it to reuse a past route. A route too long
+     for one QR (`XCTSK_QR_MAX_BYTES`) gets none, as on the task page
    - the organiser's weather notes
    - for each class: the validity arithmetic with its inputs, the available
      points, the GAP parameters, the full results table, and a **Notes** list
@@ -84,6 +95,13 @@ names wrap. So the PDF also carries the exact data as **attached files**:
 Tabular data is CSV because every spreadsheet can open it. Everything else is
 JSON, or a format the sport already reads.
 
+**Not every viewer can reach them.** Adobe Acrobat Reader and Firefox list a
+PDF's attachments; macOS Preview and Chrome do not. So the same files are
+also served on their own as a ZIP, `/comp/:id/scores.zip` ("Results data
+(ZIP)" in the Download menu), in one folder named like the PDF. The cover
+says both of these things, because "open your viewer's attachments panel"
+sent a Preview user looking for a panel that does not exist.
+
 **There is no fixed format** (owner decision, 2026-10-31). Field names follow
 the API on the day the file was made, and they can change between exports. The
 README says this. A schema that we promise to keep forever is the storage cost
@@ -106,10 +124,12 @@ focus. It is gone on the next visit. **Hide** dismisses the card for good.
 ## How it is built
 
 ```
-src/results-record/serve.ts        the handler: load, admin check, build, respond
-src/results-record/build.ts        what goes on which page
-src/results-record/pdf-writer.ts   pages, wrapped text, tables, links, bookmarks (pdf-lib)
-src/results-record/attachments.ts  the CSV / JSON / .xctsk files
+src/results-record/serve.ts           the handler: load, build the PDF or ZIP, respond
+src/results-record/build.ts           what goes on which page
+src/results-record/pdf-writer.ts      pages, wrapped text, tables, links, bookmarks, QR (pdf-lib)
+src/results-record/task-diagram-pdf.ts  the task page's route diagram, drawn with pdf-lib
+src/results-record/attachments.ts     the CSV / JSON / .xctsk files
+src/results-record/zip.ts             the same files as a ZIP (fflate)
 src/react/loaders.ts               loadResultsRecord()
 ```
 

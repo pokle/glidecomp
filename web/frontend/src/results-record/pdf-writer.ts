@@ -338,6 +338,35 @@ export class PdfWriter {
     else this.outline[this.outline.length - 1].children.push(item);
   }
 
+  /**
+   * A QR code, `size` points square with its top-left at (x, top). Dark
+   * modules are drawn a row-run at a time (one rectangle per run, not per
+   * module), each a hair taller than its row so no viewer renders hairline
+   * gaps between rows — a gap is what makes a printed QR fail to scan. The
+   * quiet zone is the page itself: the caller keeps four modules clear.
+   */
+  qr(modules: boolean[][], x: number, top: number, size: number, page = this.page): void {
+    const n = modules.length;
+    const m = size / n;
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; ) {
+        if (!modules[r][c]) {
+          c++;
+          continue;
+        }
+        const start = c;
+        while (c < n && modules[r][c]) c++;
+        page.drawRectangle({
+          x: x + start * m,
+          y: top - (r + 1) * m - 0.05,
+          width: (c - start) * m,
+          height: m + 0.1,
+          color: rgb(0, 0, 0),
+        });
+      }
+    }
+  }
+
   /** A shaded box around wrapped text, for the one thing a reader must not miss. */
   notice(text: string): void {
     const size = 9.5;

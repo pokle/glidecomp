@@ -29,14 +29,18 @@
  * through the same fixed-locale helpers the site uses.
  */
 import {
+  encodeXctskQR,
   resolveStartGates,
   resolveTaskDeadline,
   resolveTimeOfDayNear,
   resolveTimeTrialGate,
   parseTimeOfDayUTC,
+  xctaskTurnpointsToRecords,
+  XCTSK_QR_MAX_BYTES,
   type XCTask,
 } from "@glidecomp/engine";
 import { AFRelationship } from "pdf-lib";
+import { encode as encodeQr } from "uqr";
 import type { PilotScoreEntry, TaskDetailData, ClassScore } from "../react/comp/types";
 import { buildTaskLegs } from "../react/comp/task-legs";
 import {
@@ -51,6 +55,7 @@ import { formatInstant, hhmmInZone, zoneAbbrev, zoneOffsetMinutes } from "../rea
 import type { ResultsRecordLoaderData } from "../react/loaders";
 import { aggregateTeams, type CompClassScore } from "../scores-views";
 import { buildRecordFiles } from "./attachments";
+import { drawTaskDiagram, taskDiagramSize } from "./task-diagram-pdf";
 import {
   CONTENT_WIDTH,
   MARGIN_X,
@@ -70,12 +75,14 @@ export interface ResultsRecordOptions {
 }
 
 /** "corryong-cup-2026-results-2026-02-08.pdf" — dated, because an organiser
- * may keep one a day and the files must not overwrite each other. */
+ * may keep one a day and the files must not overwrite each other. The ZIP of
+ * the same data shares the name, so the two sort side by side. */
 export function resultsRecordFilename(
   comp: { name: string; timezone: string | null },
-  generatedAt: Date
+  generatedAt: Date,
+  extension: "pdf" | "zip" = "pdf"
 ): string {
-  return `${slugify(comp.name) || "competition"}-results-${todayInZone(comp.timezone ?? "UTC", generatedAt)}.pdf`;
+  return `${slugify(comp.name) || "competition"}-results-${todayInZone(comp.timezone ?? "UTC", generatedAt)}.${extension}`;
 }
 
 // ── Formatting ──────────────────────────────────────────────────────────────
@@ -365,24 +372,27 @@ function drawCover(
   );
 
   w.heading("Attached data", 3, { keepWith: 30 });
+  // Named viewers, because the most common one on a Mac shows no attachments
+  // at all: "open your viewer's attachments panel" sent a Preview user
+  // looking for a panel that does not exist.
   w.text(
-    "The data in this document is also attached to it as files: open your PDF viewer's " +
-      "attachments panel to save them. The tables here are rounded for reading; the files " +
-      "hold the exact values.",
+    "The tables here are rounded for reading. The exact values are attached to this " +
+      "PDF as files. To save them, open it in Adobe Acrobat Reader or Firefox, which " +
+      "list a PDF's attachments; macOS Preview does not. The same files are also on the " +
+      "competition's scores page: Download, then Results data (ZIP).",
     { width: COVER_LEFT_WIDTH, after: 3 }
   );
+  // Names only: README.txt describes each file, and a line per file pushed
+  // the cover onto a second page.
   const routes = files.filter((f) => f.name.endsWith(".xctsk")).length;
-  for (const f of files) {
-    if (f.name.endsWith(".xctsk")) continue;
-    w.text(`${f.name} — ${f.description}`, { size: 8.5, indent: 10, width: COVER_LEFT_WIDTH - 10 });
-  }
-  if (routes > 0) {
-    w.text(`route-NN-….xctsk — each task's route as an XCTrack task file (${routes}).`, {
-      size: 8.5,
-      indent: 10,
-      width: COVER_LEFT_WIDTH - 10,
-    });
-  }
+  const names = files
+    .filter((f) => !f.name.endsWith(".xctsk") && f.name !== "README.txt")
+    .map((f) => f.name);
+  if (routes > 0) names.push(`a .xctsk route file for each of ${routes === 1 ? "the 1 routed task" : `the ${routes} routed tasks`}`);
+  w.text(`Files: ${names.join(", ")}. README.txt says what each one holds.`, {
+    size: 8.5,
+    width: COVER_LEFT_WIDTH,
+  });
 
   return {
     pageIndex: 0,
@@ -608,7 +618,40 @@ function drawRoute(w: PdfWriter, task: TaskDetailData, zone: string): void {
     rows.push(["Stopped", `Announced ${formatInstant(new Date(task.stop_announcement_time), zone)}`]);
   }
   if (course) rows.push(["Optimised distance", km(course.totalMeters, 2)]);
-  w.keyValues(rows, { labelWidth: 112 });
+
+  // Left: the summary, and under it the route's QR. Right: the task page's
+  // route diagram (task-diagram-pdf.ts), so the record shows the shape of
+  // the task the way the site does.
+  //
+  // The QR is there so a past task can be scanned straight back into a flight
+  // app. It is the SAME payload the task page's "QR code" shows
+  // (TaskExportButtons): the turnpoints and radii as an XCTrack `XCTSK:`
+  // task. Gates and the SSS/ESS roles are not in it — they are in the
+  // attached .xctsk — so the caption says what it loads.
+  const diagram = taskDiagramSize(1);
+  const leftWidth = CONTENT_WIDTH - diagram.width - 24;
+  const qr = routeQr(xctsk);
+  w.ensure(diagram.height + 8);
+  const blockTop = w.y;
+  const blockPage = w.page;
+  const drewDiagram = drawTaskDiagram(w, xctsk, MARGIN_X + CONTENT_WIDTH - diagram.width, blockTop, 1);
+  w.keyValues(rows, { labelWidth: 112, width: drewDiagram ? leftWidth : CONTENT_WIDTH });
+  if (qr && w.page === blockPage) {
+    const qrTop = w.y - 8;
+    w.qr(qr.modules, MARGIN_X, qrTop, qr.size);
+    let captionTop = qrTop;
+    const captionX = MARGIN_X + qr.size + 12;
+    for (const line of w.wrap(
+      "Scan with XCTrack to load this route's turnpoints. The attached .xctsk has the whole task, gates included.",
+      8,
+      leftWidth - qr.size - 12
+    )) {
+      w.drawLine(line, captionX, captionTop, { size: 8, muted: true });
+      captionTop -= 11;
+    }
+    w.y = qrTop - qr.size - 4;
+  }
+  if (drewDiagram && w.page === blockPage) w.y = Math.min(w.y, blockTop - diagram.height - 4);
   w.space(4);
 
   w.table(
@@ -640,6 +683,23 @@ function drawRoute(w: PdfWriter, task: TaskDetailData, zone: string): void {
       ];
     })
   );
+}
+
+/**
+ * The route as a QR matrix, sized for paper: about 1.8 pt a module (0.6 mm,
+ * comfortably above what a phone camera resolves at arm's length), within
+ * 110–170 pt. Null when the payload is past what one QR holds, exactly where
+ * the task page stops offering one; the .xctsk attachment still has it.
+ */
+export function routeQr(
+  xctsk: XCTask
+): { payload: string; modules: boolean[][]; size: number } | null {
+  if (xctsk.turnpoints.length === 0) return null;
+  const payload = encodeXctskQR(xctaskTurnpointsToRecords(xctsk.turnpoints));
+  if (new TextEncoder().encode(payload).length > XCTSK_QR_MAX_BYTES) return null;
+  // Level L, as on the task page: the most data per module, and print is clean.
+  const modules = encodeQr(payload, { ecc: "L", border: 0 }).data;
+  return { payload, modules, size: Math.min(170, Math.max(110, modules.length * 1.8)) };
 }
 
 function drawTaskClass(

@@ -117,6 +117,85 @@ export interface TaskDiagramOptions {
   cylinders?: boolean;
 }
 
+/**
+ * Size presets for TaskDiagram. Each is a whole design, not just a scale
+ * factor: the small ones drop labels because a name at 5px is a smudge, not
+ * information.
+ *
+ * They live with the geometry rather than in the component so the results
+ * record (src/results-record/task-diagram-pdf.ts) draws the task page's own
+ * diagram from the same numbers, without importing React.
+ */
+export type TaskDiagramSize = "xs" | "sm" | "md" | "lg";
+
+export interface TaskDiagramPreset {
+  width: number;
+  height: number;
+  padding: number;
+  /** 0 = no labels. */
+  labelFontSize: number;
+  labelMaxChars: number;
+  dotRadius: number;
+  routeWidth: number;
+  arrowSize: number;
+  arrowMinLength: number;
+  cylinders: boolean;
+}
+
+export const TASK_DIAGRAM_PRESETS: Record<TaskDiagramSize, TaskDiagramPreset> = {
+  // Task-list glyph: route shape and direction only, read at a glance. No
+  // cylinders — at this size the rings crowd out the shape, which is the one
+  // thing the glyph exists to convey.
+  xs: {
+    width: 72,
+    height: 50,
+    padding: 7,
+    labelFontSize: 0,
+    labelMaxChars: 0,
+    dotRadius: 1.5,
+    routeWidth: 1.1,
+    arrowSize: 2.6,
+    arrowMinLength: 10,
+    cylinders: false,
+  },
+  sm: {
+    width: 132,
+    height: 96,
+    padding: 10,
+    labelFontSize: 0,
+    labelMaxChars: 0,
+    dotRadius: 2,
+    routeWidth: 1.4,
+    arrowSize: 3.6,
+    arrowMinLength: 14,
+    cylinders: true,
+  },
+  md: {
+    width: 340,
+    height: 240,
+    padding: 26,
+    labelFontSize: 10,
+    labelMaxChars: 12,
+    dotRadius: 2.8,
+    routeWidth: 1.6,
+    arrowSize: 4.6,
+    arrowMinLength: 22,
+    cylinders: true,
+  },
+  lg: {
+    width: 540,
+    height: 380,
+    padding: 34,
+    labelFontSize: 12,
+    labelMaxChars: 18,
+    dotRadius: 3.4,
+    routeWidth: 1.8,
+    arrowSize: 5.4,
+    arrowMinLength: 28,
+    cylinders: true,
+  },
+};
+
 /** A cylinder smaller than this is invisible noise, so it isn't drawn. */
 const MIN_CYLINDER_UNITS = 3.5;
 /** A cylinder wider than this fraction of the box swamps it, so it isn't drawn. */

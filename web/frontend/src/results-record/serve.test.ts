@@ -2,6 +2,7 @@
 import { describe, expect, test } from "vitest";
 import { loadResultsRecord } from "../react/loaders";
 import { serveResultsRecord } from "./serve";
+import { readRecord, readZip } from "./read-pdf";
 import { fixture, ORIGIN, readFonts } from "./test-fixture";
 
 const NOW = new Date("2020-12-21T01:02:03Z");
@@ -31,10 +32,15 @@ function fakeApi(override: (path: string) => Response | null = () => null) {
   return { fetch, calls, data };
 }
 
-function serve(api: ReturnType<typeof fakeApi>, segment = "unungra-cup-2020-c1") {
+function serve(
+  api: ReturnType<typeof fakeApi>,
+  segment = "unungra-cup-2020-c1",
+  format: "pdf" | "zip" = "pdf"
+) {
   return serveResultsRecord({
     fetch: api.fetch,
     segment,
+    format,
     origin: ORIGIN,
     loadFonts: async () => readFonts(),
     now: NOW,
@@ -55,16 +61,45 @@ describe("serveResultsRecord", () => {
     expect(head).toBe("%PDF-");
   });
 
-  test("anyone else is refused before a single task is fetched", async () => {
+  test("any visitor gets it, not only the comp's admins", async () => {
     const api = fakeApi((path) =>
       path === "/api/comp/c1"
         ? new Response(JSON.stringify({ ...fixture().comp, is_admin: false }), { status: 200 })
         : null
     );
     const res = await serve(api);
-    expect(res.status).toBe(403);
-    expect(await res.text()).toContain("Only this competition's admins");
-    expect(api.calls).toEqual(["/api/comp/c1"]);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("application/pdf");
+  });
+
+  test("the ZIP holds the PDF's attachments, in one folder named like it", async () => {
+    let fontsLoaded = false;
+    const res = await serveResultsRecord({
+      fetch: fakeApi().fetch,
+      segment: "unungra-cup-2020-c1",
+      format: "zip",
+      origin: ORIGIN,
+      loadFonts: async () => {
+        fontsLoaded = true;
+        return readFonts();
+      },
+      now: NOW,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("application/zip");
+    expect(res.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="unungra-cup-2020-results-2020-12-21.zip"'
+    );
+    // Nothing in a ZIP is drawn, so the fonts are never fetched.
+    expect(fontsLoaded).toBe(false);
+
+    const zipped = readZip(new Uint8Array(await res.arrayBuffer()));
+    const pdf = await readRecord(
+      new Uint8Array(await (await serve(fakeApi())).arrayBuffer())
+    );
+    const folder = "unungra-cup-2020-results-2020-12-21/";
+    expect([...zipped.keys()].sort()).toEqual([...pdf.attachments.keys()].map((n) => folder + n).sort());
+    for (const [name, file] of pdf.attachments) expect(zipped.get(folder + name)).toBe(file.text);
   });
 
   test("a comp that does not exist — or is hidden from this visitor — is a 404", async () => {

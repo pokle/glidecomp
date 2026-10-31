@@ -1,13 +1,15 @@
 /**
  * The results record (`/comp/:id/scores.pdf`, docs/results-record.md): the
- * whole competition's scores as one PDF, for the organiser to keep.
+ * whole competition's scores as one PDF to keep, and its data on its own as
+ * `scores.zip`.
  *
  * What this pins, against the real Workers:
- *  - an admin gets a real PDF whose attachments carry every flying pilot;
- *  - everyone else is refused, signed in or not — the URL, not just the menu;
- *  - the scores page's Download menu offers it to admins and nobody else;
- *  - after the close date the comp page prompts the admin to keep it, the
- *    download checks the step off, and the prompt is gone on the next visit.
+ *  - anyone, signed in or not, gets a real PDF whose attachments carry every
+ *    flying pilot, and a ZIP of the same files;
+ *  - the scores page's Download menu offers both to every reader;
+ *  - after the close date the comp page prompts the ADMIN to keep it (that
+ *    card stays admin-only), the download checks the step off, and the
+ *    prompt is gone on the next visit.
  *
  * The fixture is a fresh comp (fixtures/scored-comp.ts) closed in the past,
  * deleted again afterwards.
@@ -16,7 +18,7 @@ import { readFileSync } from "node:fs";
 import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 import { createScoredComp, FLYING_PILOTS, readScore, type ScoredComp } from "./fixtures/scored-comp";
-import { readRecord } from "../web/frontend/src/results-record/read-pdf";
+import { readRecord, readZip } from "../web/frontend/src/results-record/read-pdf";
 
 const BASE_URL = FRONTEND_URL;
 
@@ -54,26 +56,31 @@ test.afterAll(async () => {
   await admin.dispose();
 });
 
-test("an admin downloads the record; nobody else can", async ({ playwright }) => {
-  const res = await admin.get(`/comp/${fixture.compId}/scores.pdf`);
-  expect(res.status()).toBe(200);
-  expect(res.headers()["content-type"]).toBe("application/pdf");
-  expect(res.headers()["content-disposition"]).toMatch(/-results-\d{4}-\d{2}-\d{2}\.pdf"$/);
-
-  const { doc, attachments } = await readRecord(new Uint8Array(await res.body()));
-  expect(doc.getPageCount()).toBeGreaterThan(1);
-  const results = attachments.get("task-results.csv")?.text ?? "";
-  for (const p of FLYING_PILOTS) expect(results).toContain(p.name);
-  expect([...attachments.keys()]).toContain("competition.json");
-
-  // Signed out: refused at the URL, not merely missing from the menu.
+test("anyone downloads the record and its data, signed in or not", async ({ playwright }) => {
   const anon = await playwright.request.newContext({ baseURL: BASE_URL });
-  const refused = await anon.get(`/comp/${fixture.compId}/scores.pdf`, { failOnStatusCode: false });
-  expect(refused.status()).toBe(403);
+  for (const who of [admin, anon]) {
+    const res = await who.get(`/comp/${fixture.compId}/scores.pdf`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toBe("application/pdf");
+    expect(res.headers()["content-disposition"]).toMatch(/-results-\d{4}-\d{2}-\d{2}\.pdf"$/);
+    const { doc, attachments } = await readRecord(new Uint8Array(await res.body()));
+    expect(doc.getPageCount()).toBeGreaterThan(1);
+    const results = attachments.get("task-results.csv")?.text ?? "";
+    for (const p of FLYING_PILOTS) expect(results).toContain(p.name);
+    expect([...attachments.keys()]).toContain("competition.json");
+  }
+
+  // The same files, for a viewer that cannot open a PDF's attachments.
+  const zip = await anon.get(`/comp/${fixture.compId}/scores.zip`);
+  expect(zip.status()).toBe(200);
+  expect(zip.headers()["content-type"]).toBe("application/zip");
+  const files = readZip(new Uint8Array(await zip.body()));
+  const results = [...files].find(([path]) => path.endsWith("/task-results.csv"))?.[1] ?? "";
+  for (const p of FLYING_PILOTS) expect(results).toContain(p.name);
   await anon.dispose();
 });
 
-test("the scores page offers the record to admins only", async ({ page, browser }) => {
+test("the scores page offers the record and its data to every reader", async ({ page, browser }) => {
   await devLogin(page);
   await page.goto(`/comp/${fixture.compId}/scores`);
   const download = page.getByRole("button", { name: "Download" });
@@ -86,14 +93,20 @@ test("the scores page offers the record to admins only", async ({ page, browser 
   expect(file.suggestedFilename()).toMatch(/-results-\d{4}-\d{2}-\d{2}\.pdf$/);
   expect(readFileSync(await file.path()).subarray(0, 5).toString()).toBe("%PDF-");
 
-  // A signed-out reader gets the same menu without it.
+  // Signed out: the same two items, and the ZIP is a real download.
   const anon = await browser.newPage();
   await anon.goto(`${BASE_URL}/comp/${fixture.compId}/scores`);
   const anonDownload = anon.getByRole("button", { name: "Download" });
   await expect(anonDownload).toBeVisible({ timeout: 15_000 });
   await anonDownload.click();
-  await expect(anon.getByRole("menuitem", { name: "CSV spreadsheet" })).toBeVisible();
-  await expect(anon.getByRole("menuitem", { name: "Results record (PDF)" })).toHaveCount(0);
+  await expect(anon.getByRole("menuitem", { name: "Results record (PDF)" })).toBeVisible();
+  const [zip] = await Promise.all([
+    anon.waitForEvent("download"),
+    anon.getByRole("menuitem", { name: "Results data (ZIP)" }).click(),
+  ]);
+  expect(zip.suggestedFilename()).toMatch(/-results-\d{4}-\d{2}-\d{2}\.zip$/);
+  // "PK" — a ZIP's local file header.
+  expect(readFileSync(await zip.path()).subarray(0, 2).toString()).toBe("PK");
   await anon.close();
 });
 

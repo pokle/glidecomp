@@ -1,9 +1,10 @@
 /**
  * "Download" menu on the competition scores page: the scores as a CSV, the
- * same file opened live in Google Sheets, and — for the comp's admins only —
- * the results record, a PDF of every class, team and task to keep
- * (src/results-record/). Admin-only because keeping a record is the scorer's
- * job; a pilot has no use for the item, and the URL refuses them anyway.
+ * same file opened live in Google Sheets, the results record — a PDF of every
+ * class, team and task to keep (src/results-record/) — and the data that PDF
+ * carries, as a ZIP for a viewer that cannot open its attachments. Open to
+ * everyone, like the page: tucked inside this menu they add no clutter, and a
+ * pilot keeping their own copy of a comp is as welcome as its scorer.
  *
  * The first two point at ONE URL — `/comp/<slug>-<id>/scores.csv`, served by the SSR
  * Pages Function from the same loader the page renders from (see
@@ -19,12 +20,12 @@
  * handing back a broken sheet.
  */
 import { useState } from "react";
-import { DownloadIcon, ChevronDownIcon, FileTextIcon, TableIcon } from "lucide-react";
+import { DownloadIcon, ChevronDownIcon, FileArchiveIcon, FileTextIcon, TableIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Dialog, DialogFooter, DialogHeader, DialogTitle, Modal } from "@/react/rac/dialog";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
-import { compScoresCsvPath, compScoresPdfPath } from "../lib/slug";
+import { compScoresCsvPath, compScoresPdfPath, compScoresZipPath } from "../lib/slug";
 import { toast } from "../lib/toast";
 
 export function ScoresDownload({
@@ -32,13 +33,10 @@ export function ScoresDownload({
   compName,
   /** Hidden (`test`) comp — Google fetches anonymously and would get a 404. */
   isTestComp = false,
-  /** The viewer administers this comp: offer the results record. */
-  isAdmin = false,
 }: {
   compId: string;
   compName: string;
   isTestComp?: boolean;
-  isAdmin?: boolean;
 }) {
   const [sheetsOpen, setSheetsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -77,12 +75,14 @@ export function ScoresDownload({
             <TableIcon aria-hidden />
             Open in Google Sheets…
           </MenuItem>
-          {isAdmin ? (
-            <MenuItem href={compScoresPdfPath(compId, compName)} download="">
-              <FileTextIcon aria-hidden />
-              Results record (PDF)
-            </MenuItem>
-          ) : null}
+          <MenuItem href={compScoresPdfPath(compId, compName)} download="">
+            <FileTextIcon aria-hidden />
+            Results record (PDF)
+          </MenuItem>
+          <MenuItem href={compScoresZipPath(compId, compName)} download="">
+            <FileArchiveIcon aria-hidden />
+            Results data (ZIP)
+          </MenuItem>
         </Menu>
       </MenuTrigger>
 
