@@ -80,7 +80,7 @@ export function TaskRoutePage() {
         />
         <h1 className="mt-2 text-2xl font-bold">Route</h1>
         <p className="mt-2 text-muted-foreground">
-          Editing a task&rsquo;s route is for competition admins. The route
+          Editing a task&rsquo;s route is for the competition’s organisers. The route
           itself is on the task page, for everyone.
         </p>
       </div>

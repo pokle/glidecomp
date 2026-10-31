@@ -264,7 +264,7 @@ export function TaskScoresPublic({
         <Loading className="mt-2">Loading scores…</Loading>
       ) : scoreState === "no-route" ? (
         <p className="mt-2 text-muted-foreground">
-          No scores yet — the task route hasn't been set.
+          No scores yet — no route set.
         </p>
       ) : scoreState === "unavailable" || !score ? (
         <p className="mt-2 text-muted-foreground">Scores not available</p>

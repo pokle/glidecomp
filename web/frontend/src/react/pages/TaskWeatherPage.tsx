@@ -48,7 +48,7 @@ export function TaskWeatherPage() {
         />
         <h1 className="mt-2 text-2xl font-bold">Weather notes</h1>
         <p className="mt-2 text-muted-foreground">
-          Writing the day&rsquo;s weather notes is for competition admins. The
+          Writing the day&rsquo;s weather notes is for the competition’s organisers. The
           notes themselves are on the task page, for everyone.
         </p>
       </div>

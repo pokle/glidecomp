@@ -146,7 +146,7 @@ export function ScoresEmptyState({
 }) {
   return (
     <div className="mt-2 text-muted-foreground">
-      <p>No scores yet — they appear automatically once pilots submit tracks for a task.</p>
+      <p>No scores yet — they appear as tracks come in.</p>
       {isAdmin ? (
         <p className="mt-1">
           Set a{" "}
@@ -504,15 +504,9 @@ function ScoresTable({ scores, cls }: { scores: CompScores; cls: CompClassScore 
           .{" "}
           <Explain label="Fixed Total Validity" className="align-middle">
             <p>
-              Each pilot&rsquo;s total counts only their best tasks up to a fixed
-              validity
-              {scores.ftv_factor != null
-                ? ` (${Math.round(scores.ftv_factor * 100)}% discarded)`
-                : ""}
-              . Struck-through scores were discarded, &ldquo;(part)&rdquo; scores
-              counted only in part.
+              Struck-through scores are dropped; &ldquo;(part)&rdquo; scores
+              count in part. Open a total&rsquo;s breakdown for the arithmetic.
             </p>
-            <p>Open a total&rsquo;s breakdown for the arithmetic.</p>
           </Explain>
         </p>
       ) : null}

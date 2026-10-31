@@ -223,8 +223,7 @@ export function TaskScoresAdmin({
       <Card>
         <h2 className="text-lg font-bold">Manage pilots &amp; tracks</h2>
         <p className="mt-2 text-muted-foreground">
-          Set the task route first — pilot statuses and tracks can be managed once
-          the task can be scored.
+          Set the route first, then you can manage pilots and tracks.
         </p>
       </Card>
     );
@@ -278,8 +277,7 @@ export function TaskScoresAdmin({
         // Otherwise an organiser who has just closed the task is left
         // wondering why their own upload buttons still work.
         <p className="mt-1 text-sm text-muted-foreground">
-          This task is closed for track submissions. Pilots can no longer
-          send tracks; these organiser tools still work.
+          Closed for submissions. Pilots can&rsquo;t send tracks; you still can.
         </p>
       ) : null}
 
@@ -318,7 +316,7 @@ export function TaskScoresAdmin({
 
       {score.class_scores.some((c) => c.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          Click a row for the full breakdown.
+          Tap a row for the full breakdown.
         </p>
       ) : null}
     </Card>
@@ -733,8 +731,7 @@ function RowManage({
             View score card
           </LinkButton>
           <Tooltip>
-            Open {row.name}'s score card — every start, turnpoint and point
-            calculation, shown on the map
+            Open {row.name}&rsquo;s score card
           </Tooltip>
         </TooltipTrigger>
       ) : null}

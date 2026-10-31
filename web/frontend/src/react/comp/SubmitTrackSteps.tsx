@@ -168,10 +168,9 @@ export function RegistrationPicker({
   if (registration.state === "new") {
     return (
       <p className="text-sm text-muted-foreground">
-        You are not on this competition's roster yet
         {registration.may_register
-          ? ". Submitting a track will add you."
-          : ", and it does not accept pilots adding themselves — ask the organiser."}
+          ? "You're not on the roster yet. Submitting adds you."
+          : "You're not on the roster, and this competition doesn't let pilots add themselves. Ask the organiser."}
       </p>
     );
   }
@@ -181,8 +180,8 @@ export function RegistrationPicker({
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">
         {registration.matched_by
-          ? "That identifier is registered here. Confirm which entry is yours:"
-          : "We could not tell which entry on this competition's roster is you. Pick yourself, so your track is not filed under a second entry:"}
+          ? "That's registered here. Which entry is yours?"
+          : "Which of these is you?"}
       </p>
       {/* Full-width rows, not a radio dot beside a line of text (#638). This
           is the picker that exists so a pilot's registration is never guessed
@@ -448,8 +447,8 @@ export function TrackAccepted({
         <AlertDescription>
           <p>
             {result.taskName ? `${result.taskName}, ` : ""}
-            {result.compName ?? "your competition"}. Check the flight below is
-            the one you meant to send.
+            {result.compName ?? "your competition"}. Check this is the right
+            flight.
           </p>
         </AlertDescription>
       </Alert>
@@ -489,8 +488,7 @@ export function TrackAccepted({
               <p key={f.id}>{f.detail}</p>
             ))}
             <p className="mt-2">
-              It is saved either way. Submit the right file and it replaces this
-              one.
+              It&rsquo;s saved anyway. Submitting another file replaces it.
             </p>
           </AlertDescription>
         </Alert>

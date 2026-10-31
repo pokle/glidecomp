@@ -260,8 +260,8 @@ export default function ForgeIgcDialog({
             }
             description={
               openDistance
-                ? "Open distance is measured from the take-off cylinder edge to the furthest fix, so this is what the pilot should be scored for. There is no route to follow, so the flight heads off in a random direction; at zero they never leave the cylinder and score nothing."
-                : "Distance along the optimised task line, so this is what the pilot should be scored for. At the far right they make goal; at zero they land back at launch."
+                ? "Measured from the take-off cylinder edge — what they should score. No route, so the heading is random; at zero they never leave the cylinder."
+                : "Distance along the optimised route — what they should score. Far right makes goal; zero lands at launch."
             }
           />
         ) : (

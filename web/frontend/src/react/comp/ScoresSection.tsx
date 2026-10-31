@@ -122,7 +122,7 @@ export function ScoresSection({
         <p className="mt-2 text-muted-foreground">Loading scores…</p>
       ) : null}
       {state.kind === "no-route" ? (
-        <p className="mt-2 text-muted-foreground">No scores yet — task route not defined</p>
+        <p className="mt-2 text-muted-foreground">No scores yet — no route set.</p>
       ) : null}
       {state.kind === "unavailable" ? (
         <p className="mt-2 text-muted-foreground">Scores not available</p>
@@ -154,7 +154,7 @@ export function ScoresSection({
       {state.kind === "loaded" &&
       state.data.class_scores.some((cls) => cls.pilots.length > 0) ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          Click a row for the full breakdown.
+          Tap a row for the full breakdown.
         </p>
       ) : null}
     </section>
@@ -418,9 +418,8 @@ function ScoreClassTable({
           {noEssOffer ? (
             <>
               {" "}
-              — nobody reached the end of the speed section, so no time or arrival
-              points were available (FAI S7F §11) and only{" "}
-              {Number((ap.distance + ap.leading).toFixed(1))} pts could be won.
+              — nobody reached ESS, so only distance and leading points (
+              {Number((ap.distance + ap.leading).toFixed(1))} pts) were on offer.
             </>
           ) : null}
         </p>

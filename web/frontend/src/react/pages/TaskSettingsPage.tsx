@@ -57,7 +57,7 @@ export function TaskSettingsPage() {
         />
         <h1 className="mt-2 text-2xl font-bold">Settings</h1>
         <p className="mt-2 text-muted-foreground">
-          Task settings are for competition admins.
+          Task settings are for the competition’s organisers.
         </p>
       </div>
     );

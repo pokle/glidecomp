@@ -178,12 +178,12 @@ function CompDetailView({
         action={
           isAdmin ? (
             <Button variant="outline" size="sm" onPress={() => setCreateOpen(true)}>
-              New Task
+              New task
             </Button>
           ) : null
         }
       />
-      {/* Above the list so the row badges' "see Task Warnings above" holds. */}
+      {/* Above the list so the row badges' "see Task warnings above" holds. */}
       <ClassWarnings warnings={comp.class_coverage_warnings} tasks={comp.tasks} />
       <TasksList
         tasks={comp.tasks}
@@ -479,7 +479,7 @@ function TasksList({
         <p>The organisers haven't published any tasks yet.</p>
         {isAdmin ? (
           <Button variant="outline" size="sm" className="mt-3" onPress={onCreateTask}>
-            New Task
+            New task
           </Button>
         ) : null}
       </div>
@@ -538,7 +538,7 @@ function TasksList({
                   {row.task.missing_sss ? (
                     <span
                       className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
-                      title="Scoring falls back — see Task Warnings above"
+                      title="Scoring falls back — see Task warnings above"
                     >
                       No SSS
                     </span>
@@ -546,7 +546,7 @@ function TasksList({
                   {row.task.missing_ess ? (
                     <span
                       className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-500"
-                      title="Scoring falls back — see Task Warnings above"
+                      title="Scoring falls back — see Task warnings above"
                     >
                       No ESS
                     </span>
@@ -704,7 +704,7 @@ function CreateTaskDialog({
     >
       <Dialog>
         <DialogHeader>
-          <DialogTitle>Create Task</DialogTitle>
+          <DialogTitle>Create task</DialogTitle>
         </DialogHeader>
         <Form
           onSubmit={(e) => {
@@ -738,7 +738,7 @@ function CreateTaskDialog({
             />
           </div>
           <CheckList
-            label="Pilot Classes"
+            label="Pilot classes"
             value={selectedClasses}
             onChange={setSelectedClasses}
             options={pilotClasses.map((cls) => ({ value: cls, label: cls }))}

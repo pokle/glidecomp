@@ -77,9 +77,7 @@ function ErrorScreen() {
         Something went wrong
       </h1>
       <p className="text-muted-foreground">
-        Sorry, this page hit a problem it couldn't recover from. Reloading
-        usually fixes it, especially if GlideComp was updated while you had the
-        page open.
+        This page hit a problem. Reloading usually fixes it.
       </p>
       <div className="flex flex-wrap gap-3">
         <Button onPress={() => window.location.reload()}>Reload page</Button>

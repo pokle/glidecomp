@@ -75,7 +75,7 @@ export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
         />
 
         <ChoiceList
-          label="Default Pilot Class"
+          label="Default pilot class"
           value={effectiveDefault}
           onChange={setDefaultClass}
           options={classes.map((cls) => ({ value: cls, label: cls }))}

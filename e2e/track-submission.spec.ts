@@ -538,7 +538,7 @@ test.describe("submitting a track without an account", () => {
       `${BASE_URL}/comp/${target!.compId}/task/${target!.taskId}/pilot/${target!.pilotId}`
     );
 
-    await expect(page.getByText(/Working out the scores/)).toBeVisible({
+    await expect(page.getByText(/Updating scores/)).toBeVisible({
       timeout: 15_000,
     });
     // And a way out, so nobody is stranded on a spinner.
@@ -793,7 +793,7 @@ test.describe("submitting a track without an account", () => {
 
       // And the promise about the audit log and the email is made UPFRONT.
       await expect(
-        page.getByText(/recorded in the competition's public activity log/)
+        page.getByText(/logged publicly and emailed to the registered pilot/)
       ).toBeVisible();
 
       // Choosing the registration files the track against it — the roster

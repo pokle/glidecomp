@@ -157,7 +157,7 @@ export function ManualFlightPage() {
         <Breadcrumbs items={crumbs} current="Record manual flight" />
         <h1 className="mt-2 text-2xl font-bold">Record manual flight</h1>
         <p className="mt-2 text-muted-foreground">
-          Recording a flight for a pilot is for competition admins.
+          Recording a flight for a pilot is for the competition’s organisers.
         </p>
       </div>
     );

@@ -91,18 +91,18 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
             checked={openRegistration}
             onChange={setOpenRegistration}
             label="Let pilots register themselves by submitting a track"
-            hint="Off, only admins add pilots. Pilots you registered can always submit."
+            hint="When off, only admins add pilots. Registered pilots can always submit."
           />
           <SwitchField
             checked={openUpload}
             onChange={setOpenUpload}
             label="Let registered pilots record flights and statuses for each other"
-            hint="Covers uploading IGC tracks, recording manual flights, and setting pilot statuses (Absent / Did Not Fly). Admins can always do these regardless of this setting."
+            hint="Uploading tracks, recording manual flights, and marking Absent / Did Not Fly. Admins always can."
           />
         </SwitchList>
 
         <div className="flex flex-col gap-2">
-          <Label id={closeDateId}>Close Date</Label>
+          <Label id={closeDateId}>Close date</Label>
           <DatePicker
             inline
             clearable
@@ -111,12 +111,12 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
             onChange={setCloseDate}
           />
           <p className="text-xs text-muted-foreground">
-            After this date, track submissions are rejected. Leave empty for open-ended.
+            Tracks are refused after this date. Leave empty for no limit.
           </p>
         </div>
 
         <TextField
-          label="Admin Emails"
+          label="Admin emails"
           placeholder="admin1@example.com, admin2@example.com"
           value={adminsText}
           onChange={setAdminsText}
