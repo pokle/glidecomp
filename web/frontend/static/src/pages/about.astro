@@ -30,7 +30,7 @@ const sections = [
         lic: "MIT",
       },
       {
-        href: "https://github.com/peterqliu/threebox",
+        href: "https://github.com/jscastro76/threebox",
         name: "Threebox",
         desc: " — Three.js integration for Mapbox GL",
         lic: "MIT",
@@ -57,13 +57,13 @@ const compData = [
   {
     href: "https://xc.highcloud.net",
     name: "xc.highcloud.net",
-    desc: " — The AirScore instance the Australian competitions here were scored on, and the source of their tasks, track logs and official results. Those flights remain the work of the pilots who flew them and the organisers who ran the events",
+    desc: " — The AirScore site that scored the Australian competitions here, and the source of their tasks, track logs and official results. Those flights remain the work of the pilots who flew them and the organisers who ran the events",
     lic: null,
   },
   {
     href: "https://github.com/geoffwong/airscore",
     name: "AirScore",
-    desc: " — The GAP scoring software behind that site. GlideComp's scoring is checked task by task against the results AirScore published, so a score here can be traced back to the one that was flown for",
+    desc: " — The GAP scoring software behind that site. GlideComp's scores are checked task by task against the results AirScore published",
     lic: "GPL 2.0",
   },
   {
@@ -86,10 +86,10 @@ const build = [
   { href: "https://vite.dev", name: "Vite", desc: " — Build tool and dev server", lic: "MIT" },
   { href: "https://astro.build", name: "Astro", desc: " — Static site builder for the content pages", lic: "MIT" },
   { href: "https://www.typescriptlang.org", name: "TypeScript", desc: " — Typed JavaScript", lic: "Apache 2.0" },
-  { href: "https://bun.sh", name: "Bun", desc: " — JavaScript runtime and package manager", lic: "MIT" },
-  { href: "https://vitest.dev", name: "Vitest", desc: " — Unit test runner for the engine and the workers", lic: "MIT" },
+  { href: "https://bun.sh", name: "Bun", desc: " — JavaScript runtime, package manager and test runner", lic: "MIT" },
+  { href: "https://vitest.dev", name: "Vitest", desc: " — Unit test runner for the frontend and the workers", lic: "MIT" },
   { href: "https://playwright.dev", name: "Playwright", desc: " — End-to-end browser tests", lic: "Apache 2.0" },
-  { href: "https://www.cloudflare.com", name: "Cloudflare", desc: " — Pages, Workers, D1 and R2 hosting", lic: null },
+  { href: "https://www.cloudflare.com", name: "Cloudflare", desc: " — Pages, Workers, D1, R2 and email hosting", lic: null },
 ];
 ---
 
@@ -106,15 +106,14 @@ const build = [
 
       <h2 class="text-xl font-semibold mb-4">About me</h2>
       <section class="mb-10 space-y-4">
-        <p>I want to learn from better pilots, and ultimately out compete them!</p>
+        <p>I want to learn from better pilots, and ultimately outcompete them!</p>
         <p>
-          Gliding competitions are a unique experience where you can fly in the same air as the
-          best pilots in the world. After the day's task, you can talk to them, and analyse their
-          flight data.
+          Competitions are a rare chance to fly in the same air as the best pilots in the world.
+          After the task, you can talk to them and study their flights.
         </p>
         <p>
-          I built GlideComp to figure out which line they took, how fast they flew, how well they
-          climbed, and ultimately how they scored in the task!
+          I built GlideComp to see which line they took, how fast they flew, how well they
+          climbed, and in the end how they scored!
         </p>
         <p class="text-sm text-muted-foreground mt-2">— Tushar Pokle (Summer 2026)</p>
       </section>
@@ -146,10 +145,9 @@ const build = [
       <section class="mb-10">
         <h2 class="text-xl font-semibold mb-4">Competition Data</h2>
         <p class="text-muted-foreground mb-4">
-          GlideComp did not score the past competitions on this site first. Pilots flew them at
-          real events, the organisers scored them, and the organisers published the results.
-          GlideComp scores the same tracks again, so it can show its working. Anyone can then
-          compare its scores against the official result.
+          The past competitions on this site were flown at real events, and scored and published
+          by their organisers. GlideComp rescores the same tracks to show its working, so anyone
+          can compare its scores with the official results.
         </p>
         <ul class="space-y-3">
           {
@@ -169,18 +167,17 @@ const build = [
       <section class="mb-10">
         <h2 class="text-xl font-semibold mb-4">Weather Data</h2>
         <p class="text-muted-foreground mb-4">
-          The task analysis shows the conditions: the wind through the day, the
-          cloud cover, and the height of the thermals. These come from an outside meteorological
-          archive. They are <strong class="font-medium text-foreground">modelled</strong> figures,
-          sampled at a grid point near the task, and not readings taken at launch. The organiser's
-          weather notes on each task are therefore the local ground truth.
+          The task analysis shows the day's conditions: wind through the day, cloud cover and
+          thermal height. These are <strong class="font-medium text-foreground">modelled</strong>
+          figures for a grid point near the task, not readings taken at launch, so the organiser's
+          weather notes on each task are the local ground truth.
         </p>
         <ul class="space-y-3">
           <li>
             <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
               Open-Meteo
             </a>
-            <span class="text-muted-foreground"> — Archived forecasts and historical weather, free and open, under </span>
+            <span class="text-muted-foreground"> — Live forecasts, archived forecasts and historical weather, free and open, under </span>
             <a
               href="https://creativecommons.org/licenses/by/4.0/"
               target="_blank"
@@ -247,7 +244,7 @@ const build = [
             <a href="https://tabulator.info" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
               Tabulator
             </a>
-            <span class="text-muted-foreground"> — The editable pilot, task and results grids (MIT)</span>
+            <span class="text-muted-foreground"> — The editable pilots grid (MIT)</span>
           </li>
           <li>
             <a href="https://lucide.dev" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
@@ -284,7 +281,7 @@ const build = [
             <a href="https://github.com/zpao/qrcode.react" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">
               qrcode.react
             </a>
-            <span class="text-muted-foreground"> for two-factor setup (ISC)</span>
+            <span class="text-muted-foreground"> for the task and waypoint QR codes (ISC)</span>
           </li>
           <li>
             <a href="https://github.com/fontsource/fontsource" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">

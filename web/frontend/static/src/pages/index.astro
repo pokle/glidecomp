@@ -44,7 +44,7 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
 
 <Base
   title="GlideComp — same air, same task, see where the race was really won"
-  description="GlideComp analyses every track flown in a hang gliding or paragliding competition — how the fast pilots climbed, glided and chose their lines — and scores the comp in the browser, GAP or open distance, every point explained."
+  description="GlideComp analyses every track flown in a hang gliding or paragliding competition — how the fast pilots climbed, glided and chose their lines — and scores the comp with GAP or open distance, every point explained."
 >
   <!-- ===================== Hero ===================== -->
   <section class="hero">
@@ -55,10 +55,9 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
       </h1>
       <p class="hero-description fade-in" style="--delay:.05s">
         GlideComp compares every track flown on the day — who climbed better,
-        who glided smarter, whose decisions paid off — so you can see exactly
-        what the fast pilots did differently and take it to the next comp.
-        Scoring comes built in: GAP or open distance, in your browser, every
-        point explained.
+        who glided smarter, whose decisions paid off — so you can see what the
+        fast pilots did differently and take it to your next comp. Scoring is
+        built in: GAP or open distance, with every point explained.
       </p>
       <div class="hero-cta fade-in" style="--delay:.1s">
         {/* Submitting a track is deliberately NOT here. It lives in the nav,
@@ -78,10 +77,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
       <div class="hero-glow"></div>
       <div class="stage-split">
         <div class="stage-caption">
-          <h2 class="eyebrow">Pilot's GAP scores explained</h2>
+          <h2 class="eyebrow">Every score explained</h2>
           <p>
-            GlideComp explains why your pilot scored the way they did. Distance
-            points, time points, all explained in plain English.
+            Each pilot gets a report card that shows why they scored what they
+            did, with every part of the score explained in plain English.
           </p>
           <ul class="stage-list">
             <li>Every start-cylinder crossing, and which one scored</li>
@@ -306,10 +305,9 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
               </div>
               <figcaption class="chart-note">
                 <strong>What the wind did on each leg.</strong>
-                The pale bar is the time when the field flew the leg. The
-                solid band inside it is the circling that the wind was
-                estimated from. On a leg that everyone glided, that band is
-                very small.
+                The pale bar is when the field flew the leg, and the solid band
+                inside it is the circling the wind was estimated from. On a leg
+                that everyone glided, that band is tiny.
               </figcaption>
             </figure>
           </section>
@@ -371,11 +369,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
         </article>
       </div>
       <p class="section-footnote fade-in">
-        Every metric is ranked by how strongly it actually separated the field
-        that day, and checked across the comp's other tasks — so you can tell a
-        real lesson from a quirk of one day's weather. Each pilot's score comes
-        with the same treatment: a plain-English timeline of the flight, on the
-        map and in 3D.
+        Every metric is ranked by how strongly it separated the field that day,
+        and checked against the comp's other tasks, so you can tell a real
+        lesson from a quirk of one day's weather. Each pilot also gets a
+        plain-English timeline of their flight, on the map and in 3D.
         {/* A real, warm report on a real comp. The `bqlf` task id is assigned
             by D1 and is NOT stable across a reseed of Corryong Cup 2026 (the
             comp sqid `voqc` is) — if that comp is reseeded, re-read the task
@@ -442,10 +439,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              A browser. Sign in, create the competition, add a task, and
-              share the link. Pilots upload their IGC tracks, and GlideComp
-              scores them automatically. There is no software to install and
-              no spreadsheet to maintain.
+              A browser. Sign in, create the competition, add a task and share
+              the link. Pilots upload their IGC tracks and GlideComp scores
+              them automatically, with no software to install and no
+              spreadsheet to maintain.
             </p>
           </div>
         </div>
@@ -456,12 +453,12 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              With the GAP formulas that FAI competitions use: distance, time
-              and leading points. A new competition gets the official
-              defaults, and you can change the advanced parameters when you
-              need to. There is also an open-distance format for club XC
-              days. The <a href="/scoring">scoring guide</a> explains both in
-              detail.
+              With the GAP formulas FAI competitions use: distance, time and
+              leading points, plus arrival points in hang gliding. A new
+              competition starts with the official defaults, and you can
+              change the advanced settings if your rules differ. There is also
+              an open-distance format for club XC days. The
+              <a href="/scoring">scoring guide</a> explains both in detail.
             </p>
           </div>
         </div>
@@ -472,14 +469,13 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Where your day went, against every pilot who flew the same
+              Where your day went, compared with every pilot who flew the same
               task. GlideComp measures each pilot's climbing, gliding,
-              decision-making, gaggle flying and race craft from the track
-              logs. It then ranks those measures by how strongly they
-              separated the field, so the report starts with what was
-              important on the day. Read it beside your own report card, and
-              you have something specific to work on before the next
-              competition.
+              decision-making, gaggle flying and race craft from their tracks,
+              then ranks those measures by how strongly they separated the
+              field, so the report starts with what mattered most that day.
+              Read it beside your own report card and you have something
+              specific to work on before the next competition.
             </p>
           </div>
         </div>
@@ -490,11 +486,11 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Anyone who follows the competition. A track submitted for
-              scoring becomes part of the public record of that task. That
-              record is what makes the comparison possible, and every pilot in
-              the field accepts the same terms. A flight that you analyse
-              privately, outside a competition, stays yours.
+              Anyone following the competition. A track submitted for scoring
+              becomes part of that task's public record, which is what makes
+              the comparison possible, and every pilot in the field is on the
+              same terms. A flight you analyse privately, outside a
+              competition, stays private.
             </p>
           </div>
         </div>
@@ -505,13 +501,12 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              No. Competitions, tasks and scores are public pages, so you can
-              follow a competition without an account. You can also submit a
-              track without one: go to Submit track, choose the task, and name
-              yourself with the CIVL ID or the email address the organiser
-              registered you under. An account adds My Flights, where your own
-              tracks and tasks are kept. An organiser can also upload tracks
-              for a pilot.
+              No. Competitions, tasks and scores are public, so anyone can
+              follow a competition without an account. You can submit a track
+              without one too: go to Submit track, choose the task, and give
+              the CIVL ID or email address the organiser registered you under.
+              An account adds My Flights, where your own tracks and tasks are
+              kept. Organisers can also upload tracks for their pilots.
             </p>
           </div>
         </div>
@@ -522,11 +517,11 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Yes. Tasks import and export as .xctsk, and waypoints download
-              in standard formats. Pilots can scan a QR code to load the task
-              or the waypoints directly into XCTrack, Flyskyhy, SeeYou
-              Navigator and most other flight apps. Any instrument that
-              produces an IGC file works for scoring.
+              Yes. Tasks import and export as .xctsk, and waypoints download in
+              standard formats. Pilots can scan a QR code to load the task or
+              the waypoints straight into XCTrack, Flyskyhy, SeeYou Navigator
+              and most other flight apps. Any instrument that writes an IGC
+              file works for scoring.
             </p>
           </div>
         </div>
@@ -537,10 +532,10 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              Apply a penalty with a reason, and the scores recompute
-              immediately. A public audit log records every change that can
-              move a score: penalties, re-uploads and task edits. Pilots can
-              therefore always see why the numbers changed.
+              Apply a penalty with a reason and the scores update straight
+              away. A public audit log records every change that can move a
+              score, such as penalties, re-uploads and task edits, so pilots
+              can always see why the numbers changed.
             </p>
           </div>
         </div>
@@ -551,8 +546,8 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           </button>
           <div class="faq-answer">
             <p>
-              GlideComp is free to use, and Tushar Pokle sponsors it. It is an
-              open project, and the source is on
+              Nothing. GlideComp is free, sponsored by Tushar Pokle, and open
+              source on
               <a href="https://github.com/pokle/glidecomp" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </p>
           </div>
@@ -574,9 +569,9 @@ const CHART_SIZES = "(max-width: 1120px) 92vw, 1024px";
           <button type="button" class="button button-primary button-large" data-signin>
             Start a competition
           </button>
-          <a class="button button-secondary button-large" href="/comp">See a sample comp</a>
+          <a class="button button-secondary button-large" href="/comp">Browse competitions</a>
         </div>
-        <p class="cta-note">Free · Sign in with Google</p>
+        <p class="cta-note">Free · Sign in with Google or an emailed code</p>
       </div>
     </div>
   </section>

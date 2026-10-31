@@ -125,7 +125,7 @@ test.describe("prerendered content (no browser)", () => {
     const body = await html(request, "/");
     expect(body).toContain("What do I need to run a comp with GlideComp?");
     // The answer text itself, which the accordion only reveals.
-    expect(body).toContain("There is no software to install");
+    expect(body).toContain("with no software to install");
   });
 });
 
@@ -140,7 +140,7 @@ test.describe("with JavaScript off", () => {
     // `.fade-in` is hidden only under `html.js`, which the enhancement script
     // adds. With no script there is no class, so nothing is invisible — the
     // reveal is an enhancement, never a gate.
-    await expect(page.getByText("There is no software to install")).toBeVisible();
+    await expect(page.getByText("with no software to install")).toBeVisible();
     await expect(page.getByRole("tabpanel").first()).toBeVisible();
   });
 
@@ -211,7 +211,7 @@ test.describe("the homepage's vanilla enhancements", () => {
     await expect(question).toHaveAttribute("aria-expanded", "false");
     await question.click();
     await expect(question).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByText("There is no software to install")).toBeVisible();
+    await expect(page.getByText("with no software to install")).toBeVisible();
   });
 
   test("the chart tabs move selection to the tab that was pressed", async ({ page }) => {

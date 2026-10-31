@@ -50,12 +50,12 @@ describe("audit log write-through", () => {
 
   test("comp PATCH writes one entry per changed field", async () => {
     const compId = await createComp({ name: "Initial" });
+    // A close date the one-month-out default can never produce: a fixed
+    // near-future date collided with it on 31 October (Oct 31 + 1 month
+    // rolls over to 1 December), so the PATCH changed nothing.
     await authRequest("PATCH", `/api/comp/${compId}`, {
       name: "Renamed",
-      // In the past, so it can never equal the default a new comp gets (one
-      // month out): "2026-12-01" WAS that default when run on 2026-10-31, the
-      // PATCH changed nothing, and the test failed for that one day.
-      close_date: "2020-12-01",
+      close_date: "2099-12-31",
     });
     const { entries } = await getAudit(compId);
     const descs = entries.map((e) => e.description as string);

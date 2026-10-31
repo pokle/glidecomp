@@ -50,11 +50,11 @@ export function legalNoticeEffectiveDate(notice: LegalNotice): string {
   return new Date(start + LEGAL_NOTICE_DAYS * DAY_MS).toISOString().slice(0, 10);
 }
 
-const PUBLISHED = "2026-09-29";
+const PUBLISHED = "2026-10-31";
 
 export const LEGAL_NOTICE: LegalNotice = {
   version: PUBLISHED,
-  message: `We're updating our Terms, including for competition organisers. The changes take effect on ${formatLegalDate(
+  message: `We're updating our Terms and Privacy Policy, including what you can delete yourself. The changes take effect on ${formatLegalDate(
     legalNoticeEffectiveDate({ version: PUBLISHED, message: "" })
   )}.`,
 };
