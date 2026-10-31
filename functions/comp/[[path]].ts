@@ -30,6 +30,11 @@ import {
 } from "../../web/frontend/src/react/loaders";
 import { buildScoresCsv, scoresCsvFilename } from "../../web/frontend/src/scores-csv";
 import {
+  RESULTS_RECORD_FONT_PATHS,
+  RESULTS_RECORD_PATTERN,
+  serveResultsRecord,
+} from "../../web/frontend/src/results-record/serve";
+import {
   TASK_ANALYSIS_SECTIONS,
   findTaskAnalysisSection,
 } from "../../web/frontend/src/react/analysis/sections";
@@ -522,6 +527,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const csvMatch = path.match(SCORES_CSV_PATTERN);
   if (csvMatch) return scoresCsv(env, csvMatch[1], cookie, url.origin);
 
+  // The results record: every class, team and task in one PDF, for the
+  // organiser to keep. Comp admins only — see results-record/serve.ts.
+  const pdfMatch = path.match(RESULTS_RECORD_PATTERN);
+  if (pdfMatch) {
+    return serveResultsRecord({
+      fetch: compFetcher(env, cookie),
+      segment: pdfMatch[1],
+      origin: url.origin,
+      loadFonts: () => recordFonts(env, url.origin),
+    });
+  }
+
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
   // Not one of the SSR routes. Valid SPA-only /comp routes (the pilots roster,
   // the old task-analysis redirect) were already handled above via
@@ -640,6 +657,25 @@ async function scoresCsv(
       ),
     },
   });
+}
+
+/**
+ * The results record's fonts, read from the deployment's own static assets
+ * (web/frontend/public/fonts/results-record/) rather than bundled into this
+ * Function: 400 KB of font has no business in every SSR cold start, and only
+ * an admin downloading a record ever needs it.
+ */
+async function recordFonts(env: Env, origin: string) {
+  const read = async (path: string) => {
+    const res = await env.ASSETS.fetch(new Request(origin + path));
+    if (!res.ok) throw new Error(`results record font ${path} -> ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  };
+  const [regular, bold] = await Promise.all([
+    read(RESULTS_RECORD_FONT_PATHS.regular),
+    read(RESULTS_RECORD_FONT_PATHS.bold),
+  ]);
+  return { regular, bold };
 }
 
 function csvError(status: number, message: string): Response {

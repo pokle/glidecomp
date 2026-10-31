@@ -162,7 +162,9 @@ export function scoresCsvFilename(compName: string): string {
   return `${slugify(compName) || "competition"}-scores.csv`;
 }
 
-function csvEscape(value: string | number): string {
+/** One CSV cell, guarded against formula injection. Shared with the results
+ * record's attachments (src/results-record/attachments.ts). */
+export function csvEscape(value: string | number): string {
   // Numbers pass through unguarded — a negative score must stay a number, and
   // it can't carry a formula anyway.
   if (typeof value === "number") return String(value);

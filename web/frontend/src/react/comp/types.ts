@@ -329,6 +329,13 @@ export interface TaskScoreData {
   computed_at: string;
   /** True when newer inputs exist and a re-score is in flight or pending. */
   stale: boolean;
+  /**
+   * The scoring engine generation that computed this body, as 12 hex digits
+   * (the head of SCORING_SOURCE_FINGERPRINT, docs/scoring-version.md). Read
+   * from the stored row, so a stale body names the engine that wrote it.
+   * Absent from a server older than the field.
+   */
+  engine_generation?: string;
   /** The officially published record beside the rescored one (issue #603). */
   official_results?: OfficialResultsData | null;
 }

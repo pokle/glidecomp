@@ -126,9 +126,6 @@ export function TabList<T extends object>({
           // on platforms that reserve space for one; the fades below and the
           // clipped tab edge are the affordance instead.
           "overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          // A scroll viewport prints only its visible slice — let it overflow
-          // so a printed briefing still shows which views exist.
-          "print:overflow-x-visible print:max-w-none",
           className
         )}
         {...props}
@@ -142,14 +139,14 @@ export function TabList<T extends object>({
         <div
           aria-hidden="true"
           data-tab-fade="start"
-          className="pointer-events-none absolute inset-y-0 left-0 w-6 rounded-l-lg bg-linear-to-r from-muted to-muted/0 print:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 w-6 rounded-l-lg bg-linear-to-r from-muted to-muted/0"
         />
       ) : null}
       {fades.end ? (
         <div
           aria-hidden="true"
           data-tab-fade="end"
-          className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-lg bg-linear-to-l from-muted to-muted/0 print:hidden"
+          className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-lg bg-linear-to-l from-muted to-muted/0"
         />
       ) : null}
     </div>

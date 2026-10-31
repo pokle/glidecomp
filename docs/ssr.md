@@ -131,6 +131,14 @@ Dev has no Functions, so a `scoresCsvDev` middleware in `vite.config.ts` mirrors
 it on :3000 using the same builder, rather than leaving the link 404ing where
 nobody would notice.
 
+## `/comp/:id/scores.pdf`
+
+The results record: the whole competition's scores as one PDF, with the data
+attached as CSV and JSON, for an organiser to keep. **Comp admins only**
+(`403` otherwise). Served by the same Function from `loadResultsRecord`, and
+mirrored in dev by `resultsRecordDev`. Both call one handler,
+`src/results-record/serve.ts`. Full account: [results-record.md](results-record.md).
+
 ## Verifying
 
 Dev serves the SPA shell, with no SSR. To actually exercise it:

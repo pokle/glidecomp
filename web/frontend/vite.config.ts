@@ -98,6 +98,54 @@ function scoresCsvDev(): Plugin {
   };
 }
 
+/**
+ * Dev stand-in for /comp/:id/scores.pdf, the results record (see
+ * src/results-record/serve.ts). The SAME handler the Pages Function calls,
+ * loaded through Vite's SSR module loader rather than imported here: it
+ * pulls in the engine, which is raw workspace TypeScript the config bundle
+ * cannot load. The fonts come off disk instead of the ASSETS binding.
+ */
+function resultsRecordDev(): Plugin {
+  return {
+    name: 'results-record-dev',
+    configureServer(server) {
+      server.middlewares.use((req: Connect.IncomingMessage, res: any, next) => {
+        const path = req.url?.split('?')[0] ?? '';
+        if (!/^\/comp\/[^/]+\/scores\.pdf$/.test(path)) return next();
+        void (async () => {
+          try {
+            const mod = (await server.ssrLoadModule(
+              '/results-record/serve.ts'
+            )) as typeof import('./src/results-record/serve');
+            const segment = path.match(mod.RESULTS_RECORD_PATTERN)![1];
+            const cookie = req.headers.cookie;
+            const response = await mod.serveResultsRecord({
+              fetch: (p, init) =>
+                fetch(`${DEV_API_ORIGIN}${p}`, {
+                  ...init,
+                  headers: { ...(init?.headers as Record<string, string>), ...(cookie ? { cookie } : {}) },
+                }),
+              segment,
+              origin: `http://${req.headers.host ?? 'localhost:3000'}`,
+              loadFonts: async () => ({
+                regular: new Uint8Array(readFileSync(resolve(__dirname, 'public', mod.RESULTS_RECORD_FONT_PATHS.regular.slice(1)))),
+                bold: new Uint8Array(readFileSync(resolve(__dirname, 'public', mod.RESULTS_RECORD_FONT_PATHS.bold.slice(1)))),
+              }),
+            });
+            res.statusCode = response.status;
+            response.headers.forEach((value, key) => res.setHeader(key, value));
+            res.end(Buffer.from(await response.arrayBuffer()));
+          } catch (err) {
+            console.error('results record (dev) failed', err);
+            res.statusCode = 502;
+            res.end(`API Workers not reachable at ${DEV_API_ORIGIN}\n`);
+          }
+        })();
+      });
+    },
+  };
+}
+
 const SAMPLES_COMPS_DIR = resolve(__dirname, '..', 'samples', 'comps');
 
 /** Serve sample comp files from /data/comps/ in dev */
@@ -229,6 +277,7 @@ export default defineConfig({
     react(),
     workersCheck(),
     scoresCsvDev(),
+    resultsRecordDev(),
     sampleCompFiles(),
     copySampleComps(),
     {

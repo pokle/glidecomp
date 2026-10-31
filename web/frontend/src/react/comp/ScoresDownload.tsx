@@ -1,8 +1,11 @@
 /**
- * "Download" menu on the competition scores page: the scores as a CSV, and the
- * same file opened live in Google Sheets.
+ * "Download" menu on the competition scores page: the scores as a CSV, the
+ * same file opened live in Google Sheets, and — for the comp's admins only —
+ * the results record, a PDF of every class, team and task to keep
+ * (src/results-record/). Admin-only because keeping a record is the scorer's
+ * job; a pilot has no use for the item, and the URL refuses them anyway.
  *
- * Both point at ONE URL — `/comp/<slug>-<id>/scores.csv`, served by the SSR
+ * The first two point at ONE URL — `/comp/<slug>-<id>/scores.csv`, served by the SSR
  * Pages Function from the same loader the page renders from (see
  * functions/comp/[[path]].ts + src/scores-csv.ts). The download is therefore a
  * plain link: no blob, no JS, right-clickable, and identical to what a
@@ -16,12 +19,12 @@
  * handing back a broken sheet.
  */
 import { useState } from "react";
-import { DownloadIcon, ChevronDownIcon, TableIcon } from "lucide-react";
+import { DownloadIcon, ChevronDownIcon, FileTextIcon, TableIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Dialog, DialogFooter, DialogHeader, DialogTitle, Modal } from "@/react/rac/dialog";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
-import { compScoresCsvPath } from "../lib/slug";
+import { compScoresCsvPath, compScoresPdfPath } from "../lib/slug";
 import { toast } from "../lib/toast";
 
 export function ScoresDownload({
@@ -29,10 +32,13 @@ export function ScoresDownload({
   compName,
   /** Hidden (`test`) comp — Google fetches anonymously and would get a 404. */
   isTestComp = false,
+  /** The viewer administers this comp: offer the results record. */
+  isAdmin = false,
 }: {
   compId: string;
   compName: string;
   isTestComp?: boolean;
+  isAdmin?: boolean;
 }) {
   const [sheetsOpen, setSheetsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -71,6 +77,12 @@ export function ScoresDownload({
             <TableIcon aria-hidden />
             Open in Google Sheets…
           </MenuItem>
+          {isAdmin ? (
+            <MenuItem href={compScoresPdfPath(compId, compName)} download="">
+              <FileTextIcon aria-hidden />
+              Results record (PDF)
+            </MenuItem>
+          ) : null}
         </Menu>
       </MenuTrigger>
 

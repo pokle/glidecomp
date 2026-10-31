@@ -515,6 +515,16 @@ These are the standing imperatives. Each links to the reference that explains it
     loaders) is marked `data-requires-account` in the markup and hidden for an
     anonymous reader, rather than left to bounce them out of the page.
   - Coverage: the "signed out" block in `e2e/report-card.spec.ts`.
+- **The paper copy of the scores is the results record, not the page**
+  ([docs/results-record.md](docs/results-record.md)). `/comp/:id/scores.pdf`
+  is a PDF laid out in code (`src/results-record/`), comp admins only, with
+  the exact data attached as CSV and JSON. Do not add print styling to the
+  scores page or the comp page's `#scores` summary. Printing the page was a
+  cat-and-mouse game with every CSS change, and it is no longer a goal.
+  - The attachments have **no fixed format**: field names follow the API on
+    the day the file was made. Do not promise a schema.
+  - A record is never partial. A task that fails to load fails the export
+    (`503`) after retries, rather than leaving a day out.
 - **SSR-safety.** When you touch anything the server-rendered comp pages
   import ([docs/ssr.md](docs/ssr.md)):
   - No `window`/`document`/`localStorage` at **module scope** — it runs in
@@ -670,6 +680,7 @@ These are the standing imperatives. Each links to the reference that explains it
 |---|---|
 | Local dev, e2e, container preview, tunnel | [docs/local-dev.md](docs/local-dev.md) |
 | SSR'd public comp pages + `scores.csv` | [docs/ssr.md](docs/ssr.md) |
+| The results record (`scores.pdf`) | [docs/results-record.md](docs/results-record.md) |
 | Track submission (incl. anonymous) | [docs/track-submission.md](docs/track-submission.md) |
 | Bundled comps, seeding, synthetic fixtures | [docs/sample-data.md](docs/sample-data.md) |
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |

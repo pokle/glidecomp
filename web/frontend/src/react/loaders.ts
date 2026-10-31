@@ -20,8 +20,9 @@ import type {
   TaskAnalysisData,
 } from "./analysis/types";
 import type { WaypointFileRecord } from "@glidecomp/engine";
+import type { AuditEntry, AuditResponse } from "./comp/types";
 import { todayInZone } from "./lib/format";
-import { retry } from "./lib/retry";
+import { fetchWithRetry, retry } from "./lib/retry";
 
 export type FetchFn = (path: string, init?: RequestInit) => Promise<Response>;
 
@@ -52,6 +53,15 @@ export class NotFoundError extends Error {
   constructor(path: string) {
     super(`Not found: ${path}`);
     this.name = "NotFoundError";
+  }
+}
+
+/** Thrown when the visitor may see the comp but not the thing asked for —
+ * the results record, which only the comp's admins can download. */
+export class ForbiddenError extends Error {
+  constructor(path: string) {
+    super(`Forbidden: ${path}`);
+    this.name = "ForbiddenError";
   }
 }
 
@@ -140,6 +150,107 @@ export async function loadCompScores(
     scoresEtag = scoresRes.headers.get("ETag");
   }
   return { comp, scores, scoresEtag };
+}
+
+// ── /comp/:compId/scores.pdf ─────────────────────────────────────────────────
+
+/** One task as the results record shows it: its route and its scores. */
+export interface ResultsRecordTask {
+  task: TaskDetailData;
+  /** null when the task has no route, so nothing was scored. */
+  score: TaskScoreData | null;
+}
+
+export interface ResultsRecordLoaderData {
+  comp: CompDetailData;
+  /** null when no task has been scored yet. */
+  scores: CompScores | null;
+  /** Every task, in the comp's own order. */
+  tasks: ResultsRecordTask[];
+  /** The comp's audit log, newest first. */
+  audit: AuditEntry[];
+  /** True when the log was longer than the record carries (AUDIT_MAX_PAGES). */
+  auditTruncated: boolean;
+}
+
+/** 200 entries a page (the route's maximum) × 50 pages = 10,000 entries. */
+const AUDIT_PAGE_SIZE = 200;
+const AUDIT_MAX_PAGES = 50;
+
+/**
+ * Everything the results record (`/comp/:id/scores.pdf`) prints: the comp,
+ * its scores, every task's route and per-class results, and the audit log.
+ *
+ * Unlike the page loaders, a missing piece is NOT degraded to an empty
+ * section. The file is a record someone keeps, so a task whose scores failed
+ * to load must fail the whole export rather than leave a record that quietly
+ * lacks a day (issue #481: a failure to ask is not an answer). Every request
+ * goes through `fetchWithRetry` first, which retries a 5xx or a dropped
+ * request and hands a 4xx straight back.
+ */
+export async function loadResultsRecord(
+  f: FetchFn,
+  compId: string,
+  { requireAdmin = false }: { requireAdmin?: boolean } = {}
+): Promise<ResultsRecordLoaderData> {
+  const cid = encodeURIComponent(compId);
+  const get = (path: string) => fetchWithRetry(() => f(path));
+
+  const compRes = await get(`/api/comp/${cid}`);
+  if (compRes.status === 404 || compRes.status === 400) throw new NotFoundError(`/api/comp/${cid}`);
+  if (!compRes.ok) throw new Error(`/api/comp/${cid} -> ${compRes.status}`);
+  const comp = (await compRes.json()) as CompDetailData;
+  // Decided before the per-task fan-out, so a refused visitor costs one
+  // request rather than two per task.
+  if (requireAdmin && !comp.is_admin) throw new ForbiddenError(`/api/comp/${cid}`);
+
+  const [scores, tasks, auditLog] = await Promise.all([
+    (async () => {
+      const res = await get(`/api/comp/${cid}/scores`);
+      // 404 here means "no scored task yet" for a comp that does exist.
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`/api/comp/${cid}/scores -> ${res.status}`);
+      return (await res.json()) as CompScores;
+    })(),
+    Promise.all(
+      comp.tasks.map(async (summary): Promise<ResultsRecordTask> => {
+        const tid = encodeURIComponent(summary.task_id);
+        const [taskRes, scoreRes] = await Promise.all([
+          get(`/api/comp/${cid}/task/${tid}`),
+          summary.has_xctsk ? get(`/api/comp/${cid}/task/${tid}/score`) : null,
+        ]);
+        if (!taskRes.ok) throw new Error(`task ${summary.task_id} -> ${taskRes.status}`);
+        const task = (await taskRes.json()) as TaskDetailData;
+        // 422 is the route's own "this task has no route" — a real answer.
+        if (!scoreRes || scoreRes.status === 422) return { task, score: null };
+        if (!scoreRes.ok) throw new Error(`task ${summary.task_id} score -> ${scoreRes.status}`);
+        return { task, score: (await scoreRes.json()) as TaskScoreData };
+      })
+    ),
+    (async () => {
+      const entries: AuditEntry[] = [];
+      let before: number | null = null;
+      for (let page = 0; page < AUDIT_MAX_PAGES; page++) {
+        const query: string =
+          `limit=${AUDIT_PAGE_SIZE}` + (before != null ? `&before=${before}` : "");
+        const res = await get(`/api/comp/${cid}/audit?${query}`);
+        if (!res.ok) throw new Error(`/api/comp/${cid}/audit -> ${res.status}`);
+        const body = (await res.json()) as AuditResponse;
+        entries.push(...body.entries);
+        if (!body.has_more || body.next_before == null) return { entries, truncated: false };
+        before = body.next_before;
+      }
+      return { entries, truncated: true };
+    })(),
+  ]);
+
+  return {
+    comp,
+    scores,
+    tasks,
+    audit: auditLog.entries,
+    auditTruncated: auditLog.truncated,
+  };
 }
 
 // ── /comp/:compId/waypoints ──────────────────────────────────────────────────

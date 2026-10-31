@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
 import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
@@ -61,6 +62,7 @@ const COMP_TASK_CONCURRENCY = 3;
 function toTaskScoreWire(
   body: StoredTaskScore | TaskScoreResponse,
   stale: boolean,
+  engineVersion: number,
   official?: OfficialResultsWire | null
 ): Record<string, unknown> {
   const { classes, ...rest } = body;
@@ -68,8 +70,23 @@ function toTaskScoreWire(
     ...rest,
     class_scores: classes,
     stale,
+    engine_generation: engineGeneration(engineVersion),
     ...(official ? { official_results: official } : {}),
   };
+}
+
+/**
+ * The engine generation that computed a served body, as 12 hex digits — the
+ * leading 48 bits of SCORING_SOURCE_FINGERPRINT (docs/scoring-version.md), so
+ * it can be matched against a deploy's fingerprint by eye.
+ *
+ * Read from the ROW, not the running engine: a stale row is served while its
+ * re-score runs, and it was computed by whatever generation wrote it. The
+ * results record prints this, and a record that named the current engine
+ * for numbers an older one produced would misdescribe itself.
+ */
+function engineGeneration(version: number): string {
+  return version.toString(16).padStart(12, "0");
 }
 
 /**
@@ -228,7 +245,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
           return c.body(null, 304, headers);
         }
         const body = JSON.parse(row.response_json) as StoredTaskScore;
-        return c.json(toTaskScoreWire(body, stale, official), 200, headers);
+        return c.json(toTaskScoreWire(body, stale, row.engine_version, official), 200, headers);
       }
 
       // Cold — no servable blob. Compute synchronously, store, serve.
@@ -237,7 +254,7 @@ export const scoreRoutes = new Hono<AuthedEnv>()
         taskId,
         row?.inputs_rev ?? 0
       );
-      return c.json(toTaskScoreWire(response, false, official), 200, {
+      return c.json(toTaskScoreWire(response, false, SCORING_ENGINE_VERSION, official), 200, {
         ETag: toEtag(bodyIdentity(stateKey, response.computed_at) + officialTag),
         "X-Cache": "MISS",
         "Cache-Control": cacheControl(c, response.computed_at, false),

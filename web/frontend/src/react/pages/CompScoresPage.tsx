@@ -83,7 +83,12 @@ export function CompScoresPage() {
         </div>
         {state.kind === "ready" && state.scores.class_scores.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            <ScoresDownload compId={compId} compName={comp.name} isTestComp={comp.test} />
+            <ScoresDownload
+              compId={compId}
+              compName={comp.name}
+              isTestComp={comp.test}
+              isAdmin={isAdmin}
+            />
             {isAdmin ? (
               <Button
                 variant="outline"
