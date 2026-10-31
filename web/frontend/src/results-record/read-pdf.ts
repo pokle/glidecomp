@@ -25,7 +25,7 @@ export async function readRecord(bytes: Uint8Array) {
   for (let i = 0; list && i < list.size(); i += 2) {
     const name = (list.lookup(i) as PDFString | PDFHexString).decodeText();
     const spec = list.lookup(i + 1, PDFDict);
-    const stream = spec.lookup(PDFName.of("EF"), PDFDict).lookup(PDFName.of("F"), PDFRawStream);
+    const stream = spec.lookup(PDFName.of("EF"), PDFDict).lookup(PDFName.of("F")) as PDFRawStream;
     const desc = spec.lookupMaybe(PDFName.of("Desc"), PDFString, PDFHexString);
     attachments.set(name, {
       text: new TextDecoder().decode(decodePDFRawStream(stream).decode()),
