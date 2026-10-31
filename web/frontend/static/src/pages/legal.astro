@@ -25,7 +25,8 @@ const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
         </h1>
         <p class="text-muted-foreground mt-1">Last updated: {published}</p>
         <p class="text-muted-foreground mt-1">
-          The changes of {published} (Terms sections 5, 7 and 12) take effect on {effective}.
+          The changes of {published} (Privacy Policy sections 2 and 9, and Terms sections 2, 4 and 6)
+          take effect on {effective}.
         </p>
       </header>
 
@@ -69,6 +70,8 @@ const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
               <li><strong>Track logs (IGC files).</strong> Your flight&rsquo;s GPS positions, altitudes and times, and the pilot and glider details your flight instrument writes into the file.</li>
               <li><strong>What organisers create.</strong> Competitions, tasks, waypoints, penalties, pilot status (such as absent or landed) and weather notes.</li>
               <li><strong>Your own library.</strong> Tracks, tasks and notes you save to your account.</li>
+              <li><strong>API keys.</strong> The name you give each key you create, and a scrambled (hashed) copy of the key, so we can check it without storing the key itself.</li>
+              <li><strong>Connected AI assistants.</strong> If you connect an assistant such as Claude or ChatGPT: which assistant it is, the address it returns to, what you allowed it to do, and the access tokens it uses. You can disconnect it at any time in Settings.</li>
             </ul>
           </div>
 
@@ -155,10 +158,10 @@ const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
             </ul>
           </div>
 
-          <div>
+          <div id="privacy-deleting">
             <h3 class="text-lg font-semibold mb-2">9. Deleting Your Account</h3>
             <p class="text-muted-foreground">
-              You can delete your account from your dashboard. This removes your account, profile, sessions and preferences, your saved tracks, tasks and notes, and your API keys, and revokes GlideComp&rsquo;s access to your Google account.
+              You can delete your account from your dashboard. This removes your account, profile, sessions and preferences, your saved tracks, tasks and notes, your API keys and any connected AI assistants, and revokes GlideComp&rsquo;s access to your Google account.
             </p>
             <p class="text-muted-foreground mt-2">
               Competition records stay, but are no longer linked to your account: your registrations, the tracks you flew in competitions, your scores and activity log entries. They are part of each competition&rsquo;s published results, and removing them would change other pilots&rsquo; scores. If you want them removed or your name hidden, email us — we will work with the organiser and remove them unless there is a strong reason to keep them.
@@ -218,10 +221,10 @@ const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
             <h3 class="text-lg font-semibold mb-2">2. Description of Service</h3>
             <p class="text-muted-foreground">
               GlideComp is a free tool for managing and scoring hang gliding and paragliding
-              competitions. The service allows competition administrators to create competitions,
-              define tasks, and manage pilot registrations. Pilots can upload IGC track files,
-              which are analysed and scored automatically using the GAP formula. Task definitions
-              and scoring results are publicly viewable.
+              competitions. Organisers can create competitions, set tasks and manage pilot
+              registrations. Pilots and organisers can upload IGC track files, which are analysed
+              and scored automatically, with GAP or open-distance scoring. Tasks and results are
+              public, except in private test competitions.
             </p>
           </div>
 
@@ -239,7 +242,11 @@ const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
               You retain ownership of any content you upload to GlideComp, including IGC track
               files and task definitions. By uploading content, you grant GlideComp a
               non-exclusive licence to store, process, and display that content as necessary to
-              provide the service. You may delete your content at any time.
+              provide the service. You can delete your account and the tracks, tasks and notes in
+              your own library at any time. Content that is part of a competition (registrations,
+              tracks submitted for scoring, scores and the activity log) stays as that
+              competition's published record, as described in Privacy Policy
+              <a href="#privacy-deleting" class="underline hover:text-foreground">section 9</a>.
             </p>
           </div>
 
@@ -255,11 +262,7 @@ const effective = formatLegalDate(legalNoticeEffectiveDate(LEGAL_NOTICE));
             <p class="text-muted-foreground">You agree not to:</p>
             <ul class="list-disc list-inside text-muted-foreground space-y-1 mt-2">
               <li>Use the service for any unlawful purpose</li>
-              <li>Attempt to interfere with the service's operation</li>
-              <li>
-                Reverse engineer or attempt to extract the source code (beyond what is publicly
-                available on GitHub)
-              </li>
+              <li>Attempt to interfere with the service's operation, including by automated access that degrades it for others</li>
               <li>Upload content you don&rsquo;t have the right to share, or enter false information about other people</li>
             </ul>
           </div>
