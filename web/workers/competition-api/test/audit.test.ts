@@ -52,7 +52,10 @@ describe("audit log write-through", () => {
     const compId = await createComp({ name: "Initial" });
     await authRequest("PATCH", `/api/comp/${compId}`, {
       name: "Renamed",
-      close_date: "2026-12-01",
+      // In the past, so it can never equal the default a new comp gets (one
+      // month out): "2026-12-01" WAS that default when run on 2026-10-31, the
+      // PATCH changed nothing, and the test failed for that one day.
+      close_date: "2020-12-01",
     });
     const { entries } = await getAudit(compId);
     const descs = entries.map((e) => e.description as string);
