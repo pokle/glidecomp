@@ -26,6 +26,7 @@ import { CheckList } from "@/react/rac/choice-list";
 import { SwitchField, SwitchList } from "@/react/rac/switch";
 import { TextField, Description, Label } from "@/react/rac/field";
 import { DatePicker, TimePicker } from "@/react/rac/date-picker";
+import { Explain } from "@/react/rac/explain";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { useConfirm } from "@/react/lib/confirm";
@@ -194,7 +195,7 @@ export function TaskSettings({
         </div>
 
         <CheckList
-          label="Pilot Classes"
+          label="Pilot classes"
           value={selectedClasses}
           onChange={setSelectedClasses}
           options={compPilotClasses.map((cls) => ({ value: cls, label: cls }))}
@@ -214,11 +215,14 @@ export function TaskSettings({
             onChange={setStopTime}
           />
           <Description>
-            Set only when the task was stopped mid-flight (weather calldown).
-            Scores are recomputed under the stopped-task rules (FAI S7F §13.4):
-            a scored-back stop time, a clipped scoring window, and an altitude
-            bonus for pilots still flying. Leave empty for a task that ran to
-            completion.
+            Only for a task stopped mid-flight. Leave empty otherwise.{" "}
+            <Explain label="Stopped tasks" className="align-middle">
+              <p>
+                Scores are recomputed under the stopped-task rules (FAI S7F
+                §13.4): a scored-back stop time, a clipped scoring window, and
+                an altitude bonus for pilots still flying.
+              </p>
+            </Explain>
           </Description>
         </div>
 
@@ -227,7 +231,7 @@ export function TaskSettings({
             checked={submissionsOpen}
             onChange={setSubmissionsOpen}
             label="Open for track submissions"
-            hint="Turn this off and pilots can no longer send tracks or manual flights for this task. Organisers still can, so a late recovery does not need it turned back on."
+            hint="When off, only organisers can add tracks or manual flights."
           />
         </SwitchList>
       </SettingsForm>

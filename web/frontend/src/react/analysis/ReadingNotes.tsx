@@ -33,16 +33,27 @@ export const HOW_TO_READ_ID = "how-to-read";
  * curious reader can get. */
 export function VerdictLegend() {
   return (
-    <p>
-      <strong>clear pattern</strong> is |ρ| ≥ 0.5, <strong>some pattern</strong> ≥ 0.3
-      and <strong>faint pattern</strong> below — each only once the coefficient is
-      bigger than chance alone produces at that many pilots (its noise floor).{" "}
-      <strong>could be chance</strong> (in the statistics: within noise) means
-      shuffling the ranks produces a coefficient that size more than 5% of the
-      time, so it cannot be told apart from luck however big it looks.{" "}
-      <strong>too few pilots</strong> is fewer than {MIN_CORRELATION_N} pilots with a
-      value — not enough to tell either way.
-    </p>
+    <>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt className="font-medium">clear pattern</dt>
+        <dd>|ρ| ≥ 0.5</dd>
+        <dt className="font-medium">some pattern</dt>
+        <dd>|ρ| ≥ 0.3</dd>
+        <dt className="font-medium">faint pattern</dt>
+        <dd>below 0.3</dd>
+        <dt className="font-medium">could be chance</dt>
+        <dd>
+          shuffled ranks give a coefficient this big more than 5% of the time
+          (within noise)
+        </dd>
+        <dt className="font-medium">too few pilots</dt>
+        <dd>fewer than {MIN_CORRELATION_N} with a value</dd>
+      </dl>
+      <p>
+        A pattern counts only once it clears its noise floor — the coefficient
+        chance alone produces at that many pilots.
+      </p>
+    </>
   );
 }
 
@@ -140,8 +151,8 @@ export function OneDayCaveatNote({ behaviourCount }: { behaviourCount: number })
 export function OutcomeChecksNote() {
   return (
     <p>
-      They are here as a check on the analysis. A weak pattern means that
-      something is wrong in the numbers, and not in the flying of any pilot.
+      A sanity check: these should always follow the ranks. A weak pattern
+      here means a fault in the numbers, not in anyone&rsquo;s flying.
     </p>
   );
 }

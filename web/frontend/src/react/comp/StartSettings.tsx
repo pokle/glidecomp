@@ -54,8 +54,7 @@ export function StartSettings({
     <>
       {missingSssWarning ? (
         <p className="mt-1 text-sm text-amber-500">
-          ⚠ This task has no Start Speed Section (SSS) turnpoint — set one in the list
-          above, otherwise gates have no cylinder to apply to.
+          ⚠ No SSS turnpoint — mark one above so the gates have a cylinder.
         </p>
       ) : null}
       {/* Lists in flow, not popovers (#638). Both choices are two-way and
@@ -120,8 +119,8 @@ export function StartSettings({
       </ul>
       {isRace && gates.length === 0 ? (
         <p className="mt-2 text-sm text-amber-500">
-          ⚠ No start gates — every pilot will be timed from their actual
-          start crossing, like an elapsed-time task.
+          ⚠ No start gates — each pilot is timed from their own start
+          crossing.
         </p>
       ) : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">

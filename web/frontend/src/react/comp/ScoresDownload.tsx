@@ -79,8 +79,8 @@ export function ScoresDownload({
           <DialogHeader>
             <DialogTitle>Open in Google Sheets</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              One formula, kept up to date — a re-score turns up without
-              another download.
+              One formula that stays current — no re-downloading after a
+              re-score.
             </p>
           </DialogHeader>
 

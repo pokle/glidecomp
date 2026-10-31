@@ -80,8 +80,7 @@ export function TaskWeatherPanel({
     if (tooFarAhead) {
       return (
         <p className="text-sm text-muted-foreground">
-          This task is further ahead than the forecast reaches. The conditions
-          will appear here about two weeks out.
+          Too far ahead for a forecast. Check back about two weeks out.
         </p>
       );
     }

@@ -300,7 +300,7 @@ function CreateCompDialog({
             onChange={setCategory}
             description={
               <>
-                Sets the official CIVL GAP scoring defaults for your wing — see the{" "}
+                Picks the official CIVL scoring defaults (see the{" "}
                 <a
                   href={`/scoring/gap#defaults-${category}`}
                   target="_blank"
@@ -309,7 +309,7 @@ function CreateCompDialog({
                 >
                   {category === "pg" ? "paragliding" : "hang gliding"} defaults
                 </a>
-                . You can fine-tune them later in the competition's Advanced settings.
+                ). Change them later in Settings → Scoring.
               </>
             }
           />

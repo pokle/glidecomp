@@ -146,7 +146,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
                 { value: "total", label: "Sum of task scores" },
                 { value: "ftv", label: "FTV — Fixed Total Validity" },
               ]}
-              description="FTV (S7F §16) scores each pilot on their best tasks, discarding a fixed fraction of the total validity — the paragliding norm. Sum of task scores is the simple total."
+              description="FTV counts each pilot's best tasks, dropping a fixed share of total validity — usual for paragliding (S7F §16). Sum adds every task."
             />
             {seriesScoring === "ftv" ? (
               <ChoiceList
@@ -195,18 +195,14 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
                 className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-muted-foreground"
               >
                 <strong className="font-medium text-foreground">
-                  These are the official CIVL GAP defaults for your competition
-                  wing.
+                  Official CIVL defaults for your wing.
                 </strong>{" "}
-                Changing them will make your scores differ from a standard
-                FAI&nbsp;/&nbsp;AirScore result. Only edit these if your competition
-                runs under local rules (e.g. SAFA) that specify different values, or
-                you have a specific technical reason.
+                Change them only if local rules (e.g. SAFA) require it — scores
+                will then differ from a standard FAI&nbsp;/&nbsp;AirScore result.
               </div>
               <div className="flex items-start justify-between gap-4">
                 <p className="text-sm text-muted-foreground">
-                  Competition-wide scoring constants. The scoring class (HG/PG) follows the
-                  comp's Wing (in General settings).{" "}
+                  Apply to every task. HG or PG follows Wing in General.{" "}
                   <a
                     className="underline underline-offset-4"
                     href={`/scoring/gap#defaults-${wing}`}
@@ -259,7 +255,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
                 formatOptions={{ useGrouping: false }}
                 value={jtgFactor}
                 onChange={setJtgFactor}
-                description="FAI S7F §13.3: an HG pilot starting early loses 1 point per this many seconds. Spec default 2. No effect on PG (early starts are scored launch→start only)."
+                description="HG loses 1 point per this many seconds early. Default 2. (S7F §13.3)"
               />
               <NumberField
                 label="Jump-the-gun: maximum seconds early (HG)"
@@ -278,7 +274,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
                 formatOptions={{ useGrouping: false }}
                 value={essNotGoal}
                 onChange={setEssNotGoal}
-                description="FAI S7F §13.2: an HG pilot who reaches ESS but lands before goal keeps this share of their time and arrival points. Spec default 80. No effect on PG (the spec fixes it at 0 — no goal, no time points)."
+                description="Share of time and arrival points kept by an HG pilot who reaches ESS but lands short of goal. Default 80. (S7F §13.2)"
               />
 
               <SwitchList>
@@ -310,8 +306,8 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
                 onChange={setLeadingTimeRatio}
                 description={
                   wing === "pg"
-                    ? "FAI S7F §11: the % of the non-distance weight allocated to leading (0–26%, spec default 26%). The rest goes to time. When nobody makes goal, all the non-distance weight goes to leading."
-                    : "FAI S7F §11: the % of the non-distance weight allocated to leading (0–26%, spec default 17.5%). The rest goes to time and arrival."
+                    ? "Share of non-distance points given to leading; the rest go to time. 0–26%, default 26%. If nobody makes goal, leading takes it all. (S7F §11)"
+                    : "Share of non-distance points given to leading; the rest go to time and arrival. 0–26%, default 17.5%. (S7F §11)"
                 }
               />
               <ChoiceList

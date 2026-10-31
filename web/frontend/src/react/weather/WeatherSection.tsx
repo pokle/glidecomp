@@ -83,8 +83,7 @@ export function WeatherSection({
         <WeatherNotesBlock notes={notes} className="mt-2 text-sm whitespace-pre-line" />
       ) : isAdmin ? (
         <p className="mt-2 text-muted-foreground">
-          No weather notes yet. Record what the day did — the conditions pilots
-          flew in are context the scores can&rsquo;t show.
+          No weather notes yet. Add what the day did.
         </p>
       ) : null}
       {hasWeather || tooFarAhead ? (

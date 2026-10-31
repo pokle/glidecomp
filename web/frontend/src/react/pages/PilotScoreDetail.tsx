@@ -367,7 +367,7 @@ export function PilotScoreDetail() {
     return (
       <div>
         {breadcrumbs}
-        <Loading className="mt-4">Loading score details…</Loading>
+        <Loading className="mt-4">Loading score card…</Loading>
       </div>
     );
   }
@@ -383,13 +383,11 @@ export function PilotScoreDetail() {
         <div className="mt-4">
           {gaveUp ? (
             <p role="status" className="text-muted-foreground">
-              Your track is in, but the scores are taking longer than usual to
-              recompute. Reload in a minute, or open the task to see the field.
+              Your track is in. Scores are slow to update — reload in a minute.
             </p>
           ) : (
             <Loading>
-              Your track is in. Working out the scores — they depend on
-              everyone else's tracks too…
+              Your track is in. Updating scores…
             </Loading>
           )}
           <p className="mt-4">

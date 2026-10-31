@@ -138,9 +138,9 @@ test("dev login, create competition and task", async ({ page, request }) => {
   await expect(guide).toContainText("2 of 5 steps");
   await expect(page.getByText(/· Hidden/)).toHaveCount(0);
 
-  // Step 4: Create a task. Two "New Task" buttons exist on an empty comp
+  // Step 4: Create a task. Two "New task" buttons exist on an empty comp
   // (section header + the empty-state CTA in the section body).
-  await page.getByRole("button", { name: "New Task" }).first().click();
+  await page.getByRole("button", { name: "New task" }).first().click();
   const taskDialog = page.getByRole("dialog");
   await taskDialog.getByLabel("Name").fill("Day 1 - Ridge Run");
   // The Date field is a segmented picker (react-aria), not a native input, so

@@ -228,7 +228,7 @@ export function createTaskEditor(options: TaskEditorOptions): TaskEditor {
       const notice = document.createElement('div');
       notice.className = 'border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground';
       notice.textContent =
-        'Open distance: define a single Takeoff turnpoint. Distance is scored from the take-off exit — there is no goal.';
+        'Open distance: one Takeoff turnpoint, no goal. Scored from the take-off exit.';
       container.appendChild(notice);
     }
 

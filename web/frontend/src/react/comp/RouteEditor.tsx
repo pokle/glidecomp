@@ -525,7 +525,7 @@ export function RouteEditor({
       ...draftFromRecord(rec),
       type: inferAddedType(rowsRef.current, { openDistance }),
     });
-    toast.success(`Added ${rec.code} to the route — saved to the competition when you save`);
+    toast.success(`Added ${rec.code} to the route. Save to keep it.`);
   }
 
   /**
@@ -895,8 +895,8 @@ export function RouteEditor({
             (#661). A first-time scorer meets a list of turnpoints. */}
         {openDistance ? (
           <p className="text-sm text-muted-foreground">
-            Open distance: define a single Takeoff turnpoint. Distance is scored
-            from the take-off exit — there is no goal.
+            Open distance: one Takeoff turnpoint, no goal. Scored from the
+            take-off exit.
           </p>
         ) : null}
 
@@ -1000,9 +1000,8 @@ export function RouteEditor({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Directions are derived from the route geometry — a cylinder that
-            contains the previous route point is an exit cylinder, reached by
-            flying out of it.
+            Enter or exit is worked out from the route: a cylinder containing
+            the previous point is an exit.
           </p>
         </div>
 
@@ -1139,9 +1138,8 @@ export function RouteEditor({
               <DialogTitle>Load from XContest</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              Paste an XContest / XCTrack task code to replace the editor with
-              that task's turnpoints, start and goal. Nothing is saved until you
-              press Save.
+              Paste an XContest/XCTrack task code. It replaces the route;
+              nothing is saved until you press Save.
             </p>
             <TextField
               label="Task code"

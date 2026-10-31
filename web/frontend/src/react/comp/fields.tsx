@@ -236,7 +236,7 @@ export function PilotClassesField({
   const examples = PILOT_CLASS_EXAMPLES[wing];
   return (
     <AriaTextField value={value} onChange={onChange} className="group flex flex-col gap-2">
-      <Label>Pilot Classes</Label>
+      <Label>Pilot classes</Label>
       <RacInput placeholder={examples[1]} />
       <Description>
         Separately-scored divisions of the field. Comma-separated — or pick an example:

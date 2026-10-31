@@ -291,9 +291,8 @@ export function CompAnalysis() {
                 {data.total_task_count === 1 ? "" : "s"} not analysed yet
               </AlertTitle>
               <AlertDescription>
-                GlideComp is computing them in the background, and the figures
-                below leave them out. This page refreshes itself as each one
-                arrives.
+                They&rsquo;re computing in the background and are left out below.
+                This page updates as each one arrives.
               </AlertDescription>
             </Alert>
           ) : null}
