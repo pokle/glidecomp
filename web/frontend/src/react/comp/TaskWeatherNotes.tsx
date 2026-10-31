@@ -92,9 +92,8 @@ export function TaskWeatherNotes({
             }
           />
           <Description>
-            Shown to everyone on this task and alongside the task analysis
-            charts. Plain text; line breaks are kept. {draft.length}/{MAX_NOTES}
-            characters.
+            Public, on the task page and its analysis. Plain text.{" "}
+            {draft.length}/{MAX_NOTES} characters.
           </Description>
         </AriaTextField>
       </SettingsForm>

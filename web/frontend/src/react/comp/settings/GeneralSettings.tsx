@@ -96,7 +96,7 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           options={timezoneOptions(comp.timezone)}
           searchLabel="Search timezones"
           searchPlaceholder="Type to search, e.g. Melbourne"
-          description="Comp-local zone for displaying times (start gates, replay clock, score narratives). Auto derives it from the task location. Scoring runs on UTC and is unaffected."
+          description="The zone times are shown in. Auto uses the task location. Doesn't affect scoring."
         />
 
         <AriaTextField

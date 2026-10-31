@@ -494,7 +494,7 @@ function CompetitionFlightsSection() {
         ))}
       </Tree>
       <p className="text-sm text-muted-foreground">
-        Flights are managed by the competition. Contact the competition admin to delete.
+        To remove one of these, ask the competition&rsquo;s organiser.
       </p>
     </Card>
   );
@@ -577,8 +577,7 @@ function StorageSection({ tracks, tasks }: { tracks: StoredTrack[]; tasks: Store
         <p className="mt-2 text-sm text-muted-foreground">Nothing stored yet.</p>
       )}
       <p className="text-sm text-muted-foreground">
-        <strong>Heads up.</strong> Files you upload here are visible to anyone with a link. Share
-        the link to your flight if you want others to see it.
+        Anyone with the link can see a file you upload.
       </p>
     </Card>
   );

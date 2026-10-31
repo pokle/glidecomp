@@ -60,7 +60,7 @@ export function CompPilotsPage() {
         <h1 className="mt-2 text-2xl font-bold">Pilots</h1>
         <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
         <p className="mt-2 text-muted-foreground">
-          Pilot management is for competition admins. Looking for the pilots?
+          Pilot management is for the competition’s organisers. Looking for the pilots?
           They're all in the{" "}
           <Link
             className="underline underline-offset-4"

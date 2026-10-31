@@ -72,7 +72,7 @@ export function CompSettingsPage() {
         <Breadcrumbs items={underComp(compId, comp.name)} current="Settings" />
         <h1 className="mt-2 text-2xl font-bold">Settings</h1>
         <p className="mt-2 text-muted-foreground">
-          Competition settings are for competition admins.
+          Competition settings are for the competition’s organisers.
         </p>
       </div>
     );

@@ -90,7 +90,7 @@ test("a visitor gets the admin-only notice, and an unknown group 404s", async ({
   await devLogin(page, VISITOR_USER);
   await page.goto(`/comp/${compId}/settings`);
   await expect(
-    page.getByText("Competition settings are for competition admins.")
+    page.getByText("Competition settings are for the competition’s organisers.")
   ).toBeVisible();
 
   // An unknown group is a dead URL, not an empty page.

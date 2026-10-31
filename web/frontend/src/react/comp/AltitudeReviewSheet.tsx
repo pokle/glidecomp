@@ -238,12 +238,10 @@ export function AltitudeReviewSheet({
             {summary.corruptTerrainRead > 0 ? (
               <p className="mt-3 rounded border border-border bg-muted/40 p-3 text-sm">
                 {summary.corruptTerrainRead === 1
-                  ? "1 altitude is out by"
-                  : `${summary.corruptTerrainRead} altitudes are out by`}{" "}
-                almost exactly 6553.6 m, or a multiple of it. That is not
-                anything in your waypoint file: it is the signature of a terrain
-                reading taken before a decoding fault was fixed, and taking the
-                map’s altitude now corrects it.
+                  ? "1 altitude is"
+                  : `${summary.corruptTerrainRead} altitudes are`}{" "}
+                off by a multiple of 6553.6 m — an old terrain-reading bug, not
+                your file. Using the map’s altitude fixes it.
               </p>
             ) : null}
 
@@ -359,9 +357,8 @@ export function AltitudeReviewSheet({
               </ToggleButton>
             ) : null}
             <p className="w-full text-xs text-muted-foreground">
-              Nothing is saved until you press Save. Tasks already built keep
-              their own copy of a waypoint, so corrections here do not change
-              them.
+              Nothing is saved until you press Save. Existing tasks keep their
+              own copies and won’t change.
             </p>
           </SheetFooter>
         </>
@@ -502,9 +499,8 @@ function AltitudeReviewDetail({
           </p>
         ) : altitudeVerdict(pair) === "coords" ? (
           <p className="mt-3 text-sm">
-            Too far apart for terrain to explain. A mistyped coordinate lands
-            the waypoint in the next valley, so check the coordinates below
-            before taking the map’s altitude.
+            Too far apart to be terrain. Check the coordinates below first — a
+            typo can put a waypoint in the next valley.
           </p>
         ) : altitudeVerdict(pair) === "missing" ? (
           <p className="mt-3 text-sm">

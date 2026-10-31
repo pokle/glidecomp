@@ -425,9 +425,8 @@ export function TaskPilotSimilarity() {
         <div>
           <h1 className="text-2xl font-semibold">Who flew like me?</h1>
           <p className="text-sm text-muted-foreground">
-            {task?.name ?? "This task"} — pilots ranked by how closely their flying
-            matched, over the behaviours you choose. Nothing on this page uses the
-            scores or the finishing order.
+            {task?.name ?? "This task"} — pilots ranked by how alike they flew, on
+            the behaviours you pick. Scores aren&rsquo;t used.
           </p>
         </div>
         <LinkButton href={analysisHref} variant="outline" size="sm">
@@ -439,11 +438,11 @@ export function TaskPilotSimilarity() {
       {report === null || subject === null ? (
         <Card>
           <p className="text-sm text-muted-foreground">
-            There is no analysis for this task yet. Open the{" "}
+            No analysis yet. Open the{" "}
             <a className="underline" href={analysisHref}>
               task analysis
             </a>{" "}
-            first — it computes in the background the first time it is opened.
+            to start it.
           </p>
         </Card>
       ) : (
@@ -787,43 +786,35 @@ export function TaskPilotSimilarity() {
               How this is worked out
             </h2>
             <p className="text-sm text-muted-foreground">{similarity?.explanation}</p>
-            <p className="text-sm text-muted-foreground">
-              A standard deviation is how far a typical pilot sits from the field
-              average on that behaviour, so "+1.4 SD" means clearly above average and
-              "−0.1 SD" means all but average. Reading gaps this way keeps the size of
-              a difference: two pilots who glided 0.3 km/h apart stay next to each
-              other, where counting places would have separated them as much as any
-              other pair.
-            </p>
-            {byGap ? null : (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  The "Shape only" column is what the comparison would say if it
-                  looked at the direction of two pilots' departures and ignored the
-                  size of them. It is shown because the two disagreeing is the
-                  finding: a high shape figure beside a low similarity means these
-                  pilots did the same things by very different amounts. On one task
-                  in testing, the pair with the highest shape figure in the whole
-                  field sat 4.6 and 0.2 standard deviations below average on the same
-                  behaviour — the same direction, and nothing alike.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  The "Typical gap" column measures the pair a third way: how far
-                  apart the two sat, on average, across the behaviours you chose,
-                  in standard deviations.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  "Needs to beat" is how high two pilots who flew nothing alike
-                  would score anyway, one time in twenty, simply because they were
-                  compared over so few behaviours. Two pilots sharing three
-                  behaviours reach 0.67 that often; two sharing twenty-two barely
-                  reach 0.21. A row that does not beat its own figure is greyed and
-                  marked, because there is not enough in common between those two
-                  pilots to say anything — the score is real arithmetic, but it
-                  carries no finding.
-                </p>
-              </>
-            )}
+            <dl className="grid gap-x-3 gap-y-1 text-sm text-muted-foreground sm:grid-cols-[auto_1fr]">
+              <dt className="font-medium text-foreground">Gap (SD)</dt>
+              <dd>
+                How far apart, in standard deviations: &ldquo;+1.4 SD&rdquo; is
+                clearly above the field average, &ldquo;−0.1 SD&rdquo; all but
+                average. Unlike places, it keeps the size of a difference.
+              </dd>
+              {byGap ? null : (
+                <>
+                  <dt className="font-medium text-foreground">Shape only</dt>
+                  <dd>
+                    Similarity by direction alone. A high shape figure beside a
+                    low similarity means the same things, by very different
+                    amounts.
+                  </dd>
+                  <dt className="font-medium text-foreground">Typical gap</dt>
+                  <dd>
+                    The average distance apart across the behaviours you chose,
+                    in standard deviations.
+                  </dd>
+                  <dt className="font-medium text-foreground">Needs to beat</dt>
+                  <dd>
+                    What two unrelated pilots score one time in twenty over this
+                    many behaviours (0.67 for three, 0.21 for twenty-two). Rows
+                    below it are greyed: not enough in common to say anything.
+                  </dd>
+                </>
+              )}
+            </dl>
           </Card>
         </>
       )}

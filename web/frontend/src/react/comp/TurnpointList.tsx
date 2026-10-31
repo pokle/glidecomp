@@ -182,7 +182,7 @@ export function TurnpointList({
                           </span>
                         ) : null}
                         {geo?.isExit ? (
-                          <span title="Crossed flying outward — the route reaches this cylinder from inside, so pilots fly out across it">
+                          <span title="Exit: the route arrives from inside, so pilots cross it flying out">
                             <Badge variant="outline">Exit</Badge>
                           </span>
                         ) : null}

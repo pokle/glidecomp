@@ -837,7 +837,7 @@ test("Check altitudes reviews the set in a sheet and accepts one row", async ({
   );
   await expect(sheet).toContainText("check the coordinates");
   // Corrections here do not reach into tasks already built — the sheet says so.
-  await expect(sheet).toContainText("Tasks already built keep their own copy");
+  await expect(sheet).toContainText("Existing tasks keep their own copies");
 
   // Biggest disagreement first. Against flat ground that is the LOWEST
   // waypoint, and its row states BOTH altitudes — the failure this design

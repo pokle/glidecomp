@@ -108,7 +108,7 @@ const COPY = {
     pendingTitle: "Scores are being computed for the first time…",
     staleTitle: "Hold tight, scores are being re-scored…",
     staleBody:
-      "Something changed (a track, a penalty, or the task). The scores below were computed before that change and may shift slightly.",
+      "Something changed (a track, a penalty or the task), so the scores below may shift slightly.",
     landedTitle: "Re-score finished",
     landedBody: "Updated scores are ready — reload to see them.",
   },
@@ -117,7 +117,7 @@ const COPY = {
     pendingTitle: "The task analysis is pending…",
     staleTitle: "Hold tight, the analysis is being recomputed…",
     staleBody:
-      "Something changed (a track, a penalty, or the task). The analysis below was computed before that change and may shift slightly.",
+      "Something changed (a track, a penalty or the task), so the analysis below may shift slightly.",
     landedTitle: "Recompute finished",
     landedBody: "The updated analysis is ready — reload to see it.",
   },
@@ -174,8 +174,8 @@ export function ScoreFreshness({
           <AlertTitle>{copy.pendingTitle}</AlertTitle>
           <AlertDescription>
             {variant === "analysis"
-              ? "It runs in the background over every pilot's tracklog. This page refreshes itself when it lands — usually within a few minutes. If it hasn't appeared, come back and reload in about 10 minutes."
-              : "This runs in the background and usually lands within a minute; this page refreshes itself when it does."}
+              ? "Usually ready within a few minutes; this page updates itself. If not, reload in 10 minutes."
+              : "Usually ready within a minute; this page updates itself."}
             {busyBar}
           </AlertDescription>
         </Alert>

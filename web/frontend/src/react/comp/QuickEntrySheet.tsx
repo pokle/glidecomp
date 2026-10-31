@@ -22,6 +22,7 @@
 import { useMemo, useState } from "react";
 import type { WaypointFileRecord } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
+import { Explain } from "@/react/rac/explain";
 import {
   FullScreenSheet,
   SheetBody,
@@ -116,26 +117,29 @@ export function QuickEntrySheet({
 
       <SheetBody className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
-          Type the route the way you&apos;d say it — waypoint names in order,
-          each with a radius (<span className="font-medium">400m</span>,{" "}
-          <span className="font-medium">5k</span>) and, where position
-          doesn&apos;t already say it, a type (
-          <span className="font-medium">to</span>,{" "}
-          <span className="font-medium">sss</span>,{" "}
-          <span className="font-medium">ess</span>,{" "}
-          <span className="font-medium">tp</span>,{" "}
-          <span className="font-medium">goal</span>).
-          {!openDistance ? (
-            <>
-              {" "}
-              The start takes its settings the same way —{" "}
-              <span className="font-medium">enter</span> or{" "}
-              <span className="font-medium">exit</span>,{" "}
-              <span className="font-medium">race</span> or{" "}
-              <span className="font-medium">elapsed</span>, and any start gates
-              as times: <span className="font-medium">sss enter 13:15 13:30</span>.
-            </>
-          ) : null}
+          Type waypoints in order, each with a radius — e.g.{" "}
+          <span className="font-medium">ell 400m mitta 5k</span>.{" "}
+          <Explain label="Syntax" className="align-middle">
+            <p>
+              Add a type (<span className="font-medium">to</span>,{" "}
+              <span className="font-medium">sss</span>,{" "}
+              <span className="font-medium">ess</span>,{" "}
+              <span className="font-medium">tp</span>,{" "}
+              <span className="font-medium">goal</span>) where position
+              doesn&apos;t already imply it.
+            </p>
+            {!openDistance ? (
+              <p>
+                The start takes its settings the same way —{" "}
+                <span className="font-medium">enter</span> or{" "}
+                <span className="font-medium">exit</span>,{" "}
+                <span className="font-medium">race</span> or{" "}
+                <span className="font-medium">elapsed</span>, and any start
+                gates as times:{" "}
+                <span className="font-medium">sss enter 13:15 13:30</span>.
+              </p>
+            ) : null}
+          </Explain>
         </p>
 
         <QuickTaskField
@@ -152,8 +156,8 @@ export function QuickEntrySheet({
         {/* What the line cannot say, said once — so nobody has to discover by
             losing an altitude that the grammar has no word for one. */}
         <p className="text-sm text-muted-foreground">
-          Coordinates, altitude and full names stay as they are — this sets the
-          order, waypoints, radii, types and the start.
+          Only sets the order, radii, types and the start — coordinates,
+          altitudes and names are unchanged.
         </p>
       </SheetBody>
     </FullScreenSheet>

@@ -82,7 +82,7 @@ export function AdminUsers() {
   return (
     <section className="mx-auto w-full max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">All Users</h1>
+        <h1 className="text-2xl font-bold tracking-tight">All users</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {users.length} registered user{users.length !== 1 ? "s" : ""}
         </p>

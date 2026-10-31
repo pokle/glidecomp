@@ -119,7 +119,7 @@ test("a visitor gets the admin-only notice, and a made-up editor 404s", async ({
   await devLogin(page, VISITOR_USER);
   await page.goto(`/comp/${compId}/task/${taskId}/settings`);
   await expect(
-    page.getByText("Task settings are for competition admins.")
+    page.getByText("Task settings are for the competition’s organisers.")
   ).toBeVisible();
 
   // Settings is flat — it has no sub-pages — so anything below it is a dead

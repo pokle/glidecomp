@@ -552,8 +552,7 @@ export function SubmitTrackForm({
         ) : (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
-              No account needed. Tell us how you are registered for this
-              competition and we will match you to the roster.
+              No account needed — we&rsquo;ll find you on the roster.
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="flex flex-col gap-2 sm:w-56">
@@ -593,8 +592,7 @@ export function SubmitTrackForm({
             competition's public transparency record, and every upload emails
             the registered pilot (see track-notice-email.ts). */}
         <p className="mt-3 text-sm text-muted-foreground">
-          This submission is recorded in the competition's public activity log,
-          and we email the registered pilot to tell them about it.
+          Submissions are logged publicly and emailed to the registered pilot.
         </p>
       </StepBox>
 

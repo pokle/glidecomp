@@ -146,7 +146,7 @@ export function CompScoresPage() {
                     to={`${compPath(compId, comp.name)}#admins`}
                     className="underline underline-offset-4"
                   >
-                    Ask the comp admins
+                    Ask the organisers
                   </Link>
                   .
                 </p>
