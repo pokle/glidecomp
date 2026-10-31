@@ -83,6 +83,7 @@ export const E2E_SHARDS = {
     "scoring-mutations.spec.ts", // 22.3s
     "civl-rankings.spec.ts", // 16.7s
     "comp-creation.spec.ts", // 4.0s
+    "results-record.spec.ts", // new — measure on its first CI run
     "popover-position.spec.ts", // 2.8s
     "mcp.spec.ts", // new — measure on its first CI run
   ],

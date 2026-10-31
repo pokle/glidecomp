@@ -1,8 +1,12 @@
 /**
- * "Download" menu on the competition scores page: the scores as a CSV, and the
- * same file opened live in Google Sheets.
+ * "Download" menu on the competition scores page: the scores as a CSV, the
+ * same file opened live in Google Sheets, the results record — a PDF of every
+ * class, team and task to keep (src/results-record/) — and the data that PDF
+ * carries, as a ZIP for a viewer that cannot open its attachments. Open to
+ * everyone, like the page: tucked inside this menu they add no clutter, and a
+ * pilot keeping their own copy of a comp is as welcome as its scorer.
  *
- * Both point at ONE URL — `/comp/<slug>-<id>/scores.csv`, served by the SSR
+ * The first two point at ONE URL — `/comp/<slug>-<id>/scores.csv`, served by the SSR
  * Pages Function from the same loader the page renders from (see
  * functions/comp/[[path]].ts + src/scores-csv.ts). The download is therefore a
  * plain link: no blob, no JS, right-clickable, and identical to what a
@@ -16,12 +20,12 @@
  * handing back a broken sheet.
  */
 import { useState } from "react";
-import { DownloadIcon, ChevronDownIcon, TableIcon } from "lucide-react";
+import { DownloadIcon, ChevronDownIcon, FileArchiveIcon, FileTextIcon, TableIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Dialog, DialogFooter, DialogHeader, DialogTitle, Modal } from "@/react/rac/dialog";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
-import { compScoresCsvPath } from "../lib/slug";
+import { compScoresCsvPath, compScoresPdfPath, compScoresZipPath } from "../lib/slug";
 import { toast } from "../lib/toast";
 
 export function ScoresDownload({
@@ -70,6 +74,14 @@ export function ScoresDownload({
           <MenuItem onAction={() => setSheetsOpen(true)}>
             <TableIcon aria-hidden />
             Open in Google Sheets…
+          </MenuItem>
+          <MenuItem href={compScoresPdfPath(compId, compName)} download="">
+            <FileTextIcon aria-hidden />
+            Results record (PDF)
+          </MenuItem>
+          <MenuItem href={compScoresZipPath(compId, compName)} download="">
+            <FileArchiveIcon aria-hidden />
+            Results data (ZIP)
           </MenuItem>
         </Menu>
       </MenuTrigger>

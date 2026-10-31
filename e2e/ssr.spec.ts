@@ -5,6 +5,7 @@ import {
   compAnalysisPath,
 } from "../web/frontend/src/react/lib/slug";
 import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
+import { readRecord, readZip } from "../web/frontend/src/results-record/read-pdf";
 import {
   CONTENT_SECURITY_POLICY,
   TRUSTED_TYPES_REPORT_ONLY_POLICY,
@@ -178,6 +179,36 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
 
   test("a missing comp's scores.csv is a 404, not an empty file", async ({ request }) => {
     const res = await request.get("/comp/zzznope/scores.csv", { failOnStatusCode: false });
+    expect(res.status()).toBe(404);
+  });
+
+  test("/comp/:id/scores.pdf is a public PDF, its fonts read from the static assets", async ({
+    request,
+  }) => {
+    // The only path that exercises the Function's ASSETS font read — the dev
+    // mirror reads the same files off disk instead.
+    const { compId, pilotName } = await discover(request);
+    const res = await request.get(`/comp/${compId}/scores.pdf`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toBe("application/pdf");
+    expect(res.headers()["x-robots-tag"]).toContain("noindex");
+    const { doc, attachments } = await readRecord(new Uint8Array(await res.body()));
+    expect(doc.getPageCount()).toBeGreaterThan(1);
+    expect(attachments.get("task-results.csv")?.text).toContain(pilotName);
+  });
+
+  test("/comp/:id/scores.zip serves the same data as a ZIP", async ({ request }) => {
+    const { compId, pilotName } = await discover(request);
+    const res = await request.get(`/comp/${compId}/scores.zip`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toBe("application/zip");
+    const files = readZip(new Uint8Array(await res.body()));
+    const results = [...files].find(([path]) => path.endsWith("/task-results.csv"))?.[1];
+    expect(results).toContain(pilotName);
+  });
+
+  test("a missing comp's scores.pdf is a 404", async ({ request }) => {
+    const res = await request.get("/comp/zzznope/scores.pdf", { failOnStatusCode: false });
     expect(res.status()).toBe(404);
   });
 

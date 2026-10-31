@@ -224,7 +224,10 @@ reader handles either.
 > the list of class *names* a task was scored for.)
 
 Both score endpoints return `computed_at` and a `stale` flag, and carry an
-`ETag`. Use it to poll cheaply while a re-score is in flight:
+`ETag`. The task endpoint also names the `engine_generation` that computed the
+body — twelve hex digits, the head of the scoring engine's source fingerprint
+([scoring-version.md](scoring-version.md)), so a saved copy can say which
+generation of the rules produced it. Use it to poll cheaply while a re-score is in flight:
 
 ```bash
 curl -H 'If-None-Match: "abc123"' \
@@ -447,6 +450,8 @@ a crawler, and they are a contract all the same.
 | `GET` | `/sitemap.xml` | Every public comp, its scores and its comp analysis |
 | `GET` | `/civl-rankings.csv` | The CIVL monthly world ranking, as CSV |
 | `GET` | `/comp/:comp_id/scores.csv` | The scores page's downloadable twin |
+| `GET` | `/comp/:comp_id/scores.pdf` | The results record: every class, team and task in one PDF, with the data attached as CSV and JSON |
+| `GET` | `/comp/:comp_id/scores.zip` | The results record's attached data on its own, as a ZIP |
 | `GET` | `/api/civl-rankings.csv` | The same ranking data, under `/api/` |
 | `POST` | `/mcp` | The MCP endpoint (Streamable HTTP) an organiser's own assistant reads GlideComp through. Needs an OAuth access token from the provider under `/api/auth/oauth2/*`, never an API key; a request without one gets `401` and a challenge pointing at the metadata below — see [mcp.md](mcp.md) |
 | `GET` | `/mcp/server-card` | The MCP Server Card (SEP-2127): the endpoint's name, description and URL, and the protocol versions it speaks, so a client can find `/mcp` from the domain alone. Public, CORS-open, cached for an hour with an `ETag` |
@@ -473,7 +478,7 @@ the API:
 curl https://glidecomp.com/api/civl-rankings.csv?slug=hang-gliding-class-1-xc
 ```
 
-`/sitemap.xml` and `/comp/:comp_id/scores.csv` have no worked example here
+`/sitemap.xml`, `/comp/:comp_id/scores.csv`, `scores.pdf` and `scores.zip` have no worked example here
 because Pages Functions do not run under `bun run dev`, which is the stack
 `e2e/api-doc.spec.ts` executes these commands against — an example it could not
 run would be an example nothing checks.

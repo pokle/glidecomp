@@ -57,7 +57,10 @@ function createMemStorage(): Storage {
 beforeAll(() => {
   const localShim = createMemStorage();
   const sessionShim = createMemStorage();
-  for (const target of [globalThis, window]) {
+  // `window` is absent under `@vitest-environment node`, which the
+  // server-only modules' tests use (src/results-record/).
+  const targets = typeof window === "undefined" ? [globalThis] : [globalThis, window];
+  for (const target of targets) {
     Object.defineProperty(target, "localStorage", {
       value: localShim,
       writable: true,

@@ -55,6 +55,7 @@ import {
 } from "../comp/CompSectionNav";
 import { CompScoresSummary } from "../comp/CompScoresSummary";
 import { CompSetupProgress } from "../comp/CompSetupProgress";
+import { CompWrapUp } from "../comp/CompWrapUp";
 import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
 import {
   isPastCloseDate,
@@ -292,6 +293,9 @@ function CompDetailView({
           onCreateTask={() => setCreateOpen(true)}
         />
       ) : null}
+      {/* The other end of the same idea: after the close date, the next job
+          is keeping the results record. Admin-only and client-only too. */}
+      {isAdmin ? <CompWrapUp compId={compId} comp={comp} /> : null}
 
       {/* The card stack owns the rhythm between sections, which is why
           SectionHeader no longer carries a margin of its own. */}

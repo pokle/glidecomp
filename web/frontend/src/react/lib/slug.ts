@@ -100,6 +100,21 @@ export function compScoresCsvPath(id: string, name?: string | null): string {
   return `${compScoresPath(id, name)}.csv`;
 }
 
+/**
+ * The results record: the whole comp's scores as one PDF with the data
+ * attached (src/results-record/), served by the same Pages Function as the
+ * CSV.
+ */
+export function compScoresPdfPath(id: string, name?: string | null): string {
+  return `${compScoresPath(id, name)}.pdf`;
+}
+
+/** The results record's attached data on its own, as a ZIP — for a reader
+ * whose PDF viewer shows no attachments (macOS Preview). */
+export function compScoresZipPath(id: string, name?: string | null): string {
+  return `${compScoresPath(id, name)}.zip`;
+}
+
 export function compWaypointsPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/waypoints`;
 }

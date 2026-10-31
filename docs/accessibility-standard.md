@@ -81,11 +81,15 @@ differs. Know which surface you're touching:
   scale. Do not disable pinch-zoom (no `maximum-scale`/`user-scalable=no` in
   any viewport meta).
 - The comp page's print sections must remain legible when printed — briefings
-  depend on it. Three of them start a fresh page: `#tasks` and `#activity`
-  (`CompDetail.tsx`) and `#scores` (`CompScoresSummary.tsx`), each carrying
-  `break-before-page`. `#admins` is the trailing `<p>` at the foot of
-  `CompDetail.tsx` and deliberately does **not** break — it belongs under
-  whatever precedes it. (There is no `#pilots` section.)
+  depend on it. Two of them start a fresh page: `#tasks` and `#activity`
+  (`CompDetail.tsx`), each carrying `break-before-page`. `#admins` is the
+  trailing `<p>` at the foot of `CompDetail.tsx` and deliberately does **not**
+  break — it belongs under whatever precedes it. (There is no `#pilots`
+  section.)
+- **Scores are not a print target** (2026-10-31). The paper copy of a
+  competition's scores is the results record, a PDF built in code
+  ([results-record.md](results-record.md)); the scores page and the comp
+  page's `#scores` summary carry no print styling of their own.
 
 ### 3.3 Images, icons & media (WCAG 1.1.1, 1.2.x)
 

@@ -39,7 +39,7 @@ export function CompScoresSummary({
   const scoresHref = `/comp/${compId}/scores`;
 
   return (
-    <Card id="scores" className="scroll-mt-24 break-before-page">
+    <Card id="scores" className="scroll-mt-24">
       <SectionHeader
         title="Scores"
         action={
