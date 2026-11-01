@@ -39,7 +39,11 @@ Read `docs/dependency-review-log.md`. At minimum, read the most recent two entri
   upgrade like any other: read its changelog first. Never replace a SHA with a
   tag: a tag can be moved to point at different code, and the deploy job hands
   these actions the Cloudflare token.
-- For each candidate upgrade, read its changelog.
+- For each candidate upgrade, read its changelog. On Claude Code on the web,
+  github.com pages and the GitHub API outside this repository are blocked, but
+  `raw.githubusercontent.com/<owner>/<repo>/<ref>/CHANGELOG.md` is reachable.
+  Where a package ships no changelog (hono, kysely, lucide-react), `npm pack`
+  both versions into a scratch directory and diff the dists.
 - For each upgrade, note:
   - **Code changes required** → make them in this PR.
   - **Runtime requirement changes** (Node version, Bun version, OS) → if the new floor is above what `.github/workflows/*.yml` actually installs, raise the CI version *in the same PR*. Grep workflows for `setup-node` / `setup-bun`. **`engines.node` in package.json is advisory only — bun does not enforce it, so CI must explicitly install the right Node version.** This is the specific hole that broke CI for ~5 days in May 2026.
