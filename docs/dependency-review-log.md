@@ -4,6 +4,140 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-11-01
+
+**`bun audit` opens at 3 (1 high, 1 moderate, 1 low) and closes at 2 (1 high,
+1 low). Neither of the two left can reach production.** The high is last
+week's test-only `zod@3.25.76` under `@cloudflare/vitest-pool-workers`. The
+moderate (`minimatch`) and the low (`deepmerge`) are both new this week, and
+both arrive only through the `shadcn` CLI. Everything taken is a patch or an
+additive minor. No source change was needed. Node 22.23.4 is still the newest
+22.x, so `.node-version` stays.
+
+### Security Vulnerabilities Fixed
+
+| Advisory | Severity | Package | Fix |
+|----------|----------|---------|-----|
+| [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249) | moderate | `minimatch` `<11.0.1` | New override `minimatch: ^11.0.1` (resolves 11.0.3). Only path: frontend → `shadcn` → `ts-morph@26` → `@ts-morph/common@0.27.0`, which asks for `^10.0.1`, and there is no patched 10.x. The bug is reachable only with `optimizationLevel >= 2`, and ts-morph passes no options, so this was not live. minimatch 11 removes `makeRe()`, `Minimatch#regexp` and the `AST` class; `@ts-morph/common` calls only `minimatch.minimatch(path, pattern)`, so it is unaffected. Checked two ways: a scratch install, and in the tree a ts-morph `Project` globbing `/src/**/*.ts` and `['/**/*.ts', '!**/*.d.ts']` correctly, plus `bunx shadcn --version`. |
+
+**Open, and not reachable:**
+
+| Advisory | Severity | Package | Why it stays |
+|----------|----------|---------|--------------|
+| [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | high | `zod@3.25.76` | Unchanged from 2026-10-25: pinned exactly by `@cloudflare/vitest-pool-workers@0.19.1`, test runner only. It leaves with the wrangler cap. |
+| [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4) | low | `deepmerge@4.3.1` | **No patched release** (4.3.1, March 2023, is the latest). Used by `shadcn` and `@shadcn/registry` to merge `components.json` and registry JSON, so only when someone runs the shadcn CLI. Nothing in the app imports it. |
+
+**Both new advisories come in through `shadcn`, and the frontend uses one CSS
+file from it.** `src/react/globals.css` has `@import "shadcn/tailwind.css"`
+(637 lines of `@custom-variant data-*`, `@utility` and keyframes). Nothing
+else in the tree imports `shadcn`. For that one file, the frontend installs a
+CLI with an MCP server, babel, ts-morph and a registry client. Copying the file
+into `src/react/` (MIT) would drop the package and with it `deepmerge`, the
+minimatch override and the stale overrides below. That is a styling change
+and needs its own review, so this cycle does not do it. **Recommended as a
+focused PR.** The file did not change between 4.22.1 and 4.23.0 (diffed).
+
+### Dependency Upgrades
+
+| Package | From | To | Workspaces | Notes |
+|---------|------|----|------------|-------|
+| **better-auth**, **@better-auth/api-key**, **@better-auth/mcp** | 1.7.13 | 1.7.15 | frontend, auth-api | **No schema change and no cookie name or attribute change.** Headers and cookies set by a `hooks.before` hook that does not return early now reach the response (they used to be dropped). auth-api's hooks were checked by the e2e sign-in flows. Security hardening: banned users are rejected on sessions made through `internalAdapter.createSession`; admin `update-user` refuses `data.id`; `BETTER_AUTH_SECRETS` errors no longer echo the secret; social-provider token, refresh and JWKS requests no longer follow redirects. |
+| **mapbox-gl** | 3.33.0 | 3.34.1 | root, frontend | Performance work, new `raster-mask` paint properties and fixes. The public export list (227 names) and `Map` members (262) are identical. **CSP:** the counts of `WebAssembly.`, `WebAssembly.instantiate`, `new Function` and `eval(` are identical to 3.33.0 in every build, so nothing new for `script-src`. The 2026-10-17/18 question about 3.33's RTL WebAssembly is still not settled in a browser. |
+| **hono** | 4.13.14 | 4.13.16 | frontend, airscore-api, auth-api, competition-api + root override | Hardening (dist diff, as there is no changelog): the CSS helper escapes `</`; `WWW-Authenticate` escapes backslashes; the CSRF middleware covers `text/ping`; JWT verify rejects `crit` headers and signatures that are not base64url; RegExpRouter wildcards match across newlines. **`app.mount()` now throws for an in-segment wildcard (`/assets*`) or duplicate parameter names.** `grep` finds no `app.mount` in `web/`. |
+| **astro** | 7.4.2 | 7.4.4 | frontend (dev) | Fixes only. CSP no longer adds the empty-string hash, and hashes from components in `<body>` are included in static builds. **The Node floor is unchanged at `>=22.23.4`**, still enforced by `bin/astro.mjs`, and equal to `.node-version`. |
+| **react-router-dom** | 7.18.4 | 7.18.5 | frontend | react-router 7.18.5 bounds route-manifest processing during SSR/RSC requests (a DoS fix) and hardens turbo-stream decoding. |
+| shadcn | 4.22.1 | 4.23.0 | frontend | `shadcn/mcp` is now an MCP SDK v2 `McpServer` (unused here). It moved from `@modelcontextprotocol/sdk` to `@modelcontextprotocol/server`, which took `express`, `body-parser` and friends out of the tree. `tailwind.css` is byte-identical. |
+| lucide-react | 1.61.0 | 1.66.0 | frontend | About 120 icons added, none removed. Nine old names became aliases of renamed icons (`Bold` → `LetterB`, `Copyright` → `CircleLetterC`, `Heading` → `LetterH`, the `*Parking*` icons, `SquareM`, `ArchiveRestore`). The frontend imports none of them. |
+| kysely | 0.28.18 | 0.28.19 | auth-api + root override | Adds `AbortedTransactionError` for Postgres. The SQLite/D1 path is unchanged. |
+| @cfworker/json-schema | 4.1.1 | 4.1.4 | mcp-api | Conformance fixes (`contains` bounds, fractional `multipleOf`, `dependentRequired`, prototype-named properties). The mcp-api suite passes. |
+| jose | 6.2.13 | 6.2.14 | competition-api (dev), shared | Types only. |
+| `anthropics/claude-code-action` | v1.0.262 | v1.0.266 | `.github/workflows/claude.yml` | Re-pinned to the peeled commit `d535f517…`. The other six actions are at the newest release in their major line. |
+
+### Code Changes Required
+
+None.
+
+### Overrides Added / Updated
+
+| Override | Action | Reason |
+|----------|--------|--------|
+| `minimatch` `^11.0.1` | Added | GHSA-g3hv-75wg-m249. |
+| `hono` `^4.13.14` → `^4.13.16` | Updated | Aligned with the workspaces. |
+| `kysely` `^0.28.18` → `^0.28.19` | Updated | Aligned with auth-api. |
+
+**Five overrides now match nothing in `bun.lock`:** `@modelcontextprotocol/sdk`,
+`body-parser`, `@hono/node-server`, `proxy-addr` and `qs`. They came with the
+shadcn → `@modelcontextprotocol/sdk` → `express` path, which shadcn 4.23 removed.
+They are kept this cycle as floors, in case a dependency brings that path
+back. If shadcn is removed (above), delete them in the same PR.
+
+### Packages Not Upgraded (intentional)
+
+| Package | Current | Latest | Reason |
+|---------|---------|--------|--------|
+| **wrangler** | 4.116.0 | 4.156.0 | Still capped (14 cycles). `wrangler@4.156.0` depends on `miniflare 5.20261023.3-beta`, which is miniflare's `beta` dist-tag. Stable `latest` is still 4.20260730.0. |
+| @cloudflare/vitest-pool-workers, **vitest** 5 | 0.19.1, 4.1.12 | 0.23.0, 5.0.5 | Paired with the wrangler cap. Also holds the last `zod@3.25.76`. |
+| **@astrojs/mdx** | 7.0.8 | 8.1.2 | Still vestigial. It wants its own PR to delete it. |
+| **three**, **@types/three** | 0.185.x | 0.187.0 | Pre-1.0 minor (two now); focused PR. |
+| **katex** | 0.18.11 | 0.19.1 | Pre-1.0 minor; focused PR. |
+| @cloudflare/workers-types | 4.20260702.1 | 5.20261101.1 | Major. |
+| kysely 0.29, jsdom, concurrently 10, @types/node 26 | — | 0.29.8, 30.1.3, 10.0.6, 26.6.6 | Majors / pre-1.0 minors. Reasons unchanged from 2026-09-27. |
+| Node | 22.23.4 | 22.23.4 | Already the newest 22.x (`nodejs.org/dist/index.json`). |
+
+### Verification
+
+- `bun run typecheck:all` and `bun run --filter '@glidecomp/frontend' typecheck`:
+  clean.
+- `bun run test:all`: 1862 root/engine/airscore/dev-router/mcp-api, 1033
+  frontend, 245 auth-api (6 todo), 873 competition-api. 0 fail.
+- `bun run build`: clean, 10 Astro pages, astro 7.4.4 on Node 22.23.4.
+- `bun run test:e2e`: **236 passed, 1 failed, 9 skipped** in 24.5 minutes
+  (with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0`). The failure was
+  `task-analysis.spec.ts` "the pilot picker pins a highlight page-wide": just
+  after the pick, the metrics grid's first row was not found. Re-runs: the
+  spec alone with `--repeat-each=2` passed 22/22, and its whole CI shard
+  (`maps-and-analysis`, both projects) passed 33/33 in 5.9 minutes. None of the
+  bumps touches that page's picker. The run took 8 minutes longer than last
+  week's, so the container was under load.
+- `bun run test:e2e:ssr`: the first run gave **74 passed, 1 failed**, and the
+  next two full runs gave **75/75** each. The failure was the new "a tab that
+  outlived a deploy" test (#797): the error heading did not appear within 5 s,
+  while the wrangler server logged `Broken pipe`. That test passed 3/3 alone,
+  and master passed three full SSR runs. The react-router 7.18.5 changes
+  (server-side manifest bounds, turbo-stream decoding) do not touch the
+  client's lazy-route path, and `stale-deploy.ts` hooks Vite's
+  `vite:preloadError`, not the router. **If it fails again in CI, look at the
+  5 s timeout across a full page reload first.**
+- `bun audit`: 3 (1 high, 1 moderate, 1 low) before, 2 (1 high, 1 low) after.
+- `bun install` printed no `warn:` lines. Both patches (`kysely-d1@0.4.0`,
+  `threebox-plugin@2.2.7`) still match the locked versions.
+- Root `package.json` `dependencies`: read first (the same three legitimate
+  entries). `git diff package.json` after every workspace `bun update` showed
+  no stray addition. The only root edits are by hand: `mapbox-gl` and the
+  overrides above.
+- GitHub Actions: `git ls-remote --tags` for all seven; one re-pin.
+- Map-library bump: CSP grep done (above).
+
+### Lessons / Notes for Future Sessions
+
+- **Changelogs are readable from here after all.** The 2026-10-25 entry said
+  hono's notes "are only on GitHub releases, which this session could not
+  read." github.com and its API are blocked, but `raw.githubusercontent.com`
+  is not, and where a package ships no changelog a `npm pack` diff of the two
+  dists answered every question this cycle. The routine now says so.
+- **A dependency bump can make overrides dead without any warning.**
+  shadcn 4.23 removed the path that five overrides existed for, and bun said
+  nothing about it. Grep `bun.lock` for each override's package key now and
+  then: an override with no package is a floor for nothing.
+- **Look at what a flagged path is for before you accept it.** Both new
+  advisories, and most of last week's, came in through `shadcn`. The frontend
+  installs shadcn only for one stylesheet. Fixing the advisories one at a time
+  is less work this cycle, but removing the package fixes them for good.
+- **Run the SSR suite in a fresh state, not right after the 24-minute e2e.**
+  The only SSR failure this cycle came on the first run after it, with
+  wrangler logging `Broken pipe`. Clean runs afterwards passed.
+- **`cd <workspace> && bun update <pkgs>` behaved for a ninth cycle.**
+
 ## 2026-10-25 — Node 22.23.4 in CI, astro 7.4.2 (focused PR)
 
 This is not a weekly cycle. It finishes the astro hold that the cycle below
