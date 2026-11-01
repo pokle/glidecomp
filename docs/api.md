@@ -329,7 +329,31 @@ curl "https://glidecomp.com/api/comp/$COMP_ID/pilot"
 ```
 
 Returns pilots registered in the comp. Personal contact fields (email, phone)
-are redacted unless your key belongs to an admin of that competition.
+are redacted unless your key belongs to an admin of that competition. Each
+pilot carries `track_count`, the number of tracks they have uploaded — the
+tracks that removing them would delete.
+
+### Editing the roster
+
+`PATCH /pilot/:comp_pilot_id` changes only the fields you send. Send a field
+as `null` to clear it.
+
+`POST /pilot/bulk` takes `pilots` (rows to add or update; a row with a
+`comp_pilot_id` updates that pilot) and `remove` (the `comp_pilot_id`s to
+delete). Nothing else is deleted, so a pilot who registered while you were
+editing stays on the roster. Leave `remove` out and the older contract
+applies: `pilots` is the whole roster, and every pilot it does not mention is
+deleted. Prefer `remove`, even when it is empty.
+
+```bash
+curl -X POST "https://glidecomp.com/api/comp/$COMP_ID/pilot/bulk" \
+  -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"pilots":[{"registered_pilot_name":"Jo Ridge","pilot_class":"open"}],"remove":[]}'
+```
+
+Editing a roster entry never undoes a pilot's own link to their GlideComp
+account (open registration, or choosing their entry when they uploaded). An
+email or ID that matches a different account moves the link to that account.
 
 ## Waypoints and weather
 

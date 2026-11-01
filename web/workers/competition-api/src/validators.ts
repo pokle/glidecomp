@@ -391,7 +391,14 @@ export const updateCompPilotSchema = compPilotFieldsSchema.partial();
 /**
  * Bulk upsert payload. Each row may include `comp_pilot_id` (encoded sqid)
  * to identify an existing row for update; omit it for a new row.
- * Rows not included in the payload are deleted by the server.
+ *
+ * `remove` names the existing rows to delete, and nothing else is deleted: a
+ * row the payload does not mention is left as it is. Without `remove` the
+ * older contract applies — the payload is the whole roster, and every row it
+ * does not mention is deleted. That contract deletes pilots the caller never
+ * saw (one who joined through open registration while the editor was open),
+ * so new callers send `remove`, even when it is empty. It stays optional so a
+ * browser tab loaded before the change keeps working.
  *
  * Max 250 rows per request (matches the 250 pilots-per-comp cap).
  */
@@ -403,6 +410,7 @@ export const bulkPilotsSchema = z.object({
       })
     )
     .max(250),
+  remove: z.array(z.string().max(MAX_TEXT)).max(250).optional(),
 });
 
 /**

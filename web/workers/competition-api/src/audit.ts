@@ -183,3 +183,23 @@ export function describeChange(
   }
   return `Changed ${field} from ${fmt(oldValue)} to ${fmt(newValue)}`;
 }
+
+/**
+ * describeChange for a field whose value must not be published — the two the
+ * public roster withholds (SEC-15): the organiser-entered email and the
+ * driver's contact details. The audit log is public on every non-test comp,
+ * so this records THAT the field changed, and never what it held.
+ *
+ *   describePrivateChange("email", null, "jo@example.com") → `Set email`
+ *   describePrivateChange("driver", "Sam 0400…", "")       → `Cleared driver`
+ */
+export function describePrivateChange(
+  field: string,
+  oldValue: unknown,
+  newValue: unknown
+): string {
+  const empty = (v: unknown) => v === null || v === undefined || v === "";
+  if (empty(oldValue)) return `Set ${field}`;
+  if (empty(newValue)) return `Cleared ${field}`;
+  return `Changed ${field}`;
+}

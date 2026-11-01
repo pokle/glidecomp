@@ -288,7 +288,7 @@ same test-comp visibility rules as the rest of the API.
 |--------|-------|------|-------------|
 | GET | `/api/comp/:comp_id/pilot` | Optional | List registered pilots for this comp with their class, team, etc. Public for non-test. |
 | POST | `/api/comp/:comp_id/pilot` | Admin | Register one pilot (runs the linking resolver). |
-| POST | `/api/comp/:comp_id/pilot/bulk` | Admin | Register/update up to 250 pilot rows in one transactional diff-and-write. Idempotent — re-submitting the same import is a no-op. Backs the paste-from-spreadsheet UI. |
+| POST | `/api/comp/:comp_id/pilot/bulk` | Admin | Register/update up to 250 pilot rows in one transaction, and delete the rows named in `remove`. Idempotent — re-submitting the same import is a no-op. Without `remove`, every row the payload does not mention is deleted (the original contract, kept for older clients). |
 | PATCH | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Admin | Update pilot_class, team_name, driver_contact, starting_order. |
 | DELETE | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Admin | Remove a registration. |
 
