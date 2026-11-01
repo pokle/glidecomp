@@ -345,10 +345,14 @@ editing stays on the roster. Leave `remove` out and the older contract
 applies: `pilots` is the whole roster, and every pilot it does not mention is
 deleted. Prefer `remove`, even when it is empty.
 
-```bash
-curl -X POST "https://glidecomp.com/api/comp/$COMP_ID/pilot/bulk" \
-  -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"pilots":[{"registered_pilot_name":"Jo Ridge","pilot_class":"open"}],"remove":[]}'
+```json
+{
+  "pilots": [
+    { "registered_pilot_name": "Jo Ridge", "pilot_class": "open" },
+    { "comp_pilot_id": "k3Xa", "registered_pilot_name": "Sam Thermal", "pilot_class": "sport" }
+  ],
+  "remove": ["p9Qw"]
+}
 ```
 
 Editing a roster entry never undoes a pilot's own link to their GlideComp
