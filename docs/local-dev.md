@@ -84,7 +84,7 @@ and named by subject:
 | Shard | Roughly |
 |---|---|
 | `maps-and-analysis` | the map, the analysis page, the charts that explain a score |
-| `organiser` | comp/task settings, the pilots grid, waypoints, scoring mutations |
+| `organiser` | comp/task settings, the pilots page, waypoints, scoring mutations |
 | `public-and-pilot` | track submission, sign-in, content pages, search, the API doc |
 
 Run one locally the way CI does:

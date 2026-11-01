@@ -50,7 +50,7 @@
  * waypoint QR (#312), the task route glyph (#476) and the task-analysis
  * metric chart (#455).
  */
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import {
   Dialog as AriaDialog,
   Modal as AriaModal,
@@ -58,7 +58,7 @@ import {
 } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
-import { useBackDismiss } from "@/react/lib/use-back-dismiss";
+import { useBackDismiss, type BackDismissLayer } from "@/react/lib/use-back-dismiss";
 
 const BACKDROPS = {
   /** The app's own surface — for themed content. A chart or a diagram drawn
@@ -73,6 +73,7 @@ const BACKDROPS = {
 export function FullScreenSheet({
   label,
   onClose,
+  confirmDismiss,
   backdrop = "surface",
   dismissOnPress = false,
   className,
@@ -81,6 +82,22 @@ export function FullScreenSheet({
   /** The dialog's accessible name. Say what is on screen, not "dialog". */
   label: string;
   onClose: () => void;
+  /**
+   * Asked before Back, Escape or a press outside closes the sheet — answer
+   * false (or a promise of false) to stay open. Not asked when the sheet's
+   * own button closes it; that button is the caller's to wire.
+   *
+   * For a sheet whose way out SAVES to the server, where closing is not
+   * free: the pilot sheet asks "Discard changes?" here when its draft is
+   * dirty. A sheet whose draft is applied on the way out (the waypoint and
+   * turnpoint sheets) has nothing to ask, and leaves this out.
+   *
+   * On a Back, the press has already used up the sheet's history entry, so it
+   * is put straight back before asking — the same move the unsaved-changes
+   * guard makes — and "keep editing" leaves the reader exactly where they
+   * were, with the next Back still aimed at this sheet.
+   */
+  confirmDismiss?: () => boolean | Promise<boolean>;
   backdrop?: keyof typeof BACKDROPS;
   /**
    * Make the whole sheet one big close target.
@@ -94,14 +111,29 @@ export function FullScreenSheet({
   className?: string;
   children: ReactNode;
 }) {
-  useBackDismiss(onClose);
+  const layer = useRef<BackDismissLayer | null>(null);
+  /** Close if `confirmDismiss` allows it. `fromBack`: the entry is spent. */
+  const requestClose = (fromBack: boolean) => {
+    const answer = confirmDismiss ? confirmDismiss() : true;
+    if (answer === true) {
+      onClose();
+      return;
+    }
+    if (fromBack) layer.current?.rearm();
+    if (answer !== false) {
+      void answer.then((ok) => {
+        if (ok) onClose();
+      });
+    }
+  };
+  layer.current = useBackDismiss(() => requestClose(true));
 
   return (
     <ModalOverlay
       isOpen
       isDismissable
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) requestClose(false);
       }}
       className={cn("fixed inset-0 z-[100]", BACKDROPS[backdrop])}
     >

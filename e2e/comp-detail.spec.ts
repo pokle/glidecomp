@@ -2,8 +2,8 @@
  * Comp detail page (/comp/:id) — interaction coverage for its RAC surfaces
  * (converted 2026-07-21, see docs/2026-07-18-rac-adoption-guide.md):
  * scores view tabs + sortable scores tables + the scores-by-task Select,
- * the pilots section (read-only RAC grid + the kept-by-policy Tabulator edit
- * grid inside a RAC dialog shell), the activity filter tabs, and the routed
+ * the pilots page (a list of pilots that open sheets — its editing is covered
+ * on a comp of its own in comp-pilots.spec.ts), the activity filter tabs, and the routed
  * settings pages (Advanced GAP NumberFields, the in-flow timezone list).
  *
  * Drives the seeded "Corryong Cup 2026" sample comp READ-ONLY: every dialog
@@ -188,8 +188,9 @@ function trackMutations(page: Page): () => boolean {
   page.on("request", (r) => {
     if (r.method() === "GET" || !r.url().includes("/api/comp")) return;
     // One exception, and it has to be an exception: the CIVL ranking lookup
-    // is a READ that takes a body, because what it reads about is the roster
-    // sitting unsaved in the editor's grid (routes/pilot.ts). Method alone
+    // is a READ that takes a body, because what it reads about is the rows
+    // the fill sheet sends, IDs it has only just found included
+    // (routes/pilot.ts). Method alone
     // cannot tell it apart from a write, so it is named here rather than the
     // rule being loosened to "POST is fine".
     if (r.url().includes("/pilot/civl-rankings")) return;
@@ -590,7 +591,7 @@ test("scores page: Download menu saves a long-form CSV and offers the Sheets for
   await expect(download).toBeFocused();
 });
 
-test("pilots page: read-only grid, Tabulator editor, list-editor popup, cancel discards", async ({
+test("pilots page: a list that opens each pilot's sheet, and closing one untouched sends nothing", async ({
   page,
 }) => {
   // The roster editor is its own admin-only page now.
@@ -601,47 +602,26 @@ test("pilots page: read-only grid, Tabulator editor, list-editor popup, cancel d
 
   const mutated = trackMutations(page);
 
-  // Read-only RAC grid renders the roster.
+  // A list, at every width — the grid it replaced is gone.
   const roster = page.getByRole("grid", { name: "Pilots" });
-  await expect(roster).toBeVisible({ timeout: 15_000 });
-  await expect(roster.locator("tbody tr").first()).toBeVisible();
+  await expect(roster.getByRole("row").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".tabulator")).toHaveCount(0);
 
-  // "Edit" opens the dialog and the (lazy-loaded) Tabulator grid builds.
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "Edit pilots" })).toBeVisible();
-  const firstRow = page.locator("#pilots-grid .tabulator-row").first();
-  await expect(firstRow).toBeVisible({ timeout: 15_000 });
+  // A row opens that pilot's sheet, and Done on an untouched pilot closes it
+  // without a request: each pilot is saved on Done, but only if it changed.
+  const name = (await roster.getByRole("row").first().locator("p.font-medium").innerText()).trim();
+  await roster.getByRole("row").first().click();
+  const sheet = page.getByRole("dialog", { name: `${name} details` });
+  await expect(sheet.getByRole("textbox", { name: "Name" })).toHaveValue(name);
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden();
 
-  // Edit a class cell: the list editor's popup must render *inside* the
-  // dialog (Tabulator popupContainer: "#pilots-edit-dialog"), else the modal
-  // would paint over it.
-  const classCell = firstRow.locator('[tabulator-field="pilot_class"]');
-  const original = (await classCell.innerText()).trim();
-  const replacement = comp.pilot_classes.find((c) => c !== original);
-  expect(replacement).toBeTruthy();
-  await classCell.click();
-  const editList = page.locator("#pilots-edit-dialog .tabulator-edit-list");
-  await expect(editList).toBeVisible();
-  await editList
-    .locator(".tabulator-edit-list-item")
-    .getByText(replacement!, { exact: true })
-    .click();
-  await expect(classCell).toHaveText(replacement!);
-
-  // Cancel discards: dialog closes without saving…
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  // …so reopening rebuilds the grid with the original value.
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
-  const reopenedRow = page.locator("#pilots-grid .tabulator-row").first();
-  await expect(reopenedRow).toBeVisible({ timeout: 15_000 });
-  await expect(reopenedRow.locator('[tabulator-field="pilot_class"]')).toHaveText(
-    original
-  );
-  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Back from an untouched sheet closes it too, and leaves the page alone.
+  await roster.getByRole("row").first().click();
+  await expect(sheet).toBeVisible();
+  await page.goBack();
+  await expect(sheet).toBeHidden();
+  await expect(roster).toBeVisible();
 
   expect(mutated()).toBe(false);
 });

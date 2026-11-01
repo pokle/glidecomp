@@ -105,7 +105,10 @@ export function Shell() {
     // the RAC->react-router bridge lives here once rather than in each page.
     // SSR-safe: it only uses useNavigate/useHref, which work under StaticRouter.
     <RacRouterProvider>
-    <div className="flex min-h-dvh flex-col">
+    {/* The page fills the screen, less any bar fixed to its bottom
+        (lib/use-bottom-bar.ts): without that, a short page parks the footer
+        at the foot of the screen, underneath the bar. */}
+    <div className="flex min-h-[calc(100dvh_-_var(--bottom-bar,0px))] flex-col">
       {/* Skip link (WCAG 2.4.1, accessibility-standard §4.3): the first
           focusable element, visually hidden until focused, jumping keyboard/AT
           users past the header straight to <main>. Keep in sync with the static

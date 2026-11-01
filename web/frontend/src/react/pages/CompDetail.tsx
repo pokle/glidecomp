@@ -5,8 +5,7 @@
  * Mutations that used to window.location.reload() instead bump a refresh
  * counter that re-runs the comp fetch.
  *
- * Built on the RAC kit (src/react/rac/) like the task detail page — the
- * pilots editor keeps its Tabulator grid (see PilotsSection).
+ * Built on the RAC kit (src/react/rac/) like the task detail page.
  */
 import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";

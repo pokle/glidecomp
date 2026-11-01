@@ -51,7 +51,7 @@ import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
  * Everything else is signed-in, admin-only or otherwise never server-rendered,
  * so it has no business in the bundle an anonymous visitor downloads to read a
  * scoreboard. Splitting these keeps the dashboard, settings, onboarding, the
- * admin screens and the Tabulator-backed pilots roster out of the entry chunk.
+ * admin screens and the pilots roster editor out of the entry chunk.
  */
 const Dashboard = lazy(() =>
   import("./pages/Dashboard").then((m) => ({ default: m.Dashboard }))

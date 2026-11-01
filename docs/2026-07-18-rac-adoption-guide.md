@@ -66,44 +66,18 @@ the body mid-action by `disabled` swaps, a `role="progressbar"` on something
 that was never a task. The one place it did not earn its keep is editable
 tables, which are Tabulator's job.
 
-**Tabulator policy (2026-07-21, owner preference): editable tables are
-Tabulator, full stop.** The project owner prefers Tabulator for every
-editable table/grid — don't reinvent spreadsheet editing in RAC. The pilots
-editor's grid (comp page → Pilots → Edit) works really well — frozen
-columns, spreadsheet-style cell editing, list editors — and replacing
-Tabulator with RAC has repeatedly been the most painful part of this
-exploration (see gotcha #2 and the route-editor history). This cuts both
-ways: existing Tabulator grids stay, and a hand-rolled editable table being
-converted should become a **Tabulator grid**, not a RAC Table/GridList (the
-waypoints page did exactly this — see gotcha #16 for the wiring pattern).
-The GridList card list has **no consumer today** — the route editor that was
-its one caller went back to a RAC `Table` (see the superseded section below) —
-but it stays in the kit as the answer for *card-shaped* editable collections.
-Either way, don't plan new RAC editable tables. Converting a page means
-converting the chrome
-*around* the grid (dialog shell, buttons, read-only tables) and using
-Tabulator for the grid itself. It coexists happily inside a RAC Modal: give
-the kit `Dialog` an `id` and point Tabulator's `popupContainer` at it so
-editor popups render above the dialog. The
-shadcn-token theme lives in `comp/tabulator-grid.css` (shared, `gc-grid`
-container class). Do NOT plan a GridList/Table rewrite of the pilots grid.
-
-**Always go through `comp/TabulatorGrid.tsx`** — the in-repo React wrapper —
-rather than calling `new TabulatorFull(...)` in an effect. It owns the lazy
-`import("tabulator-tables")` (so Tabulator stays out of the public bundle and
-the SSR bundle), the build/destroy lifecycle, row cloning,
-stale-handler-proof event binding, and turning off browser autofill on the
-editor inputs Tabulator builds (Safari was offering saved email addresses over
-the pilots grid); grids just declare
-`initialColumns`/`initialData`/`options`/`events` and take a `tableRef` for the
-imperative calls. It is **not** the `react-tabulator` npm package the Tabulator
-docs point at (that one pins `tabulator-tables@5.6.1` — we're on 6.x — and
-peers at React <= 17, and we're on 19), and it does not copy that package's
-API. Read the header comment in that file before using it — notably the grid is
-**uncontrolled**: `initialColumns`/`initialData` are thunks called once at
-build (remount via `key` to rebuild, push updates through `tableRef`), and the
-instance only exists a tick after mount, so gate anything that drives it on
-`onReady`.
+**Tabulator policy — superseded (2026-11-01, owner decision).** From
+2026-07-21 editable tables were Tabulator "full stop", and the pilots editor's
+grid was the model for it. The mobile-first stance (CLAUDE.md, 2026-09-19)
+undid that one grid at a time: the waypoints grid became a list of rows that
+open sheets, and on 2026-11-01 the pilots grid followed, at every width — on a
+phone its frozen ✕ and name columns left room for about one and a half of the
+other twelve. Tabulator, `comp/TabulatorGrid.tsx` and `comp/tabulator-grid.css`
+went with it. An editable collection is now a `GridList` of rows opening
+`FullScreenSheet`s (`comp/WaypointList.tsx`, `comp/PilotList.tsx`), and work
+that really is spreadsheet-shaped goes to a spreadsheet through CSV export and
+import. Gotcha #16 and the history below still mention Tabulator; they
+describe code that no longer exists.
 
 ## What exists
 
@@ -273,9 +247,9 @@ instance only exists a tick after mount, so gate anything that drives it on
 - **Nothing is left unconverted** — the six waves finished on 2026-07-27 and
   `src/react/ui/` is gone. For where each kind of code lives now, see
   [Where the UI lives](#where-the-ui-lives-2026-07-27-post-migration) at the
-  end of this doc. Tabulator remains in the comp-page pilots dialog and the
-  waypoints admin grid **by design** (see the Tabulator policy at the top —
-  it is kept, not pending).
+  end of this doc. Tabulator stayed in the pilots dialog and the waypoints
+  grid by design until both became lists of sheets (2026-09-19 and
+  2026-11-01) — see the superseded Tabulator policy at the top.
 - The date/time pickers were already RAC before the migration and moved across
   unchanged; they live at `rac/date-picker.tsx` (lazy-loaded via
   `date-picker.impl.tsx` so they stay out of the SSR bundle).
@@ -533,7 +507,8 @@ Points worth knowing before you reach for one:
     ride on a span *inside* the Column, and every sortable/interactive
     Column still needs exactly one `isRowHeader` column beside it.
 
-16. **Inline Tabulator on a page (not in a dialog) — the waypoints pattern.**
+16. *(Historical: there has been no Tabulator in the app since 2026-11-01.)*
+    **Inline Tabulator on a page (not in a dialog) — the waypoints pattern.**
     When an editable grid lives on the page beside other React-driven UI (the
     waypoints map), keep React state as the source of truth and let the grid
     mirror into it: render `<TabulatorGrid>` only where the grid belongs
@@ -1027,10 +1002,10 @@ rather than "how to convert one".
    Table an `aria-label`, one column `isRowHeader`, rows an `id`, and a
    `scrollLabel` if it can overflow. Row-click navigation = `onRowAction` plus
    a real AriaLink in the name cell (keeps a crawlable anchor).
-4. **Editable grids are Tabulator** (policy at the top of this doc). Inside a
-   dialog, give the kit `Dialog` an `id` and point Tabulator's
-   `popupContainer` at it. The shared theme is `comp/tabulator-grid.css`
-   (`gc-grid` container class).
+4. **There is no editable grid.** An editable collection is a `GridList` of
+   rows opening `FullScreenSheet`s — `comp/WaypointList.tsx` and
+   `comp/PilotList.tsx` are the worked examples (see the superseded Tabulator
+   policy at the top of this doc).
 5. Measurement vs completion: `rac/meter` for a reading within a range,
    `rac/progress` for a task running to completion. They document the split
    from both sides.
@@ -1044,7 +1019,6 @@ rather than "how to convert one".
 | `src/react/rac/` | **The kit.** One component family per file. Includes `date-picker` (RAC under the hood, lazy-loaded so it stays out of the SSR bundle) and two behaviour-free static pieces, `badge` and `alert`. |
 | `src/react/vendor/` | Thin wrappers over third-party widgets RAC doesn't provide: `input-otp` (the sign-in code field) and `sonner` (the toaster). Not a kit — don't grow it without a reason of that kind. |
 | `src/react/comp/`, `pages/`, `analysis/`, `weather/` | Feature code. Uses the kit; owns no primitives. Local one-page helpers are fine (`SettingsCard` in Settings.tsx, which is all `ui/card` ever was). |
-| Tabulator grids | Editable grids only, per the policy above: the comp pilots editor and the waypoints admin grid, both through `comp/TabulatorGrid.tsx`. |
 | `src/analysis/`, `src/replay/` | Vanilla TS entries — own styling, no React, deliberately outside all of this. |
 | `web/frontend/static/` | The prerendered Astro content pages. No framework by design. |
 

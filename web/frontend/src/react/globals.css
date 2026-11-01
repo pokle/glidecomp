@@ -260,9 +260,12 @@
 }
 
 /* Floating bottom-right chrome (the Preview-as pill): its 0.75rem offset,
-   clear of the home indicator and the rounded corner. */
+   clear of the home indicator and the rounded corner — or clear of a bottom
+   bar, when a page has one (`--bottom-bar`, lib/use-bottom-bar.ts). The bar
+   already spends the home indicator in its own padding, so it is the larger
+   of the two and not their sum. */
 @utility bottom-safe-3 {
-  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(0.75rem + max(env(safe-area-inset-bottom, 0px), var(--bottom-bar, 0px)));
 }
 
 @utility right-safe-3 {
@@ -276,6 +279,14 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* A row scrolled into view by keyboard focus must stop ABOVE a bar fixed to
+     the bottom of the screen, not under it (WCAG 2.4.11, Focus Not Obscured;
+     the bar is lib/use-bottom-bar.ts, and the variable is unset — so this is
+     zero — on every page without one). */
+  html {
+    scroll-padding-bottom: var(--bottom-bar, 0px);
   }
 
   /* The app root needs its own stacking context so body-level portals (RAC

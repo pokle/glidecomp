@@ -397,15 +397,21 @@ These are the standing imperatives. Each links to the reference that explains it
     `px-gutter-safe` INSIDE one counts the notch twice; and `variant="rows"`
     already makes a row `flex items-center gap-3`, so restating that says
     nothing.
-  - **Tabulator is for a grid that is genuinely spreadsheet-shaped** — many
-    rows, many columns, edited cell by cell on a wide screen, like the pilots
-    grid. Lazy-load it, RAC chrome around it, shared theme in
-    `comp/tabulator-grid.css`; and still don't rebuild spreadsheet editing in
-    RAC. It is no longer the default answer for "an editable collection": that
-    it was is how the waypoints page ended up with a grid nobody could use from
-    a hill (see the mobile-first rule above). A list of rows that open sheets
-    is usually the better shape, and `rac/grid-list.tsx` is what it is built
-    from.
+  - **There is no editable grid.** An editable collection is a list of rows
+    that open sheets, built from `rac/grid-list.tsx` and
+    `rac/full-screen-sheet.tsx`; the waypoints page and the pilots page
+    (`comp/PilotsSection.tsx`) are the worked examples. Tabulator went with its
+    last grid on 2026-11-01: the pilots roster, fourteen columns in a dialog,
+    of which a phone showed about one and a half. Spreadsheet-shaped work goes
+    to a real spreadsheet through CSV export and import instead, so that round
+    trip must be lossless (the export's `glidecomp_id` column). Don't bring a
+    grid back for the desktop alone — that is two editors.
+  - **A bar fixed to the bottom of the screen goes through
+    `lib/use-bottom-bar.ts`**, as the pilots page's search-and-add bar does.
+    It publishes the bar's height as `--bottom-bar`, which the toaster and the
+    Preview-as pill add to their offsets (they would otherwise sit on the
+    bar's +), pads the page so its end scrolls clear of the bar, and lifts the
+    bar above an on-screen keyboard.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI

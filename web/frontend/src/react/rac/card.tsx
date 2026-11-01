@@ -23,7 +23,7 @@ import { cn } from "@/react/lib/utils";
 
 /**
  * The surface recipe on its own, for elements that need to READ as a card but
- * cannot be a `<section>` — a link row in a list, a `<li>`, a Tabulator shell.
+ * cannot be a `<section>` — a link row in a list, a `<li>`.
  * Prefer `<Card>`; reach for this only when the element is dictated by
  * semantics. Keeping it in one place is the point: a bordered, transparent box
  * was fine on a white page and reads as a hole punched in a tinted one.

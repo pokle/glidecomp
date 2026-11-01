@@ -1,0 +1,364 @@
+/**
+ * The pilots page (/comp/:id/pilots): a list of pilots that open full-screen
+ * sheets, with a search box and a + riding at the bottom of the screen — at
+ * every width. It replaced a fourteen-column Tabulator grid in a dialog, which
+ * on a phone showed about one and a half columns at a time.
+ *
+ * Runs in BOTH Playwright projects (fixtures/mobile.ts): the phone is the
+ * width the page was designed for, and the desktop must not grow a second
+ * shape. What it holds:
+ *
+ *   - the search finds a pilot by any field, words in any order, accents
+ *     ignored; and + carries the searched-for name into a new pilot;
+ *   - a pilot is saved the moment Done is pressed (nothing waits for a
+ *     page-level Save), and Back with unsaved edits asks first;
+ *   - Remove asks before it removes;
+ *   - an import shows what it will add, update and remove before it does any
+ *     of it, and an exported roster comes back as the same pilots;
+ *   - the page never scrolls sideways, its targets are thumb-sized, and the
+ *     last pilot scrolls clear of the bar.
+ *
+ * Each test builds its own comp through the API (named through e2eCompName so
+ * a killed run is swept) and the suite deletes them afterwards.
+ */
+import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
+import { e2eCompName } from "./fixtures/stack";
+
+const TEST_USER = {
+  name: "E2E Pilots Organiser",
+  email: "e2e-comp-pilots@test.local",
+};
+
+/** The dev server, honouring the worktree port override (fixtures/stack.ts). */
+function baseUrl(): string {
+  return process.env.DEV_FRONTEND_PORT
+    ? `http://localhost:${process.env.DEV_FRONTEND_PORT}`
+    : "http://localhost:3000";
+}
+
+/** Enough pilots that the list scrolls on any screen. */
+const FILLERS = Array.from({ length: 30 }, (_, i) => ({
+  registered_pilot_name: `Filler Pilot ${String(i + 1).padStart(2, "0")}`,
+  pilot_class: "open",
+}));
+
+const ROSTER = [
+  {
+    registered_pilot_name: "Tom Smith",
+    registered_pilot_civl_id: "12345",
+    registered_pilot_glider: "Moyes Litespeed RX",
+    pilot_class: "open",
+  },
+  { registered_pilot_name: "Ana Müller", pilot_class: "sport" },
+  {
+    registered_pilot_name: "Jo Ridge",
+    registered_pilot_email: "jo@example.com",
+    pilot_class: "open",
+    team_name: "Alpha",
+  },
+  ...FILLERS,
+];
+
+const created: string[] = [];
+let api: APIRequestContext;
+
+test.beforeAll(async ({ playwright }) => {
+  api = await playwright.request.newContext({ baseURL: baseUrl() });
+  const login = await api.post("/api/auth/dev-login", { data: TEST_USER });
+  expect(login.ok(), await login.text()).toBe(true);
+});
+
+test.afterAll(async () => {
+  for (const id of created) await api.delete(`/api/comp/${id}`);
+  await api.dispose();
+});
+
+/** A comp of our own, holding `roster`. */
+async function makeComp(roster: object[] = ROSTER): Promise<string> {
+  const res = await api.post("/api/comp", {
+    data: { name: e2eCompName("Pilots page"), category: "hg", pilot_classes: ["open", "sport"] },
+  });
+  expect(res.ok(), await res.text()).toBe(true);
+  const compId = ((await res.json()) as { comp_id: string }).comp_id;
+  created.push(compId);
+  const bulk = await api.post(`/api/comp/${compId}/pilot/bulk`, {
+    data: { pilots: roster, remove: [] },
+  });
+  expect(bulk.ok(), await bulk.text()).toBe(true);
+  return compId;
+}
+
+interface Pilot {
+  comp_pilot_id: string;
+  name: string;
+  team_name: string | null;
+  pilot_class: string;
+}
+
+async function rosterOf(compId: string): Promise<Pilot[]> {
+  const res = await api.get(`/api/comp/${compId}/pilot`);
+  return ((await res.json()) as { pilots: Pilot[] }).pilots;
+}
+
+async function signIn(page: Page): Promise<void> {
+  const login = await page.request.post("/api/auth/dev-login", { data: TEST_USER });
+  expect(login.ok(), await login.text()).toBe(true);
+  const token = login.headers()["set-cookie"]?.match(/better-auth\.session_token=([^;]+)/);
+  if (token) {
+    await page.context().addCookies([
+      { name: "better-auth.session_token", value: token[1], domain: "localhost", path: "/" },
+    ]);
+  }
+}
+
+test.beforeEach(async ({ page }) => {
+  await signIn(page);
+});
+
+const list = (page: Page) => page.getByRole("grid", { name: "Pilots" });
+const rows = (page: Page) => list(page).getByRole("row");
+const search = (page: Page) => page.getByRole("searchbox", { name: "Find a pilot" });
+
+async function openPage(page: Page, compId: string): Promise<void> {
+  await page.goto(`/comp/${compId}/pilots`);
+  await expect(rows(page).first()).toBeVisible({ timeout: 20_000 });
+}
+
+/** The visible names, top to bottom. */
+async function names(page: Page): Promise<string[]> {
+  const texts = await rows(page).locator("p.font-medium").allInnerTexts();
+  return texts.map((t) => t.trim());
+}
+
+/** See comp-waypoints.spec.ts: asserted, because it is what the grid failed. */
+async function expectNoSidewaysScroll(page: Page): Promise<void> {
+  const scrolls = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+  );
+  expect(scrolls, "the page must not scroll sideways").toBe(false);
+}
+
+/** A target a thumb can hit, measured on the rendered box (44px). */
+async function expectThumbSized(page: Page, name: string, box: { width: number; height: number } | null) {
+  expect(box, `${name} must be on screen`).not.toBeNull();
+  expect(box!.height, `${name} height`).toBeGreaterThanOrEqual(44);
+  expect(box!.width, `${name} width`).toBeGreaterThanOrEqual(44);
+}
+
+test("search finds a pilot by any field, in any order, accents ignored", async ({ page }) => {
+  const compId = await makeComp();
+  await openPage(page, compId);
+
+  await search(page).fill("smi tom");
+  await expect.poll(() => names(page)).toEqual(["Tom Smith"]);
+  await expect(page.getByRole("status").filter({ hasText: "of" })).toHaveText(
+    `1 of ${ROSTER.length} pilots`
+  );
+
+  await search(page).fill("muller");
+  await expect.poll(() => names(page)).toEqual(["Ana Müller"]);
+
+  // A CIVL number off a licence, a glider, a class.
+  await search(page).fill("12345");
+  await expect.poll(() => names(page)).toEqual(["Tom Smith"]);
+  await search(page).fill("litespeed");
+  await expect.poll(() => names(page)).toEqual(["Tom Smith"]);
+  await search(page).fill("sport");
+  await expect.poll(() => names(page)).toEqual(["Ana Müller"]);
+
+  await search(page).fill("");
+  await expect.poll(async () => (await names(page)).length).toBe(ROSTER.length);
+});
+
+test("+ after a search that finds nobody adds a pilot with that name", async ({ page }) => {
+  const compId = await makeComp();
+  await openPage(page, compId);
+
+  await search(page).fill("Zara New");
+  await expect(list(page)).toContainText('No pilot matches "Zara New".');
+
+  await page.getByRole("button", { name: "Add a pilot named Zara New" }).click();
+  const sheet = page.getByRole("dialog", { name: "New pilot" });
+  await expect(sheet.getByRole("textbox", { name: "Name" })).toHaveValue("Zara New");
+  // The option's TEXT, not the radio: the kit hides the input under its
+  // label (rac gotcha #13, as task-settings-pages.spec.ts does).
+  await sheet.getByText("sport", { exact: true }).click();
+  await expect(sheet.getByRole("radio", { name: "sport" })).toBeChecked();
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+
+  // Saved on Done: there is no page-level Save to press.
+  await expect.poll(() => names(page)).toEqual(["Zara New"]);
+  const saved = (await rosterOf(compId)).find((p) => p.name === "Zara New");
+  expect(saved?.pilot_class).toBe("sport");
+});
+
+test("a pilot is saved on Done, and Back with unsaved edits asks first", async ({ page }) => {
+  const compId = await makeComp();
+  await openPage(page, compId);
+  await search(page).fill("jo ridge");
+  await rows(page).first().click();
+
+  const sheet = page.getByRole("dialog", { name: "Jo Ridge details" });
+  const team = sheet.getByRole("textbox", { name: "Team" });
+  await expect(team).toHaveValue("Alpha");
+  await team.fill("Bravo");
+
+  // Back with an unsaved edit asks. Keep editing leaves the reader where they
+  // were, with the edit intact and the next Back still aimed at the sheet.
+  await page.goBack();
+  const ask = page.getByRole("alertdialog");
+  await expect(ask).toContainText("Discard changes?");
+  await ask.getByRole("button", { name: "Keep editing" }).click();
+  await expect(team).toHaveValue("Bravo");
+
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  expect((await rosterOf(compId)).find((p) => p.name === "Jo Ridge")?.team_name).toBe("Bravo");
+
+  // Discard changes throws the edit away, and nothing is sent.
+  await rows(page).first().click();
+  await sheet.getByRole("textbox", { name: "Team" }).fill("Charlie");
+  await page.goBack();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
+  await expect(sheet).toBeHidden();
+  expect((await rosterOf(compId)).find((p) => p.name === "Jo Ridge")?.team_name).toBe("Bravo");
+
+  // Back from an untouched sheet just closes it — and leaves the page alone.
+  await rows(page).first().click();
+  await expect(sheet).toBeVisible();
+  await page.goBack();
+  await expect(sheet).toBeHidden();
+  await expect(page).toHaveURL(new RegExp(`/comp/.*${compId}.*/pilots`));
+  await expect(list(page)).toBeVisible();
+});
+
+test("Remove asks before it removes", async ({ page }) => {
+  const compId = await makeComp();
+  await openPage(page, compId);
+  await search(page).fill("ana");
+  await rows(page).first().click();
+
+  const sheet = page.getByRole("dialog", { name: "Ana Müller details" });
+  await sheet.getByRole("button", { name: "Remove this pilot" }).click();
+  const ask = page.getByRole("alertdialog");
+  await expect(ask).toContainText("Remove Ana Müller?");
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  expect((await rosterOf(compId)).some((p) => p.name === "Ana Müller")).toBe(true);
+
+  await sheet.getByRole("button", { name: "Remove this pilot" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await expect(list(page)).toContainText('No pilot matches "ana".');
+  expect((await rosterOf(compId)).some((p) => p.name === "Ana Müller")).toBe(false);
+});
+
+test("an import says what it will add, update and remove before it does any of it", async ({
+  page,
+}) => {
+  const compId = await makeComp(ROSTER.slice(0, 3));
+  await openPage(page, compId);
+
+  const importFile = async (csv: string) => {
+    await page.getByRole("button", { name: "Roster actions" }).click();
+    await page.getByRole("menuitem", { name: "Import CSV…" }).click();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("dialog").getByRole("button", { name: "Choose file" }).click();
+    await (await chooser).setFiles({
+      name: "roster.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+  };
+
+  // Tom matched by his CIVL ID and moved to Sport; a new pilot; Ana and Jo
+  // are not in the file, so the file would remove them.
+  await importFile(["name,class,civl_id", "Tom Smith,sport,12345", "Dee New,open,"].join("\n"));
+  const review = page.getByRole("dialog", { name: "Import roster.csv" });
+  await expect(review).toContainText("1 updated · 1 new · 2 removed");
+  await expect(review).toContainText("Ana Müller");
+  await expect(review).toContainText("Jo Ridge");
+
+  // Cancel writes nothing.
+  await review.getByRole("button", { name: "Cancel" }).click();
+  await expect(review).toBeHidden();
+  expect((await rosterOf(compId)).map((p) => p.name).sort()).toEqual(
+    ["Ana Müller", "Jo Ridge", "Tom Smith"]
+  );
+
+  // Apply writes exactly what the review said.
+  await importFile(["name,class,civl_id", "Tom Smith,sport,12345", "Dee New,open,"].join("\n"));
+  await review.getByRole("button", { name: "Apply" }).click();
+  await expect(review).toBeHidden({ timeout: 20_000 });
+  const after = await rosterOf(compId);
+  expect(after.map((p) => p.name).sort()).toEqual(["Dee New", "Tom Smith"]);
+  expect(after.find((p) => p.name === "Tom Smith")?.pilot_class).toBe("sport");
+});
+
+test("an exported roster re-imports as the same pilots", async ({ page }) => {
+  // Ana has no ID and no email — the kind of pilot open registration makes —
+  // so only the export's glidecomp_id column can bring her back as herself.
+  const compId = await makeComp(ROSTER.slice(0, 3));
+  await openPage(page, compId);
+
+  await page.getByRole("button", { name: "Roster actions" }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: "Export CSV" }).click();
+  const csv = await (await (await download).createReadStream()).toArray();
+
+  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("menuitem", { name: "Import CSV…" }).click();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("dialog").getByRole("button", { name: "Choose file" }).click();
+  await (await chooser).setFiles({
+    name: "exported.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.concat(csv),
+  });
+
+  const review = page.getByRole("dialog", { name: "Import exported.csv" });
+  await expect(review).toContainText("0 updated · 0 new · 0 removed");
+  await expect(review.getByRole("button", { name: "Apply" })).toBeDisabled();
+});
+
+test("the page never scrolls sideways, its targets are thumb-sized, and the last pilot clears the bar", async ({
+  page,
+}) => {
+  const compId = await makeComp();
+  await openPage(page, compId);
+  await expectNoSidewaysScroll(page);
+
+  await expectThumbSized(page, "the + button", await page.getByRole("button", { name: "Add pilot" }).boundingBox());
+  const searchBox = await page.getByRole("group").filter({ has: search(page) }).first().boundingBox();
+  expect(searchBox!.height, "the search box height").toBeGreaterThanOrEqual(44);
+  await expectThumbSized(page, "a pilot row", await rows(page).first().boundingBox());
+
+  // Scroll to the end: the last pilot, and the footer after it, must sit
+  // above the bar rather than stop behind it.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const plus = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
+  const last = await rows(page).last().boundingBox();
+  expect(last!.y + last!.height, "the last pilot ends above the bar").toBeLessThanOrEqual(plus!.y);
+  const footer = await page.locator("footer").last().boundingBox();
+  expect(footer!.y + footer!.height, "the footer ends above the bar").toBeLessThanOrEqual(plus!.y);
+
+  // A row reached from the keyboard is never left under the bar (WCAG
+  // 2.4.11): PageDown moves focus a screen down the list, and the browser
+  // scrolls it into view — above the bar, by the page's scroll-padding.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await rows(page).first().focus();
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("PageDown");
+    const focused = await page.evaluate(() => {
+      const r = document.activeElement!.getBoundingClientRect();
+      return { bottom: r.bottom };
+    });
+    const bar = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
+    expect(focused.bottom, "the focused row ends above the bar").toBeLessThanOrEqual(bar!.y);
+  }
+
+  // A sheet is full screen and does not scroll sideways either.
+  await rows(page).first().click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expectNoSidewaysScroll(page);
+});

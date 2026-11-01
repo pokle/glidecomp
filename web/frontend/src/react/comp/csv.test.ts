@@ -41,7 +41,7 @@ describe("COLUMNS order", () => {
 describe("exportCsvContent", () => {
   it("writes the header row alone for an empty table (fillable template)", () => {
     expect(exportCsvContent([])).toBe(
-      "name,email,glider,class,team,driver,wprs_points,civl_id,safa_id,ushpa_id,bhpa_id,dhv_id,ffvl_id,fai_id\n"
+      "name,email,glider,class,team,driver,wprs_points,civl_id,safa_id,ushpa_id,bhpa_id,dhv_id,ffvl_id,fai_id,glidecomp_id\n"
     );
   });
 
