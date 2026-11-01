@@ -49,6 +49,11 @@ export interface CompPilot {
   /** That list's snapshot month (ISO 'YYYY-MM-01'), or null when hand-set. */
   civl_ranking_date: string | null;
   first_start_order: number | null;
+  /**
+   * How many tracks the pilot has uploaded to this comp. Removing the pilot
+   * deletes them too, so this is what Remove costs.
+   */
+  track_count: number;
 }
 
 /**
@@ -308,6 +313,21 @@ export function parsedRowToBulk(row: ParsedRow): BulkPilotRow {
     civl_ranking_slug: points === null ? null : (row.civl_ranking_slug ?? null),
     civl_ranking_date: points === null ? null : (row.civl_ranking_date ?? null),
   };
+}
+
+/**
+ * The pilots a save should remove: the ones the editor was opened with that
+ * are no longer in the payload — deleted from the grid, or left out of an
+ * imported CSV.
+ *
+ * Sent as the bulk route's `remove` list rather than leaving the server to
+ * delete "everyone the payload does not mention", because that includes
+ * pilots the editor never showed: one who joined through open registration
+ * while the editor was open was deleted, tracks and all, by the next Save.
+ */
+export function removedPilotIds(shown: CompPilot[], payload: BulkPilotRow[]): string[] {
+  const kept = new Set(payload.flatMap((r) => (r.comp_pilot_id ? [r.comp_pilot_id] : [])));
+  return shown.map((p) => p.comp_pilot_id).filter((id) => !kept.has(id));
 }
 
 // ── CSV export ───────────────────────────────────────────────────────────────

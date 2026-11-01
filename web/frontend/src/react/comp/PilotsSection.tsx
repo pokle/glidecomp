@@ -10,7 +10,7 @@
  * editing and is not part of the RAC conversion) and is declared through the
  * shared `TabulatorGrid` wrapper, which owns the lazy load and lifecycle; only
  * the dialog shell and buttons around it are RAC. All mutations funnel through
- * POST /api/comp/:comp_id/pilot/bulk.
+ * POST /api/comp/:comp_id/pilot/bulk, naming the pilots to remove.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -54,6 +54,7 @@ import {
   normalizeRow,
   parseImportedCsv,
   pilotToRow,
+  removedPilotIds,
   serverErrorMessage,
   slugify,
   validateRows,
@@ -642,7 +643,9 @@ function EditPilotsDialog({
     try {
       const res = await api.api.comp[":comp_id"].pilot.bulk.$post({
         param: { comp_id: compId },
-        json: { pilots: payload },
+        // `remove` names who goes; anyone else on the server — say a pilot
+        // who joined while this editor was open — stays.
+        json: { pilots: payload, remove: removedPilotIds(pilots, payload) },
       });
       if (!res.ok) {
         const body = await res.text();
