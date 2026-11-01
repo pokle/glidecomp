@@ -69,7 +69,7 @@ export function ComboBox<T extends object>({
       {label ? <Label>{label}</Label> : <Label className="sr-only">Search</Label>}
       <Group
         className={cn(
-          "flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-transparent px-2.5 transition-colors",
+          "flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 transition-colors",
           "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50 dark:bg-input/30"
         )}
       >

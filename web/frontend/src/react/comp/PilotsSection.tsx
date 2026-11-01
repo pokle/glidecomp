@@ -22,7 +22,7 @@
  *   - comp/RosterActions.tsx — the ⋯ menu's import, export, CIVL fill and
  *     test pilots, each previewing what it will write.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { Badge } from "@/react/rac/badge";
 import { Button } from "@/react/rac/button";
@@ -74,7 +74,7 @@ export function PilotsSection({
   compName,
   compClasses,
   openRegistration,
-  onPilotsChanged,
+  onCountChange,
   headingAs = "h2",
 }: {
   compId: string;
@@ -83,9 +83,9 @@ export function PilotsSection({
   /** Whether a pilot can join this comp by submitting a track. Shown here
    *  because the roster is the only place the consequence is visible. */
   openRegistration?: boolean;
-  /** Called after any change to the roster, so the parent can refetch data
-   *  that depends on it (e.g. the setup guide's pilot_count). */
-  onPilotsChanged?: () => void;
+  /** The roster's size, whenever it changes — for the page's section nav,
+   *  whose "Pilots (n)" otherwise holds the count the page loaded with. */
+  onCountChange?: (count: number) => void;
   /** "h1" when the section is the whole page (/comp/:id/pilots). */
   headingAs?: "h1" | "h2";
 }) {
@@ -124,10 +124,16 @@ export function PilotsSection({
   }, [loadPilots]);
 
   /** The whole roster changed (a bulk write answered with all of it). */
-  const replaceRoster = (roster: CompPilot[]) => {
-    setPilots(roster);
-    onPilotsChanged?.();
-  };
+  const replaceRoster = (roster: CompPilot[]) => setPilots(roster);
+
+  // Through a ref, so a parent passing an inline callback does not re-run
+  // this on every render.
+  const countChanged = useRef(onCountChange);
+  countChanged.current = onCountChange;
+  const count = pilots?.length;
+  useEffect(() => {
+    if (count !== undefined) countChanged.current?.(count);
+  }, [count]);
 
   const shown = useMemo(
     () => (pilots ? sortPilots(filterPilots(pilots, query), sortBy) : []),
@@ -310,14 +316,12 @@ export function PilotsSection({
               saved,
             ]);
             setEditing(null);
-            onPilotsChanged?.();
           }}
           onRemoved={(removed) => {
             setPilots((list) =>
               (list ?? []).filter((p) => p.comp_pilot_id !== removed.comp_pilot_id)
             );
             setEditing(null);
-            onPilotsChanged?.();
           }}
         />
       ) : null}

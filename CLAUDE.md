@@ -411,7 +411,10 @@ These are the standing imperatives. Each links to the reference that explains it
     It publishes the bar's height as `--bottom-bar`, which the toaster and the
     Preview-as pill add to their offsets (they would otherwise sit on the
     bar's +), pads the page so its end scrolls clear of the bar, and lifts the
-    bar above an on-screen keyboard.
+    bar above an on-screen keyboard — only while focus is INSIDE the bar. It
+    once lifted for any keyboard, and on an iPhone it stuck halfway up the
+    screen: the bar came back as the pilot sheet closed, measured the sheet's
+    keyboard on its way out, and iOS never said when it had gone.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI

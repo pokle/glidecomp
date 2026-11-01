@@ -189,6 +189,17 @@ test("+ after a search that finds nobody adds a pilot with that name", async ({ 
 
   // Saved on Done: there is no page-level Save to press.
   await expect.poll(() => names(page)).toEqual(["Zara New"]);
+  // And the section nav's count follows the list, rather than keeping the
+  // number the page loaded with. At a phone's width the nav folds "Pilots"
+  // into its More menu, so look there when it is not on the bar.
+  const counted = `Pilots (${ROSTER.length + 1})`;
+  if ((await page.getByRole("link", { name: counted }).count()) === 0) {
+    await page.getByRole("button", { name: "More sections" }).click();
+    await expect(page.getByRole("menuitem", { name: counted })).toBeVisible();
+    await page.keyboard.press("Escape");
+  } else {
+    await expect(page.getByRole("link", { name: counted }).first()).toBeAttached();
+  }
   const saved = (await rosterOf(compId)).find((p) => p.name === "Zara New");
   expect(saved?.pilot_class).toBe("sport");
 });
@@ -361,4 +372,92 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the last
   await rows(page).first().click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expectNoSidewaysScroll(page);
+
+  // Its fields stand out from the page behind them. They were transparent,
+  // which on the grey page background made an input the same grey as the
+  // page — hard to find on a phone in daylight.
+  const [fieldBg, pageBg] = await page
+    .getByRole("dialog")
+    .getByRole("textbox", { name: "Name" })
+    .evaluate((el) => [
+      getComputedStyle(el).backgroundColor,
+      getComputedStyle(document.body).backgroundColor,
+    ]);
+  expect(fieldBg, "an input must not be the page's own colour").not.toBe(pageBg);
+});
+
+/**
+ * Stand in for a phone's on-screen keyboard. Headless Chromium has none, so
+ * `visualViewport` is replaced with one the test can shrink — which is all a
+ * keyboard does to it on iOS Safari. `quietly` changes the height without a
+ * `resize`, the way iOS put its keyboard away when the sheet closed on a real
+ * iPhone (the bug this guards).
+ */
+async function stubKeyboard(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const vv = new EventTarget() as EventTarget & {
+      height: number;
+      width: number;
+      offsetTop: number;
+      offsetLeft: number;
+      scale: number;
+    };
+    Object.assign(vv, {
+      height: window.innerHeight,
+      width: window.innerWidth,
+      offsetTop: 0,
+      offsetLeft: 0,
+      scale: 1,
+    });
+    Object.defineProperty(window, "visualViewport", { configurable: true, get: () => vv });
+    (window as unknown as Record<string, unknown>).__keyboard = (px: number, quietly = false) => {
+      vv.height = window.innerHeight - px;
+      if (!quietly) vv.dispatchEvent(new Event("resize"));
+    };
+  });
+}
+
+async function keyboard(page: Page, px: number, quietly = false): Promise<void> {
+  await page.evaluate(
+    ([h, q]) =>
+      (window as unknown as { __keyboard: (px: number, q: boolean) => void }).__keyboard(h, q),
+    [px, quietly] as const
+  );
+}
+
+/** How far the bar's + sits above the bottom of the screen. */
+async function barLift(page: Page): Promise<number> {
+  const plus = await page.getByRole("button", { name: /^Add (pilot|a pilot named)/ }).boundingBox();
+  const height = await page.evaluate(() => window.innerHeight);
+  return height - (plus!.y + plus!.height);
+}
+
+test("the bar rises over its own keyboard only, and never stays up", async ({ page }) => {
+  await stubKeyboard(page);
+  const compId = await makeComp(ROSTER.slice(0, 3));
+  await openPage(page, compId);
+  const resting = await barLift(page);
+  expect(resting, "the bar starts at the bottom").toBeLessThan(60);
+
+  // Add a pilot. The sheet's keyboard is up when Done closes it and brings
+  // the bar back — then goes away without a resize, as it did on an iPhone.
+  await page.getByRole("button", { name: "Add pilot" }).click();
+  const sheet = page.getByRole("dialog", { name: "New pilot" });
+  await sheet.getByRole("textbox", { name: "Name" }).fill("Kim Keyboard");
+  await sheet.getByText("open", { exact: true }).click();
+  await keyboard(page, 300);
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await keyboard(page, 0, true);
+  expect(await barLift(page), "the sheet's keyboard must not leave the bar up").toBeCloseTo(resting, 0);
+
+  // The search's own keyboard lifts the bar above it...
+  await search(page).click();
+  await keyboard(page, 300);
+  expect(await barLift(page)).toBeGreaterThanOrEqual(resting + 300 - 1);
+
+  // ...and leaving the search drops it at once, resize or no resize.
+  await page.getByRole("heading", { level: 1 }).click();
+  await keyboard(page, 0, true);
+  expect(await barLift(page), "leaving the search drops the bar").toBeCloseTo(resting, 0);
 });

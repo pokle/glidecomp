@@ -27,7 +27,7 @@ export function CompPilotsPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { loading } = useUser();
-  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, setData } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
@@ -82,6 +82,10 @@ export function CompPilotsPage() {
         compName={comp.name}
         compClasses={comp.pilot_classes}
         openRegistration={comp.open_registration}
+        // Keeps the section nav's "Pilots (n)" in step with the list below it.
+        onCountChange={(n) =>
+          setData((c) => (c && c.pilot_count !== n ? { ...c, pilot_count: n } : c))
+        }
         headingAs="h1"
       />
     </div>

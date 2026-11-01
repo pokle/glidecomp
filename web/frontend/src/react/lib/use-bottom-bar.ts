@@ -25,6 +25,16 @@
  * written to `--keyboard-inset` on the bar itself, and the bar adds it to its
  * `bottom`.
  *
+ * **Only while the bar itself has focus.** The first version lifted the bar
+ * for ANY keyboard, and it stuck halfway up an iPhone's screen. The pilot
+ * sheet hides the bar while it is open; pressing Done brought the bar back in
+ * the same render that removed the sheet's focused field, so it measured the
+ * sheet's keyboard on its way out and lifted itself above it. iOS then put
+ * the keyboard away without a `resize` the bar ever heard, and the bar stayed
+ * up until the page was next resized (switching apps did it). A keyboard
+ * opened for anything else is not the bar's business: it lifts while focus is
+ * inside it, and drops to the bottom the moment focus leaves.
+ *
  * Pinch-zoom shrinks the visual viewport too, without any keyboard, so a
  * zoomed-in page lifts nothing. Desktop browsers never shrink it at all.
  *
@@ -55,13 +65,25 @@ export function useBottomBar(): RefCallback<HTMLElement> {
 
     const vv = window.visualViewport;
     const lift = () => {
-      if (!vv) return;
+      const focused = bar.contains(document.activeElement);
       const keyboard =
-        vv.scale > 1.01 ? 0 : Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        !vv || !focused || vv.scale > 1.01
+          ? 0
+          : Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       bar.style.setProperty("--keyboard-inset", `${Math.round(keyboard)}px`);
     };
+    // A keyboard animates in after focus lands, so the resize is what says
+    // how tall it is; focusout drops the bar back at once rather than waiting
+    // for a resize that iOS may never send.
     vv?.addEventListener("resize", lift);
     vv?.addEventListener("scroll", lift);
+    bar.addEventListener("focusin", lift);
+    bar.addEventListener("focusout", (e) => {
+      // Moving between the search box and its clear button is still inside.
+      if (!bar.contains(e.relatedTarget as Node | null)) {
+        bar.style.setProperty("--keyboard-inset", "0px");
+      }
+    });
     lift();
 
     return () => {
