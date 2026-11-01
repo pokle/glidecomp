@@ -14,7 +14,7 @@ import {
   validated,
 } from "../validators";
 import { matchRoster, type RankedEntry } from "../civl-ranking-match";
-import { resolvePilotId } from "../pilot-resolver";
+import { resolvePilotId, type MatchedBy } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { audit, auditAll, describeChange, describePrivateChange } from "../audit";
 import { mapWithConcurrency } from "../lib/concurrency";
@@ -426,6 +426,45 @@ async function nextPilotLink(
   return madeByOldIdentity ? null : before.pilot_id;
 }
 
+/** What the resolver matched on, as the request field and the words for it. */
+const MATCHED_FIELD: Record<NonNullable<MatchedBy>, { field: string; noun: string }> = {
+  email: { field: "registered_pilot_email", noun: "email" },
+  civl_id: { field: "registered_pilot_civl_id", noun: "CIVL ID" },
+  safa_id: { field: "registered_pilot_safa_id", noun: "SAFA ID" },
+  ushpa_id: { field: "registered_pilot_ushpa_id", noun: "USHPA ID" },
+  bhpa_id: { field: "registered_pilot_bhpa_id", noun: "BHPA ID" },
+  dhv_id: { field: "registered_pilot_dhv_id", noun: "DHV ID" },
+  ffvl_id: { field: "registered_pilot_ffvl_id", noun: "FFVL ID" },
+  fai_id: { field: "registered_pilot_fai_id", noun: "FAI ID" },
+};
+
+/**
+ * The refusal for a row whose email or ID belongs to a pilot already on the
+ * roster: who they are, and which field said so — so the form can put it
+ * under that field ("Tushar Pokle is already registered with this email.")
+ * instead of leaving the organiser to work out which of eight fields it means.
+ */
+async function alreadyRegistered(
+  db: D1Database,
+  compId: number,
+  pilotId: number,
+  matchedBy: MatchedBy,
+  exceptCompPilotId: number | null = null
+): Promise<{ error: string; field?: string }> {
+  const row = await db
+    .prepare(
+      `SELECT registered_pilot_name FROM comp_pilot
+        WHERE comp_id = ? AND pilot_id = ? AND comp_pilot_id IS NOT ?`
+    )
+    .bind(compId, pilotId, exceptCompPilotId)
+    .first<{ registered_pilot_name: string }>();
+  const who = row?.registered_pilot_name ?? "This pilot";
+  const matched = matchedBy ? MATCHED_FIELD[matchedBy] : null;
+  return matched
+    ? { error: `${who} is already registered with this ${matched.noun}.`, field: matched.field }
+    : { error: `${who} is already registered in this competition.` };
+}
+
 export const pilotRoutes = new Hono<AuthedEnv>()
   // ── GET /api/comp/pilot ── Get current user's pilot profile
   // (literal path — must be registered before /api/comp/:comp_id/pilot)
@@ -546,7 +585,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
           .first();
         if (dupe) {
           return c.json(
-            { error: "This pilot is already registered in the competition" },
+            await alreadyRegistered(c.env.DB, compId, resolved.pilot_id, resolved.matched_by),
             409
           );
         }
@@ -997,8 +1036,11 @@ export const pilotRoutes = new Hono<AuthedEnv>()
           .bind(compId, newPilotId, compPilotId)
           .first();
         if (dupe) {
+          // Ask the resolver again for WHICH field matched: the refusal names
+          // it, and this is the one path that needs to know.
+          const { matched_by } = await resolvePilotId(c.env.DB, resolverFields(merged));
           return c.json(
-            { error: "Another row in this competition already links to that pilot" },
+            await alreadyRegistered(c.env.DB, compId, newPilotId, matched_by, compPilotId),
             409
           );
         }

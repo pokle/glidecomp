@@ -10,11 +10,17 @@
  * of signal, a morning of roster edits waiting on one Save is a morning that
  * one stray tap can lose. Each pilot is saved the moment it is done.
  *
+ * It is a kit `FormSheet` (rac/form.tsx), which owns what happens when Done
+ * does not work: the form's own checks and the server's refusals land under
+ * the field they are about, focused and scrolled into view, and anything
+ * about no field in particular is pinned under the header. Before that, a
+ * refusal sat at the top of a body the organiser had scrolled past, and Done
+ * looked broken. Field `name`s are what the server's refusals are mapped onto
+ * (SERVER_FIELDS).
+ *
  * Because closing SAVES, the other ways out — Back, Escape, a press outside —
  * cannot quietly do the same: they ask before discarding a dirty draft
- * (`confirmDismiss`), and leave a clean one at once. A failed save keeps the
- * sheet open with the server's reason at the top, so nothing typed is lost to
- * a dropped request.
+ * (`confirmDismiss`), and leave a clean one at once.
  *
  * Remove is at the foot, apart from everything else, and asks first — naming
  * the tracks that go with the pilot. In the grid it replaced, removing a pilot
@@ -23,24 +29,16 @@
  */
 import { useState } from "react";
 import { Trash2Icon } from "lucide-react";
-import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Button } from "@/react/rac/button";
 import { Disclosure } from "@/react/rac/disclosure";
 import { TextField } from "@/react/rac/field";
-import { FullScreenSheet, SheetBody, SheetHeader } from "@/react/rac/full-screen-sheet";
+import { FormSheet, UNREACHABLE, readRefusal, useFormState } from "@/react/rac/form";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { api } from "../../comp/api";
 import { useConfirm } from "../lib/confirm";
 import { toast } from "../lib/toast";
 import { formatRankingMonth, listLabel } from "./civl-rankings";
-import {
-  emptyRow,
-  normalizeRow,
-  pilotToRow,
-  serverErrorMessage,
-  type CompPilot,
-  type ParsedRow,
-} from "./csv";
+import { emptyRow, normalizeRow, pilotToRow, type CompPilot, type ParsedRow } from "./csv";
 import { createBody, draftProblems, isBlankDraft, isDirtyDraft, patchBody } from "./pilot-edit";
 
 /** The sporting-body IDs behind the "Other IDs" fold, in the CSV's order. */
@@ -52,6 +50,20 @@ const OTHER_IDS = [
   ["ffvl_id", "FFVL ID"],
   ["fai_id", "FAI ID"],
 ] as const;
+
+/** The server's name for each field → the field's `name` in this sheet. */
+const SERVER_FIELDS: Record<string, string> = {
+  registered_pilot_name: "name",
+  registered_pilot_email: "email",
+  registered_pilot_glider: "glider",
+  registered_pilot_civl_id: "civl_id",
+  registered_pilot_safa_id: "safa_id",
+  registered_pilot_ushpa_id: "ushpa_id",
+  registered_pilot_bhpa_id: "bhpa_id",
+  registered_pilot_dhv_id: "dhv_id",
+  registered_pilot_ffvl_id: "ffvl_id",
+  registered_pilot_fai_id: "fai_id",
+};
 
 type DraftKey = Exclude<keyof ParsedRow, "comp_pilot_id">;
 
@@ -89,98 +101,14 @@ export function PilotSheet({
     pilot ? pilotToRow(pilot) : { ...emptyRow(compClasses), name: initialName ?? "" }
   );
   const [draft, setDraft] = useState<ParsedRow>(start);
-  const [saving, setSaving] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Field errors wait for the first Done: a form that turns red while it is
-  // still being filled in is complaining about work in progress.
-  const [checked, setChecked] = useState(false);
-
-  const set = (key: DraftKey, value: string) =>
-    setDraft((d) =>
-      key === "wprs_points"
-        ? // A typed score is the organiser's own number, so the list and
-          // month it may have come from stop being true of it.
-          { ...d, wprs_points: value, civl_ranking_slug: null, civl_ranking_date: null }
-        : { ...d, [key]: value }
-    );
-  const text = (key: DraftKey) => (draft[key] ?? "") as string;
 
   /** Whether closing would lose anything. */
   const unsaved = pilot ? isDirtyDraft(start, draft) : !isBlankDraft(draft);
-  const problems = checked ? draftProblems(draft, compClasses) : {};
-  const shownName = normalizeRow(draft).name || pilot?.name || "New pilot";
-
-  async function done() {
-    if (!unsaved) {
-      onClose();
-      return;
-    }
-    setChecked(true);
-    if (Object.keys(draftProblems(draft, compClasses)).length > 0) return;
-
-    setSaving(true);
-    setError(null);
-    try {
-      const res = pilot
-        ? await api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$patch({
-            param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
-            json: patchBody(pilot, draft),
-          })
-        : await api.api.comp[":comp_id"].pilot.$post({
-            param: { comp_id: compId },
-            json: createBody(draft),
-          });
-      if (!res.ok) {
-        setError(serverErrorMessage(await res.text()));
-        return;
-      }
-      const saved = (await res.json()) as unknown as CompPilot;
-      toast.success(`Saved ${saved.name}`);
-      onSaved(saved);
-    } catch {
-      setError("Could not reach GlideComp. Check your connection, then press Done again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function remove() {
-    if (!pilot) return;
-    const n = pilot.track_count;
-    const ok = await confirm({
-      title: `Remove ${pilot.name}?`,
-      message: n > 0 ? `Their ${n} track${n === 1 ? "" : "s"} will be deleted too.` : undefined,
-      confirmLabel: "Remove",
-      destructive: true,
-    });
-    if (!ok) return;
-    setRemoving(true);
-    setError(null);
-    try {
-      const res = await api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$delete({
-        param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
-      });
-      if (!res.ok) {
-        setError(serverErrorMessage(await res.text()));
-        return;
-      }
-      toast.success(`Removed ${pilot.name}`);
-      onRemoved(pilot);
-    } catch {
-      setError("Could not reach GlideComp. Check your connection, then try again.");
-    } finally {
-      setRemoving(false);
-    }
-  }
-
-  const otherIdsSet = OTHER_IDS.filter(([key]) => text(key).trim() !== "").map(([, label]) =>
-    label.replace(" ID", "")
-  );
 
   return (
-    <FullScreenSheet
+    <FormSheet
       label={pilot ? `${pilot.name} details` : "New pilot"}
+      title={normalizeRow(draft).name || pilot?.name || "New pilot"}
       onClose={onClose}
       confirmDismiss={() =>
         unsaved
@@ -195,159 +123,240 @@ export function PilotSheet({
             })
           : true
       }
-      className="flex flex-col"
-    >
-      <SheetHeader
-        title={shownName}
-        action={
-          <Button
-            autoFocus
-            isPending={saving}
-            pendingLabel="Saving"
-            isDisabled={removing}
-            onPress={() => void done()}
-          >
-            Done
-          </Button>
+      validate={() => (unsaved ? draftProblems(draft, compClasses) : {})}
+      fieldNames={SERVER_FIELDS}
+      onSubmit={async () => {
+        if (!unsaved) return undefined;
+        return pilot
+          ? api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$patch({
+              param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
+              json: patchBody(pilot, draft),
+            })
+          : api.api.comp[":comp_id"].pilot.$post({
+              param: { comp_id: compId },
+              json: createBody(draft),
+            });
+      }}
+      onSuccess={async (res) => {
+        if (!res) {
+          onClose();
+          return;
         }
+        const saved = (await res.json()) as unknown as CompPilot;
+        toast.success(`Saved ${saved.name}`);
+        onSaved(saved);
+      }}
+    >
+      <PilotFields
+        compId={compId}
+        compClasses={compClasses}
+        pilot={pilot}
+        draft={draft}
+        setDraft={setDraft}
+        onRemoved={onRemoved}
       />
+    </FormSheet>
+  );
+}
 
-      <SheetBody>
-        <div className="flex flex-col gap-4">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
+/** The sheet's body: inside the form, so it can read and report its errors. */
+function PilotFields({
+  compId,
+  compClasses,
+  pilot,
+  draft,
+  setDraft,
+  onRemoved,
+}: {
+  compId: string;
+  compClasses: string[];
+  pilot: CompPilot | null;
+  draft: ParsedRow;
+  setDraft: React.Dispatch<React.SetStateAction<ParsedRow>>;
+  onRemoved: (removed: CompPilot) => void;
+}) {
+  const confirm = useConfirm();
+  const { fieldErrors, pending, setFormError } = useFormState();
+  const [removing, setRemoving] = useState(false);
+  const [othersOpen, setOthersOpen] = useState(false);
 
-          {pilot?.linked ? (
-            <p className="text-sm text-muted-foreground">
-              {pilot.linked_username
-                ? `Linked to @${pilot.linked_username}`
-                : "Linked to a GlideComp account"}
-            </p>
-          ) : null}
+  const set = (key: DraftKey, value: string) =>
+    setDraft((d) =>
+      key === "wprs_points"
+        ? // A typed score is the organiser's own number, so the list and
+          // month it may have come from stop being true of it.
+          { ...d, wprs_points: value, civl_ranking_slug: null, civl_ranking_date: null }
+        : { ...d, [key]: value }
+    );
+  const text = (key: DraftKey) => (draft[key] ?? "") as string;
 
-          <TextField
-            label="Name"
-            value={text("name")}
-            onChange={(v) => set("name", v)}
-            autoComplete="off"
-            isInvalid={!!problems.name}
-            errorMessage={problems.name}
-          />
+  // An error on a field behind the fold opens the fold: the kit focuses the
+  // field with the problem, and a collapsed one cannot take focus.
+  const otherIdError = OTHER_IDS.some(([key]) => fieldErrors[key]);
+  const otherIdsSet = OTHER_IDS.filter(([key]) => text(key).trim() !== "").map(([, label]) =>
+    label.replace(" ID", "")
+  );
 
-          <RadioGroup
-            label="Class"
-            value={draft.pilot_class || null}
-            onChange={(v) => set("pilot_class", v)}
-            orientation="horizontal"
-            isInvalid={!!problems.pilot_class}
-            errorMessage={problems.pilot_class}
-          >
-            {/* A row of thumb-sized targets: the kit's radio is as tall as its
-                text, and a comp's classes are few enough to sit side by side. */}
-            <div className="flex flex-wrap gap-x-5">
-              {compClasses.map((c) => (
-                <Radio key={c} value={c} className="min-h-11 pr-1 text-base md:text-sm">
-                  {c}
-                </Radio>
-              ))}
-            </div>
-          </RadioGroup>
+  async function remove() {
+    if (!pilot) return;
+    const n = pilot.track_count;
+    const ok = await confirm({
+      title: `Remove ${pilot.name}?`,
+      message: n > 0 ? `Their ${n} track${n === 1 ? "" : "s"} will be deleted too.` : undefined,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
+    setRemoving(true);
+    setFormError(null);
+    try {
+      const res = await api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$delete({
+        param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
+      });
+      if (!res.ok) {
+        setFormError((await readRefusal(res)).message);
+        return;
+      }
+      toast.success(`Removed ${pilot.name}`);
+      onRemoved(pilot);
+    } catch {
+      setFormError(UNREACHABLE);
+    } finally {
+      setRemoving(false);
+    }
+  }
 
-          <TextField
-            label="Email"
-            type="email"
-            inputMode="email"
-            autoComplete="off"
-            value={text("email")}
-            onChange={(v) => set("email", v)}
-            description="The address they sign in with — it's how their tracks find them."
-            isInvalid={!!problems.email}
-            errorMessage={problems.email}
-          />
-
-          <TextField
-            label="Glider"
-            autoComplete="off"
-            value={text("glider")}
-            onChange={(v) => set("glider", v)}
-          />
-
-          <TextField
-            label="WPRS points"
-            inputMode="decimal"
-            autoComplete="off"
-            value={text("wprs_points")}
-            onChange={(v) => set("wprs_points", v)}
-            description={pointsSource(draft)}
-            isInvalid={!!problems.wprs_points}
-            errorMessage={problems.wprs_points}
-          />
-
-          <TextField
-            label="CIVL ID"
-            inputMode="numeric"
-            autoComplete="off"
-            value={text("civl_id")}
-            onChange={(v) => set("civl_id", v)}
-          />
-
-          <TextField
-            label="Team"
-            autoComplete="off"
-            value={text("team_name")}
-            onChange={(v) => set("team_name", v)}
-          />
-
-          <TextField
-            label="Driver"
-            autoComplete="off"
-            value={text("driver_contact")}
-            onChange={(v) => set("driver_contact", v)}
-          />
-
-          <Disclosure
-            title="Other IDs"
-            headingLevel={3}
-            badge={
-              otherIdsSet.length > 0 ? (
-                <span className="text-sm text-muted-foreground">
-                  ({otherIdsSet.join(", ")} set)
-                </span>
-              ) : null
-            }
-          >
-            <div className="flex flex-col gap-4 pt-3">
-              {OTHER_IDS.map(([key, label]) => (
-                <TextField
-                  key={key}
-                  label={label}
-                  autoComplete="off"
-                  value={text(key)}
-                  onChange={(v) => set(key, v)}
-                />
-              ))}
-            </div>
-          </Disclosure>
-        </div>
-
-        {pilot ? (
-          <div className="mt-8 border-t border-border pt-4">
-            <Button
-              variant="destructive"
-              isPending={removing}
-              pendingLabel="Removing"
-              isDisabled={saving}
-              onPress={() => void remove()}
-            >
-              <Trash2Icon className="size-4" aria-hidden="true" />
-              Remove this pilot
-            </Button>
-          </div>
+  return (
+    <>
+      <div className="flex flex-col gap-4">
+        {pilot?.linked ? (
+          <p className="text-sm text-muted-foreground">
+            {pilot.linked_username
+              ? `Linked to @${pilot.linked_username}`
+              : "Linked to a GlideComp account"}
+          </p>
         ) : null}
-      </SheetBody>
-    </FullScreenSheet>
+
+        <TextField
+          label="Name"
+          name="name"
+          value={text("name")}
+          onChange={(v) => set("name", v)}
+          autoComplete="off"
+        />
+
+        <RadioGroup
+          label="Class"
+          name="pilot_class"
+          value={draft.pilot_class || null}
+          onChange={(v) => set("pilot_class", v)}
+          orientation="horizontal"
+        >
+          {/* A row of thumb-sized targets: the kit's radio is as tall as its
+              text, and a comp's classes are few enough to sit side by side. */}
+          <div className="flex flex-wrap gap-x-5">
+            {compClasses.map((c) => (
+              <Radio key={c} value={c} className="min-h-11 pr-1 text-base md:text-sm">
+                {c}
+              </Radio>
+            ))}
+          </div>
+        </RadioGroup>
+
+        <TextField
+          label="Email"
+          name="email"
+          type="email"
+          inputMode="email"
+          autoComplete="off"
+          value={text("email")}
+          onChange={(v) => set("email", v)}
+          description="The address they sign in with — it's how their tracks find them."
+        />
+
+        <TextField
+          label="Glider"
+          name="glider"
+          autoComplete="off"
+          value={text("glider")}
+          onChange={(v) => set("glider", v)}
+        />
+
+        <TextField
+          label="WPRS points"
+          name="wprs_points"
+          inputMode="decimal"
+          autoComplete="off"
+          value={text("wprs_points")}
+          onChange={(v) => set("wprs_points", v)}
+          description={pointsSource(draft)}
+        />
+
+        <TextField
+          label="CIVL ID"
+          name="civl_id"
+          inputMode="numeric"
+          autoComplete="off"
+          value={text("civl_id")}
+          onChange={(v) => set("civl_id", v)}
+        />
+
+        <TextField
+          label="Team"
+          name="team_name"
+          autoComplete="off"
+          value={text("team_name")}
+          onChange={(v) => set("team_name", v)}
+        />
+
+        <TextField
+          label="Driver"
+          name="driver_contact"
+          autoComplete="off"
+          value={text("driver_contact")}
+          onChange={(v) => set("driver_contact", v)}
+        />
+
+        <Disclosure
+          title="Other IDs"
+          headingLevel={3}
+          isExpanded={othersOpen || otherIdError}
+          onExpandedChange={setOthersOpen}
+          badge={
+            otherIdsSet.length > 0 ? (
+              <span className="text-sm text-muted-foreground">({otherIdsSet.join(", ")} set)</span>
+            ) : null
+          }
+        >
+          <div className="flex flex-col gap-4 pt-3">
+            {OTHER_IDS.map(([key, label]) => (
+              <TextField
+                key={key}
+                label={label}
+                name={key}
+                autoComplete="off"
+                value={text(key)}
+                onChange={(v) => set(key, v)}
+              />
+            ))}
+          </div>
+        </Disclosure>
+      </div>
+
+      {pilot ? (
+        <div className="mt-8 border-t border-border pt-4">
+          <Button
+            variant="destructive"
+            isPending={removing}
+            pendingLabel="Removing"
+            isDisabled={pending}
+            onPress={() => void remove()}
+          >
+            <Trash2Icon className="size-4" aria-hidden="true" />
+            Remove this pilot
+          </Button>
+        </div>
+      ) : null}
+    </>
   );
 }

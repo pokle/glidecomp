@@ -355,6 +355,10 @@ export default defineConfig({
               path === '/comp' ||
               path.startsWith('/comp/') ||
               path === '/scores' ||
+              // The kit form's test bench (e2e/forms.spec.ts). This middleware
+              // is the dev server's alone, and the route exists only in a
+              // development build (src/react/routes.tsx).
+              path === '/__kit/form' ||
               /^\/(submit|profile|settings|onboarding|signin|oauth\/consent)\/?$/.test(path) ||
               /^\/admin\/(users|cache)\/?$/.test(path));
           // Old static-page URLs 301 to their clean SPA/Astro routes.

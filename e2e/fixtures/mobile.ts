@@ -49,6 +49,10 @@ export const MOBILE_SPEC_FILES = [
   // screen in thumb reach. The fourteen-column grid it replaced showed about
   // one and a half columns at this width.
   "comp-pilots.spec.ts",
+  // The kit form (rac/form.tsx), whose rules are about where an error lands
+  // on the screen — which is exactly what a phone's height, its keyboard and
+  // a sheet's fixed header change.
+  "forms.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */

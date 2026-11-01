@@ -326,3 +326,69 @@ describe("the roster says how many tracks each pilot holds", () => {
     expect(pilots[0].track_count).toBe(1);
   });
 });
+
+describe("a refusal names the field it is about", () => {
+  test("a request that fails validation says which field", async () => {
+    const compId = await createComp();
+    const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Alice",
+      registered_pilot_email: "not an email",
+      pilot_class: "open",
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; field?: string };
+    expect(body.field).toBe("registered_pilot_email");
+    // The old string is unchanged, for anything that still reads it.
+    expect(body.error).toMatch(/^registered_pilot_email: /);
+  });
+
+  test("adding a pilot already on the roster names them, and the field that matched", async () => {
+    await env.DB.prepare("INSERT INTO pilot (user_id, name) VALUES (?, ?)")
+      .bind("user-3", "Pilot Three")
+      .run();
+    const compId = await createComp();
+    const first = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Pilot Three",
+      registered_pilot_email: "pilot3@test.com",
+      pilot_class: "open",
+    });
+    expect(first.status).toBe(201);
+
+    const again = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Moosh",
+      registered_pilot_email: "pilot3@test.com",
+      pilot_class: "open",
+    });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toEqual({
+      error: "Pilot Three is already registered with this email.",
+      field: "registered_pilot_email",
+    });
+  });
+
+  test("editing a pilot onto someone else's CIVL ID names them, and the field", async () => {
+    await env.DB.prepare("INSERT INTO pilot (user_id, name, civl_id) VALUES (?, ?, ?)")
+      .bind("user-3", "Pilot Three", "C-42")
+      .run();
+    const compId = await createComp();
+    await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Pilot Three",
+      registered_pilot_civl_id: "C-42",
+      pilot_class: "open",
+    });
+    const other = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Moosh",
+      pilot_class: "open",
+    });
+    const { comp_pilot_id } = (await other.json()) as Pilot;
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}/pilot/${comp_pilot_id}`, {
+      registered_pilot_civl_id: "C-42",
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: "Pilot Three is already registered with this CIVL ID.",
+      field: "registered_pilot_civl_id",
+    });
+  });
+});

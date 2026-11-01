@@ -415,6 +415,21 @@ These are the standing imperatives. Each links to the reference that explains it
     once lifted for any keyboard, and on an iPhone it stuck halfway up the
     screen: the bar came back as the pilot sheet closed, measured the sheet's
     keyboard on its way out, and iOS never said when it had gone.
+  - **Every form submits through the kit form, `rac/form.tsx`** (`Form`, or
+    the `FormSheet` shape), and a failed save is never a toast. It owns what
+    happens when Save does not work, so no page writes that again: an error
+    about a field goes UNDER that field, which is focused and scrolled into
+    view; one about no field is pinned where it cannot scroll away (under a
+    sheet's header); one submit at a time; a dropped connection keeps what
+    was typed. The server's half is `{ error, field }` on every refusal —
+    `validated()` does it for schema failures, and a route that knows which
+    input it is refusing says so (`fieldNames` maps it onto the form's field
+    `name`s). Every form did this by hand until 2026-11, two ways, and both
+    lost the reader: on an iPhone the pilot sheet's Done spun and stopped,
+    with the reason at the top of a body scrolled past it.
+    `e2e/forms.spec.ts` holds the rules on a phone and a desktop against a
+    development-only bench (`/__kit/form`), so a form built on the kit tests
+    only its own fields.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI

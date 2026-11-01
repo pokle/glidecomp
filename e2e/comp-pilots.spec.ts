@@ -244,6 +244,43 @@ test("a pilot is saved on Done, and Back with unsaved edits asks first", async (
   await expect(list(page)).toBeVisible();
 });
 
+test("a refusal lands under the field it is about, focused and in view", async ({ page }) => {
+  // The bug, found on an iPhone: an email that already belonged to someone on
+  // the roster was refused, the refusal went to the top of a body scrolled
+  // past it, and Done looked broken. The test organiser is a pilot too, on
+  // this roster by their email.
+  const profile = await api.patch("/api/comp/pilot", { data: { name: TEST_USER.name } });
+  expect(profile.ok(), await profile.text()).toBe(true);
+  const compId = await makeComp([
+    { registered_pilot_name: "Org Self", registered_pilot_email: TEST_USER.email, pilot_class: "open" },
+    ...FILLERS.slice(0, 3),
+  ]);
+  await openPage(page, compId);
+
+  await page.getByRole("button", { name: "Add pilot" }).click();
+  const sheet = page.getByRole("dialog", { name: "New pilot" });
+  await sheet.getByRole("textbox", { name: "Name" }).fill("Moosh");
+  await sheet.getByText("open", { exact: true }).click();
+  const email = sheet.getByRole("textbox", { name: "Email" });
+  await email.fill(TEST_USER.email);
+  // Scrolled down past the email, the way the organiser was.
+  await sheet.getByRole("textbox", { name: "Driver" }).scrollIntoViewIfNeeded();
+  await sheet.getByRole("button", { name: "Done" }).click();
+
+  await expect(sheet).toContainText("Org Self is already registered with this email.");
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await expect(email).toBeFocused();
+  await expect(email).toBeInViewport();
+
+  // Editing the field clears its error, and the corrected pilot saves.
+  await email.fill("moosh@example.com");
+  await expect(email).toHaveValue("moosh@example.com");
+  await expect(sheet).not.toContainText("already registered");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  expect((await rosterOf(compId)).some((p) => p.name === "Moosh")).toBe(true);
+});
+
 test("Remove asks before it removes", async ({ page }) => {
   const compId = await makeComp();
   await openPage(page, compId);
@@ -329,7 +366,7 @@ test("an exported roster re-imports as the same pilots", async ({ page }) => {
 
   const review = page.getByRole("dialog", { name: "Import exported.csv" });
   await expect(review).toContainText("0 updated · 0 new · 0 removed");
-  await expect(review.getByRole("button", { name: "Apply" })).toBeDisabled();
+  await expect(review.getByRole("button", { name: "Apply" })).toHaveCount(0);
 });
 
 test("the page never scrolls sideways, its targets are thumb-sized, and the last pilot clears the bar", async ({

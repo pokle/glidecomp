@@ -26,7 +26,7 @@ import {
   DialogTitle,
   Modal,
 } from "@/react/rac/dialog";
-import { FullScreenSheet, SheetBody, SheetHeader } from "@/react/rac/full-screen-sheet";
+import { FormSheet } from "@/react/rac/form";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
@@ -43,24 +43,10 @@ import {
   normalizeRow,
   parsedRowToBulk,
   pilotToRow,
-  serverErrorMessage,
   type BulkPilotRow,
   type CompPilot,
 } from "./csv";
 import { planChanges, planImport, planRequest, type ImportPlan } from "./roster-import";
-
-/** One bulk write: the changed rows, and who to remove. The whole roster back. */
-async function bulkSave(
-  compId: string,
-  body: { pilots: BulkPilotRow[]; remove: string[] }
-): Promise<CompPilot[]> {
-  const res = await api.api.comp[":comp_id"].pilot.bulk.$post({
-    param: { comp_id: compId },
-    json: body,
-  });
-  if (!res.ok) throw new Error(serverErrorMessage(await res.text()));
-  return ((await res.json()) as unknown as { pilots: CompPilot[] }).pilots;
-}
 
 export function RosterActionsMenu({
   onImport,
@@ -175,23 +161,7 @@ export function ImportReviewSheet({
   onApplied: (roster: CompPilot[]) => void;
   onClose: () => void;
 }) {
-  const [applying, setApplying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const changes = planChanges(plan);
-
-  async function apply() {
-    setApplying(true);
-    setError(null);
-    try {
-      onApplied(await bulkSave(compId, planRequest(plan)));
-      toast.success(`Imported ${plan.fileName}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setApplying(false);
-    }
-  }
-
   const summary = [
     `${plan.updated.length} updated`,
     `${plan.added.length} new`,
@@ -199,83 +169,81 @@ export function ImportReviewSheet({
   ].join(" · ");
 
   return (
-    <FullScreenSheet label={`Import ${plan.fileName}`} onClose={onClose} className="flex flex-col">
-      <SheetHeader
-        title={`Import ${plan.fileName}`}
-        description={<p className="text-sm text-muted-foreground">{summary}</p>}
-        leading={
-          <Button variant="outline" onPress={onClose}>
-            Cancel
-          </Button>
-        }
-        action={
-          <Button
-            autoFocus
-            isDisabled={plan.errors.length > 0 || changes === 0}
-            isPending={applying}
-            pendingLabel="Applying"
-            onPress={() => void apply()}
-          >
-            Apply
-          </Button>
-        }
-      />
-      <SheetBody className="flex flex-col gap-6">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-        {plan.errors.length > 0 ? (
-          <Alert variant="destructive">
-            <AlertDescription>
-              <ul className="list-disc pl-5">
-                {plan.errors.slice(0, 20).map((e, i) => (
-                  <li key={i}>{e}</li>
-                ))}
-                {plan.errors.length > 20 ? <li>… and {plan.errors.length - 20} more</li> : null}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {changes === 0 && plan.errors.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            This file matches the roster. There is nothing to change.
-          </p>
-        ) : null}
+    <FormSheet
+      label={`Import ${plan.fileName}`}
+      title={`Import ${plan.fileName}`}
+      description={<p className="text-sm text-muted-foreground">{summary}</p>}
+      leading={
+        <Button variant="outline" onPress={onClose}>
+          Cancel
+        </Button>
+      }
+      submitLabel="Apply"
+      pendingLabel="Applying"
+      // Nothing to apply, or a file that cannot be: the reasons are in the body.
+      hideSubmit={plan.errors.length > 0 || changes === 0}
+      onClose={onClose}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].pilot.bulk.$post({
+          param: { comp_id: compId },
+          json: planRequest(plan),
+        })
+      }
+      onSuccess={async (res) => {
+        onApplied(((await res!.json()) as unknown as { pilots: CompPilot[] }).pilots);
+        toast.success(`Imported ${plan.fileName}`);
+      }}
+      bodyClassName="flex flex-col gap-6"
+    >
+      {plan.errors.length > 0 ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            <ul className="list-disc pl-5">
+              {plan.errors.slice(0, 20).map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+              {plan.errors.length > 20 ? <li>… and {plan.errors.length - 20} more</li> : null}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {changes === 0 && plan.errors.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          This file matches the roster. There is nothing to change.
+        </p>
+      ) : null}
 
-        {/* Removed first: it is the part that cannot be undone. */}
-        <ReviewSection title="Removed" count={plan.removed.length}>
-          {plan.removed.map(({ pilot, sameNameAsNew }) => (
-            <li key={pilot.comp_pilot_id} className="py-2">
-              <p className="font-medium">{pilot.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {[
-                  tracksNote(pilot.track_count),
-                  sameNameAsNew ? "Same name as a new row in the file" : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </li>
-          ))}
-        </ReviewSection>
-        <ReviewSection title="New" count={plan.added.length}>
-          {plan.added.map((row, i) => (
-            <li key={i} className="py-2 font-medium">
-              {row.registered_pilot_name}
-            </li>
-          ))}
-        </ReviewSection>
-        <ReviewSection title="Updated" count={plan.updated.length}>
-          {plan.updated.map(({ before }) => (
-            <li key={before.comp_pilot_id} className="py-2 font-medium">
-              {before.name}
-            </li>
-          ))}
-        </ReviewSection>
-      </SheetBody>
-    </FullScreenSheet>
+      {/* Removed first: it is the part that cannot be undone. */}
+      <ReviewSection title="Removed" count={plan.removed.length}>
+        {plan.removed.map(({ pilot, sameNameAsNew }) => (
+          <li key={pilot.comp_pilot_id} className="py-2">
+            <p className="font-medium">{pilot.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {[
+                tracksNote(pilot.track_count),
+                sameNameAsNew ? "Same name as a new row in the file" : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </li>
+        ))}
+      </ReviewSection>
+      <ReviewSection title="New" count={plan.added.length}>
+        {plan.added.map((row, i) => (
+          <li key={i} className="py-2 font-medium">
+            {row.registered_pilot_name}
+          </li>
+        ))}
+      </ReviewSection>
+      <ReviewSection title="Updated" count={plan.updated.length}>
+        {plan.updated.map(({ before }) => (
+          <li key={before.comp_pilot_id} className="py-2 font-medium">
+            {before.name}
+          </li>
+        ))}
+      </ReviewSection>
+    </FormSheet>
   );
 }
 
@@ -375,8 +343,7 @@ export function CivlFillSheet({
   onClose: () => void;
 }) {
   const [plan, setPlan] = useState<FillPlan | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [filling, setFilling] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Asked once, about the roster as the sheet opened on it. The sheet covers
   // the list, so nothing can change the roster under the answer from here.
@@ -388,7 +355,7 @@ export function CivlFillSheet({
       })
       .catch(() => {
         if (!cancelled) {
-          setError("Could not read the CIVL rankings. Check your connection, then try again.");
+          setLoadError("Could not read the CIVL rankings. Check your connection, then try again.");
         }
       });
     return () => {
@@ -397,50 +364,38 @@ export function CivlFillSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on open
   }, []);
 
-  async function fill() {
-    if (!plan) return;
-    setFilling(true);
-    setError(null);
-    try {
-      onApplied(await bulkSave(compId, { pilots: plan.changes.map((c) => c.row), remove: [] }));
-      toast.success(plan.outcome);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setFilling(false);
-    }
-  }
-
   return (
-    <FullScreenSheet label="Fill from CIVL rankings" onClose={onClose} className="flex flex-col">
-      <SheetHeader
-        title="Fill from CIVL rankings"
-        leading={
-          <Button variant="outline" onPress={onClose}>
-            Cancel
-          </Button>
-        }
-        action={
-          plan && plan.changes.length > 0 ? (
-            <Button
-              autoFocus
-              isPending={filling}
-              pendingLabel="Filling from the rankings"
-              onPress={() => void fill()}
-            >
-              Fill
-            </Button>
-          ) : undefined
-        }
-      />
-      <SheetBody className="flex flex-col gap-4">
-        {error ? (
+    <FormSheet
+      label="Fill from CIVL rankings"
+      title="Fill from CIVL rankings"
+      leading={
+        <Button variant="outline" onPress={onClose}>
+          Cancel
+        </Button>
+      }
+      submitLabel="Fill"
+      pendingLabel="Filling from the rankings"
+      hideSubmit={!plan || plan.changes.length === 0}
+      onClose={onClose}
+      onSubmit={() =>
+        api.api.comp[":comp_id"].pilot.bulk.$post({
+          param: { comp_id: compId },
+          json: { pilots: plan!.changes.map((c) => c.row), remove: [] },
+        })
+      }
+      onSuccess={async (res) => {
+        onApplied(((await res!.json()) as unknown as { pilots: CompPilot[] }).pilots);
+        toast.success(plan!.outcome);
+      }}
+      bodyClassName="flex flex-col gap-4"
+    >
+        {loadError ? (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{loadError}</AlertDescription>
           </Alert>
         ) : null}
         {plan === null ? (
-          error ? null : <Loading className="text-sm">Reading the CIVL world rankings…</Loading>
+          loadError ? null : <Loading className="text-sm">Reading the CIVL world rankings…</Loading>
         ) : plan.changes.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {plan.alreadySet > 0
@@ -474,7 +429,6 @@ export function CivlFillSheet({
             </ul>
           </>
         )}
-      </SheetBody>
-    </FullScreenSheet>
+    </FormSheet>
   );
 }

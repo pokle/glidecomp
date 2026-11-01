@@ -66,6 +66,12 @@ const OAuthConsent = lazy(() =>
 const SignIn = lazy(() =>
   import("./pages/SignIn").then((m) => ({ default: m.SignIn }))
 );
+// The kit form's test bench, for e2e/forms.spec.ts. Development builds only:
+// `import.meta.env.DEV` is false in a production build, so neither the route
+// nor the page is in it.
+const KitFormFixture = import.meta.env.DEV
+  ? lazy(() => import("./pages/KitFormFixture").then((m) => ({ default: m.KitFormFixture })))
+  : null;
 const CompPilotsPage = lazy(() =>
   import("./pages/CompPilotsPage").then((m) => ({ default: m.CompPilotsPage }))
 );
@@ -176,6 +182,9 @@ export function AppRoutes() {
             {/* Inside Shell: /submit is a destination with somewhere to go
                 afterwards, not a dead end like /signin. */}
             <Route path="/submit" element={<SubmitTrack />} />
+            {KitFormFixture ? (
+              <Route path="/__kit/form" element={<KitFormFixture />} />
+            ) : null}
             <Route path="/comp" element={<Competitions />} />
             <Route path="/comp/:compId" element={<CompDetail />} />
             <Route path="/comp/:compId/scores" element={<CompScoresPage />} />

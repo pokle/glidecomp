@@ -72,7 +72,7 @@ export const E2E_SHARDS = {
   /**
    * What an organiser does to a competition: the comp and task settings pages,
    * the pilots page, the waypoint editor, the rankings fill, and the mutations
-   * that must move a score. Five of the six `mobile` specs are here, because
+   * that must move a score. Six of the seven `mobile` specs are here, because
    * the organiser's pages are built mobile-first (#636, #637, and the
    * waypoints and pilots lists).
    */
@@ -84,6 +84,7 @@ export const E2E_SHARDS = {
     "scoring-mutations.spec.ts", // 22.3s
     "civl-rankings.spec.ts", // 16.7s
     "comp-pilots.spec.ts", // new — measure on its first CI run (chromium + mobile)
+    "forms.spec.ts", // new — the kit form's rules (chromium + mobile)
     "comp-creation.spec.ts", // 4.0s
     "hidden-comp-share-link.spec.ts", // new — measure on its first CI run
     "results-record.spec.ts", // new — measure on its first CI run
