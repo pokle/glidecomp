@@ -13,7 +13,6 @@
  */
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 /* Atkinson Hyperlegible Next — the app UI face and the analysis pages'
    reading face (the report is dense number-reading; the font is designed for
    exactly that). One variable file spans every weight the UI uses, so a page
@@ -23,6 +22,28 @@
 @import "../fonts.css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* `data-selected:` and `data-disabled:` match a value, not a bare attribute.
+   Tailwind's built-in `data-*` variants match any element that carries the
+   attribute, so `data-disabled="false"` would count as disabled. These two
+   rules keep the meaning the classes have always had. They are copied
+   verbatim from shadcn's `tailwind.css` (MIT, (c) shadcn), which this file
+   imported whole until 2026-11-01 for these two alone. The rest of it (seven
+   more variants, scroll-fade, shimmer, accordion keyframes) was unused, and
+   the package brought the shadcn CLI and its advisories with it. A new
+   `data-*:` variant needs no rule here unless it must match a value too. */
+@custom-variant data-selected {
+  &:where([data-selected="true"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]),
+  &:where([data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
 
 :root {
   /* Surfaces. The ground is Apple's systemGroupedBackground and a card is

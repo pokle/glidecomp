@@ -4,6 +4,95 @@ This log is written by the weekly upgrade routine at `.claude/commands/upgrade-d
 
 **Entries are point-in-time snapshots, and a lesson in one can be obsolete by the time you read it.** The routine is the current instruction; where the two disagree, the routine wins. One case is already known: the cycles below record hand-running `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium chromium-headless-shell` when the environment's pre-baked Chromium didn't match Playwright's pin. `bun run test:e2e` does that itself now — see `web/scripts/ensure-playwright-browsers.sh`. Don't repeat the manual step, and if you retire another recurring workaround, note it here rather than only in that cycle's Lessons, where the next session will read it as still-current advice.
 
+## 2026-11-01 — shadcn removed (focused PR)
+
+This is not a weekly cycle. It does the follow-up that the cycle below
+recommended. **The `shadcn` package is gone from the tree.** `bun audit` goes
+from 2 to 1: `deepmerge` (GHSA-gcqx-w48m-w2h4) leaves with it, and the
+`minimatch` override is no longer needed. The one finding left is the
+test-only `zod@3.25.76`.
+
+**What the frontend used it for.** One line, `@import "shadcn/tailwind.css"`
+in `src/react/globals.css`. That file is 637 lines of Tailwind v4 directives:
+
+- nine `@custom-variant` rules (`data-open`, `data-closed`, `data-checked`,
+  `data-unchecked`, `data-selected`, `data-disabled`, `data-active`,
+  `data-horizontal`, `data-vertical`);
+- the `no-scrollbar`, `scroll-fade-*` and `shimmer-*` utilities;
+- the accordion keyframes.
+
+A grep of `src/` and `static/` finds only `data-selected:` (6 files) and
+`data-disabled:` (9 files) in use. Those two rules are now copied verbatim
+into `globals.css`, with a comment on why they are there. They are kept,
+not left to Tailwind's built-in `data-*` variants, because they match a
+value: shadcn's `data-selected` is `[data-selected="true"]`, and its
+`data-disabled` excludes `data-disabled="false"`. Tailwind's own variants match
+the bare attribute, so `"false"` would count as set.
+
+### The CSS did not change
+
+The production build was compared before and after, file by file:
+
+- Six of the nine CSS files are byte-identical.
+- `app`, `analysis` and the Astro `Base` stylesheet are each 900 bytes
+  smaller. The rule-by-rule diff shows what went: the eight
+  `@property --scroll-fade-*`/`--shimmer-*` declarations, their fallback
+  defaults in the `@layer properties` block, and the unlayered
+  `.shimmer` reduced-motion rule. Nothing in the app uses any of them.
+  With those removed from the old files, old and new are **byte-identical**.
+  Every selector the app uses compiles the same, in the same order.
+
+### Overrides removed
+
+`bun install` reported no changes after each removal, and
+`bun install --frozen-lockfile` agrees. Each of the thirteen below now
+matches no package in `bun.lock`:
+
+| Override | Why it existed |
+|----------|----------------|
+| `minimatch` | GHSA-g3hv-75wg-m249, through shadcn → ts-morph (cycle below). |
+| `@modelcontextprotocol/sdk`, `body-parser`, `@hono/node-server`, `proxy-addr`, `qs` | The shadcn → MCP SDK → express path. shadcn 4.23 had already removed it. |
+| `@babel/core`, `browserslist`, `postcss-selector-parser` | shadcn's own dependencies (babel, for `@shadcn/registry`'s code transforms). |
+| `brace-expansion` | Through `minimatch`, shadcn → ts-morph. |
+| `ip-address` | `@shadcn/registry` → `socks`. |
+| `fast-uri`, `systeminformation` | `@shadcn/registry` → `@dotenvx/dotenvx` (→ `conf` → `ajv` for fast-uri). |
+
+**Two dead overrides are left on purpose:** `protocol-buffers-schema` and
+`uuid`. They matched nothing on master before this change either. That is a
+separate question, and the cycle below missed it. Delete them, or find what
+they were for, next cycle.
+
+### Verification
+
+- The CSS comparison above.
+- `bun run typecheck:all`, the frontend `typecheck` and `bun run test:all`:
+  clean, 0 fail (1862 root/engine/airscore/dev-router/mcp-api, 1033
+  frontend, 245 auth-api with 6 todo, 873 competition-api).
+- `bun run build`: clean, 10 Astro pages.
+- `bun run test:e2e`: **236 passed, 1 failed, 9 skipped** in 22.6 minutes. The
+  failure was `comp-detail.spec.ts` "scores page: Download menu…" on the
+  `mobile` project: `apiRequestContext.get: socket hang up (ECONNRESET)` on a
+  plain GET of a report-card URL. The dev server reset the socket, and no
+  assertion failed. The same test passed on `chromium` in that run. Re-run alone
+  (`--project=mobile --repeat-each=3`), the spec passed 30/30. A CSS change
+  cannot reset a socket. wrangler had also died and restarted earlier in the
+  run, at test 32, which is the known ProxyWorker case (`docs/local-dev.md`).
+- `bun run test:e2e:ssr`: **75/75 passed** in 2.4 minutes, run first and from
+  a fresh state (the cycle below's lesson).
+- `bun audit`: 2 before (1 high, 1 low), 1 high after.
+- `grep shadcn bun.lock`: no match.
+
+### Lessons
+
+- **Read what an import brings before a routine keeps upgrading it.** The
+  shadcn kit left on 2026-07-27, and this log bumped `shadcn` on five later
+  cycles with the note "we import only `shadcn/tailwind.css`". That note was
+  the finding, and none of those cycles acted on it.
+- **To prove a CSS refactor changes nothing, diff the build output rule by
+  rule.** Whole-file hashes say only "different". Splitting the minified CSS
+  at top-level rules and comparing them as an ordered list found exactly what
+  went and showed that nothing else moved.
+
 ## 2026-11-01
 
 **`bun audit` opens at 3 (1 high, 1 moderate, 1 low) and closes at 2 (1 high,
@@ -33,9 +122,12 @@ file from it.** `src/react/globals.css` has `@import "shadcn/tailwind.css"`
 else in the tree imports `shadcn`. For that one file, the frontend installs a
 CLI with an MCP server, babel, ts-morph and a registry client. Copying the file
 into `src/react/` (MIT) would drop the package and with it `deepmerge`, the
-minimatch override and the stale overrides below. That is a styling change
-and needs its own review, so this cycle does not do it. **Recommended as a
-focused PR.** The file did not change between 4.22.1 and 4.23.0 (diffed).
+minimatch override and the stale overrides below. ~~That is a styling change
+and needs its own review~~ — **corrected:** copying the file verbatim compiles
+to identical CSS, so it is no styling change at all. What deserved its own PR
+was trimming it to what the app uses. **Done in the focused entry above
+("shadcn removed").** The file did not change between 4.22.1 and 4.23.0
+(diffed).
 
 ### Dependency Upgrades
 
@@ -69,7 +161,10 @@ None.
 `body-parser`, `@hono/node-server`, `proxy-addr` and `qs`. They came with the
 shadcn → `@modelcontextprotocol/sdk` → `express` path, which shadcn 4.23 removed.
 They are kept this cycle as floors, in case a dependency brings that path
-back. If shadcn is removed (above), delete them in the same PR.
+back. If shadcn is removed (above), delete them in the same PR. **Correction:**
+seven were dead, not five — `protocol-buffers-schema` and `uuid` already
+matched nothing, and this count missed them. See the "shadcn removed" entry
+above for what happened to all of them.
 
 ### Packages Not Upgraded (intentional)
 
