@@ -18,6 +18,7 @@ import {
   request,
 } from "./helpers";
 import { SHARE_KEY_RE, newShareKey, splitCompRef, shareKeyMatches } from "../src/share-key";
+import { encodeId } from "../src/sqids";
 
 beforeEach(async () => {
   await clearCompData();
@@ -57,18 +58,63 @@ describe("share-key helpers", () => {
   });
 });
 
-describe("every comp has a key", () => {
-  test("a comp written straight to the database gets one from the trigger", async () => {
-    // The sample seeder and the AirScore importer insert rows without the
-    // routes; migration 0041's trigger must still give every comp a key.
-    await env.DB.prepare(
+describe("every key is minted by the Worker", () => {
+  /** A hidden comp written straight to the database, as the seeder and the
+   * importer do (and as every comp predating migration 0041 was), with
+   * user-1 as its admin. */
+  async function keylessHiddenComp(): Promise<{ id: number; sqid: string }> {
+    const res = await env.DB.prepare(
       `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class)
        VALUES ('Seeded', '2026-01-01T00:00:00Z', NULL, 'hg', 1, '["open"]', 'open')`
     ).run();
-    const row = await env.DB.prepare(
-      "SELECT share_key FROM comp WHERE name = 'Seeded'"
-    ).first<{ share_key: string | null }>();
-    expect(row?.share_key).toMatch(SHARE_KEY_RE);
+    const id = res.meta.last_row_id as number;
+    await env.DB.prepare("INSERT INTO comp_admin (comp_id, user_id) VALUES (?, 'user-1')")
+      .bind(id)
+      .run();
+    return { id, sqid: encodeId(env.SQIDS_ALPHABET, id) };
+  }
+
+  async function storedKey(id: number): Promise<string | null> {
+    const row = await env.DB.prepare("SELECT share_key FROM comp WHERE comp_id = ?")
+      .bind(id)
+      .first<{ share_key: string | null }>();
+    return row?.share_key ?? null;
+  }
+
+  test("the database mints nothing: a comp written straight to it has no key", async () => {
+    // No backfill and no trigger in migration 0041. SQLite's random() is not
+    // documented as cryptographically secure, so a key never comes from SQL.
+    const { id } = await keylessHiddenComp();
+    expect(await storedKey(id)).toBeNull();
+  });
+
+  test("its admin opening it mints one, and the same key every time after", async () => {
+    const { id, sqid } = await keylessHiddenComp();
+    const first = (await (await authRequest("GET", `/api/comp/${sqid}`)).json()) as any;
+    expect(first.share_key).toMatch(SHARE_KEY_RE);
+    expect(await storedKey(id)).toBe(first.share_key);
+    const again = (await (await authRequest("GET", `/api/comp/${sqid}`)).json()) as any;
+    expect(again.share_key).toBe(first.share_key);
+  });
+
+  test("nobody else's visit mints one, and a keyless hidden comp opens for no key", async () => {
+    const { id, sqid } = await keylessHiddenComp();
+    expect((await request("GET", `/api/comp/${sqid}`)).status).toBe(404);
+    expect((await request("GET", `/api/comp/${sqid}_${"a".repeat(12)}`)).status).toBe(404);
+    expect(await storedKey(id)).toBeNull();
+  });
+
+  test("hiding a public comp that has no key mints one for its admin", async () => {
+    const compId = await createComp({ name: "Was public" });
+    const { id } = await env.DB.prepare("SELECT comp_id AS id FROM comp WHERE name = 'Was public'")
+      .first<{ id: number }>() as { id: number };
+    await env.DB.prepare("UPDATE comp SET share_key = NULL WHERE comp_id = ?").bind(id).run();
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, { test: true });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { share_key: string | null };
+    expect(body.share_key).toMatch(SHARE_KEY_RE);
+    expect(await storedKey(id)).toBe(body.share_key);
   });
 
   test("creating a hidden comp answers with its key; a public one with none", async () => {

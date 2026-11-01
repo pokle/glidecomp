@@ -22,7 +22,12 @@
  * `hiddenFromCaller()` (admins only, SEC-37/38): a link is for looking at a
  * draft, not for registering into it or uploading a track.
  *
- * Migration 0041 adds the column, backfills it and keeps it filled by trigger.
+ * Every key is minted HERE, from `crypto.getRandomValues` — never in SQL,
+ * whose random() is not documented as cryptographically secure. Migration
+ * 0041 adds the column empty; a new comp is created with a key, and
+ * `ensureShareKey()` fills one in for any comp that has none (those that
+ * predate the column, or were written by the seeder or the importer) the
+ * first time a hidden comp needs it. A NULL key opens nothing.
  */
 
 /** Characters a key is drawn from. No `-` (the slug's separator) and no `_`
@@ -74,6 +79,36 @@ export function splitCompRef(
 /** The comp-id segment a URL needs: the sqid, plus the key when there is one. */
 export function compRef(sqid: string, key?: string | null): string {
   return key ? `${sqid}${SHARE_KEY_SEPARATOR}${key}` : sqid;
+}
+
+/**
+ * The comp's share key, minting one first if it has none.
+ *
+ * Called where a hidden comp's key is about to be handed to someone entitled
+ * to it — its admin opening the comp, or hiding it — so a comp that predates
+ * the column, or that the seeder or the importer wrote, gets its key from
+ * `newShareKey()` like every other. Safe to race: the UPDATE only fills an
+ * empty column, and the re-read returns whichever key won.
+ *
+ * Not audited: it changes nothing anyone can see and no score. It only gives
+ * a hidden comp the link it was always meant to have.
+ */
+export async function ensureShareKey(
+  db: D1Database,
+  compId: number,
+  current: string | null | undefined
+): Promise<string> {
+  if (current) return current;
+  await db
+    .prepare("UPDATE comp SET share_key = ? WHERE comp_id = ? AND share_key IS NULL")
+    .bind(newShareKey(), compId)
+    .run();
+  const row = await db
+    .prepare("SELECT share_key FROM comp WHERE comp_id = ?")
+    .bind(compId)
+    .first<{ share_key: string | null }>();
+  if (!row?.share_key) throw new Error(`comp ${compId} has no share key after minting one`);
+  return row.share_key;
 }
 
 /**

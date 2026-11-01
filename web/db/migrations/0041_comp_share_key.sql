@@ -6,52 +6,11 @@
 -- The comp id itself is a sequential number in a public encoding, so it is
 -- no secret; this is. See `web/workers/competition-api/src/share-key.ts`.
 --
--- Twelve characters of [a-z0-9] (about 62 bits): every guess costs a request,
--- so that is out of reach of online guessing. "Reset link" writes a new one,
--- which retires every link shared so far.
---
--- Every comp has a key, public ones included, so hiding a comp never has to
--- mint one first. Only a hidden comp ever needs it.
+-- Deliberately NOT generated here, neither as a backfill nor by a trigger.
+-- SQLite's random() is not documented as cryptographically secure, and what
+-- D1 seeds it from is not ours to verify, so every key is minted by
+-- `newShareKey()` in the Worker, from `crypto.getRandomValues`. Existing comps
+-- start with NULL, which opens nothing; the Worker fills a hidden comp's key
+-- the first time it is needed (`ensureShareKey()`: when an admin opens the
+-- comp, or hides it), and a new comp is created with one.
 ALTER TABLE comp ADD COLUMN share_key TEXT;
-
--- One random character of the key's alphabet. `random() % 36` lies in
--- (-36, 36), so abs() of it can never overflow, and the modulo bias over a
--- 64-bit source is negligible.
-UPDATE comp SET share_key =
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-  substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1)
-WHERE share_key IS NULL;
-
--- The comp routes name a key on every INSERT (newShareKey()), but comps are
--- also written by the sample seeder, the AirScore importer and the tests. The
--- trigger means none of them can leave a comp without a key, rather than each
--- having to remember.
-CREATE TRIGGER IF NOT EXISTS comp_share_key_default
-AFTER INSERT ON comp
-WHEN NEW.share_key IS NULL
-BEGIN
-  UPDATE comp SET share_key =
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1) ||
-    substr('abcdefghijklmnopqrstuvwxyz0123456789', 1 + abs(random() % 36), 1)
-  WHERE comp_id = NEW.comp_id;
-END;

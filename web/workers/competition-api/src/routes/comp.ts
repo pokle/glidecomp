@@ -5,7 +5,7 @@ import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin, isSuperAdmin } from "../super-admin";
 import { hiddenFromViewer } from "../comp-visibility";
-import { newShareKey } from "../share-key";
+import { ensureShareKey, newShareKey } from "../share-key";
 import { createCompSchema, updateCompSchema, validated } from "../validators";
 import {
   boolFromDb,
@@ -664,6 +664,9 @@ export const compRoutes = new Hono<AuthedEnv>()
         ...encodeComp(alphabet, r),
         // So the list links straight to the URL that carries the key, and
         // the organiser's address bar is the share link from the first click.
+        // Null for a hidden comp that has no key yet: the list stays a pure
+        // read, and opening the comp mints one (GET /api/comp/:comp_id), then
+        // moves the organiser onto the keyed URL.
         share_key: shareKeyFor(r, true),
         is_admin: true,
         pilot_classes: JSON.parse(r.pilot_classes as string),
@@ -740,6 +743,13 @@ export const compRoutes = new Hono<AuthedEnv>()
       }
 
       const isAdmin = await isCompAdmin(c.env.DB, compId, user);
+
+      // A hidden comp's admin is about to be told its key; a comp from before
+      // the column (or from the seeder or the importer) gets one now, minted in
+      // the Worker like every other.
+      if (comp.test && isAdmin && !comp.share_key) {
+        comp.share_key = await ensureShareKey(c.env.DB, compId, null);
+      }
 
       // Real organisers only (`comp_admin` rows). A site super admin can
       // administer without a row — that is `is_admin` below, not this list.
@@ -996,6 +1006,12 @@ export const compRoutes = new Hono<AuthedEnv>()
         .first<Record<string, unknown>>();
 
       if (!updated) return c.json({ error: "Competition not found" }, 404);
+
+      // Just hidden, or hidden before the column existed: the admin is about
+      // to be told the key their URLs need, so make sure there is one.
+      if (updated.test && !updated.share_key) {
+        updated.share_key = await ensureShareKey(c.env.DB, compId, null);
+      }
 
       const admins = await c.env.DB.prepare(
         `SELECT u.email, u.name FROM comp_admin ca
