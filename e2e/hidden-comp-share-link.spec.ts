@@ -80,6 +80,9 @@ test("the organiser's address bar is the share link", async ({ page }) => {
   await page.goto(`/comp/${fixture.compId}`);
   await expect(page.getByText(ORGANISER_NOTE)).toBeVisible();
   await expect.poll(() => urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
+  // The organiser can still submit to their own hidden comp — which is what
+  // makes the visitor's missing button below a real finding.
+  await expect(page.getByRole("main").getByRole("link", { name: "Submit track" })).toBeVisible();
 });
 
 test("a visitor with the link reads the comp signed out and keeps the key", async ({
@@ -91,11 +94,16 @@ test("a visitor with the link reads the comp signed out and keeps the key", asyn
     await page.goto(`/comp/${fixture.compId}_${shareKey}`);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("share link");
     await expect(page.getByText(VISITOR_NOTE)).toBeVisible();
+    // The link is for reading a draft: no Submit track, which every write
+    // route would refuse. (The organiser sees it on this same page — see the
+    // test above.)
+    await expect(page.getByRole("main").getByRole("link", { name: "Submit track" })).toHaveCount(0);
 
     // Into a task: the key rides along in the id, so the page still opens.
     await page.getByRole("link", { name: "Task 4" }).first().click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Task 4");
     expect(urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
+    await expect(page.getByRole("main").getByRole("button", { name: "Submit track" })).toHaveCount(0);
 
     // The id alone opens nothing.
     await page.goto(`/comp/${fixture.compId}`);

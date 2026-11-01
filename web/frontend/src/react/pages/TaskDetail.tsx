@@ -275,7 +275,10 @@ export function TaskDetail() {
             anyone, so the markup must settle after hydration rather than
             before. The button itself no longer depends on a session —
             submitting is open to anyone the comp's roster knows. */}
-        {mounted && !isClosed && (!task.submissions_closed || isAdmin) ? (
+        {/* A hidden comp's share link is for READING a draft: every write
+            route refuses anyone but its admins, so no visitor is offered a
+            button that can only fail. */}
+        {mounted && !isClosed && (!task.submissions_closed || isAdmin) && (!comp?.test || isAdmin) ? (
           <Button size="sm" onPress={() => setSubmitOpen(true)}>
             Submit track
           </Button>
@@ -425,7 +428,8 @@ export function TaskDetail() {
           isOpenDistance={comp?.scoring_format === "open_distance"}
           isAuthenticated={user != null}
           isClosed={isClosed}
-          submissionsClosed={task.submissions_closed && !isAdmin}
+          // A hidden comp takes no submissions from its link's visitors.
+          submissionsClosed={(task.submissions_closed || !!comp?.test) && !isAdmin}
           canUploadOnBehalf={canUploadOnBehalf}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}

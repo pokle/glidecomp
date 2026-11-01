@@ -267,7 +267,9 @@ function CompDetailView({
             open question, and the page is where that question is answered.
             Mount-gated for the same reason as the task page's button — this
             page is server-rendered. */}
-        {mounted && !isClosed ? (
+        {/* Not for a hidden comp's link visitors: the link is for reading a
+            draft, and every write route refuses anyone but its admins. */}
+        {mounted && !isClosed && (!comp.test || isAdmin) ? (
           <LinkButton size="sm" href={`/submit?comp=${encodeURIComponent(compId)}`}>
             Submit track
           </LinkButton>

@@ -154,6 +154,10 @@ function makeEnv(opts: { waypoints?: object[]; xctsk?: unknown } = {}): {
             timezone: "Australia/Melbourne",
             scoring_format: "gap",
             pilot_classes: ["open", "sport"],
+            // Hidden and organised by the caller: the API hands its admin
+            // the share key, which the tool must not pass on.
+            test: true,
+            share_key: "7hq2m9xk4rwd",
             tasks: [{ task_id: "fghij", name: "Task 1", task_date: "2026-01-05", has_xctsk: true }],
           });
         case "/api/comp/abcde/task/fghij":
@@ -479,6 +483,13 @@ describe("the tools", () => {
       expect(r.isError, name).toBe(true);
       expect(r.content[0]!.text, name).toContain("has no route yet");
     }
+  });
+
+  test("get_competition never hands a hidden comp's share key to the assistant", async () => {
+    const { env } = makeEnv();
+    const r = await callTool(env, "get_competition", { comp_id: "abcde" });
+    expect(r.isError).toBeFalsy();
+    expect(JSON.stringify(r)).not.toContain("7hq2m9xk4rwd");
   });
 
   test("a comp the account can't see is a tool error the model can read, not a protocol failure", async () => {
