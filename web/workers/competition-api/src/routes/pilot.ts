@@ -16,7 +16,7 @@ import {
 import { matchRoster, type RankedEntry } from "../civl-ranking-match";
 import { resolvePilotId } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
-import { audit, auditAll, describeChange } from "../audit";
+import { audit, auditAll, describeChange, describePrivateChange } from "../audit";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
 import { deleteTrackFiles, trackFileKeysForPilots } from "../track-files";
@@ -123,6 +123,16 @@ const COMP_PILOT_COLUMNS = [
   "cp.first_start_order",
 ] as const;
 
+/**
+ * How many tracks a roster row holds, as a column of the row's own SELECT.
+ *
+ * Removing a pilot deletes their tracks with them (the cascade, plus
+ * deleteTrackFiles), so an editor that offers Remove needs this number to say
+ * what Remove costs. Served by idx_task_track_by_pilot (migration 0020).
+ */
+const TRACK_COUNT_COLUMN =
+  "(SELECT COUNT(*) FROM task_track tt WHERE tt.comp_pilot_id = cp.comp_pilot_id) AS track_count";
+
 interface CompPilotRow {
   comp_pilot_id: number;
   comp_id: number;
@@ -144,6 +154,8 @@ interface CompPilotRow {
   civl_ranking_slug: string | null;
   civl_ranking_date: string | null;
   first_start_order: number | null;
+  /** Present when the SELECT included TRACK_COUNT_COLUMN. */
+  track_count?: number;
 }
 
 function serializeCompPilot(
@@ -176,6 +188,7 @@ function serializeCompPilot(
     civl_ranking_slug: row.civl_ranking_slug,
     civl_ranking_date: row.civl_ranking_date,
     first_start_order: row.first_start_order,
+    track_count: row.track_count ?? 0,
   };
 }
 
@@ -318,7 +331,7 @@ async function fetchCompPilot(
 > {
   return db
     .prepare(
-      `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email, u.username AS linked_username
+      `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, ${TRACK_COUNT_COLUMN}, u.email AS linked_email, u.username AS linked_username
        FROM comp_pilot cp
        LEFT JOIN pilot p ON cp.pilot_id = p.pilot_id
        LEFT JOIN "user" u ON p.user_id = u.id
@@ -326,6 +339,91 @@ async function fetchCompPilot(
     )
     .bind(compPilotId)
     .first<CompPilotRow & { linked_email: string | null; linked_username: string | null }>();
+}
+
+/**
+ * The roster fields an account link can be resolved from. The name is not one
+ * of them: the resolver never links on a name alone, so a name can neither
+ * make a link nor undo one.
+ */
+const LINK_IDENTITY_FIELDS = [
+  "registered_pilot_email",
+  "registered_pilot_civl_id",
+  "registered_pilot_safa_id",
+  "registered_pilot_ushpa_id",
+  "registered_pilot_bhpa_id",
+  "registered_pilot_dhv_id",
+  "registered_pilot_ffvl_id",
+  "registered_pilot_fai_id",
+] as const;
+
+type LinkIdentity = Pick<WritableFields, "registered_pilot_name" | (typeof LINK_IDENTITY_FIELDS)[number]>;
+
+function resolverFields(row: LinkIdentity) {
+  return {
+    name: row.registered_pilot_name,
+    email: row.registered_pilot_email ?? null,
+    civl_id: row.registered_pilot_civl_id ?? null,
+    safa_id: row.registered_pilot_safa_id ?? null,
+    ushpa_id: row.registered_pilot_ushpa_id ?? null,
+    bhpa_id: row.registered_pilot_bhpa_id ?? null,
+    dhv_id: row.registered_pilot_dhv_id ?? null,
+    ffvl_id: row.registered_pilot_ffvl_id ?? null,
+    fai_id: row.registered_pilot_fai_id ?? null,
+  };
+}
+
+/**
+ * Which GlideComp account a roster row is linked to once it holds `next`.
+ *
+ * Shared by the single-pilot PATCH and the bulk save, which used to decide
+ * this differently and both got it wrong. A row can be linked in three ways:
+ * the resolver matched the organiser's email or ID (pilot-resolver.ts), the
+ * pilot claimed the row themselves when uploading (`claimed-by-choice` in
+ * routes/igc.ts), or the pilot joined through open registration and the row
+ * was created already linked. The last two leave the organiser's identity
+ * columns untouched — a self-registered row has no email at all — so the
+ * resolver cannot explain them, and re-running it is not evidence against
+ * them. Bulk save re-ran it on every row, every time, and so unlinked every
+ * self-registered pilot whenever an organiser saved the roster. Their next
+ * upload then asked them which registration was theirs — about a row they had
+ * made themselves — and "none of these" would have registered them twice.
+ *
+ * An unlinked row whose identity is unchanged is not re-resolved either. An
+ * account that turns up later finds its rows itself: linkExistingRegistrations
+ * runs when the pilot saves their profile and when they upload.
+ *
+ * So:
+ *   - An edit that leaves the identity alone leaves the link alone.
+ *   - An identity that now matches an account links to it — the organiser's
+ *     email or ID naming a different pilot is the way a wrong link is fixed.
+ *   - An identity that matches nobody drops the link only if the OLD identity
+ *     is what made it. That keeps "I typed the wrong email, and it linked to
+ *     the wrong person" fixable, without letting an organiser adding a SAFA
+ *     number undo a pilot's own claim.
+ *
+ * `before` is null for a row being created.
+ */
+async function nextPilotLink(
+  db: D1Database,
+  before: (LinkIdentity & { pilot_id: number | null }) | null,
+  next: LinkIdentity
+): Promise<number | null> {
+  // Blank and absent are the same fact: the column is empty either way.
+  const same = (a: string | null | undefined, b: string | null | undefined) =>
+    (a || null) === (b || null);
+  if (before && LINK_IDENTITY_FIELDS.every((f) => same(before[f], next[f]))) {
+    return before.pilot_id;
+  }
+
+  const resolved = (await resolvePilotId(db, resolverFields(next))).pilot_id;
+  if (resolved !== null || before === null || before.pilot_id === null) {
+    return resolved;
+  }
+
+  const madeByOldIdentity =
+    (await resolvePilotId(db, resolverFields(before))).pilot_id === before.pilot_id;
+  return madeByOldIdentity ? null : before.pilot_id;
 }
 
 export const pilotRoutes = new Hono<AuthedEnv>()
@@ -366,7 +464,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       const isAdmin = await isCompAdmin(c.env.DB, compId, user);
 
       const pilots = await c.env.DB.prepare(
-        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email, u.username AS linked_username
+        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, ${TRACK_COUNT_COLUMN}, u.email AS linked_email, u.username AS linked_username
          FROM comp_pilot cp
          LEFT JOIN pilot p ON cp.pilot_id = p.pilot_id
          LEFT JOIN "user" u ON p.user_id = u.id
@@ -484,7 +582,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
     validated("json", bulkPilotsSchema),
     async (c) => {
       const compId = c.var.ids.comp_id!;
-      const { pilots } = c.req.valid("json");
+      const { pilots, remove } = c.req.valid("json");
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
@@ -494,6 +592,20 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         .first<{ pilot_classes: string }>();
       if (!comp) return c.json({ error: "Competition not found" }, 404);
       const compClasses = JSON.parse(comp.pilot_classes) as string[];
+
+      // The rows the caller asked to remove, decoded once. Undefined is the
+      // older whole-roster contract (see bulkPilotsSchema).
+      let removeIds: Set<number> | undefined;
+      if (remove !== undefined) {
+        removeIds = new Set();
+        for (const sqid of remove) {
+          const id = decodeId(alphabet, sqid);
+          if (id === null) {
+            return c.json({ error: `Invalid comp_pilot_id in remove: ${sqid}` }, 400);
+          }
+          removeIds.add(id);
+        }
+      }
 
       // Decode every row's id ONCE, up front, into a plan that says what each
       // row IS. Everything downstream — the delete set, the score-affected
@@ -531,6 +643,10 @@ export const pilotRoutes = new Hono<AuthedEnv>()
           errors.push({ index, error: "Duplicate comp_pilot_id in payload" });
           continue;
         }
+        if (removeIds?.has(id)) {
+          errors.push({ index, error: "The same pilot is both updated and removed" });
+          continue;
+        }
         idsSeen.add(id);
         planned.push({ kind: "update", index, id, row });
       }
@@ -564,10 +680,22 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         return c.json({ errors }, 400);
       }
 
-      const keepIds = new Set(
+      const updatedIds = new Set(
         planned.flatMap((p) => (p.kind === "update" ? [p.id] : []))
       );
-      const toDelete = [...existingById.keys()].filter((id) => !keepIds.has(id));
+      // Who goes. With a `remove` list, exactly the rows it names — and only
+      // those still here: a pilot another organiser already removed is gone,
+      // which is what was asked. Without one, the older contract: every row
+      // the payload does not mention.
+      //
+      // The older contract is the reason `remove` exists. It deletes rows the
+      // caller never saw — a pilot who joined through open registration while
+      // an organiser had the editor open was deleted by that organiser's next
+      // save, and their tracks with them.
+      const toDelete = removeIds
+        ? [...removeIds].filter((id) => existingById.has(id))
+        : [...existingById.keys()].filter((id) => !updatedIds.has(id));
+      const deleting = new Set(toDelete);
 
       // Resolve linking for each row that needs one. Each resolution is an
       // independent D1 read, so they overlap rather than queueing: a 250-row
@@ -575,27 +703,34 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       const resolvedPilotIds = await mapWithConcurrency(
         planned,
         PILOT_RESOLVE_CONCURRENCY,
-        async ({ row }) =>
-          (
-            await resolvePilotId(c.env.DB, {
-              name: row.registered_pilot_name,
-              email: row.registered_pilot_email,
-              civl_id: row.registered_pilot_civl_id,
-              safa_id: row.registered_pilot_safa_id,
-              ushpa_id: row.registered_pilot_ushpa_id,
-              bhpa_id: row.registered_pilot_bhpa_id,
-              dhv_id: row.registered_pilot_dhv_id,
-              ffvl_id: row.registered_pilot_ffvl_id,
-              fai_id: row.registered_pilot_fai_id,
-            })
-          ).pilot_id
+        async (p) =>
+          nextPilotLink(
+            c.env.DB,
+            p.kind === "update" ? existingById.get(p.id)! : null,
+            p.row
+          )
       );
 
-      // Enforce the partial unique index: no two rows in the payload may
-      // resolve to the same linked pilot_id.
+      // Enforce the partial unique index: no two rows may end up linked to
+      // the same pilot. That includes the rows this save leaves alone, which
+      // only exist under a `remove` list — the older contract deletes them.
+      const untouchedByPilot = new Map<number, string>(); // pilot_id → name
+      for (const row of existingById.values()) {
+        if (row.pilot_id === null) continue;
+        if (updatedIds.has(row.comp_pilot_id) || deleting.has(row.comp_pilot_id)) continue;
+        untouchedByPilot.set(row.pilot_id, row.registered_pilot_name);
+      }
       const linkedSeen = new Map<number, number>(); // pilot_id → row index
       for (const [i, pilotId] of resolvedPilotIds.entries()) {
         if (pilotId === null) continue;
+        const untouched = untouchedByPilot.get(pilotId);
+        if (untouched !== undefined) {
+          errors.push({
+            index: planned[i].index,
+            error: `Resolved to the same pilot as "${untouched}", who is already registered`,
+          });
+          continue;
+        }
         const first = linkedSeen.get(pilotId);
         if (first !== undefined) {
           errors.push({
@@ -711,7 +846,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
 
       // Return the new state of all pilots in the comp.
       const after = await c.env.DB.prepare(
-        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email, u.username AS linked_username
+        `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, ${TRACK_COUNT_COLUMN}, u.email AS linked_email, u.username AS linked_username
          FROM comp_pilot cp
          LEFT JOIN pilot p ON cp.pilot_id = p.pilot_id
          LEFT JOIN "user" u ON p.user_id = u.id
@@ -815,87 +950,57 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      // Build a complete field set (existing overlaid with body) so we can
-      // re-run the resolver if any identity field changed.
+      // The stored row with the body laid over it. A field the body names
+      // wins, null included — null is how a field is cleared. Only a field
+      // the body leaves out keeps its stored value. (This was
+      // `body.x ?? existing.x`, which read null as "leave it alone", so no
+      // field could ever be cleared: a driver's number, once typed, stayed.)
+      const overlay = <T,>(sent: T | undefined, stored: T): T =>
+        sent !== undefined ? sent : stored;
       const merged = {
-        registered_pilot_name:
-          body.registered_pilot_name ?? existing.registered_pilot_name,
-        registered_pilot_email:
-          body.registered_pilot_email ?? existing.registered_pilot_email,
-        registered_pilot_civl_id:
-          body.registered_pilot_civl_id ?? existing.registered_pilot_civl_id,
-        registered_pilot_safa_id:
-          body.registered_pilot_safa_id ?? existing.registered_pilot_safa_id,
-        registered_pilot_ushpa_id:
-          body.registered_pilot_ushpa_id ?? existing.registered_pilot_ushpa_id,
-        registered_pilot_bhpa_id:
-          body.registered_pilot_bhpa_id ?? existing.registered_pilot_bhpa_id,
-        registered_pilot_dhv_id:
-          body.registered_pilot_dhv_id ?? existing.registered_pilot_dhv_id,
-        registered_pilot_ffvl_id:
-          body.registered_pilot_ffvl_id ?? existing.registered_pilot_ffvl_id,
-        registered_pilot_fai_id:
-          body.registered_pilot_fai_id ?? existing.registered_pilot_fai_id,
-        registered_pilot_glider:
-          body.registered_pilot_glider ?? existing.registered_pilot_glider,
-        pilot_class: body.pilot_class ?? existing.pilot_class,
-        team_name: body.team_name ?? existing.team_name,
-        driver_contact: body.driver_contact ?? existing.driver_contact,
-        wprs_points: body.wprs_points ?? existing.wprs_points,
+        registered_pilot_name: overlay(body.registered_pilot_name, existing.registered_pilot_name),
+        registered_pilot_email: overlay(body.registered_pilot_email, existing.registered_pilot_email),
+        registered_pilot_civl_id: overlay(body.registered_pilot_civl_id, existing.registered_pilot_civl_id),
+        registered_pilot_safa_id: overlay(body.registered_pilot_safa_id, existing.registered_pilot_safa_id),
+        registered_pilot_ushpa_id: overlay(body.registered_pilot_ushpa_id, existing.registered_pilot_ushpa_id),
+        registered_pilot_bhpa_id: overlay(body.registered_pilot_bhpa_id, existing.registered_pilot_bhpa_id),
+        registered_pilot_dhv_id: overlay(body.registered_pilot_dhv_id, existing.registered_pilot_dhv_id),
+        registered_pilot_ffvl_id: overlay(body.registered_pilot_ffvl_id, existing.registered_pilot_ffvl_id),
+        registered_pilot_fai_id: overlay(body.registered_pilot_fai_id, existing.registered_pilot_fai_id),
+        registered_pilot_glider: overlay(body.registered_pilot_glider, existing.registered_pilot_glider),
+        pilot_class: overlay(body.pilot_class, existing.pilot_class),
+        team_name: overlay(body.team_name, existing.team_name),
+        driver_contact: overlay(body.driver_contact, existing.driver_contact),
+        wprs_points: overlay(body.wprs_points, existing.wprs_points),
         // The source travels with the number: a PATCH that moves the score
         // without naming a list is a hand override, and leaving the old list
         // and month attached would date-stamp a value CIVL never published.
         civl_ranking_slug:
           body.wprs_points !== undefined
             ? (body.civl_ranking_slug ?? null)
-            : (body.civl_ranking_slug ?? existing.civl_ranking_slug),
+            : overlay(body.civl_ranking_slug, existing.civl_ranking_slug),
         civl_ranking_date:
           body.wprs_points !== undefined
             ? (body.civl_ranking_date ?? null)
-            : (body.civl_ranking_date ?? existing.civl_ranking_date),
-        first_start_order:
-          body.first_start_order ?? existing.first_start_order,
+            : overlay(body.civl_ranking_date, existing.civl_ranking_date),
+        first_start_order: overlay(body.first_start_order, existing.first_start_order),
       };
 
-      // Only re-run the resolver if an identity field was touched.
-      let newPilotId: number | null = existing.pilot_id;
-      const identityChanged =
-        body.registered_pilot_name !== undefined ||
-        body.registered_pilot_email !== undefined ||
-        body.registered_pilot_civl_id !== undefined ||
-        body.registered_pilot_safa_id !== undefined ||
-        body.registered_pilot_ushpa_id !== undefined ||
-        body.registered_pilot_bhpa_id !== undefined ||
-        body.registered_pilot_dhv_id !== undefined ||
-        body.registered_pilot_ffvl_id !== undefined ||
-        body.registered_pilot_fai_id !== undefined;
-
-      if (identityChanged) {
-        const resolved = await resolvePilotId(c.env.DB, {
-          name: merged.registered_pilot_name,
-          email: merged.registered_pilot_email,
-          civl_id: merged.registered_pilot_civl_id,
-          safa_id: merged.registered_pilot_safa_id,
-          ushpa_id: merged.registered_pilot_ushpa_id,
-          bhpa_id: merged.registered_pilot_bhpa_id,
-          dhv_id: merged.registered_pilot_dhv_id,
-          ffvl_id: merged.registered_pilot_ffvl_id,
-          fai_id: merged.registered_pilot_fai_id,
-        });
-        newPilotId = resolved.pilot_id;
-
-        if (newPilotId !== null && newPilotId !== existing.pilot_id) {
-          const dupe = await c.env.DB.prepare(
-            "SELECT comp_pilot_id FROM comp_pilot WHERE comp_id = ? AND pilot_id = ? AND comp_pilot_id != ?"
-          )
-            .bind(compId, newPilotId, compPilotId)
-            .first();
-          if (dupe) {
-            return c.json(
-              { error: "Another row in this competition already links to that pilot" },
-              409
-            );
-          }
+      // See nextPilotLink: an edit that leaves the identity alone leaves the
+      // link alone, and a pilot's own claim survives an identity that
+      // matches nobody.
+      const newPilotId = await nextPilotLink(c.env.DB, existing, merged);
+      if (newPilotId !== null && newPilotId !== existing.pilot_id) {
+        const dupe = await c.env.DB.prepare(
+          "SELECT comp_pilot_id FROM comp_pilot WHERE comp_id = ? AND pilot_id = ? AND comp_pilot_id != ?"
+        )
+          .bind(compId, newPilotId, compPilotId)
+          .first();
+        if (dupe) {
+          return c.json(
+            { error: "Another row in this competition already links to that pilot" },
+            409
+          );
         }
       }
 
@@ -935,20 +1040,30 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         ["civl_ranking_date", "CIVL ranking date"],
         ["first_start_order", "first-start order"],
       ];
+      // The two fields the public roster withholds (SEC-15). The audit log is
+      // public on every non-test comp, so for these it says that the field
+      // changed and never what it held.
+      const privateFields = new Set<keyof typeof merged>([
+        "registered_pilot_email",
+        "driver_contact",
+      ]);
       const subjectName = merged.registered_pilot_name;
       for (const [key, label] of auditFields) {
         if (body[key as keyof typeof body] === undefined) continue;
         const oldVal = existing[key as keyof CompPilotRow];
         const newVal = merged[key];
         if (oldVal === newVal) continue;
+        const change = privateFields.has(key)
+          ? describePrivateChange(label, oldVal, newVal)
+          : describeChange(label, oldVal, newVal);
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "pilot",
           subject_id: compPilotId,
           subject_name: subjectName,
-          description: `${subjectName}: ${describeChange(label, oldVal, newVal)}`,
+          description: `${subjectName}: ${change}`,
         });
       }
-      if (identityChanged && newPilotId !== existing.pilot_id) {
+      if (newPilotId !== existing.pilot_id) {
         await audit(c.env.DB, c.var.user, compId, {
           subject_type: "pilot",
           subject_id: compPilotId,

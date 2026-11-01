@@ -3,8 +3,10 @@ import {
   exportCsvContent,
   emptyRow,
   parseImportedCsv,
+  removedPilotIds,
   validateRows,
   COLUMNS,
+  type CompPilot,
   type ParsedRow,
 } from "./csv";
 
@@ -290,5 +292,33 @@ describe("the WPRS points column", () => {
     const { rows } = parseImportedCsv(exported, CLASSES);
     expect(rows[0].wprs_points).toBe("261.5");
     expect(rows[0].civl_ranking_slug).toBeNull();
+  });
+});
+
+describe("removedPilotIds", () => {
+  const shown = (ids: string[]) =>
+    ids.map((comp_pilot_id) => ({ comp_pilot_id }) as CompPilot);
+
+  it("names the pilots the editor was opened with that the save leaves out", () => {
+    const payload = validateRows(
+      [makeRow({ comp_pilot_id: "a" }), makeRow({ comp_pilot_id: "c" })],
+      CLASSES
+    ).payload;
+    expect(removedPilotIds(shown(["a", "b", "c"]), payload)).toEqual(["b"]);
+  });
+
+  it("never names a pilot the editor did not show", () => {
+    // Somebody who joined while the editor was open is not in `shown`, so
+    // nothing this save sends can remove them.
+    expect(removedPilotIds(shown(["a"]), validateRows([makeRow({ comp_pilot_id: "a" })], CLASSES).payload)).toEqual([]);
+  });
+
+  it("a new row carries no id and removes nobody", () => {
+    expect(removedPilotIds(shown([]), validateRows([makeRow()], CLASSES).payload)).toEqual([]);
+  });
+
+  it("a row emptied in the grid is dropped, and so is removed", () => {
+    const blank = { ...emptyRow([]), comp_pilot_id: "a" };
+    expect(removedPilotIds(shown(["a"]), validateRows([blank], CLASSES).payload)).toEqual(["a"]);
   });
 });
