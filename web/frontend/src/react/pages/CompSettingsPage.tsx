@@ -21,7 +21,7 @@ import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
-import { idFromSegment, compSettingsPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compSettingsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import type { CompDetailData } from "../comp/types";
@@ -51,7 +51,9 @@ export function CompSettingsPage() {
     refresh,
   });
   // Settle the address bar on the canonical `${slug}-${id}/settings[/group]`.
-  useCanonicalPath(comp ? compSettingsPath(compId, comp.name, group) : null);
+  useCanonicalPath(
+    comp ? compSettingsPath(compUrlId(comp, compId), comp.name, group) : null
+  );
 
   const isAdmin = useAdminView(!!comp?.is_admin);
 

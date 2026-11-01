@@ -37,7 +37,7 @@ import type { Context } from "hono";
 import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
-import { isCompAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
 import { audit } from "../audit";
 import { encodeId } from "../sqids";
 import {
@@ -58,18 +58,21 @@ import {
 
 /**
  * Who may read task weather. Public for a normal comp; a hidden `test` comp
- * stays admin-only. Mirrors canViewAnalysis exactly — if that rule
- * changes, this one changes with it.
+ * opens for its admins and for whoever holds its share link. The same
+ * `hiddenFromViewer()` rule as canViewAnalysis and every other read route.
  */
 async function canViewWeather(
   c: Context<AuthedEnv>,
   compId: number,
-  isTest: boolean
+  comp: { test: number; share_key: string | null }
 ): Promise<boolean> {
-  if (!isTest) return true;
-  const user = c.var.user;
-  if (!user) return false;
-  return isCompAdmin(c.env.DB, compId, user);
+  return !(await hiddenFromViewer(
+    c.env.DB,
+    compId,
+    comp,
+    c.var.user,
+    c.var.ids.comp_key
+  ));
 }
 
 /**
@@ -108,12 +111,12 @@ export const weatherRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
-      if (!(await canViewWeather(c, compId, !!comp.test)))
+      if (!(await canViewWeather(c, compId, comp)))
         return c.json({ error: "Not found" }, 404);
 
       const task = await c.env.DB.prepare(

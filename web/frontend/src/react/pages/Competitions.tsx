@@ -45,7 +45,7 @@ import {
   scoringFormatLabel,
 } from "../lib/format";
 import { useInitialData } from "../lib/initial-data";
-import { compPath } from "../lib/slug";
+import { compPath, compUrlId } from "../lib/slug";
 import { SearchResults } from "../search/SearchResults";
 import { MIN_SEARCH_CHARS, useSiteSearch } from "../search/use-site-search";
 import type { CompListEntry, CompetitionsLoaderData } from "../loaders";
@@ -182,7 +182,7 @@ export function Competitions() {
           {filteredComps.map((comp) => (
             <li key={comp.comp_id}>
               <AriaLink
-                href={compPath(comp.comp_id, comp.name)}
+                href={compPath(compUrlId(comp, comp.comp_id), comp.name)}
                 className={cn(
                   cardSurface,
                   "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
@@ -273,7 +273,11 @@ function CreateCompDialog({
       }
       const data = await res.json();
       onOpenChange(false);
-      onCreated((data as { comp_id: string }).comp_id);
+      // A new comp starts hidden: open it on the URL that carries its share
+      // key, so the organiser's address bar is the link to share from the
+      // first page they see.
+      const created = data as { comp_id: string; test: boolean; share_key?: string | null };
+      onCreated(compUrlId(created, created.comp_id));
     } catch {
       toast.error("Network error. Please try again.");
     } finally {

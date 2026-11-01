@@ -15,7 +15,7 @@ import { NotFound } from "@/react/components/NotFound";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
-import { idFromSegment, taskPath, taskSettingsPath } from "../lib/slug";
+import { compUrlId, idFromSegment, taskPath, taskSettingsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskSettings } from "../comp/settings/TaskSettings";
@@ -42,7 +42,9 @@ export function TaskSettingsPage() {
   // Settle the address bar on the canonical slugged path once both names are
   // known — the comp's name is half of it.
   useCanonicalPath(
-    comp && task ? taskSettingsPath(compId, comp.name, taskId, task.name) : null
+    comp && task
+      ? taskSettingsPath(compUrlId(comp, compId), comp.name, taskId, task.name)
+      : null
   );
 
   if (notFound) return <NotFound title="Task not found" />;

@@ -5,7 +5,7 @@ import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { buildScoresCsv, scoresCsvFilename, type ScoresCsvInput } from './src/scores-csv';
-import { idFromSegment } from './src/react/lib/slug';
+import { compUrlId, idFromSegment } from './src/react/lib/slug';
 
 // Where /api/* is proxied in dev: the dev-router Worker started by
 // `bun run dev:workers` (all Workers, one wrangler session — see
@@ -72,10 +72,18 @@ function scoresCsvDev(): Plugin {
               res.end('Competition not found\n');
               return;
             }
-            const comp = (await compRes.json()) as { name: string };
+            const comp = (await compRes.json()) as {
+              comp_id: string;
+              name: string;
+              test: boolean;
+              share_key?: string | null;
+            };
             const scores = scoresRes.ok
               ? ((await scoresRes.json()) as ScoresCsvInput)
               : { comp_id: compId, tasks: [], scores: [] };
+            // Same as the Function: on a hidden comp the rows link back with
+            // the share key, or a shared sheet's links would all 404.
+            scores.comp_id = compUrlId(comp, compId);
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader(
               'Content-Disposition',

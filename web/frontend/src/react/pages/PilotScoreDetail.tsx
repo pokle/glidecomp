@@ -37,7 +37,7 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
 import { retry } from "../lib/retry";
-import { idFromSegment, pilotPath, taskPath } from "../lib/slug";
+import { compUrlId, idFromSegment, pilotPath, taskPath } from "../lib/slug";
 import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -342,7 +342,7 @@ export function PilotScoreDetail() {
   useCanonicalPath(
     readyData && compId && taskId && pilotId
       ? pilotPath(
-          compId,
+          compUrlId(readyData.comp, compId),
           readyData.comp.name,
           taskId,
           readyData.task.name,

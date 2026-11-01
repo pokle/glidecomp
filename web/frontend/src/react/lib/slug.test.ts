@@ -11,6 +11,10 @@ import {
   taskPath,
   taskAnalysisPath,
   pilotPath,
+  bareCompId,
+  compUrlId,
+  pathCarriesShareKey,
+  redactShareKeys,
 } from "./slug";
 
 describe("slugify", () => {
@@ -110,5 +114,54 @@ describe("path builders", () => {
   test("a missing name degrades to a bare-id segment", () => {
     expect(compPath("voqc", null)).toBe("/comp/voqc");
     expect(taskPath("voqc", null, "zqfs", undefined)).toBe("/comp/voqc/task/zqfs");
+  });
+});
+
+describe("hidden competitions' share links", () => {
+  const hidden = { comp_id: "vzuq", test: true, share_key: "7hq2m9xk4rwd" };
+
+  test("the share key rides along as part of the id", () => {
+    expect(idFromSegment("corryong-cup-2027-vzuq_7hq2m9xk4rwd")).toBe("vzuq_7hq2m9xk4rwd");
+    expect(nameSlugFromSegment("corryong-cup-2027-vzuq_7hq2m9xk4rwd")).toBe("corryong-cup-2027");
+    expect(compPath("vzuq_7hq2m9xk4rwd", "Corryong Cup 2027")).toBe(
+      "/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd"
+    );
+  });
+
+  test("compUrlId: a hidden comp's URL carries its key, a public one's never does", () => {
+    expect(compUrlId(hidden, "vzuq")).toBe("vzuq_7hq2m9xk4rwd");
+    // A draft link still works after publishing, and settles on the clean URL.
+    expect(compUrlId({ ...hidden, test: false }, "vzuq_7hq2m9xk4rwd")).toBe("vzuq");
+    // No key in the payload (an old cached body): keep what the URL has.
+    expect(compUrlId({ ...hidden, share_key: null }, "vzuq_aaaaaaaaaaaa")).toBe(
+      "vzuq_aaaaaaaaaaaa"
+    );
+    expect(compUrlId(null, "vzuq")).toBe("vzuq");
+  });
+
+  test("bareCompId drops the key, for comparing ids", () => {
+    expect(bareCompId("vzuq_7hq2m9xk4rwd")).toBe("vzuq");
+    expect(bareCompId("vzuq")).toBe("vzuq");
+  });
+
+  test("pathCarriesShareKey looks at the comp segment only", () => {
+    expect(pathCarriesShareKey("/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd")).toBe(true);
+    expect(pathCarriesShareKey("/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd/task/t-1-abcd")).toBe(
+      true
+    );
+    expect(pathCarriesShareKey("/comp/corryong-cup-2027-vzuq/task/t-1-abcd")).toBe(false);
+    expect(pathCarriesShareKey("/comp")).toBe(false);
+  });
+
+  test("redactShareKeys masks every key and leaves the rest of the URL", () => {
+    expect(
+      redactShareKeys(
+        "https://glidecomp.com/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd/task/t-1-abcd"
+      )
+    ).toBe("https://glidecomp.com/comp/corryong-cup-2027-vzuq_[key]/task/t-1-abcd");
+    expect(redactShareKeys("/analysis?compId=vzuq_7hq2m9xk4rwd&taskId=abcd")).toBe(
+      "/analysis?compId=vzuq_[key]&taskId=abcd"
+    );
+    expect(redactShareKeys("/comp/corryong-cup-2027-vzuq")).toBe("/comp/corryong-cup-2027-vzuq");
   });
 });

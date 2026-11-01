@@ -44,7 +44,7 @@ import { STRATEGY_VERDICTS, winningLabel } from "../analysis/types";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/react/rac/card";
 import { Badge } from "@/react/rac/badge";
-import { taskAnalysisPath, taskAnalysisSectionPath, taskSimilarityPath } from "../lib/slug";
+import { compUrlId, taskAnalysisPath, taskAnalysisSectionPath, taskSimilarityPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { AnalysisBasis } from "../analysis/AnalysisBasis";
 import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
@@ -73,7 +73,9 @@ export function TaskAnalysis() {
   // Settle the address bar on the canonical `${slug}-${id}` once both names
   // load (the analysis body carries neither, so wait for the name fetches).
   useCanonicalPath(
-    comp && task ? taskAnalysisPath(compId, comp.name, taskId, task.name) : null
+    comp && task
+      ? taskAnalysisPath(compUrlId(comp, compId), comp.name, taskId, task.name)
+      : null
   );
 
   // Every link out of here carries the report's view state — the class being

@@ -12,6 +12,13 @@
  * premature bare-slug URL. The id in a canonical path equals the id in a bare
  * one, so the page's data fetch (keyed on the extracted id) is unaffected — a
  * `replace` here only rewrites the URL text, it does not refetch.
+ *
+ * The one exception is a hidden comp, whose canonical id carries its share key
+ * (build the path with `compUrlId()`, lib/slug.ts). An admin who arrives on a
+ * bare URL — from search, an old bookmark, an assistant's link — is moved onto
+ * the keyed one so their address bar is the link to share, and the page fetches
+ * once more under the new id. "Reset link" moves them onto the new key the
+ * same way.
  */
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";

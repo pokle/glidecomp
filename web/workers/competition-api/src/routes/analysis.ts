@@ -22,7 +22,7 @@ import { aggregateComp, type CompTaskResult } from "@glidecomp/engine";
 import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
-import { isCompAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
 import { audit } from "../audit";
 import { decodeId, encodeId } from "../sqids";
 import { buildCompStandings } from "../comp-standings";
@@ -50,8 +50,9 @@ import {
 
 /**
  * Who may read task analysis. Public for a normal comp; a hidden `test` comp
- * stays admin-only (competition admins + super-admins — isCompAdmin grants
- * both). This mirrors the score route's visibility check exactly.
+ * opens for its admins (competition admins + super-admins) and for whoever
+ * holds its share link — `hiddenFromViewer()`, the rule every read route
+ * shares, so this cannot drift from the score route.
  *
  * The GET routes use `optionalAuth` (not `requireAuth`) so an anonymous
  * request to a test comp 404s here rather than 401ing in middleware — the
@@ -66,12 +67,15 @@ import {
 async function canViewAnalysis(
   c: Context<AuthedEnv>,
   compId: number,
-  isTest: boolean
+  comp: { test: number; share_key: string | null }
 ): Promise<boolean> {
-  if (!isTest) return true;
-  const user = c.var.user;
-  if (!user) return false;
-  return isCompAdmin(c.env.DB, compId, user);
+  return !(await hiddenFromViewer(
+    c.env.DB,
+    compId,
+    comp,
+    c.var.user,
+    c.var.ids.comp_key
+  ));
 }
 
 /**
@@ -136,16 +140,16 @@ export const analysisRoutes = new Hono<AuthedEnv>()
       const taskId = c.var.ids.task_id!;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
 
-      // Public for a normal comp; a hidden `test` comp 404s for non-admins —
-      // the same way test comps are concealed, so the endpoint's existence
-      // isn't a signal.
-      if (!(await canViewAnalysis(c, compId, !!comp.test)))
+      // Public for a normal comp; a hidden `test` comp 404s for anyone who is
+      // neither an admin nor holding its link — the same way test comps are
+      // concealed, so the endpoint's existence isn't a signal.
+      if (!(await canViewAnalysis(c, compId, comp)))
         return c.json({ error: "Not found" }, 404);
 
       const task = await c.env.DB.prepare(
@@ -252,7 +256,7 @@ export const analysisRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, test, category, scoring_format, series_scoring, ftv_factor
+        `SELECT comp_id, name, test, share_key, category, scoring_format, series_scoring, ftv_factor
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -260,13 +264,14 @@ export const analysisRoutes = new Hono<AuthedEnv>()
           comp_id: number;
           name: string;
           test: number;
+          share_key: string | null;
           category: string | null;
           scoring_format: string;
           series_scoring: string;
           ftv_factor: number | null;
         }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
-      if (!(await canViewAnalysis(c, compId, !!comp.test)))
+      if (!(await canViewAnalysis(c, compId, comp)))
         return c.json({ error: "Not found" }, 404);
 
       const tasks = await c.env.DB.prepare(

@@ -73,7 +73,7 @@ import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useAdminView, useUser } from "../lib/user";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underComp } from "../lib/crumbs";
-import { idFromSegment, compWaypointsPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compWaypointsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
 import { formatCoords, parseCoords } from "../comp/route-editor";
@@ -180,8 +180,12 @@ export function CompWaypoints() {
   // first client render match the server markup exactly.
   const initial = useInitialData<CompWaypointsLoaderData>();
   const [compName, setCompName] = useState<string>(initial?.comp.name ?? "");
+  // The id this viewer's URLs carry — plus the share key on a hidden comp.
+  const [compRef, setCompRef] = useState<string | null>(
+    initial ? compUrlId(initial.comp, compId) : null
+  );
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
-  useCanonicalPath(compName ? compWaypointsPath(compId, compName) : null);
+  useCanonicalPath(compName ? compWaypointsPath(compRef ?? compId, compName) : null);
   const [realIsAdmin, setRealIsAdmin] = useState(!!initial?.comp.is_admin);
   const [taskCount, setTaskCount] = useState<number | undefined>(
     initial?.comp.tasks?.length
@@ -300,6 +304,7 @@ export function CompWaypoints() {
           is_admin?: boolean;
         };
         setCompName(comp.name ?? "");
+        setCompRef(compUrlId(comp, compId));
         setRealIsAdmin(!!comp.is_admin);
         setTaskCount(comp.tasks?.length);
         setWaypointCount(comp.waypoint_count);

@@ -82,6 +82,20 @@ quotes if you copy the line. Reference tables use the route's own parameter
 names instead (`/api/comp/:comp_id`), because those name the *route*, where a
 variable names *your* value.
 
+### Hidden competitions
+
+A hidden (`"test": true`) competition answers `404` to anyone who neither
+administers it nor holds its link. The link is the comp's id with its
+`share_key` after an underscore — `vzuq_7hq2m9xk4rwd` — and that form works
+anywhere a `:comp_id` does, for every `GET`: `GET /api/comp/vzuq_7hq2m9xk4rwd/scores`
+reads a hidden comp's scores with no API key at all.
+
+`GET /api/comp/:comp_id` returns `share_key` to whoever may read the comp (its
+admins, or a caller whose id already carried it), and `null` for a public comp.
+The key opens a hidden comp for reading only: every write still needs an admin.
+A response to a request whose id carried a key is `Cache-Control: private,
+no-store` and `X-Robots-Tag: noindex`.
+
 ## Rate limiting
 
 API keys are rate limited to **60 requests per 60 seconds, per key**. This is
@@ -109,6 +123,7 @@ endpoints return an `ETag`; send it back as `If-None-Match` to get a cheap
 | `GET` | `/api/comp/:comp_id` | One comp, with its tasks, pilot count and admins |
 | `PATCH` | `/api/comp/:comp_id` | Edit name, category, dates, scoring format, GAP params — **admin** |
 | `DELETE` | `/api/comp/:comp_id` | Delete the comp and everything under it — **admin** |
+| `POST` | `/api/comp/:comp_id/share-key` | Reset a hidden comp's link: a new `share_key`, and every link shared before stops working — **admin** |
 | `POST` | `/api/comp/:comp_id/task` | Add a task — **admin** |
 | `GET` | `/api/comp/:comp_id/task/:task_id` | Task metadata and its `xctsk` definition |
 | `PATCH` | `/api/comp/:comp_id/task/:task_id` | Edit the task's date, classes or route — **admin** |

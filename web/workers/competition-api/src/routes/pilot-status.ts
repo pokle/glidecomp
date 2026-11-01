@@ -4,7 +4,7 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
-import { hiddenFromCaller } from "../comp-visibility";
+import { hiddenFromCaller, hiddenFromViewer } from "../comp-visibility";
 import {
   upsertPilotStatusSchema,
   updatePilotStatusNoteSchema,
@@ -124,16 +124,16 @@ export const pilotStatusRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
 
-      if (comp.test) {
-        if (!user) return c.json({ error: "Not found" }, 404);
-        if (!(await isCompAdmin(c.env.DB, compId, user)))
-          return c.json({ error: "Not found" }, 404);
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       // Verify task belongs to this comp

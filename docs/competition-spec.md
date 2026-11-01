@@ -46,7 +46,8 @@ Tables referenced from the auth-api worker:
   - creation_date (TEXT NOT NULL)
   - close_date (TEXT) — after this date, no more track submissions are accepted. NULL means submissions are open indefinitely.
   - category (TEXT NOT NULL) — one of 'hg' or 'pg'
-  - test (INTEGER NOT NULL DEFAULT 0) — boolean. Test comps are only visible to admins.
+  - test (INTEGER NOT NULL DEFAULT 0) — boolean. A test ("hidden") comp is listed and searchable only for its admins, and readable only by its admins and by whoever holds its share link.
+  - share_key (TEXT) — the secret half of a hidden comp's link, 12 characters of [a-z0-9] (migration 0041). A hidden comp's URLs carry it after the comp id: `/comp/<slug>-<id>_<share_key>`.
   - pilot_classes (TEXT NOT NULL) — JSON array of valid pilot class strings for this comp, e.g. `["open", "sport", "floater"]`. Defines the universe of classes. Must contain at least one entry.
   - default_pilot_class (TEXT NOT NULL) — the class assigned to auto-registered pilots. Must be one of the values in `pilot_classes`.
   - gap_params (TEXT) — JSON object matching the GAPParameters interface
@@ -375,7 +376,7 @@ comp:
 - Ensure only admins of a comp can modify it and any associated child data (task, igc, xctsk, …)
 - Non-test competitions, their tasks, tracks, and scores are publicly readable (no auth required).
 - Test competitions and all write/modify operations require authentication.
-- Only admins can see test competitions.
+- Test (hidden) competitions are never listed or searchable except by their admins. They can be read by their admins and by anyone whose URL carries the comp's share key (`competition-api/src/share-key.ts`); the comp id alone opens nothing, since ids are sequential in a public encoding. Writes to a test competition stay admin-only, key or no key.
 - Enforce limits on the size of user supplied data to avoid abuse
   - Limit the size of user entered text fields to 128 chars (approx)
   - Limit the size of IGC files uploaded and stored to 5mb each.

@@ -10,6 +10,12 @@
  * available than the pure client-rendered version. Upstream 404s (including
  * anonymous `test` comps) render the shell with a 404 status + noindex.
  *
+ * A hidden comp's URL carries its share key after the comp's id
+ * (`/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd`, lib/slug.ts `compUrlId`). Its
+ * pages render for whoever holds the link, but are never indexed or stored by
+ * a shared cache, and any redirect into or out of a keyed URL is a 302: a
+ * permanent one would bring a reset key back from a browser's cache.
+ *
  * `render` is imported from the Vite-built SSR bundle (web/frontend/dist-ssr),
  * produced by `bun run build:ssr` before the Functions are bundled.
  */
@@ -40,6 +46,8 @@ import {
 } from "../../web/frontend/src/react/analysis/sections";
 import {
   idFromSegment,
+  compUrlId,
+  pathCarriesShareKey,
   compPath,
   compScoresPath,
   compWaypointsPath,
@@ -206,8 +214,10 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/?$/,
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
-      const data = await loadCompDetail(f, compId);
+      const urlCompId = idFromSegment(m[1]);
+      const data = await loadCompDetail(f, urlCompId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const c = data.comp;
       const canonical = compPath(compId, c.name);
       const summary = [
@@ -240,8 +250,10 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/scores\/?$/,
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
-      const data = await loadCompScores(f, compId);
+      const urlCompId = idFromSegment(m[1]);
+      const data = await loadCompScores(f, urlCompId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const c = data.comp;
       const canonical = compScoresPath(compId, c.name);
       return {
@@ -267,8 +279,10 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/waypoints\/?$/,
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
-      const data = await loadCompWaypoints(f, compId);
+      const urlCompId = idFromSegment(m[1]);
+      const data = await loadCompWaypoints(f, urlCompId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const n = data.waypoints.length;
       const canonical = compWaypointsPath(compId, data.comp.name);
       return {
@@ -291,9 +305,11 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/?$/,
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
+      const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
-      const data = await loadTaskDetail(f, compId, taskId);
+      const data = await loadTaskDetail(f, urlCompId, taskId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const compName = data.comp?.name ?? "GlideComp";
       // Only canonicalise when the comp name resolved — otherwise we'd 301 to a
       // URL that strips a good comp slug down to the bare id.
@@ -323,10 +339,12 @@ const ROUTES: Array<{
   {
     pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/pilot\/([^/]+)\/?$/,
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
+      const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
       const pilotId = idFromSegment(m[3]);
-      const data = await loadPilotScoreDetail(f, compId, taskId, pilotId);
+      const data = await loadPilotScoreDetail(f, urlCompId, taskId, pilotId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const pilotName = pilotNameFrom(data.score, pilotId);
       const canonical = pilotPath(
         compId,
@@ -358,8 +376,10 @@ const ROUTES: Array<{
     // Comp analysis (behavioural metrics across the comp's tasks).
     pattern: /^\/comp\/([^/]+)\/analysis\/?$/,
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
-      const data = await loadCompAnalysis(f, compId);
+      const urlCompId = idFromSegment(m[1]);
+      const data = await loadCompAnalysis(f, urlCompId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const a = data.analysis;
       const name = data.comp?.name ?? a.comp_name;
       const canonical = compAnalysisPath(compId, name);
@@ -393,9 +413,11 @@ const ROUTES: Array<{
     // above, and a child of the task's own URL.
     pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/analysis\/?$/,
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
+      const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
-      const data = await loadTaskAnalysis(f, compId, taskId);
+      const data = await loadTaskAnalysis(f, urlCompId, taskId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const a = data.analysis;
       const compName = data.comp?.name ?? "GlideComp";
       const taskName = data.task?.name ?? "Task";
@@ -442,10 +464,12 @@ const ROUTES: Array<{
       ).join("|")})/?$`
     ),
     async run(f, m, origin) {
-      const compId = idFromSegment(m[1]);
+      const urlCompId = idFromSegment(m[1]);
       const taskId = idFromSegment(m[2]);
       const section = findTaskAnalysisSection(m[3])!;
-      const data = await loadTaskAnalysis(f, compId, taskId);
+      const data = await loadTaskAnalysis(f, urlCompId, taskId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
       const a = data.analysis;
       const compName = data.comp?.name ?? "GlideComp";
       const taskName = data.task?.name ?? "Task";
@@ -503,7 +527,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const legacy = path.match(LEGACY_TASK_ANALYSIS);
   if (legacy) {
     const to = `/comp/${legacy[1]}/task/${legacy[2]}/analysis${legacy[3] ?? ""}`;
-    return canonicalRedirect(url.origin + to + url.search, cookie);
+    return canonicalRedirect(url.origin + to + url.search, cookie, pathCarriesShareKey(path));
   }
 
   // Private SPA-only routes under /comp: served as the plain shell (they
@@ -568,12 +592,25 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return fetchShell(env, url);
   }
 
+  // A hidden comp, read by an admin or through its share link. Every route's
+  // loader data carries the comp, so a route added later inherits this.
+  const hidden = isHiddenComp(rendered.data);
+
   // Canonicalise the URL: 301 to `${slug}-${id}` whenever the request path is
   // not already it (a bare `${id}`, a stale/mis-cased slug, a trailing slash).
   // The name comes from the loader above, so the target reflects the current
   // title. Query is preserved; the fragment never reaches the server.
+  //
+  // On a hidden comp the canonical id carries the share key, so an admin who
+  // arrives on a bare URL lands on the one their address bar can share; a
+  // keyed URL for a comp that has since been published settles on the clean
+  // one. Both are 302s (see canonicalRedirect).
   if (rendered.canonicalPath && rendered.canonicalPath !== path) {
-    return canonicalRedirect(url.origin + rendered.canonicalPath + url.search, cookie);
+    return canonicalRedirect(
+      url.origin + rendered.canonicalPath + url.search,
+      cookie,
+      hidden || pathCarriesShareKey(path) || pathCarriesShareKey(rendered.canonicalPath)
+    );
   }
 
   const visitor = await visitorPromise;
@@ -593,11 +630,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   const template = await (await fetchShell(env, url)).text();
-  const html = injectSsr(template, path, bodyHtml, rendered.head, ssrData);
+  const head = hidden ? { ...rendered.head, noindex: true } : rendered.head;
+  const html = injectSsr(template, path, bodyHtml, head, ssrData);
 
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": pageCacheControl(cookie, rendered.cache),
+    // A hidden comp's page is for whoever holds its link: never a shared
+    // cache's to keep, even for an anonymous visitor.
+    "Cache-Control": hidden ? "private, no-store" : pageCacheControl(cookie, rendered.cache),
   });
   // Only ever present on a cookie-forwarded (so `private, no-store`) render.
   for (const setCookie of visitor.setCookies) headers.append("Set-Cookie", setCookie);
@@ -617,8 +657,10 @@ const SCORES_CSV_PATTERN = /^\/comp\/([^/]+)\/scores\.csv$/;
  * A URL rather than a client-built blob because that is what makes it useful
  * beyond a download: Google Sheets' IMPORTDATA reads it live, and it works with
  * JS off. The visitor's cookie is forwarded like everywhere else here, so an
- * admin can export a `test` comp and everyone else gets its 404. Never
- * indexed — it is the page's data, and the page is the indexable form.
+ * admin can export a `test` comp and everyone else gets its 404 — unless their
+ * URL carries the comp's share key, which is how the Google Sheets formula for
+ * a hidden comp works signed out. Never indexed — it is the page's data, and
+ * the page is the indexable form.
  *
  * The file's link columns are absolute against THIS request's origin, so an
  * export taken from a preview deployment links back into that deployment
@@ -642,21 +684,27 @@ async function scoresCsv(
 
   // No scored task yet → the header row alone. An empty export is a truthful
   // answer; an error would make a legitimate URL look broken.
-  const csv = buildScoresCsv(data.scores ?? { comp_id: compId, tasks: [], class_scores: [] }, {
-    compName: data.comp.name,
-    origin,
-  });
+  //
+  // The rows link back with the id THIS reader's URLs carry — on a hidden comp
+  // that includes the share key, or every link in a shared sheet would 404.
+  const linkId = compUrlId(data.comp, compId);
+  const csv = buildScoresCsv(
+    { ...(data.scores ?? { tasks: [], class_scores: [] }), comp_id: linkId },
+    { compName: data.comp.name, origin }
+  );
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${scoresCsvFilename(data.comp.name)}"`,
       "X-Robots-Tag": "noindex",
-      "Cache-Control": pageCacheControl(
-        cookie,
-        data.scores
-          ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
-          : undefined
-      ),
+      "Cache-Control": data.comp.test
+        ? "private, no-store"
+        : pageCacheControl(
+            cookie,
+            data.scores
+              ? { computedAt: data.scores.computed_at, stale: data.scores.stale }
+              : undefined
+          ),
     },
   });
 }
@@ -719,8 +767,22 @@ function pageCacheControl(cookie: string | null, cache?: CacheHint): string {
  * consolidate on the canonical form. Cached modestly (the target changes only
  * if the comp/task is renamed); a cookie-forwarded redirect can name a comp
  * visible only to that admin, so it is never shared-cached.
+ *
+ * `keyed`: the redirect is into or out of a hidden comp's share-key URL. Then
+ * it is a 302, never cached: a browser keeps a 301, so after "Reset link" (or
+ * hiding a comp again) it would go on sending its reader to a dead key.
  */
-function canonicalRedirect(location: string, cookie: string | null): Response {
+function canonicalRedirect(
+  location: string,
+  cookie: string | null,
+  keyed = false
+): Response {
+  if (keyed) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: location, "Cache-Control": "private, no-store" },
+    });
+  }
   return new Response(null, {
     status: 301,
     headers: {
@@ -728,6 +790,13 @@ function canonicalRedirect(location: string, cookie: string | null): Response {
       "Cache-Control": cookie ? "private, no-store" : "public, max-age=3600",
     },
   });
+}
+
+/** Whether a route's loader data is a hidden comp's (read by an admin, or by
+ * whoever holds its link). Every SSR route's data carries `comp`. */
+function isHiddenComp(data: unknown): boolean {
+  const comp = (data as { comp?: { test?: boolean } | null } | null)?.comp;
+  return !!comp?.test;
 }
 
 // ── shell helpers ────────────────────────────────────────────────────────────

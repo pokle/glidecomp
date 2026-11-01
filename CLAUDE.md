@@ -231,6 +231,26 @@ These are the standing imperatives. Each links to the reference that explains it
     (`user.via`); no call site does anything. And a route it sets must name
     every waypoint exactly — a fuzzy match may propose, never dispose, as with
     pilot names (`mcp-api/src/route-plan.ts`).
+- **A hidden comp opens for its admins and for whoever holds its link —
+  never for its id alone.** Comp ids are sequential in a public Sqids
+  encoding, so "anyone who knows the id" is everyone. A hidden (`test`) comp's
+  URLs carry its `share_key` after the id (`/comp/<slug>-vzuq_7hq2m9xk4rwd`,
+  migration 0041, `competition-api/src/share-key.ts`), so the organiser's
+  address bar IS the link to share and nobody hunts for a share button.
+  - **Every read route gates through `hiddenFromViewer()`, every write route
+    through `hiddenFromCaller()`** (`src/comp-visibility.ts`). A link is for
+    looking at a draft: registration, uploads and statuses stay admin-only
+    (SEC-37/38). Discovery is unchanged — list, search, lookup, sitemap and
+    MCP never name a hidden comp to a non-admin, key or no key.
+  - **The key goes wherever the id goes**, so build a comp URL from
+    `compUrlId(comp, compId)` (`lib/slug.ts`) and let it ride; never strip it
+    off a `compId` you are about to put in a link or a fetch.
+  - **A keyed response is never shared-cached or indexed**: `sqidsMiddleware`
+    forces `private, no-store` + `noindex` on the API, the SSR Function does
+    the same for a hidden comp's pages and 302s (never 301s) into and out of
+    keyed URLs, so "Reset link" cannot be undone by a browser's cache. Never
+    write a key into the audit log (key holders read it) or a log line
+    (`redactShareKeys()`).
 - **The search index maintains itself — do NOT add a call site for it.**
   `GET /api/comp/search` answers over an FTS5 index of competitions, tasks
   (including their routes' turnpoints) and pilots
@@ -509,8 +529,10 @@ These are the standing imperatives. Each links to the reference that explains it
     gated by `storage.isAvailable()` on the client and `requireAuth` on the
     server, which is the boundary that actually holds.
   - A hidden `test` comp stays hidden: all four routes the deep link uses 404
-    for a non-admin, and the viewer must say not-found while naming nothing —
-    the breadcrumbs are built only once the task really resolved.
+    for anyone who is neither an admin nor holding its share link (a keyed
+    `compId` opens it, exactly as on the comp pages), and the viewer must say
+    not-found while naming nothing — the breadcrumbs are built only once the
+    task really resolved.
   - Anything that would RELOAD into a URL the gate refuses (the sample
     loaders) is marked `data-requires-account` in the markup and hidden for an
     anonymous reader, rather than left to bounce them out of the page.
@@ -668,8 +690,9 @@ These are the standing imperatives. Each links to the reference that explains it
     expensive and few people read it) and the cold path **never computes
     synchronously** (returns `pending`, schedules, UI polls).
   - Visibility is `canViewAnalysis()` in `routes/analysis.ts` — one rule for
-    both — mirroring the score route: anyone may read a normal comp's analysis;
-    a hidden `test` comp 404s for non-admins.
+    both, delegating to `hiddenFromViewer()` like every read route: anyone may
+    read a normal comp's analysis; a hidden `test` comp 404s for anyone who is
+    neither an admin nor holding its share link.
 - **Weather** ([docs/weather.md](docs/weather.md)) — provider-neutral interface
   over outside meteorological sources, so a call site names no provider. A
   prediction can never be read as a record; every chart prints its source, and

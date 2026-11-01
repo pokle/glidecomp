@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures/test";
-import { idFromSegment } from "../web/frontend/src/react/lib/slug";
+import { bareCompId, idFromSegment } from "../web/frontend/src/react/lib/slug";
 import { e2eCompName } from "./fixtures/stack";
 
 // A STABLE identity, not a per-run one: dev-login signs up-or-in, so this
@@ -85,14 +85,20 @@ test("dev login, create competition and task", async ({ page, request }) => {
   // assertion polls until the comp fetch resolves.
   await page.waitForURL("**/comp/*");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(COMP_NAME);
-  // Capture the id for afterEach's cleanup. The path segment is the canonical
-  // `${name-slug}-${id}` form, so take the id off the end rather than the whole
-  // segment — the API only accepts the bare sqid.
-  createdCompId = idFromSegment(new URL(page.url()).pathname.split("/")[2]);
-  // Born hidden: the facts line says so, and an anonymous reader (the
-  // `request` fixture holds no session) gets a 404.
-  await expect(page.getByText(/· Hidden/)).toBeVisible();
+  // Born hidden, and opened on the URL that carries its share key: the
+  // organiser's address bar is the link to share. The path segment is the
+  // canonical `${name-slug}-${id}_${key}` form.
+  const urlCompId = idFromSegment(new URL(page.url()).pathname.split("/")[2]);
+  expect(urlCompId).toMatch(/^[a-z]+_[a-z0-9]{12}$/);
+  // Capture the bare id for afterEach's cleanup.
+  createdCompId = bareCompId(urlCompId);
+  await expect(
+    page.getByText("Hidden. Anyone you send this page’s link to can see it.")
+  ).toBeVisible();
+  // An anonymous reader (the `request` fixture holds no session) gets a 404
+  // for the id alone — and the comp itself through the link.
   expect((await request.get(`/api/comp/${createdCompId}`)).status()).toBe(404);
+  expect((await request.get(`/api/comp/${urlCompId}`)).status()).toBe(200);
 
   // Step 3b: The admin-only setup guide shows on a fresh comp with step 1
   // ("Create the competition") pre-checked. The progress count is over the
@@ -136,7 +142,11 @@ test("dev login, create competition and task", async ({ page, request }) => {
     .click();
   await expect(guide).toContainText("Completed: Make public");
   await expect(guide).toContainText("2 of 5 steps");
-  await expect(page.getByText(/· Hidden/)).toHaveCount(0);
+  await expect(page.getByText(/Anyone you send this page’s link to/)).toHaveCount(0);
+  // Public now: the address bar settles on the clean URL, without the key.
+  await expect
+    .poll(() => idFromSegment(new URL(page.url()).pathname.split("/")[2]))
+    .toBe(createdCompId);
 
   // Step 4: Create a task. Two "New task" buttons exist on an empty comp
   // (section header + the empty-state CTA in the section body).

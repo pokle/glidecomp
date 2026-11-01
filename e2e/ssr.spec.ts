@@ -15,6 +15,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SAMPLE_COMP_NAME } from "../web/workers/competition-api/src/sample";
+import { e2eCompName } from "./fixtures/stack";
 
 /**
  * SSR verification against the REAL Pages runtime (wrangler pages dev on the
@@ -351,6 +352,90 @@ test.describe("SSR — isolation and fallback", () => {
       expect(html).not.toContain('id="__SSR_DATA__"');
     });
   }
+});
+
+/**
+ * A hidden comp's share link (`/comp/<slug>-<id>_<key>`, lib/slug.ts
+ * compUrlId). Dev serves no SSR, so this is the only suite that can see what
+ * the Function does with one: render it for anyone holding the key, but never
+ * index it or let a shared cache keep it, and redirect into and out of keyed
+ * URLs with 302s a browser will not remember past a "Reset link".
+ */
+test.describe("SSR — a hidden comp's share link", () => {
+  // One comp, walked from hidden to published: the order matters, and a
+  // retry must start the walk again rather than land on a published comp.
+  test.describe.configure({ mode: "serial" });
+  const NAME = e2eCompName("SSR share link");
+  let admin: APIRequestContext;
+  let compId: string;
+  let shareKey: string;
+
+  test.beforeAll(async ({ playwright }) => {
+    const baseURL = test.info().project.use.baseURL;
+    admin = await playwright.request.newContext({ baseURL });
+    const signIn = await admin.post("/api/auth/dev-login", {
+      data: { name: "SSR Share Link", email: "ssr-share-link@test.local" },
+    });
+    expect(signIn.ok(), `dev-login failed: ${signIn.status()}`).toBeTruthy();
+    // No `test`: a new comp starts hidden, and its creator is told the key.
+    const res = await admin.post("/api/comp", { data: { name: NAME, category: "hg" } });
+    expect(res.ok(), await res.text()).toBeTruthy();
+    const body = (await res.json()) as { comp_id: string; share_key: string };
+    compId = body.comp_id;
+    shareKey = body.share_key;
+    expect(shareKey).toMatch(/^[a-z0-9]{12}$/);
+  });
+
+  test.afterAll(async () => {
+    if (compId) await admin.delete(`/api/comp/${compId}`);
+    await admin.dispose();
+  });
+
+  test("the keyed URL server-renders for a visitor, noindex and never shared-cached", async ({
+    request,
+  }) => {
+    const res = await request.get(compPath(`${compId}_${shareKey}`, NAME), { maxRedirects: 0 });
+    expect(res.status()).toBe(200);
+    expect(res.headers()["cache-control"]).toBe("private, no-store");
+    const html = await res.text();
+    expect(html).toContain(NAME);
+    expect(html).toContain('name="robots" content="noindex"');
+    expect(html).toContain("Not yet published.");
+  });
+
+  test("the id alone is a 404 for a visitor", async ({ request }) => {
+    const res = await request.get(compPath(compId, NAME), { failOnStatusCode: false });
+    expect(res.status()).toBe(404);
+    expect(await res.text()).not.toContain(NAME);
+  });
+
+  test("its admin is moved onto the keyed URL with a 302, not a 301", async () => {
+    const res = await admin.get(compPath(compId, NAME), { maxRedirects: 0 });
+    expect(res.status()).toBe(302);
+    expect(res.headers()["cache-control"]).toBe("private, no-store");
+    expect(new URL(res.headers()["location"]).pathname).toBe(
+      compPath(`${compId}_${shareKey}`, NAME)
+    );
+  });
+
+  test("the scores CSV opens signed out with the key, and is never shared-cached", async ({
+    request,
+  }) => {
+    const res = await request.get(`${compPath(`${compId}_${shareKey}`, NAME)}/scores.csv`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()["cache-control"]).toBe("private, no-store");
+    expect(res.headers()["content-type"]).toContain("text/csv");
+  });
+
+  test("once published, a keyed link settles on the clean URL with a 302", async ({
+    request,
+  }) => {
+    const publish = await admin.patch(`/api/comp/${compId}`, { data: { test: false } });
+    expect(publish.ok(), await publish.text()).toBeTruthy();
+    const res = await request.get(compPath(`${compId}_${shareKey}`, NAME), { maxRedirects: 0 });
+    expect(res.status()).toBe(302);
+    expect(new URL(res.headers()["location"]).pathname).toBe(compPath(compId, NAME));
+  });
 });
 
 test.describe("URL canonicalisation (301 to slug-id)", () => {

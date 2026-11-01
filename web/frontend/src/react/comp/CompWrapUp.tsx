@@ -26,7 +26,7 @@ import { Check, Circle } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { ProgressBar } from "@/react/rac/progress";
 import { formatTaskDate, todayInZone } from "../lib/format";
-import { compScoresPdfPath } from "../lib/slug";
+import { compScoresPdfPath, bareCompId } from "../lib/slug";
 import type { CompDetailData } from "./types";
 
 export interface WrapUpStep {
@@ -62,7 +62,9 @@ export function deriveWrapUpSteps(
 }
 
 function storageKey(kind: "hidden" | "saved", compId: string): string {
-  return `glidecomp:wrap-up-${kind}:${compId}`;
+  // The bare id, so a hidden comp's share key (which a reset changes) does
+  // not make the browser forget.
+  return `glidecomp:wrap-up-${kind}:${bareCompId(compId)}`;
 }
 
 function readFlag(kind: "hidden" | "saved", compId: string): boolean {

@@ -4,7 +4,7 @@ import type { PublicEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth } from "../middleware/auth";
-import { isCompAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
 import { validated } from "../validators";
 
 const auditQuerySchema = z.object({
@@ -30,17 +30,17 @@ export const auditRoutes = new Hono<PublicEnv>()
 
       // Test comps require admin access
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
 
       if (!comp) return c.json({ error: "Not found" }, 404);
 
-      if (comp.test) {
-        if (!user) return c.json({ error: "Not found" }, 404);
-        if (!(await isCompAdmin(c.env.DB, compId, user)))
-          return c.json({ error: "Not found" }, 404);
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       const effectiveLimit = limit ?? DEFAULT_LIMIT;

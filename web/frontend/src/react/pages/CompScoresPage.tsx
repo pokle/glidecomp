@@ -19,7 +19,7 @@ import { Card } from "@/react/rac/card";
 import { api } from "../../comp/api";
 import { useAdminView } from "../lib/user";
 import { underComp } from "../lib/crumbs";
-import { idFromSegment, compPath, compScoresPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compPath, compScoresPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import {
@@ -52,7 +52,7 @@ export function CompScoresPage() {
   });
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
-  useCanonicalPath(comp ? compScoresPath(compId, comp.name) : null);
+  useCanonicalPath(comp ? compScoresPath(compUrlId(comp, compId), comp.name) : null);
 
   const { state, rescoring, rescore } = useCompScores(
     compId ?? "",
@@ -83,7 +83,11 @@ export function CompScoresPage() {
         </div>
         {state.kind === "ready" && state.scores.class_scores.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            <ScoresDownload compId={compId} compName={comp.name} isTestComp={comp.test} />
+            <ScoresDownload
+              compId={compUrlId(comp, compId)}
+              compName={comp.name}
+              isTestComp={comp.test}
+            />
             {isAdmin ? (
               <Button
                 variant="outline"

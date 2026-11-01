@@ -1,0 +1,16 @@
+-- ── comp.share_key ─────────────────────────────────────────────────────────
+--
+-- The secret half of a hidden competition's link. A hidden (`test`) comp
+-- answers as missing to everyone except its admins AND anyone whose URL
+-- carries this key after the comp's id: `/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd`.
+-- The comp id itself is a sequential number in a public encoding, so it is
+-- no secret; this is. See `web/workers/competition-api/src/share-key.ts`.
+--
+-- Deliberately NOT generated here, neither as a backfill nor by a trigger.
+-- SQLite's random() is not documented as cryptographically secure, and what
+-- D1 seeds it from is not ours to verify, so every key is minted by
+-- `newShareKey()` in the Worker, from `crypto.getRandomValues`. Existing comps
+-- start with NULL, which opens nothing; the Worker fills a hidden comp's key
+-- the first time it is needed (`ensureShareKey()`: when an admin opens the
+-- comp, or hides it), and a new comp is created with one.
+ALTER TABLE comp ADD COLUMN share_key TEXT;

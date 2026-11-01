@@ -21,7 +21,7 @@ import { useParams } from "react-router-dom";
 import { Card } from "@/react/rac/card";
 import { Explain } from "@/react/rac/explain";
 import { NotFound } from "../components/NotFound";
-import { idFromSegment, taskAnalysisSectionPath } from "../lib/slug";
+import { compUrlId, idFromSegment, taskAnalysisSectionPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
 import { useTaskAnalysis } from "../analysis/use-task-report";
@@ -55,7 +55,13 @@ export function TaskAnalysisSection() {
   // load (the analysis body carries neither, so wait for the name fetches).
   useCanonicalPath(
     comp && task && section
-      ? taskAnalysisSectionPath(compId, comp.name, taskId, task.name, section.slug)
+      ? taskAnalysisSectionPath(
+          compUrlId(comp, compId),
+          comp.name,
+          taskId,
+          task.name,
+          section.slug
+        )
       : null
   );
 

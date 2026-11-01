@@ -68,15 +68,7 @@ import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
-import {
-  idFromSegment,
-  compPath,
-  taskPath,
-  taskAnalysisPath,
-  taskSettingsPath,
-  taskRoutePath,
-  taskWeatherPath,
-} from "../lib/slug";
+import { compUrlId, idFromSegment, compPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
@@ -114,7 +106,9 @@ export function TaskDetail() {
   // Canonicalise once both names are known (comp is a non-critical fetch, so
   // wait for it rather than 301-ing to a bare comp segment).
   useCanonicalPath(
-    comp && task ? taskPath(compId, comp.name, taskId, task.name) : null
+    comp && task
+      ? taskPath(compUrlId(comp, compId), comp.name, taskId, task.name)
+      : null
   );
 
   const [scoresRefresh, setScoresRefresh] = useState(0);
@@ -281,7 +275,10 @@ export function TaskDetail() {
             anyone, so the markup must settle after hydration rather than
             before. The button itself no longer depends on a session —
             submitting is open to anyone the comp's roster knows. */}
-        {mounted && !isClosed && (!task.submissions_closed || isAdmin) ? (
+        {/* A hidden comp's share link is for READING a draft: every write
+            route refuses anyone but its admins, so no visitor is offered a
+            button that can only fail. */}
+        {mounted && !isClosed && (!task.submissions_closed || isAdmin) && (!comp?.test || isAdmin) ? (
           <Button size="sm" onPress={() => setSubmitOpen(true)}>
             Submit track
           </Button>
@@ -431,7 +428,8 @@ export function TaskDetail() {
           isOpenDistance={comp?.scoring_format === "open_distance"}
           isAuthenticated={user != null}
           isClosed={isClosed}
-          submissionsClosed={task.submissions_closed && !isAdmin}
+          // A hidden comp takes no submissions from its link's visitors.
+          submissionsClosed={(task.submissions_closed || !!comp?.test) && !isAdmin}
           canUploadOnBehalf={canUploadOnBehalf}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}

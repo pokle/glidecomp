@@ -36,6 +36,10 @@ export interface RouteIds {
   comp_id?: number;
   task_id?: number;
   comp_pilot_id?: number;
+  /** A hidden comp's share key, when the `comp_id` segment carried one
+   * (`vzuq_7hq2m9xk4rwd`, see share-key.ts). Read only by
+   * `hiddenFromViewer()`. */
+  comp_key?: string;
 }
 
 /**

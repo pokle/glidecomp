@@ -21,7 +21,7 @@ import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underTask } from "../lib/crumbs";
-import { idFromSegment, taskPath, taskRoutePath } from "../lib/slug";
+import { compUrlId, idFromSegment, taskPath, taskRoutePath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import type { CompDetailData, TaskDetailData } from "../comp/types";
@@ -58,7 +58,9 @@ export function TaskRoutePage() {
     });
 
   useCanonicalPath(
-    comp && task ? taskRoutePath(compId, comp.name, taskId, task.name) : null
+    comp && task
+      ? taskRoutePath(compUrlId(comp, compId), comp.name, taskId, task.name)
+      : null
   );
 
   const isAdmin = useAdminView(!!comp?.is_admin);

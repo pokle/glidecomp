@@ -4,6 +4,8 @@ import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin, isSuperAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
+import { ensureShareKey, newShareKey } from "../share-key";
 import { createCompSchema, updateCompSchema, validated } from "../validators";
 import {
   boolFromDb,
@@ -245,12 +247,29 @@ function describeGapParamChanges(
   return out;
 }
 
-// Helper to encode comp row IDs for response
+// Helper to encode comp row IDs for response. The share key never rides
+// along with the row: a caller that may have it gets it from `shareKeyFor()`,
+// so a SELECT that happens to name the column cannot publish it.
 function encodeComp(alphabet: string, row: Record<string, unknown>) {
+  const { share_key: _secret, ...rest } = row;
   return {
-    ...row,
+    ...rest,
     comp_id: encodeId(alphabet, row.comp_id as number),
   };
+}
+
+/**
+ * The share key a caller's URLs need for this comp, or null.
+ *
+ * Only a hidden comp has a link that needs a key, and only someone who can
+ * already see it is told the key: its admins, or a visitor who arrived with
+ * the key in their link (so it tells them nothing new). The frontend builds
+ * `${comp_id}_${share_key}` into every URL for the comp from it — which is how
+ * the organiser's address bar becomes the share link (share-key.ts).
+ */
+function shareKeyFor(row: Record<string, unknown>, entitled: boolean): string | null {
+  if (!row.test || !entitled) return null;
+  return (row.share_key as string | null) ?? null;
 }
 
 /**
@@ -508,10 +527,11 @@ export const compRoutes = new Hono<AuthedEnv>()
       // public list; going public is now the setup guide's last step. The DB
       // column default stays 0 — this INSERT always names the value.
       const test = body.test ?? true;
+      const shareKey = newShareKey();
 
       const compResult = await c.env.DB.prepare(
-        `INSERT INTO comp (name, creation_date, close_date, category, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO comp (name, creation_date, close_date, category, test, share_key, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           body.name,
@@ -519,6 +539,7 @@ export const compRoutes = new Hono<AuthedEnv>()
           closeDate,
           body.category,
           test ? 1 : 0,
+          shareKey,
           JSON.stringify(pilotClasses),
           defaultClass,
           gapParams ? JSON.stringify(gapParams) : null,
@@ -550,6 +571,8 @@ export const compRoutes = new Hono<AuthedEnv>()
       return c.json(
         {
           comp_id: encodeId(c.env.SQIDS_ALPHABET, compId),
+          // The creator administers it; a hidden comp's URLs need the key.
+          share_key: test ? shareKey : null,
           name: body.name,
           category: body.category,
           creation_date: now,
@@ -598,12 +621,12 @@ export const compRoutes = new Hono<AuthedEnv>()
       // `comp_admin` row for.
       adminComps = isSuperAdmin(user)
         ? await c.env.DB.prepare(
-            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.share_key, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
              FROM comp c
              ORDER BY c.creation_date DESC`
           ).all()
         : await c.env.DB.prepare(
-            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
+            `SELECT c.comp_id, c.name, c.category, c.creation_date, c.close_date, c.test, c.share_key, c.pilot_classes, c.default_pilot_class, c.gap_params, c.scoring_format, c.timezone, c.open_igc_upload, c.open_registration
              FROM comp c
              JOIN comp_admin ca ON c.comp_id = ca.comp_id
              WHERE ca.user_id = ?
@@ -639,6 +662,12 @@ export const compRoutes = new Hono<AuthedEnv>()
     const merged = [
       ...adminComps.results.map((r) => ({
         ...encodeComp(alphabet, r),
+        // So the list links straight to the URL that carries the key, and
+        // the organiser's address bar is the share link from the first click.
+        // Null for a hidden comp that has no key yet: the list stays a pure
+        // read, and opening the comp mints one (GET /api/comp/:comp_id), then
+        // moves the organiser onto the keyed URL.
+        share_key: shareKeyFor(r, true),
         is_admin: true,
         pilot_classes: JSON.parse(r.pilot_classes as string),
         gap_params: r.gap_params ? JSON.parse(r.gap_params as string) : null,
@@ -690,7 +719,7 @@ export const compRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, organiser_notes, settings_reviewed
+        `SELECT comp_id, name, category, creation_date, close_date, test, share_key, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, organiser_notes, settings_reviewed
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
@@ -700,11 +729,26 @@ export const compRoutes = new Hono<AuthedEnv>()
         return c.json({ error: "Competition not found" }, 404);
       }
 
+      // A hidden comp opens for its admins and for whoever holds its link.
+      if (
+        await hiddenFromViewer(
+          c.env.DB,
+          compId,
+          comp as { test: number; share_key: string | null },
+          user,
+          c.var.ids.comp_key
+        )
+      ) {
+        return c.json({ error: "Competition not found" }, 404);
+      }
+
       const isAdmin = await isCompAdmin(c.env.DB, compId, user);
 
-      // Test comps require admin access
-      if (comp.test && !isAdmin) {
-        return c.json({ error: "Competition not found" }, 404);
+      // A hidden comp's admin is about to be told its key; a comp from before
+      // the column (or from the seeder or the importer) gets one now, minted in
+      // the Worker like every other.
+      if (comp.test && isAdmin && !comp.share_key) {
+        comp.share_key = await ensureShareKey(c.env.DB, compId, null);
       }
 
       // Real organisers only (`comp_admin` rows). A site super admin can
@@ -772,6 +816,8 @@ export const compRoutes = new Hono<AuthedEnv>()
 
       return c.json({
         ...serializeComp(alphabet, comp),
+        // Past the gate above, anyone reading a hidden comp is entitled.
+        share_key: shareKeyFor(comp, true),
         admins: admins.results,
         is_admin: isAdmin,
         tasks: tasks.results.map((t) => {
@@ -953,13 +999,19 @@ export const compRoutes = new Hono<AuthedEnv>()
 
       // Return updated comp
       const updated = await c.env.DB.prepare(
-        `SELECT comp_id, name, category, creation_date, close_date, test, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, organiser_notes
+        `SELECT comp_id, name, category, creation_date, close_date, test, share_key, pilot_classes, default_pilot_class, gap_params, scoring_format, series_scoring, ftv_factor, timezone, open_igc_upload, open_registration, organiser_notes
          FROM comp WHERE comp_id = ?`
       )
         .bind(compId)
         .first<Record<string, unknown>>();
 
       if (!updated) return c.json({ error: "Competition not found" }, 404);
+
+      // Just hidden, or hidden before the column existed: the admin is about
+      // to be told the key their URLs need, so make sure there is one.
+      if (updated.test && !updated.share_key) {
+        updated.share_key = await ensureShareKey(c.env.DB, compId, null);
+      }
 
       const admins = await c.env.DB.prepare(
         `SELECT u.email, u.name FROM comp_admin ca
@@ -971,8 +1023,47 @@ export const compRoutes = new Hono<AuthedEnv>()
 
       return c.json({
         ...serializeComp(alphabet, updated),
+        // requireCompAdmin: the caller administers this comp.
+        share_key: shareKeyFor(updated, true),
         admins: admins.results,
       });
+    }
+  )
+
+  // ── POST /api/comp/:comp_id/share-key ── Reset a hidden comp's link
+  //
+  // Writes a new share key, which retires every link shared so far: a URL
+  // carrying the old key answers not-found to everyone but the comp's admins.
+  // Admin-only like every write, and audit-logged — but the description never
+  // names a key, because key holders can read a hidden comp's audit log.
+  // No score bump: who can see a comp is not a scoring input.
+  .post(
+    "/api/comp/:comp_id/share-key",
+    requireAuth,
+    sqidsMiddleware,
+    requireCompAdmin,
+    async (c) => {
+      const compId = c.var.ids.comp_id!;
+      const comp = await c.env.DB.prepare(
+        "SELECT name FROM comp WHERE comp_id = ?"
+      )
+        .bind(compId)
+        .first<{ name: string }>();
+      if (!comp) return c.json({ error: "Competition not found" }, 404);
+
+      const shareKey = newShareKey();
+      await c.env.DB.prepare("UPDATE comp SET share_key = ? WHERE comp_id = ?")
+        .bind(shareKey, compId)
+        .run();
+
+      await audit(c.env.DB, c.var.user, compId, {
+        subject_type: "comp",
+        subject_id: compId,
+        subject_name: comp.name,
+        description: `Reset the link to hidden competition "${comp.name}" — links shared before now no longer open it`,
+      });
+
+      return c.json({ share_key: shareKey });
     }
   )
 

@@ -271,9 +271,15 @@ export function buildServer(env: ToolsEnv, caller: Caller, authInfo: AuthInfo, o
         } & Record<string, unknown>>(`/api/comp/${encodeURIComponent(comp_id)}`);
         const compUrl = url(compPath(comp.comp_id, comp.name));
         const tasks = (comp.tasks ?? []).map((t) => ({ ...t, url: url(taskPath(comp.comp_id, comp.name, t.task_id, t.name)) }));
+        // A hidden comp's share key opens it to anyone who holds it. The
+        // organiser's assistant has no use for it — the organiser's own
+        // session opens the comp — and a transcript is not where the key to
+        // a draft should end up. The links stay bare; the site moves the
+        // organiser onto the keyed URL when they follow one.
+        const { share_key: _shareKey, ...shown } = comp;
         return answer(
           `${comp.name}: ${compUrl}`,
-          { ...comp, url: compUrl, waypoints_url: url(compWaypointsPath(comp.comp_id, comp.name)), tasks },
+          { ...shown, url: compUrl, waypoints_url: url(compWaypointsPath(comp.comp_id, comp.name)), tasks },
           [compLink({ url: compUrl, name: comp.name }), ...tasks.map((t) => taskLink(t, comp.name))]
         );
       } catch (err) {

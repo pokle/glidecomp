@@ -24,7 +24,7 @@ import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underPilot } from "../lib/crumbs";
-import { idFromSegment, manualFlightPath, taskPath } from "../lib/slug";
+import { compUrlId, idFromSegment, manualFlightPath, taskPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { fetchWithRetry } from "../comp/types";
@@ -122,7 +122,7 @@ export function ManualFlightPage() {
   useCanonicalPath(
     comp && task && pilot
       ? manualFlightPath(
-          compId,
+          compUrlId(comp, compId),
           comp.name,
           taskId,
           task.name,

@@ -4,7 +4,7 @@ import { SCORING_ENGINE_VERSION } from "@glidecomp/engine";
 import type { AuthedEnv } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { optionalAuth, requireAuth, requireCompAdmin } from "../middleware/auth";
-import { isCompAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
 import { audit } from "../audit";
 import { encodeId } from "../sqids";
 import { mapWithConcurrency } from "../lib/concurrency";
@@ -177,17 +177,17 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       // Check comp exists and handle test visibility
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
 
       if (!comp) return c.json({ error: "Not found" }, 404);
 
-      if (comp.test) {
-        if (!user) return c.json({ error: "Not found" }, 404);
-        if (!(await isCompAdmin(c.env.DB, compId, user)))
-          return c.json({ error: "Not found" }, 404);
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       // Verify task exists, belongs to comp, and has an xctsk
@@ -278,12 +278,13 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       // Check comp exists and handle test visibility
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test, pilot_classes, scoring_format, series_scoring, ftv_factor, category FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key, pilot_classes, scoring_format, series_scoring, ftv_factor, category FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
         .first<{
           comp_id: number;
           test: number;
+          share_key: string | null;
           pilot_classes: string;
           scoring_format: string;
           series_scoring: string;
@@ -293,10 +294,10 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       if (!comp) return c.json({ error: "Not found" }, 404);
 
-      if (comp.test) {
-        if (!user) return c.json({ error: "Not found" }, 404);
-        if (!(await isCompAdmin(c.env.DB, compId, user)))
-          return c.json({ error: "Not found" }, 404);
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       // Load all tasks with xctsk for this comp
@@ -445,22 +446,19 @@ export const scoreRoutes = new Hono<AuthedEnv>()
 
       // Check comp exists and handle test visibility
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
 
       if (!comp) {
         return c.json({ error: "Not found" }, 404);
       }
 
-      if (comp.test) {
-        if (!user) {
-          return c.json({ error: "Not found" }, 404);
-        }
-        if (!(await isCompAdmin(c.env.DB, compId, user))) {
-          return c.json({ error: "Not found" }, 404);
-        }
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       // Verify task belongs to comp

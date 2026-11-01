@@ -14,6 +14,7 @@ import { Check, Circle } from "lucide-react";
 import { Button } from "@/react/rac/button";
 import { ProgressBar } from "@/react/rac/progress";
 import type { CompDetailData } from "./types";
+import { bareCompId } from "../lib/slug";
 
 export interface SetupStep {
   key: "create" | "settings" | "waypoints" | "pilots" | "task" | "public";
@@ -70,7 +71,9 @@ export function deriveSetupSteps(comp: CompDetailData): SetupStep[] {
 }
 
 function hideKey(compId: string): string {
-  return `glidecomp:setup-guide-hidden:${compId}`;
+  // The bare id: a hidden comp's URL id carries its share key, which a reset
+  // changes, and the reader's choice must outlive that.
+  return `glidecomp:setup-guide-hidden:${bareCompId(compId)}`;
 }
 
 function readHidden(compId: string): boolean {

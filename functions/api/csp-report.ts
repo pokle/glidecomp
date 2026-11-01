@@ -20,7 +20,12 @@
  * Public and unauthenticated by necessity (a browser sends these with no
  * credentials), so the body is capped and a request never gets anything back
  * but an empty 204.
+ *
+ * A report names the page it came from, and a hidden competition's page URL
+ * carries its share key (lib/slug.ts). Every string is passed through
+ * `redactShareKeys` before it is logged, so the logs never hold a working link.
  */
+import { redactShareKeys } from "../../web/frontend/src/react/lib/slug";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_REPORTS = 20;
@@ -74,7 +79,9 @@ function violations(body: unknown): Violation[] {
 }
 
 function clip(v: unknown): unknown {
-  return typeof v === "string" && v.length > 300 ? `${v.slice(0, 300)}…` : v;
+  if (typeof v !== "string") return v;
+  const s = redactShareKeys(v);
+  return s.length > 300 ? `${s.slice(0, 300)}…` : s;
 }
 
 export const onRequestPost: PagesFunction = async ({ request }) => {
