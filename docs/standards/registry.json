@@ -202,8 +202,8 @@
       },
       "onChange": "Read the snapshot diff. Safe to PR for editorial changes and new optional members. A new specVersion, a renamed or required member, or a changed well-known path or media type: update ai-catalog.json and the discovery test if mechanical, otherwise owner.",
       "seen": {
-        "value": "05a18c1154f62e3b",
-        "checkedAt": "2026-10-25"
+        "value": "7e73801d137ca4d6",
+        "checkedAt": "2026-10-31"
       }
     },
     {
@@ -288,10 +288,10 @@
         "url": "https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/",
         "pattern": "draft-ietf-oauth-v2-1-(\\d+)"
       },
-      "onChange": "Owner, but usually informational: `follows` is the draft revision the MCP authorisation spec we implement (2025-11-25) cites, and the provider itself is Better Auth's mcp() plugin. A newer draft is a log line until the MCP spec adopts it; publication as an RFC, or a newer MCP revision citing a newer draft, is an issue.",
+      "onChange": "Owner, but usually informational: `follows` is the draft revision the MCP authorisation spec we implement (2026-07-28; 2025-11-25 cited the same draft) cites, and the provider itself is Better Auth's mcp() plugin. A newer draft is a log line until the MCP spec adopts it; publication as an RFC, or a newer MCP revision citing a newer draft, is an issue.",
       "seen": {
-        "value": "16",
-        "checkedAt": "2026-10-25"
+        "value": "17",
+        "checkedAt": "2026-10-31"
       }
     },
     {

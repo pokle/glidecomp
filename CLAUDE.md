@@ -290,7 +290,7 @@ These are the standing imperatives. Each links to the reference that explains it
   formula and never a fit — the task-analysis captions say "a trend fitted
   through the dots"; these must not. A pilot is plotted only when the curve
   provably explains their published points; anyone carrying a reduction it
-  doesn't model (§12.1, §12.3.5) is counted out, and if that's the viewing pilot
+  doesn't model (§13.2, §13.4.5) is counted out, and if that's the viewing pilot
   the chart is suppressed. Shared chart geometry lives in
   `src/react/charts/scale.ts`.
 - **(d) A repaired track shows its repairs.** The "Track data cleaning" section
