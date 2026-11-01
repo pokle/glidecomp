@@ -4,6 +4,7 @@ import { encodeId, decodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
 import { isCompAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
 import {
   updatePilotSchema,
   updateCompPilotSchema,
@@ -341,25 +342,28 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
 
       if (!comp) {
         return c.json({ error: "Not found" }, 404);
       }
 
-      // SEC-15: PII (admin-entered email, linked Better Auth email,
-      // driver_contact phone) must only be returned to a comp admin.
-      // Test comps already require admin to see anything; for non-test
-      // comps we keep public visibility of names/IDs/classes but redact
-      // the PII fields via `serializeCompPilotPublic`.
-      const isAdmin = await isCompAdmin(c.env.DB, compId, user);
-
-      if (comp.test && !isAdmin) {
+      // A hidden comp opens for its admins and for whoever holds its link.
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
         return c.json({ error: "Not found" }, 404);
       }
+
+      // SEC-15: PII (admin-entered email, linked Better Auth email,
+      // driver_contact phone) must only be returned to a comp admin — on a
+      // hidden comp too, where a share-link visitor reads the same redacted
+      // roster as the public does on a published one. Names/IDs/classes stay
+      // visible; the PII fields go via `serializeCompPilotPublic`.
+      const isAdmin = await isCompAdmin(c.env.DB, compId, user);
 
       const pilots = await c.env.DB.prepare(
         `SELECT ${COMP_PILOT_COLUMNS.join(", ")}, u.email AS linked_email, u.username AS linked_username

@@ -2,22 +2,52 @@
  * Which competitions a caller may see: as a SQL fragment for a search, and as
  * a yes/no for a route handed one competition's id.
  *
- * `test` comps are hidden from everyone except their own admins (and super
- * admins). Every endpoint that can name a competition it was not given the id
- * of — the 404 page's lookup, the search box — has to apply the same rule, or
- * it becomes the way to discover a hidden competition. Every endpoint that
- * WAS given the id has to apply it too, or knowing the id becomes the way in.
+ * A hidden (`test`) comp is never DISCOVERABLE except by its own admins (and
+ * super admins): every endpoint that can name a competition it was not given
+ * the id of — the comp list, the 404 page's lookup, the search box, the
+ * sitemap — applies `visibleCompsFilter` or `test = 0`, or it becomes the way
+ * to find a hidden competition.
+ *
+ * Given the id, a hidden comp can be READ by its admins and by anyone whose
+ * link carries its share key (`hiddenFromViewer`, see share-key.ts). The id
+ * alone opens nothing — ids are sequential in a public encoding, so knowing
+ * one proves nothing. WRITES stay admin-only (`hiddenFromCaller`): a shared
+ * link is for looking at a draft, not for changing it.
  */
 import type { AuthUser } from "./env";
 import { isCompAdmin, isSuperAdmin } from "./super-admin";
+import { shareKeyMatches } from "./share-key";
 
 /**
- * Whether a hidden `test` competition must answer this caller as a missing one.
+ * Whether a READ of a hidden competition must answer this caller as a missing
+ * one: true unless the caller administers it or presented its share key.
  *
- * The single-competition counterpart of `visibleCompsFilter` below, for the
- * routes that are handed an id rather than searching for one. A `test` comp is
- * the organiser's own staging area — a pre-publish rehearsal, or one of the
- * synthetic fixtures `docs/sample-data.md` seeds.
+ * Every read route handed a comp id goes through this, so the rule cannot
+ * drift between them. `key` is `c.var.ids.comp_key`, which `sqidsMiddleware`
+ * splits off the comp-id segment; `comp.share_key` is the comp's own.
+ *
+ * The key is checked before the admin lookup only because it needs no query.
+ * A wrong key is no worse than none: 404 in the route's own not-found wording,
+ * exactly as for a comp that does not exist.
+ */
+export async function hiddenFromViewer(
+  db: D1Database,
+  compId: number,
+  comp: { test: number | boolean; share_key?: string | null },
+  user: Pick<AuthUser, "id" | "email"> | null | undefined,
+  key: string | undefined
+): Promise<boolean> {
+  if (!comp.test) return false;
+  if (shareKeyMatches(key, comp.share_key)) return false;
+  return !(await isCompAdmin(db, compId, user));
+}
+
+/**
+ * Whether a WRITE to a hidden `test` competition must answer this caller as a
+ * missing one. Reads use `hiddenFromViewer` above, which also honours the
+ * share key; this deliberately does not. A `test` comp is the organiser's own
+ * staging area — a pre-publish rehearsal, a draft shared for feedback, or one
+ * of the synthetic fixtures `docs/sample-data.md` seeds.
  *
  * The read routes have always gated on the flag, and so has the anonymous
  * submit; the WRITE routes did not (SEC-37/38), so any account that knew or

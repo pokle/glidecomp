@@ -16,7 +16,7 @@ import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underComp } from "../lib/crumbs";
-import { idFromSegment, compPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { PilotsSection } from "../comp/PilotsSection";
@@ -37,7 +37,9 @@ export function CompPilotsPage() {
     title: (c) => `GlideComp - ${c.name} pilots`,
   });
   // Settle the address bar on the canonical `${slug}-${id}/pilots` once loaded.
-  useCanonicalPath(comp ? `${compPath(compId, comp.name)}/pilots` : null);
+  useCanonicalPath(
+    comp ? `${compPath(compUrlId(comp, compId), comp.name)}/pilots` : null
+  );
 
   const isAdmin = useAdminView(!!comp?.is_admin);
 

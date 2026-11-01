@@ -21,7 +21,7 @@ import {
   submissionsBlockedFor,
   submissionsClosedBody,
 } from "../submission-gate";
-import { hiddenFromCaller } from "../comp-visibility";
+import { hiddenFromCaller, hiddenFromViewer } from "../comp-visibility";
 
 interface ManualFlightRow {
   task_manual_flight_id: number;
@@ -125,15 +125,15 @@ export const manualFlightRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
-      if (comp.test) {
-        if (!user) return c.json({ error: "Not found" }, 404);
-        if (!(await isCompAdmin(c.env.DB, compId, user)))
-          return c.json({ error: "Not found" }, 404);
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       const task = await c.env.DB.prepare(
@@ -174,15 +174,15 @@ export const manualFlightRoutes = new Hono<AuthedEnv>()
       const alphabet = c.env.SQIDS_ALPHABET;
 
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
       if (!comp) return c.json({ error: "Not found" }, 404);
-      if (comp.test) {
-        if (!user) return c.json({ error: "Not found" }, 404);
-        if (!(await isCompAdmin(c.env.DB, compId, user)))
-          return c.json({ error: "Not found" }, 404);
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       const rows = await c.env.DB.prepare(

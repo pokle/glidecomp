@@ -7,7 +7,9 @@
  *
  * Parsing is unambiguous because a sqid id is `[a-z]+` (SQIDS_ALPHABET is the
  * 26 lowercase letters — no digits, no dashes), so the id is always the text
- * after the LAST dash. That makes a bare `${id}` (the pre-slug URLs we still
+ * after the LAST dash. A hidden competition's id carries its share key after
+ * an underscore (`vzuq_7hq2m9xk4rwd`, see `compUrlId` below); the key is
+ * `[a-z0-9]` with no dash either, so it simply rides along as part of the id. That makes a bare `${id}` (the pre-slug URLs we still
  * support) and a slugged `${slug}-${id}` parse identically, and it makes the
  * whole canonical URL lowercase (the id already is).
  *
@@ -77,6 +79,67 @@ export function nameSlugFromSegment(segment: string): string {
   }
   const i = s.lastIndexOf("-");
   return i === -1 ? "" : s.slice(0, i);
+}
+
+// ── Hidden competitions' links ───────────────────────────────────────────────
+//
+// A hidden comp opens for its admins and for anyone whose URL carries its
+// share key after the comp's id: `/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd`
+// (web/workers/competition-api/src/share-key.ts). Because the key is PART of
+// the id, every path builder below and every `/api/comp/${compId}` fetch
+// carries it without being told, so a visitor who arrived by the link keeps it
+// as they click around — and the organiser's own address bar is the link to
+// share.
+
+/** Separates a comp's sqid from its share key. Never in a sqid or a key. */
+export const SHARE_KEY_SEPARATOR = "_";
+
+/**
+ * The comp id a URL for this comp should carry, for this viewer.
+ *
+ * Public comp: the bare sqid, dropping any stale key (a draft link still works
+ * after publishing, and settles on the clean URL). Hidden comp: the sqid plus
+ * the key the API handed this viewer — its admins, or a visitor who arrived
+ * with it. `fallback` (the id the URL already has) is kept when the comp has
+ * not loaded, or the payload carries no key.
+ */
+export function compUrlId(
+  comp:
+    | { comp_id: string; test?: boolean; share_key?: string | null }
+    | null
+    | undefined,
+  fallback: string
+): string {
+  if (!comp) return fallback;
+  if (!comp.test) return comp.comp_id;
+  return comp.share_key
+    ? `${comp.comp_id}${SHARE_KEY_SEPARATOR}${comp.share_key}`
+    : fallback;
+}
+
+/** A comp id without its share key — for comparing ids, never for a URL. */
+export function bareCompId(id: string): string {
+  const i = id.indexOf(SHARE_KEY_SEPARATOR);
+  return i === -1 ? id : id.slice(0, i);
+}
+
+/**
+ * Text with every share key in it masked: `vzuq_7hq2m9xk4rwd` → `vzuq_[key]`.
+ * For anything that writes a URL somewhere other people can read it — a log
+ * line above all — so the key to a hidden comp is not handed out with it.
+ */
+export function redactShareKeys(text: string): string {
+  return text.replace(/([a-z]+)_[a-z0-9]{12}(?![a-z0-9])/g, "$1_[key]");
+}
+
+/**
+ * Whether a `/comp/…` pathname's comp segment carries a share key. A page or
+ * redirect for such a path is a hidden comp's, so it is never shared-cached
+ * and never a permanent redirect (a reset key would keep resurfacing).
+ */
+export function pathCarriesShareKey(pathname: string): boolean {
+  const segment = pathname.split("/")[2] ?? "";
+  return idFromSegment(segment).includes(SHARE_KEY_SEPARATOR);
 }
 
 // ── Canonical path builders ──────────────────────────────────────────────────

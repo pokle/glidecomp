@@ -8,9 +8,10 @@
  * the page does not. (It was admin-only at first, to keep the menu tidy; the
  * items sit inside the Download menu, so they add no clutter either way.)
  * The data is fetched with the visitor's own cookie, so a hidden `test` comp
- * is still a 404 for anyone who cannot see it, exactly as on the page.
+ * is still a 404 for anyone who cannot see it, exactly as on the page — and
+ * opens for whoever's URL carries its share key, also as on the page.
  */
-import { idFromSegment } from "../react/lib/slug";
+import { compUrlId, idFromSegment } from "../react/lib/slug";
 import { loadResultsRecord, NotFoundError, type FetchFn } from "../react/loaders";
 import { buildResultsRecord, resultsRecordFilename, type Fonts } from "./build";
 import { buildResultsZip } from "./zip";
@@ -53,6 +54,10 @@ export async function serveResultsRecord({
     console.error("results record error for", compId, err);
     return plain(503, "The results record could not be made right now — please try again");
   }
+  // Every link in the document is built from comp.comp_id. On a hidden comp
+  // it must carry the share key the reader's own URLs carry, or a record
+  // passed on would link only to "not found".
+  data = { ...data, comp: { ...data.comp, comp_id: compUrlId(data.comp, compId) } };
 
   let body: Uint8Array;
   try {

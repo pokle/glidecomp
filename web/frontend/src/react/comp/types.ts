@@ -63,6 +63,12 @@ export interface CompDetailData {
    * the column existed has none; read it as "".
    */
   organiser_notes?: string;
+  /**
+   * A hidden comp's share key, for whoever may see the comp (its admins, or
+   * a visitor whose link carried it); null for a public comp. Build URLs with
+   * `compUrlId()` (lib/slug.ts), which puts it after the id.
+   */
+  share_key?: string | null;
   tasks: TaskSummary[];
   /** Real `comp_admin` rows only — never includes a site super admin unless
    *  they also hold a row. Use `is_admin` for "may the viewer administer?". */
@@ -459,6 +465,9 @@ export interface CompListEntry {
   scoring_format?: string;
   is_admin: boolean;
   test: boolean;
+  /** The key to the admin's own hidden comps; null otherwise. See
+   * CompDetailData.share_key. */
+  share_key?: string | null;
   first_task_date: string | null;
   last_task_date: string | null;
   /** Comp-local IANA zone, when set (see CompDetailData.timezone). */

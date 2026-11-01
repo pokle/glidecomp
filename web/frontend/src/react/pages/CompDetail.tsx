@@ -10,6 +10,7 @@
  */
 import { Fragment, useEffect, useId, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { EyeOffIcon } from "lucide-react";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { Button, LinkButton } from "@/react/rac/button";
@@ -39,12 +40,7 @@ import {
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
 import { compCrumbs } from "../lib/crumbs";
-import {
-  idFromSegment,
-  compPath,
-  compSettingsPath,
-  taskPath,
-} from "../lib/slug";
+import { compUrlId, idFromSegment, compPath, compSettingsPath, taskPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { SectionHeader } from "../components/SectionHeader";
@@ -86,7 +82,7 @@ export function CompDetail() {
   const [createOpen, setCreateOpen] = useState(false);
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
-  useCanonicalPath(comp ? compPath(compId, comp.name) : null);
+  useCanonicalPath(comp ? compPath(compUrlId(comp, compId), comp.name) : null);
 
   // Deep links like /comp/:id#scores (the old /scores page redirects there):
   // scroll once the sections exist.
@@ -213,10 +209,22 @@ function CompDetailView({
       <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">{comp.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {facts.join(" · ")}
-            {comp.test ? " · Hidden" : null}
-          </p>
+          <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
+          {/* A hidden comp says so, and says who can see it. Its URL carries
+              the share key (lib/slug.ts compUrlId), so the organiser's own
+              address bar is the link to send; a visitor is told why they can
+              see a competition nobody can find — and that it is not yet
+              published, so a draft is never taken for official results. */}
+          {comp.test ? (
+            <p className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
+              <EyeOffIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                {isAdmin
+                  ? "Hidden. Anyone you send this page’s link to can see it."
+                  : "Not yet published. You can see this competition because someone shared its link with you."}
+              </span>
+            </p>
+          ) : null}
           {/* Organiser credit sits with the facts: who runs the day is a
               companion to what kind of day it is. The scores page's "Ask the
               comp admins" links to #admins here. Names are the mailto — no

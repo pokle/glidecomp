@@ -102,7 +102,20 @@ it via `_routes.json` because `_redirects` can't match hosts.
 ### Failure behaviour
 
 - Upstream 404/400 → a real 404 plus `noindex`. Hidden `test` comps 404
-  anonymously.
+  anonymously — unless the URL carries the comp's share key
+  (`/comp/<slug>-<id>_<key>`, see `compUrlId` in `lib/slug.ts`).
+
+### Hidden competitions
+
+A hidden comp's pages render for its admins and for whoever's URL carries its
+share key, and are always `noindex` + `private, no-store`, even for an
+anonymous visitor. The canonical path includes the key, so an admin who
+arrives on a bare URL is redirected onto the keyed one (their address bar is
+then the link to share), and a keyed URL for a comp that has since been
+published settles on the clean one. Every redirect into or out of a keyed URL
+is a **302**, never a 301: a browser keeps a 301, and would go on sending its
+reader to a key that "Reset link" retired. The CSV and the results record
+link back with the key, or a shared sheet's links would all be dead.
 - Any loader or render error → the plain SPA shell. **SSR can never make a page
   less available than the pure-client version.**
 

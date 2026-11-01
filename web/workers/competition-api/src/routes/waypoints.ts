@@ -9,10 +9,10 @@ import {
   type WaypointFileRecord,
   type XCTask,
 } from "@glidecomp/engine";
-import type { AuthUser, AuthedEnv, Env } from "../env";
+import type { AuthUser, AuthedEnv, Env, RouteIds } from "../env";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
-import { isCompAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
 import { validated } from "../validators";
 import { audit } from "../audit";
 
@@ -28,23 +28,28 @@ function slugify(name: string): string {
 
 /**
  * Load a comp, applying the public-visibility rule: a missing comp, or a hidden
- * `test` comp viewed by a non-admin, is treated as not-found. Returns the comp
+ * `test` comp viewed by someone who is neither an admin nor holding its share
+ * link, is treated as not-found. Returns the comp
  * row on success or a 404 `Response` to return directly — so every waypoints
  * endpoint gates identically instead of hand-copying the check.
  */
 async function loadVisibleComp(
   c: {
     env: Env;
-    var: { user: AuthUser | null };
+    var: { user: AuthUser | null; ids: RouteIds };
     json: (body: unknown, status: 404) => Response;
   },
   compId: number
 ): Promise<{ name: string } | Response> {
-  const comp = await c.env.DB.prepare("SELECT test, name FROM comp WHERE comp_id = ?")
+  const comp = await c.env.DB.prepare(
+    "SELECT test, share_key, name FROM comp WHERE comp_id = ?"
+  )
     .bind(compId)
-    .first<{ test: number; name: string }>();
+    .first<{ test: number; share_key: string | null; name: string }>();
   if (!comp) return c.json({ error: "Not found" }, 404);
-  if (comp.test && (!c.var.user || !(await isCompAdmin(c.env.DB, compId, c.var.user)))) {
+  if (
+    await hiddenFromViewer(c.env.DB, compId, comp, c.var.user, c.var.ids.comp_key)
+  ) {
     return c.json({ error: "Not found" }, 404);
   }
   return { name: comp.name };

@@ -16,12 +16,13 @@
  * "create a sheet from this URL" link to send someone to — but a formula in A1
  * does better than an upload anyway: the sheet re-reads the URL periodically,
  * so a re-scored task shows up without anyone re-exporting anything. It fetches
- * anonymously, which is why a hidden `test` comp says so instead of silently
- * handing back a broken sheet.
+ * anonymously, which works for a hidden `test` comp too: `compId` carries the
+ * comp's share key there (lib/slug.ts `compUrlId`), so the formula's URL is the
+ * comp's private link, and the dialog says so.
  */
 import { useState } from "react";
 import { DownloadIcon, ChevronDownIcon, FileArchiveIcon, FileTextIcon, TableIcon } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
+import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Dialog, DialogFooter, DialogHeader, DialogTitle, Modal } from "@/react/rac/dialog";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
@@ -31,7 +32,7 @@ import { toast } from "../lib/toast";
 export function ScoresDownload({
   compId,
   compName,
-  /** Hidden (`test`) comp — Google fetches anonymously and would get a 404. */
+  /** Hidden (`test`) comp — the formula then holds the comp's private link. */
   isTestComp = false,
 }: {
   compId: string;
@@ -97,11 +98,10 @@ export function ScoresDownload({
           </DialogHeader>
 
           {isTestComp ? (
-            <Alert variant="destructive">
-              <AlertTitle>This competition is hidden</AlertTitle>
+            <Alert>
               <AlertDescription>
-                Google fetches the file signed out, so it will get “not found”.
-                Download the CSV instead, or publish the competition first.
+                This formula includes the competition’s private link. Anyone
+                who can open the sheet can open the competition.
               </AlertDescription>
             </Alert>
           ) : null}

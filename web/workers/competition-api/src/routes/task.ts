@@ -3,7 +3,7 @@ import type { AuthUser, AuthedEnv } from "../env";
 import { encodeId } from "../sqids";
 import { sqidsMiddleware } from "../middleware/sqids";
 import { requireAuth, optionalAuth, requireCompAdmin } from "../middleware/auth";
-import { isCompAdmin } from "../super-admin";
+import { hiddenFromViewer } from "../comp-visibility";
 import { createTaskSchema, updateTaskSchema, validated } from "../validators";
 import { audit, auditAll, describeChange, excerpt } from "../audit";
 import {
@@ -302,22 +302,19 @@ export const taskRoutes = new Hono<AuthedEnv>()
 
       // Check comp exists and handle test visibility
       const comp = await c.env.DB.prepare(
-        "SELECT comp_id, test FROM comp WHERE comp_id = ?"
+        "SELECT comp_id, test, share_key FROM comp WHERE comp_id = ?"
       )
         .bind(compId)
-        .first<{ comp_id: number; test: number }>();
+        .first<{ comp_id: number; test: number; share_key: string | null }>();
 
       if (!comp) {
         return c.json({ error: "Not found" }, 404);
       }
 
-      if (comp.test) {
-        if (!user) {
-          return c.json({ error: "Not found" }, 404);
-        }
-        if (!(await isCompAdmin(c.env.DB, compId, user))) {
-          return c.json({ error: "Not found" }, 404);
-        }
+      if (
+        await hiddenFromViewer(c.env.DB, compId, comp, user, c.var.ids.comp_key)
+      ) {
+        return c.json({ error: "Not found" }, 404);
       }
 
       const task = await c.env.DB.prepare(

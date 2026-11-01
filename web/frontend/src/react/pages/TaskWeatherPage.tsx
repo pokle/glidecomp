@@ -12,7 +12,7 @@ import { NotFound } from "@/react/components/NotFound";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
-import { idFromSegment, taskPath, taskWeatherPath } from "../lib/slug";
+import { compUrlId, idFromSegment, taskPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { TaskWeatherNotes } from "../comp/TaskWeatherNotes";
@@ -33,7 +33,9 @@ export function TaskWeatherPage() {
   );
 
   useCanonicalPath(
-    comp && task ? taskWeatherPath(compId, comp.name, taskId, task.name) : null
+    comp && task
+      ? taskWeatherPath(compUrlId(comp, compId), comp.name, taskId, task.name)
+      : null
   );
 
   if (notFound) return <NotFound title="Task not found" />;

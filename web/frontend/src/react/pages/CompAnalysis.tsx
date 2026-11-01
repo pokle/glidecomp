@@ -38,7 +38,7 @@ import { ConsistencyChip } from "../analysis/ConsistencyChip";
 import { ConsistencyMap } from "../analysis/charts/ConsistencyMap";
 import { MetricGlossary, type GlossaryEntry } from "../analysis/MetricGlossary";
 import { underComp, COMP_ANALYSIS_LABEL } from "../lib/crumbs";
-import { idFromSegment, compAnalysisPath, taskAnalysisPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compAnalysisPath, taskAnalysisPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { usePollWhile } from "../lib/use-poll-while";
 import { api } from "../../comp/api";
@@ -77,7 +77,9 @@ export function CompAnalysis() {
   // Settle the address bar on the canonical `${slug}-${id}` once a name is
   // known (the analysis body carries comp_name even before the comp fetch).
   const canonicalName = comp?.name ?? data?.comp_name;
-  useCanonicalPath(canonicalName ? compAnalysisPath(compId, canonicalName) : null);
+  useCanonicalPath(
+    canonicalName ? compAnalysisPath(compUrlId(comp, compId), canonicalName) : null
+  );
 
   const analysisUrl = compId
     ? `/api/comp/${encodeURIComponent(compId)}/analysis`
