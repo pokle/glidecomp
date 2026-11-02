@@ -358,6 +358,9 @@ test.describe("SSR — isolation and fallback", () => {
     "/comp/new",
     // Admin-only roster editor page.
     "/comp/anything/pilots",
+    // The roster's CSV import and CIVL fill (#810): admin-only pages under it.
+    "/comp/anything/pilots/import",
+    "/comp/anything/pilots/civl-fill",
     // Admin-only settings pages (index + a group sub-page).
     "/comp/anything/settings",
     "/comp/anything/settings/scoring",

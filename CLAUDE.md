@@ -409,10 +409,15 @@ These are the standing imperatives. Each links to the reference that explains it
     never `fixed`: a fixed bar has to be moved around the keyboard by hand,
     and on an iPhone the pilots page's bottom bar once stuck halfway up the
     screen doing that. A sticky bar at the top never meets the keyboard.
+  - **A draft goes in `lib/draft-store.ts`** — work not yet saved that
+    another page, a reload or Back must find again (a CSV read in the
+    browser, a waypoint file or a route edited as a set): this tab's
+    sessionStorage, keyed by what it edits, owned by the signed-in user,
+    versioned, and always allowed to come back empty. The roster import is
+    the worked example (#810); see [docs/drafts.md](docs/drafts.md).
   - **What is left to convert** is tracked one page at a time, in the
     order set out in [#823](https://github.com/pokle/glidecomp/issues/823):
-    [#810](https://github.com/pokle/glidecomp/issues/810) (roster import
-    review, CIVL fill), [#811](https://github.com/pokle/glidecomp/issues/811)
+    [#811](https://github.com/pokle/glidecomp/issues/811)
     (waypoint details, altitude review, full-screen map),
     [#812](https://github.com/pokle/glidecomp/issues/812) (turnpoint sheet,
     quick entry); then [#817](https://github.com/pokle/glidecomp/issues/817)
@@ -451,7 +456,7 @@ These are the standing imperatives. Each links to the reference that explains it
     trip must be lossless (the export's `glidecomp_id` column). Don't bring a
     grid back for the desktop alone — that is two editors.
   - **Every form submits through the kit form, `rac/form.tsx`** (`Form`, on
-    a page — `FormSheet` is only for the sheets awaiting #810–#812), and a
+    a page — `FormSheet` is left only for the kit's own bench, until #817), and a
     failed save is never a toast. It owns what
     happens when Save does not work, so no page writes that again: an error
     about a field goes UNDER that field, which is focused and scrolled into
@@ -773,6 +778,7 @@ These are the standing imperatives. Each links to the reference that explains it
 | Task weather + weather notes | [docs/weather.md](docs/weather.md) |
 | Site search (comps/tasks/routes/pilots) | [docs/2026-08-01-site-search.md](docs/2026-08-01-site-search.md) |
 | Waypoint altitudes (units, zero, the check) | [docs/waypoint-altitudes.md](docs/waypoint-altitudes.md) |
+| Unsaved drafts that survive navigation (`lib/draft-store.ts`) | [docs/drafts.md](docs/drafts.md) |
 | Track data quality | [docs/track-quality.md](docs/track-quality.md) |
 | Thermal shapes (reconstruction + surfaces) | [docs/thermal-shapes.md](docs/thermal-shapes.md) |
 | CIVL world rankings | [docs/civl-rankings.md](docs/civl-rankings.md) |

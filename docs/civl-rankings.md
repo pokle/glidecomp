@@ -205,7 +205,8 @@ from, by the (list, month, pilot) it recorded.
 `src/react/comp/RosterActions.tsx` + `civl-rankings.ts`).
 
 **"Fill from CIVL…"**, in the page's ⋯ menu with the other roster-wide
-actions. It opens a sheet (`CivlFillSheet`) that works the whole fill out in
+actions. It opens a page of its own (`/comp/:id/pilots/civl-fill`,
+`pages/CompCivlFillPage.tsx`; a full-screen sheet until #810) that works the whole fill out in
 memory first and lists what it will set — each pilot's new CIVL ID and points,
 and the list and month the points come from — with the button that sets them.
 Nothing is written until Fill is pressed, and then only the rows that change
@@ -227,7 +228,7 @@ matched by it on the second, which is what makes their ranks fillable at all.
 This was two buttons, and the ordering was the organiser's to know — pressing
 them the other way round simply did less.
 
-**Neither pass overwrites.** The sheet promises "Add CIVL IDs and WPRS points
+**Neither pass overwrites.** The page promises "Add CIVL IDs and WPRS points
 when missing", and a number already on the roster is somebody's answer — typed
 for a pilot the lists have wrong or have missed, or filled from an earlier
 import. The cost is the refresh path: when CIVL publishes a new month, filling
@@ -244,14 +245,15 @@ are **not** folded, because SQLite's `NOCASE` is ASCII-only and the fold would
 claim matches the query could never fetch. Rules and reasoning:
 `web/workers/competition-api/src/civl-ranking-match.ts`.
 
-The sheet reads `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
+The page reads `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
 which answers about the rows it is SENT rather than the stored roster: the
 second pass has to ask about the IDs the first pass has only just found, and
-those exist in memory, not yet in the database. The sheet asks again every
+those exist in memory, not yet in the database. The page asks again every
 time it opens, because the matches are keyed by row index, and a stale answer
 does not merely miss — it can put one pilot's id on another pilot's row. Each
-pilot is now saved on its own, so the roster the sheet opens on is the saved
-one: a name corrected a moment ago is already there to be matched.
+pilot is now saved on its own, and the page fetches the roster itself, so
+the roster it asks about is the saved one: a name corrected a moment ago is
+already there to be matched.
 
 Writes go through the ordinary bulk save, so they are `audit()`ed like any
 other roster change. They take **no** `bumpAndRevalidateScores()` call: a world

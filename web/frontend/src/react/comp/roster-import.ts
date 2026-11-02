@@ -1,6 +1,6 @@
 /**
  * What importing a CSV would do to the roster, worked out BEFORE anything is
- * written, so the review sheet can show it and Apply can do exactly that.
+ * written, so the review page can show it and Apply can do exactly that.
  *
  * An imported file is the roster: a pilot it holds is added or updated, and a
  * pilot it does not hold is removed — tracks and all. The grid this replaced
@@ -29,6 +29,8 @@ import {
   validateRows,
   type BulkPilotRow,
   type CompPilot,
+  type ImportIssue,
+  type ImportParseOptions,
   type ParsedRow,
 } from "./csv";
 
@@ -44,21 +46,77 @@ export interface ImportPlan {
   unchanged: number;
   /** Why the file cannot be applied. Apply is refused while any remain. */
   errors: string[];
+  /** The same reasons, grouped the way the review page states them. */
+  problems: ImportProblems;
+  /**
+   * Classes the comp does not have whose pilots were put in another one at
+   * the organiser's word (`unknownClassAs`), with how many each.
+   */
+  remapped: Array<{ from: string; to: string; count: number }>;
 }
+
+/** Rows the review lists under a grouped sentence, with their own messages. */
+export type ProblemRows = Array<{ row: number; message: string }>;
+
+export interface ImportProblems {
+  /** One entry per class the file names and the comp does not have. */
+  unknownClasses: Array<{ cls: string; rows: ProblemRows }>;
+  /** Rows with no name: skipped. */
+  noName: ProblemRows;
+  /** Rows with a name and no class. */
+  noClass: ProblemRows;
+  /** Anything else, as it was said: a missing name column, bad points, too many pilots. */
+  other: string[];
+}
+
+/** Group the parser's issues; `other` is every error none of them explains. */
+function groupProblems(issues: ImportIssue[], errors: string[]): ImportProblems {
+  const problems: ImportProblems = { unknownClasses: [], noName: [], noClass: [], other: [] };
+  const explained = new Set<string>();
+  for (const issue of issues) {
+    explained.add(issue.message);
+    const entry = { row: issue.row, message: issue.message };
+    if (issue.kind === "no-name") problems.noName.push(entry);
+    else if (issue.kind === "no-class") problems.noClass.push(entry);
+    else {
+      const group = problems.unknownClasses.find((g) => g.cls === issue.cls);
+      if (group) group.rows.push(entry);
+      else problems.unknownClasses.push({ cls: issue.cls, rows: [entry] });
+    }
+  }
+  problems.other = errors.filter((e) => !explained.has(e));
+  return problems;
+}
+
+export type PlanOptions = ImportParseOptions;
 
 export function planImport(
   text: string,
   fileName: string,
   roster: CompPilot[],
-  compClasses: string[]
+  compClasses: string[],
+  opts: PlanOptions = {}
 ): ImportPlan {
-  const parsed = parseImportedCsv(text, compClasses);
-  const empty: ImportPlan = { fileName, added: [], updated: [], removed: [], unchanged: 0, errors: [] };
+  const parsed = parseImportedCsv(text, compClasses, opts);
+  const remapped: ImportPlan["remapped"] = [];
+  for (const r of parsed.remapped) {
+    const group = remapped.find((g) => g.from === r.from);
+    if (group) group.count++;
+    else remapped.push({ from: r.from, to: r.to, count: 1 });
+  }
+  const empty: ImportPlan = {
+    fileName,
+    added: [],
+    updated: [],
+    removed: [],
+    unchanged: 0,
+    errors: [],
+    problems: groupProblems([], []),
+    remapped,
+  };
   if (parsed.rows.length === 0) {
-    return {
-      ...empty,
-      errors: parsed.errors.length > 0 ? parsed.errors : ["No pilot rows found in file"],
-    };
+    const errors = parsed.errors.length > 0 ? parsed.errors : ["No pilot rows found in file"];
+    return { ...empty, errors, problems: groupProblems(parsed.issues, errors) };
   }
 
   const byId = new Map(roster.map((p) => [p.comp_pilot_id, p]));
@@ -78,8 +136,15 @@ export function planImport(
     return row;
   });
 
-  const { payload, errors } = validateRows(rows, compClasses);
-  const plan: ImportPlan = { ...empty, errors: [...parsed.errors, ...errors] };
+  // The parser has already said which classes are wrong; validating them
+  // again listed every such row twice.
+  const { payload, errors } = validateRows(rows, compClasses, { checkClasses: false });
+  const allErrors = [...parsed.errors, ...errors];
+  const plan: ImportPlan = {
+    ...empty,
+    errors: allErrors,
+    problems: groupProblems(parsed.issues, allErrors),
+  };
 
   const kept = new Set<string>();
   for (const row of payload) {
@@ -112,4 +177,18 @@ export function planRequest(plan: ImportPlan): { pilots: BulkPilotRow[]; remove:
     pilots: [...plan.updated.map((u) => u.row), ...plan.added],
     remove: plan.removed.map((r) => r.pilot.comp_pilot_id),
   };
+}
+
+/**
+ * The class "put them in …" means: the comp's default, or its first class
+ * when the default is somehow not among them.
+ */
+export function fallbackClass(compClasses: string[], defaultClass: string | null | undefined): string {
+  return defaultClass && compClasses.includes(defaultClass) ? defaultClass : compClasses[0];
+}
+
+/** "a", "a and b", "a, b and c". */
+export function listInWords(items: string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }

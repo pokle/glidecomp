@@ -234,7 +234,10 @@ export function normalizeRow(raw: ParsedRow): ParsedRow {
  */
 export function validateRows(
   rows: ParsedRow[],
-  compClasses: string[]
+  compClasses: string[],
+  /** False where the rows were parsed by parseImportedCsv, which has already
+   *  said which classes are wrong — once per row, not twice. */
+  { checkClasses = true }: { checkClasses?: boolean } = {}
 ): { payload: BulkPilotRow[]; errors: string[] } {
   const errors: string[] = [];
   const kept: ParsedRow[] = [];
@@ -250,7 +253,9 @@ export function validateRows(
       errors.push(`Row ${i + 1}: name is required`);
       return;
     }
-    if (!row.pilot_class) {
+    if (!checkClasses) {
+      // Reported by the parser already.
+    } else if (!row.pilot_class) {
       errors.push(`Row ${i + 1} (${row.name}): class is required`);
     } else if (!compClasses.includes(row.pilot_class)) {
       errors.push(
@@ -387,6 +392,41 @@ function stripFormulaGuard(value: string): string {
 // ── CSV parsing ──────────────────────────────────────────────────────────────
 
 /**
+ * One reason a row cannot be imported as it stands, with the message the
+ * row-by-row list shows. `errors` carries the same messages as plain strings;
+ * these are what the review page groups ("25 pilots are in the class …")
+ * without reading its own sentences back.
+ */
+export type ImportIssue =
+  | { kind: "no-name"; row: number; message: string }
+  | { kind: "no-class"; row: number; name: string; message: string }
+  | { kind: "unknown-class"; row: number; name: string; cls: string; message: string };
+
+/** A row whose class the comp does not have, put in `to` at the organiser's word. */
+export interface ImportRemap {
+  row: number;
+  name: string;
+  from: string;
+  to: string;
+}
+
+export interface ImportParseOptions {
+  /**
+   * Put every row whose class the comp does not have in this class instead
+   * (the review page's "Put them in …"). Ignored unless the comp has it. A row
+   * with NO class is not moved: nothing was said about it to be overruled.
+   */
+  unknownClassAs?: string;
+}
+
+export interface ParsedImport {
+  rows: ParsedRow[];
+  errors: string[];
+  issues: ImportIssue[];
+  remapped: ImportRemap[];
+}
+
+/**
  * Parse CSV or TSV with header row. Handles quoted fields, doubled-quote
  * escaping, a UTF-8 BOM (Excel prepends one), and comma / tab / semicolon
  * separators (auto-detected from the header; semicolon is what Excel writes
@@ -401,16 +441,21 @@ function stripFormulaGuard(value: string): string {
  */
 export function parseImportedCsv(
   text: string,
-  compClasses: string[]
-): { rows: ParsedRow[]; errors: string[] } {
+  compClasses: string[],
+  opts: ImportParseOptions = {}
+): ParsedImport {
+  const none = { issues: [], remapped: [] };
   const trimmed = text.replace(/^\uFEFF/, "").trim();
   if (!trimmed) {
-    return { rows: [], errors: ["No data provided"] };
+    return { rows: [], errors: ["No data provided"], ...none };
   }
   const lines = splitCsvLines(trimmed);
   if (lines.length === 0) {
-    return { rows: [], errors: ["No data provided"] };
+    return { rows: [], errors: ["No data provided"], ...none };
   }
+  // Only a class the comp has can stand in for one it does not.
+  const fallback =
+    opts.unknownClassAs && compClasses.includes(opts.unknownClassAs) ? opts.unknownClassAs : null;
 
   // Auto-detect separator: whichever of tab / semicolon / comma appears most
   // in the header row (comma on a tie or when none appear).
@@ -434,11 +479,18 @@ export function parseImportedCsv(
     return {
       rows: [],
       errors: ['CSV must contain a "name" column (all other columns are optional)'],
+      ...none,
     };
   }
 
   const rows: ParsedRow[] = [];
   const errors: string[] = [];
+  const issues: ImportIssue[] = [];
+  const remapped: ImportRemap[] = [];
+  const problem = (issue: ImportIssue) => {
+    issues.push(issue);
+    errors.push(issue.message);
+  };
   for (let i = 1; i < lines.length; i++) {
     const cells = parseCsvLine(lines[i], sep);
     // emptyRow(compClasses) pre-fills the class when the comp has exactly
@@ -462,20 +514,36 @@ export function parseImportedCsv(
     const id = idColumn >= 0 ? (cells[idColumn] ?? "").trim() : "";
     if (id) row.comp_pilot_id = id;
     if (!row.name) {
-      errors.push(`Row ${i}: name is required — row skipped`);
+      problem({ kind: "no-name", row: i, message: `Row ${i}: name is required — row skipped` });
       continue;
     }
     if (!row.pilot_class) {
-      errors.push(`Row ${i} (${row.name}): class is missing — set it before saving`);
+      problem({
+        kind: "no-class",
+        row: i,
+        name: row.name,
+        message: `Row ${i} (${row.name}): class is missing — set it before saving`,
+      });
     } else if (!compClasses.includes(row.pilot_class)) {
-      errors.push(
-        `Row ${i} (${row.name}): class "${row.pilot_class}" is not valid (valid: ${compClasses.join(", ")}) — fix it before saving`
-      );
+      if (fallback) {
+        // The organiser chose this on the review page: a class the comp does
+        // not have becomes its default one, and the review says so.
+        remapped.push({ row: i, name: row.name, from: row.pilot_class, to: fallback });
+        row.pilot_class = fallback;
+      } else {
+        problem({
+          kind: "unknown-class",
+          row: i,
+          name: row.name,
+          cls: row.pilot_class,
+          message: `Row ${i} (${row.name}): class "${row.pilot_class}" is not valid (valid: ${compClasses.join(", ")}) — fix it before saving`,
+        });
+      }
     }
     rows.push(row);
   }
 
-  return { rows, errors };
+  return { rows, errors, issues, remapped };
 }
 
 /** Pick the separator (tab / semicolon / comma) that appears most in the header. */

@@ -133,7 +133,7 @@ async function openRoster(page: Page, id: string): Promise<void> {
   await expect(rows(page).first()).toBeVisible({ timeout: 20_000 });
 }
 
-/** Open the fill's sheet from the page's ⋯ menu. */
+/** Open the fill's page (a sheet until #810) from the roster's ⋯ menu. */
 async function openFill(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Roster actions" }).click();
   await page.getByRole("menuitem", { name: "Fill from CIVL…" }).click();
@@ -159,7 +159,7 @@ test("one press fills IDs by name and then rankings by ID, and shows what it wil
 
   // Three are placeable: Bruno by his ID, Ada and Cleo by name. Twin
   // Ambiguity (two DIFFERENT ranked humans, one name), Unranked Nobody and
-  // every filler are not. The sheet says so before anything is pressed, and
+  // every filler are not. The page says so before anything is pressed, and
   // lists what Fill will set — nothing has been written yet.
   await expect(
     page.getByText(new RegExp(`3 of ${ROSTER.length} pilots have one`))
@@ -195,7 +195,7 @@ test("one press fills IDs by name and then rankings by ID, and shows what it wil
   await expect(page).toHaveURL(/\/pilots(\?|$)/);
 
   // Ask again on the same roster. "Add when missing" means exactly that:
-  // there is nothing left to set, and the sheet says why rather than
+  // there is nothing left to set, and the page says why rather than
   // offering a Fill that would do nothing.
   await openFill(page);
   await expect(page.getByText(/3 already had a score and were left alone/)).toBeVisible({
