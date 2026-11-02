@@ -347,6 +347,9 @@ test.describe("SSR — isolation and fallback", () => {
     // Create a test IGC (#822): admin-only, under the SSR'd task route, which
     // it must not be mistaken for.
     "/comp/anything/task/anything/test-igc",
+    // The task's QR code (#813): public, but a picture for a camera with
+    // nothing to server-render, under the SSR'd task route.
+    "/comp/anything/task/anything/qr",
     // The pilot-similarity prototype: a real SPA route that derives everything
     // client-side from the report it fetches, so it has nothing to
     // server-render and must reach the shell rather than the 404 fallback.

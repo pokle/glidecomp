@@ -179,6 +179,10 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   // Create a test IGC — admin-only like the editors, and nothing on it but a
   // form whose result is a file made in the browser.
   /^\/comp\/[^/]+\/task\/[^/]+\/test-igc\/?$/,
+  // The task's QR code (#813). PUBLIC, unlike most of this list, but a picture
+  // for a camera: nothing in it for a crawler that the SSR'd task page (the
+  // same route, as text) does not already give it.
+  /^\/comp\/[^/]+\/task\/[^/]+\/qr\/?$/,
   // Recording a manual flight for one pilot (FAI S7F §9.2.2) — admin-only.
   /^\/comp\/[^/]+\/task\/[^/]+\/pilot\/[^/]+\/manual-flight\/?$/,
   // The pilot-similarity sheet under the per-task analysis. Everything
