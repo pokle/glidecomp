@@ -1,7 +1,8 @@
 /**
- * The load every SSR'd comp page does, and the two ways a hand-written copy
- * of it went wrong: forgetting to clear the previous verdict when the id in
- * the path changes, and fetching over a seed the server already rendered.
+ * The load every SSR'd comp page does, and the ways a hand-written copy of it
+ * went wrong: forgetting to clear the previous verdict when the id in the path
+ * changes, fetching over a seed the server already rendered, and passing off
+ * the previous id's data as this one's.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { createElement, act } from "react";
@@ -38,7 +39,7 @@ function mount(
   initialProps: { id: string | undefined; seed: Comp | null; refresh?: number },
   load: Load
 ) {
-  const seen: { data: Comp | null; notFound: boolean }[] = [];
+  const seen: { data: Comp | null; notFound: boolean; current: boolean }[] = [];
   function Probe({ id, seed, refresh }: { id: string | undefined; seed: Comp | null; refresh?: number }) {
     const r = useSeededResource<Comp>({
       ids: [id],
@@ -47,7 +48,7 @@ function mount(
       title: (c) => `GlideComp - ${c.name}`,
       refresh,
     });
-    seen.push({ data: r.data, notFound: r.notFound });
+    seen.push({ data: r.data, notFound: r.notFound, current: r.current });
     return null;
   }
   act(() => {
@@ -165,6 +166,83 @@ describe("useSeededResource", () => {
     await settle();
     expect(load).toHaveBeenCalledTimes(1);
     expect(probe.last().data).toEqual({ name: "Renamed" });
+  });
+
+  it("calls the server's copy current: it was rendered for this URL", async () => {
+    const probe = mount({ id: "abc", seed: { name: "Bright Open" } }, vi.fn<Load>());
+    expect(probe.last().current).toBe(true);
+  });
+
+  it("is not current until something has loaded", async () => {
+    let answer!: (r: JsonResponse) => void;
+    const load = vi.fn<Load>(() => new Promise((resolve) => (answer = resolve)));
+    const probe = mount({ id: "abc", seed: null }, load);
+    expect(probe.last().current).toBe(false);
+
+    answer(res(200, { name: "Corryong" }));
+    await settle();
+    expect(probe.last().current).toBe(true);
+  });
+
+  it("keeps the previous id's data on screen, but never calls it current", async () => {
+    // Reset link: the page moves onto the comp's new share key while it still
+    // holds the comp loaded under the old one. A canonical path built from that
+    // comp is the dead link — so nothing may treat it as this URL's until the
+    // load for the new id lands.
+    let answer!: (r: JsonResponse) => void;
+    const load = vi
+      .fn<Load>()
+      .mockResolvedValueOnce(res(200, { name: "Old key" }))
+      .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+
+    const probe = mount({ id: "vzuq_oldkey", seed: null }, load);
+    await settle();
+    expect(probe.last()).toEqual({ data: { name: "Old key" }, notFound: false, current: true });
+
+    const rendersBefore = probe.seen.length;
+    probe.update({ id: "vzuq_newkey", seed: null });
+    await settle();
+    // Still showing what it had — no flash of a spinner — but not as current,
+    // on any render since the id changed: one is enough to rewrite the URL.
+    expect(probe.last()).toEqual({ data: { name: "Old key" }, notFound: false, current: false });
+    expect(probe.seen.slice(rendersBefore).map((r) => r.current)).not.toContain(true);
+
+    answer(res(200, { name: "New key" }));
+    await settle();
+    expect(probe.last()).toEqual({ data: { name: "New key" }, notFound: false, current: true });
+  });
+
+  it("is not current for an id it could not load", async () => {
+    const load = vi
+      .fn<Load>()
+      .mockResolvedValueOnce(res(200, { name: "Alive" }))
+      .mockResolvedValueOnce(res(404));
+    const probe = mount({ id: "alive", seed: null }, load);
+    await settle();
+
+    probe.update({ id: "dead", seed: null });
+    await settle();
+    expect(probe.last().notFound).toBe(true);
+    expect(probe.last().current).toBe(false);
+  });
+
+  it("stays current while a mutation refetches the same id", async () => {
+    // A save bumps `refresh`; the URL has not moved, so the page's address bar
+    // has nothing to wait for.
+    let answer!: (r: JsonResponse) => void;
+    const load = vi
+      .fn<Load>()
+      .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    const seed = { name: "Original" };
+    const probe = mount({ id: "abc", seed, refresh: 0 }, load);
+
+    probe.update({ id: "abc", seed, refresh: 1 });
+    await settle();
+    expect(probe.last().current).toBe(true);
+
+    answer(res(200, { name: "Renamed" }));
+    await settle();
+    expect(probe.last()).toEqual({ data: { name: "Renamed" }, notFound: false, current: true });
   });
 
   it("treats a dropped request as a page that is not there, not as empty data", async () => {

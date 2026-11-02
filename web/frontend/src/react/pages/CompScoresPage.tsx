@@ -44,15 +44,18 @@ export function CompScoresPage() {
   // SSR seed: the server ran loadCompScores for this URL. Null on client
   // boot / SPA navigations, where the effects below fetch instead.
   const initial = useInitialData<CompScoresLoaderData>();
-  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, current } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: initial?.comp ?? null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
     title: (c) => `GlideComp - ${c.name} scores`,
   });
 
-  // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
-  useCanonicalPath(comp ? compScoresPath(compUrlId(comp, compId), comp.name) : null);
+  // Settle the address bar on the canonical `${slug}-${id}` once the name loads
+  // (for THIS id, not the one the page was on before).
+  useCanonicalPath(
+    comp && current ? compScoresPath(compUrlId(comp, compId), comp.name) : null
+  );
 
   const { state, rescoring, rescore } = useCompScores(
     compId ?? "",

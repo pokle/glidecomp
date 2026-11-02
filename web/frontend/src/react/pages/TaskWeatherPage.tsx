@@ -26,14 +26,14 @@ export function TaskWeatherPage() {
   const taskId = idFromSegment(taskParam ?? "");
   const navigate = useNavigate();
 
-  const { comp, task, isAdmin, notFound, loading } = useTaskAdminPage(
+  const { comp, task, isAdmin, notFound, loading, current } = useTaskAdminPage(
     compId,
     taskId,
     (t) => `GlideComp - ${t.name} weather notes`
   );
 
   useCanonicalPath(
-    comp && task
+    comp && task && current
       ? taskWeatherPath(compUrlId(comp, compId), comp.name, taskId, task.name)
       : null
   );

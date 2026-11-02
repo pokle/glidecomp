@@ -48,13 +48,13 @@ export function ManualFlightPage() {
   const navigate = useNavigate();
   const { loading } = useUser();
 
-  const { data: comp, notFound: compNotFound } =
+  const { data: comp, notFound: compNotFound, current: compCurrent } =
     useSeededResource<CompDetailData>({
       ids: [compId],
       seed: null,
       load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
     });
-  const { data: task, notFound: taskNotFound } =
+  const { data: task, notFound: taskNotFound, current: taskCurrent } =
     useSeededResource<TaskDetailData>({
       ids: [compId, taskId],
       seed: null,
@@ -120,7 +120,7 @@ export function ManualFlightPage() {
   }, [compId, taskId, compPilotId]);
 
   useCanonicalPath(
-    comp && task && pilot
+    comp && task && pilot && compCurrent && taskCurrent
       ? manualFlightPath(
           compUrlId(comp, compId),
           comp.name,

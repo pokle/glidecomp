@@ -43,7 +43,7 @@ export function CompSettingsPage() {
   // Bumped after a sub-page save so the index re-reads the stored values
   // rather than showing the seed it loaded before the edit.
   const [refresh, setRefresh] = useState(0);
-  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, current } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
@@ -51,8 +51,11 @@ export function CompSettingsPage() {
     refresh,
   });
   // Settle the address bar on the canonical `${slug}-${id}/settings[/group]`.
+  // Not until the comp is the one this URL names: "Reset link" moves the page
+  // onto the new key while it still holds the comp loaded under the old one,
+  // and a path built from that comp is the dead link.
   useCanonicalPath(
-    comp ? compSettingsPath(compUrlId(comp, compId), comp.name, group) : null
+    comp && current ? compSettingsPath(compUrlId(comp, compId), comp.name, group) : null
   );
 
   const isAdmin = useAdminView(!!comp?.is_admin);

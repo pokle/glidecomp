@@ -47,7 +47,7 @@ export function CompNewTaskPage() {
   const compId = idFromSegment(compParam ?? "");
   const { loading } = useUser();
 
-  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, current } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
@@ -56,7 +56,8 @@ export function CompNewTaskPage() {
   // The share key rides in every link a hidden comp's page builds.
   const urlId = comp ? compUrlId(comp, compId) : compId;
 
-  useCanonicalPath(comp ? compNewTaskPath(urlId, comp.name) : null);
+  // Not from a comp still held over from the URL the page was on before.
+  useCanonicalPath(comp && current ? compNewTaskPath(urlId, comp.name) : null);
 
   const isAdmin = useAdminView(!!comp?.is_admin);
 

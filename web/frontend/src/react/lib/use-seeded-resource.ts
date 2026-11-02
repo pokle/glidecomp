@@ -19,6 +19,12 @@
  *     nothing re-fetches (issue #481).
  *   - **The seed is for the first render only.** A mutation bumps `refresh`,
  *     which fetches past the seed rather than re-rendering the server's copy.
+ *   - **Whose data it is.** When the id in the path changes, `data` stays the
+ *     previous id's until the new load lands — the page keeps its content up
+ *     rather than flashing a spinner — and `current` says so. Anything that
+ *     writes the data back into the URL (`useCanonicalPath`) must wait for
+ *     `current`, or it writes the previous URL back over the new one: that is
+ *     how "Reset link" put the dead share key back in the address bar.
  *
  * ## What deliberately does NOT use this
  *
@@ -52,6 +58,14 @@ export interface SeededResource<T> {
    * reads the words back out of the path and offers what does resolve.
    */
   notFound: boolean;
+  /**
+   * `data` was loaded for the ids the page names NOW. False while the page
+   * still holds what it loaded for the URL it was on before (react-router keeps
+   * a page mounted when only the id in the path changes) and the load for the
+   * new ids has not landed. A canonical path built from that data would be the
+   * previous URL's, so pass `null` to `useCanonicalPath` until this is true.
+   */
+  current: boolean;
   /** For optimistic local edits; the next load overwrites them. */
   setData: Dispatch<SetStateAction<T | null>>;
 }
@@ -77,12 +91,14 @@ export function useSeededResource<T>({
   /** Bumped by a mutation to force a fetch past the seed. */
   refresh?: number;
 }): SeededResource<T> {
-  const [data, setData] = useState<T | null>(seed);
-  const [notFound, setNotFound] = useState(false);
-
   // Join the ids so the effect keys on their values rather than on the array's
   // identity, which is fresh on every render.
   const idKey = ids.join("§");
+
+  const [data, setData] = useState<T | null>(seed);
+  // The ids `data` was loaded for. The server's seed is for the URL it rendered.
+  const [dataKey, setDataKey] = useState<string | null>(seed ? idKey : null);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     setNotFound(false);
@@ -112,6 +128,7 @@ export function useSeededResource<T>({
         const body = (await res.json()) as T;
         if (cancelled) return;
         setData(body);
+        setDataKey(idKey);
         if (title) document.title = title(body);
       } catch {
         // Every retry was dropped. Better to say the page is not there than to
@@ -128,5 +145,5 @@ export function useSeededResource<T>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idKey, refresh]);
 
-  return { data, notFound, setData };
+  return { data, notFound, current: data !== null && dataKey === idKey, setData };
 }
