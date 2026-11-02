@@ -48,7 +48,7 @@
  *   touches one.
  */
 import { execSync } from "node:child_process";
-import { test, expect, type Page, type Locator } from "./fixtures/test";
+import { test, expect, DESKTOP_ONLY, type Page, type Locator } from "./fixtures/test";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 import { stubTerrainElevations } from "./fixtures/mapbox";
 
@@ -361,6 +361,18 @@ test("the browser back button closes a sheet, not the page", async ({ page }) =>
   await (await firstWaypointRow(page)).click();
   await page.getByRole("dialog").getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Done releases the sheet's history entry on the way out: a passive effect
+  // after the sheet has left the screen, then a history.back(). A production
+  // build takes the sheet off screen fast enough that a Back pressed in the
+  // same instant landed on that entry before it was released — no reader is
+  // that quick, so wait for the release the way their next Back would.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (history.state as { gcBackDismiss?: number } | null)?.gcBackDismiss ?? null
+      )
+    )
+    .toBeNull();
   await page.goBack();
   await expect(page).not.toHaveURL(url);
   await page.goForward();
@@ -376,8 +388,8 @@ test("the browser back button closes a sheet, not the page", async ({ page }) =>
  * nothing — the reader had to find the column first. The scroller is now full
  * width (SheetBody in rac/full-screen-sheet.tsx).
  */
-test("a sheet scrolls from its side margins on a wide window", async ({ page, isMobile }) => {
-  test.skip(isMobile, "a phone-width sheet has no margin beside its column");
+// DESKTOP_ONLY: a phone-width sheet has no margin beside its column.
+test("a sheet scrolls from its side margins on a wide window", { tag: DESKTOP_ONLY }, async ({ page }) => {
   // Wide and short, so the column has margins AND its fields overflow.
   await page.setViewportSize({ width: 1400, height: 360 });
 
@@ -580,11 +592,10 @@ test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobi
   expect(mutated()).toBe(false);
 });
 
-test("device export: download menu lists every format", async ({ page, isMobile }) => {
-  // A coarse pointer gets "Open in app" with hosted links instead of the
-  // client-side download menu (WaypointDeviceExport), so the menu this
-  // asserts on is the fine-pointer one.
-  test.skip(!!isMobile, "a coarse pointer gets Open in app, not the download menu");
+// DESKTOP_ONLY: a coarse pointer gets "Open in app" with hosted links instead
+// of the client-side download menu (WaypointDeviceExport), so the menu this
+// asserts on is the fine-pointer one.
+test("device export: download menu lists every format", { tag: DESKTOP_ONLY }, async ({ page }) => {
   const mutated = trackMutations(page);
 
   await page.getByRole("button", { name: "Download waypoints" }).click();
@@ -601,12 +612,10 @@ test("device export: download menu lists every format", async ({ page, isMobile 
   expect(mutated()).toBe(false);
 });
 
-test("device export: the download menu carries its own swap toggle", async ({
+// DESKTOP_ONLY: fine pointer only, for the same reason as the test above.
+test("device export: the download menu carries its own swap toggle", { tag: DESKTOP_ONLY }, async ({
   page,
-  isMobile,
 }) => {
-  // Fine pointer only, for the same reason as the test above.
-  test.skip(!!isMobile, "a coarse pointer gets Open in app, not the download menu");
   const mutated = trackMutations(page);
 
   // The QR section is shut, so the menu's own item is the only way to swap.

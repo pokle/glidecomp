@@ -48,8 +48,10 @@ async function reachable(url: string): Promise<boolean> {
 }
 
 interface Options {
-  /** Where the pages are served. Defaults to the Vite dev server (:3000); the
-   *  SSR config serves the built output through `wrangler pages dev` instead. */
+  /** Where the pages are served. Defaults to FRONTEND_URL (:3000), where
+   *  playwright.config.ts serves its production build (or, with
+   *  E2E_FRONTEND=dev, the Vite dev server); the SSR config serves the built
+   *  output through `wrangler pages dev` instead. */
   frontendUrl?: string;
   /** How to name that server when it's the one that died. */
   frontendLabel?: string;
@@ -73,7 +75,7 @@ export default class StackHealthReporter implements Reporter {
 
   constructor(options: Options = {}) {
     this.frontendUrl = options.frontendUrl ?? FRONTEND_URL;
-    this.frontendLabel = options.frontendLabel ?? "the Vite dev server";
+    this.frontendLabel = options.frontendLabel ?? "the frontend server";
   }
 
   onTestEnd(test: TestCase, result: TestResult): void {

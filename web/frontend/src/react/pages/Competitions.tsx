@@ -1,5 +1,6 @@
 /**
- * Competition list + create dialog + site search. Built on the RAC kit
+ * Competition list + site search. Starting a new competition is a page of its
+ * own (/comp/new, pages/NewCompPage.tsx). Built on the RAC kit
  * (src/react/rac/) — see docs/2026-07-18-rac-adoption-guide.md.
  *
  * The one box does two different jobs, and the boundary between them is the
@@ -20,23 +21,14 @@
  * show, so there is nothing for the server to render either way.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Link as AriaLink, useFilter } from "react-aria-components";
-import { Button } from "@/react/rac/button";
+import { Button, LinkButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { cardSurface } from "@/react/rac/card";
 import { cn } from "@/react/lib/utils";
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Modal,
-} from "@/react/rac/dialog";
 import { SearchField } from "@/react/rac/field";
 import { api } from "../../comp/api";
-import { CategoryField, NameField, PilotClassesField } from "../comp/fields";
-import { toast } from "../lib/toast";
 import { useGoToSignIn, useUser } from "../lib/user";
 import {
   formatDate,
@@ -55,13 +47,11 @@ type Comp = CompListEntry;
 export function Competitions() {
   const { user, previewRole } = useUser();
   const goToSignIn = useGoToSignIn();
-  const navigate = useNavigate();
   // SSR: seed from the server loader so the list is in the first paint and the
   // client hydrates the same markup. Client boot / SPA navigations start null.
   const initial = useInitialData<CompetitionsLoaderData>();
   const [comps, setComps] = useState<Comp[] | null>(initial?.comps ?? null);
   const [loadError, setLoadError] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   // Seeded from the URL during render, not in an effect: the server renders
   // this same location, so both sides start with the same query and the same
   // decision about which of the two views to show.
@@ -144,9 +134,7 @@ export function Competitions() {
         />
         <span className="ml-auto">
           {user ? (
-            <Button type="button" onPress={() => setCreateOpen(true)}>
-              Start a new competition
-            </Button>
+            <LinkButton href="/comp/new">Start a new competition</LinkButton>
           ) : (
             <Button type="button" variant="outline" onPress={() => goToSignIn("/comp")}>
               Sign in to start a competition
@@ -215,121 +203,6 @@ export function Competitions() {
           ))}
         </ul>
       )}
-
-      <CreateCompDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={(compId) => navigate(`/comp/${compId}`)}
-      />
     </section>
-  );
-}
-
-function CreateCompDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (compId: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState<"hg" | "pg">("hg");
-  const [pilotClasses, setPilotClasses] = useState("open");
-  const [submitting, setSubmitting] = useState(false);
-
-  // Reset the form each time the dialog opens (matches the vanilla behaviour).
-  function handleOpenChange(next: boolean) {
-    if (next) {
-      setName("");
-      setCategory("hg");
-      setPilotClasses("open");
-    }
-    onOpenChange(next);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    const classes = pilotClasses
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    try {
-      const res = await api.api.comp.$post({
-        json: {
-          name: name.trim(),
-          category,
-          pilot_classes: classes.length > 0 ? classes : ["open"],
-          // No `test`: a new comp starts hidden, and the setup guide's last
-          // step, "Make public", is where it goes public.
-        },
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error((err as { error?: string }).error || "Failed to create competition");
-        return;
-      }
-      const data = await res.json();
-      onOpenChange(false);
-      // A new comp starts hidden: open it on the URL that carries its share
-      // key, so the organiser's address bar is the link to share from the
-      // first page they see.
-      const created = data as { comp_id: string; test: boolean; share_key?: string | null };
-      onCreated(compUrlId(created, created.comp_id));
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Modal isOpen={open} onOpenChange={handleOpenChange} className="sm:max-w-lg">
-      <Dialog>
-        <DialogHeader>
-          <DialogTitle>Start a new competition</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-          <NameField
-            value={name}
-            onChange={setName}
-            placeholder="e.g. Corryong Cup 2026"
-            autoFocus
-          />
-
-          <CategoryField
-            value={category}
-            onChange={setCategory}
-            description={
-              <>
-                Picks the official CIVL scoring defaults (see the{" "}
-                <a
-                  href={`/scoring/gap#defaults-${category}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-4"
-                >
-                  {category === "pg" ? "paragliding" : "hang gliding"} defaults
-                </a>
-                ). Change them later in Settings → Scoring.
-              </>
-            }
-          />
-
-          <PilotClassesField value={pilotClasses} onChange={setPilotClasses} wing={category} />
-
-          <DialogFooter>
-            <Button slot="close" variant="outline">
-              Cancel
-            </Button>
-            <Button type="submit" isDisabled={submitting}>
-              {submitting ? "Creating..." : "Create"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Dialog>
-    </Modal>
   );
 }

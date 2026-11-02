@@ -66,12 +66,17 @@ const OAuthConsent = lazy(() =>
 const SignIn = lazy(() =>
   import("./pages/SignIn").then((m) => ({ default: m.SignIn }))
 );
-// The kit form's test bench, for e2e/forms.spec.ts. Development builds only:
-// `import.meta.env.DEV` is false in a production build, so neither the route
-// nor the page is in it.
-const KitFormFixture = import.meta.env.DEV
+// The kit form's test bench, for e2e/forms.spec.ts. Development builds and the
+// e2e suite's build (`vite build --mode e2e`, web/scripts/e2e-frontend.sh)
+// only: in the production build both conditions are constant false, so neither
+// the route nor the page is in it.
+const KitFormFixture = import.meta.env.DEV || import.meta.env.MODE === "e2e"
   ? lazy(() => import("./pages/KitFormFixture").then((m) => ({ default: m.KitFormFixture })))
   : null;
+// Starting a competition — signed-in only, a noindex shell in the SSR Function.
+const NewCompPage = lazy(() =>
+  import("./pages/NewCompPage").then((m) => ({ default: m.NewCompPage }))
+);
 const CompPilotsPage = lazy(() =>
   import("./pages/CompPilotsPage").then((m) => ({ default: m.CompPilotsPage }))
 );
@@ -80,6 +85,9 @@ const CompSettingsPage = lazy(() =>
 );
 const CompPilotPage = lazy(() =>
   import("./pages/CompPilotPage").then((m) => ({ default: m.CompPilotPage }))
+);
+const CompNewTaskPage = lazy(() =>
+  import("./pages/CompNewTaskPage").then((m) => ({ default: m.CompNewTaskPage }))
 );
 const TaskSettingsPage = lazy(() =>
   import("./pages/TaskSettingsPage").then((m) => ({ default: m.TaskSettingsPage }))
@@ -189,6 +197,9 @@ export function AppRoutes() {
               <Route path="/__kit/form" element={<KitFormFixture />} />
             ) : null}
             <Route path="/comp" element={<Competitions />} />
+            {/* A page rather than a dialog over the list (the overlays rule in
+                CLAUDE.md). The static segment outranks /comp/:compId below. */}
+            <Route path="/comp/new" element={<NewCompPage />} />
             <Route path="/comp/:compId" element={<CompDetail />} />
             <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
             {/* Admin-only roster editor — noindex shell in the SSR Function. */}
@@ -214,6 +225,11 @@ export function AppRoutes() {
                 its pending notice server-side (noindex) while the client polls.
                 A hidden `test` comp still 404s for non-admins. */}
             <Route path="/comp/:compId/analysis" element={<CompAnalysis />} />
+            {/* Creating a task: a page, not a dialog over the comp (#819).
+                Admin-only, so a noindex shell in the SSR Function, listed
+                ahead of the public task route, whose URL shape it shares. The
+                router ranks the static `new` above `:taskId` by itself. */}
+            <Route path="/comp/:compId/task/new" element={<CompNewTaskPage />} />
             <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
             {/* The task's three admin-only editors, all SIBLINGS: each is
                 reached from the part of the task page it edits, so none nests

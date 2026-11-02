@@ -1,6 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 import { FRONTEND_URL, API_READY_URL } from "./e2e/fixtures/stack";
-import { MOBILE_SPEC_FILES, MOBILE_TEST_MATCH } from "./e2e/fixtures/mobile";
+import {
+  DESKTOP_ONLY,
+  MOBILE_SPEC_FILES,
+  MOBILE_TEST_MATCH,
+  PHONE_ONLY,
+} from "./e2e/fixtures/mobile";
 import { shardFromEnv } from "./e2e/fixtures/shards";
 
 /**
@@ -16,6 +21,19 @@ const shard = shardFromEnv();
 
 /** `**\/name.spec.ts` for each spec in the shard, or undefined for all of them. */
 const shardGlobs = shard ? shard.map((f) => `**/${f}`) : undefined;
+
+/**
+ * What serves the pages. By default a PRODUCTION build (web/scripts/
+ * e2e-frontend.sh → e2e-serve-dist.ts): every test opens a fresh browser
+ * context, so every page load is a cold one, and on the Vite dev server that
+ * was ~330 unbundled modules — a signed-in page took 1.5 s to be ready against
+ * 0.65 s from the build. e2e-serve-dist.ts has the measurements and keeps the
+ * dev server's routing, so a spec cannot tell the two apart.
+ *
+ * `E2E_FRONTEND=dev` brings the dev server back, for iterating on a spec with
+ * HMR rather than rebuilding (~5 s warm) on every run. CI never sets it.
+ */
+const useDevServer = process.env.E2E_FRONTEND === "dev";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -65,7 +83,14 @@ export default defineConfig({
   reporter: [
     // Always first: it turns "the stack died" into one honest line and stops
     // the run, instead of a dozen unrelated-looking product failures.
-    ["./e2e/reporters/stack-health.ts"],
+    [
+      "./e2e/reporters/stack-health.ts",
+      {
+        frontendLabel: useDevServer
+          ? "the Vite dev server"
+          : "the e2e frontend server (web/scripts/e2e-serve-dist.ts)",
+      },
+    ],
     ...(process.env.CI
       ? ([["html", { open: "never" }], ["list"]] as const)
       : ([["list"]] as const)),
@@ -91,6 +116,9 @@ export default defineConfig({
     {
       name: "chromium",
       ...(shardGlobs ? { testMatch: shardGlobs } : {}),
+      // Tagged tests are never scheduled where they mean nothing, rather than
+      // skipped after their beforeEach has run (e2e/fixtures/mobile.ts).
+      grepInvert: new RegExp(PHONE_ONLY),
     },
     // A phone, structurally (issue #643). Before this, the only mobile cover
     // was a `setViewportSize` at the top of individual tests, which changes
@@ -120,6 +148,7 @@ export default defineConfig({
         ? MOBILE_SPEC_FILES.filter((f) => shard.includes(f)).map((f) => `**/${f}`)
         : MOBILE_TEST_MATCH,
       use: { ...devices["Pixel 7"] },
+      grepInvert: new RegExp(DESKTOP_ONLY),
     },
   ].filter((p) => p.testMatch === undefined || p.testMatch.length > 0),
   // One entry, not three: every Worker lives in a single wrangler session
@@ -136,12 +165,17 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      // The port comes from DEV_FRONTEND_PORT via vite.config.ts, not a CLI
-      // flag: `dev` runs vite under concurrently, which swallows extra args.
-      command: "bun run dev:frontend",
+      // Both read the port from DEV_FRONTEND_PORT (vite.config.ts and
+      // e2e-serve-dist.ts), not a CLI flag: `dev` runs vite under concurrently,
+      // which swallows extra args.
+      //
+      // Outside CI an existing server on the port is reused, whichever kind it
+      // is — a `bun run dev` left running means this run drives the dev server.
+      command: useDevServer ? "bun run dev:frontend" : "bash web/scripts/e2e-frontend.sh",
       url: FRONTEND_URL,
       reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
+      // The build runs first: ~5 s with Astro's image cache warm, ~20 s cold.
+      timeout: useDevServer ? 60_000 : 180_000,
       env: {
         // The map specs serve every Mapbox response from recordings and
         // synthetic tiles (e2e/fixtures/mapbox.ts), so they need no real token

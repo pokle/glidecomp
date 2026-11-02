@@ -158,10 +158,18 @@ interface HeadTags {
  * per-request, not shell-noindexed here).
  */
 const NOINDEX_SHELL_ROUTES: RegExp[] = [
+  // Starting a new competition — signed-in only. Checked before ROUTES, so
+  // "new" never reaches the comp-detail loader as an id it cannot parse (and
+  // could not be one: a comp id is at least four characters).
+  /^\/comp\/new\/?$/,
   // Pilot roster editor — admin-only management surface, nothing for crawlers.
   /^\/comp\/[^/]+\/pilots\/?$/,
   // One pilot's editor (and /pilots/new) — admin-only, like the roster.
   /^\/comp\/[^/]+\/pilots\/[^/]+\/?$/,
+  // Creating a task (#819) — admin-only. It shares its shape with the public
+  // task page below, and must be caught here first: `new` is no task's id (a
+  // sqid is at least four letters), so the task route would only 404 it.
+  /^\/comp\/[^/]+\/task\/new\/?$/,
   // Competition settings pages (index + group sub-pages) — admin-only.
   /^\/comp\/[^/]+\/settings(\/[^/]+)?\/?$/,
   // The task's three admin-only editors, the routed replacements for the Task

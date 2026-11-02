@@ -35,7 +35,7 @@ import { readFileSync } from "node:fs";
 import {
   test,
   expect,
-  phoneOnly,
+  PHONE_ONLY,
   type Locator,
   type Page,
 } from "./fixtures/test";
@@ -292,11 +292,7 @@ test("scores page: class tabs, top 3, scores-by-task select, sorting", async ({
   await expect(swapped.locator("tbody tr").first()).toBeVisible();
 });
 
-test("scores page: the view tabs stay reachable on a narrow phone", async ({
-  page,
-  isMobile,
-}) => {
-  phoneOnly(isMobile);
+test("scores page: the view tabs stay reachable on a narrow phone", { tag: PHONE_ONLY }, async ({ page }) => {
   // 320px is the narrowest viewport the accessibility standard supports
   // (docs/accessibility-standard.md §3.2). The sample comp's four views —
   // two classes, "Top 3 per task & class", "Scores by task" — are wider than
@@ -369,11 +365,7 @@ test("scores page: the view tabs stay reachable on a narrow phone", async ({
  * row that quietly went back to wrapping would still hide nothing and still
  * pass a count-only check.
  */
-test("the section bar folds into More rather than wrapping on a phone", async ({
-  page,
-  isMobile,
-}) => {
-  phoneOnly(isMobile);
+test("the section bar folds into More rather than wrapping on a phone", { tag: PHONE_ONLY }, async ({ page }) => {
   await page.goto(`/comp/${compId}`);
   const bar = page.getByRole("navigation", { name: "Sections" });
   await expect(bar).toBeVisible({ timeout: 15_000 });
@@ -482,11 +474,7 @@ test("the section bar is the same on every competition page", async ({ page }) =
   await expectBar(/Tasks/);
 });
 
-test("the app header folds into More rather than wrapping on a phone", async ({
-  page,
-  isMobile,
-}) => {
-  phoneOnly(isMobile);
+test("the app header folds into More rather than wrapping on a phone", { tag: PHONE_ONLY }, async ({ page }) => {
   await page.goto(`/comp/${compId}`);
   const nav = page.getByRole("navigation", { name: "Main" });
   await expect(nav).toBeVisible({ timeout: 15_000 });

@@ -4,8 +4,16 @@ import { readFileSync, existsSync, cpSync } from 'fs';
 import { execSync } from 'child_process';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { buildScoresCsv, scoresCsvFilename, type ScoresCsvInput } from './src/scores-csv';
-import { compUrlId, idFromSegment } from './src/react/lib/slug';
+import {
+  API_PROXY_PREFIXES,
+  CIVL_RANKINGS_CSV_API_PATH,
+  CIVL_RANKINGS_CSV_PATH,
+  MOVED_PAGES,
+  SCORES_CSV_PATTERN,
+  STATIC_PAGE_ROUTES,
+  isSpaRoute,
+  scoresCsvResponse,
+} from './src/dev-routing';
 
 // Where /api/* is proxied in dev: the dev-router Worker started by
 // `bun run dev:workers` (all Workers, one wrangler session — see
@@ -46,60 +54,26 @@ function workersCheck(): Plugin {
 }
 
 /**
- * Dev stand-in for the /comp/:id/scores.csv Pages Function
- * (functions/comp/[[path]].ts). Dev serves no Functions, so without this the
- * scores page's Download → CSV link 404s on :3000 — and a link that only works
- * in production is a link nobody tests. Same builder, same bytes; the visitor's
- * cookie is forwarded so a hidden comp behaves as it does in prod.
+ * Dev stand-in for the /comp/:id/scores.csv Pages Function — see
+ * scoresCsvResponse in src/dev-routing.ts, which the e2e server shares.
  */
 function scoresCsvDev(): Plugin {
   return {
     name: 'scores-csv-dev',
     configureServer(server) {
       server.middlewares.use((req: Connect.IncomingMessage, res: any, next) => {
-        const match = (req.url?.split('?')[0] ?? '').match(/^\/comp\/([^/]+)\/scores\.csv$/);
+        const match = (req.url?.split('?')[0] ?? '').match(SCORES_CSV_PATTERN);
         if (!match) return next();
-        const compId = idFromSegment(match[1]);
-        const headers = req.headers.cookie ? { cookie: req.headers.cookie } : undefined;
         void (async () => {
-          try {
-            const [compRes, scoresRes] = await Promise.all([
-              fetch(`${DEV_API_ORIGIN}/api/comp/${compId}`, { headers }),
-              fetch(`${DEV_API_ORIGIN}/api/comp/${compId}/scores`, { headers }),
-            ]);
-            if (!compRes.ok) {
-              res.statusCode = compRes.status === 404 || compRes.status === 400 ? 404 : 502;
-              res.end('Competition not found\n');
-              return;
-            }
-            const comp = (await compRes.json()) as {
-              comp_id: string;
-              name: string;
-              test: boolean;
-              share_key?: string | null;
-            };
-            const scores = scoresRes.ok
-              ? ((await scoresRes.json()) as ScoresCsvInput)
-              : { comp_id: compId, tasks: [], scores: [] };
-            // Same as the Function: on a hidden comp the rows link back with
-            // the share key, or a shared sheet's links would all 404.
-            scores.comp_id = compUrlId(comp, compId);
-            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader(
-              'Content-Disposition',
-              `attachment; filename="${scoresCsvFilename(comp.name)}"`
-            );
-            res.end(
-              buildScoresCsv(scores, {
-                compName: comp.name,
-                // Same rule as the Function: link back to where this came from.
-                origin: `http://${req.headers.host ?? 'localhost:3000'}`,
-              })
-            );
-          } catch {
-            res.statusCode = 502;
-            res.end(`API Workers not reachable at ${DEV_API_ORIGIN}\n`);
-          }
+          const response = await scoresCsvResponse({
+            apiOrigin: DEV_API_ORIGIN,
+            segment: match[1],
+            cookie: req.headers.cookie,
+            origin: `http://${req.headers.host ?? 'localhost:3000'}`,
+          });
+          res.statusCode = response.status;
+          response.headers.forEach((value, key) => res.setHeader(key, value));
+          res.end(await response.text());
         })();
       });
     },
@@ -212,20 +186,7 @@ const GIT_SHA = (() => {
 // the clean page URLs there so everything is seamless on one origin (:3000).
 const ASTRO_ORIGIN = process.env.ASTRO_ORIGIN || 'http://localhost:4321';
 const ASTRO_DEV_BASE = '/_static';
-// Keep in sync with the Astro pages under static/src/pages/ — a page missing
-// here 404s in dev (it still works in prod, where _routes.json hands /scoring/*
-// to the built files).
-const STATIC_PAGE_ROUTES = new Set([
-  '/',
-  '/about',
-  '/assistant',
-  '/legal',
-  '/scoring',
-  '/scoring/gap',
-  '/scoring/open-distance',
-  '/scoring/data-cleaning',
-  '/scoring/track-validity',
-]);
+// The page list itself is STATIC_PAGE_ROUTES in src/dev-routing.ts.
 
 // Root-level Vite dev module URLs that both this server and Astro's dev server
 // emit; disambiguated by referer (see the dev middleware below).
@@ -339,41 +300,17 @@ export default defineConfig({
       //   /_static/* and the static page URLs  -> Astro dev server
       //   SPA routes                            -> the React app shell (app.html)
       //   old *.html URLs                       -> 301 to their clean URL
+      // The tables are in src/dev-routing.ts, shared with the e2e suite's
+      // server for the built output (web/scripts/e2e-serve-dist.ts).
       name: 'rewrite-spa-routes',
       configureServer(server) {
         server.middlewares.use((req: Connect.IncomingMessage, _res, next) => {
-          // SPA (React) routes are served by the app shell at /app.html.
-          // Module/asset requests (they contain a dot) pass through untouched.
           const path = req.url?.split('?')[0] ?? '';
-          const isSpaRoute =
-            !path.includes('.') &&
-            (path.startsWith('/u/') ||
-              // All /comp* routes serve the shell, mirroring production where
-              // _routes.json hands /comp* to the Pages Function (SSR with an
-              // SPA-shell fallback). Covers every comp sub-route registered in
-              // src/react/routes.tsx (waypoints, task, pilot, ...).
-              path === '/comp' ||
-              path.startsWith('/comp/') ||
-              path === '/scores' ||
-              // The kit form's test bench (e2e/forms.spec.ts). This middleware
-              // is the dev server's alone, and the route exists only in a
-              // development build (src/react/routes.tsx).
-              path === '/__kit/form' ||
-              /^\/(submit|profile|settings|onboarding|signin|oauth\/consent)\/?$/.test(path) ||
-              /^\/admin\/(users|cache)\/?$/.test(path));
           // Old static-page URLs 301 to their clean SPA/Astro routes.
-          const movedTo: Record<string, string> = {
-            '/about.html': '/about',
-            '/legal.html': '/legal',
-            '/scoring.html': '/scoring',
-            '/scoring-gap.html': '/scoring/gap',
-            '/scoring-open-distance.html': '/scoring/open-distance',
-            '/theme-editor': '/',
-            '/kitchensink.html': '/',
-          };
-          if (movedTo[path]) {
+          const movedTo = MOVED_PAGES[path];
+          if (movedTo) {
             _res.statusCode = 301;
-            _res.setHeader('Location', movedTo[path]);
+            _res.setHeader('Location', movedTo);
             _res.end();
             return;
           }
@@ -396,7 +333,8 @@ export default defineConfig({
             void proxyToAstro(req, _res, req.url ?? '/');
             return;
           }
-          if (isSpaRoute) {
+          // SPA (React) routes are served by the app shell at /app.html.
+          if (isSpaRoute(path)) {
             req.url = '/app.html';
           } else if (req.url === '/replay' || req.url === '/replay/') {
             req.url = '/replay.html';
@@ -442,31 +380,20 @@ export default defineConfig({
         searchForWorkspaceRoot(process.cwd()),
       ],
     },
-    // One rule for the whole API surface: it all goes to the dev-router Worker,
+    // Everything that belongs to the Workers goes to the dev-router Worker,
     // which dispatches to auth-api / competition-api / airscore-api over
-    // service bindings exactly as the Pages Functions in functions/api/ do in
-    // production. There is no /api/* path this dev server serves itself, and
-    // the per-prefix table this replaced was a second place to forget to update
-    // (`/api/u/` — public track links — was once missing from it). See
-    // web/scripts/dev-workers.sh for why there is only one target now.
+    // service bindings exactly as the Pages Functions in functions/ do in
+    // production. The prefixes, and why each is there, are API_PROXY_PREFIXES
+    // in src/dev-routing.ts; see web/scripts/dev-workers.sh for why there is
+    // only one target.
     proxy: {
-      '/api': { target: DEV_API_ORIGIN, changeOrigin: true },
-      // The OAuth discovery documents MCP clients fetch from the origin root.
-      // Pages Functions in production (functions/.well-known/); the
-      // dev-router sends them to auth-api here.
-      '/.well-known/oauth-': { target: DEV_API_ORIGIN, changeOrigin: true },
-      // The MCP endpoint and its server card (functions/mcp/[[path]].ts in production).
-      '/mcp': { target: DEV_API_ORIGIN, changeOrigin: true },
-      '/.well-known/openid-configuration': { target: DEV_API_ORIGIN, changeOrigin: true },
-      // /civl-rankings.csv is a Pages Function in production
-      // (functions/civl-rankings.csv.ts), and Pages Functions don't run under
-      // `bun run dev`. Rewriting to the worker path it forwards to keeps the
-      // one public URL working in dev too, so verifying an import doesn't
-      // require a `wrangler pages dev` build.
-      '/civl-rankings.csv': {
+      ...Object.fromEntries(
+        API_PROXY_PREFIXES.map((prefix) => [prefix, { target: DEV_API_ORIGIN, changeOrigin: true }])
+      ),
+      [CIVL_RANKINGS_CSV_PATH]: {
         target: DEV_API_ORIGIN,
         changeOrigin: true,
-        rewrite: (path: string) => path.replace(/^\//, '/api/'),
+        rewrite: (path: string) => path.replace(CIVL_RANKINGS_CSV_PATH, CIVL_RANKINGS_CSV_API_PATH),
       },
     },
   },
