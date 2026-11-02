@@ -262,6 +262,19 @@ export function taskWeatherPath(
 }
 
 /**
+ * Create a test IGC for this task — an organiser's tool, not an editor: it
+ * makes a file to download and changes nothing.
+ */
+export function taskTestIgcPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/test-igc`;
+}
+
+/**
  * The per-task analysis. A child of the TASK: it is the one task's
  * report, it is where a reader arrives from, and the breadcrumbs say the same
  * (lib/crumbs.ts). The whole-comp report at {@link compAnalysisPath} collects

@@ -93,6 +93,9 @@ const ManualFlightPage = lazy(() =>
 const TaskWeatherPage = lazy(() =>
   import("./pages/TaskWeatherPage").then((m) => ({ default: m.TaskWeatherPage }))
 );
+const TaskTestIgcPage = lazy(() =>
+  import("./pages/TaskTestIgcPage").then((m) => ({ default: m.TaskTestIgcPage }))
+);
 // Client-only (a noindex shell in the SSR Function), and lazy so it costs
 // nothing on the pages that do not open it.
 const TaskPilotSimilarity = lazy(() =>
@@ -234,6 +237,13 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/weather"
               element={<TaskWeatherPage />}
+            />
+            {/* Create a test IGC: an organiser's tool rather than an editor (it
+                makes a file to download and changes nothing), and admin-only
+                like them, so a noindex shell in the SSR Function too. */}
+            <Route
+              path="/comp/:compId/task/:taskId/test-igc"
+              element={<TaskTestIgcPage />}
             />
             {/* This task's own TASK analysis, collected by the comp analysis: a summary, with
                 a box per section linking to the section's own page. */}

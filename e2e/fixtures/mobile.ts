@@ -38,6 +38,9 @@ export const MOBILE_SPEC_FILES = [
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
   "task-settings-pages.spec.ts",
+  // Create a test IGC (#822), a page under the task where it was a dialog —
+  // because a dialog with text fields is what misbehaved on a phone.
+  "task-test-igc.spec.ts",
   // The waypoints page, whose editor is a list of waypoints opening
   // full-screen sheets, at every width — the Tabulator grid it replaced did
   // not work at this one. This project is what holds that: the page is

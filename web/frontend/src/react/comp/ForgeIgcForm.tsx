@@ -1,6 +1,10 @@
 /**
  * Create a test IGC — synthesise a tracklog that flies THIS task, and download
- * it.
+ * it. A PAGE of its own (/comp/:compId/task/:taskId/test-igc, in
+ * pages/TaskTestIgcPage.tsx); this is its form. It was a dialog over the task
+ * page until 2026-11 (issue #822): five fields and a slider are exactly
+ * what the overlays rule in CLAUDE.md moves onto a page, where the keyboard,
+ * the scroll and Back are the browser's own.
  *
  * An organiser's tool, and deliberately not a hidden one: testing track
  * submission, scoring and the report card needs files, and the only other ways
@@ -13,8 +17,15 @@
  * the `bun run forge-igc` CLI so the two cannot drift into making different
  * files. What this adds is the verdict: every file is put through `parseIGC`
  * and `assessTrackQuality` — the same code the worker runs on upload — before
- * it is offered, so the panel says whether the file will be ACCEPTED and
+ * it is offered, so the page says whether the file will be ACCEPTED and
  * SCORED rather than whether it looks about right.
+ *
+ * Create is the kit form's submit (rac/form.tsx), so a bad take-off time lands
+ * under its field, and a task the engine cannot fly (a waypoint with no
+ * coordinates) in the form's one fixed place for an error — never a toast.
+ * What it makes is the verdict and the Download button, which appear under
+ * Create and take focus, so a phone reader is shown them rather than left
+ * above them.
  *
  * An open-distance task has no route and no goal, so the slider changes
  * meaning rather than disappearing: how far beyond the take-off cylinder the
@@ -24,12 +35,14 @@
  *
  * Nothing here reaches the server. It makes a file and offers it as a
  * download, so opening this can't touch a competition — submitting the file
- * afterwards goes through the ordinary upload path, audit log and all.
+ * afterwards goes through the ordinary upload path, audit log and all. Which
+ * is also why the kit form's submit is handed no request: a refusal from the
+ * engine is dressed as one (`refusal`) so it is shown where every other is.
  *
- * Loaded lazily. Only a comp's own admins can open it, so its code has no
- * business in the bundle every pilot downloads.
+ * Loaded lazily, with its page. Only a comp's own admins can open it, so its
+ * code has no business in the bundle every pilot downloads.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   assessTrackQuality,
   forgeIgc,
@@ -43,16 +56,13 @@ import {
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Modal,
-} from "@/react/rac/dialog";
+import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { NumberField, TextField } from "@/react/rac/field";
+import { Form, FormErrorBanner, SubmitButton, type SubmitResponse } from "@/react/rac/form";
 import { SimpleSelect } from "@/react/rac/select";
 import { Slider } from "@/react/rac/slider";
+import { SectionHeader } from "../components/SectionHeader";
+import { underTask } from "../lib/crumbs";
 import { downloadFile } from "../lib/format";
 import { slugify } from "./csv";
 
@@ -74,15 +84,30 @@ interface Verdict {
   findings: { id: string; severity: string; title: string }[];
 }
 
+/** The take-off time's form-field name. */
+const START = "start";
+
+/**
+ * The engine's refusal, in the shape the kit form reads a server's in — so
+ * "nothing to fly" is shown in the form's one fixed place for an error that
+ * belongs to no field, like any other refusal.
+ */
+function refusal(message: string): SubmitResponse {
+  return new Response(JSON.stringify({ error: message }), {
+    status: 422,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 const SABOTAGE: { value: ForgeSabotage; label: string }[] = [
   { value: "none", label: "Clean flight" },
   { value: "day", label: "Wrong day" },
   { value: "place", label: "Wrong place" },
 ];
 
-export default function ForgeIgcDialog({
-  open,
-  onClose,
+export function ForgeIgcForm({
+  compId,
+  taskId,
   taskName,
   taskDate,
   compName,
@@ -90,8 +115,9 @@ export default function ForgeIgcDialog({
   category,
   xctsk,
 }: {
-  open: boolean;
-  onClose: () => void;
+  /** The comp id for links — its share key included (`compUrlId`). */
+  compId: string;
+  taskId: string;
   taskName: string;
   taskDate: string;
   compName: string;
@@ -122,15 +148,24 @@ export default function ForgeIgcDialog({
     Math.min(taskKm, Math.round((range.defaultMeters / 1000) * 10) / 10)
   );
   const [verdict, setVerdict] = useState<Verdict | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Bumped by every Create, so "Create again" moves focus to the new verdict
+  // just as the first Create did.
+  const [made, setMade] = useState(0);
+  const verdictRef = useRef<HTMLDivElement>(null);
 
   const zone = timezone ?? "UTC";
   const offset = zoneOffsetHours(taskDate, zone);
 
-  function create() {
-    setBusy(true);
-    setProblem(null);
+  // What was made is shown under Create. On a phone that is below the fold,
+  // so take the reader to it.
+  useEffect(() => {
+    if (made === 0 || !verdictRef.current) return;
+    verdictRef.current.scrollIntoView({ block: "nearest" });
+    verdictRef.current.focus({ preventScroll: true });
+  }, [made]);
+
+  /** Make the file and judge it. A refusal when the engine cannot fly it. */
+  function create(): SubmitResponse | undefined {
     setVerdict(null);
     try {
       const { text, fixCount, courseMeters } = forgeIgc(xctsk, {
@@ -171,12 +206,11 @@ export default function ForgeIgcDialog({
           title: f.title,
         })),
       });
+      return undefined;
     } catch (err) {
       // A task with one turnpoint, a waypoint with no coordinates: say what
       // happened rather than offering a file that was never made.
-      setProblem(err instanceof Error ? err.message : "Could not create a flight.");
-    } finally {
-      setBusy(false);
+      return refusal(err instanceof Error ? err.message : "Could not create a flight.");
     }
   }
 
@@ -195,31 +229,41 @@ export default function ForgeIgcDialog({
     verdict != null && sabotage === "none" && verdict.hardFailed;
 
   return (
-    <Modal isOpen={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <Dialog className="gap-3">
-        <DialogHeader>
-          <DialogTitle>Create a test IGC</DialogTitle>
-        </DialogHeader>
-
-        <p className="text-sm text-muted-foreground">
-          For <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
-          {offset >= 0 ? "+" : ""}
-          {offset}).
-        </p>
+    <div className="max-w-2xl">
+      <Breadcrumbs
+        items={underTask(compId, compName, taskId, taskName)}
+        current="Create a test IGC"
+      />
+      <Form
+        validate={() => ({
+          [START]: /^([01]\d|2[0-3]):[0-5]\d$/.test(startLocal) ? null : "Use HH:MM",
+        })}
+        onSubmit={async () => create()}
+        onSuccess={() => setMade((n) => n + 1)}
+        className="mt-2 flex flex-col gap-4"
+      >
+        <div className="flex flex-col gap-1">
+          <SectionHeader as="h1" title="Create a test IGC" />
+          <p className="text-sm text-muted-foreground">
+            For <strong>{taskName}</strong> on {taskDate} ({zone}, UTC
+            {offset >= 0 ? "+" : ""}
+            {offset}).
+          </p>
+        </div>
+        <FormErrorBanner />
 
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-3">
-          <TextField label="Pilot name" value={pilot} onChange={setPilot} />
-          <TextField label="Glider" value={glider} onChange={setGlider} />
+          <TextField label="Pilot name" name="pilot" value={pilot} onChange={setPilot} />
+          <TextField label="Glider" name="glider" value={glider} onChange={setGlider} />
           <TextField
             label="Take off (local)"
+            name={START}
             value={startLocal}
             onChange={setStartLocal}
-            validate={(v) =>
-              /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? null : "Use HH:MM"
-            }
           />
           <NumberField
             label="Fix interval (s)"
+            name="rate"
             value={rate}
             onChange={setRate}
             minValue={1}
@@ -227,6 +271,7 @@ export default function ForgeIgcDialog({
           />
           <NumberField
             label="Cruise (km/h)"
+            name="speed"
             value={speedKmh}
             onChange={setSpeedKmh}
             minValue={5}
@@ -273,71 +318,66 @@ export default function ForgeIgcDialog({
           </p>
         )}
 
-        {problem ? (
-          <Alert variant="destructive">
-            <AlertTitle>Nothing to fly</AlertTitle>
-            <AlertDescription>{problem}</AlertDescription>
-          </Alert>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <SubmitButton pendingLabel="Creating">
+            {verdict ? "Create again" : "Create"}
+          </SubmitButton>
+          {verdict?.shapeOk ? (
+            <Button variant="outline" onPress={() => download(verdict)}>
+              Download .igc
+            </Button>
+          ) : null}
+        </div>
 
         {verdict ? (
-          <div className="flex flex-col gap-2">
-            <Alert variant={unexpectedlyWithheld ? "destructive" : undefined}>
-              <AlertTitle>
-                {!verdict.shapeOk
-                  ? "This file would be rejected on upload"
-                  : unexpectedlyWithheld
-                    ? "This was meant to be clean, but it fails a hard check"
-                    : verdict.hardFailed
-                      ? "Created — and withheld from scoring, as asked"
-                      : "Created, and the engine accepts it"}
-              </AlertTitle>
-              <AlertDescription>
-                <dl className="mt-1 grid grid-cols-[repeat(auto-fit,minmax(min(7rem,100%),1fr))] gap-x-6 gap-y-1 text-sm">
-                  <Fact label="Flight date" value={verdict.flightDate ?? "—"} />
-                  <Fact
-                    label={openDistance ? "Open distance" : "Course flown"}
-                    value={`${(verdict.courseMeters / 1000).toFixed(1)} km`}
-                  />
-                  <Fact label="Airborne" value={hhmm(verdict.durationSeconds)} />
-                  <Fact label="Track" value={`${verdict.trackKm.toFixed(1)} km`} />
-                  <Fact
-                    label="Highest"
-                    value={verdict.maxAltitude == null ? "—" : `${Math.round(verdict.maxAltitude)} m`}
-                  />
-                  <Fact label="Fixes" value={verdict.fixCount.toLocaleString()} />
-                  <Fact
-                    label="Size"
-                    value={`${(verdict.text.length / 1024).toFixed(0)} KB`}
-                  />
-                </dl>
-                {verdict.findings.length > 0 ? (
-                  <ul className="mt-2 list-inside list-disc text-sm">
-                    {verdict.findings.map((f) => (
-                      <li key={f.id}>
-                        [{f.severity}] {f.title}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </AlertDescription>
-            </Alert>
-          </div>
+          <Alert
+            ref={verdictRef}
+            tabIndex={-1}
+            variant={unexpectedlyWithheld ? "destructive" : undefined}
+            className="outline-none"
+          >
+            <AlertTitle>
+              {!verdict.shapeOk
+                ? "This file would be rejected on upload"
+                : unexpectedlyWithheld
+                  ? "This was meant to be clean, but it fails a hard check"
+                  : verdict.hardFailed
+                    ? "Created — and withheld from scoring, as asked"
+                    : "Created, and the engine accepts it"}
+            </AlertTitle>
+            <AlertDescription>
+              <dl className="mt-1 grid grid-cols-[repeat(auto-fit,minmax(min(7rem,100%),1fr))] gap-x-6 gap-y-1 text-sm">
+                <Fact label="Flight date" value={verdict.flightDate ?? "—"} />
+                <Fact
+                  label={openDistance ? "Open distance" : "Course flown"}
+                  value={`${(verdict.courseMeters / 1000).toFixed(1)} km`}
+                />
+                <Fact label="Airborne" value={hhmm(verdict.durationSeconds)} />
+                <Fact label="Track" value={`${verdict.trackKm.toFixed(1)} km`} />
+                <Fact
+                  label="Highest"
+                  value={verdict.maxAltitude == null ? "—" : `${Math.round(verdict.maxAltitude)} m`}
+                />
+                <Fact label="Fixes" value={verdict.fixCount.toLocaleString()} />
+                <Fact
+                  label="Size"
+                  value={`${(verdict.text.length / 1024).toFixed(0)} KB`}
+                />
+              </dl>
+              {verdict.findings.length > 0 ? (
+                <ul className="mt-2 list-inside list-disc text-sm">
+                  {verdict.findings.map((f) => (
+                    <li key={f.id}>
+                      [{f.severity}] {f.title}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </AlertDescription>
+          </Alert>
         ) : null}
-
-        <DialogFooter>
-          <Button slot="close" variant="outline">
-            Close
-          </Button>
-          <Button variant="outline" isPending={busy} pendingLabel="Creating" onPress={create}>
-            {verdict ? "Create again" : "Create"}
-          </Button>
-          {verdict?.shapeOk ? (
-            <Button onPress={() => download(verdict)}>Download .igc</Button>
-          ) : null}
-        </DialogFooter>
-      </Dialog>
-    </Modal>
+      </Form>
+    </div>
   );
 }
 

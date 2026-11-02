@@ -338,6 +338,9 @@ test.describe("SSR — isolation and fallback", () => {
     // Admin-only settings pages (index + a group sub-page).
     "/comp/anything/settings",
     "/comp/anything/settings/scoring",
+    // Create a test IGC (#822): admin-only, under the SSR'd task route, which
+    // it must not be mistaken for.
+    "/comp/anything/task/anything/test-igc",
     // The pilot-similarity prototype: a real SPA route that derives everything
     // client-side from the report it fetches, so it has nothing to
     // server-render and must reach the shell rather than the 404 fallback.
