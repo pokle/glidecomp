@@ -93,7 +93,8 @@ describe code that no longer exists.
   full-width 44px rows in flow, replacing a Select or RadioGroup wherever the
   value is part of a form that gets Saved; see the Conventions section for
   which control to reach for), `table` (Table/TableHeader/Column/Row/
-  Cell/CellEditZone), `grid-list` (GridList/GridListItem/RowContent — a
+  Cell/CellEditZone), `grid-list` (GridList/GridListItem/RowContent, plus
+  GridListSection/GridListHeader for named groups — a
   vertical list with `keyboardNavigationBehavior="tab"`, and since the
   mobile-first pass the kit's default answer for an editable collection that
   is not genuinely spreadsheet-shaped. `variant="cards"` is the bordered-card
@@ -101,7 +102,9 @@ describe code that no longer exists.
   buttons — the waypoints editor and its read-only view, the altitude review
   and the route editor's turnpoints are all that. `RowContent` is the row
   body those four share: a leading slot, a name with one truncating line of
-  detail under it, a trailing slot and an optional chevron), `combo-box` (ComboBox/ComboBoxItem — text input
+  detail under it, a trailing slot and an optional chevron. A section is a
+  `rowgroup` named by its header, which arrow keys step over; the pilots
+  page's "Sort: Team" is the worked example), `combo-box` (ComboBox/ComboBoxItem — text input
   + floating filtered suggestions; **use this, not SearchField + list-box**,
   whenever typing filters a list: it owns the ARIA combobox contract that a
   searchbox beside a detached listbox doesn't provide — see gotcha #12),

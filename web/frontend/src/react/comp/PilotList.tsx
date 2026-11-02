@@ -16,9 +16,23 @@
  * glider · WPRS points, then whether the pilot's tracks can find them —
  * `@username` when an account is linked, "no email" when neither an account
  * nor an email connects them to their uploads.
+ *
+ * Given `groups` (the page's "Sort: Team"), the same rows sit under a
+ * heading per team — "Alpha Gliders · 3 pilots", the teamless last under
+ * "No team" — as named groups a screen reader announces. The groups are a
+ * sort with headings, not a second list: the same rows, opening the same
+ * sheet.
  */
-import { GridList, GridListItem, RowContent } from "@/react/rac/grid-list";
+import { Collection } from "react-aria-components";
+import {
+  GridList,
+  GridListHeader,
+  GridListItem,
+  GridListSection,
+  RowContent,
+} from "@/react/rac/grid-list";
 import type { CompPilot } from "./csv";
+import type { TeamGroup } from "./team-names";
 
 /** The facts on a row's second line, in reading order. */
 export function pilotDetail(p: CompPilot): string {
@@ -32,29 +46,59 @@ export function pilotDetail(p: CompPilot): string {
 
 export function PilotList({
   pilots,
+  groups,
   emptyMessage,
   onOpen,
 }: {
   pilots: CompPilot[];
+  /** The same pilots under team headings, when the list is sorted by team. */
+  groups?: TeamGroup<CompPilot>[];
   /** Why the list is empty — "nobody yet" and "nobody matches" differ. */
   emptyMessage: string;
   onOpen: (compPilotId: string) => void;
 }) {
+  const row = (p: CompPilot & { id: string }) => (
+    <GridListItem variant="rows" id={p.id} textValue={p.name} className="cursor-pointer">
+      <RowContent title={p.name} detail={pilotDetail(p)} chevron />
+    </GridListItem>
+  );
+  const withIds = (list: CompPilot[]) => list.map((p) => ({ ...p, id: p.comp_pilot_id }));
+  const shared = {
+    "aria-label": "Pilots",
+    variant: "rows" as const,
+    onAction: (key: React.Key) => onOpen(String(key)),
+    renderEmptyState: () => (
+      <p className="p-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+    ),
+  };
+
+  if (groups) {
+    return (
+      <GridList
+        {...shared}
+        // A section's id shares the collection's key space with the pilots'
+        // ids, which are Sqids and never hold a colon. No team is named "",
+        // so plain "team:" is the teamless group.
+        items={groups.map((g) => ({ ...g, id: `team:${g.team ?? ""}` }))}
+      >
+        {(g) => (
+          <GridListSection variant="rows" id={g.id}>
+            {/* "Alpha Gliders · 3 pilots": the name is what a reader scans
+                for, so it carries the rows' ink and the count stays muted. */}
+            <GridListHeader variant="rows">
+              <span className="font-medium text-foreground">{g.team ?? "No team"}</span>
+              {` · ${g.size} ${g.size === 1 ? "pilot" : "pilots"}`}
+            </GridListHeader>
+            <Collection items={withIds(g.pilots)}>{row}</Collection>
+          </GridListSection>
+        )}
+      </GridList>
+    );
+  }
+
   return (
-    <GridList
-      aria-label="Pilots"
-      variant="rows"
-      items={pilots.map((p) => ({ ...p, id: p.comp_pilot_id }))}
-      onAction={(key) => onOpen(String(key))}
-      renderEmptyState={() => (
-        <p className="p-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
-      )}
-    >
-      {(p) => (
-        <GridListItem variant="rows" id={p.id} textValue={p.name} className="cursor-pointer">
-          <RowContent title={p.name} detail={pilotDetail(p)} chevron />
-        </GridListItem>
-      )}
+    <GridList {...shared} items={withIds(pilots)}>
+      {row}
     </GridList>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchTeam, rosterTeams, teamKey, teamOptions } from "./team-names";
+import { groupByTeam, matchTeam, rosterTeams, teamKey, teamOptions } from "./team-names";
 
 const roster = (...names: Array<string | null>) => names.map((team_name) => ({ team_name }));
 
@@ -70,5 +70,38 @@ describe("teamOptions", () => {
       "near:Alpha Gliders",
       "new:Alpha Gilders",
     ]);
+  });
+});
+
+describe("groupByTeam", () => {
+  const p = (name: string, team_name: string | null) => ({ name, team_name });
+  const roster = [
+    p("Zed", "Bravo"),
+    p("Ada", null),
+    p("Cy", "Alpha Gliders"),
+    p("Bo", "Alpha Gliders"),
+    p("Di", "  "),
+  ];
+  const view = (groups: ReturnType<typeof groupByTeam<ReturnType<typeof p>>>) =>
+    groups.map((g) => `${g.team ?? "none"} ${g.size}: ${g.pilots.map((x) => x.name).join(",")}`);
+
+  it("puts teams in name order, pilots by name, and the teamless last", () => {
+    expect(view(groupByTeam(roster, roster))).toEqual([
+      "Alpha Gliders 2: Bo,Cy",
+      "Bravo 1: Zed",
+      "none 2: Ada,Di",
+    ]);
+  });
+
+  it("keeps two spellings apart, as the scores do", () => {
+    const split = [p("Ada", "Alpha Gliders"), p("Bo", "alpha gliders")];
+    const teams = groupByTeam(split, split).map((g) => g.team);
+    expect(teams).toHaveLength(2);
+    expect(teams).toEqual(expect.arrayContaining(["Alpha Gliders", "alpha gliders"]));
+  });
+
+  it("drops a team a search leaves empty, and still counts the whole team", () => {
+    const shown = roster.filter((x) => x.name === "Cy");
+    expect(view(groupByTeam(shown, roster))).toEqual(["Alpha Gliders 2: Cy"]);
   });
 });

@@ -139,3 +139,44 @@ export function teamOptions(input: string, teams: RosterTeam[]): TeamOption[] {
   options.push({ id: `new:${input.trim()}`, kind: "new", name: input.trim() });
   return options;
 }
+
+/** One heading in the pilot list's team view, and the pilots under it. */
+export interface TeamGroup<P> {
+  /** The team, or null for the pilots in none. */
+  team: string | null;
+  /** How many pilots the WHOLE roster has in it, whatever a search shows. */
+  size: number;
+  pilots: P[];
+}
+
+/**
+ * The pilot list's "Sort: Team": a group per team, teams in name order, the
+ * pilots in each by name, and the teamless last.
+ *
+ * A team here is what SCORING calls one — the trimmed name, exactly as
+ * `aggregateTeams()` groups the Teams tab — and not `teamKey()`'s folding.
+ * Two spellings of a team left over from before the server spelled every
+ * write the roster's way (competition-api/src/team-name.ts) are two teams
+ * with two totals on the scores page, so they are two headings here, side by
+ * side, which is how an organiser finds them.
+ *
+ * `size` counts `roster`, not `shown`: a search narrows the rows under a
+ * heading, but the heading says how big the team IS.
+ */
+export function groupByTeam<P extends { name: string; team_name: string | null }>(
+  shown: P[],
+  roster: P[]
+): TeamGroup<P>[] {
+  const teamOf = (p: P) => p.team_name?.trim() || null;
+  const sizes = new Map<string | null, number>();
+  for (const p of roster) sizes.set(teamOf(p), (sizes.get(teamOf(p)) ?? 0) + 1);
+  const groups = new Map<string | null, P[]>();
+  for (const p of shown) groups.set(teamOf(p), [...(groups.get(teamOf(p)) ?? []), p]);
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b)))
+    .map(([team, pilots]) => ({
+      team,
+      size: sizes.get(team) ?? pilots.length,
+      pilots: [...pilots].sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+}

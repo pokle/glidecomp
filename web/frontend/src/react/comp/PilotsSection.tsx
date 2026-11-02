@@ -37,7 +37,7 @@ import { useBottomBar } from "../lib/use-bottom-bar";
 import { fetchWithRetry } from "./types";
 import { exportCsvContent, pilotToRow, slugify, type CompPilot } from "./csv";
 import { filterPilots, queryWords } from "./pilot-search";
-import { rosterTeams } from "./team-names";
+import { groupByTeam, rosterTeams } from "./team-names";
 import { PilotList } from "./PilotList";
 import { PilotSheet } from "./PilotSheet";
 import {
@@ -48,17 +48,23 @@ import {
 } from "./RosterActions";
 import type { ImportPlan } from "./roster-import";
 
-type SortBy = "name" | "wprs_points";
+type SortBy = "name" | "wprs_points" | "team";
 
 /**
  * The roster in the chosen order. WPRS points run highest first — the order
  * the rankings are read in — with unscored pilots last: "no score" is not a
  * very bad one, and an organiser looking for their top seeds should not have
  * to scroll past everyone who has never been ranked.
+ *
+ * "Team" is a sort with headings: the pilots by name here, then filed under
+ * their teams by `groupByTeam()` (comp/team-names.ts). One control rather
+ * than a "Group by" beside "Sort": on a phone that is one dropdown, not two,
+ * and of the six pairs two would make, team-then-name is the one team work
+ * needs.
  */
 function sortPilots(pilots: CompPilot[], by: SortBy): CompPilot[] {
   const byName = (a: CompPilot, b: CompPilot) => a.name.localeCompare(b.name);
-  if (by === "name") return [...pilots].sort(byName);
+  if (by === "name" || by === "team") return [...pilots].sort(byName);
   return [...pilots].sort((a, b) => {
     if (a.wprs_points === null && b.wprs_points === null) return byName(a, b);
     if (a.wprs_points === null) return 1;
@@ -136,11 +142,19 @@ export function PilotsSection({
     if (count !== undefined) countChanged.current?.(count);
   }, [count]);
 
-  const shown = useMemo(
-    () => (pilots ? sortPilots(filterPilots(pilots, query), sortBy) : []),
-    [pilots, query, sortBy]
-  );
   const teams = useMemo(() => rosterTeams(pilots ?? []), [pilots]);
+  // "Team" is offered only while some pilot has one: on a roster with none it
+  // would file everyone under "No team", which sorts nothing. Removing the
+  // last team falls back to names rather than leaving that behind.
+  const sort: SortBy = sortBy === "team" && teams.length === 0 ? "name" : sortBy;
+  const shown = useMemo(
+    () => (pilots ? sortPilots(filterPilots(pilots, query), sort) : []),
+    [pilots, query, sort]
+  );
+  const groups = useMemo(
+    () => (sort === "team" && pilots ? groupByTeam(shown, pilots) : undefined),
+    [sort, shown, pilots]
+  );
   const searching = queryWords(query).length > 0;
   const nobodyMatches = searching && shown.length === 0;
   const typedName = query.trim();
@@ -245,11 +259,12 @@ export function PilotsSection({
                 label="Sort"
                 // Label beside the control, not above it: one line for one word.
                 className="flex-row items-center"
-                value={sortBy}
+                value={sort}
                 onChange={(v) => setSortBy(v as SortBy)}
                 options={[
                   { value: "name", label: "Name" },
                   { value: "wprs_points", label: "WPRS points" },
+                  ...(teams.length > 0 ? [{ value: "team", label: "Team" }] : []),
                 ]}
               />
             ) : null}
@@ -257,6 +272,7 @@ export function PilotsSection({
 
           <PilotList
             pilots={shown}
+            groups={groups}
             emptyMessage={
               searching
                 ? `No pilot matches "${typedName}".`

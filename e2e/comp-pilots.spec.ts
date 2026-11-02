@@ -327,6 +327,63 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   expect(await teamOf("Cy")).toBe("Alpha Gliders");
 });
 
+test("Sort: Team files the pilots under their teams, the teamless last", async ({ page }) => {
+  const sortTo = async (option: string) => {
+    await page.getByRole("button", { name: /Sort/ }).click();
+    await page.getByRole("option", { name: option }).click();
+  };
+  const headings = () => list(page).getByRole("rowheader").allInnerTexts();
+
+  // A roster with no teams is not offered a sort that would file everyone
+  // under "No team".
+  const teamless = await makeComp([
+    { registered_pilot_name: "Ann", pilot_class: "open" },
+    { registered_pilot_name: "Ben", pilot_class: "open" },
+  ]);
+  await openPage(page, teamless);
+  await page.getByRole("button", { name: /Sort/ }).click();
+  await expect(page.getByRole("option", { name: "Name" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Team" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  const compId = await makeComp([
+    { registered_pilot_name: "Zoe", pilot_class: "open", team_name: "Bravo" },
+    { registered_pilot_name: "Ada", pilot_class: "open" },
+    { registered_pilot_name: "Cy", pilot_class: "open", team_name: "Alpha Gliders" },
+    { registered_pilot_name: "Bo", pilot_class: "open", team_name: "Alpha Gliders" },
+  ]);
+  await openPage(page, compId);
+  await sortTo("Team");
+
+  // Teams in name order, pilots by name inside each, and every heading names
+  // the group a screen reader announces.
+  await expect.poll(headings).toEqual(["Alpha Gliders · 2 pilots", "Bravo · 1 pilot", "No team · 1 pilot"]);
+  await expect.poll(() => names(page)).toEqual(["Bo", "Cy", "Zoe", "Ada"]);
+  await expect(
+    list(page).getByRole("rowgroup", { name: "Alpha Gliders · 2 pilots" }).getByRole("row")
+  ).toHaveText([/Alpha Gliders/, /^Bo/, /^Cy/]);
+
+  // A search narrows the rows and drops an empty team; a heading still says
+  // how big its team is.
+  await search(page).fill("cy");
+  await expect.poll(headings).toEqual(["Alpha Gliders · 2 pilots"]);
+  await expect.poll(() => names(page)).toEqual(["Cy"]);
+  await search(page).fill("");
+
+  // The rows are the same rows: one opens its sheet, and a pilot who joins a
+  // team moves under it.
+  await rows(page).filter({ hasText: "Ada" }).click();
+  const sheet = page.getByRole("dialog", { name: "Ada details" });
+  const team = sheet.getByRole("combobox", { name: "Team" });
+  await team.scrollIntoViewIfNeeded();
+  await team.click();
+  await page.getByRole("option", { name: "Bravo (1)" }).click();
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await expect.poll(headings).toEqual(["Alpha Gliders · 2 pilots", "Bravo · 2 pilots"]);
+  await expect.poll(() => names(page)).toEqual(["Bo", "Cy", "Ada", "Zoe"]);
+});
+
 test("a refusal lands under the field it is about, focused and in view", async ({ page }) => {
   // The bug, found on an iPhone: an email that already belonged to someone on
   // the roster was refused, the refusal went to the top of a body scrolled
