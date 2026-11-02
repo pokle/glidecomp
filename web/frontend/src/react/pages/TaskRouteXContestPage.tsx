@@ -82,7 +82,7 @@ function XContestForm({ editor }: { editor: RouteEditorState }) {
           if (!got) return;
           // The load may have asked first ("Replace the route…?").
           if (await loadRoute(got.task, `XContest task ${got.code}`)) {
-            editor.leave({ afterConfirm: true });
+            editor.leave();
           }
         }}
       >

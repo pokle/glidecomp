@@ -82,10 +82,12 @@ PAGE with its own URL, not a `FullScreenSheet`: the pilot editor
 (`comp/PilotList.tsx` → `pages/CompPilotPage.tsx`) is the model. A sheet over
 a scrolled page was hit-tested in the wrong place by iOS Safari once a
 keyboard had come and gone, and everything that kept sheets usable (React
-Aria's iOS scroll lock, `lib/use-back-dismiss.ts`, `lib/use-sheet-scroll-reset.ts`)
-imitated what a page does natively. The rule is in CLAUDE.md; the remaining
-sheets (the waypoints list's among them) are pokle/glidecomp#810–#816, and
-#817 removes the machinery. Small overlays — a confirm, a menu, a combo box's
+Aria's iOS scroll lock, a history entry per sheet so Back could close it, a
+scroll reset) imitated what a page does natively. The rule is in CLAUDE.md;
+every sheet became a page in pokle/glidecomp#810–#822, and #817 deleted the
+machinery (`FullScreenSheet`, `FormSheet`, `use-back-dismiss`,
+`use-sheet-scroll-reset`; `src/react/no-overlays.test.ts` keeps them out).
+Back is the browser's everywhere, a dialog open or not. Small overlays — a confirm, a menu, a combo box's
 list — are fine. And a combo box on a touch device holds its list invisible
 until the on-screen keyboard opens (600 ms at most): an e2e that clicks an
 option must wait for the popover's opacity first (see `openList()` in
@@ -184,22 +186,7 @@ describe code that no longer exists.
   MenuSection/MenuHeader/MenuSeparator — a Header must sit inside a
   MenuSection to name the group, and `placement` forwards to the popover),
   `router` (RacRouterProvider — bridges RAC `href` links to react-router;
-  SSR-safe), `full-screen-sheet` (FullScreenSheet + SheetHeader/
-  SheetBody/SheetFooter — the **full-bleed** modal and the chrome for a
-  header-plus-scrolling-body sheet: the header's title, its optional
-  `leading` and `action` slots and the `autoFocus` way out, the body's
-  `max-w-2xl` readable width and `min-h-0` scroll, and the footer for a
-  whole-sheet action. Four sheets had each written their own before it, in
-  two vocabularies that disagreed about all three. Full-bleed matters because
-  `dialog`'s Modal is a centered panel whose overlay
-  padding/background/centering are not overridable. Render it when open and
-  not when closed: there is no `isOpen`, so a closed sheet costs nothing and a
-  lazily-imported one stays unimported. `dismissOnPress` makes the whole sheet
-  a close target and is **only** for content that is a picture — anything
-  interactive inside would dismiss on the way to being pressed; without it,
-  give the sheet an `autoFocus` Close button, since Escape alone isn't a
-  discoverable affordance. Callers: the waypoint QR, the task route glyph, the
-  task-analysis metric chart), `nav-list` (NavList/NavRow/NavActionRow — the
+  SSR-safe), `nav-list` (NavList/NavRow/NavActionRow — the
   grouped tappable-row list for hierarchical settings screens: each row is a
   RAC Link (or Button, for `NavActionRow` actions like "Delete competition")
   showing a label, a muted current-value summary and a chevron, on a minimum
@@ -387,8 +374,7 @@ Points worth knowing before you reach for one:
   surface that touches a viewport edge holds its CONTENT clear of the notch and
   the home indicator while its background stays full-bleed. The `pt-safe` /
   `pb-safe` / `p-safe` / `px-gutter-safe` / `px-page-safe` / `pb-gutter-safe`
-  utilities in `react/globals.css` are the vocabulary; `rac/full-screen-sheet.tsx`
-  already applies `p-safe` for every sheet, so callers need nothing. `env()` is
+  utilities in `react/globals.css` are the vocabulary. `env()` is
   0px everywhere else, so none of it costs the desktop anything.
 
 ## Hard-won gotchas (read before touching RAC code)
@@ -719,26 +705,16 @@ Points worth knowing before you reach for one:
       hand-written `role="menuitem"` anchor (SiteHeader.astro) keeps the real
       attribute, so the two implementations differ here on purpose.
 
-24. **A dialog opened from inside a `FullScreenSheet` opens BEHIND it unless
-    it is told not to.** The sheet's overlay is `z-[100]`; `Modal`
-    (`rac/dialog.tsx`) is `z-50`, and both are portalled to the body, so
-    z-index decides and the sheet wins — the dialog is mounted, focused and
-    invisible. `Modal` therefore takes one stacking knob, `elevated`, which
-    lifts its overlay to `z-[110]`; pass it through from whatever opened the
-    dialog. (Its one caller, the Add waypoint dialog over the waypoints
-    editor's maximised map, went in #811, when both became pages.) Nothing else about the overlay is
-    overridable, deliberately — the same reasoning as the thermal rose's
-    legend popover, which carries `z-[110]` for exactly this reason.
+24. **Retired with #817: a dialog opened from inside a full-screen sheet
+    opened BEHIND it.** The sheet's overlay was `z-[100]` and `Modal`'s
+    `z-50`, so `Modal` grew an `elevated` knob to lift itself over one.
+    There are no full-screen sheets now, and the knob went with them; the
+    number is kept so references to the later gotchas still hold.
 
-25. **A safe-area utility INSIDE a `FullScreenSheet` counts the inset
-    twice.** The sheet already spends it, once, on its own `p-safe` (see the
-    edge-to-edge convention above). A caller that then adds `px-gutter-safe`
-    gets `max(1rem, inset) + inset`, and `pb-gutter-safe` gets
-    `1rem + 2·inset` — visibly wider gutters in landscape, and only on the
-    sheets that did it, which is how two of the four sheets came to have a
-    different gutter from the other two. Inside a sheet, padding is plain
-    Tailwind: `px-4`, `p-4`, `pb-4`. `SheetHeader` / `SheetBody` /
-    `SheetFooter` do that for you.
+25. **Retired with #817: a safe-area utility inside a full-screen sheet
+    counted the inset twice**, because the sheet already spent it on its own
+    `p-safe`. On a page, the edge-to-edge convention above is the whole
+    story.
 
 26. **`variant="rows"` already lays a GridList row out.** `navRowClass` is
     `flex min-h-11 w-full items-center gap-3 px-4 py-2.5 …`, so a row
@@ -748,30 +724,21 @@ Points worth knowing before you reach for one:
     `min-w-0 flex-1` middle block, the truncating detail line and the
     chevron.
 
-27. **Anything that pushes a history entry has to say where it belongs in the
-    stack.** `lib/use-back-dismiss.ts` is no longer only for overlays: the
-    unsaved-changes guard holds an entry too, so Back on a dirty form asks
-    before it discards. Three rules came out of wiring it up, and all three
-    were caught by the e2e rather than by review.
-    - **A guard is a GROUND-FLOOR layer** (`useBackDismiss`'s third
-      argument). It does not arm in the order the reader would expect: on the
-      waypoints page it is editing an altitude *inside* the review sheet that
-      turns the form dirty, two layers deep, and an entry pushed there takes
-      the Back that was aimed at the sheet. History is linear and an entry
-      cannot be inserted underneath one, so a ground-floor layer waits for the
-      stack to empty and takes the ground floor when it is free.
-    - **Never start a second traversal while one is in flight.**
-      `history.back()` does not take effect until its popstate lands, so a
-      second walk reads the entry the first has already left and pops for it
-      as well — two pages back in one press. Walks run one at a time and
-      re-read the stack when their turn comes.
-    - **Do not count entries; read them.** The confirm dialog is itself a
-      layer (Back behaves as Escape does), so "Discard changes" has to leave
-      through an entry that may or may not have been released yet. Each step
-      reads the marker off the entry it is standing on, which also lets it pop
-      straight through a DEAD one — a release that found somebody else's entry
-      on top of its own, refused to pop it, and left an entry wearing the
-      page's URL that a Back would otherwise land on and appear to do nothing.
+27. **Nothing pushes a history entry to catch Back — Back is the
+    browser's.** Until #817, `lib/use-back-dismiss.ts` pushed an entry for
+    every open sheet and dialog, and for every dirty form, so that Back
+    could close or ask instead of leaving. Keeping those entries straight
+    took a stack (a popstate reaches every listener), ground-floor layers for
+    the forms, a queue so two walks never popped for the same entry, and
+    dead-entry handling for releases that lost a race — all of it found by
+    the e2e, which were the flaky ones in CI — and a page that went Back
+    straight after a confirmation still had to wait for the dialog to give
+    its entry back. All of it is deleted. A dialog holds no entry: Back
+    navigates, and the dialog closes with the page it was over
+    (`rac/dialog.tsx`'s `CloseOnNavigation`, which matters for the
+    app-wide confirm). Navigate through the router, never with
+    `history.pushState`/`back`/`go` by hand:
+    `src/react/no-overlays.test.ts` fails if you do.
 
 28. **A checkbox item in a Menu is a one-item `MenuSection`, not a `MenuItem`
     with an `onAction` that toggles state.** `selectionMode` is a prop on
@@ -860,7 +827,7 @@ out. What the bullets say about each piece otherwise still holds. Five pieces:
   legs and positions are all computed from outside the item.
 - **`comp/TurnpointSheet.tsx` — one turnpoint, at full screen.** Was
   `TurnpointDetailsDialog`, a centred `Modal` whose form scrolled inside a
-  `max-h-[calc(100dvh-2rem)]` box; now `rac/full-screen-sheet.tsx`. It carries
+  `max-h-[calc(100dvh-2rem)]` box; then a full-screen sheet (deleted in #817). It carries
   **Delete**, and it has **no Cancel**: nothing here is saved, so Done and the
   back gesture both keep the edits and the page's own Cancel is what throws the
   route away. The draft applies on the way OUT, not per keystroke.

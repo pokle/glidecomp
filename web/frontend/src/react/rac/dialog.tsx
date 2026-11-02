@@ -8,20 +8,17 @@
  * passes isOpen/onOpenChange to Modal, mirroring the Base UI open/onOpenChange
  * pattern the app already uses.
  *
- * **Back closes a dialog, exactly as Escape does.** A dialog is React state
- * rather than a route, so the history stack cannot see it and a back gesture
- * would skip past it and leave the PAGE — which on a phone is how people
- * close things. This was wired into {@link ./full-screen-sheet.tsx
- * FullScreenSheet} first and nowhere else, and the gap had teeth: the
- * waypoints page's Add-waypoint dialog opens `elevated` over the maximised
- * map sheet, and because a dialog registered no layer, a Back press there
- * reached the SHEET's listener as the topmost one — closing the map
- * underneath and leaving the dialog floating over the page.
- *
- * `lib/use-back-dismiss.ts` is shared by both, so layers interleave in the
- * order they opened whichever kind they are.
+ * **Back is the browser's Back, with a dialog open too.** A dialog here is
+ * small — a confirmation, a share link — and holds no history entry of its
+ * own: Back navigates, exactly as it would with the dialog closed, and the
+ * dialog goes with the page it was about ({@link CloseOnNavigation}). Escape,
+ * the ✕ and the dialog's own buttons are what close it and stay put. Until
+ * #817 every dialog pushed an entry so that Back closed it instead; that
+ * imitated navigation, raced every page that went Back straight after a
+ * confirmation, and went with the full-screen sheets it was built for
+ * (CLAUDE.md, "No full-screen overlays").
  */
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import {
   Dialog as AriaDialog,
   Modal as AriaModal,
@@ -34,27 +31,32 @@ import {
 } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
-import { useBackDismiss } from "@/react/lib/use-back-dismiss";
 import { Button } from "./button";
 import { XIcon } from "lucide-react";
 
 /**
- * One history entry for as long as this dialog is open.
+ * Close the dialog when the reader goes Back or Forward (a `popstate`) — the
+ * only navigation a modal dialog leaves within reach — so it never outlives
+ * the page it was asked over.
  *
- * A component rather than a hook call in {@link Modal}, because it has to
- * mount and unmount WITH the dialog: `Modal` itself stays mounted across
- * open and closed (callers drive `isOpen`), while RAC's `ModalOverlay`
- * renders its children only while open. Sitting inside the overlay is
- * therefore what makes "while it is open" true.
+ * A dialog inside a page unmounts with it anyway; this is for the ones that
+ * do not. The confirmation (`rac/confirm.tsx`) is mounted once, app-wide, so
+ * a "Remove Ana?" left open by a Back would otherwise float over the page
+ * Back went to, still waiting for an answer about a pilot no longer on
+ * screen. Closing it answers "no" (`onOpenChange(false)`), as Escape does.
  *
- * It closes through `OverlayTriggerStateContext`, which the overlay provides
- * and which resolves to the same state whether the dialog is controlled by
- * `isOpen`/`onOpenChange` or opened by a `DialogTrigger` — so neither kind of
- * caller has to pass anything.
+ * Inside the overlay, which renders its children only while open, and closes
+ * through `OverlayTriggerStateContext` — the same state whether the dialog is
+ * controlled by `isOpen`/`onOpenChange` or opened by a `DialogTrigger`.
  */
-function BackDismissLayer() {
+function CloseOnNavigation() {
   const state = useContext(OverlayTriggerStateContext);
-  useBackDismiss(() => state?.close());
+  useEffect(() => {
+    if (!state) return;
+    const close = () => state.close();
+    window.addEventListener("popstate", close);
+    return () => window.removeEventListener("popstate", close);
+  }, [state]);
   return null;
 }
 
@@ -66,24 +68,16 @@ function BackDismissLayer() {
  *
  * This is a centered panel and cannot be talked into being anything else —
  * the overlay's padding, background and centering below are not overridable.
- * For a modal that fills the screen edge to edge, use
- * rac/full-screen-sheet.tsx.
+ * There is no full-screen variant: anything that would fill the screen is a
+ * page (CLAUDE.md, "No full-screen overlays").
  */
 export function Modal({
   className,
   children,
   isDismissable = true,
-  elevated = false,
   ...props
 }: Omit<ModalOverlayProps, "className"> & {
   className?: string;
-  /**
-   * Lift the overlay over a {@link ../full-screen-sheet FullScreenSheet}
-   * (z-[100]) — for a dialog opened from inside one, which at the default
-   * z-50 would open behind the sheet it was asked for. The only stacking
-   * knob: everything else about the overlay stays this component's call.
-   */
-  elevated?: boolean;
 }) {
   return (
     <ModalOverlay
@@ -94,14 +88,11 @@ export function Modal({
       // auto margins collapse to 0 on overflow so the whole panel scrolls.
       className={cn(
         "fixed inset-0 isolate z-50 flex min-h-dvh justify-center overflow-y-auto bg-black/10 p-4 supports-backdrop-filter:backdrop-blur-xs",
-        "data-entering:animate-in data-entering:fade-in-0 data-exiting:animate-out data-exiting:fade-out-0 data-entering:duration-100 data-exiting:duration-100",
-        elevated && "z-[110]"
+        "data-entering:animate-in data-entering:fade-in-0 data-exiting:animate-out data-exiting:fade-out-0 data-entering:duration-100 data-exiting:duration-100"
       )}
       {...props}
     >
-      {/* Back behaves as Escape does, so a dialog that has turned the keyboard
-          dismissal off (a must-decide alertdialog) opts out of both. */}
-      {props.isKeyboardDismissDisabled ? null : <BackDismissLayer />}
+      <CloseOnNavigation />
       <AriaModal
         data-slot="dialog-content"
         className={cn(

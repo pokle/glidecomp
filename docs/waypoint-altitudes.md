@@ -250,8 +250,8 @@ the unit preference like every other altitude in the app (issue #662).
 
 The editor's screens were sheets, React state over the list, because the list
 held the unsaved work and a sibling route would have unmounted it. That left
-them invisible to the history stack, and `lib/use-back-dismiss.ts` gave each one
-a history entry so Back could close it — machinery that broke three ways
+them invisible to the history stack, and a history entry pushed for each one
+let Back close it — machinery that broke three ways
 (StrictMode, a popstate reaching every listener, our own pop looking like the
 reader's), and whose e2e tests were the flaky ones in CI.
 

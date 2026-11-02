@@ -733,7 +733,10 @@ test("Load from XContest is a page, and refuses a code under its field", async (
   await page.getByRole("button", { name: "Load", exact: true }).click();
   // The route already has turnpoints, so it asks before replacing them.
   await page.getByRole("alertdialog").getByRole("button", { name: "Replace" }).click();
+  // Straight back to the route: no dialog holds a history entry to wait for
+  // (#817), so the page goes while the question is still fading out.
   await expect(page).toHaveURL(ROUTE_URL);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   expect(await routeCodes(page)).toEqual(["XC1", "XC2"]);
 
   // Back to the route leaves the editor's draft where it was; Cancel there

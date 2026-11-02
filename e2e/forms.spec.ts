@@ -8,15 +8,19 @@
  * built on the kit only has to test its own fields.
  *
  * It drives the development-only bench at /__kit/form
- * (pages/KitFormFixture.tsx): Name, ten notes, then Email, so whichever field
- * the test is about is off screen when the reader presses Done. Playwright
+ * (pages/KitFormFixture.tsx), a form PAGE laid out as the pilot page is (the
+ * sheet it once opened went with the rest in #817): Done on the header row,
+ * then Name, ten notes and Email, so the field the server refuses is off
+ * screen when the reader presses Done. Playwright
  * plays the server: every save goes to `/__kit/form-submit`, answered here.
  */
 import { test, expect, type Locator, type Page, type Route } from "./fixtures/test";
 
-const sheet = (page: Page) => page.getByRole("dialog", { name: "Test form" });
-const field = (page: Page, name: string) => sheet(page).getByRole("textbox", { name });
-const done = (page: Page) => sheet(page).getByRole("button", { name: "Done" });
+/** The bench page's form. */
+const form = (page: Page) =>
+  page.locator("form").filter({ has: page.getByRole("heading", { name: "Test form", level: 1 }) });
+const field = (page: Page, name: string) => form(page).getByRole("textbox", { name });
+const done = (page: Page) => form(page).getByRole("button", { name: "Done" });
 
 /** Count the saves, and answer each one with `answer`. */
 async function server(page: Page, answer: (route: Route) => Promise<void>): Promise<() => number> {
@@ -31,36 +35,37 @@ async function server(page: Page, answer: (route: Route) => Promise<void>): Prom
 const refuse = (status: number, body: object) => (route: Route) =>
   route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
-async function openSheet(page: Page): Promise<void> {
+async function openForm(page: Page): Promise<void> {
   await page.goto("/__kit/form");
-  await page.getByRole("button", { name: "Open the test sheet" }).click();
-  await expect(sheet(page)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Test form", level: 1 })).toBeVisible();
 }
 
 /**
- * On screen, and not under the sheet's header — the header does not scroll,
- * so anything that slid beneath it is as good as hidden.
+ * On screen, and not under anything — the site's sticky header included, so
+ * anything that slid beneath it is as good as hidden. The topmost element at
+ * the target's centre must be the target or inside it.
  */
 async function expectInView(page: Page, target: Locator, what: string): Promise<void> {
   await expect(target, `${what} is on screen`).toBeInViewport();
-  const header = await done(page).boundingBox();
-  const box = await target.boundingBox();
-  expect(box!.y, `${what} is not under the header`).toBeGreaterThanOrEqual(
-    header!.y + header!.height
-  );
+  const uncovered = await target.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return !!top && (el === top || el.contains(top));
+  });
+  expect(uncovered, `${what} is not under anything`).toBe(true);
 }
 
 test("a problem the form finds itself is shown under its field, focused, and nothing is sent", async ({
   page,
 }) => {
   const saves = await server(page, refuse(500, {}));
-  await openSheet(page);
-  // Down at the bottom, far from Name.
+  await openForm(page);
+  // Down at the bottom, far from Name (the click scrolls back up to Done).
   await field(page, "Email").scrollIntoViewIfNeeded();
 
   await done(page).click();
   const name = field(page, "Name");
-  await expect(sheet(page)).toContainText("Enter a name.");
+  await expect(form(page)).toContainText("Enter a name.");
   await expect(name).toHaveAttribute("aria-invalid", "true");
   await expect(name).toBeFocused();
   await expectInView(page, name, "the Name field");
@@ -69,7 +74,7 @@ test("a problem the form finds itself is shown under its field, focused, and not
   // Typing into it clears the error and keeps what was typed.
   await name.pressSequentially("Ana");
   await expect(name).toHaveValue("Ana");
-  await expect(sheet(page)).not.toContainText("Enter a name.");
+  await expect(form(page)).not.toContainText("Enter a name.");
 });
 
 test("a refusal about a field lands under that field, focused, and clears when it is edited", async ({
@@ -79,7 +84,7 @@ test("a refusal about a field lands under that field, focused, and clears when i
     page,
     refuse(409, { error: "Ana is already registered with this email.", field: "contact_email" })
   );
-  await openSheet(page);
+  await openForm(page);
   await field(page, "Email").fill("ana@example.com");
   await field(page, "Name").fill("Ana");
   // Back at the top, far from Email.
@@ -87,7 +92,7 @@ test("a refusal about a field lands under that field, focused, and clears when i
 
   await done(page).click();
   const email = field(page, "Email");
-  await expect(sheet(page)).toContainText("Ana is already registered with this email.");
+  await expect(form(page)).toContainText("Ana is already registered with this email.");
   await expect(email).toHaveAttribute("aria-invalid", "true");
   await expect(email).toBeFocused();
   await expectInView(page, email, "the Email field");
@@ -95,53 +100,52 @@ test("a refusal about a field lands under that field, focused, and clears when i
   await expect(field(page, "Name")).toHaveValue("Ana");
 
   await email.fill("someone@example.com");
-  await expect(sheet(page)).not.toContainText("already registered");
+  await expect(form(page)).not.toContainText("already registered");
   await expect(email).not.toHaveAttribute("aria-invalid", "true");
   // And the edit itself survived clearing the error. It once did not: the
   // field re-rendered with its old value and swallowed what was typed.
   await expect(email).toHaveValue("someone@example.com");
 });
 
-test("a refusal about nothing in particular is pinned under the header, and stays there", async ({
+test("a refusal about nothing in particular is shown beside Done, focused and on screen", async ({
   page,
 }) => {
   await server(page, refuse(409, { error: "The competition is closed." }));
-  await openSheet(page);
+  await openForm(page);
   await field(page, "Name").fill("Ana");
   await field(page, "Email").scrollIntoViewIfNeeded();
 
   await done(page).click();
-  const alert = sheet(page).getByRole("alert").filter({ hasText: "The competition is closed." });
+  const alert = form(page).getByRole("alert").filter({ hasText: "The competition is closed." });
   await expectInView(page, alert, "the error");
   await expect(alert).toBeFocused();
 
-  // Scroll the form every way: the error does not scroll with it.
-  await field(page, "Name").scrollIntoViewIfNeeded();
-  await expectInView(page, alert, "the error, scrolled to the top");
+  // Scrolled away and back, it is still there: an error, not a toast.
   await field(page, "Email").scrollIntoViewIfNeeded();
-  await expectInView(page, alert, "the error, scrolled to the bottom");
+  await alert.scrollIntoViewIfNeeded();
+  await expectInView(page, alert, "the error, scrolled back to");
 });
 
-test("a refusal naming a field the form does not have goes to the pinned error", async ({
+test("a refusal naming a field the form does not have goes to the form's own error", async ({
   page,
 }) => {
   await server(page, refuse(400, { error: "That is not allowed.", field: "nothing_here" }));
-  await openSheet(page);
+  await openForm(page);
   await field(page, "Name").fill("Ana");
   await done(page).click();
-  await expectInView(page, sheet(page).getByRole("alert").filter({ hasText: "That is not allowed." }), "the error");
+  await expectInView(page, form(page).getByRole("alert").filter({ hasText: "That is not allowed." }), "the error");
 });
 
 test("a dropped connection says so, and keeps everything typed", async ({ page }) => {
   await server(page, (route) => route.abort("internetdisconnected"));
-  await openSheet(page);
+  await openForm(page);
   await field(page, "Name").fill("Ana");
   await field(page, "Email").fill("ana@example.com");
 
   await done(page).click();
   await expectInView(
     page,
-    sheet(page).getByRole("alert").filter({
+    form(page).getByRole("alert").filter({
       hasText: "Could not reach GlideComp. Check your connection, then try again.",
     }),
     "the error"
@@ -157,7 +161,7 @@ test("one submit at a time, and the button says it is busy", async ({ page }) =>
     await held;
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await openSheet(page);
+  await openForm(page);
   await field(page, "Name").fill("Ana");
 
   await done(page).click();
@@ -167,7 +171,7 @@ test("one submit at a time, and the button says it is busy", async ({ page }) =>
   await field(page, "Name").press("Enter");
   release();
 
-  await expect(sheet(page)).toBeHidden({ timeout: 20_000 });
-  await expect(page.getByText("Saved the test form")).toBeVisible();
+  await expect(page.getByText("Saved the test form")).toBeVisible({ timeout: 20_000 });
+  await expect(done(page)).not.toHaveAttribute("data-pending", "true");
   expect(saves()).toBe(1);
 });
