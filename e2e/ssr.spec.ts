@@ -3,6 +3,7 @@ import {
   compPath,
   compScoresPath,
   compAnalysisPath,
+  metricSegment,
 } from "../web/frontend/src/react/lib/slug";
 import { SCORES_CSV_COLUMNS } from "../web/frontend/src/scores-csv";
 import { readRecord, readZip } from "../web/frontend/src/results-record/read-pdf";
@@ -629,6 +630,70 @@ test.describe("SSR — comp & task analysis (public)", () => {
     );
     expect(res.status()).toBe(404);
     expect(await res.text()).toContain('name="robots" content="noindex"');
+  });
+
+  /**
+   * One metric's chart at full size (#815) — a page where it was an overlay.
+   * Server-rendered through the section loader so a shared link opens on the
+   * chart, but always noindexed: it is a bigger copy of a chart the
+   * strategies page already shows. A segment no metric answers to is a real
+   * 404 once the report is in; and the legacy /analysis/task/ redirect must
+   * not catch it.
+   */
+  test("a metric's full-size chart server-renders, noindexed; an unknown one 404s", async ({
+    request,
+    page,
+  }) => {
+    const { compId, taskId } = await discover(request);
+    await warmTaskAnalysis(request, compId, taskId);
+    const report = (await (
+      await request.get(`/api/comp/${compId}/task/${taskId}/analysis`)
+    ).json()) as {
+      pending: boolean;
+      classes: Array<{
+        report: {
+          metrics: Array<{ id: string; label: string; correlation?: unknown; outcome?: boolean }>;
+        };
+      }>;
+    };
+    test.skip(report.pending || report.classes.length === 0, "the report never warmed");
+    // One the ranking links to: a behaviour with a correlation.
+    const metric = report.classes[0].report.metrics.find((m) => m.correlation && !m.outcome)!;
+    const url = `/comp/${compId}/task/${taskId}/analysis/metrics/${metricSegment(metric.id)}`;
+
+    const res = await request.get(url);
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain('id="__SSR_DATA__"');
+    expect(html).toContain(`${metric.label} —`);
+    expect(html).toContain('name="robots" content="noindex"');
+    // The chart itself is in the server's HTML, not only after hydration.
+    expect(html).toContain('role="group"');
+
+    const missing = await request.get(
+      `/comp/${compId}/task/${taskId}/analysis/metrics/no-such-metric`,
+      { failOnStatusCode: false }
+    );
+    expect(missing.status()).toBe(404);
+    expect(await missing.text()).toContain('name="robots" content="noindex"');
+
+    // And it hydrates cleanly (see "hydration is clean" below for why both
+    // channels are listened on).
+    const isHydrationError = (text: string) =>
+      /hydrat|did not match|#418|#423|server rendered/i.test(text);
+    const hydrationErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error" && isHydrationError(msg.text())) {
+        hydrationErrors.push(msg.text());
+      }
+    });
+    page.on("pageerror", (err) => {
+      if (isHydrationError(err.message)) hydrationErrors.push(err.message);
+    });
+    await page.goto(url);
+    await expect(page.getByRole("heading", { level: 1, name: metric.label })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    expect(hydrationErrors, hydrationErrors.join("\n")).toHaveLength(0);
   });
 
   test("comp analysis server-renders with a title and SSR data", async ({

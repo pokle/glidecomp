@@ -211,7 +211,7 @@ export function RankScatter({
    * so its aspect ratio decides how much of a tall box it can use: at the
    * default {@link BASE_H} a phone-width chart is ~190px tall no matter how
    * much screen is free. Callers that want the rank axis to spend the screen
-   * (the ranking pane, the full-screen overlay) measure their box and pass
+   * (the ranking pane, the full-size chart page) measure their box and pass
    * the height that matches its aspect.
    *
    * A floor, never a cap: below BASE_H the axis labels and the spread-out
@@ -307,7 +307,7 @@ export function RankScatter({
 
   // Naming everyone needs a row of vertical space per pilot, so the chart
   // grows instead of the labels compressing into an unreadable pile. The
-  // caller's floor (the full-screen overlay's measured aspect) comes in on
+  // caller's floor (the full-size chart page's measured aspect) comes in on
   // the same max(): whichever wants more room wins.
   const height = Math.max(
     BASE_H + (margin.bottom - MARGIN.bottom),

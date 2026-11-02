@@ -27,7 +27,7 @@ import {
   underTaskAnalysis,
   type Crumb,
 } from "../lib/crumbs";
-import { compAnalysisPath } from "../lib/slug";
+import { compAnalysisPath, taskAnalysisSectionPath } from "../lib/slug";
 import { PilotHighlightProvider } from "./PilotHighlightContext";
 import { PilotPicker } from "./PilotPicker";
 import type { TaskReportBundle } from "./use-task-report";
@@ -41,6 +41,12 @@ export interface TaskAnalysisFrameProps {
    * as its heading, where a sub-page takes the chapter as its parent.
    */
   section?: { label: string; lede: string };
+  /**
+   * The section a page one level further down hangs off — "Metric details"
+   * for one metric's full-size chart. It becomes the trail's last crumb, and
+   * takes the report's view state with it, as the chapter does for a section.
+   */
+  parent?: { slug: string; label: string };
   /** Shown beside the class select. Only pages with per-pilot rows want it. */
   pilotPicker?: boolean;
   children: (ctx: {
@@ -52,6 +58,7 @@ export interface TaskAnalysisFrameProps {
 export function TaskAnalysisFrame({
   bundle,
   section,
+  parent,
   pilotPicker = false,
   children,
 }: TaskAnalysisFrameProps) {
@@ -98,8 +105,29 @@ export function TaskAnalysisFrame({
   // page of the report. Walking up out of a section and arriving back at the
   // default class would undo a choice the reader made two clicks ago. The
   // crumbs above it are other pages and take none of it.
+  const chapterCrumbs = underTaskAnalysis(compId, comp?.name, taskId, task?.name);
   const crumbs = section
-    ? withQuery(underTaskAnalysis(compId, comp?.name, taskId, task?.name), search)
+    ? withQuery(
+        parent
+          ? [
+              ...chapterCrumbs,
+              {
+                label: parent.label,
+                to:
+                  compId && taskId
+                    ? taskAnalysisSectionPath(
+                        compId,
+                        comp?.name,
+                        taskId,
+                        task?.name,
+                        parent.slug
+                      )
+                    : "/comp",
+              },
+            ]
+          : chapterCrumbs,
+        search
+      )
     : underTask(compId, comp?.name, taskId, task?.name);
 
   // Gate on `status` only, never on the user session: the content is public,

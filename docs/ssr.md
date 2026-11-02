@@ -24,6 +24,7 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 | `/comp/:id/analysis` | the COMP analysis: every task's read against each other |
 | `/comp/:id/task/:id/analysis` | the TASK analysis (a contents list for the six below) |
 | `/comp/:id/task/:id/analysis/:section` | one section of that chapter — `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
+| `/comp/:id/task/:id/analysis/metrics/:metric` | one metric's chart at full size (#815) — always noindexed, a bigger copy of a chart on `strategies`; an unknown metric is a 404 |
 
 A cold task-analysis report server-renders its pending notice and is noindexed
 **per request**, not shell-noindexed. The section route's pattern is built from

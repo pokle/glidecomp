@@ -57,6 +57,8 @@ import {
   taskDiagramPath,
   taskAnalysisPath,
   taskAnalysisSectionPath,
+  taskAnalysisMetricPath,
+  metricSegment,
   pilotPath,
 } from "../../web/frontend/src/react/lib/slug";
 
@@ -556,6 +558,78 @@ const ROUTES: Array<{
                 taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name),
               ],
               [section.label, canonical ?? origin],
+            ])
+          ),
+        },
+      };
+    },
+  },
+  {
+    // One metric's rank scatter at full size (#815), under the Metric details
+    // section. Server-rendered through the same loader as the sections, so a
+    // shared link opens on the chart and a hidden comp's key is settled here
+    // like everywhere else — but ALWAYS noindexed: it is a bigger copy of a
+    // chart the strategies page already shows, one page per metric, and the
+    // index should hold the page that explains it rather than thirty copies.
+    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/analysis\/metrics\/([^/]+)\/?$/,
+    async run(f, m, origin) {
+      const urlCompId = idFromSegment(m[1]);
+      const taskId = idFromSegment(m[2]);
+      const segment = m[3];
+      const data = await loadTaskAnalysis(f, urlCompId, taskId);
+      const compId = compUrlId(data.comp, urlCompId);
+      const a = data.analysis;
+      // The metric the segment names, from whichever class carries it. A
+      // report with classes but no such metric makes this a dead URL; a
+      // pending one cannot say yet, so it renders the pending notice.
+      const metric = a.classes
+        .flatMap((c) => c.report.metrics)
+        .find((x) => metricSegment(x.id) === segment);
+      if (a.classes.length > 0 && !metric) {
+        throw new NotFoundError(`metric ${segment}`);
+      }
+      const compName = data.comp?.name ?? "GlideComp";
+      const taskName = data.task?.name ?? "Task";
+      const metricsSection = findTaskAnalysisSection("metrics")!;
+      const canonical =
+        data.comp && data.task && metric
+          ? taskAnalysisMetricPath(
+              compId,
+              data.comp.name,
+              taskId,
+              data.task.name,
+              metric.id
+            )
+          : undefined;
+      const label = metric?.label ?? metricsSection.label;
+      return {
+        data,
+        canonicalPath: canonical,
+        cache: { computedAt: a.computed_at, stale: a.stale || a.pending },
+        head: {
+          title: `${label} — ${taskName}, ${compName}`,
+          description: `${label}, plotted against rank: ${taskName} at ${compName} on GlideComp.`,
+          noindex: true,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [compName, compPath(compId, data.comp?.name)],
+              [taskName, taskPath(compId, data.comp?.name, taskId, data.task?.name)],
+              [
+                "Task analysis",
+                taskAnalysisPath(compId, data.comp?.name, taskId, data.task?.name),
+              ],
+              [
+                metricsSection.label,
+                taskAnalysisSectionPath(
+                  compId,
+                  data.comp?.name,
+                  taskId,
+                  data.task?.name,
+                  metricsSection.slug
+                ),
+              ],
+              [label, canonical ?? origin],
             ])
           ),
         },

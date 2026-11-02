@@ -349,6 +349,36 @@ export function taskAnalysisSectionPath(
   return `${taskAnalysisPath(compId, compName, taskId, taskName)}/${section}`;
 }
 
+/**
+ * The URL segment for one task-analysis metric: its engine id with the dots
+ * and underscores turned into dashes (`climb.time_to_core` →
+ * `climb-time-to-core`). Derived from the id, never from the label, so it is
+ * as stable as the id itself. Not the raw id, because a path with a dot in it
+ * is a FILE to the dev server and to the e2e's (`isSpaRoute` in
+ * src/dev-routing.ts), which would never hand it to the app.
+ *
+ * A page resolves the segment by comparing it with this function's output
+ * for each metric its report carries — never by inverting it.
+ */
+export function metricSegment(metricId: string): string {
+  return slugify(metricId);
+}
+
+/**
+ * One metric's rank scatter at full size, on its own page (#815). It hangs
+ * off the "Metric details" section — the page that holds every metric — and
+ * is reached from the chart beside the Winning strategies ranking.
+ */
+export function taskAnalysisMetricPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  metricId: string
+): string {
+  return `${taskAnalysisSectionPath(compId, compName, taskId, taskName, "metrics")}/${metricSegment(metricId)}`;
+}
+
 /** The pilot-similarity sheet, hung off the task's analysis. */
 export function taskSimilarityPath(
   compId: string,

@@ -30,7 +30,7 @@ import { DistributionStrip } from "./DistributionStrip";
 /**
  * Room kept below the plot for the rest of the figure (checkbox, readout,
  * caption) when filling leftover height in the side-by-side column. Same
- * budget as MetricChartOverlay.
+ * budget as the full-size chart page (pages/TaskAnalysisMetricChart.tsx).
  */
 const CAPTION_ALLOWANCE = 128;
 
@@ -60,7 +60,7 @@ export function MetricDetailPanel({
    * heading of its own (the print block), 3 when it is the section's own
    * first level. */
   headingLevel?: 3 | 4;
-  /** Control rendered opposite the metric name — the full-screen trigger.
+  /** Control rendered opposite the metric name — the link to the full-size chart.
    * Absent in print, which has no screen to fill. */
   headerAction?: ReactNode;
   /**
@@ -131,7 +131,7 @@ export function MetricDetailPanel({
  * Ask RankScatter for the viewBox height that matches the space we want the
  * plot to occupy. Stacked that is most of the viewport; side by side it is
  * the flex-1 leftover in the sticky column (the same conversion the
- * full-screen overlay uses).
+ * full-size chart page uses).
  *
  * SSR-safe: the observer is an effect, so the server and the first client
  * paint agree (BASE_H), then the chart grows.
