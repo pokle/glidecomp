@@ -173,7 +173,12 @@ if (typeof window !== "undefined") {
   if (ssr && "user" in ssr) seedCurrentUser(ssr.user ?? null);
 }
 
-export async function deleteAccount(): Promise<{ success: boolean; error?: string }> {
+export async function deleteAccount(): Promise<{
+  success: boolean;
+  error?: string;
+  /** The request never got an answer — the caller words that one itself. */
+  unreachable?: boolean;
+}> {
   try {
     const res = await fetch("/api/auth/delete-account", {
       method: "POST",
@@ -186,7 +191,7 @@ export async function deleteAccount(): Promise<{ success: boolean; error?: strin
     }
     return { success: true };
   } catch {
-    return { success: false, error: "Network error" };
+    return { success: false, error: "Network error", unreachable: true };
   }
 }
 
