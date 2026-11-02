@@ -2,6 +2,7 @@ import { createAuthClient } from "better-auth/client";
 import { emailOTPClient } from "better-auth/client/plugins";
 import { SIGNED_IN_VIA_PARAM, writeLastSignInMethod } from "./last-sign-in";
 import { readSsrData } from "../ssr-data";
+import { clearAllDrafts } from "../react/lib/draft-store";
 
 export const authClient = createAuthClient({
   basePath: "/api/auth",
@@ -37,6 +38,9 @@ export async function signInWithOtp(email: string, otp: string) {
 export async function signOut() {
   const result = await authClient.signOut();
   writeAccountHint(null);
+  // Unsaved drafts (react/lib/draft-store.ts) are the account's, not the
+  // browser's: a hidden comp's roster must not wait here for the next person.
+  clearAllDrafts();
   return result;
 }
 

@@ -6,30 +6,44 @@
  * fill or an import the organiser disagreed with was undone by Cancel. With
  * the grid gone each one writes straight to the roster, so each one that
  * changes many pilots shows exactly what it will write first and writes it
- * only on a second press: the import as a review sheet naming every pilot it
- * adds, updates and removes (with the tracks that go with them), the CIVL fill
- * as the list of IDs and points it is about to set. The same shape as the
+ * only on a second press: the import as a review naming every pilot it adds,
+ * updates and removes (with the tracks that go with them), the CIVL fill as
+ * the list of IDs and points it is about to set. The same shape as the
  * waypoints page's Check altitudes, and for the same reason.
  *
- * Both write through the bulk route with a `remove` list and ONLY the rows
- * that change, so a pilot who joins while a review is open is left alone.
+ * **Each is a page under the list** (#810), where they were full-screen
+ * sheets over it — the overlays rule in CLAUDE.md:
+ *
+ *   - /pilots/import (pages/CompRosterImportPage.tsx): what a CSV must look
+ *     like and the button that picks one, then — on the same page — the
+ *     review of that file. The file is a DRAFT (`rosterImportDraft`, see
+ *     lib/draft-store.ts and docs/drafts.md): read in the browser, kept in
+ *     this tab's storage, so a reload comes back to the review rather than to
+ *     the list. With no draft to read (a shared link, a new tab, a draft
+ *     discarded) the page simply asks for the file again.
+ *   - /pilots/civl-fill (pages/CompCivlFillPage.tsx): it asks the rankings
+ *     itself, about the roster the page fetched.
+ *
+ * Both are kit forms (rac/form.tsx): a refusal is pinned under the heading,
+ * never a toast. Both write through the bulk route with a `remove` list and
+ * ONLY the rows that change, so a pilot who joins while a review is open is
+ * left alone — and the audit log and the score bump happen there, on the
+ * server, as they always have.
  */
 import { useEffect, useState } from "react";
 import { FileTrigger } from "react-aria-components";
 import { EllipsisIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/react/rac/alert";
+import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Modal,
-} from "@/react/rac/dialog";
-import { FormSheet } from "@/react/rac/form";
+import { Form, FormErrorBanner, SubmitButton, useFormState } from "@/react/rac/form";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
 import { Loading } from "@/react/rac/progress";
+import { SettingsPage } from "../components/SettingsPage";
+import { SectionHeader } from "../components/SectionHeader";
 import { api } from "../../comp/api";
+import { underCompPilots } from "../lib/crumbs";
+import { defineDraft } from "../lib/draft-store";
 import { toast } from "../lib/toast";
 import {
   fillCivlIds,
@@ -46,7 +60,7 @@ import {
   type BulkPilotRow,
   type CompPilot,
 } from "./csv";
-import { planChanges, planImport, planRequest, type ImportPlan } from "./roster-import";
+import { planChanges, planRequest, type ImportPlan } from "./roster-import";
 
 export function RosterActionsMenu({
   onImport,
@@ -77,71 +91,77 @@ export function RosterActionsMenu({
 }
 
 /**
+ * A CSV file chosen for import and not yet applied: what the review page
+ * reads back after a reload. The FILE, not the plan worked out from it — the
+ * page plans it again against the roster it fetched, so the review is always
+ * of the roster as it is now.
+ */
+export interface RosterImportDraft {
+  fileName: string;
+  text: string;
+}
+
+/** One per comp (keyed `[bareCompId]`), in this tab, for the signed-in user. */
+export const rosterImportDraft = defineDraft<RosterImportDraft>({
+  kind: "roster-import",
+  version: 1,
+  isValid: (v): v is RosterImportDraft =>
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as RosterImportDraft).fileName === "string" &&
+    typeof (v as RosterImportDraft).text === "string",
+});
+
+/**
  * What a CSV must look like, and the button that picks one. This is the
  * onboarding the grid's empty placeholder used to carry, moved to where it is
  * needed: the moment someone imports.
  */
-export function ImportCsvDialog({
-  compClasses,
-  roster,
-  onPlanned,
-  onClose,
+export function ImportCsvPicker({
+  compId,
+  compName,
+  onChosen,
 }: {
-  compClasses: string[];
-  roster: CompPilot[];
-  onPlanned: (plan: ImportPlan) => void;
-  onClose: () => void;
+  compId: string;
+  compName: string;
+  onChosen: (draft: RosterImportDraft) => void;
 }) {
   async function choose(files: FileList | null) {
     const file = files?.[0];
     if (!file) return;
-    onPlanned(planImport(await file.text(), file.name, roster, compClasses));
+    onChosen({ fileName: file.name, text: await file.text() });
   }
 
   return (
-    <Modal
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      className="sm:max-w-lg"
-    >
-      <Dialog className="gap-3">
-        <DialogHeader>
-          <DialogTitle>Import CSV</DialogTitle>
-        </DialogHeader>
-        <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-          <li>
-            Only <strong>name</strong> and <strong>class</strong> are required — every other
-            column, including all the sporting-body IDs, is optional.
-          </li>
-          <li>
-            CSV imports need a header row naming the columns (
-            {COLUMNS.map((c) => c.header).join(", ")}). Column order and capitalisation don't
-            matter, and unrecognised columns are ignored.
-          </li>
-          <li>
-            Pilots are matched to the IGC tracks they upload by <strong>email</strong> — enter
-            the address each pilot signs in to GlideComp with (e.g. their Gmail address).
-          </li>
-          <li>
-            Tip: <strong>Export CSV</strong> now to download a blank template you can fill in
-            with your favourite spreadsheet (Excel, Numbers, Google Sheets…).
-          </li>
-        </ul>
-        <DialogFooter>
-          <Button slot="close" variant="outline">
-            Cancel
-          </Button>
-          <FileTrigger
-            acceptedFileTypes={[".csv", ".tsv", ".txt"]}
-            onSelect={(files) => void choose(files)}
-          >
-            <Button>Choose file</Button>
-          </FileTrigger>
-        </DialogFooter>
-      </Dialog>
-    </Modal>
+    <SettingsPage crumbs={underCompPilots(compId, compName)} title="Import CSV">
+      <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+        <li>
+          Only <strong>name</strong> and <strong>class</strong> are required — every other
+          column, including all the sporting-body IDs, is optional.
+        </li>
+        <li>
+          CSV imports need a header row naming the columns (
+          {COLUMNS.map((c) => c.header).join(", ")}). Column order and capitalisation don't
+          matter, and unrecognised columns are ignored.
+        </li>
+        <li>
+          Pilots are matched to the IGC tracks they upload by <strong>email</strong> — enter
+          the address each pilot signs in to GlideComp with (e.g. their Gmail address).
+        </li>
+        <li>
+          Tip: <strong>Export CSV</strong> now to download a blank template you can fill in
+          with your favourite spreadsheet (Excel, Numbers, Google Sheets…).
+        </li>
+      </ul>
+      <div>
+        <FileTrigger
+          acceptedFileTypes={[".csv", ".tsv", ".txt"]}
+          onSelect={(files) => void choose(files)}
+        >
+          <Button>Choose file</Button>
+        </FileTrigger>
+      </div>
+    </SettingsPage>
   );
 }
 
@@ -150,16 +170,53 @@ function tracksNote(n: number): string | null {
   return n > 0 ? `${n} track${n === 1 ? "" : "s"}` : null;
 }
 
-export function ImportReviewSheet({
+/**
+ * The page's heading row: the title, then Cancel and the submit, top right —
+ * where the sheet had them, in reach without scrolling past the whole list.
+ * Cancel waits while the submit is in flight: leaving then would leave twice
+ * once the submit landed.
+ */
+function ReviewHeader({
+  title,
+  onCancel,
+  submit,
+}: {
+  title: string;
+  onCancel: () => void;
+  submit: React.ReactNode;
+}) {
+  const { pending } = useFormState();
+  return (
+    <SectionHeader
+      as="h1"
+      className="mt-2"
+      title={<span className="[overflow-wrap:anywhere]">{title}</span>}
+      action={
+        <div className="flex gap-2">
+          <Button variant="outline" isDisabled={pending} onPress={onCancel}>
+            Cancel
+          </Button>
+          {submit}
+        </div>
+      }
+    />
+  );
+}
+
+export function ImportReview({
   compId,
+  compName,
   plan,
+  onCancel,
   onApplied,
-  onClose,
 }: {
   compId: string;
+  compName: string;
   plan: ImportPlan;
-  onApplied: (roster: CompPilot[]) => void;
-  onClose: () => void;
+  /** Discard the file and leave. */
+  onCancel: () => void;
+  /** Applied: forget the file and leave. */
+  onApplied: () => void;
 }) {
   const changes = planChanges(plan);
   const summary = [
@@ -167,83 +224,83 @@ export function ImportReviewSheet({
     `${plan.added.length} new`,
     `${plan.removed.length} removed`,
   ].join(" · ");
+  // Nothing to apply, or a file that cannot be: the reasons are in the body.
+  const canApply = plan.errors.length === 0 && changes > 0;
 
   return (
-    <FormSheet
-      label={`Import ${plan.fileName}`}
-      title={`Import ${plan.fileName}`}
-      description={<p className="text-sm text-muted-foreground">{summary}</p>}
-      leading={
-        <Button variant="outline" onPress={onClose}>
-          Cancel
-        </Button>
-      }
-      submitLabel="Apply"
-      pendingLabel="Applying"
-      // Nothing to apply, or a file that cannot be: the reasons are in the body.
-      hideSubmit={plan.errors.length > 0 || changes === 0}
-      onClose={onClose}
-      onSubmit={() =>
-        api.api.comp[":comp_id"].pilot.bulk.$post({
-          param: { comp_id: compId },
-          json: planRequest(plan),
-        })
-      }
-      onSuccess={async (res) => {
-        onApplied(((await res!.json()) as unknown as { pilots: CompPilot[] }).pilots);
-        toast.success(`Imported ${plan.fileName}`);
-      }}
-      bodyClassName="flex flex-col gap-6"
-    >
-      {plan.errors.length > 0 ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            <ul className="list-disc pl-5">
-              {plan.errors.slice(0, 20).map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-              {plan.errors.length > 20 ? <li>… and {plan.errors.length - 20} more</li> : null}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {changes === 0 && plan.errors.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          This file matches the roster. There is nothing to change.
-        </p>
-      ) : null}
-
-      {/* Removed first: it is the part that cannot be undone. */}
-      <ReviewSection title="Removed" count={plan.removed.length}>
-        {plan.removed.map(({ pilot, sameNameAsNew }) => (
-          <li key={pilot.comp_pilot_id} className="py-2">
-            <p className="font-medium">{pilot.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {[
-                tracksNote(pilot.track_count),
-                sameNameAsNew ? "Same name as a new row in the file" : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+    <div className="max-w-2xl">
+      <Breadcrumbs items={underCompPilots(compId, compName)} current="Import CSV" />
+      <Form
+        onSubmit={() =>
+          api.api.comp[":comp_id"].pilot.bulk.$post({
+            param: { comp_id: compId },
+            json: planRequest(plan),
+          })
+        }
+        onSuccess={() => {
+          toast.success(`Imported ${plan.fileName}`);
+          onApplied();
+        }}
+      >
+        <ReviewHeader
+          title={`Import ${plan.fileName}`}
+          onCancel={onCancel}
+          submit={canApply ? <SubmitButton pendingLabel="Applying">Apply</SubmitButton> : null}
+        />
+        <p className="mt-1 text-sm text-muted-foreground">{summary}</p>
+        <FormErrorBanner className="mt-3" />
+        <div className="mt-4 flex flex-col gap-6">
+          {plan.errors.length > 0 ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <ul className="list-disc pl-5">
+                  {plan.errors.slice(0, 20).map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                  {plan.errors.length > 20 ? <li>… and {plan.errors.length - 20} more</li> : null}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {changes === 0 && plan.errors.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              This file matches the roster. There is nothing to change.
             </p>
-          </li>
-        ))}
-      </ReviewSection>
-      <ReviewSection title="New" count={plan.added.length}>
-        {plan.added.map((row, i) => (
-          <li key={i} className="py-2 font-medium">
-            {row.registered_pilot_name}
-          </li>
-        ))}
-      </ReviewSection>
-      <ReviewSection title="Updated" count={plan.updated.length}>
-        {plan.updated.map(({ before }) => (
-          <li key={before.comp_pilot_id} className="py-2 font-medium">
-            {before.name}
-          </li>
-        ))}
-      </ReviewSection>
-    </FormSheet>
+          ) : null}
+
+          {/* Removed first: it is the part that cannot be undone. */}
+          <ReviewSection title="Removed" count={plan.removed.length}>
+            {plan.removed.map(({ pilot, sameNameAsNew }) => (
+              <li key={pilot.comp_pilot_id} className="py-2">
+                <p className="font-medium">{pilot.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {[
+                    tracksNote(pilot.track_count),
+                    sameNameAsNew ? "Same name as a new row in the file" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </li>
+            ))}
+          </ReviewSection>
+          <ReviewSection title="New" count={plan.added.length}>
+            {plan.added.map((row, i) => (
+              <li key={i} className="py-2 font-medium">
+                {row.registered_pilot_name}
+              </li>
+            ))}
+          </ReviewSection>
+          <ReviewSection title="Updated" count={plan.updated.length}>
+            {plan.updated.map(({ before }) => (
+              <li key={before.comp_pilot_id} className="py-2 font-medium">
+                {before.name}
+              </li>
+            ))}
+          </ReviewSection>
+        </div>
+      </Form>
+    </div>
   );
 }
 
@@ -259,9 +316,9 @@ function ReviewSection({
   if (count === 0) return null;
   return (
     <section>
-      <h3 className="text-sm font-semibold">
+      <h2 className="text-sm font-semibold">
         {title} ({count})
-      </h3>
+      </h2>
       <ul className="divide-y divide-border">{children}</ul>
     </section>
   );
@@ -331,22 +388,23 @@ async function planCivlFill(compId: string, roster: CompPilot[]): Promise<FillPl
   return { matched: first.matched_count, changes, alreadySet: ranks.already_set, outcome };
 }
 
-export function CivlFillSheet({
+export function CivlFill({
   compId,
+  compName,
   roster,
-  onApplied,
-  onClose,
+  onDone,
 }: {
   compId: string;
+  compName: string;
+  /** The roster the page fetched: what the rankings are asked about. */
   roster: CompPilot[];
-  onApplied: (roster: CompPilot[]) => void;
-  onClose: () => void;
+  /** Cancelled, or filled: leave. */
+  onDone: () => void;
 }) {
   const [plan, setPlan] = useState<FillPlan | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Asked once, about the roster as the sheet opened on it. The sheet covers
-  // the list, so nothing can change the roster under the answer from here.
+  // Asked once, about the roster the page fetched when it opened.
   useEffect(() => {
     let cancelled = false;
     planCivlFill(compId, roster)
@@ -361,74 +419,76 @@ export function CivlFillSheet({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on open
-  }, []);
+  }, [compId, roster]);
 
   return (
-    <FormSheet
-      label="Fill from CIVL rankings"
-      title="Fill from CIVL rankings"
-      leading={
-        <Button variant="outline" onPress={onClose}>
-          Cancel
-        </Button>
-      }
-      submitLabel="Fill"
-      pendingLabel="Filling from the rankings"
-      hideSubmit={!plan || plan.changes.length === 0}
-      onClose={onClose}
-      onSubmit={() =>
-        api.api.comp[":comp_id"].pilot.bulk.$post({
-          param: { comp_id: compId },
-          json: { pilots: plan!.changes.map((c) => c.row), remove: [] },
-        })
-      }
-      onSuccess={async (res) => {
-        onApplied(((await res!.json()) as unknown as { pilots: CompPilot[] }).pilots);
-        toast.success(plan!.outcome);
-      }}
-      bodyClassName="flex flex-col gap-4"
-    >
-        {loadError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{loadError}</AlertDescription>
-          </Alert>
-        ) : null}
-        {plan === null ? (
-          loadError ? null : <Loading className="text-sm">Reading the CIVL world rankings…</Loading>
-        ) : plan.changes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {plan.alreadySet > 0
-              ? `${plan.alreadySet} already had a score and ${plan.alreadySet === 1 ? "was" : "were"} left alone — clear one to refill.`
-              : "No CIVL rankings match this roster. You can still type them in by hand."}
-          </p>
-        ) : (
-          <>
+    <div className="max-w-2xl">
+      <Breadcrumbs items={underCompPilots(compId, compName)} current="Fill from CIVL rankings" />
+      <Form
+        onSubmit={() =>
+          api.api.comp[":comp_id"].pilot.bulk.$post({
+            param: { comp_id: compId },
+            json: { pilots: plan!.changes.map((c) => c.row), remove: [] },
+          })
+        }
+        onSuccess={() => {
+          toast.success(plan!.outcome);
+          onDone();
+        }}
+      >
+        <ReviewHeader
+          title="Fill from CIVL rankings"
+          onCancel={onDone}
+          submit={
+            plan && plan.changes.length > 0 ? (
+              <SubmitButton pendingLabel="Filling from the rankings">Fill</SubmitButton>
+            ) : null
+          }
+        />
+        <FormErrorBanner className="mt-3" />
+        <div className="mt-4 flex flex-col gap-4">
+          {loadError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{loadError}</AlertDescription>
+            </Alert>
+          ) : null}
+          {plan === null ? (
+            loadError ? null : <Loading className="text-sm">Reading the CIVL world rankings…</Loading>
+          ) : plan.changes.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Add CIVL IDs and WPRS (World Pilot Ranking Scheme) points when missing
+              {plan.alreadySet > 0
+                ? `${plan.alreadySet} already had a score and ${plan.alreadySet === 1 ? "was" : "were"} left alone — clear one to refill.`
+                : "No CIVL rankings match this roster. You can still type them in by hand."}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {plan.matched} of {roster.length} {roster.length === 1 ? "pilot has" : "pilots have"}{" "}
-              one.
-            </p>
-            <ul aria-label="What Fill will set" className="divide-y divide-border">
-              {plan.changes.map((c) => (
-                <li key={c.pilot.comp_pilot_id} className="py-2">
-                  <p className="font-medium">{c.pilot.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {[
-                      c.civlId ? `CIVL ID ${c.civlId}` : null,
-                      c.points !== null ? `${c.points} pts` : null,
-                      c.points !== null ? c.source : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-    </FormSheet>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Add CIVL IDs and WPRS (World Pilot Ranking Scheme) points when missing
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {plan.matched} of {roster.length}{" "}
+                {roster.length === 1 ? "pilot has" : "pilots have"} one.
+              </p>
+              <ul aria-label="What Fill will set" className="divide-y divide-border">
+                {plan.changes.map((c) => (
+                  <li key={c.pilot.comp_pilot_id} className="py-2">
+                    <p className="font-medium">{c.pilot.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {[
+                        c.civlId ? `CIVL ID ${c.civlId}` : null,
+                        c.points !== null ? `${c.points} pts` : null,
+                        c.points !== null ? c.source : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      </Form>
+    </div>
   );
 }

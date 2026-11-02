@@ -105,7 +105,7 @@ export const E2E_SHARDS = {
   ],
 
   /*
-   * What an organiser does, in three shards. Nine of the sixteen `mobile` specs
+   * What an organiser does, in three shards. Ten of the seventeen `mobile` specs
    * are in them, because the organiser's pages are built mobile-first (#636,
    * #637, and the waypoints and pilots lists), so most of these run twice.
    */
@@ -135,6 +135,7 @@ export const E2E_SHARDS = {
    */
   "organiser-pilots": [
     "comp-pilots.spec.ts", // 54.4s (chromium + mobile)
+    "roster-pages.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "civl-rankings.spec.ts", // 20.8s, ~11s of it seeding 14,535 ranked pilots
     "forms.spec.ts", // 10.0s (chromium + mobile)
     "scoring-mutations.spec.ts", // 7.2s

@@ -216,6 +216,19 @@ export function compPilotPath(
 }
 
 /**
+ * The roster's two bulk actions, each a page under the list (#810): choosing
+ * and reviewing a CSV import, and the CIVL rankings fill. Static segments, so
+ * the router ranks them above a pilot's `:pilotId`, as it does `new`.
+ */
+export function compPilotsImportPath(id: string, name?: string | null): string {
+  return `${compPilotsPath(id, name)}/import`;
+}
+
+export function compPilotsCivlFillPath(id: string, name?: string | null): string {
+  return `${compPilotsPath(id, name)}/civl-fill`;
+}
+
+/**
  * The admin-only competition settings pages. Without `group`, the index of
  * grouped rows; with one (e.g. "scoring"), that group's sub-page.
  */

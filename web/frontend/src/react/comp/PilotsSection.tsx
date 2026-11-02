@@ -26,7 +26,8 @@
  *   - The search and the sort are in the URL (`?q=`, `?sort=`), so Back from
  *     a pilot's page returns to the list exactly as it was left.
  *   - comp/RosterActions.tsx — the ⋯ menu's import, export, CIVL fill and
- *     test pilots, each previewing what it will write.
+ *     test pilots. The import and the fill are pages of their own
+ *     (/pilots/import, /pilots/civl-fill), each previewing what it will write.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -42,17 +43,16 @@ import { downloadFile } from "../lib/format";
 import { toast } from "../lib/toast";
 import { fetchWithRetry } from "./types";
 import { exportCsvContent, pilotToRow, slugify, type CompPilot } from "./csv";
-import { compPilotPath } from "../lib/slug";
+import {
+  bareCompId,
+  compPilotPath,
+  compPilotsCivlFillPath,
+  compPilotsImportPath,
+} from "../lib/slug";
 import { filterPilots, queryWords } from "./pilot-search";
 import { groupByTeam, rosterTeams } from "./team-names";
 import { PilotList } from "./PilotList";
-import {
-  CivlFillSheet,
-  ImportCsvDialog,
-  ImportReviewSheet,
-  RosterActionsMenu,
-} from "./RosterActions";
-import type { ImportPlan } from "./roster-import";
+import { RosterActionsMenu, rosterImportDraft } from "./RosterActions";
 
 type SortBy = "name" | "wprs_points" | "team";
 const SORTS: SortBy[] = ["name", "wprs_points", "team"];
@@ -121,9 +121,6 @@ export function PilotsSection({
   const setQuery = (q: string) => setParam("q", q, "");
   const setSortBy = (v: SortBy) => setParam("sort", v, "name");
   const navigate = useNavigate();
-  const [importing, setImporting] = useState(false);
-  const [plan, setPlan] = useState<ImportPlan | null>(null);
-  const [fillingCivl, setFillingCivl] = useState(false);
 
 
   const loadPilots = useCallback(async () => {
@@ -238,9 +235,16 @@ export function PilotsSection({
         action={
           pilots ? (
             <RosterActionsMenu
-              onImport={() => setImporting(true)}
+              onImport={() => {
+                // "Import CSV…" always starts at choosing a file: a file
+                // chosen earlier and left unapplied is not what was asked for.
+                rosterImportDraft.clear([bareCompId(compId)]);
+                navigate(compPilotsImportPath(compId, compName), { state: { fromList: true } });
+              }}
               onExport={exportCsv}
-              onFillCivl={() => setFillingCivl(true)}
+              onFillCivl={() =>
+                navigate(compPilotsCivlFillPath(compId, compName), { state: { fromList: true } })
+              }
               onAddTestPilots={() => void addTestPilots()}
             />
           ) : null
@@ -337,42 +341,6 @@ export function PilotsSection({
           />
         </>
       )}
-
-      {importing && pilots ? (
-        <ImportCsvDialog
-          compClasses={compClasses}
-          roster={pilots}
-          onClose={() => setImporting(false)}
-          onPlanned={(p) => {
-            setImporting(false);
-            setPlan(p);
-          }}
-        />
-      ) : null}
-
-      {plan ? (
-        <ImportReviewSheet
-          compId={compId}
-          plan={plan}
-          onClose={() => setPlan(null)}
-          onApplied={(roster) => {
-            setPlan(null);
-            replaceRoster(roster);
-          }}
-        />
-      ) : null}
-
-      {fillingCivl && pilots ? (
-        <CivlFillSheet
-          compId={compId}
-          roster={pilots}
-          onClose={() => setFillingCivl(false)}
-          onApplied={(roster) => {
-            setFillingCivl(false);
-            replaceRoster(roster);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

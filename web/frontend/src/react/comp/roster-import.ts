@@ -1,6 +1,6 @@
 /**
  * What importing a CSV would do to the roster, worked out BEFORE anything is
- * written, so the review sheet can show it and Apply can do exactly that.
+ * written, so the review page can show it and Apply can do exactly that.
  *
  * An imported file is the roster: a pilot it holds is added or updated, and a
  * pilot it does not hold is removed — tracks and all. The grid this replaced

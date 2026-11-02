@@ -66,6 +66,10 @@ export const MOBILE_SPEC_FILES = [
   // screen in thumb reach. The fourteen-column grid it replaced showed about
   // one and a half columns at this width.
   "comp-pilots.spec.ts",
+  // The roster's CSV import and CIVL fill (#810), pages under the pilots list
+  // where they were full-screen sheets over it — the shape that stopped
+  // answering taps on an iPhone. Back and a reload are the browser's now.
+  "roster-pages.spec.ts",
   // The kit form (rac/form.tsx), whose rules are about where an error lands
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.

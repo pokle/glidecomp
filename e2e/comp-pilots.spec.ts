@@ -16,7 +16,8 @@
  *     searched, sorted and scrolled as it was left;
  *   - Remove asks before it removes;
  *   - an import shows what it will add, update and remove before it does any
- *     of it, and an exported roster comes back as the same pilots;
+ *     of it, and an exported roster comes back as the same pilots (the
+ *     import page's own URL, Back and reload are roster-pages.spec.ts's);
  *   - the page never scrolls sideways, its targets are thumb-sized, and the
  *     search bar stays in reach without covering a focused row.
  *
@@ -149,6 +150,27 @@ async function openList(page: Page, field: Locator): Promise<void> {
   await centre(field);
   await field.click();
   await expect(page.locator('[data-trigger="ComboBox"]')).toHaveCSS("opacity", "1");
+}
+
+/**
+ * Import a CSV from the ⋯ menu: the import page, its Choose file, then the
+ * review of that file, on the same page.
+ */
+async function importFile(page: Page, name: string, csv: string | Buffer): Promise<Locator> {
+  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("menuitem", { name: "Import CSV…" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Import CSV" })).toBeVisible({
+    timeout: 20_000,
+  });
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Choose file" }).click();
+  await (await chooser).setFiles({
+    name,
+    mimeType: "text/csv",
+    buffer: typeof csv === "string" ? Buffer.from(csv) : csv,
+  });
+  await expect(page.getByRole("heading", { level: 1, name: `Import ${name}` })).toBeVisible();
+  return page.getByRole("main");
 }
 
 /** Back on the list, after a Done, a Remove or a Back. */
@@ -517,38 +539,27 @@ test("an import says what it will add, update and remove before it does any of i
 }) => {
   const compId = await makeComp(ROSTER.slice(0, 3));
   await openPage(page, compId);
-
-  const importFile = async (csv: string) => {
-    await page.getByRole("button", { name: "Roster actions" }).click();
-    await page.getByRole("menuitem", { name: "Import CSV…" }).click();
-    const chooser = page.waitForEvent("filechooser");
-    await page.getByRole("dialog").getByRole("button", { name: "Choose file" }).click();
-    await (await chooser).setFiles({
-      name: "roster.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(csv),
-    });
-  };
+  const csv = ["name,class,civl_id", "Tom Smith,sport,12345", "Dee New,open,"].join("\n");
 
   // Tom matched by his CIVL ID and moved to Sport; a new pilot; Ana and Jo
   // are not in the file, so the file would remove them.
-  await importFile(["name,class,civl_id", "Tom Smith,sport,12345", "Dee New,open,"].join("\n"));
-  const review = page.getByRole("dialog", { name: "Import roster.csv" });
+  let review = await importFile(page, "roster.csv", csv);
   await expect(review).toContainText("1 updated · 1 new · 2 removed");
   await expect(review).toContainText("Ana Müller");
   await expect(review).toContainText("Jo Ridge");
 
   // Cancel writes nothing.
   await review.getByRole("button", { name: "Cancel" }).click();
-  await expect(review).toBeHidden();
+  await backOnList(page);
   expect((await rosterOf(compId)).map((p) => p.name).sort()).toEqual(
     ["Ana Müller", "Jo Ridge", "Tom Smith"]
   );
 
-  // Apply writes exactly what the review said.
-  await importFile(["name,class,civl_id", "Tom Smith,sport,12345", "Dee New,open,"].join("\n"));
+  // Apply writes exactly what the review said, and returns to the list.
+  review = await importFile(page, "roster.csv", csv);
   await review.getByRole("button", { name: "Apply" }).click();
-  await expect(review).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
+  await expect.poll(() => names(page)).toEqual(["Dee New", "Tom Smith"]);
   const after = await rosterOf(compId);
   expect(after.map((p) => p.name).sort()).toEqual(["Dee New", "Tom Smith"]);
   expect(after.find((p) => p.name === "Tom Smith")?.pilot_class).toBe("sport");
@@ -565,17 +576,7 @@ test("an exported roster re-imports as the same pilots", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Export CSV" }).click();
   const csv = await (await (await download).createReadStream()).toArray();
 
-  await page.getByRole("button", { name: "Roster actions" }).click();
-  await page.getByRole("menuitem", { name: "Import CSV…" }).click();
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("dialog").getByRole("button", { name: "Choose file" }).click();
-  await (await chooser).setFiles({
-    name: "exported.csv",
-    mimeType: "text/csv",
-    buffer: Buffer.concat(csv),
-  });
-
-  const review = page.getByRole("dialog", { name: "Import exported.csv" });
+  const review = await importFile(page, "exported.csv", Buffer.concat(csv));
   await expect(review).toContainText("0 updated · 0 new · 0 removed");
   await expect(review.getByRole("button", { name: "Apply" })).toHaveCount(0);
 });

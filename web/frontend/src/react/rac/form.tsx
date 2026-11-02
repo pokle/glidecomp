@@ -394,10 +394,11 @@ export function FormErrorBanner({ className }: { className?: string }) {
  * A form at full screen: a sheet whose header carries the submit, with the
  * form-level error pinned beneath that header — outside the body that
  * scrolls, so it is on screen however far down the reader was when they
- * pressed it. The shape the roster import review and the CIVL fill use —
- * until they become pages of their own, as the overlays rule in CLAUDE.md
- * now asks of anything with a field in it. A new form goes on a page with
- * `Form`, not in one of these.
+ * pressed it. The roster import review and the CIVL fill used it until they
+ * became pages of their own (#810), as the overlays rule in CLAUDE.md asks of
+ * anything with a field in it; only the kit's own bench (/__kit/form) uses it
+ * now, and it goes in #817. A new form goes on a page with `Form`, not in one
+ * of these.
  */
 export function FormSheet({
   label,

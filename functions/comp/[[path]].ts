@@ -168,7 +168,9 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/new\/?$/,
   // Pilot roster editor — admin-only management surface, nothing for crawlers.
   /^\/comp\/[^/]+\/pilots\/?$/,
-  // One pilot's editor (and /pilots/new) — admin-only, like the roster.
+  // One pilot's editor (and /pilots/new), and the roster's CSV import and
+  // CIVL fill (/pilots/import, /pilots/civl-fill, #810) — admin-only, like
+  // the roster.
   /^\/comp\/[^/]+\/pilots\/[^/]+\/?$/,
   // Creating a task (#819) — admin-only. It shares its shape with the public
   // task page below, and must be caught here first: `new` is no task's id (a
