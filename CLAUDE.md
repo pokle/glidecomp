@@ -409,7 +409,8 @@ These are the standing imperatives. Each links to the reference that explains it
     never `fixed`: a fixed bar has to be moved around the keyboard by hand,
     and on an iPhone the pilots page's bottom bar once stuck halfway up the
     screen doing that. A sticky bar at the top never meets the keyboard.
-  - **What is left to convert** is tracked one page at a time:
+  - **What is left to convert** is tracked one page at a time, in the
+    order set out in [#823](https://github.com/pokle/glidecomp/issues/823):
     [#810](https://github.com/pokle/glidecomp/issues/810) (roster import
     review, CIVL fill), [#811](https://github.com/pokle/glidecomp/issues/811)
     (waypoint details, altitude review, full-screen map),
