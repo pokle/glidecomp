@@ -19,7 +19,9 @@ name: Deploy
 # step had a median of 10m40s over 15 runs, finished last in all 15, and set a
 # median run of 11m32s. It is now five shards (e2e/fixtures/shards.ts), and the
 # suite drives a production build rather than the Vite dev server, which halves
-# what each page load costs (web/scripts/e2e-serve-dist.ts).
+# what each page load costs (web/scripts/e2e-serve-dist.ts). On the first green
+# run of both (41430947899) the e2e shards' test steps took 1m31s–3m33s and the
+# whole run 5m16s; the last e2e job finished 67s before Deploy did.
 #
 # The floor worth chasing is the `test` → `deploy` chain: Test's job has a
 # median of 3m38s and Deploy's 1m26s on a branch (about 2m on master, which
@@ -411,7 +413,8 @@ jobs:
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
 
       # This job is the build's critical path, so the ~10–15s Astro spends
-      # re-encoding images on a cold build comes straight off the run. The
+      # re-encoding images on a cold build comes straight off the run: Build
+      # took 14–25s over 15 runs, and 7s with the cache (run 41430947899). The
       # output is identical either way (see the note on the E2E job), and a
       # master run only ever restores a cache master wrote: GitHub scopes
       # caches by branch, and a branch cannot write the default branch's.

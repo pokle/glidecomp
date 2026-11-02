@@ -112,7 +112,18 @@ therefore the SUM of every test. That reached ~9m of test execution and made
 the E2E job the entire build's critical path: every other job, deploy included,
 was finished by minute five while E2E ran to eleven. Three shards fixed that in
 August; by November the organiser one had tripled and was the long pole on
-every run (a median of 10m40s over 15 runs), so it became three.
+every run (a median of 10m40s over 15 runs), so it became three — and the
+suite moved onto a production build (above). The first green run of both
+(41430947899):
+
+| | Before (15-run median) | After |
+|---|---|---|
+| organiser tests | 10m40s, one shard | 1m31s / 1m51s / 2m32s, three shards |
+| maps-and-analysis | 4m33s | 3m33s |
+| public-and-pilot | 4m12s | 2m14s |
+| whole run | 11m32s | 5m16s |
+
+The long pole is now `test` → `deploy`, not e2e.
 
 The groups are in **`e2e/fixtures/shards.ts`**, balanced by measured duration
 and named by subject:
