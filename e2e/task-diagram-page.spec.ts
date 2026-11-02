@@ -116,7 +116,12 @@ test("the glyph links to the page, and Back returns to the same scroll", async (
   expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
 
-  // Brought into view, which on this short screen means scrolled down.
+  // Brought into view, which on this short screen means scrolled down. Only
+  // once the scores above the list have loaded: a section that changes height
+  // above it moves the scroll (the browser's scroll anchoring), and the offset
+  // to come back to is the one the reader leaves from. Not "networkidle": the
+  // scores' freshness poll keeps the network busy.
+  await expect(page.getByText("Loading scores…")).toHaveCount(0);
   await link.scrollIntoViewIfNeeded();
   const scrolled = await page.evaluate(() => window.scrollY);
   expect(scrolled).toBeGreaterThan(0);
@@ -132,10 +137,13 @@ test("the glyph links to the page, and Back returns to the same scroll", async (
   await page.goBack();
   await expect(page).toHaveURL(compUrl(compId));
   await expect(compHeading(page)).toBeVisible();
+  // Where it was left — give or take the scores section, which loads again
+  // above the list and can shift it by a line or two. A restore that failed would be at the top,
+  // hundreds of pixels away.
   await expect
-    .poll(() => page.evaluate(() => window.scrollY))
-    .toBeGreaterThanOrEqual(scrolled - 2);
-  expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(scrolled + 2);
+    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - scrolled))
+    .toBeLessThanOrEqual(40);
+  await expect(link).toBeInViewport();
 });
 
 test("a reload keeps the page, and Back still leaves it", async ({ page }) => {
