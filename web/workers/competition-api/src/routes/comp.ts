@@ -466,10 +466,14 @@ export const compRoutes = new Hono<AuthedEnv>()
       const pilotClasses = body.pilot_classes ?? ["open"];
       const defaultClass = body.default_pilot_class ?? pilotClasses[0];
 
-      // Validate default_pilot_class is in pilot_classes
+      // Validate default_pilot_class is in pilot_classes. Each refusal names
+      // the input it is about (`field`), so a form shows it under that field.
       if (!pilotClasses.includes(defaultClass)) {
         return c.json(
-          { error: "default_pilot_class must be one of pilot_classes" },
+          {
+            error: "default_pilot_class must be one of pilot_classes",
+            field: "default_pilot_class",
+          },
           400
         );
       }
@@ -478,7 +482,10 @@ export const compRoutes = new Hono<AuthedEnv>()
       );
       if (unknownClass2.length > 0) {
         return c.json(
-          { error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknownClass2.join(", ")})` },
+          {
+            error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknownClass2.join(", ")})`,
+            field: "gap_params.hgClass2Classes",
+          },
           400
         );
       }

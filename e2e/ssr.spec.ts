@@ -333,6 +333,9 @@ test.describe("SSR — isolation and fallback", () => {
    * crawler. (Task analysis is no longer here — it is SSR'd; see below.)
    */
   for (const path of [
+    // Starting a new competition: signed-in only, and beside /comp/:compId,
+    // so "new" must reach the shell rather than a 404 for an unknown id.
+    "/comp/new",
     // Admin-only roster editor page.
     "/comp/anything/pilots",
     // Admin-only settings pages (index + a group sub-page).

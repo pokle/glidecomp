@@ -158,6 +158,10 @@ interface HeadTags {
  * per-request, not shell-noindexed here).
  */
 const NOINDEX_SHELL_ROUTES: RegExp[] = [
+  // Starting a new competition — signed-in only. Checked before ROUTES, so
+  // "new" never reaches the comp-detail loader as an id it cannot parse (and
+  // could not be one: a comp id is at least four characters).
+  /^\/comp\/new\/?$/,
   // Pilot roster editor — admin-only management surface, nothing for crawlers.
   /^\/comp\/[^/]+\/pilots\/?$/,
   // One pilot's editor (and /pilots/new) — admin-only, like the roster.
