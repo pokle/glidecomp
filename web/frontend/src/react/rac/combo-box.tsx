@@ -34,8 +34,17 @@
  * bringing a half-hidden field into view, or the kit form centring the field
  * it is reporting (rac/form.tsx). Without the tap, the list that focus opened
  * was gone a frame later, and only typing brought it back.
+ *
+ * And nothing stays SELECTED in a field: its text is its value, and a choice
+ * from the list only fills it in. A selected option made React Aria move its
+ * virtual focus onto that option whenever the list reopened, which fires a
+ * blur at the input mid-keystroke; on an iPhone a held Backspace after
+ * picking a team deleted one letter and stopped. React Aria closes the list
+ * only when the selection CHANGES, so with none kept the field closes it, a
+ * frame after the choice has filled in the text (which React Aria answers by
+ * opening the list).
  */
-import { useContext } from "react";
+import { useContext, useRef } from "react";
 import {
   ComboBox as AriaComboBox,
   ComboBoxStateContext,
@@ -54,6 +63,9 @@ import { cn } from "@/react/lib/utils";
 import { Label, Description, FieldError } from "./field";
 import { popoverClass } from "./select";
 
+/** The open/close state React Aria keeps for a combo box. */
+type ListState = NonNullable<React.ContextType<typeof ComboBoxStateContext>>;
+
 /** The caller filters (see the note at the top), so RAC shows what it is given. */
 const showEverything = () => true;
 
@@ -68,6 +80,7 @@ export function ComboBox<T extends object>({
   renderEmptyState,
   variant = "search",
   children,
+  onSelectionChange,
   ...props
 }: Omit<AriaComboBoxProps<T>, "className" | "children" | "items"> & {
   /** A search box (the default), or a form field (see the note above). */
@@ -83,12 +96,22 @@ export function ComboBox<T extends object>({
   renderEmptyState?: () => React.ReactNode;
   children: React.ReactNode | ((item: T) => React.ReactNode);
 }) {
+  // The field variant's state, for closing the list after a choice (see above).
+  const stateRef = useRef<ListState | null>(null);
+  const field = variant === "field";
   return (
     <AriaComboBox
       className={cn("group flex flex-col gap-2", className)}
       menuTrigger="input"
       defaultFilter={showEverything}
       {...props}
+      {...(field ? { selectedKey: null } : {})}
+      onSelectionChange={(key) => {
+        onSelectionChange?.(key);
+        // A frame later: the choice changes the field's text, and React Aria
+        // reopens the list for a changed text while the field has focus.
+        if (field && key != null) requestAnimationFrame(() => stateRef.current?.close());
+      }}
     >
       {label ? <Label>{label}</Label> : <Label className="sr-only">Search</Label>}
       <Group
@@ -105,7 +128,8 @@ export function ComboBox<T extends object>({
             more here: this input already owns a suggestion popover, so a
             browser autofill panel would fight it for the same screen space. */}
         <ComboBoxInput
-          opensOnTap={variant === "field"}
+          opensOnTap={field}
+          stateRef={stateRef}
           placeholder={placeholder}
           autoComplete="off"
           // A name in a form field starts its words with capitals; a search
@@ -137,8 +161,16 @@ export function ComboBox<T extends object>({
 }
 
 /** The combo box's input; `opensOnTap` is the field variant's tap (see the note at the top). */
-function ComboBoxInput({ opensOnTap, ...props }: InputProps & { opensOnTap: boolean }) {
+function ComboBoxInput({
+  opensOnTap,
+  stateRef,
+  ...props
+}: InputProps & {
+  opensOnTap: boolean;
+  stateRef: React.RefObject<ListState | null>;
+}) {
   const state = useContext(ComboBoxStateContext);
+  stateRef.current = state;
   return (
     <AriaInput
       {...props}

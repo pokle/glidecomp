@@ -34,6 +34,7 @@ import { Trash2Icon } from "lucide-react";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { TextField } from "@/react/rac/field";
+import { FIELD_NAME, asFieldNames } from "./pilot-field-names";
 import {
   Form,
   FormErrorBanner,
@@ -68,8 +69,8 @@ const OTHER_IDS = [
 
 /** The server's name for each field → the field's `name` in this form. */
 const SERVER_FIELDS: Record<string, string> = {
-  registered_pilot_name: "name",
-  registered_pilot_email: "email",
+  registered_pilot_name: FIELD_NAME.name,
+  registered_pilot_email: FIELD_NAME.email,
   registered_pilot_glider: "glider",
   registered_pilot_civl_id: "civl_id",
   registered_pilot_safa_id: "safa_id",
@@ -78,6 +79,7 @@ const SERVER_FIELDS: Record<string, string> = {
   registered_pilot_dhv_id: "dhv_id",
   registered_pilot_ffvl_id: "ffvl_id",
   registered_pilot_fai_id: "fai_id",
+  team_name: FIELD_NAME.team_name,
 };
 
 type DraftKey = Exclude<keyof ParsedRow, "comp_pilot_id">;
@@ -165,7 +167,7 @@ export function PilotForm({
     <div className="max-w-2xl">
       <Breadcrumbs items={underCompPilots(compId, compName)} current={pilot?.name ?? "New pilot"} />
       <Form
-        validate={() => (unsaved ? problems() : {})}
+        validate={() => (unsaved ? asFieldNames(problems()) : {})}
         fieldNames={SERVER_FIELDS}
         onSubmit={async () => {
           if (!unsaved) return undefined;
@@ -286,7 +288,7 @@ function PilotFields({
         <FormSection title="Required">
           <TextField
             label="Name"
-            name="name"
+            name={FIELD_NAME.name}
             value={text("name")}
             onChange={(v) => set("name", v)}
             autoComplete="off"
@@ -334,7 +336,7 @@ function PilotFields({
           ) : null}
           <TextField
             label="Email"
-            name="email"
+            name={FIELD_NAME.email}
             type="email"
             inputMode="email"
             autoComplete="off"

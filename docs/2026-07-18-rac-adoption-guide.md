@@ -89,7 +89,21 @@ sheets (the waypoints list's among them) are pokle/glidecomp#810–#816, and
 list — are fine. And a combo box on a touch device holds its list invisible
 until the on-screen keyboard opens (600 ms at most): an e2e that clicks an
 option must wait for the popover's opacity first (see `openList()` in
-`e2e/comp-pilots.spec.ts`). Gotcha #16 and the history below still mention Tabulator; they
+`e2e/comp-pilots.spec.ts`). Two iPhone findings from the pilot page
+(2026-11-02), both found only on a phone:
+
+- **A form field's combo box keeps no selection** (`variant="field"`). A
+  selected option is where React Aria puts its virtual focus each time the
+  list reopens, and that fires a `blur` at the input mid-keystroke: a held
+  Backspace after picking a team deleted one letter and stopped. Chromium
+  never showed it.
+- **Safari's contact AutoFill ignores `autocomplete="off"`.** It offered the
+  organiser's own name and email on the pilot page's Name, Email and Team
+  fields, over the Team field's own list. A field `name` containing
+  "search" stops it (`comp/pilot-field-names.ts`); renaming the label or
+  `autocorrect="off"` did not.
+
+Gotcha #16 and the history below still mention Tabulator; they
 describe code that no longer exists.
 
 ## What exists

@@ -21,6 +21,7 @@
 import { useMemo } from "react";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import { useFormState } from "@/react/rac/form";
+import { FIELD_NAME } from "./pilot-field-names";
 import { teamOptions, type RosterTeam, type TeamOption } from "./team-names";
 
 export function TeamField({
@@ -44,7 +45,7 @@ export function TeamField({
     <ComboBox<TeamOption>
       variant="field"
       label="Team"
-      name="team_name"
+      name={FIELD_NAME.team_name}
       menuTrigger="focus"
       allowsCustomValue
       inputValue={value}
@@ -60,7 +61,7 @@ export function TeamField({
         onChange(option.name);
         if (option.kind === "new") onNewTeam(option.name);
         // A choice from the list answers "Choose a team…" at once.
-        clearFieldError("team_name");
+        clearFieldError(FIELD_NAME.team_name);
       }}
     >
       {(option) => (
