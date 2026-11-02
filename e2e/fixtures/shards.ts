@@ -109,6 +109,7 @@ export const E2E_SHARDS = {
     "transient-api-failure.spec.ts", // 11.4s
     "search.spec.ts", // 10.6s
     "settings-save-ux.spec.ts", // 10.1s
+    "settings-api-keys.spec.ts", // new — creating an API key (chromium + mobile)
     "account-name-sync.spec.ts", // new — not yet measured
     "legal-notice.spec.ts", // new — not yet measured
     "not-found-suggestions.spec.ts", // 9.9s

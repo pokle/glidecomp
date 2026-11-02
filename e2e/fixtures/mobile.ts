@@ -53,6 +53,10 @@ export const MOBILE_SPEC_FILES = [
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.
   "forms.spec.ts",
+  // Creating an API key on Settings (#821): it was two dialogs, one with a
+  // text field, which is the keyboard trouble the overlays rule is about. Now
+  // a form on the page, with the new key shown in place.
+  "settings-api-keys.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */
