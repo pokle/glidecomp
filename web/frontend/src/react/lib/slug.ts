@@ -182,6 +182,36 @@ export function compWaypointsPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/waypoints`;
 }
 
+/**
+ * The waypoints editor's other pages (#811), each a page of its own rather
+ * than a sheet over the list: see the overlays rule in CLAUDE.md. A waypoint
+ * is addressed by the editor's row id, not its code — see
+ * comp/waypoints-draft.ts for why.
+ */
+export function compWaypointPath(id: string, name: string | null | undefined, rowId: number): string {
+  return `${compWaypointsPath(id, name)}/${rowId}`;
+}
+
+/** Adding a waypoint; `search` (from comp/AddWaypointForm) carries a map pick. */
+export function compWaypointsNewPath(id: string, name?: string | null, search = ""): string {
+  return `${compWaypointsPath(id, name)}/new${search}`;
+}
+
+/** The waypoints map at the size of the screen. */
+export function compWaypointsMapPath(id: string, name?: string | null): string {
+  return `${compWaypointsPath(id, name)}/map`;
+}
+
+/** The altitude review ("Check altitudes"), and one waypoint of it. */
+export function compAltitudeReviewPath(
+  id: string,
+  name?: string | null,
+  rowId?: number
+): string {
+  const review = `${compWaypointsPath(id, name)}/altitudes`;
+  return rowId === undefined ? review : `${review}/${rowId}`;
+}
+
 export function compAnalysisPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/analysis`;
 }

@@ -353,16 +353,20 @@ export function SubmitButton({
   pendingLabel = "Saving",
   className,
   autoFocus,
+  isDisabled,
 }: {
   children: ReactNode;
   pendingLabel?: string;
   className?: string;
   autoFocus?: boolean;
+  /** Nothing to submit yet — the waypoints page's Save with no changes. */
+  isDisabled?: boolean;
 }) {
   const { pending } = useFormState();
   return (
     <Button
       type="submit"
+      isDisabled={isDisabled}
       isPending={pending}
       pendingLabel={pendingLabel}
       className={className}

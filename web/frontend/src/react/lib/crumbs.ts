@@ -19,6 +19,8 @@ import {
   compPilotsPath,
   pilotPath,
   taskRoutePath,
+  compWaypointsPath,
+  compAltitudeReviewPath,
 } from "./slug";
 
 export type Crumb = { label: string; to: string };
@@ -62,6 +64,31 @@ export function underCompPilots(compId: string | undefined, compName: string | n
   return [
     ...underComp(compId, compName),
     { label: "Pilots", to: compId ? compPilotsPath(compId, compName) : "/comp" },
+  ];
+}
+
+/**
+ * Ancestors of the waypoints editor's pages (one waypoint, Add, the map, the
+ * altitude review): the competition, then its waypoints.
+ */
+export function underCompWaypoints(
+  compId: string | undefined,
+  compName: string | null | undefined
+): Crumb[] {
+  return [
+    ...underComp(compId, compName),
+    { label: "Waypoints", to: compId ? compWaypointsPath(compId, compName) : "/comp" },
+  ];
+}
+
+/** Ancestors of one waypoint of the altitude review: the review itself. */
+export function underAltitudeReview(
+  compId: string | undefined,
+  compName: string | null | undefined
+): Crumb[] {
+  return [
+    ...underCompWaypoints(compId, compName),
+    { label: "Check altitudes", to: compId ? compAltitudeReviewPath(compId, compName) : "/comp" },
   ];
 }
 

@@ -363,6 +363,13 @@ test.describe("SSR — isolation and fallback", () => {
     "/comp/anything/pilots/civl-fill",
     // Copying another competition's pilots in: admin-only, under the roster.
     "/comp/anything/pilots/copy",
+    // The waypoints editor's pages (#811): admin-only, and under the SSR'd
+    // waypoints list, which they must not be mistaken for.
+    "/comp/anything/waypoints/1",
+    "/comp/anything/waypoints/new",
+    "/comp/anything/waypoints/map",
+    "/comp/anything/waypoints/altitudes",
+    "/comp/anything/waypoints/altitudes/1",
     // Admin-only settings pages (index + a group sub-page).
     "/comp/anything/settings",
     "/comp/anything/settings/scoring",
