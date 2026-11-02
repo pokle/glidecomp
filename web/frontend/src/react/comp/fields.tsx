@@ -15,6 +15,7 @@ import { Checkbox as RacCheckbox } from "@/react/rac/checkbox";
 import { ComboBox, ComboBoxItem } from "@/react/rac/combo-box";
 import {
   Description,
+  FieldError,
   Input as RacInput,
   Label,
   NumberField,
@@ -180,15 +181,19 @@ export function NameField({
   onChange,
   placeholder,
   autoFocus,
+  name = "name",
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  /** The field's name in a kit form (rac/form.tsx). */
+  name?: string;
 }) {
   return (
     <TextField
       label="Name"
+      name={name}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
@@ -203,14 +208,18 @@ export function CategoryField({
   value,
   onChange,
   description,
+  name = "category",
 }: {
   value: "hg" | "pg";
   onChange: (value: "hg" | "pg") => void;
   description?: React.ReactNode;
+  /** The field's name in a kit form (rac/form.tsx). */
+  name?: string;
 }) {
   return (
     <ChoiceList
       label="Wing"
+      name={name}
       value={value}
       onChange={(v) => onChange(v as "hg" | "pg")}
       description={description}
@@ -228,16 +237,25 @@ export function PilotClassesField({
   value,
   onChange,
   wing,
+  name = "pilot_classes",
 }: {
   value: string;
   onChange: (value: string) => void;
   wing: "hg" | "pg";
+  /** The field's name in a kit form (rac/form.tsx). */
+  name?: string;
 }) {
   const examples = PILOT_CLASS_EXAMPLES[wing];
   return (
-    <AriaTextField value={value} onChange={onChange} className="group flex flex-col gap-2">
+    <AriaTextField
+      value={value}
+      onChange={onChange}
+      name={name}
+      className="group flex flex-col gap-2"
+    >
       <Label>Pilot classes</Label>
       <RacInput placeholder={examples[1]} />
+      <FieldError />
       <Description>
         Separately-scored divisions of the field. Comma-separated — or pick an example:
       </Description>

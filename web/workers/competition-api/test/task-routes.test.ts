@@ -232,6 +232,22 @@ describe("PATCH /api/comp/:comp_id/task/:task_id", () => {
     expect(data.name).toBe("Updated Name");
   });
 
+  test("refuses a pilot class the comp does not have, naming the field", async () => {
+    const compId = await createComp({ pilot_classes: ["open"] });
+    const taskId = await createTask(compId);
+
+    const res = await authRequest(
+      "PATCH",
+      `/api/comp/${compId}/task/${taskId}`,
+      { pilot_classes: ["open", "novice"] }
+    );
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string; field?: string };
+    expect(data.error).toContain("novice");
+    // So the task's settings page puts it under the Pilot classes field.
+    expect(data.field).toBe("pilot_classes");
+  });
+
   test("updates task date", async () => {
     const compId = await createComp();
     const taskId = await createTask(compId);

@@ -39,7 +39,6 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const [openUpload, setOpenUpload] = useState(comp.open_igc_upload ?? true);
   const [closeDate, setCloseDate] = useState(savedCloseDate);
   const [adminsText, setAdminsText] = useState(savedAdmins);
-  const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -51,39 +50,10 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     closeDate !== savedCloseDate ||
     adminsText !== savedAdmins;
 
-  async function save() {
-    const adminEmails = adminsText
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    if (adminEmails.length === 0) {
-      toast.warning("At least one admin email is required");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].$patch({
-        param: { comp_id: compId },
-        json: {
-          test,
-          open_registration: openRegistration,
-          open_igc_upload: openUpload,
-          close_date: closeDate || null,
-          admin_emails: adminEmails,
-        },
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to update competition");
-        return;
-      }
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const adminEmails = adminsText
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 
   /** A new share key. The page moves onto the URL that carries it, so the
    * address bar is the new link to send. */
@@ -124,25 +94,46 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
 
   return (
     <SettingsPage crumbs={underCompSettings(compId, comp.name)} title="Access">
-      <SettingsForm onSave={save} saving={saving} dirty={dirty}>
+      <SettingsForm
+        dirty={dirty}
+        validate={() => ({
+          admin_emails: adminEmails.length === 0 && "At least one admin email is required",
+        })}
+        onSubmit={() =>
+          api.api.comp[":comp_id"].$patch({
+            param: { comp_id: compId },
+            json: {
+              test,
+              open_registration: openRegistration,
+              open_igc_upload: openUpload,
+              close_date: closeDate || null,
+              admin_emails: adminEmails,
+            },
+          })
+        }
+        onSuccess={onSaved}
+      >
         {/* The three booleans share one card, as consecutive settings rows do
             on a phone. "Hidden?" is the only place a comp's visibility is
             set: a new comp starts hidden, and the setup guide's "Make public"
             step links here. */}
         <SwitchList>
           <SwitchField
+            name="test"
             checked={test}
             onChange={setTest}
             label="Hidden?"
             hint="Not in the competition list or search. Only admins, and people you send this competition’s link to, can see it."
           />
           <SwitchField
+            name="open_registration"
             checked={openRegistration}
             onChange={setOpenRegistration}
             label="Let pilots register themselves by submitting a track"
             hint="When off, only admins add pilots. Registered pilots can always submit."
           />
           <SwitchField
+            name="open_igc_upload"
             checked={openUpload}
             onChange={setOpenUpload}
             label="Let registered pilots record flights and statuses for each other"
@@ -174,6 +165,7 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           <DatePicker
             inline
             clearable
+            name="close_date"
             aria-labelledby={closeDateId}
             value={closeDate}
             onChange={setCloseDate}
@@ -183,8 +175,11 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           </p>
         </div>
 
+        {/* A refusal about one address ("admin_emails.1") lands here: the
+            kit form reads a list item's refusal as its list's. */}
         <TextField
           label="Admin emails"
+          name="admin_emails"
           placeholder="admin1@example.com, admin2@example.com"
           value={adminsText}
           onChange={setAdminsText}

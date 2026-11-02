@@ -902,7 +902,10 @@ export const compRoutes = new Hono<AuthedEnv>()
 
         if (!newClasses.includes(newDefault)) {
           return c.json(
-            { error: "default_pilot_class must be one of pilot_classes" },
+            {
+              error: "default_pilot_class must be one of pilot_classes",
+              field: "default_pilot_class",
+            },
             400
           );
         }
@@ -946,7 +949,10 @@ export const compRoutes = new Hono<AuthedEnv>()
         const unknown = class2.filter((cls) => !classesAfter.includes(cls));
         if (unknown.length > 0) {
           return c.json(
-            { error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknown.join(", ")})` },
+            {
+              error: `hgClass2Classes must name pilot classes of this competition (unknown: ${unknown.join(", ")})`,
+              field: "gap_params.hgClass2Classes",
+            },
             400
           );
         }

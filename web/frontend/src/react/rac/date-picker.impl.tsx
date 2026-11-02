@@ -62,6 +62,20 @@ import {
 
 import { cn } from "@/react/lib/utils";
 import { FieldError } from "./field";
+import { useOptionalFormState } from "./form";
+
+/**
+ * `onChange`, clearing the field's error first when it sits in a kit form
+ * under a `name`. The form clears an edited field's error from its `input`
+ * event, and a segment edit fires none.
+ */
+function useChange(name: string | undefined, onChange: (value: string) => void) {
+  const form = useOptionalFormState();
+  return (value: string) => {
+    if (name) form?.clearFieldError(name);
+    onChange(value);
+  };
+}
 
 /** Day-first segments (DD/MM/YYYY), matching the app's en-GB date rendering. */
 const LOCALE = "en-GB";
@@ -69,7 +83,7 @@ const LOCALE = "en-GB";
 // The field box mirrors rac/field.tsx's input so pickers sit flush with text inputs.
 const fieldBox = cn(
   "flex h-8 w-full min-w-0 items-center rounded-lg border border-input bg-card px-2.5 py-1 text-base transition-colors md:text-sm dark:bg-input/30",
-  "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+  "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 data-[invalid]:border-destructive",
   "data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
 );
 
@@ -212,12 +226,6 @@ function CalendarPopover() {
 
 interface PickerBaseProps {
   id?: string;
-  /**
-   * The field's name in a form. A kit `Form` (rac/form.tsx) shows its own
-   * check, or the server's refusal, for this name under the field (the date
-   * picker renders one; the others have had no form to report into yet).
-   */
-  name?: string;
   /** True to render a trailing clear (×) button when a value is set. */
   clearable?: boolean;
   required?: boolean;
@@ -225,6 +233,8 @@ interface PickerBaseProps {
   className?: string;
   "aria-label"?: string;
   "aria-labelledby"?: string;
+  /** The field's name in a kit form, where its error is shown under it. */
+  name?: string;
 }
 
 export interface DatePickerProps extends PickerBaseProps {
@@ -250,12 +260,13 @@ export function DatePicker({
   ...rest
 }: DatePickerProps) {
   const dateValue = parseSafe(value, parseDate) as CalendarDate | null;
+  const change = useChange(rest.name, onChange);
   return (
     <I18nProvider locale={LOCALE}>
       <AriaDatePicker
         {...rest}
         value={dateValue}
-        onChange={(v) => onChange(v ? v.toString() : "")}
+        onChange={(v) => change(v ? v.toString() : "")}
         granularity="day"
         className={cn("w-full", className)}
       >
@@ -266,7 +277,7 @@ export function DatePicker({
             )}
           </DateInput>
           {clearable && dateValue ? (
-            <ClearButton onClear={() => onChange("")} />
+            <ClearButton onClear={() => change("")} />
           ) : null}
           {/* No trigger when the calendar is already on the page. */}
           {inline ? null : (
@@ -304,13 +315,14 @@ export function DateTimePicker({
   ...rest
 }: DateTimePickerProps) {
   const dateValue = parseSafe(value, parseDateTime) as CalendarDateTime | null;
+  const change = useChange(rest.name, onChange);
   return (
     <I18nProvider locale={LOCALE}>
       <AriaDatePicker
         {...rest}
         value={dateValue}
         // CalendarDateTime.toString() → "YYYY-MM-DDTHH:MM:SS"; keep the minute form.
-        onChange={(v) => onChange(v ? v.toString().slice(0, 16) : "")}
+        onChange={(v) => change(v ? v.toString().slice(0, 16) : "")}
         granularity="minute"
         hourCycle={24}
         className={cn("w-full", className)}
@@ -322,12 +334,13 @@ export function DateTimePicker({
             )}
           </DateInput>
           {clearable && dateValue ? (
-            <ClearButton onClear={() => onChange("")} />
+            <ClearButton onClear={() => change("")} />
           ) : null}
           <AriaButton className={trailingButton} aria-label="Open calendar">
             <CalendarIcon className="size-4" />
           </AriaButton>
         </Group>
+        <FieldError className="mt-2 block" />
         <CalendarPopover />
       </AriaDatePicker>
     </I18nProvider>
@@ -349,13 +362,14 @@ export function TimePicker({
   ...rest
 }: TimePickerProps) {
   const timeValue = parseSafe(value, parseTime) as Time | null;
+  const change = useChange(rest.name, onChange);
   return (
     <I18nProvider locale={LOCALE}>
       <AriaTimeField
         {...rest}
         value={timeValue}
         // Time.toString() → "HH:MM:SS"; keep the minute form.
-        onChange={(v) => onChange(v ? v.toString().slice(0, 5) : "")}
+        onChange={(v) => change(v ? v.toString().slice(0, 5) : "")}
         granularity="minute"
         hourCycle={24}
         className={cn("w-full", className)}
@@ -367,11 +381,12 @@ export function TimePicker({
             )}
           </DateInput>
           {clearable && timeValue ? (
-            <ClearButton onClear={() => onChange("")} />
+            <ClearButton onClear={() => change("")} />
           ) : (
             <Clock className="ml-1 size-4 shrink-0 text-muted-foreground" />
           )}
         </Group>
+        <FieldError className="mt-2 block" />
       </AriaTimeField>
     </I18nProvider>
   );

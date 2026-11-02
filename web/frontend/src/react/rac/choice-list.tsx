@@ -63,6 +63,7 @@ export function ChoiceList({
   onChange,
   options,
   ariaLabel,
+  name,
   className,
 }: {
   label?: React.ReactNode;
@@ -72,6 +73,8 @@ export function ChoiceList({
   options: Choice[];
   /** Use when there is no visible `label` to name the group. */
   ariaLabel?: string;
+  /** The field's name in a kit form, where its error is shown under it. */
+  name?: string;
   className?: string;
 }) {
   return (
@@ -79,6 +82,7 @@ export function ChoiceList({
       value={value}
       onChange={onChange}
       aria-label={ariaLabel}
+      name={name}
       className={cn("flex flex-col gap-2", className)}
     >
       {label ? <Label>{label}</Label> : null}
@@ -112,6 +116,7 @@ export function ChoiceList({
         ))}
       </div>
       {description ? <Description>{description}</Description> : null}
+      <FieldError />
     </AriaRadioGroup>
   );
 }
@@ -255,34 +260,31 @@ export function CheckList({
   label,
   description,
   errorMessage,
-  name,
   value,
   onChange,
   options,
   ariaLabel,
+  name,
   className,
 }: {
   label?: React.ReactNode;
   description?: React.ReactNode;
-  /**
-   * The group's name in a form. A kit `Form` (rac/form.tsx) shows its own
-   * check, or the server's refusal, for this name under the group.
-   */
-  name?: string;
   errorMessage?: string;
   value: string[];
   onChange: (value: string[]) => void;
   options: Choice[];
   /** Use when there is no visible `label` to name the group. */
   ariaLabel?: string;
+  /** The field's name in a kit form, where its error is shown under it. */
+  name?: string;
   className?: string;
 }) {
   return (
     <AriaCheckboxGroup
-      name={name}
       value={value}
       onChange={onChange}
       aria-label={ariaLabel}
+      name={name}
       className={cn("flex flex-col gap-2", className)}
     >
       {label ? <Label>{label}</Label> : null}
@@ -321,8 +323,8 @@ export function CheckList({
         ))}
       </div>
       {description ? <Description>{description}</Description> : null}
-      {/* Always there: it shows nothing until the group is invalid, which is
-          also how a kit form's error for `name` reaches the reader. */}
+      {/* Renders only when the group is invalid: an `errorMessage`, or one a
+          kit form hands it by `name`. */}
       <FieldError>{errorMessage}</FieldError>
     </AriaCheckboxGroup>
   );
