@@ -153,8 +153,42 @@ describe("POST /api/comp", () => {
       default_pilot_class: "novice",
     });
     expect(res.status).toBe(400);
-    const data = (await res.json()) as { error: string };
+    const data = (await res.json()) as { error: string; field?: string };
     expect(data.error).toContain("default_pilot_class");
+    // Names the input it refuses, so a form can show it under that field.
+    expect(data.field).toBe("default_pilot_class");
+  });
+
+  // The new-competition page (pages/NewCompPage.tsx) shows each of these
+  // under the field it is about, by the `field` the refusal names.
+  test("each refusal of a specific input names its field", async () => {
+    // A schema failure names its path — a pilot class by its place in the list.
+    const badClass = await authRequest("POST", "/api/comp", {
+      name: "Bad Class",
+      category: "hg",
+      pilot_classes: ["open", "<b>"],
+    });
+    expect(badClass.status).toBe(400);
+    expect(((await badClass.json()) as { field?: string }).field).toBe("pilot_classes.1");
+
+    const noName = await authRequest("POST", "/api/comp", { name: "", category: "hg" });
+    expect(noName.status).toBe(400);
+    expect(((await noName.json()) as { field?: string }).field).toBe("name");
+
+    // The route's own check on the FAI Class 2 list.
+    const class2 = await authRequest("POST", "/api/comp", {
+      name: "C2",
+      category: "hg",
+      pilot_classes: ["open"],
+      gap_params: {
+        nominalTime: 5400, minimumDistance: 5000, scoring: "HG",
+        useLeading: true, useArrival: true, hgClass2Classes: ["floater"],
+      },
+    });
+    expect(class2.status).toBe(400);
+    expect(((await class2.json()) as { field?: string }).field).toBe(
+      "gap_params.hgClass2Classes"
+    );
   });
 
   test("rejects unauthenticated requests", async () => {

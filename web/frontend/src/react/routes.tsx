@@ -72,6 +72,10 @@ const SignIn = lazy(() =>
 const KitFormFixture = import.meta.env.DEV
   ? lazy(() => import("./pages/KitFormFixture").then((m) => ({ default: m.KitFormFixture })))
   : null;
+// Starting a competition — signed-in only, a noindex shell in the SSR Function.
+const NewCompPage = lazy(() =>
+  import("./pages/NewCompPage").then((m) => ({ default: m.NewCompPage }))
+);
 const CompPilotsPage = lazy(() =>
   import("./pages/CompPilotsPage").then((m) => ({ default: m.CompPilotsPage }))
 );
@@ -192,6 +196,9 @@ export function AppRoutes() {
               <Route path="/__kit/form" element={<KitFormFixture />} />
             ) : null}
             <Route path="/comp" element={<Competitions />} />
+            {/* A page rather than a dialog over the list (the overlays rule in
+                CLAUDE.md). The static segment outranks /comp/:compId below. */}
+            <Route path="/comp/new" element={<NewCompPage />} />
             <Route path="/comp/:compId" element={<CompDetail />} />
             <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
             {/* Admin-only roster editor — noindex shell in the SSR Function. */}

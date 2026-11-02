@@ -56,6 +56,9 @@ export const MOBILE_SPEC_FILES = [
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.
   "forms.spec.ts",
+  // Starting a new competition: a page rather than a dialog with a text
+  // field, which is the shape the phone could not use (#818).
+  "comp-new.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */
