@@ -103,7 +103,7 @@ export const E2E_SHARDS = {
   ],
 
   /*
-   * What an organiser does, in three shards. Seven of the eight `mobile` specs
+   * What an organiser does, in three shards. Eight of the nine `mobile` specs
    * are in them, because the organiser's pages are built mobile-first (#636,
    * #637, and the waypoints and pilots lists), so most of these run twice.
    */
@@ -117,6 +117,7 @@ export const E2E_SHARDS = {
     "comp-detail.spec.ts", // 33.5s (chromium + mobile), ~12s of it seeding the sample comp
     "comp-settings-pages.spec.ts", // 21.2s (chromium + mobile)
     "comp-new.spec.ts", // 5.0s (chromium + mobile)
+    "task-new-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "hidden-comp-share-link.spec.ts", // 4.9s
     "results-record.spec.ts", // 2.9s
     "comp-creation.spec.ts", // 2.5s

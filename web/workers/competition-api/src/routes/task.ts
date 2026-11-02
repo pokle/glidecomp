@@ -200,10 +200,13 @@ export const taskRoutes = new Hono<AuthedEnv>()
       const invalidClasses = body.pilot_classes.filter(
         (cls) => !compClasses.includes(cls)
       );
+      // Each refusal about one input names it (`field`), so the new-task
+      // page's kit form shows it under that field rather than above the form.
       if (invalidClasses.length > 0) {
         return c.json(
           {
             error: `Invalid pilot classes: ${invalidClasses.join(", ")}. Must be one of: ${compClasses.join(", ")}`,
+            field: "pilot_classes",
           },
           400
         );
@@ -215,7 +218,7 @@ export const taskRoutes = new Hono<AuthedEnv>()
         body.xctsk
       );
       if (geometryError) {
-        return c.json({ error: geometryError }, 400);
+        return c.json({ error: geometryError, field: "xctsk" }, 400);
       }
 
       // Enforce task limit

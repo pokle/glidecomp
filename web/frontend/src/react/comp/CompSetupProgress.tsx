@@ -88,11 +88,12 @@ function readHidden(compId: string): boolean {
 export function CompSetupProgress({
   compId,
   comp,
-  onCreateTask,
+  newTaskHref,
 }: {
   compId: string;
   comp: CompDetailData;
-  onCreateTask: () => void;
+  /** The page that creates a task, share key and all for a hidden comp. */
+  newTaskHref: string;
 }) {
   const headingId = useId();
   const [hidden, setHidden] = useState(() => readHidden(compId));
@@ -164,9 +165,10 @@ export function CompSetupProgress({
             {step.label}
           </Link>
         ) : (
-          <button type="button" className={linkClass} onClick={onCreateTask}>
+          // No task yet: to the page that creates one (#819).
+          <Link className={linkClass} to={newTaskHref}>
             {step.label}
-          </button>
+          </Link>
         );
       case "public":
         // The "Hidden?" switch lives on the Access settings page.
