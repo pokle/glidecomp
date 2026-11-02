@@ -14,7 +14,8 @@
  * mattered more once `lib/use-back-dismiss.ts` made Back first-class
  * navigation on the waypoints page: it now walks out of one sheet per press,
  * and the press after the last one dropped an afternoon of typing without a
- * word.
+ * word. (Since #811 that editor is pages over a draft kept in storage, so it
+ * passes `guardBack: false`: Back there loses nothing, and means "not now".)
  *
  * ## What Back does here
  *

@@ -35,9 +35,9 @@
  * .xctsk file. Saving PATCHes the task's xctsk (the server validates strictly
  * and audit-logs the change).
  *
- * AddWaypointDialog stays a plain dialog over this page: it is a short
- * single-purpose form, and it is shared with the competition waypoints page,
- * so reshaping it here would fork it.
+ * AddWaypointDialog stays a plain dialog over this page until #812 makes it
+ * a page. Its fields are comp/AddWaypointForm.tsx, which the competition
+ * waypoints editor shows on a page of its own (#811), so the two cannot fork.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileTrigger } from "react-aria-components";

@@ -92,7 +92,12 @@ export const reviewWaypointUrl = /\/comp\/[^/]+\/waypoints\/altitudes\/\d+$/;
 export async function onEditorList(page: Page, rows: number): Promise<void> {
   await expect(page).toHaveURL(listUrl, { timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible({ timeout: 20_000 });
-  await expect(editorRows(page)).toHaveCount(rows, { timeout: 20_000 });
+  if (rows === 0) {
+    // An empty GridList renders its empty state as a row of its own.
+    await expect(page.getByText(/^No waypoints yet\./)).toBeVisible({ timeout: 20_000 });
+  } else {
+    await expect(editorRows(page)).toHaveCount(rows, { timeout: 20_000 });
+  }
 }
 
 /** The first row of the editor's list, once it is there. */

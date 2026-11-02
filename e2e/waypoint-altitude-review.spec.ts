@@ -63,6 +63,14 @@ async function checkAltitudes(page: Page, alt: number, alpha?: number): Promise<
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
+/** The page must never scroll sideways, at either project's width. */
+async function expectNoSidewaysScroll(page: Page): Promise<void> {
+  const scrolls = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+  );
+  expect(scrolls, "the page must not scroll sideways").toBe(false);
+}
+
 /** The codes down the review's list, in order. */
 async function listedCodes(page: Page): Promise<string[]> {
   const titles = await reviewRows(page).allInnerTexts();
@@ -93,6 +101,7 @@ test("Check altitudes reviews the set on a page and accepts one row", async ({ p
   const topRow = reviewRows(page).first();
   await expect(topRow).toContainText(`file ${lowest} m`);
   await expect(topRow).toContainText("map 4000 m");
+  await expectNoSidewaysScroll(page);
 
   // Accepting one row takes the map's value. The row STAYS in the list rather
   // than vanishing under the thumb, now agreeing — with no "0 m" beside it.
@@ -127,6 +136,7 @@ test("one waypoint of the review is a page; Back and Done return to the review",
   await expect(page.getByRole("main")).toContainText("apart");
   // No map on this page, by decision.
   await expect(page.locator(".mapboxgl-canvas")).toHaveCount(0);
+  await expectNoSidewaysScroll(page);
 
   // The altitude is editable here, which is the alternative to accepting.
   const altInput = page.getByRole("textbox", { name: "Altitude (m)" });

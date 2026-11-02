@@ -245,15 +245,28 @@ test("the editor lists waypoints, edits one on its own page, and blocks bad coor
  * comes back where it was scrolled to (lib/scroll-restoration.ts). Restoration
  * runs before late content lands, so the scroll is compared with a tolerance.
  */
-test("Back and Done leave a waypoint's page for the list, at its scroll", async ({ page }) => {
+test("Back and Done leave a waypoint's page for the list, at its scroll", async ({
+  page,
+  isMobile,
+}) => {
   const mutated = trackMutations(page);
-  // Short, so the list scrolls at either project's width.
-  const size = page.viewportSize()!;
-  await page.setViewportSize({ width: size.width, height: 480 });
+  // Short on a desktop, so the list scrolls there too. (A phone's pinned map
+  // pane already pushes the list well down the page.)
+  if (!isMobile) {
+    const size = page.viewportSize()!;
+    await page.setViewportSize({ width: size.width, height: 600 });
+  }
 
-  const last = editorRows(page).last();
-  await last.scrollIntoViewIfNeeded();
-  const lastCode = waypoints[waypoints.length - 1].code;
+  // The last row, scrolled to the MIDDLE of the screen, clear of the sticky
+  // map pane above it and the sticky Save bar below.
+  const index = waypoints.length - 1;
+  const lastCode = waypoints[index].code;
+  const centre = async () => {
+    const row = editorRows(page).nth(index);
+    await row.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    return row;
+  };
+  const last = await centre();
   await expect(last).toContainText(lastCode);
   const scrolled = await page.evaluate(() => window.scrollY);
   expect(scrolled, "the list must scroll for this test to mean anything").toBeGreaterThan(0);
@@ -267,7 +280,7 @@ test("Back and Done leave a waypoint's page for the list, at its scroll", async 
     .toBeGreaterThan(scrolled - 120);
 
   // Done.
-  await openWaypoint(page, editorRows(page).last(), lastCode);
+  await openWaypoint(page, await centre(), lastCode);
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await onEditorList(page, waypoints.length);
   await expect
