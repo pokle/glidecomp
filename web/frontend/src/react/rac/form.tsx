@@ -150,7 +150,23 @@ export function useFormState(): FormState {
   return state;
 }
 
-const FOCUSABLE = 'input:not([type="hidden"]), textarea, select, button';
+/**
+ * The form's state if there is a kit `Form` around, else null — for a kit
+ * field that may be used outside one, and whose value changes without an
+ * `input` event the form could hear (a date picker's segments), so it clears
+ * its own error.
+ */
+export function useOptionalFormState(): FormState | null {
+  return useContext(FormContext);
+}
+
+/**
+ * Where a reader types, ahead of anything they only press: a number field's
+ * minus button comes before its input, and a date's segments are spinbuttons
+ * rather than inputs.
+ */
+const TYPED = 'input:not([type="hidden"]), textarea, select, [role="spinbutton"]';
+const FOCUSABLE = `${TYPED}, button`;
 
 /**
  * The first thing in `form` a reader has to fix — the control itself, not the
@@ -160,9 +176,34 @@ const FOCUSABLE = 'input:not([type="hidden"]), textarea, select, button';
 function firstProblem(form: HTMLElement): HTMLElement | null {
   const field = form.querySelector<HTMLElement>('[data-invalid], [aria-invalid="true"]');
   if (field) {
-    return field.matches(FOCUSABLE) ? field : (field.querySelector<HTMLElement>(FOCUSABLE) ?? field);
+    if (field.matches(FOCUSABLE)) return field;
+    return (
+      field.querySelector<HTMLElement>(TYPED) ??
+      field.querySelector<HTMLElement>(FOCUSABLE) ??
+      field
+    );
   }
   return form.querySelector<HTMLElement>("[data-form-error]");
+}
+
+/**
+ * The field a refusal is about: the server's name for it, mapped through
+ * `fieldNames`, or else the nearest field above it — a refusal about one item
+ * of a list ("admin_emails.1") is about the field the list is typed in.
+ */
+function fieldFor(
+  form: HTMLElement | null,
+  field: string | undefined,
+  fieldNames: Record<string, string> | undefined
+): string | undefined {
+  if (!form || !field) return undefined;
+  const parts = field.split(".");
+  for (let n = parts.length; n > 0; n--) {
+    const path = parts.slice(0, n).join(".");
+    const name = fieldNames?.[path] ?? path;
+    if (form.querySelector(`[name="${CSS.escape(name)}"]`)) return name;
+  }
+  return undefined;
 }
 
 export function Form({
@@ -214,7 +255,10 @@ export function Form({
    * kit has, without each one being told.
    */
   const clearEdited = (e: { target: EventTarget | null }) => {
-    const name = (e.target as HTMLInputElement | null)?.name;
+    const target = e.target as HTMLInputElement | null;
+    // A number field's name is on a hidden input beside the one typed in,
+    // which carries it as `data-field-name` instead (rac/field.tsx).
+    const name = target?.name || target?.dataset?.fieldName;
     if (name) clearFieldError(name);
   };
 
@@ -222,6 +266,15 @@ export function Form({
     if (refused === 0 || !formRef.current) return;
     const target = firstProblem(formRef.current);
     if (!target) return;
+    // A field folded away in a <details> (the scoring page's Advanced
+    // settings) is unfolded, or there would be nothing to see or to focus.
+    for (
+      let fold = target.closest("details");
+      fold;
+      fold = fold.parentElement?.closest("details") ?? null
+    ) {
+      fold.open = true;
+    }
     // Centre it in whatever scrolls it, which keeps it clear of a sheet's
     // header, a bottom bar and (once focus raises one) the keyboard.
     target.scrollIntoView({ block: "center" });
@@ -258,10 +311,8 @@ export function Form({
 
     if (res && !res.ok) {
       const refusal = await readRefusal(res);
-      const name = refusal.field ? (fieldNames?.[refusal.field] ?? refusal.field) : undefined;
-      const hasField =
-        !!name && !!formRef.current?.querySelector(`[name="${CSS.escape(name)}"]`);
-      if (hasField) setFieldErrors({ [name!]: refusal.message });
+      const name = fieldFor(formRef.current, refusal.field, fieldNames);
+      if (name) setFieldErrors({ [name]: refusal.message });
       else setFormError(refusal.message);
       setRefused((n) => n + 1);
       return;

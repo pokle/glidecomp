@@ -152,6 +152,10 @@ export function NumberField({
         </AriaButton>
         <AriaInput
           placeholder={placeholder}
+          // RAC puts the field's `name` on a hidden input holding the number,
+          // not on this one; the kit form reads it here to clear the field's
+          // error as it is edited (rac/form.tsx).
+          data-field-name={props.name}
           // The caret owns horizontal keys; without this, a NumberField inside
           // a grid cell hands ArrowLeft/Right to the grid's cell navigation.
           onKeyDown={(e) => {

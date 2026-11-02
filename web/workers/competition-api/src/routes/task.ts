@@ -442,6 +442,7 @@ export const taskRoutes = new Hono<AuthedEnv>()
           return c.json(
             {
               error: `Invalid pilot classes: ${invalidClasses.join(", ")}. Must be one of: ${compClasses.join(", ")}`,
+              field: "pilot_classes",
             },
             400
           );
