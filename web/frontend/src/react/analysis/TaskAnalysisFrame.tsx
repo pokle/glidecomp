@@ -41,6 +41,12 @@ export interface TaskAnalysisFrameProps {
    * as its heading, where a sub-page takes the chapter as its parent.
    */
   section?: { label: string; lede: string };
+  /**
+   * Crumbs between the chapter and this page, for a page one level below a
+   * section (the thermal map under Thermals). Each carries its own query: the
+   * page building it knows which of its parameters the parent reads.
+   */
+  parents?: Crumb[];
   /** Shown beside the class select. Only pages with per-pilot rows want it. */
   pilotPicker?: boolean;
   children: (ctx: {
@@ -52,6 +58,7 @@ export interface TaskAnalysisFrameProps {
 export function TaskAnalysisFrame({
   bundle,
   section,
+  parents = [],
   pilotPicker = false,
   children,
 }: TaskAnalysisFrameProps) {
@@ -99,7 +106,10 @@ export function TaskAnalysisFrame({
   // default class would undo a choice the reader made two clicks ago. The
   // crumbs above it are other pages and take none of it.
   const crumbs = section
-    ? withQuery(underTaskAnalysis(compId, comp?.name, taskId, task?.name), search)
+    ? [
+        ...withQuery(underTaskAnalysis(compId, comp?.name, taskId, task?.name), search),
+        ...parents,
+      ]
     : underTask(compId, comp?.name, taskId, task?.name);
 
   // Gate on `status` only, never on the user session: the content is public,
@@ -148,7 +158,7 @@ export function TaskAnalysisFrame({
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">{heading}</h1>
-          <p className="text-sm text-muted-foreground">{lede}</p>
+          {lede ? <p className="text-sm text-muted-foreground">{lede}</p> : null}
         </div>
         {/* Pure navigation/actions. */}
         <div className="flex items-center gap-2">

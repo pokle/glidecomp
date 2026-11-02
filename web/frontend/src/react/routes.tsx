@@ -111,6 +111,11 @@ const TaskPilotSimilarity = lazy(() =>
     default: m.TaskPilotSimilarity,
   }))
 );
+// One thermal's rose and map at the size of the screen (#816). Client-only
+// for the same reason: a noindex shell, and the map in it is browser-only.
+const TaskThermalMap = lazy(() =>
+  import("./pages/TaskThermalMap").then((m) => ({ default: m.TaskThermalMap }))
+);
 const Scores = lazy(() =>
   import("./pages/Scores").then((m) => ({ default: m.Scores }))
 );
@@ -275,6 +280,15 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/analysis/similar"
               element={<TaskPilotSimilarity />}
+            />
+            {/* One thermal's rose over the terrain it worked, at the size of
+                the screen — a leaf of the thermals section, where it was a
+                full-screen sheet until #816. Two segments deep, so the
+                :section route below can never match it; a noindex shell in
+                functions/comp/[[path]].ts. */}
+            <Route
+              path="/comp/:compId/task/:taskId/analysis/thermals/map"
+              element={<TaskThermalMap />}
             />
             {/* One section of the chapter, each showing that one thing. Five
                 slugs, listed in analysis/sections.ts and matched by the

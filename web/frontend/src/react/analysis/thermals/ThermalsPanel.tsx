@@ -44,8 +44,7 @@ import type {
   FieldThermalsSummary,
   WeatherHour,
 } from "@glidecomp/engine";
-import { Button, ToggleButton } from "@/react/rac/button";
-import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
+import { Button, LinkButton, ToggleButton } from "@/react/rac/button";
 import { MasterDetail } from "@/react/components/MasterDetail";
 import { useMasterDetailSelection } from "@/react/components/use-master-detail-selection";
 import { ExpandIcon } from "../charts/MetricChartOverlay";
@@ -55,6 +54,7 @@ import { Explain } from "@/react/rac/explain";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { formatTimeOfDay } from "../../lib/time";
 import { formatAltitude, useUnits } from "../../lib/units";
+import { useMounted } from "../../lib/use-mounted";
 import { formatMetricValue } from "../types";
 import { unitDisplay } from "../units";
 import { ValueBar } from "../ValueBar";
@@ -195,6 +195,57 @@ export function thermalFromParam<T extends { id: number }>(
   return shapes.find((s) => String(s.id) === param) ?? null;
 }
 
+/**
+ * The thermal a page is showing: the one the query names, else the
+ * most-shared — the deterministic default, so the SSR render and the first
+ * client render agree. Shared by the section and the thermal map page, so a
+ * link between them can never land on a different thermal.
+ */
+export function shownThermal<T extends { id: number; pilotCount: number }>(
+  param: string | null,
+  shapes: readonly T[]
+): T {
+  return (
+    thermalFromParam(param, shapes) ??
+    shapes.reduce((best, s) => (s.pilotCount > best.pilotCount ? s : best), shapes[0])
+  );
+}
+
+/** History state the maximise link sets on the thermal map page's entry. */
+export const FROM_THERMALS = "fromThermals";
+
+/** The URL parameter the satellite backdrop's toggle round-trips through. */
+const MAP_PARAM = "map";
+
+/**
+ * Whether the satellite backdrop is on — URL state (`?map=1` / `?map=0`
+ * against a per-page default), so Back to the section returns it as it was
+ * left, and a reload keeps it. Written with `replace`: flipping a backdrop
+ * is not a place to go Back to (and a same-path replace keeps the scroll —
+ * lib/scroll-restoration.ts).
+ *
+ * Off until mounted, whatever the query says: mapbox-gl is browser-only and
+ * lazy, so the SSR snapshot never carries it, and the first client render
+ * must agree with that snapshot or hydration fails.
+ */
+function useShowMap(defaultOn: boolean): [boolean, (on: boolean) => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mounted = useMounted();
+  const raw = searchParams.get(MAP_PARAM);
+  const on = raw === "1" ? true : raw === "0" ? false : defaultOn;
+  const set = (next: boolean) =>
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (next === defaultOn) p.delete(MAP_PARAM);
+        else p.set(MAP_PARAM, next ? "1" : "0");
+        return p;
+      },
+      { replace: true }
+    );
+  return [mounted && on, set];
+}
+
 // The map backdrop stays a separate lazy chunk: mapbox-gl (and its CSS) load
 // only when someone flips the toggle, and never in the SSR entry.
 const ThermalRoseMap = lazy(() => import("./ThermalRoseMap"));
@@ -330,7 +381,7 @@ function ThermalRose({
 
   return (
     // No width cap of its own: the figure wrapper decides how big the rose
-    // draws (max-w-80 inline; the full-screen sheet spends the viewport).
+    // draws (max-w-80 inline; the thermal map page spends the viewport).
     <svg viewBox={`0 0 ${ROSE_SIZE} ${ROSE_SIZE}`} className="h-auto w-full" role="img" aria-label={label}>
       {/* Sector wedges: relative climb by side of the core. */}
       <g aria-hidden>
@@ -493,10 +544,7 @@ function RoseLegend() {
       >
         <InfoIcon aria-hidden className="size-3.5" />
       </Button>
-      {/* Above the FullScreenSheet's z-[100]: the legend renders inside the
-          expanded figure too, and the default popover z-50 would put it
-          behind the sheet's own backdrop. */}
-      <Popover className="z-[110]">
+      <Popover>
         <p className="font-medium">Reading the rose</p>
         <ul className="mt-2 space-y-1.5">
           {rows.map((r, i) => (
@@ -514,12 +562,12 @@ function RoseLegend() {
 /**
  * The rose over its optional satellite backdrop, with the figure's own
  * controls: the Map toggle, the maximise/restore control on the map's own
- * corner (one button, one place — press to fill the screen, press again to
+ * corner (one control, one place — press to fill the screen, press again to
  * come back; the browser Fullscreen API mapbox's own control rides on does
- * not exist on iPhones, so the "full screen" is the app's FullScreenSheet),
- * the legend, and — once the camera has been panned or zoomed away —
- * Re-centre. One component for the inline detail pane AND the full-screen
- * sheet, so the two can never disagree about behaviour.
+ * not exist on iPhones, so "the screen" is a page of its own, the thermal
+ * map at /analysis/thermals/map), the legend, and — once the camera has been
+ * panned or zoomed away — Re-centre. One component for the inline detail pane
+ * AND the thermal map page, so the two can never disagree about behaviour.
  *
  * While the map is shown the rose stops taking pointer events: drags and
  * pinches belong to the map (inline, touch panning takes two fingers so one
@@ -529,11 +577,16 @@ function RoseLegend() {
  * a lie. The map's core marker keeps saying where the thermal is, and
  * Re-centre restores the locked view (and the rose with it).
  *
- * Two layouts. Inline the figure IS the rose's square. `fill` (the sheet)
+ * Two layouts. Inline the figure IS the rose's square. `fill` (the map page)
  * spends the whole box on the MAP — that is what maximising is for — with
  * the rose a centred square over it; the scale lock then keys off the
  * rose's own width (`scaleRef`), not the map's, so the rings stay at true
  * ground size while the map shows more terrain around them.
+ *
+ * Maximising is a LINK (#816), not a layer over the page: the full-size
+ * figure is a route of its own, so Back, reload and a shared link all work
+ * the way they do everywhere else. The restore control on that page is the
+ * way back to the section it came from.
  */
 function RoseFigure({
   shape,
@@ -543,8 +596,8 @@ function RoseFigure({
   distanceText,
   showMap,
   onShowMapChange,
-  expanded = false,
-  onToggleExpand,
+  maximiseHref,
+  onRestore,
   cooperativeGestures = true,
   fill = false,
   className,
@@ -554,17 +607,17 @@ function RoseFigure({
   climbFactor: number;
   climbUnit: string;
   distanceText: (m: number) => string;
-  /** Lifted to the panel so the inline figure and the sheet stay in step. */
+  /** URL state (`?map=`), owned by the page, so Back and a reload keep it. */
   showMap: boolean;
   onShowMapChange: (on: boolean) => void;
-  /** Whether this instance IS the full-screen one (flips the control's
-   * glyph from maximise to restore). */
-  expanded?: boolean;
-  /** The maximise/restore control's action. */
-  onToggleExpand?: () => void;
+  /** Inline: where the maximise control goes — the thermal map page. */
+  maximiseHref?: string;
+  /** On the thermal map page: the restore control's action, back to the
+   * section. Present means this instance IS the full-size one. */
+  onRestore?: () => void;
   /** Two-finger touch pan — on inline maps embedded in the scrolling page. */
   cooperativeGestures?: boolean;
-  /** Fill the parent box with the map, rose centred over it (the sheet). */
+  /** Fill the parent box with the map, rose centred over it (the map page). */
   fill?: boolean;
   className?: string;
 }) {
@@ -635,9 +688,11 @@ function RoseFigure({
         )}
       >
         {fill ? (
+          // ThermalMapView's box is 100dvh-8rem tall; 4rem less again keeps
+          // the square clear of the toolbar rows on a landscape screen.
           <div
             ref={roseBoxRef}
-            className="w-full max-w-[min(100%,calc(100dvh-9rem))]"
+            className="w-full max-w-[min(100%,calc(100dvh-12rem))]"
           >
             {rose}
           </div>
@@ -665,20 +720,34 @@ function RoseFigure({
         ) : null}
       </div>
       {/* The map's own maximise/restore control, mapbox-style on the map's
-          corner: ONE button in ONE place, whose glyph flips — press to take
-          the whole screen, press the same button to come back. Shown while
-          the map is (or full screen, so the way back never disappears if the
-          map is toggled off in there). */}
-      {onToggleExpand && (showMap || expanded) ? (
+          corner: ONE control in ONE place, whose glyph flips — press to take
+          the whole screen, press the same corner to come back. Maximise is
+          shown while the map is; restore always, so the way back never
+          disappears if the map is toggled off on the map page. */}
+      {onRestore ? (
         <div className="absolute top-8 right-0 print:hidden">
           <Button
             variant="outline"
             size="icon-sm"
-            aria-label={expanded ? "Restore map size" : "Maximise map"}
-            onPress={onToggleExpand}
+            aria-label="Restore map size"
+            onPress={onRestore}
           >
-            {expanded ? <CollapseIcon /> : <ExpandIcon />}
+            <CollapseIcon />
           </Button>
+        </div>
+      ) : maximiseHref && showMap ? (
+        <div className="absolute top-8 right-0 print:hidden">
+          <LinkButton
+            variant="outline"
+            size="icon-sm"
+            aria-label="Maximise map"
+            href={maximiseHref}
+            // Marks the entry it pushes: the map page's restore control is
+            // then a real Back, which returns this section with its scroll.
+            routerOptions={{ state: { [FROM_THERMALS]: true } }}
+          >
+            <ExpandIcon />
+          </LinkButton>
         </div>
       ) : null}
       <div className="absolute top-0 right-0">
@@ -763,6 +832,7 @@ export function ThermalsPanel({
   weather,
   weatherPending,
   replayHrefFor,
+  mapPath,
 }: {
   thermals: FieldThermalsSummary;
   compTimezone: string | null;
@@ -770,6 +840,9 @@ export function ThermalsPanel({
   weatherPending: boolean;
   /** Deep link into the 3D replay for one thermal; null hides the link. */
   replayHrefFor: (thermalId: number) => string | null;
+  /** The thermal map page (no query — the panel adds the thermal and the
+   * report's view state); null hides the maximise control. */
+  mapPath: string | null;
 }) {
   const units = useUnits();
   const climb = unitDisplay("m/s", units);
@@ -793,12 +866,8 @@ export function ThermalsPanel({
   const [searchParams] = useSearchParams();
   const chosen = thermalFromParam(searchParams.get(THERMAL_PARAM), shapes);
   // Satellite backdrop under the rose — off by default (and in the SSR
-  // snapshot), so mapbox-gl only ever loads on an explicit flip. Shared by
-  // the inline figure and the full-screen sheet.
-  const [showMap, setShowMap] = useState(false);
-  // The figure filling the screen (rac/full-screen-sheet.tsx), for actually
-  // exploring the terrain around the thermal.
-  const [expanded, setExpanded] = useState(false);
+  // snapshot), so mapbox-gl only ever loads on an explicit flip.
+  const [showMap, setShowMap] = useShowMap(false);
   // What the pane shows. With nothing chosen it is still the default thermal:
   // side by side the pane is on screen from the first paint and must not be
   // empty, and stacked it is off screen anyway until a row is picked.
@@ -827,6 +896,18 @@ export function ThermalsPanel({
 
   const multiCoreBands = selected.bands.filter((b) => b.subCores.length >= 2);
   const replayHref = replayHrefFor(selected.id);
+  // The figure at the size of the screen, for actually exploring the terrain
+  // around the thermal: a page of its own (#816). The link names the thermal
+  // this pane shows, and carries the report's view state (class, pinned
+  // pilot) — the backdrop is on there by default, so `map` stays behind.
+  const maximiseHref = mapPath
+    ? (() => {
+        const q = new URLSearchParams(searchParams);
+        q.set(THERMAL_PARAM, String(selected.id));
+        q.delete(MAP_PARAM);
+        return `${mapPath}?${q.toString()}`;
+      })()
+    : undefined;
 
   // The census's mean-climb bars, scaled from zero (climb is a magnitude —
   // a bar starting at the day's weakest thermal would exaggerate the spread)
@@ -1012,7 +1093,7 @@ export function ThermalsPanel({
             distanceText={(m) => altWithUnit(m)}
             showMap={showMap}
             onShowMapChange={setShowMap}
-            onToggleExpand={() => setExpanded(true)}
+            maximiseHref={maximiseHref}
           />
           <div className="space-y-3 text-sm">
             <ul className="space-y-2">
@@ -1191,71 +1272,11 @@ export function ThermalsPanel({
       </div>}
       />
 
-      {/* The figure at full size. Mounted only while open (the sheet's
-          contract), so the SSR snapshot and the un-expanded page carry none
-          of it. Cooperative gestures come OFF in here: there is no page
-          underneath to scroll, so one finger may pan the map. */}
-      {expanded ? (
-        <FullScreenSheet
-          label={`Thermal at ${formatTimeOfDay(new Date(selected.startMs).toISOString(), tz)}, rose and map`}
-          onClose={() => setExpanded(false)}
-          className="flex flex-col gap-2 p-3 sm:p-4"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="min-w-0 truncate text-base font-semibold">
-              Thermal at{" "}
-              {formatTimeOfDay(new Date(selected.startMs).toISOString(), tz)} —{" "}
-              {selected.pilotCount} pilots
-            </h2>
-            {/* The way out, autoFocused — see the note on FullScreenSheet. */}
-            <Button
-              autoFocus
-              variant="outline"
-              size="sm"
-              onPress={() => setExpanded(false)}
-            >
-              Close
-            </Button>
-          </div>
-          <div className="min-h-0 w-full flex-1">
-            {/* `fill`: the MAP spends the whole box — that is what
-                maximising is for — and the rose floats over it as a centred
-                square no bigger than the shorter viewport edge. */}
-            <RoseFigure
-              shape={selected}
-              model={model}
-              climbFactor={climb.factor}
-              climbUnit={climb.unit}
-              distanceText={(m) => altWithUnit(m)}
-              showMap={showMap}
-              onShowMapChange={setShowMap}
-              expanded
-              onToggleExpand={() => setExpanded(false)}
-              cooperativeGestures={false}
-              fill
-            />
-          </div>
-        </FullScreenSheet>
-      ) : null}
-
       {/* The reconstruction method is behind the ⓘ. The model ATTRIBUTION is
           not: it is a licence obligation, so it stays on the page in both
           media, and the "a model run, not an observation" caveat stays with
           it — a prediction must never be readable as a record. */}
-      <p className="text-xs text-muted-foreground">
-        <span className="inline-flex items-baseline gap-1">
-          <span>
-            The dashed &ldquo;forecast&rdquo; arrow is the weather
-            model&rsquo;s wind — a model run, not an observation.
-            {weather?.source
-              ? ` Model: ${weather.source.attribution} (${weather.source.model}).`
-              : ""}
-          </span>
-          <Explain label="How the thermals were reconstructed" className="self-center">
-            <ThermalsNote />
-          </Explain>
-        </span>
-      </p>
+      <ForecastAttribution weather={weather} />
       {/* The note renders <p>s, so its print copy sits beside the paragraph,
           not inside it — a <p> cannot hold another <p>. */}
       <div className="hidden text-xs text-muted-foreground print:block">
@@ -1285,5 +1306,99 @@ function ThermalsNote() {
         &ldquo;forecast&rdquo; arrow is the weather model&rsquo;s wind.
       </p>
     </>
+  );
+}
+
+/**
+ * The forecast arrow's caveat and the weather model's attribution, with the
+ * reconstruction method behind the ⓘ. Wherever the rose is drawn with its
+ * dashed "forecast" arrow — the section and the thermal map page alike — this
+ * goes with it: the attribution is a licence obligation, and a prediction must
+ * never be readable as a record.
+ */
+function ForecastAttribution({ weather }: { weather: TaskWeather | null }) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      <span className="inline-flex items-baseline gap-1">
+        <span>
+          The dashed &ldquo;forecast&rdquo; arrow is the weather
+          model&rsquo;s wind — a model run, not an observation.
+          {weather?.source
+            ? ` Model: ${weather.source.attribution} (${weather.source.model}).`
+            : ""}
+        </span>
+        <Explain label="How the thermals were reconstructed" className="self-center">
+          <ThermalsNote />
+        </Explain>
+      </span>
+    </p>
+  );
+}
+
+/**
+ * What a task with no shared thermal shows, on the section and on the thermal
+ * map page alike.
+ */
+export function NoThermalsNote() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      No thermal on this task was shared by two pilots, so there is nothing
+      to reconstruct: a thermal's shape comes from the tracks that circled
+      it together.
+    </p>
+  );
+}
+
+/**
+ * One thermal's rose over the terrain it worked, at the size of the screen:
+ * the body of the thermal map page (pages/TaskThermalMap.tsx, #816). It was a
+ * FullScreenSheet over the section until 2026-11; it is a page now, so the
+ * thermal comes from the query (`?thermal=`), never from the section that
+ * linked here — a reload or a shared link has no section underneath.
+ *
+ * The backdrop is ON by default here (it is what the page is for), and
+ * `?map=0` remembers turning it off. The figure's box is the viewport less a
+ * margin, never all of it: one finger pans this map (cooperative gestures are
+ * off — the map is the page's whole subject), so the page must always keep a
+ * strip outside the map to scroll by. Nothing is fixed to the screen.
+ */
+export function ThermalMapView({
+  thermals,
+  weather,
+  onRestore,
+}: {
+  thermals: FieldThermalsSummary;
+  weather: TaskWeather | null;
+  /** The restore control: back to the section this page belongs to. */
+  onRestore: () => void;
+}) {
+  const units = useUnits();
+  const climb = unitDisplay("m/s", units);
+  const [searchParams] = useSearchParams();
+  const selected = shownThermal(searchParams.get(THERMAL_PARAM), thermals.shapes);
+  const model = useMemo(() => modelWindFor(selected, weather), [selected, weather]);
+  const [showMap, setShowMap] = useShowMap(true);
+  const altWithUnit = (m: number) => formatAltitude(m, { prefs: units }).withUnit;
+  return (
+    <div className="space-y-2">
+      <div className="h-[calc(100dvh-8rem)] min-h-80 w-full">
+        {/* `fill`: the MAP spends the whole box — that is what maximising
+            is for — and the rose floats over it as a centred square no
+            bigger than the box's shorter edge. */}
+        <RoseFigure
+          shape={selected}
+          model={model}
+          climbFactor={climb.factor}
+          climbUnit={climb.unit}
+          distanceText={altWithUnit}
+          showMap={showMap}
+          onShowMapChange={setShowMap}
+          onRestore={onRestore}
+          cooperativeGestures={false}
+          fill
+        />
+      </div>
+      <ForecastAttribution weather={weather} />
+    </div>
   );
 }

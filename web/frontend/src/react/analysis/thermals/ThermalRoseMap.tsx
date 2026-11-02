@@ -15,7 +15,7 @@
  *
  * Inline the map sits in a long scrolling page, so touch gestures are
  * COOPERATIVE (two fingers to pan — one finger keeps scrolling the page);
- * the full-screen sheet has no page under it and turns that off.
+ * the thermal map page, where the map is the whole subject, turns that off.
  *
  * Raw mapbox-gl rather than the shared analysis MapProvider — the provider
  * exists for the interactive analysis map (docs/mapbox-interactions-spec.md)
@@ -57,7 +57,7 @@ export default function ThermalRoseMap({
   /** Bump to snap the camera back to the locked framing. */
   recentreToken?: number;
   /** The element whose width IS the rose's rendered width, when the map's
-   * own box is bigger than the rose (the full-screen sheet, where the map
+   * own box is bigger than the rose (the thermal map page, where the map
    * fills the viewport and the rose is a centred square over it). The
    * scale lock must equal metres-per-pixel over THAT box, not the map's. */
   scaleRef?: React.RefObject<HTMLElement | null>;

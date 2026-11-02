@@ -333,6 +333,20 @@ export function taskSimilarityPath(
   return `${taskAnalysisPath(compId, compName, taskId, taskName)}/similar`;
 }
 
+/**
+ * One thermal's rose over the terrain it worked, at the size of the screen —
+ * a leaf of the thermals section (#816). Which thermal rides in the query
+ * (`?thermal=`), as it does on the section page.
+ */
+export function taskThermalMapPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskAnalysisSectionPath(compId, compName, taskId, taskName, "thermals")}/map`;
+}
+
 export function pilotPath(
   compId: string,
   compName: string | null | undefined,

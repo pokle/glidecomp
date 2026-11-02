@@ -351,6 +351,10 @@ test.describe("SSR — isolation and fallback", () => {
     // client-side from the report it fetches, so it has nothing to
     // server-render and must reach the shell rather than the 404 fallback.
     "/comp/anything/task/anything/analysis/similar",
+    // The thermal map (#816): a leaf of the SSR'd thermals section, there to
+    // show a browser-only map. It must reach the shell, not the section's
+    // route (which would 404 "thermals/map") or the 404 fallback.
+    "/comp/anything/task/anything/analysis/thermals/map",
   ]) {
     test(`a hard reload of ${path} serves a noindex app shell`, async ({ request }) => {
       const res = await request.get(path, { failOnStatusCode: false });

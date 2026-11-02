@@ -77,6 +77,14 @@ clustering (`shared-thermals.ts`) and the circle detector.
     core, seen from above, with lean and drift already taken out by the
     band re-centring. The ⓘ popover names all seven marks with the same
     glyphs the rose draws, so a swatch can never drift from the chart.
+  - The **Map** toggle lays the rose over satellite imagery at the rose's own
+    ground scale (`?map=1`). With the map on, the corner's maximise control
+    is a link to **`/analysis/thermals/map?thermal=<id>`**: the same figure
+    with the map spending the viewport, a page of its own since #816 (it was
+    a full-screen sheet). It reads the thermal from the query and the report
+    through the same `use-task-report.ts`, so a reload or a shared link
+    reproduces it; its restore control is the browser's Back. A noindex
+    shell, not SSR'd — see [ssr.md](ssr.md).
 - **3D replay** (`/replay?comp=&task=`): `ThermalLayer` draws each thermal as
   a ring stack (one ring per band at the measured core + working radius), the
   core axis, and feeder diamonds. The pilots' own trails are the point cloud.

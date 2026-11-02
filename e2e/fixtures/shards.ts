@@ -98,6 +98,7 @@ export const E2E_SHARDS = {
     "trusted-types.spec.ts", // 57.1s
     "report-card.spec.ts", // 28.4s
     "task-analysis.spec.ts", // 20.6s
+    "task-thermal-map.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "explain-affordance.spec.ts", // 4.5s
     "lazy-map-in-view.spec.ts", // 2.0s
   ],

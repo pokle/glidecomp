@@ -70,6 +70,11 @@ export const MOBILE_SPEC_FILES = [
   // text field, which is the keyboard trouble the overlays rule is about. Now
   // a form on the page, with the new key shown in place.
   "settings-api-keys.spec.ts",
+  // The thermal map (#816): one thermal's rose and map at the size of the
+  // screen, a page where it was a full-screen sheet. The page has to fit a
+  // phone — no sideways scroll, the figure no taller than the screen — and
+  // Back has to work there.
+  "task-thermal-map.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */
