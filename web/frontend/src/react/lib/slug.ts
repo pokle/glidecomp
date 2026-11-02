@@ -225,6 +225,15 @@ export function taskPath(
   return `${compPath(compId, compName)}/task/${slugSegment(taskId, taskName)}`;
 }
 
+/**
+ * The admin-only page that creates a task. A page and not a dialog over the
+ * comp: see the overlays rule in CLAUDE.md. `new` can never be a task's id
+ * (a sqid is at least four letters), so it cannot shadow a real task.
+ */
+export function compNewTaskPath(id: string, name?: string | null): string {
+  return `${compPath(id, name)}/task/new`;
+}
+
 /*
  * The task's three admin-only editors, all siblings under the task: each is
  * reached from the part of the task page it edits, so none is nested under

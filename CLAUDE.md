@@ -420,8 +420,6 @@ These are the standing imperatives. Each links to the reference that explains it
     diagram), [#815](https://github.com/pokle/glidecomp/issues/815) and
     [#816](https://github.com/pokle/glidecomp/issues/816) (task analysis
     figures), and the dialogs with text fields:
-    [#818](https://github.com/pokle/glidecomp/issues/818) (new competition),
-    [#819](https://github.com/pokle/glidecomp/issues/819) (new task),
     [#820](https://github.com/pokle/glidecomp/issues/820) (submit track on
     the task page), [#821](https://github.com/pokle/glidecomp/issues/821)
     (API key); then [#817](https://github.com/pokle/glidecomp/issues/817)
@@ -473,8 +471,8 @@ These are the standing imperatives. Each links to the reference that explains it
     lost the reader: on an iPhone the pilot sheet's Done spun and stopped,
     with the reason at the top of a body scrolled past it.
     `e2e/forms.spec.ts` holds the rules on a phone and a desktop against a
-    development-only bench (`/__kit/form`), so a form built on the kit tests
-    only its own fields.
+    bench built only in development and in the e2e suite's `e2e`-mode build
+    (`/__kit/form`), so a form built on the kit tests only its own fields.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI

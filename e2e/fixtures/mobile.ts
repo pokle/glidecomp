@@ -38,6 +38,9 @@ export const MOBILE_SPEC_FILES = [
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
   "task-settings-pages.spec.ts",
+  // Creating a task (#819): a page rather than a dialog with a text field,
+  // which is what the overlays rule moved off a phone.
+  "task-new-page.spec.ts",
   // Create a test IGC (#822), a page under the task where it was a dialog —
   // because a dialog with text fields is what misbehaved on a phone.
   "task-test-igc.spec.ts",
@@ -56,9 +59,40 @@ export const MOBILE_SPEC_FILES = [
   // on the screen — which is exactly what a phone's height, its keyboard and
   // a sheet's fixed header change.
   "forms.spec.ts",
+  // Starting a new competition: a page rather than a dialog with a text
+  // field, which is the shape the phone could not use (#818).
+  "comp-new.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */
 export const MOBILE_TEST_MATCH: string[] = MOBILE_SPEC_FILES.map(
   (file) => `**/${file}`
 );
+
+/**
+ * Tag for a test that only means something on a phone, in a spec listed above:
+ *
+ *   test("…folds into More on a phone", { tag: PHONE_ONLY }, async ({ page }) => {
+ *
+ * The `chromium` project never schedules it (`grepInvert` in
+ * playwright.config.ts). This replaced a `phoneOnly(isMobile)` call at the top
+ * of the body, which skipped correctly but only once the file's `beforeEach`
+ * had signed in and loaded a page for nothing — about a second per skipped
+ * test, eight times a run. mobile.test.ts fails if a spec carrying it is not in
+ * MOBILE_SPEC_FILES, where it would run in no project at all.
+ *
+ * Every other test in a listed spec runs in BOTH projects, because the second
+ * pass is the entire point: a journey that works at both widths is the thing
+ * worth pinning. If a test fails under `mobile`, that is a finding about the
+ * phone layout, not a reason to tag it.
+ */
+export const PHONE_ONLY = "@phone-only";
+
+/**
+ * Tag for a test of something a phone deliberately does NOT have — a coarse
+ * pointer gets "Open in app" where a mouse gets a download menu, a phone-width
+ * sheet has no side margin to scroll from. The `mobile` project never schedules
+ * it. The same warning as PHONE_ONLY applies, harder: this is for a behaviour
+ * that differs by design, never for a test that fails on the phone.
+ */
+export const DESKTOP_ONLY = "@desktop-only";
