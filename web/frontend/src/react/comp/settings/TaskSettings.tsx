@@ -89,7 +89,6 @@ export function TaskSettings({
   const [submissionsOpen, setSubmissionsOpen] = useState(
     !task.submissions_closed
   );
-  const [saving, setSaving] = useState(false);
 
   const dirty =
     name !== task.name ||
@@ -99,48 +98,11 @@ export function TaskSettings({
     selectedClasses.length !== savedClasses.length ||
     selectedClasses.some((cls) => !savedClasses.includes(cls));
 
-  async function save() {
-    if (selectedClasses.length === 0) {
-      toast.warning("Select at least one pilot class");
-      return;
-    }
-
-    // The stop is on the task date; combine it with the comp-local stop time.
-    const stopIso =
-      stopTime && taskDate
-        ? zonedDateTimeLocalToUtcISO(`${taskDate}T${stopTime}`, timezone)
-        : null;
-    if (stopTime && !stopIso) {
-      toast.warning("Enter a valid stop time");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
-        param: { comp_id: compId, task_id: taskId },
-        json: {
-          name: name.trim(),
-          task_date: taskDate,
-          pilot_classes: selectedClasses,
-          stop_announcement_time: stopIso,
-          submissions_closed: !submissionsOpen,
-        },
-      });
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to update task");
-        return;
-      }
-
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  // The stop is on the task date; combine it with the comp-local stop time.
+  const stopIso =
+    stopTime && taskDate
+      ? zonedDateTimeLocalToUtcISO(`${taskDate}T${stopTime}`, timezone)
+      : null;
 
   async function deleteTask() {
     const confirmed = await confirm({
@@ -173,14 +135,36 @@ export function TaskSettings({
       crumbs={underTask(compId, comp.name, taskId, task.name)}
       title="Settings"
     >
-      <SettingsForm onSave={save} saving={saving} dirty={dirty}>
+      <SettingsForm
+        dirty={dirty}
+        validate={() => ({
+          name: !name.trim() && "Enter a task name",
+          task_date: !taskDate && "Enter a task date",
+          pilot_classes: selectedClasses.length === 0 && "Select at least one pilot class",
+          stop_announcement_time: !!stopTime && !stopIso && "Enter a valid stop time",
+        })}
+        onSubmit={() =>
+          api.api.comp[":comp_id"].task[":task_id"].$patch({
+            param: { comp_id: compId, task_id: taskId },
+            json: {
+              name: name.trim(),
+              task_date: taskDate,
+              pilot_classes: selectedClasses,
+              stop_announcement_time: stopIso,
+              submissions_closed: !submissionsOpen,
+            },
+          })
+        }
+        onSuccess={onSaved}
+      >
+        {/* Named as the API names them, so a refusal lands under its field. */}
         <TextField
           label="Name"
+          name="name"
           isRequired
           maxLength={128}
           value={name}
           onChange={setName}
-          errorMessage="Enter a task name"
         />
 
         <div className="flex flex-col gap-2">
@@ -188,6 +172,7 @@ export function TaskSettings({
           <DatePicker
             inline
             required
+            name="task_date"
             aria-labelledby={dateId}
             value={taskDate}
             onChange={setTaskDate}
@@ -196,6 +181,7 @@ export function TaskSettings({
 
         <CheckList
           label="Pilot classes"
+          name="pilot_classes"
           value={selectedClasses}
           onChange={setSelectedClasses}
           options={compPilotClasses.map((cls) => ({ value: cls, label: cls }))}
@@ -210,6 +196,7 @@ export function TaskSettings({
               and nothing that opens over the description below it. */}
           <TimePicker
             clearable
+            name="stop_announcement_time"
             aria-labelledby={stopId}
             value={stopTime}
             onChange={setStopTime}
@@ -228,6 +215,7 @@ export function TaskSettings({
 
         <SwitchList>
           <SwitchField
+            name="submissions_closed"
             checked={submissionsOpen}
             onChange={setSubmissionsOpen}
             label="Open for track submissions"

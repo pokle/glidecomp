@@ -18,7 +18,7 @@ import { useState } from "react";
 import { TextField as AriaTextField } from "react-aria-components";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
-import { Description, Label, TextArea } from "@/react/rac/field";
+import { Description, FieldError, Label, TextArea } from "@/react/rac/field";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { underTask } from "@/react/lib/crumbs";
@@ -43,40 +43,31 @@ export function TaskWeatherNotes({
   onSaved: () => void;
 }) {
   const [draft, setDraft] = useState(task.weather_notes);
-  const [saving, setSaving] = useState(false);
 
   const dirty = draft.trim() !== task.weather_notes.trim();
-
-  async function save() {
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].task[":task_id"].$patch({
-        param: { comp_id: compId, task_id: taskId },
-        // Trimmed on the way in so "cleared" is unambiguous — a field of
-        // whitespace would otherwise read as notes that render as nothing.
-        json: { weather_notes: draft.trim() },
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to save weather notes");
-        return;
-      }
-      toast.success("Weather notes saved");
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <SettingsPage
       crumbs={underTask(compId, comp.name, taskId, task.name)}
       title="Weather notes"
     >
-      <SettingsForm onSave={save} saving={saving} dirty={dirty}>
+      <SettingsForm
+        dirty={dirty}
+        onSubmit={() =>
+          api.api.comp[":comp_id"].task[":task_id"].$patch({
+            param: { comp_id: compId, task_id: taskId },
+            // Trimmed on the way in so "cleared" is unambiguous — a field of
+            // whitespace would otherwise read as notes that render as nothing.
+            json: { weather_notes: draft.trim() },
+          })
+        }
+        onSuccess={() => {
+          toast.success("Weather notes saved");
+          onSaved();
+        }}
+      >
         <AriaTextField
+          name="weather_notes"
           value={draft}
           onChange={setDraft}
           maxLength={MAX_NOTES}
@@ -95,6 +86,7 @@ export function TaskWeatherNotes({
             Public, on the task page and its analysis. Plain text.{" "}
             {draft.length}/{MAX_NOTES} characters.
           </Description>
+          <FieldError />
         </AriaTextField>
       </SettingsForm>
     </SettingsPage>
