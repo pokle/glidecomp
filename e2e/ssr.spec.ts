@@ -361,9 +361,16 @@ test.describe("SSR — isolation and fallback", () => {
     // The roster's CSV import and CIVL fill (#810): admin-only pages under it.
     "/comp/anything/pilots/import",
     "/comp/anything/pilots/civl-fill",
+    // Copying another competition's pilots in: admin-only, under the roster.
+    "/comp/anything/pilots/copy",
     // Admin-only settings pages (index + a group sub-page).
     "/comp/anything/settings",
     "/comp/anything/settings/scoring",
+    // Copying the competition into a new one: admin-only, beside the SSR'd
+    // comp page, which must not try to render "copy" as a section.
+    "/comp/anything/copy",
+    // Choosing a route to copy: admin-only, under the route editor's shell.
+    "/comp/anything/task/anything/route/copy",
     // Creating a task (#819): the same shape as the public task page, so it
     // must be caught before the task route would try to render (and 404) it.
     "/comp/anything/task/new",

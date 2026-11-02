@@ -229,6 +229,27 @@ export function compPilotsCivlFillPath(id: string, name?: string | null): string
 }
 
 /**
+ * Copying the pilots of another competition into this roster. With
+ * `fromCompId`, the review of copying that one; without, the choice of which.
+ */
+export function compPilotsCopyPath(
+  id: string,
+  name?: string | null,
+  fromCompId?: string | null
+): string {
+  const path = `${compPilotsPath(id, name)}/copy`;
+  return fromCompId ? `${path}?from=${encodeURIComponent(fromCompId)}` : path;
+}
+
+/**
+ * Starting a new competition from this one (its settings, waypoints and
+ * pilots; never its tasks). Admin-only, reached from the settings index.
+ */
+export function compCopyPath(id: string, name?: string | null): string {
+  return `${compPath(id, name)}/copy`;
+}
+
+/**
  * The admin-only competition settings pages. Without `group`, the index of
  * grouped rows; with one (e.g. "scoring"), that group's sub-page.
  */
@@ -295,6 +316,34 @@ export function taskRoutePath(
   taskName: string | null | undefined
 ): string {
   return `${taskPath(compId, compName, taskId, taskName)}/route`;
+}
+
+/**
+ * Choosing a route from another task to copy into this one's route editor.
+ * The choice comes back to the editor as {@link taskRouteCopyFromPath}.
+ */
+export function taskRouteCopyPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/copy`;
+}
+
+/**
+ * The route editor with another task's route loaded into it as unsaved
+ * work. The source is in the URL, so a reload loads it again.
+ */
+export function taskRouteCopyFromPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  from: { compId: string; taskId: string }
+): string {
+  const query = new URLSearchParams({ from_comp: from.compId, from_task: from.taskId });
+  return `${taskRoutePath(compId, compName, taskId, taskName)}?${query.toString()}`;
 }
 
 /** The organiser's account of what the day did. */

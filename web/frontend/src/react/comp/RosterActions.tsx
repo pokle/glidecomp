@@ -80,11 +80,14 @@ export function RosterActionsMenu({
   onImport,
   onExport,
   onFillCivl,
+  onCopyFromComp,
   onAddTestPilots,
 }: {
   onImport: () => void;
   onExport: () => void;
   onFillCivl: () => void;
+  /** Copy another competition's pilots in (pages/CompPilotsCopyPage.tsx). */
+  onCopyFromComp: () => void;
   onAddTestPilots: () => void;
 }) {
   return (
@@ -98,6 +101,7 @@ export function RosterActionsMenu({
         <MenuItem onAction={onImport}>Import CSV…</MenuItem>
         <MenuItem onAction={onExport}>Export CSV</MenuItem>
         <MenuItem onAction={onFillCivl}>Fill from CIVL…</MenuItem>
+        <MenuItem onAction={onCopyFromComp}>Copy from another competition…</MenuItem>
         <MenuItem onAction={onAddTestPilots}>Add test pilots</MenuItem>
       </Menu>
     </MenuTrigger>

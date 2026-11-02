@@ -7,6 +7,8 @@
  * "Delete competition" lives here as a destructive row rather than on a
  * sub-page: it is an action, not a setting, and burying it a level down
  * would only make it easier to press by accident next to a Save button.
+ * "Copy to a new competition" is the other action here; it opens a page
+ * (pages/CompCopyPage.tsx) and changes nothing about this competition.
  */
 import { accessSummary, scoringSummary } from "./scoring-settings";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +18,7 @@ import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
 import { useConfirm } from "@/react/lib/confirm";
 import { underComp } from "@/react/lib/crumbs";
-import { compSettingsPath } from "@/react/lib/slug";
+import { compCopyPath, compSettingsPath } from "@/react/lib/slug";
 import type { CompDetailData } from "../types";
 import { GeneralSettings } from "./GeneralSettings";
 import { ClassesSettings } from "./ClassesSettings";
@@ -107,6 +109,15 @@ export function CompSettingsIndex({
           to={groupPath("scoring")}
           label="Scoring"
           value={scoringSummary(comp)}
+        />
+      </NavList>
+      {/* An action rather than a setting, like Delete below, but it changes
+          nothing here: it starts a new competition from this one. */}
+      <NavList>
+        <NavRow
+          to={compCopyPath(compId, comp.name)}
+          label="Copy to a new competition"
+          description="Its settings, waypoints and pilots, for the next event"
         />
       </NavList>
       <NavList label="Danger zone">

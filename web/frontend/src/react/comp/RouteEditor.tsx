@@ -31,9 +31,10 @@
  * imperative write-back; Start Speed Section gates and goal configuration are
  * edited on the start and goal turnpoints (and still in collapsible sections
  * below the list) so a whole .xctsk is editable in one place; routes can be
- * imported from a .xctsk file or an XContest task code, and exported to a
- * .xctsk file. Saving PATCHes the task's xctsk (the server validates strictly
- * and audit-logs the change).
+ * imported from a .xctsk file or an XContest task code, copied from another
+ * task (pages/TaskRouteCopyPage.tsx, which comes back here as `copyFrom`),
+ * and exported to a .xctsk file. Saving PATCHes the task's xctsk (the server
+ * validates strictly and audit-logs the change).
  *
  * AddWaypointDialog stays a plain dialog over this page: it is a short
  * single-purpose form, and it is shared with the competition waypoints page,
@@ -50,7 +51,7 @@ import {
   type XCTask,
 } from "@glidecomp/engine";
 import type { MapPickDetails, MapWaypoint } from "../../analysis/map-provider";
-import { Button, ToggleButton } from "@/react/rac/button";
+import { Button, LinkButton, ToggleButton } from "@/react/rac/button";
 import {
   Dialog,
   DialogFooter,
@@ -119,6 +120,8 @@ export function RouteEditor({
   timezone,
   onCancel,
   onSaved,
+  copyFrom = null,
+  copyPickerPath,
 }: {
   compId: string;
   /** For the breadcrumb trail's canonical links. */
@@ -138,6 +141,14 @@ export function RouteEditor({
   /** Leaving without saving; the caller decides where "back" is. */
   onCancel: () => void;
   onSaved: () => void;
+  /**
+   * A route copied from another task (pages/TaskRouteCopyPage.tsx), loaded
+   * once on arrival as unsaved work over the saved route, so Save, Cancel
+   * and the unsaved-changes guard all treat it as an edit.
+   */
+  copyFrom?: { task: XCTask; label: string } | null;
+  /** Where "Copy from another competition" goes: the route picker. */
+  copyPickerPath?: string;
 }) {
   const confirm = useConfirm();
 
@@ -303,7 +314,9 @@ export function RouteEditor({
   if (initialSnapshotRef.current === null) initialSnapshotRef.current = snapshot();
   const dirty = snapshot() !== initialSnapshotRef.current;
 
-  useUnsavedChangesGuard(dirty && !saving, {
+  // Armed through a save, and left through on success (`guard.leave`): see
+  // UnsavedChangesGuard.leave for the race disarming on Save caused.
+  const guard = useUnsavedChangesGuard(dirty, {
     title: "Discard route changes?",
     message: "This route has unsaved changes. Leaving will discard them.",
   });
@@ -582,6 +595,12 @@ export function RouteEditor({
       });
       if (!ok) return;
     }
+    applyTask(task);
+    toast.success(`Loaded ${task.turnpoints.length} turnpoints from ${sourceLabel}`);
+  }
+
+  /** Put a whole task into the editor: grid, panels and base fields. */
+  function applyTask(task: XCTask) {
     baseRef.current = task;
     setRows(turnpointsToRows(task.turnpoints, nextRowId));
     setSssType(task.sss?.type ?? "RACE");
@@ -591,8 +610,23 @@ export function RouteEditor({
     const deadline = task.goal?.deadline ? gateToHHMM(task.goal.deadline) : null;
     setGoalDeadline(deadline ? toDisplayTime(deadline) : "");
     setGoalElevation(elevationFromTask(task));
-    toast.success(`Loaded ${task.turnpoints.length} turnpoints from ${sourceLabel}`);
   }
+
+  // A route chosen on the copy page arrives in the URL: load it once, with
+  // no "Replace the route?" question, because choosing it was the answer.
+  // After the first render, so the unsaved-changes snapshot is of the SAVED
+  // route and the copy reads as an edit.
+  const copiedRef = useRef(false);
+  useEffect(() => {
+    if (!copyFrom || copiedRef.current) return;
+    copiedRef.current = true;
+    applyTask(copyFrom.task);
+    toast.success(
+      `Loaded ${copyFrom.task.turnpoints.length} turnpoints from ${copyFrom.label}. ` +
+        "Nothing is saved until you press Save."
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
 
   async function importFile(files: FileList | null) {
     const file = files?.[0];
@@ -809,7 +843,7 @@ export function RouteEditor({
       toast.success(
         `Route saved: ${task.turnpoints.length} turnpoint${task.turnpoints.length === 1 ? "" : "s"}${wpNote} — scores will recompute`
       );
-      onSaved();
+      guard.leave(onSaved);
     } catch {
       toast.error("Network error. Please try again.");
     } finally {
@@ -992,6 +1026,12 @@ export function RouteEditor({
             >
               Load from XContest
             </Button>
+            {/* A link, so the unsaved-changes guard asks before it leaves. */}
+            {copyPickerPath ? (
+              <LinkButton variant="outline" size="sm" href={copyPickerPath}>
+                Copy from another competition
+              </LinkButton>
+            ) : null}
             <Button variant="outline" size="sm" onPress={exportFile}>
               Export .xctsk
             </Button>

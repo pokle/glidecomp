@@ -265,6 +265,29 @@ export const updateCompSchema = z.object({
   organiser_notes: proseText(z.string().max(MAX_ORGANISER_NOTES)).optional(),
 });
 
+// ── Copying a competition (issue: subsequent competitions) ──
+//
+// The clone always brings the settings; each of the rest is the organiser's
+// choice, and an omitted one means "bring it", the page's default.
+export const cloneCompSchema = z.object({
+  name: requiredName(),
+  waypoints: z.boolean().optional(),
+  pilots: z.boolean().optional(),
+  admins: z.boolean().optional(),
+});
+
+/** A competition to copy from: its id as it goes in URLs, share key or not. */
+const compRefString = z.string().min(1).max(MAX_TEXT);
+
+export const copyPilotsSchema = z.object({ from_comp_id: compRefString });
+
+export const copyPilotsPreviewSchema = z.object({ from: compRefString });
+
+/** The route picker's optional words to look for in a comp or task name. */
+export const routeSourcesQuerySchema = z.object({
+  q: z.string().max(MAX_TEXT).optional(),
+});
+
 // ── Pilot status (per-task) validators ──
 //
 // Admins/pilots may hand-pick only the two "did not fly" outcomes. "Present"
@@ -413,6 +436,13 @@ export const updateCompPilotSchema = compPilotFieldsSchema.partial();
  *
  * Max 250 rows per request (matches the 250 pilots-per-comp cap).
  */
+/**
+ * The most pilots one competition's roster may hold. The bulk save and the
+ * copy from another competition both check the roster as it will be after
+ * the write.
+ */
+export const MAX_PILOTS_PER_COMP = 250;
+
 export const bulkPilotsSchema = z.object({
   pilots: z
     .array(

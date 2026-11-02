@@ -119,6 +119,7 @@ export const E2E_SHARDS = {
     "comp-detail.spec.ts", // 33.5s (chromium + mobile), ~12s of it seeding the sample comp
     "comp-settings-pages.spec.ts", // 21.2s (chromium + mobile)
     "comp-new.spec.ts", // 5.0s (chromium + mobile)
+    "comp-copy.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-new-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-test-igc.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "hidden-comp-share-link.spec.ts", // 4.9s

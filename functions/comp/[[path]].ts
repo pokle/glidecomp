@@ -168,9 +168,9 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/new\/?$/,
   // Pilot roster editor — admin-only management surface, nothing for crawlers.
   /^\/comp\/[^/]+\/pilots\/?$/,
-  // One pilot's editor (and /pilots/new), and the roster's CSV import and
-  // CIVL fill (/pilots/import, /pilots/civl-fill, #810) — admin-only, like
-  // the roster.
+  // One pilot's editor (and /pilots/new), and the roster's CSV import, CIVL
+  // fill and copy (/pilots/import, /pilots/civl-fill, #810; /pilots/copy) —
+  // admin-only, like the roster.
   /^\/comp\/[^/]+\/pilots\/[^/]+\/?$/,
   // Creating a task (#819) — admin-only. It shares its shape with the public
   // task page below, and must be caught here first: `new` is no task's id (a
@@ -178,10 +178,16 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/[^/]+\/task\/new\/?$/,
   // Competition settings pages (index + group sub-pages) — admin-only.
   /^\/comp\/[^/]+\/settings(\/[^/]+)?\/?$/,
+  // Copying the competition into a new one — admin-only, reached from the
+  // settings index.
+  /^\/comp\/[^/]+\/copy\/?$/,
   // The task's three admin-only editors, the routed replacements for the Task
   // Settings, route and weather-notes dialogs. The route editor has a second
   // reason never to be server-rendered: it pulls Mapbox.
   /^\/comp\/[^/]+\/task\/[^/]+\/(settings|route|weather)\/?$/,
+  // Choosing a route to copy into the route editor — admin-only, and only a
+  // list of other tasks' routes, each already on its own task page.
+  /^\/comp\/[^/]+\/task\/[^/]+\/route\/copy\/?$/,
   // Create a test IGC — admin-only like the editors, and nothing on it but a
   // form whose result is a file made in the browser.
   /^\/comp\/[^/]+\/task\/[^/]+\/test-igc\/?$/,

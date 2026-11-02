@@ -18,6 +18,7 @@ import {
   compSettingsPath,
   compPilotsPath,
   pilotPath,
+  taskRoutePath,
 } from "./slug";
 
 export type Crumb = { label: string; to: string };
@@ -90,6 +91,22 @@ export function underTask(
     {
       label: taskName || "Task",
       to: compId && taskId ? taskPath(compId, compName, taskId, taskName) : "/comp",
+    },
+  ];
+}
+
+/** Ancestors of a page under a task's route editor (copying a route in). */
+export function underTaskRoute(
+  compId: string | undefined,
+  compName: string | null | undefined,
+  taskId: string | undefined,
+  taskName: string | null | undefined
+): Crumb[] {
+  return [
+    ...underTask(compId, compName, taskId, taskName),
+    {
+      label: "Route",
+      to: compId && taskId ? taskRoutePath(compId, compName, taskId, taskName) : "/comp",
     },
   ];
 }
