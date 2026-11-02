@@ -155,7 +155,7 @@ function CopyRoute({ editor }: { editor: RouteEditorState }) {
         ? source.task_name
         : `${source.task_name} (${source.comp_name})`;
       // The load may have asked first ("Replace the route…?").
-      if (await loadRoute(task, label)) editor.leave({ afterConfirm: true });
+      if (await loadRoute(task, label)) editor.leave();
     } catch {
       setChooseError("Network error. Check your connection, then try again.");
     } finally {

@@ -24,7 +24,6 @@ import { useAdminView, useUser } from "../lib/user";
 import { underCompPilots } from "../lib/crumbs";
 import { compPilotPath, compPilotsPath, compUrlId, idFromSegment } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { backPastClosedOverlays } from "../lib/use-back-dismiss";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
 import type { CompPilot } from "../comp/csv";
@@ -120,8 +119,7 @@ export function CompPilotPage() {
   if (pilotId && !pilot) return <NotFound title="Pilot not found" />;
 
   const backToList = () => {
-    // Behind the Remove confirmation's own history entry, if it just closed.
-    if ((location.state as { fromList?: boolean } | null)?.fromList) backPastClosedOverlays();
+    if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1);
     else navigate(compPilotsPath(urlId, comp.name), { replace: true });
   };
 

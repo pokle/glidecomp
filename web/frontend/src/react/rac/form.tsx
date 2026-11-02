@@ -16,15 +16,15 @@
  * screen reader. What it adds is the submit itself. The rules:
  *
  *   - **An error about a field goes under that field**, and the field is
- *     focused and scrolled to the middle of its scroller — clear of a sheet's
- *     header, a bottom bar and an on-screen keyboard. The form's own checks
+ *     focused and scrolled to the middle of the page — clear of a sticky
+ *     header and an on-screen keyboard. The form's own checks
  *     (`validate`) and the server's refusals land the same way: a refusal
  *     names its field (`{ error, field }`, competition-api's `validated()` and
  *     the routes that know better), and `fieldNames` maps the server's name
  *     for it onto the field's `name` here.
  *   - **An error about no field in particular has one fixed place**, the
- *     {@link FormErrorBanner} — pinned under a sheet's header, outside what
- *     scrolls — and focus moves to it. Never a toast: toasts are for "Saved".
+ *     {@link FormErrorBanner} — beside the button that submits, and focus
+ *     moves to it, scrolling it into view. Never a toast: toasts are for "Saved".
  *   - **One submit at a time**, and the submit button says so
  *     ({@link SubmitButton}). Enter submits, as a form does.
  *   - **A request that never got an answer** says {@link UNREACHABLE}, and
@@ -55,11 +55,6 @@ import { cn } from "@/react/lib/utils";
 import { Alert, AlertDescription } from "./alert";
 import { Button } from "./button";
 import { CardTitle, cardSurface } from "./card";
-import {
-  FullScreenSheet,
-  SheetBody,
-  SheetHeader,
-} from "./full-screen-sheet";
 
 /** The words for a request that never got an answer. */
 export const UNREACHABLE = "Could not reach GlideComp. Check your connection, then try again.";
@@ -275,8 +270,8 @@ export function Form({
     ) {
       fold.open = true;
     }
-    // Centre it in whatever scrolls it, which keeps it clear of a sheet's
-    // header, a bottom bar and (once focus raises one) the keyboard.
+    // Centre it in whatever scrolls it, which keeps it clear of a sticky
+    // header and (once focus raises one) the keyboard.
     target.scrollIntoView({ block: "center" });
     target.focus({ preventScroll: true });
   }, [refused]);
@@ -335,7 +330,7 @@ export function Form({
         className={className}
       >
         {/* `contents`: it exists only to hear edits bubble, and must not be a
-            box in the form's own layout (FormSheet's is a flex column). */}
+            box in the form's own layout (often a flex column). */}
         <div className="contents" onInput={clearEdited} onChange={clearEdited}>
           {children}
         </div>
@@ -378,9 +373,10 @@ export function SubmitButton({
 }
 
 /**
- * The error that belongs to no field. Place it where it cannot scroll away:
- * FormSheet pins it under the header. Focus moves here when it appears, so it
- * is read out as well as seen.
+ * The error that belongs to no field. Place it beside the submit — under a
+ * page's header when Done is at the top, above Save when Save is at the foot.
+ * Focus moves here when it appears (scrolling it into view), so it is read out
+ * as well as seen.
  */
 export function FormErrorBanner({ className }: { className?: string }) {
   const { formError } = useFormState();
@@ -391,72 +387,6 @@ export function FormErrorBanner({ className }: { className?: string }) {
         <AlertDescription>{formError}</AlertDescription>
       </Alert>
     </div>
-  );
-}
-
-/**
- * A form at full screen: a sheet whose header carries the submit, with the
- * form-level error pinned beneath that header — outside the body that
- * scrolls, so it is on screen however far down the reader was when they
- * pressed it. The roster import review and the CIVL fill used it until they
- * became pages of their own (#810), as the overlays rule in CLAUDE.md asks of
- * anything with a field in it; only the kit's own bench (/__kit/form) uses it
- * now, and it goes in #817. A new form goes on a page with `Form`, not in one
- * of these.
- */
-export function FormSheet({
-  label,
-  title,
-  description,
-  leading,
-  submitLabel = "Done",
-  pendingLabel,
-  hideSubmit = false,
-  onClose,
-  confirmDismiss,
-  bodyClassName,
-  children,
-  ...form
-}: {
-  /** The sheet's accessible name. */
-  label: string;
-  title: ReactNode;
-  description?: ReactNode;
-  /** Left of the title — a Cancel. */
-  leading?: ReactNode;
-  submitLabel?: string;
-  pendingLabel?: string;
-  /** When there is nothing to submit (a preview that found nothing to do). */
-  hideSubmit?: boolean;
-  onClose: () => void;
-  confirmDismiss?: () => boolean | Promise<boolean>;
-  bodyClassName?: string;
-  children: ReactNode;
-} & Omit<Parameters<typeof Form>[0], "className" | "children">) {
-  return (
-    <FullScreenSheet
-      label={label}
-      onClose={onClose}
-      confirmDismiss={confirmDismiss}
-      className="flex flex-col"
-    >
-      <Form {...form} className="flex h-full min-h-0 flex-col">
-        <SheetHeader
-          title={title}
-          description={description}
-          leading={leading}
-          action={
-            hideSubmit ? undefined : (
-              <SubmitButton autoFocus pendingLabel={pendingLabel}>
-                {submitLabel}
-              </SubmitButton>
-            )
-          }
-        />
-        <FormErrorBanner className="mx-auto w-full max-w-2xl px-4 pt-3" />
-        <SheetBody className={bodyClassName}>{children}</SheetBody>
-      </Form>
-    </FullScreenSheet>
   );
 }
 

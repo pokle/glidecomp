@@ -229,7 +229,6 @@ export function useWaypointsEditor(): WaypointsEditor {
   useUnsavedChangesGuard(dirty, {
     title: "Discard changes?",
     message: "This page has unsaved changes. Leaving will discard them.",
-    guardBack: false,
     isWithin: (url) => inEditor(url, bareId),
     onDiscard: () => waypointsDraft.clear([bareId]),
   });

@@ -354,8 +354,8 @@ These are the standing imperatives. Each links to the reference that explains it
     altitude without its file altitude. It is now a LIST whose rows open a
     page each (`comp/WaypointList.tsx` → `pages/CompWaypointPage.tsx`, at
     `/comp/:id/waypoints/:n`), at every width; until #811 they opened
-    full-screen sheets, which the overlays rule below retired. The grid is gone, not hidden behind a breakpoint: two editors
-    meant two code paths and a reviewer on a desktop seeing something the
+    full-screen sheets, which the overlays rule below retired. The grid is
+    gone, not hidden behind a breakpoint: two editors meant two code paths and a reviewer on a desktop seeing something the
     author never tested on a phone.
   - **And the read-only view is the same list.** It was a six-column RAC
     `Table` in an `overflow-x-auto` scroll region, so the shape the editor had
@@ -390,12 +390,12 @@ These are the standing imperatives. Each links to the reference that explains it
     the pilot sheet in one place and hit-tested it in another: taps on Name
     fell through to the inert page behind it, with no error anywhere. Every
     piece of machinery that made sheets usable — React Aria's iOS scroll lock
-    (which patches `HTMLElement.prototype.focus`), `lib/use-back-dismiss.ts`'s
-    history entries for Back, `lib/use-sheet-scroll-reset.ts`, a bottom bar
-    lifted over the keyboard by hand — re-implemented something a page does
-    natively, and each grew its own iOS bug. A page gets Back, scroll
-    restoration, the keyboard and focus from the browser, which is the most
-    tested path there is.
+    (which patches `HTMLElement.prototype.focus`), a history entry pushed for
+    every open sheet and dialog so Back could close it, a scroll reset, a
+    bottom bar lifted over the keyboard by hand — re-implemented something a
+    page does natively, and each grew its own iOS bug. A page gets Back,
+    scroll restoration, the keyboard and focus from the browser, which is the
+    most tested path there is.
   - **The worked example is the pilot editor**: `/comp/:id/pilots/:pilotId`
     and `/pilots/new` (`pages/CompPilotPage.tsx`, form in
     `comp/PilotForm.tsx`). The list keeps its search and sort in the URL
@@ -423,16 +423,21 @@ These are the standing imperatives. Each links to the reference that explains it
     addressed by the draft's own ids, its review's snapshot kept in it. The
     route editor (#812) is the same shape over a task's route
     (`comp/use-route-editor.ts`). See [docs/drafts.md](docs/drafts.md).
-  - **What is left to do** is [#817](https://github.com/pokle/glidecomp/issues/817)
-    (the last step of [#823](https://github.com/pokle/glidecomp/issues/823)):
-    every overlay is a page since the route editor's turnpoint, Quick entry,
-    Load from XContest and Add waypoint became pages over a stored draft of
-    the route (#812), so #817 deletes `FullScreenSheet`, `FormSheet`,
-    `use-back-dismiss` and `use-sheet-scroll-reset`. Until then only the
-    kit's own bench (`/__kit/form`), `rac/dialog.tsx`'s Back handling, the
-    unsaved-changes guard's `guardBack` and `backPastClosedOverlays()` (the
-    pilot page and the route editor, leaving by Back just after a
-    confirmation) still use them; do not add a new user of any of it.
+  - **Back is the browser's, with unsaved edits or a dialog open too.**
+    Nothing holds a history entry to catch it. The unsaved-changes guard
+    (`lib/use-unsaved-changes-guard.ts`) asks before a reload, a tab close or
+    an in-app link — never on Back. An editor with a draft loses nothing to
+    Back (it means "not now"); a page without one (the settings pages, the
+    pilot page) leaves the edits behind, as any web form does. A small
+    dialog holds no entry either: Back navigates, and the dialog closes with
+    the page it was over (`rac/dialog.tsx`), so a page can go Back the
+    moment a confirmation closes.
+  - **The conversion is complete** ([#823](https://github.com/pokle/glidecomp/issues/823)):
+    every full-screen overlay is a page, and #817 deleted what only overlays
+    needed — `FullScreenSheet`, `FormSheet`, the history-entry machinery for
+    Back and the sheet scroll reset. `src/react/no-overlays.test.ts` fails
+    if any of it comes back, or if SPA code pushes or walks history entries
+    by hand rather than through the router.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
@@ -444,17 +449,12 @@ These are the standing imperatives. Each links to the reference that explains it
   instead (a static styled element is fine: see `rac/badge.tsx`, `rac/alert.tsx`).
   - Thin wrappers over non-RAC third-party widgets live in `src/react/vendor/` —
     today the `input-otp` sign-in field and the `sonner` toaster.
-  - **A sheet's chrome and a list row's body are kit components, not things
-    each surface writes out.** `rac/full-screen-sheet.tsx` carries
-    `SheetHeader` / `SheetBody` / `SheetFooter`, and `rac/grid-list.tsx`
-    carries `RowContent`. Four sheets and three lists had each grown their
-    own, in vocabularies that disagreed about the gutter, the title's weight,
-    the readable-width cap and the chevron — none of it decided, all of it
-    copied. Two consequences worth knowing before adding padding of your own:
-    a `FullScreenSheet` already spends the safe-area inset on its `p-safe`, so
-    `px-gutter-safe` INSIDE one counts the notch twice; and `variant="rows"`
-    already makes a row `flex items-center gap-3`, so restating that says
-    nothing.
+  - **A list row's body is a kit component, not something each surface
+    writes out.** `rac/grid-list.tsx` carries `RowContent`. Three lists had
+    each grown their own, in vocabularies that disagreed about the gutter,
+    the title's weight and the chevron — none of it decided, all of it
+    copied. `variant="rows"` already makes a row `flex items-center gap-3`,
+    so restating that says nothing.
   - **There is no editable grid.** An editable collection is a list of rows
     (`rac/grid-list.tsx`) that each open a page of their own — the pilots
     page (`comp/PilotsSection.tsx` → `pages/CompPilotPage.tsx`) is the worked
@@ -465,13 +465,12 @@ These are the standing imperatives. Each links to the reference that explains it
     trip must be lossless (the export's `glidecomp_id` column). Don't bring a
     grid back for the desktop alone — that is two editors.
   - **Every form submits through the kit form, `rac/form.tsx`** (`Form`, on
-    a page — `FormSheet` is left only for the kit's own bench, until #817), and a
-    failed save is never a toast. It owns what
+    a page), and a failed save is never a toast. It owns what
     happens when Save does not work, so no page writes that again: an error
     about a field goes UNDER that field, which is focused and scrolled into
-    view; one about no field is pinned where it cannot scroll away (under a
-    sheet's header); one submit at a time; a dropped connection keeps what
-    was typed. The server's half is `{ error, field }` on every refusal —
+    view; one about no field goes in the form's one banner beside its submit
+    button, focused and scrolled into view the same way; one submit at a
+    time; a dropped connection keeps what was typed. The server's half is `{ error, field }` on every refusal —
     `validated()` does it for schema failures, and a route that knows which
     input it is refusing says so (`fieldNames` maps it onto the form's field
     `name`s). Every form did this by hand until 2026-11, two ways, and both
