@@ -4,19 +4,18 @@
  * (React port of profile.ts) with the account settings (React port of
  * settings.ts); each concern is its own separated card.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Form } from "react-aria-components";
 import { useLocation } from "react-router-dom";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card, CardGrid, CardHeader } from "@/react/rac/card";
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Modal,
-} from "@/react/rac/dialog";
 import { FieldGroup, TextField } from "@/react/rac/field";
+import {
+  Form as KitForm,
+  FormErrorBanner,
+  SubmitButton,
+  type SubmitResponse,
+} from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/react/rac/table";
@@ -496,16 +495,67 @@ function ProfileSection() {
   );
 }
 
+/**
+ * The longest label the api-key plugin takes (its `maximumNameLength`, left at
+ * the plugin's default in auth-api's auth.ts). Stated here only to word the
+ * refusal; the server is what enforces it, and settings-api-keys.spec.ts types
+ * one character more to hold the two together.
+ */
+const API_KEY_LABEL_MAX = 32;
+
+/**
+ * auth-api answers a refusal in Better Auth's shape, `{ code, message }`, and
+ * the kit form reads `{ error, field }` (rac/form.tsx). This is the
+ * translation: a code that is about the label lands under the Label field
+ * (`name`, which is also the server's name for it), and any other refusal
+ * keeps its own message for the form's banner. A body already in the kit's
+ * shape — GlideComp's own routes in auth-api, its rate limits — passes through.
+ */
+const KEY_LABEL_REFUSALS: Record<string, string> = {
+  INVALID_NAME_LENGTH: `A label can be at most ${API_KEY_LABEL_MAX} characters.`,
+};
+
+async function asKitRefusal(res: Response): Promise<SubmitResponse> {
+  if (res.ok) return res;
+  const text = await res.text().catch(() => "");
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Not JSON: the kit reads plain text itself.
+  }
+  const { code, message, error } = (body ?? {}) as Record<string, unknown>;
+  const kit =
+    typeof error === "string"
+      ? null
+      : typeof code === "string" && code in KEY_LABEL_REFUSALS
+        ? { error: KEY_LABEL_REFUSALS[code], field: "name" }
+        : typeof message === "string"
+          ? { error: message }
+          : null;
+  const out = kit ? JSON.stringify(kit) : text;
+  return {
+    ok: false,
+    status: res.status,
+    text: async () => out,
+    json: async () => JSON.parse(out) as unknown,
+  };
+}
+
 function ApiKeysSection() {
   const confirm = useConfirm();
   const [keys, setKeys] = useState<ApiKey[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
   const [keyName, setKeyName] = useState("");
-  const [creating, setCreating] = useState(false);
+  // The new key's secret, shown in place until Done. React state ONLY: never
+  // the URL, history state or storage, so a reload — or Back and Forward —
+  // shows the list without it, as the warning beside it promises.
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const createdHeadingRef = useRef<HTMLHeadingElement>(null);
+  // Done hands focus back to Label: the button it was on is about to go.
+  const formRef = useRef<HTMLDivElement>(null);
 
   const loadKeys = useCallback(async () => {
     setLoadError(null);
@@ -526,30 +576,11 @@ function ApiKeysSection() {
     void loadKeys();
   }, [loadKeys]);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setCreating(true);
-    try {
-      const res = await fetch("/api/auth/api-key/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name: keyName.trim() || undefined }),
-      });
-      if (!res.ok) {
-        toast.error("Failed to create API key. Please try again.");
-        return;
-      }
-      const data = (await res.json()) as { key: string };
-      setCreateOpen(false);
-      setCopied(false);
-      setCreatedKey(data.key);
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setCreating(false);
-    }
-  }
+  // The key appears below the button that made it: take the reader there, so
+  // a screen reader hears that it exists before anything else is pressed.
+  useEffect(() => {
+    if (createdKey) createdHeadingRef.current?.focus();
+  }, [createdKey]);
 
   async function handleRevoke(keyId: string) {
     const confirmed = await confirm({
@@ -581,8 +612,6 @@ function ApiKeysSection() {
 
   return (
     <Card>
-      {/* The create action is section-scoped, so it belongs right-aligned on
-          the header row (design language) rather than stacked above the table. */}
       <CardHeader
         title="API keys"
         description={
@@ -602,19 +631,91 @@ function ApiKeysSection() {
             for endpoints, examples, and rate limits.
           </>
         }
-        action={
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => {
-              setKeyName("");
-              setCreateOpen(true);
-            }}
-          >
-            Create API key
-          </Button>
-        }
       />
+      {/* On the page, not in a dialog (#821): a dialog with a text field is
+          the overlay CLAUDE.md rules out, for the iPhone keyboard's sake. A
+          kit form, so a refusal lands under Label and never in a toast. */}
+      <div ref={formRef}>
+        <KitForm
+          className="flex flex-col gap-4"
+          onSubmit={async () =>
+            asKitRefusal(
+              await fetch("/api/auth/api-key/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ name: keyName.trim() || undefined }),
+              })
+            )
+          }
+          onSuccess={async (res) => {
+            const data = (await res!.json()) as { key: string };
+            setKeyName("");
+            setCopied(false);
+            setCreatedKey(data.key);
+            await loadKeys();
+          }}
+        >
+          <TextField
+            name="name"
+            label="Label (optional)"
+            value={keyName}
+            onChange={setKeyName}
+            placeholder="e.g. My scoring agent"
+            description="This key will expire in 90 days. Create a new one when it does."
+          />
+          <div>
+            <SubmitButton pendingLabel="Creating the key">Create API key</SubmitButton>
+          </div>
+          <FormErrorBanner />
+        </KitForm>
+      </div>
+
+      {createdKey ? (
+        <section
+          aria-labelledby="api-key-created"
+          className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4"
+        >
+          <div>
+            <h3
+              id="api-key-created"
+              ref={createdHeadingRef}
+              tabIndex={-1}
+              className="font-medium outline-none"
+            >
+              API key created
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Copy this key now — it won't be shown again.
+            </p>
+          </div>
+          <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
+            {createdKey}
+          </code>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onPress={() => {
+                void navigator.clipboard.writeText(createdKey).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+            <Button
+              variant="outline"
+              onPress={() => {
+                setCreatedKey(null);
+                formRef.current?.querySelector<HTMLInputElement>('input[name="name"]')?.focus();
+              }}
+            >
+              Done
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
       <div>
         {loadError ? (
           <p role="alert">{loadError}</p>
@@ -675,69 +776,6 @@ function ApiKeysSection() {
           </div>
         )}
       </div>
-
-      <Modal isOpen={createOpen} onOpenChange={setCreateOpen}>
-        <Dialog>
-          <DialogHeader>
-            <DialogTitle>Create API key</DialogTitle>
-          </DialogHeader>
-          <Form onSubmit={handleCreate} className="flex flex-col gap-4">
-            <TextField
-              label="Label (optional)"
-              value={keyName}
-              onChange={setKeyName}
-              placeholder="e.g. My scoring agent"
-              description="This key will expire in 90 days. Create a new one when it does."
-              autoFocus
-            />
-            <DialogFooter>
-              <Button slot="close" variant="outline">
-                Cancel
-              </Button>
-              <Button type="submit" isPending={creating} pendingLabel="Creating the key">
-                Create
-              </Button>
-            </DialogFooter>
-          </Form>
-        </Dialog>
-      </Modal>
-
-      <Modal
-        isOpen={createdKey !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreatedKey(null);
-            void loadKeys();
-          }
-        }}
-      >
-        <Dialog>
-          <DialogHeader>
-            <DialogTitle>API key created</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Copy this key now — it won't be shown again.
-            </p>
-          </DialogHeader>
-          <code className="block rounded-md border bg-muted px-3 py-2 font-mono text-sm break-all">
-            {createdKey}
-          </code>
-          <DialogFooter>
-            <Button
-              onPress={() => {
-                void navigator.clipboard.writeText(createdKey ?? "").then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                });
-              }}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </Button>
-            <Button slot="close" variant="outline">
-              Done
-            </Button>
-          </DialogFooter>
-        </Dialog>
-      </Modal>
     </Card>
   );
 }
