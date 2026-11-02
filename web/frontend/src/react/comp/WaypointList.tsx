@@ -12,10 +12,11 @@
  * reader came to see a waypoint's map altitude without its file altitude.
  *
  * A row shows everything a waypoint has, on two lines, with no sideways
- * scrolling anywhere. Tapping it opens {@link WaypointSheet}; the pin beside
+ * scrolling anywhere. Tapping it opens that waypoint's page
+ * (pages/CompWaypointPage.tsx — a sheet until #811); the pin beside
  * it flies the page's map instead, which is why this is a GridList rather than
  * a NavList — a row here holds a button (see rac/grid-list.tsx). Read-only,
- * where no sheet opens, the row itself is what flies the map.
+ * where no page opens, the row itself is what flies the map.
  *
  * ## Read-only is the same list, not a table
  *
@@ -95,7 +96,7 @@ export function WaypointList({
   /** Why the list is empty — "nothing yet" and "nothing matches" differ. */
   emptyMessage?: string;
   /**
-   * Open one waypoint's sheet. Leave it out for the read-only view, where
+   * Open one waypoint's page. Leave it out for the read-only view, where
    * there is nothing behind a row — the absence of this IS the read-only
    * mode, and it also decides what pressing a row does.
    */
@@ -146,7 +147,7 @@ export function WaypointList({
             variant="rows"
             id={row.id}
             textValue={row.code || "waypoint"}
-            // Every row does something — opens its sheet, or flies the map —
+            // Every row does something — opens its page, or flies the map —
             // except a read-only one with coordinates that do not parse.
             className={valid || !readOnly ? "cursor-pointer" : "cursor-default"}
           >

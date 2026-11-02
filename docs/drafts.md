@@ -6,8 +6,10 @@ Decided in [#810](https://github.com/pokle/glidecomp/issues/810), for
 (tracking: [#823](https://github.com/pokle/glidecomp/issues/823)).
 
 Code: `web/frontend/src/react/lib/draft-store.ts` (the store),
-`lib/use-draft.ts` (the React hook), and the worked example,
-`pages/CompRosterImportPage.tsx`.
+`lib/use-draft.ts` (the React hook), and the two editors that use it: the
+roster import (`pages/CompRosterImportPage.tsx`, #810) and the waypoints
+editor (`comp/waypoints-draft.ts` + `comp/use-waypoints-editor.ts`, #811 — see
+[How the waypoints editor uses it](#how-the-waypoints-editor-uses-it)).
 
 ## The problem
 
@@ -165,3 +167,50 @@ read from a CSV. So:
 - **The unsaved-changes guard** (`lib/use-unsaved-changes-guard.ts`) asks
   before a page with an unsaved FORM is left. A stored draft survives a
   reload, so a page that holds one does not need the guard for reloads.
+
+## How the waypoints editor uses it
+
+[#811](https://github.com/pokle/glidecomp/issues/811) made the waypoints
+editor five pages over one draft: the list (`/comp/:id/waypoints`), one
+waypoint (`/waypoints/:n`), Add waypoint (`/waypoints/new`), the map at full
+size (`/waypoints/map`) and the altitude review (`/waypoints/altitudes`, and
+`/altitudes/:n` for one waypoint of it). The store is `waypointsDraft` in
+`comp/waypoints-draft.ts`, keyed `[compId]`; every page reaches it through
+`useWaypointsEditor()` (`comp/use-waypoints-editor.ts`). What it decided, for
+#812 to reuse or argue with:
+
+- **A whole-file draft, not a save per item.** The server holds the waypoint
+  set as one document, saved with one `PUT` and one audit entry, and the
+  editor's biggest changes are set-wide (upload a file, convert from feet,
+  take the map's altitude for all). A save per waypoint would be a
+  read-modify-write of the whole set on every tap. The pilot page saves per
+  pilot because a pilot IS a row on the server.
+- **Items are addressed by the draft's own ids.** A waypoint's page is
+  `/waypoints/:n`, where `n` is the row id in the draft — not the code, which
+  that page edits, and which a waypoint added a minute ago has nowhere else.
+  With no draft, the rows are numbered 1..N in file order, the same on every
+  page and after every reload; a draft keeps the ids it was given, and a new
+  row or a replaced file takes ids never used before.
+- **Every change is written at once.** A page has no draft of its own inside
+  the draft: a waypoint's page writes each keystroke through, so Done and Back
+  both keep it and a reload finds it. (The sheets each held a local copy,
+  applied on the way out — which a page's way out, the browser's Back, would
+  lose.)
+- **Where the server's copy came from.** The draft stores `base`, the saved
+  set it started from. A stored draft with no edits of its own is only a copy
+  of an older save, so when the server's set has moved it is dropped for the
+  new one; a draft WITH edits is kept, and the list says the saved set changed
+  under it (`resolveDraft`).
+- **Review state is part of the draft.** The altitude review's readings and
+  its list's membership and order are a snapshot taken when the check runs,
+  stored with the file, so going into one waypoint of the review and back, or
+  reloading, finds the same list.
+- **Read only after mount.** The list is server-rendered, and the server has
+  no storage: a first client render that read the draft would not match the
+  server's markup. `useMounted()` holds the read back one render.
+- **Leaving.** Going between the editor's own pages is not leaving it, so the
+  unsaved-changes guard is told which links are inside (`isWithin`). A link
+  out asks "Discard changes?", and discarding clears the draft (`onDiscard`).
+  Back does not ask (`guardBack: false`): it means "not now", and the draft
+  waits. A reload keeps the draft too, so the list has a "Discard changes"
+  button beside Save for throwing it away on purpose. Save clears it.

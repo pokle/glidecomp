@@ -94,6 +94,20 @@ const CompRosterImportPage = lazy(() =>
 const CompCivlFillPage = lazy(() =>
   import("./pages/CompCivlFillPage").then((m) => ({ default: m.CompCivlFillPage }))
 );
+// The waypoints editor's pages (#811): one waypoint, Add waypoint, the map at
+// full size and the altitude review. The list itself is SSR'd (above).
+const CompWaypointPage = lazy(() =>
+  import("./pages/CompWaypointPage").then((m) => ({ default: m.CompWaypointPage }))
+);
+const CompWaypointNewPage = lazy(() =>
+  import("./pages/CompWaypointNewPage").then((m) => ({ default: m.CompWaypointNewPage }))
+);
+const CompWaypointsMapPage = lazy(() =>
+  import("./pages/CompWaypointsMapPage").then((m) => ({ default: m.CompWaypointsMapPage }))
+);
+const CompAltitudeReviewPage = lazy(() =>
+  import("./pages/CompAltitudeReviewPage").then((m) => ({ default: m.CompAltitudeReviewPage }))
+);
 const CompNewTaskPage = lazy(() =>
   import("./pages/CompNewTaskPage").then((m) => ({ default: m.CompNewTaskPage }))
 );
@@ -243,6 +257,20 @@ export function AppRoutes() {
               element={<CompSettingsPage />}
             />
             <Route path="/comp/:compId/waypoints" element={<CompWaypoints />} />
+            {/* The waypoints editor's other pages, where they were sheets and a
+                dialog over the list (#811). Admin-only noindex shells in the
+                SSR Function. The static segments outrank :rowId by themselves. */}
+            <Route path="/comp/:compId/waypoints/new" element={<CompWaypointNewPage />} />
+            <Route path="/comp/:compId/waypoints/map" element={<CompWaypointsMapPage />} />
+            <Route
+              path="/comp/:compId/waypoints/altitudes"
+              element={<CompAltitudeReviewPage />}
+            />
+            <Route
+              path="/comp/:compId/waypoints/altitudes/:rowId"
+              element={<CompAltitudeReviewPage />}
+            />
+            <Route path="/comp/:compId/waypoints/:rowId" element={<CompWaypointPage />} />
             {/* Analysis (behavioural metrics). One COMP analysis per competition
                 at /analysis, and one chapter per task UNDER THAT TASK — see the
                 task routes below. The comp report collects the chapters; it does

@@ -351,9 +351,10 @@ These are the standing imperatives. Each links to the reference that explains it
     unusable on a phone: it scrolled sideways inside a page that scrolled down,
     under a map pane that stuck, and its frozen Code column hid whichever
     column sat beside it — which is how a reader came to see a waypoint's map
-    altitude without its file altitude. It is now a LIST whose rows open
-    full-screen sheets (`comp/WaypointList.tsx`, `comp/WaypointSheet.tsx`), at
-    every width. The grid is gone, not hidden behind a breakpoint: two editors
+    altitude without its file altitude. It is now a LIST whose rows open a
+    page each (`comp/WaypointList.tsx` → `pages/CompWaypointPage.tsx`, at
+    `/comp/:id/waypoints/:n`), at every width; until #811 they opened
+    full-screen sheets, which the overlays rule below retired. The grid is gone, not hidden behind a breakpoint: two editors
     meant two code paths and a reviewer on a desktop seeing something the
     author never tested on a phone.
   - **And the read-only view is the same list.** It was a six-column RAC
@@ -361,12 +362,13 @@ These are the standing imperatives. Each links to the reference that explains it
     just stopped using survived for the anonymous PILOT — the one actually
     standing on the hill — while the organiser more likely to be at a desk got
     the list. `WaypointList` with no `onOpen` IS the read-only mode: no
-    chevron, because nothing opens. When a surface has an admin view and a
+    chevron, because nothing opens — and the editor's pages under
+    `/waypoints/` send a visitor back to it. When a surface has an admin view and a
     visitor view, fixing one is half the job.
   - **A tap target is the whole area doing nothing beside it.** The waypoints
     list's locate pin was a 28x28 px icon with 300 px of inert row next to
     it. It is now the row's entire left-hand strip (48x44 px, flush to the
-    card's edge), and read-only — where no sheet opens — the WHOLE ROW flies
+    card's edge), and read-only — where no page opens — the WHOLE ROW flies
     the map. The pin stays there because it is what NAMES the action for a
     reader who cannot see the map move; one action with a big target is not
     two ways to do a thing. Measure a target in the e2e rather than asserting
@@ -375,7 +377,7 @@ These are the standing imperatives. Each links to the reference that explains it
     and a 28 px box with every class-level check still green.
   - **One way to do a thing.** The same pass deleted a "Fill altitudes from
     map" button that duplicated what `Check altitudes` does better, a
-    "Show on the map" button in the waypoint sheet that duplicated the list
+    "Show on the map" button in the waypoint's editor that duplicated the list
     row's pin, and a status line that pre-judged a set nobody had asked about.
     A second way to do something is a thing to keep working, explain and test.
 - **No full-screen overlays: a screen of its own is a PAGE, with its own URL**
@@ -414,13 +416,17 @@ These are the standing imperatives. Each links to the reference that explains it
     browser, a waypoint file or a route edited as a set): this tab's
     sessionStorage, keyed by what it edits, owned by the signed-in user,
     versioned, and always allowed to come back empty. The roster import is
-    the worked example (#810); see [docs/drafts.md](docs/drafts.md).
+    the small worked example (#810); the waypoints editor (#811) is the one
+    for an editor of several pages over one draft — a waypoint's page, Add
+    waypoint, the map at full size and the altitude review all read and
+    write the same stored file (`comp/use-waypoints-editor.ts`), its items
+    addressed by the draft's own ids, its review's snapshot kept in it. See
+    [docs/drafts.md](docs/drafts.md).
   - **What is left to convert** is tracked one page at a time, in the
     order set out in [#823](https://github.com/pokle/glidecomp/issues/823):
-    [#811](https://github.com/pokle/glidecomp/issues/811)
-    (waypoint details, altitude review, full-screen map),
     [#812](https://github.com/pokle/glidecomp/issues/812) (turnpoint sheet,
-    quick entry); then [#817](https://github.com/pokle/glidecomp/issues/817)
+    quick entry, and the route editor's Add waypoint dialog, whose fields
+    are already shared in `comp/AddWaypointForm.tsx`); then [#817](https://github.com/pokle/glidecomp/issues/817)
     deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
     `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
     do not add a new user of any of it.
@@ -449,7 +455,7 @@ These are the standing imperatives. Each links to the reference that explains it
   - **There is no editable grid.** An editable collection is a list of rows
     (`rac/grid-list.tsx`) that each open a page of their own — the pilots
     page (`comp/PilotsSection.tsx` → `pages/CompPilotPage.tsx`) is the worked
-    example; the waypoints page still opens sheets until #811. Tabulator went with its
+    example, and the waypoints page is the same shape (#811). Tabulator went with its
     last grid on 2026-11-01: the pilots roster, fourteen columns in a dialog,
     of which a phone showed about one and a half. Spreadsheet-shaped work goes
     to a real spreadsheet through CSV export and import instead, so that round
@@ -546,8 +552,9 @@ These are the standing imperatives. Each links to the reference that explains it
     set, were both deleted: the check does the fill's job better because it
     shows what it would write before writing it. (The route editor keeps a
     fill for its turnpoint blanks, where there is no list to review.) It
-    changes nothing on its own and reviews in a SHEET
-    (`comp/AltitudeReviewSheet.tsx`) whose every row states BOTH altitudes —
+    changes nothing on its own and reviews on a PAGE of its own
+    (`/comp/:id/waypoints/altitudes`, `comp/AltitudeReview.tsx`; a sheet
+    until #811) whose every row states BOTH altitudes —
     the grid columns it replaced put the file's altitude behind the frozen Code
     column, so a disagreement was reported with half of itself off screen.
     Under 50 m is not a finding (a ~10 m DEM grid against a file rounded to
@@ -555,14 +562,16 @@ These are the standing imperatives. Each links to the reference that explains it
     whole-file ratio or offset is one bulk fix rather than 187 decisions. The
     review's list is a snapshot in BOTH membership and order: sorting by the
     size of the disagreement live sends each row to the bottom the moment it is
-    accepted. A difference of exactly zero prints nothing — the absence of a
-    finding is not a finding — and inside a waypoint both Back and Done return
-    to the LIST, never out of the review.
-  - **The waypoints page is a list of sheets, at every width** (pages from
-    #811 on) — see the
-    mobile-first rule above for what it replaced. `comp-waypoints.spec.ts` runs
-    in both Playwright projects, and asserts that the page never scrolls
-    sideways.
+    accepted. The snapshot is kept in the waypoints draft, so it holds across
+    a visit to one waypoint (`/altitudes/:n`) and a reload. A difference of
+    exactly zero prints nothing — the absence of a finding is not a finding —
+    and inside a waypoint Back and Done (and the browser's Back) return to
+    the review's LIST, never out of the review.
+  - **The waypoints page is a list of pages, at every width** (sheets until
+    #811) — see the
+    mobile-first rule above for what it replaced. `comp-waypoints.spec.ts`
+    and `waypoint-altitude-review.spec.ts` run in both Playwright projects,
+    and assert that the pages never scroll sideways.
   - **Never read a Terrain-RGB pixel through a canvas.** The tiles are RGBA and
     Mapbox marks no-data — the sea past a coastline included — with partial
     alpha; a canvas stores premultiplied bytes, so the 24-bit elevation those

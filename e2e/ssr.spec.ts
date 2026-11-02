@@ -361,6 +361,13 @@ test.describe("SSR — isolation and fallback", () => {
     // The roster's CSV import and CIVL fill (#810): admin-only pages under it.
     "/comp/anything/pilots/import",
     "/comp/anything/pilots/civl-fill",
+    // The waypoints editor's pages (#811): admin-only, and under the SSR'd
+    // waypoints list, which they must not be mistaken for.
+    "/comp/anything/waypoints/1",
+    "/comp/anything/waypoints/new",
+    "/comp/anything/waypoints/map",
+    "/comp/anything/waypoints/altitudes",
+    "/comp/anything/waypoints/altitudes/1",
     // Admin-only settings pages (index + a group sub-page).
     "/comp/anything/settings",
     "/comp/anything/settings/scoring",

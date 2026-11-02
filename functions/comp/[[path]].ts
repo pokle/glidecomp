@@ -172,6 +172,12 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   // CIVL fill (/pilots/import, /pilots/civl-fill, #810) — admin-only, like
   // the roster.
   /^\/comp\/[^/]+\/pilots\/[^/]+\/?$/,
+  // The waypoints editor's pages (#811): one waypoint (/waypoints/:n), Add
+  // waypoint (/new), the map at full size (/map), and the altitude review
+  // (/altitudes, /altitudes/:n) — admin-only, and all of them edit a draft
+  // only the browser has. The list itself (/waypoints) is SSR'd below; this
+  // only matches a segment under it.
+  /^\/comp\/[^/]+\/waypoints\/[^/]+(\/[^/]+)?\/?$/,
   // Creating a task (#819) — admin-only. It shares its shape with the public
   // task page below, and must be caught here first: `new` is no task's id (a
   // sqid is at least four letters), so the task route would only 404 it.

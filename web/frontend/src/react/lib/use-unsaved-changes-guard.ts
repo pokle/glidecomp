@@ -64,6 +64,19 @@ export function useUnsavedChangesGuard(
      * tab closes and in-app links still ask.
      */
     guardBack?: boolean;
+    /**
+     * Links that do not leave the work: another page of the same editor.
+     * The waypoints editor is several pages over one stored draft (#811), so
+     * going from the list to a waypoint's page is not leaving it — only a
+     * link out of the editor asks.
+     */
+    isWithin?: (url: URL) => boolean;
+    /**
+     * Run when the reader answers "Discard changes" to a link, before the
+     * navigation — for work that would otherwise outlive the page (a draft in
+     * storage, lib/draft-store.ts), so that discarding really discards.
+     */
+    onDiscard?: () => void;
   }
 ): void {
   const confirm = useConfirm();
@@ -119,7 +132,9 @@ export function useUnsavedChangesGuard(
     void askRef.current().then((ok) => {
       // Finish the press: out of this layer's entry, out of the dialog's, and
       // then one real step back — which is the one they made.
-      if (ok) guard.layer?.unwind(() => window.history.back());
+      if (!ok) return;
+      guard.options.onDiscard?.();
+      guard.layer?.unwind(() => window.history.back());
     });
   }, dirty && options.guardBack !== false, true);
   guardRef.current.layer = layer;
@@ -143,6 +158,7 @@ export function useUnsavedChangesGuard(
       // External links fall through to beforeunload; same-page hashes are fine.
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname && url.hash) return;
+      if (guardRef.current.options.isWithin?.(url)) return;
 
       // Stop the navigation at document level — stopImmediatePropagation so
       // React's root listeners (and any sibling duplicate) never see the
@@ -152,6 +168,7 @@ export function useUnsavedChangesGuard(
       const guard = guardRef.current;
       void askRef.current().then((ok) => {
         if (!ok) return;
+        guard.options.onDiscard?.();
         const to = url.pathname + url.search + url.hash;
         // Drop the guard's own entry (and the dialog's) before pushing the
         // destination, so the reader's stack is the one they would have had

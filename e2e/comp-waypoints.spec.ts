@@ -1,41 +1,32 @@
 /**
- * Comp waypoints page (/comp/:id/waypoints) — interaction coverage for its RAC
- * surfaces. Runs in BOTH Playwright projects (see e2e/fixtures/mobile.ts):
+ * Comp waypoints (/comp/:id/waypoints) and the editor's pages under it. Runs
+ * in BOTH Playwright projects (see e2e/fixtures/mobile.ts):
  *
- * - Admins get a LIST of waypoints, each row opening a full-screen sheet, at
- *   every width. The Tabulator grid this replaced on 2026-09-19 is gone rather
- *   than hidden behind a breakpoint (the mobile-first rule in CLAUDE.md), so
- *   the tests assert `.tabulator` is absent and that the page never scrolls
- *   sideways. A sheet's edits are a draft applied on the way out, and mirror
- *   into React state then (the "N waypoints" count, the dirty Save button,
- *   coordinate validation).
- * - Save lives in the page's fixed bottom bar beside an "Unsaved changes"
- *   hint, and while dirty a navigation guard offers Discard/Keep editing —
- *   the comp-settings behaviour (settings-save-ux.spec.ts), brought here
- *   after an admin lost a set of added waypoints to a tap on a link. The
- *   browser's Back gets the same question, and answering "Keep editing"
- *   leaves the history stack exactly as it was found.
- * - The map maximises into a full-screen sheet carrying its own Add-from-map
- *   toggle, so several points can be placed from a phone-sized map.
- * - "Check altitudes" is the page's only altitude action and reports nothing
- *   until pressed. It compares the whole set against the map's terrain in a
- *   sheet of its own: a snapshot-narrowed list (frozen in membership AND
- *   order), a per-row accept, a per-waypoint detail view, and a live-region
- *   banner. Driven against a FLAT synthetic DEM (stubTerrainElevations), so
- *   every disagreement in the test is arithmetic the test chose rather than
- *   whatever the real terrain says.
- * - Every sheet is dismissable with the browser's Back (lib/use-back-dismiss),
- *   one layer per press — the review's detail view back to its list, not out
- *   of the page.
- * - Anonymous visitors get the read-only RAC table instead.
+ * - Admins get a LIST of waypoints at every width. The Tabulator grid this
+ *   replaced on 2026-09-19 is gone rather than hidden behind a breakpoint (the
+ *   mobile-first rule in CLAUDE.md), so the tests assert `.tabulator` is
+ *   absent and that the page never scrolls sideways.
+ * - A row opens that waypoint's PAGE (/waypoints/:n), where it opened a
+ *   full-screen sheet until #811. Add waypoint (/waypoints/new) and the map
+ *   at full size (/waypoints/map) are pages too. Each is left by the
+ *   browser's Back, and Done/Back return to the list.
+ * - What they edit is a DRAFT of the whole file in sessionStorage (#811,
+ *   docs/drafts.md), so an edit survives going between the pages and a
+ *   reload; Save on the list sends it, and "Discard changes" throws it away.
+ * - Leaving the editor by a link with unsaved edits asks first; going
+ *   between its own pages does not; Back keeps the draft for later.
+ * - Anonymous visitors get the same list, read-only, and are sent to it from
+ *   the editor's pages.
  * - The device-export panel (RAC Menu of download formats, QR toggle, swap
- *   checkbox) and the RAC Add-waypoint dialog.
+ *   checkbox).
  * - One save round-trip against the real API, restored afterwards from the
  *   captured original so the seeded comp is left exactly as found.
  *
- * Drives the seeded "Corryong Cup 2026" sample comp. Every test except the
- * save round-trip is mutation-free (trackMutations pattern from
- * comp-detail.spec.ts); the round-trip restores via API in a finally block.
+ * The altitude review has a spec of its own: waypoint-altitude-review.spec.ts.
+ *
+ * Every test is mutation-free (trackMutations) except the save round-trips,
+ * which restore via the API in a finally block. Each test has a fresh browser
+ * context, so a fresh sessionStorage: no draft leaks from one to the next.
  *
  * RAC testing gotchas honoured here (rac-adoption-guide):
  * - Never wait on "networkidle" (freshness pollers elsewhere; DOM waits only).
@@ -43,124 +34,39 @@
  *   hidden. Click the label text, assert by role (gotcha #13).
  * - `getByRole` matches an accessible name as a SUBSTRING: "Waypoints" also
  *   matches "Edit waypoints", so exact names are passed `exact: true`.
- * - The rows rebuild when the page's fetch lands, which detaches a node
- *   mid-click; `beforeEach` waits for the full row count before any test
- *   touches one.
  */
-import { execSync } from "node:child_process";
 import { test, expect, DESKTOP_ONLY, type Page, type Locator } from "./fixtures/test";
-import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
-import { stubTerrainElevations } from "./fixtures/mapbox";
-
-const BASE_URL = FRONTEND_URL;
-const COMP_NAME = "Corryong Cup 2026";
-
-interface Waypoint {
-  code: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  altitude: number;
-  radius: number;
-}
+import { FRONTEND_URL } from "./fixtures/stack";
+import {
+  COMP_NAME,
+  editorRows,
+  firstWaypointRow,
+  h1,
+  onEditorList,
+  seededWaypoints,
+  signInAsSuperAdmin,
+  trackMutations,
+  waypointRow,
+  waypointUrl,
+  type Waypoint,
+} from "./fixtures/waypoints";
 
 let compId: string;
 let waypoints: Waypoint[];
 
 test.beforeAll(async ({ playwright }) => {
   test.setTimeout(300_000);
-  const api = await playwright.request.newContext({ baseURL: BASE_URL });
-
-  const findComp = async (): Promise<string | null> => {
-    const res = await api.get("/api/comp");
-    if (!res.ok()) return null;
-    const { comps } = (await res.json()) as {
-      comps: Array<{ comp_id: string; name: string }>;
-    };
-    return comps.find((c) => c.name === COMP_NAME)?.comp_id ?? null;
-  };
-
-  let id = await findComp();
-  if (!id) {
-    execSync("bun run seed corryong-cup-2026", {
-      stdio: "inherit",
-      timeout: 240_000,
-    });
-    id = await findComp();
-  }
-  if (!id) throw new Error(`Sample comp "${COMP_NAME}" not found after seeding`);
-  compId = id;
-
-  const wpRes = await api.get(`/api/comp/${compId}/waypoints`);
-  expect(wpRes.ok()).toBe(true);
-  waypoints = ((await wpRes.json()) as { waypoints: Waypoint[] }).waypoints;
-  // The seed builds the comp waypoint set as the union of task turnpoints —
-  // a seeded comp always has some.
-  expect(waypoints.length).toBeGreaterThan(0);
-
+  const api = await playwright.request.newContext({ baseURL: FRONTEND_URL });
+  ({ compId, waypoints } = await seededWaypoints(api));
   await api.dispose();
 });
 
-/**
- * Dev-login as the super-admin and open the waypoints page. Same cookie
- * plumbing as comp-detail.spec.ts.
- */
 test.beforeEach(async ({ page }) => {
-  const loginRes = await page.request.post("/api/auth/dev-login", {
-    data: SUPER_ADMIN,
-  });
-  if (!loginRes.ok()) {
-    const body = await loginRes.text();
-    throw new Error(
-      `Dev login failed: ${loginRes.status()} ${loginRes.statusText()} — ${body}`
-    );
-  }
-  const setCookieHeader = loginRes.headers()["set-cookie"];
-  if (setCookieHeader) {
-    const tokenMatch = setCookieHeader.match(/better-auth\.session_token=([^;]+)/);
-    if (tokenMatch) {
-      await page.context().addCookies([
-        {
-          name: "better-auth.session_token",
-          value: tokenMatch[1],
-          domain: "localhost",
-          path: "/",
-        },
-      ]);
-    }
-  }
-
+  await signInAsSuperAdmin(page);
   await page.goto(`/comp/${compId}/waypoints`);
-  await expect(page.getByRole("heading", { level: 1, name: "Waypoints" })).toBeVisible();
-  // Admin affordances appear once /api/auth/me + the comp fetch resolve — the
-  // Upload button is the sync point that the admin view is active.
-  await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible({
-    timeout: 15_000,
-  });
-  // And wait for the editor to SETTLE, not merely to appear. The list is keyed
-  // by row id and the page rebuilds those ids when the waypoint fetch lands,
-  // so every row detaches a moment after the first paint. A test whose first
-  // act is a click (rather than an auto-retrying assertion) caught that and
-  // spent its whole timeout on "element was detached from the DOM, retrying".
-  await expect(
-    page.getByRole("grid", { name: "Edit waypoints" }).getByRole("row")
-  ).toHaveCount(waypoints.length, { timeout: 15_000 });
+  await expect(h1(page, "Waypoints")).toBeVisible();
+  await onEditorList(page, waypoints.length);
 });
-
-/** Watches for any mutating call to the competition API for the page's life. */
-function trackMutations(page: Page): () => boolean {
-  let mutated = false;
-  page.on("request", (r) => {
-    if (r.method() !== "GET" && r.url().includes("/api/comp")) mutated = true;
-  });
-  return () => mutated;
-}
-
-/** The editor list's rows, and the altitude review's. Both are RAC GridLists. */
-const editorRows = (page: Page) =>
-  page.getByRole("grid", { name: "Edit waypoints" }).getByRole("row");
-const reviewRows = (page: Page) =>
-  page.getByRole("grid", { name: "Waypoints to look at" }).getByRole("row");
 
 /**
  * The page must never scroll sideways, at either project's width. That is the
@@ -192,72 +98,65 @@ async function expectBigEnoughToTap(target: Locator): Promise<void> {
   expect(box!.height, "tap target height").toBeGreaterThanOrEqual(44);
 }
 
-async function firstWaypointRow(page: Page): Promise<Locator> {
-  const row = editorRows(page).first();
-  await expect(row).toBeVisible({ timeout: 15_000 });
-  return row;
-}
-
-/** The row for one waypoint code. */
-const waypointRow = (page: Page, code: string) =>
-  editorRows(page).filter({ hasText: code }).first();
-
 /**
  * The device-export toolbar's first button. Its LABEL depends on the pointer:
  * a coarse pointer gets hosted links to open in a flight app, a fine one gets
- * a client-side download menu (WaypointDeviceExport). Tests that only care
- * that the toolbar is there match either.
+ * a client-side download menu (WaypointDeviceExport).
  */
 const deviceExportButton = (page: Page) =>
   page.getByRole("button", {
     name: /Download waypoints|Open waypoints in a flight app/,
   });
 
-/** Open one waypoint's sheet, set a field, and apply it on the way out. */
+const saveButton = (page: Page) => page.getByRole("button", { name: "Save", exact: true });
+
+/** Open a row's page: its own URL, its code as the heading, no dialog. */
+async function openWaypoint(page: Page, row: Locator, code: string): Promise<void> {
+  await row.click();
+  await expect(page).toHaveURL(waypointUrl);
+  await expect(h1(page, code)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+
+/** Open a row's page, set a field, and press Done. */
 async function editWaypoint(
   page: Page,
   row: Locator,
+  code: string,
   field: "Code" | "Name" | "Coordinates" | "Altitude (m)" | "Radius (m)",
   value: string
 ) {
-  await row.click();
-  const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("heading", { level: 2 })).toBeVisible();
-  await sheet.getByRole("textbox", { name: field, exact: true }).fill(value);
-  await sheet.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await openWaypoint(page, row, code);
+  await page.getByRole("textbox", { name: field, exact: true }).fill(value);
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await onEditorList(page, waypoints.length);
 }
 
 /**
  * Re-enter the waypoints page through the comp's section nav, and answer with
- * the comp page's URL.
- *
- * `beforeEach` arrives by `goto`, which makes the page the first entry of its
- * own document — Back from there leaves for the blank page Playwright started
- * on, unloading the document and raising a `beforeunload` prompt the guard's
- * own dialog would then be hiding behind. Coming in through a link instead
- * puts a real in-app route underneath, which is also what a reader has.
+ * the comp page's URL — so there is a real in-app page underneath, which is
+ * what a reader has.
  */
 async function reachWaypointsFromCompPage(page: Page): Promise<string> {
   await page
     .getByRole("navigation", { name: "Breadcrumb" })
     .getByRole("link", { name: COMP_NAME })
     .click();
-  await expect(page.getByRole("heading", { level: 1, name: COMP_NAME })).toBeVisible();
+  await expect(h1(page, COMP_NAME)).toBeVisible();
   const compUrl = page.url();
-
   await page
     .getByRole("navigation", { name: "Sections" })
     .getByRole("link", { name: /^Waypoints/ })
     .click();
-  await expect(editorRows(page)).toHaveCount(waypoints.length, { timeout: 15_000 });
+  await onEditorList(page, waypoints.length);
   return compUrl;
 }
 
-test("the editor lists waypoints, edits in a sheet, and blocks bad coords", async ({
+test("the editor lists waypoints, edits one on its own page, and blocks bad coords", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
+  const code = waypoints[0].code;
 
   // The editor is a LIST at every width — no Tabulator, and nothing scrolls
   // sideways. An admin's list is named apart from a visitor's, which is the
@@ -265,252 +164,257 @@ test("the editor lists waypoints, edits in a sheet, and blocks bad coords", asyn
   await expect(page.locator(".tabulator")).toHaveCount(0);
   await expect(page.getByRole("grid", { name: "Waypoints", exact: true })).toHaveCount(0);
   const firstRow = await firstWaypointRow(page);
-  await expect(firstRow).toContainText(waypoints[0].code);
-  // Everything a waypoint has is ON its row, the altitude included — the one
-  // thing the grid could not do at a phone's width.
+  await expect(firstRow).toContainText(code);
+  // Everything a waypoint has is ON its row, the altitude included.
   await expect(firstRow).toContainText(
     waypoints[0].altitude === undefined ? "no altitude" : `${waypoints[0].altitude} m`
   );
   await expectNoSidewaysScroll(page);
 
   // The locate pin is the row's whole left-hand strip. In the editor the row
-  // itself opens the sheet, so the pin is a genuinely separate action and
-  // needs a target of its own — it was 28x28 px beside 300 px of row.
+  // itself opens the waypoint, so the pin is a genuinely separate action and
+  // needs a target of its own — and pressing it must NOT open the page.
   const pin = firstRow.getByRole("button", { name: /Show .* on the map/ });
   await expectBigEnoughToTap(pin);
-  // And pressing it must NOT open the sheet: RAC does not fire a row's action
-  // when a focusable child of it is pressed, and that is what keeps the two
-  // apart.
+  const listHref = page.url();
   await pin.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).toHaveURL(listHref);
 
   // React state drives the count line and the pristine Save button.
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
-  const saveButton = page.getByRole("button", { name: "Save", exact: true });
-  await expect(saveButton).toBeDisabled();
+  await expect(saveButton(page)).toBeDisabled();
   await expect(page.getByText("Unsaved changes")).toBeHidden();
 
-  // A row opens one waypoint, with every field it has.
-  await firstRow.click();
-  const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("heading", { name: waypoints[0].code })).toBeVisible();
+  // A row opens one waypoint — a page, with every field it has.
+  await openWaypoint(page, firstRow, code);
   for (const label of ["Code", "Name", "Coordinates", "Altitude (m)", "Radius (m)"]) {
-    await expect(sheet.getByRole("textbox", { name: label, exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: label, exact: true })).toBeVisible();
   }
+  await expectNoSidewaysScroll(page);
   // No second way to look at the same point: the row's pin does that.
-  await expect(sheet.getByRole("button", { name: "Show on the map" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show on the map" })).toHaveCount(0);
 
-  // The draft applies on the way out and the page turns dirty.
-  await sheet.getByRole("textbox", { name: "Name", exact: true }).fill("E2E Waypoint");
-  await sheet.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Done returns to the list, and the edit is there, unsaved.
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill("E2E Waypoint");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await onEditorList(page, waypoints.length);
   await expect(await firstWaypointRow(page)).toContainText("E2E Waypoint");
-  await expect(saveButton).toBeEnabled();
+  await expect(saveButton(page)).toBeEnabled();
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
   // A radius chip is a one-tap answer to the field beside it.
-  await (await firstWaypointRow(page)).click();
-  await page.getByRole("dialog").getByRole("button", { name: "5 km" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Done", exact: true }).click();
-  // formatCylinderRadius's own spelling, as the read-only table prints it.
+  await openWaypoint(page, await firstWaypointRow(page), code);
+  await page.getByRole("button", { name: "5 km" }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await onEditorList(page, waypoints.length);
+  // formatCylinderRadius's own spelling.
   await expect(await firstWaypointRow(page)).toContainText("5km");
 
-  // A number field commits on the way out even without an explicit blur, or
-  // the value would be lost silently.
-  await editWaypoint(page, await firstWaypointRow(page), "Altitude (m)", "321");
+  // A number field commits on the way out even without an explicit blur.
+  await editWaypoint(page, await firstWaypointRow(page), code, "Altitude (m)", "321");
   await expect(await firstWaypointRow(page)).toContainText("321 m");
 
-  // Garbage coordinates flag the row and the count line…
-  await editWaypoint(page, await firstWaypointRow(page), "Coordinates", "not coordinates");
+  // Done will not leave with coordinates that do not parse: it is a kit form,
+  // so the reason is under the field, and the field has focus.
+  await openWaypoint(page, await firstWaypointRow(page), code);
+  const coords = page.getByRole("textbox", { name: "Coordinates", exact: true });
+  await coords.fill("not coordinates");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByText("Enter coordinates as “lat, lon”")).toBeVisible();
+  await expect(coords).toBeFocused();
+  await expect(page).toHaveURL(waypointUrl);
+
+  // Back still leaves — it is the browser's — and the list flags the row…
+  await page.goBack();
+  await onEditorList(page, waypoints.length);
   await expect(await firstWaypointRow(page)).toContainText("invalid");
   await expect(page.getByText("1 need valid coordinates")).toBeVisible();
 
-  // …and Save refuses (client-side) instead of PUTting bad data.
-  await saveButton.click();
+  // …and Save refuses (client-side) instead of PUTting bad data, saying why
+  // beside the button rather than in a toast.
+  await saveButton(page).click();
   await expect(
-    page.getByText("Every waypoint needs valid coordinates before saving")
+    page.getByRole("alert").filter({ hasText: "Every waypoint needs valid coordinates before saving" })
   ).toBeVisible();
 
   expect(mutated()).toBe(false);
 });
 
 /**
- * Back closes one layer at a time.
- *
- * The sheets are React state, not routes — the page behind them is unsaved
- * work, so a sibling route would unmount it and the unsaved-changes guard
- * would prompt on the way in. That left them invisible to the history stack,
- * and one Back from a waypoint's details left the whole editor. Each sheet
- * now owns a history entry (lib/use-back-dismiss.ts) and pops it again on the
- * way out.
+ * A waypoint is a page: Back and Done both return to the list, and the list
+ * comes back where it was scrolled to (lib/scroll-restoration.ts). Restoration
+ * runs before late content lands, so the scroll is compared with a tolerance.
  */
-test("the browser back button closes a sheet, not the page", async ({ page }) => {
+test("Back and Done leave a waypoint's page for the list, at its scroll", async ({ page }) => {
   const mutated = trackMutations(page);
-  const url = page.url();
+  // Short, so the list scrolls at either project's width.
+  const size = page.viewportSize()!;
+  await page.setViewportSize({ width: size.width, height: 480 });
 
-  // One sheet: back closes it and stays on the page.
-  await (await firstWaypointRow(page)).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  const last = editorRows(page).last();
+  await last.scrollIntoViewIfNeeded();
+  const lastCode = waypoints[waypoints.length - 1].code;
+  await expect(last).toContainText(lastCode);
+  const scrolled = await page.evaluate(() => window.scrollY);
+  expect(scrolled, "the list must scroll for this test to mean anything").toBeGreaterThan(0);
+
+  // Back.
+  await openWaypoint(page, last, lastCode);
   await page.goBack();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page).toHaveURL(url);
-  await expect(await firstWaypointRow(page)).toBeVisible();
-
-  // Closing from the UI leaves the stack as it was found, so the NEXT back
-  // still goes nowhere unexpected: open, Done, then back stays on the page.
-  await (await firstWaypointRow(page)).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  // Done releases the sheet's history entry on the way out: a passive effect
-  // after the sheet has left the screen, then a history.back(). A production
-  // build takes the sheet off screen fast enough that a Back pressed in the
-  // same instant landed on that entry before it was released — no reader is
-  // that quick, so wait for the release the way their next Back would.
+  await onEditorList(page, waypoints.length);
   await expect
-    .poll(() =>
-      page.evaluate(
-        () => (history.state as { gcBackDismiss?: number } | null)?.gcBackDismiss ?? null
-      )
-    )
-    .toBeNull();
+    .poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 })
+    .toBeGreaterThan(scrolled - 120);
+
+  // Done.
+  await openWaypoint(page, editorRows(page).last(), lastCode);
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await onEditorList(page, waypoints.length);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 })
+    .toBeGreaterThan(scrolled - 120);
+
+  // Done went BACK rather than forward to a second copy of the list: one more
+  // Back leaves the editor.
+  const listHref = page.url();
   await page.goBack();
-  await expect(page).not.toHaveURL(url);
-  await page.goForward();
-  await expect(page).toHaveURL(url);
+  await expect(page).not.toHaveURL(listHref);
 
   expect(mutated()).toBe(false);
 });
 
-/**
- * A sheet's body caps its column at a readable width, but on a wide window
- * most of the sheet is the margin either side of it. The scroller used to be
- * the capped column itself, so a mouse wheel over those margins scrolled
- * nothing — the reader had to find the column first. The scroller is now full
- * width (SheetBody in rac/full-screen-sheet.tsx).
- */
-// DESKTOP_ONLY: a phone-width sheet has no margin beside its column.
-test("a sheet scrolls from its side margins on a wide window", { tag: DESKTOP_ONLY }, async ({ page }) => {
-  // Wide and short, so the column has margins AND its fields overflow.
-  await page.setViewportSize({ width: 1400, height: 360 });
-
-  await (await firstWaypointRow(page)).click();
-  const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("heading", { level: 2 })).toBeVisible();
-
-  const code = sheet.getByRole("textbox", { name: "Code", exact: true });
-  const before = (await code.boundingBox())!;
-  // Well left of the column, level with its fields.
-  await page.mouse.move(60, before.y + before.height / 2);
-  await page.mouse.wheel(0, 200);
-  await expect
-    .poll(async () => (await code.boundingBox())!.y, { message: "the fields moved up" })
-    .toBeLessThan(before.y - 50);
-});
-
-test("back closes a dialog too, and leaves the history as it found it", async ({
-  page,
-}) => {
+test("the draft survives a reload, on the waypoint's page and on the list", async ({ page }) => {
   const mutated = trackMutations(page);
-  const url = page.url();
+  const code = waypoints[0].code;
 
-  // Back used to be wired into FullScreenSheet and nothing else, so on a phone
-  // it closed a sheet and left the PAGE from a dialog. Both kinds now register
-  // in the one layer stack (lib/use-back-dismiss), which is also what makes a
-  // dialog opened over a sheet — the Add-waypoint dialog opens `elevated` over
-  // the maximised map — take the Back that was aimed at it, rather than the
-  // sheet underneath closing and leaving the dialog floating.
-  await page.getByRole("button", { name: "Add waypoint" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add waypoint" });
-  await expect(dialog).toBeVisible();
-  await page.goBack();
-  await expect(dialog).toHaveCount(0);
-  await expect(page).toHaveURL(url);
-  await expect(await firstWaypointRow(page)).toBeVisible();
+  // Every change goes straight into the draft: no Done needed.
+  await openWaypoint(page, await firstWaypointRow(page), code);
+  const name = page.getByRole("textbox", { name: "Name", exact: true });
+  await name.fill("E2E Reloaded");
+  await page.reload();
+  await expect(h1(page, code)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(
+    "E2E Reloaded"
+  );
 
-  // Closing from the UI consumes the entry it pushed, so the stack is left
-  // exactly as it was found — the next Back goes where a reader expects
-  // instead of appearing to do nothing.
-  await page.getByRole("button", { name: "Add waypoint" }).click();
+  // Opened directly, Done has no list behind it to go Back to: it goes to
+  // the list instead — which has the edit, unsaved.
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await onEditorList(page, waypoints.length);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Reloaded");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  await page.reload();
+  await onEditorList(page, waypoints.length);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Reloaded");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // Discard changes is how the draft goes on purpose — asked first.
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toHaveCount(0);
-  await page.goBack();
-  await expect(page).not.toHaveURL(url);
-  await page.goForward();
-  await expect(page).toHaveURL(url);
+  await dialog.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByText("Unsaved changes")).toBeHidden();
+  await expect(await firstWaypointRow(page)).not.toContainText("E2E Reloaded");
+  await expect(saveButton(page)).toBeDisabled();
+  await page.reload();
+  await onEditorList(page, waypoints.length);
+  await expect(page.getByText("Unsaved changes")).toBeHidden();
 
   expect(mutated()).toBe(false);
 });
 
-test("remove a row and add one via the RAC dialog (nothing saved)", async ({
-  page,
-}) => {
+test("remove a waypoint, and add one on a page of its own (nothing saved)", async ({ page }) => {
   const mutated = trackMutations(page);
-
-  const firstRow = await firstWaypointRow(page);
   const firstCode = waypoints[0].code;
-  await expect(firstRow).toContainText(firstCode);
 
-  // Remove the first waypoint: the count line (React state) drops by one.
-  // The grid has a ✕ on the row; the phone editor removes from the sheet,
-  // which is where every other field of that waypoint lives too.
-  await firstRow.click();
-  const sheet = page.getByRole("dialog");
-  await sheet.getByRole("button", { name: "Remove this waypoint" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Remove is on the waypoint's page, where every other field of it lives.
+  await openWaypoint(page, await firstWaypointRow(page), firstCode);
+  await page.getByRole("button", { name: "Remove this waypoint" }).click();
+  await onEditorList(page, waypoints.length - 1);
   await expect(page.getByText(`${waypoints.length - 1} waypoints`)).toBeVisible();
   await expect(await firstWaypointRow(page)).not.toContainText(firstCode);
 
-  // Add a waypoint through the shared RAC dialog. Nothing joins the API until
-  // Save — this stays a client-side row.
-  await page.getByRole("button", { name: "Add waypoint" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "Add waypoint" })).toBeVisible();
-  await dialog.getByRole("textbox", { name: "Code" }).fill("E2E1");
-  await dialog
-    .getByRole("textbox", { name: "Coordinates (lat, lon)" })
-    .fill("-36.5, 148.2");
-  await dialog.getByRole("button", { name: "Add", exact: true }).click();
+  // Add waypoint is a page — no dialog — on the kit form.
+  await page.getByRole("link", { name: "Add waypoint" }).click();
+  await expect(page).toHaveURL(/\/waypoints\/new$/);
+  await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectNoSidewaysScroll(page);
+  await page.getByRole("textbox", { name: "Code" }).fill("E2E1");
 
-  // Back to the original count, and the grid scrolled the new row into view.
+  // Coordinates are the one thing it cannot do without: refused under the
+  // field, which takes focus.
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)" });
+  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toBeVisible();
+  await expect(coords).toBeFocused();
+
+  await coords.fill("-36.5, 148.2");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await onEditorList(page, waypoints.length);
   await expect(page.getByText(`${waypoints.length} waypoints`)).toBeVisible();
   await expect(waypointRow(page, "E2E1")).toBeVisible();
+
+  // Back from Add waypoint adds nothing.
+  await page.getByRole("link", { name: "Add waypoint" }).click();
+  await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("textbox", { name: "Code" }).fill("E2E2");
+  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.6, 148.3");
+  await page.goBack();
+  await onEditorList(page, waypoints.length);
+  await expect(waypointRow(page, "E2E2")).toHaveCount(0);
 
   expect(mutated()).toBe(false);
 });
 
-test("save round-trip persists an edit, restore leaves the comp as found", async ({
-  page,
-}) => {
+test("Add waypoint takes a map tap from its URL, and survives a reload", async ({ page }) => {
+  const mutated = trackMutations(page);
+  // A tap on either map arrives like this: the point, and what the map said
+  // about it, in the URL.
+  const pick = encodeURIComponent(JSON.stringify({ elevation: 812, placeName: "E2E Hill" }));
+  await page.goto(`/comp/${compId}/waypoints/new?at=-36.5,148.2&pick=${pick}`);
+  await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
+  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)" });
+  await expect(coords).toHaveValue("-36.5,148.2");
+  await expect(page.getByRole("textbox", { name: /^Name/ })).toHaveValue("E2E Hill");
+  await expect(page.getByText(/Filled coordinates, elevation and name from the map/)).toBeVisible();
+
+  await page.reload();
+  await expect(coords).toHaveValue("-36.5,148.2", { timeout: 20_000 });
+
+  // Opened directly, Add has no list behind it to go Back to: it goes there.
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await onEditorList(page, waypoints.length + 1);
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  expect(mutated()).toBe(false);
+});
+
+test("save round-trip persists an edit, restore leaves the comp as found", async ({ page }) => {
   // Capture the original set so the finally block can put it back verbatim.
   const origRes = await page.request.get(`/api/comp/${compId}/waypoints`);
   expect(origRes.ok()).toBe(true);
   const original = (await origRes.json()) as { waypoints: Waypoint[] };
 
   try {
-    await editWaypoint(page, await firstWaypointRow(page), "Name", "E2E Renamed");
+    await editWaypoint(page, await firstWaypointRow(page), waypoints[0].code, "Name", "E2E Renamed");
 
     const putDone = page.waitForResponse(
       (r) => r.url().includes("/waypoints") && r.request().method() === "PUT"
     );
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await saveButton(page).click();
     expect((await putDone).ok()).toBe(true);
     // The saved values are the new baseline: clean page, disabled button.
-    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    await expect(saveButton(page)).toBeDisabled();
     await expect(page.getByText("Unsaved changes")).toBeHidden();
 
-    // Saving disarms the back guard, and its history entry goes with it: one
-    // press leaves the page rather than landing on a stray entry wearing the
-    // same URL and appearing to do nothing.
-    await page.goBack();
-    await expect(page).not.toHaveURL(/waypoints$/);
-    await page.goForward();
-    await expect(await firstWaypointRow(page)).toContainText("E2E Renamed");
-
-    // A reload proves it persisted (the editor rebuilds from the API).
+    // A reload proves it persisted (the editor rebuilds from the API, with no
+    // draft left behind).
     await page.reload();
+    await onEditorList(page, waypoints.length);
     await expect(await firstWaypointRow(page)).toContainText("E2E Renamed");
+    await expect(page.getByText("Unsaved changes")).toBeHidden();
   } finally {
     const restore = await page.request.put(`/api/comp/${compId}/waypoints`, {
       data: { waypoints: original.waypoints },
@@ -521,26 +425,18 @@ test("save round-trip persists an edit, restore leaves the comp as found", async
 
 test("device export: the QR section carries the swap toggle", async ({ page }) => {
   // Runs in BOTH projects. The pointer decides what the first toolbar button
-  // does, but the QR half is the same everywhere — and a phone is the width
-  // this toolbar exists for, so it is the width the toggle has to work at.
+  // does, but the QR half is the same everywhere.
   const mutated = trackMutations(page);
 
-  // Shut, the section is not on the page at all: two buttons and nothing else.
   await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toHaveCount(0);
-
-  // QR toggles on (caption + code render).
   await page.getByRole("button", { name: "QR code" }).click();
   await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toBeVisible();
 
-  // Swap lives INSIDE the expanded section — it is not page chrome standing
-  // above both outputs any more. Click the label text, read state by role
-  // (gotcha #13).
   const swap = page.getByRole("checkbox", { name: /Swap code & name/ });
   await expect(swap).not.toBeChecked();
   await page.getByText(/Swap code & name/).click();
   await expect(swap).toBeChecked();
 
-  // Collapsed, the section takes its checkbox with it.
   await page.getByRole("button", { name: "Hide QR" }).click();
   await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toHaveCount(0);
   await expect(swap).toHaveCount(0);
@@ -549,12 +445,8 @@ test("device export: the QR section carries the swap toggle", async ({ page }) =
 });
 
 test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobile }) => {
-  // Stacked only: side by side the pane is a column that costs the list
-  // nothing, so there is no fold and DetailFoldButton hides itself. It does
-  // that with the same `@5xl:` container query MasterDetail splits on, which
-  // needs a container ancestor — a page that forgot the `@container` wrapper
-  // would leak the button into the wide layout, and this is what would catch
-  // it.
+  // Stacked only: side by side there is no fold and DetailFoldButton hides
+  // itself, with the same `@5xl:` container query MasterDetail splits on.
   const mutated = trackMutations(page);
   const fold = page.getByRole("button", { name: "Hide map" });
 
@@ -564,14 +456,10 @@ test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobi
     return;
   }
 
-  // One row: the toggle sits level with the two device buttons, not under
-  // them — a second row for one right-aligned button is the space this move
-  // was meant to give back.
   const qr = page.getByRole("button", { name: "QR code" });
   const rowTop = async (l: Locator) => (await l.boundingBox())!.y;
   expect(Math.abs((await rowTop(fold)) - (await rowTop(qr)))).toBeLessThan(8);
 
-  // And it still folds the pane it names, both ways, saying so to AT.
   await expect(fold).toHaveAttribute("aria-expanded", "true");
   await fold.click();
   const unfold = page.getByRole("button", { name: "Show map" });
@@ -582,33 +470,27 @@ test("the map fold toggle rides the toolbar, on ONE line", async ({ page, isMobi
   await unfold.click();
   await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible();
 
-  // An expanded QR makes the device block tall AND wide. The toggle must keep
-  // its place in the button row rather than being pushed under the QR, which
-  // is what a plain sibling did.
   await qr.click();
   await expect(page.getByText(/Scan with XCTrack, Flyskyhy/)).toBeVisible();
-  expect(Math.abs((await rowTop(fold)) - (await rowTop(page.getByRole("button", { name: "Hide QR" }))))).toBeLessThan(8);
+  expect(
+    Math.abs((await rowTop(fold)) - (await rowTop(page.getByRole("button", { name: "Hide QR" }))))
+  ).toBeLessThan(8);
 
   expect(mutated()).toBe(false);
 });
 
 // DESKTOP_ONLY: a coarse pointer gets "Open in app" with hosted links instead
-// of the client-side download menu (WaypointDeviceExport), so the menu this
-// asserts on is the fine-pointer one.
+// of the client-side download menu (WaypointDeviceExport).
 test("device export: download menu lists every format", { tag: DESKTOP_ONLY }, async ({ page }) => {
   const mutated = trackMutations(page);
-
   await page.getByRole("button", { name: "Download waypoints" }).click();
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
-  // All 8 engine export formats (WAYPOINT_EXPORT_FORMATS). The swap item is a
-  // menuitemCHECKBOX, so it is deliberately not one of them.
+  // All 8 engine export formats (WAYPOINT_EXPORT_FORMATS).
   await expect(menu.getByRole("menuitem")).toHaveCount(8);
   await expect(menu.getByRole("menuitem", { name: "SeeYou (.cup)" })).toBeVisible();
-
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
-
   expect(mutated()).toBe(false);
 });
 
@@ -617,17 +499,13 @@ test("device export: the download menu carries its own swap toggle", { tag: DESK
   page,
 }) => {
   const mutated = trackMutations(page);
-
-  // The QR section is shut, so the menu's own item is the only way to swap.
   await expect(page.getByRole("checkbox", { name: /Swap code & name/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Download waypoints" }).click();
   const item = page.getByRole("menuitemcheckbox", { name: /Swap code & name/ });
   await expect(item).toBeVisible();
   await expect(item).not.toBeChecked();
-
-  // Selecting it must NOT close the menu — the formats under it are the point,
-  // and on a touch device their hrefs are rebuilt against the new swap state.
+  // Selecting it must NOT close the menu.
   await item.click();
   await expect(item).toBeChecked();
   await expect(page.getByRole("menu")).toBeVisible();
@@ -641,15 +519,26 @@ test("device export: the download menu carries its own swap toggle", { tag: DESK
   expect(mutated()).toBe(false);
 });
 
-test("navigating away from unsaved waypoints is guarded", async ({ page }) => {
+test("leaving the editor by a link asks; going between its pages does not", async ({ page }) => {
   const mutated = trackMutations(page);
-  await editWaypoint(page, await firstWaypointRow(page), "Name", "E2E Unsaved");
+  const code = waypoints[0].code;
+  await editWaypoint(page, await firstWaypointRow(page), code, "Name", "E2E Unsaved");
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  // Keep editing: the navigation is cancelled and the edit survives.
+  // Into a waypoint's page and back out by its breadcrumb: the editor's own
+  // pages, so nothing asks.
+  await openWaypoint(page, await firstWaypointRow(page), code);
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Waypoints" })
+    .click();
+  await onEditorList(page, waypoints.length);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Unsaved");
+
+  // Out of the editor: asked. Keep editing stays, with the edit.
   await page.getByRole("link", { name: "Competitions" }).first().click();
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog).toBeVisible();
   await expect(
     dialog.getByText("This page has unsaved changes. Leaving will discard them.")
   ).toBeVisible();
@@ -658,118 +547,79 @@ test("navigating away from unsaved waypoints is guarded", async ({ page }) => {
   await expect(page).toHaveURL(/waypoints$/);
   await expect(await firstWaypointRow(page)).toContainText("E2E Unsaved");
 
-  // Discard: the navigation proceeds and nothing was ever sent to the API.
+  // Discard: the navigation proceeds, and the draft really is gone — the
+  // waypoints come back as saved.
   await page.getByRole("link", { name: "Competitions" }).first().click();
-  await page
-    .getByRole("alertdialog")
-    .getByRole("button", { name: "Discard changes" })
-    .click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
   await expect(page).toHaveURL(/\/comp$/);
+  await page.goto(`/comp/${compId}/waypoints`);
+  await onEditorList(page, waypoints.length);
+  await expect(page.getByText("Unsaved changes")).toBeHidden();
+  await expect(await firstWaypointRow(page)).not.toContainText("E2E Unsaved");
 
   expect(mutated()).toBe(false);
 });
 
 /**
- * Back is guarded too.
- *
- * Neither of the guard's older layers ever sees a back gesture: a `popstate`
- * is not a click, and a same-document history step is not an unload. So the
- * one gesture this page treats as first-class navigation — Back walks out of
- * one sheet per press — used to end by dropping the work without a word.
+ * Back is the browser's, and means "not now": it leaves the editor without a
+ * question, and the draft is there when the reader comes back. (Until #811 a
+ * history entry held by the page asked on Back instead; the overlays rule in
+ * CLAUDE.md retired that machinery, and with the draft in storage there is
+ * nothing for Back to lose.)
  */
-test("the back gesture on unsaved waypoints is guarded", async ({ page }) => {
-  const mutated = trackMutations(page);
-  const compUrl = await reachWaypointsFromCompPage(page);
-  const waypointsUrl = page.url();
-
-  await editWaypoint(page, await firstWaypointRow(page), "Name", "E2E Back Guard");
-  await expect(page.getByText("Unsaved changes")).toBeVisible();
-
-  // The guard armed when the form went dirty, so it sits UNDER every overlay
-  // opened afterwards: a sheet still takes the first press for itself.
-  await (await firstWaypointRow(page)).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.goBack();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page).toHaveURL(waypointsUrl);
-
-  // With the overlays gone the next press reaches the guard, which asks
-  // instead of leaving. Keep editing: the reader has not moved and the edit
-  // is still there.
-  await page.goBack();
-  const dialog = page.getByRole("alertdialog");
-  await expect(
-    dialog.getByText("This page has unsaved changes. Leaving will discard them.")
-  ).toBeVisible();
-  await dialog.getByRole("button", { name: "Keep editing" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(waypointsUrl);
-  await expect(await firstWaypointRow(page)).toContainText("E2E Back Guard");
-
-  // Keep editing left the stack exactly as it found it, so the NEXT press
-  // asks again rather than appearing to do nothing.
-  await page.goBack();
-  await expect(page.getByRole("alertdialog")).toBeVisible();
-  await page
-    .getByRole("alertdialog")
-    .getByRole("button", { name: "Discard changes" })
-    .click();
-
-  // Discard finishes the press: one step back, to where the reader came from.
-  await expect(page).toHaveURL(compUrl);
-  expect(mutated()).toBe(false);
-});
-
-test("a reverted edit disarms the back guard and leaves no stray entry", async ({
+test("Back leaves the editor without asking, and the draft waits for Forward", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
   const compUrl = await reachWaypointsFromCompPage(page);
-
-  // Dirty, then clean again by hand — the same transition a Save makes, minus
-  // the round trip. The guard's history entry has to go with it.
-  const original = waypoints[0].name;
-  await editWaypoint(page, await firstWaypointRow(page), "Name", "E2E Reverted");
+  await editWaypoint(page, await firstWaypointRow(page), waypoints[0].code, "Name", "E2E Later");
   await expect(page.getByText("Unsaved changes")).toBeVisible();
-  await editWaypoint(page, await firstWaypointRow(page), "Name", original);
-  await expect(page.getByText("Unsaved changes")).toBeHidden();
 
-  // ONE press leaves, with nothing asked and no dead entry to walk through.
   await page.goBack();
   await expect(page).toHaveURL(compUrl);
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
 
+  await page.goForward();
+  await onEditorList(page, waypoints.length);
+  await expect(await firstWaypointRow(page)).toContainText("E2E Later");
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
   expect(mutated()).toBe(false);
 });
 
-test("the map maximises into a full-screen sheet with its own Add from map", async ({
+test("the map opens at full size on a page of its own, with its own Add from map", async ({
   page,
 }) => {
   const mutated = trackMutations(page);
 
-  await page.getByRole("button", { name: "Maximise" }).click();
-  const sheet = page.getByRole("dialog", { name: "Waypoint map" });
-  await expect(sheet).toBeVisible();
+  await page.getByRole("link", { name: "Maximise map" }).click();
+  await expect(page).toHaveURL(/\/waypoints\/map$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Waypoint map" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(`${waypoints.length} waypoints · nothing is saved`)).toBeVisible();
+  await expectNoSidewaysScroll(page);
 
-  // The pane's own copy of the control stands down while the sheet holds the
-  // map: exactly one Add-from-map toggle on the page, and it is in the sheet.
-  await expect(page.getByRole("button", { name: "Add from map" })).toHaveCount(1);
-  await sheet.getByRole("button", { name: "Add from map" }).click();
-  await expect(sheet.getByRole("button", { name: /Tap the map to place/ })).toBeVisible();
+  // Armed is in the URL, so coming back from Add waypoint finds it armed.
+  await page.getByRole("button", { name: "Add from map" }).click();
+  await expect(page.getByRole("button", { name: /Tap the map to place/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/waypoints\/map\?add=1$/);
 
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Maximise" })).toBeVisible();
+  // Done goes back to the list.
+  await page.getByRole("button", { name: "Done" }).click();
+  await onEditorList(page, waypoints.length);
+
+  // And so does Back.
+  await page.getByRole("link", { name: "Maximise map" }).click();
+  await expect(page).toHaveURL(/\/waypoints\/map$/);
+  await page.goBack();
+  await onEditorList(page, waypoints.length);
 
   expect(mutated()).toBe(false);
 });
 
-test("the device panel follows the SAVED set, not the editor's rows", async ({
-  page,
-}) => {
-  // A file parsed into the grid is not yet on the server, so the panel — whose
-  // links are hosted endpoints — must not offer it. Emptied and restored via
-  // the API, like the save round-trip above.
+test("the device panel follows the SAVED set, not the editor's rows", async ({ page }) => {
+  // A file parsed into the editor is not yet on the server, so the panel —
+  // whose links are hosted endpoints — must not offer it.
   const origRes = await page.request.get(`/api/comp/${compId}/waypoints`);
   expect(origRes.ok()).toBe(true);
   const original = (await origRes.json()) as { waypoints: Waypoint[] };
@@ -780,27 +630,22 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({
     });
     expect(emptied.ok()).toBe(true);
     await page.reload();
-    await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible({
-      timeout: 15_000,
-    });
+    await onEditorList(page, 0);
 
-    // Nothing published: no toolbar, and the editor's own job is what's left.
     await expect(deviceExportButton(page)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "QR code" })).toHaveCount(0);
 
     // Adding a waypoint in the editor does NOT bring it back — only a save does.
-    await page.getByRole("button", { name: "Add waypoint" }).click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByRole("textbox", { name: "Code" }).fill("E2E2");
-    await dialog
-      .getByRole("textbox", { name: "Coordinates (lat, lon)" })
-      .fill("-36.5, 148.2");
-    await dialog.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByRole("link", { name: "Add waypoint" }).click();
+    await expect(h1(page, "Add waypoint")).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("textbox", { name: "Code" }).fill("E2E2");
+    await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 148.2");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await onEditorList(page, 1);
     await expect(page.getByText("Unsaved changes")).toBeVisible();
     await expect(deviceExportButton(page)).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await saveButton(page).click();
     await expect(deviceExportButton(page)).toBeVisible();
   } finally {
     const restore = await page.request.put(`/api/comp/${compId}/waypoints`, {
@@ -810,260 +655,22 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({
   }
 });
 
-/**
- * The altitude review, over flat ground at a height no Corryong waypoint sits
- * at — so every waypoint disagrees with the map by a known amount and the
- * review must find them all.
- *
- * 4000 m is chosen to be far above the whole set (the highest Corryong
- * waypoint is under 1000 m), which puts every row past the
- * coordinate-suspicion threshold. That is the point: the flagging, the
- * accept and the way out are what this asserts, and they are the parts a real
- * DEM cannot make deterministic.
- *
- * The review is a SHEET at every width now, so this runs in both projects.
- */
-test("Check altitudes reviews the set in a sheet and accepts one row", async ({
-  page,
-}) => {
-  const mutated = trackMutations(page);
-  // alpha 128: the coastal no-data case. Read off a canvas this same pixel
-  // comes back thousands of metres out (a Great Ocean Road waypoint read
-  // 13273 m); the elevation the review shows must be 4000 regardless.
-  await stubTerrainElevations(page.context(), 4000, 128);
-
-  await firstWaypointRow(page);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Check altitudes" }).click();
-
-  const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(sheet.getByRole("status")).toContainText(
-    `${waypoints.length} of ${waypoints.length} waypoints to look at`
-  );
-  await expect(sheet).toContainText("check the coordinates");
-  // Corrections here do not reach into tasks already built — the sheet says so.
-  await expect(sheet).toContainText("Existing tasks keep their own copies");
-
-  // Biggest disagreement first. Against flat ground that is the LOWEST
-  // waypoint, and its row states BOTH altitudes — the failure this design
-  // replaces was a reader who could only see one of them.
-  const lowest = Math.min(...waypoints.map((w) => w.altitude ?? 0));
-  const topRow = reviewRows(page).first();
-  await expect(topRow).toContainText(`file ${lowest} m`);
-  await expect(topRow).toContainText("map 4000 m");
-
-  // Accepting one row takes the map's value, as an ordinary unsaved edit.
-  const saveButton = page.getByRole("button", { name: "Save", exact: true });
-  await expect(saveButton).toBeDisabled();
-  await topRow.getByRole("button", { name: "Use 4000 m" }).click();
-  // The row STAYS in the list rather than vanishing under the thumb, and now
-  // agrees with the map — with no "0 m" beside it, because a difference of
-  // zero is the absence of a finding rather than one worth printing.
-  await expect(topRow).toContainText("file 4000 m");
-  // A signed delta is what a finding looks like; there must be none.
-  await expect(topRow).not.toContainText(/[+-]\d+\s*m/);
-  await expect(saveButton).toBeEnabled();
-
-  // Done closes the sheet and the edit survives as an unsaved change.
-  await sheet.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(saveButton).toBeEnabled();
-  await expect(page.getByText("Unsaved changes")).toBeVisible();
-
-  // A review reads the map, never the API.
-  expect(mutated()).toBe(false);
-});
-
-test("a review row opens one waypoint, with both altitudes and no map", async ({
-  page,
-}) => {
-  const mutated = trackMutations(page);
-  await stubTerrainElevations(page.context(), 4000, 128);
-
-  await firstWaypointRow(page);
-  await page.getByRole("button", { name: "Check altitudes" }).click();
-  const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible({
-    timeout: 20_000,
-  });
-
-  const lowest = Math.min(...waypoints.map((w) => w.altitude ?? 0));
-  await reviewRows(page).first().click();
-
-  // One waypoint: both numbers, labelled, and the difference between them.
-  await expect(sheet.getByText("In the file")).toBeVisible();
-  await expect(sheet.getByText("From the map")).toBeVisible();
-  await expect(sheet).toContainText(`${lowest} m`);
-  await expect(sheet).toContainText("4000 m");
-  await expect(sheet).toContainText("apart");
-  // No map in this view (decided deliberately: the page owns one Mapbox
-  // instance and hands it between the pane and the full-screen map).
-  await expect(sheet.locator(".mapboxgl-canvas")).toHaveCount(0);
-
-  // The altitude is editable here, which is the alternative to accepting.
-  // A NumberField commits on blur rather than per keystroke, which is what
-  // tapping anything else in the sheet does anyway.
-  const altInput = sheet.getByRole("textbox", { name: "Altitude (m)" });
-  await altInput.fill("123");
-  await altInput.blur();
-  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
-
-  // Back returns to the list, which is the "leave it as it is" path.
-  await sheet.getByRole("button", { name: /^All \d+$/ }).click();
-  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible();
-
-  // And so does Done, from this view. It used to close the whole sheet, which
-  // dropped the reader out to the waypoints page half way down a list of
-  // twelve: "done with this waypoint" is not "done with the check".
-  await reviewRows(page).first().click();
-  await expect(sheet.getByText("In the file")).toBeVisible();
-  await sheet.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible();
-
-  // Back walks one layer at a time too: into a waypoint, back to the list,
-  // back to the page.
-  await reviewRows(page).first().click();
-  await expect(sheet.getByText("In the file")).toBeVisible();
-  await page.goBack();
-  await expect(page.getByRole("dialog").getByRole("heading", { name: "Check altitudes" })).toBeVisible();
-  await page.goBack();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(await firstWaypointRow(page)).toBeVisible();
-
-  expect(mutated()).toBe(false);
-});
-
-test("typing a coordinate in the review keeps the comparison on screen", async ({
-  page,
-}) => {
-  const mutated = trackMutations(page);
-  await stubTerrainElevations(page.context(), 4000, 128);
-
-  await firstWaypointRow(page);
-  await page.getByRole("button", { name: "Check altitudes" }).click();
-  const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible({
-    timeout: 20_000,
-  });
-
-  await reviewRows(page).first().click();
-  // Which waypoint that is depends on the disagreements, so read it off the
-  // heading rather than assuming the editor's first row.
-  const code = (await sheet.getByRole("heading", { level: 2 }).textContent()) ?? "";
-  const accept = sheet.getByRole("button", { name: /^Use the map’s altitude/ });
-  await expect(accept).toBeVisible();
-
-  // Moving the waypoint makes its terrain reading stale, so the page forgets
-  // the reading whenever the coordinates change — which per keystroke used to
-  // destroy the comparison this view exists to show. The first character
-  // typed took the map's altitude away, so "From the map" fell to "—", the
-  // difference line vanished and the accept button unmounted, mid-paste. The
-  // field is a draft now, so type a character at a time and none of that
-  // moves.
-  const coords = sheet.getByRole("textbox", { name: "Coordinates" });
-  await coords.fill("");
-  await coords.pressSequentially("-36.61234, 146.61234", { delay: 10 });
-  await expect(sheet).toContainText("4000 m");
-  await expect(sheet).toContainText("apart");
-  await expect(accept).toBeVisible();
-  await expect(sheet.getByText("Enter coordinates as")).toHaveCount(0);
-
-  // Applied on the way out, once — and the stale reading goes with it, which
-  // is what the row underneath now says.
-  await sheet.getByRole("button", { name: /^All \d+$/ }).click();
-  await expect(sheet.getByRole("heading", { name: "Check altitudes" })).toBeVisible();
-  await expect(reviewRows(page).first()).toContainText("no map reading");
-
-  await sheet.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByText("Unsaved changes")).toBeVisible();
-  await expect(waypointRow(page, code)).toContainText("-36.61234");
-
-  expect(mutated()).toBe(false);
-});
-
-test("the review narrows to the rows worth looking at, and can widen again", async ({
-  page,
-}) => {
-  const mutated = trackMutations(page);
-  // Flat ground AT one of the set's own altitudes, so some rows agree and the
-  // rest do not — which is what the narrowing is for.
-  const altitudes = waypoints.map((w) => w.altitude ?? 0);
-  const commonest = [...altitudes]
-    .sort(
-      (a, b) =>
-        altitudes.filter((x) => x === b).length - altitudes.filter((x) => x === a).length
-    )[0];
-  await stubTerrainElevations(page.context(), commonest);
-  const agreeing = altitudes.filter((a) => Math.abs(a - commonest) < 50).length;
-  const toLookAt = waypoints.length - agreeing;
-  // The fixture only makes sense if the set really is mixed.
-  expect(toLookAt).toBeGreaterThan(0);
-  expect(agreeing).toBeGreaterThan(0);
-
-  await firstWaypointRow(page);
-  await page.getByRole("button", { name: "Check altitudes" }).click();
-
-  const sheet = page.getByRole("dialog");
-  await expect(sheet.getByRole("status")).toContainText(
-    `${toLookAt} of ${waypoints.length} waypoints to look at`,
-    { timeout: 20_000 }
-  );
-  await expect(sheet).toContainText(`${agreeing} agree`);
-
-  // Narrowed by default: the agreeing rows are counted, not listed.
-  await expect(reviewRows(page)).toHaveCount(toLookAt);
-  const widen = sheet.getByRole("button", { name: `Show all ${waypoints.length} waypoints` });
-  await expect(widen).toBeVisible();
-  await widen.click();
-  await expect(reviewRows(page)).toHaveCount(waypoints.length);
-  await sheet
-    .getByRole("button", { name: `Show only the ${toLookAt} to look at` })
-    .click();
-  await expect(reviewRows(page)).toHaveCount(toLookAt);
-
-  // Accept the lot: every disagreement goes, and it is all one unsaved edit.
-  const saveButton = page.getByRole("button", { name: "Save", exact: true });
-  await expect(saveButton).toBeDisabled();
-  await sheet
-    .getByRole("button", { name: `Use the map’s altitude for all ${toLookAt}` })
-    .click();
-  await expect(saveButton).toBeEnabled();
-  await expect(sheet.getByRole("status")).toContainText("agrees with the map");
-
-  expect(mutated()).toBe(false);
-});
-
-test("anonymous visitors get the same list, read-only, no admin controls", async ({
-  page,
-}) => {
+test("anonymous visitors get the same list, read-only, and no editor pages", async ({ page }) => {
   await page.context().clearCookies();
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Waypoints" })).toBeVisible();
+  await expect(h1(page, "Waypoints")).toBeVisible();
 
   // The SAME list an admin gets, named apart and with nothing behind a row.
-  // It used to be a six-column table in a sideways-scrolling region, which
-  // left the pilot on the hill with the shape the editor had stopped using.
   const list = page.getByRole("grid", { name: "Waypoints", exact: true });
   await expect(list).toBeVisible({ timeout: 15_000 });
   const row = list.getByRole("row").filter({ hasText: waypoints[0].code }).first();
   await expect(row).toBeVisible();
-  // Everything a waypoint has is on its row here too.
   await expect(row).toContainText(`${waypoints[0].altitude} m`);
-  // The locate pin stays — a visitor gets the map as well, and the pin is what
-  // NAMES the action for a reader who cannot see the map move.
-  await expect(row.getByRole("button", { name: /Show .* on the map/ })).toBeVisible();
-  await expectBigEnoughToTap(row.getByRole("button", { name: /Show .* on the map/ }));
+  const pin = row.getByRole("button", { name: /Show .* on the map/ });
+  await expect(pin).toBeVisible();
+  await expectBigEnoughToTap(pin);
 
-  // The whole row flies the map, not just the pin. The pan is imperative on
-  // the Mapbox instance and leaves no DOM trace, so what is asserted here is
-  // that the row presents itself as actionable and that pressing it opens
-  // nothing and goes nowhere — there is no sheet behind a read-only row,
-  // which is why it carries no chevron either.
+  // The whole row flies the map; nothing opens and nothing navigates.
   const here = page.url();
   await expect(row).toHaveCSS("cursor", "pointer");
   await row.click();
@@ -1075,8 +682,17 @@ test("anonymous visitors get the same list, read-only, no admin controls", async
   // No admin chrome, no Tabulator.
   await expect(page.getByRole("button", { name: "Upload file" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Check altitudes" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Add waypoint" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(page.locator(".tabulator")).toHaveCount(0);
 
   // The device-export panel is for everyone.
   await expect(deviceExportButton(page)).toBeVisible();
+
+  // The editor's pages are the organisers': a visitor is sent to the list.
+  for (const sub of ["1", "new", "map", "altitudes"]) {
+    await page.goto(`/comp/${compId}/waypoints/${sub}`);
+    await expect(page).toHaveURL(/\/waypoints$/, { timeout: 20_000 });
+    await expect(page.getByRole("grid", { name: "Waypoints", exact: true })).toBeVisible();
+  }
 });
