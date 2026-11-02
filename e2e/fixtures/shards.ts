@@ -103,7 +103,7 @@ export const E2E_SHARDS = {
   ],
 
   /*
-   * What an organiser does, in three shards. Eight of the ten `mobile` specs
+   * What an organiser does, in three shards. Eight of the eleven `mobile` specs
    * are in them, because the organiser's pages are built mobile-first (#636,
    * #637, and the waypoints and pilots lists), so most of these run twice.
    */
@@ -158,6 +158,7 @@ export const E2E_SHARDS = {
     "full-screen-sheets.spec.ts", // 19.6s, ~17s of it seeding the sample comp
     "legal-notice.spec.ts", // 12.9s
     "settings-save-ux.spec.ts", // 7.2s
+    "settings-api-keys.spec.ts", // new — creating an API key (chromium + mobile)
     "user-files-upload.spec.ts", // 5.6s
     "email-otp-signin.spec.ts", // 5.4s
     "account-name-sync.spec.ts", // 5.3s
