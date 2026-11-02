@@ -6,10 +6,12 @@ Decided in [#810](https://github.com/pokle/glidecomp/issues/810), for
 (tracking: [#823](https://github.com/pokle/glidecomp/issues/823)).
 
 Code: `web/frontend/src/react/lib/draft-store.ts` (the store),
-`lib/use-draft.ts` (the React hook), and the two editors that use it: the
-roster import (`pages/CompRosterImportPage.tsx`, #810) and the waypoints
+`lib/use-draft.ts` (the React hook), and the three editors that use it: the
+roster import (`pages/CompRosterImportPage.tsx`, #810), the waypoints
 editor (`comp/waypoints-draft.ts` + `comp/use-waypoints-editor.ts`, #811 — see
-[How the waypoints editor uses it](#how-the-waypoints-editor-uses-it)).
+[How the waypoints editor uses it](#how-the-waypoints-editor-uses-it)) and the
+route editor (`comp/route-draft.ts` + `comp/use-route-editor.ts`, #812 — see
+[How the route editor uses it](#how-the-route-editor-uses-it)).
 
 ## The problem
 
@@ -214,3 +216,44 @@ size (`/waypoints/map`) and the altitude review (`/waypoints/altitudes`, and
   Back does not ask (`guardBack: false`): it means "not now", and the draft
   waits. A reload keeps the draft too, so the list has a "Discard changes"
   button beside Save for throwing it away on purpose. Save clears it.
+
+## How the route editor uses it
+
+[#812](https://github.com/pokle/glidecomp/issues/812) made the route editor
+five pages over one draft: the route (`/comp/:c/task/:t/route`), one
+turnpoint (`/route/:n`), Quick entry (`/route/quick`), Load from XContest
+(`/route/xcontest`) and Add waypoint (`/route/add-waypoint`). The store is
+`routeDraft` in `comp/route-draft.ts`, keyed `[compId, taskId]` (the comp's
+bare id); every page reaches it through `useRouteEditor()`
+(`comp/use-route-editor.ts`). It follows the waypoints editor in every point
+above. What is particular to a route:
+
+- **The draft is the whole task, not only the turnpoints.** The start and
+  goal settings are in it too, because they are edited on two pages (the
+  route's Start and Goal sections, and the start and goal turnpoints' own
+  pages), and so is the task the route was loaded from (`baseTask`): an
+  imported `.xctsk` or XContest task brings fields the editor does not edit,
+  and Save must still write them.
+- **Times are stored as the organiser types them**, in the competition's zone.
+  They become UTC only when Save assembles the task (`assembleRouteTask` in
+  `comp/route-editor.ts`, the same assembly the MCP route plan uses).
+- **Turnpoints are addressed by the draft's own ids** (`/route/:n`), as
+  waypoints are. A reorder, a delete or Quick entry keeps the id of every
+  turnpoint that is still there (Quick entry reconciles, see
+  `comp/route-reconcile.ts`); a loaded task's rows take ids never used before.
+- **"Add turnpoint" adds an empty turnpoint and opens its page.** Every change
+  on that page goes straight into the draft, like an edit. An empty
+  turnpoint (no code and no coordinates) is not an edit — the dirty check
+  ignores it — and the route page drops it when it opens again, so an Add
+  that is left empty, by Done or by Back, adds nothing. A new Goal demotes
+  the old one at its first edit, not at the press.
+- **Waypoints made on Add waypoint wait in the draft** (`pendingWaypoints`).
+  They are in the route at once, and Save writes them to the competition just
+  before the route, so discarding the route discards them too.
+- **Quick entry's line is not kept.** It is a view of the route, made again
+  from the draft each time the page opens; "Use this route" writes the result
+  into the draft, and Cancel or Back leaves the draft as it was.
+- **Leaving.** As in the waypoints editor: links between the editor's pages
+  do not ask, a link out of it asks "Discard route changes?", Back means "not
+  now", and a reload keeps the draft. The route page's Cancel is the way to
+  throw the draft away on purpose; it asks first when there are changes.

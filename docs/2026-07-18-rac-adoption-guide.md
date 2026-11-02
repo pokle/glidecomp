@@ -835,7 +835,16 @@ bun run test:e2e                   # full suite (one known flaky dev-login test;
 
 The route editor is **`comp/RouteEditor.tsx`**, a routed page
 (`/comp/:c/task/:t/route`). Since **#661** a whole route can be set here
-without typing the quick-task syntax at all. Five pieces:
+without typing the quick-task syntax at all.
+
+**Since #812 (2026-11) the sheets and dialogs below are pages** (the overlays
+rule in CLAUDE.md): one turnpoint is `pages/TaskRouteTurnpointPage.tsx` at
+`/route/:n`, Quick entry `pages/TaskRouteQuickPage.tsx` at `/route/quick`,
+and Load from XContest and Add waypoint are `/route/xcontest` and
+`/route/add-waypoint`. They all edit one stored draft of the route
+(`comp/route-draft.ts`, `comp/use-route-editor.ts`, docs/drafts.md), and a
+turnpoint's page writes each change into it rather than applying on the way
+out. What the bullets say about each piece otherwise still holds. Five pieces:
 
 - **`comp/TurnpointList.tsx` — the editable turnpoint list.** A RAC `GridList`
   with **`variant="rows"`**, which paints it as `rac/nav-list.tsx` rows (the

@@ -1,6 +1,6 @@
 /**
  * "Enter task" — the type-it-out route builder, now the body of the route
- * editor's Quick entry sheet (comp/QuickEntrySheet.tsx).
+ * editor's Quick entry page (pages/TaskRouteQuickPage.tsx; a sheet until #812).
  *
  * Type a route the way you'd say it — "ell 400m ell 5k mitta cudg ncor 1k" —
  * and the whole set of turnpoints falls out: names are fuzzy-matched against
@@ -18,9 +18,9 @@
  * a route — it cannot say a turnpoint's coordinates, its altitude or its long
  * name — so a mirror that rebuilt the route from the text quietly threw those
  * away, and it did so on a keystroke rather than on a decision. Applying is now
- * an explicit press in the sheet, and it reconciles rather than rebuilds (see
+ * an explicit press on the page, and it reconciles rather than rebuilds (see
  * route-reconcile.ts). This component is the editor for the text and nothing
- * else: it owns no route, and its value is controlled by the sheet.
+ * else: it owns no route, and its value is controlled by the page.
  *
  * Mobile first: no overlays at all — suggestions sit inline under the field,
  * where a phone keyboard can't cover them.
@@ -55,7 +55,7 @@ export function QuickTaskField({
   waypoints: WaypointFileRecord[];
   /** Radius used for turnpoints with no distance token. */
   defaultRadius: number;
-  /** The line being edited. Controlled — the sheet owns it. */
+  /** The line being edited. Controlled — the page owns it. */
   value: string;
   onChange: (text: string) => void;
   /**

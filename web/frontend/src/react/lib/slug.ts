@@ -327,6 +327,53 @@ export function taskRoutePath(
   return `${taskPath(compId, compName, taskId, taskName)}/route`;
 }
 
+/**
+ * The route editor's other pages (#812), each a page of its own rather than
+ * a sheet or a dialog over the route: see the overlays rule in CLAUDE.md. A
+ * turnpoint is addressed by the editor's row id, not its code or position —
+ * see comp/route-draft.ts for why.
+ */
+export function taskRouteTurnpointPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  rowId: number
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/${rowId}`;
+}
+
+/** The whole route typed as one line. */
+export function taskRouteQuickPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/quick`;
+}
+
+/** Loading a route from an XContest / XCTrack task code. */
+export function taskRouteXContestPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/xcontest`;
+}
+
+/** Adding a competition waypoint from the route's map; `search` carries the map pick. */
+export function taskRouteAddWaypointPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  search = ""
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/add-waypoint${search}`;
+}
+
 /** The organiser's account of what the day did. */
 export function taskWeatherPath(
   compId: string,

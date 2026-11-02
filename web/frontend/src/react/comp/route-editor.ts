@@ -503,8 +503,8 @@ export interface AssembledRoute {
 
 /**
  * The whole task from the turnpoint rows and the start and goal panels — the
- * route editor's save, without its toasts. The same assembly as the
- * website's RouteEditor: the loaded task's type, version, earth model,
+ * route editor's Save (comp/RouteEditor.tsx, since #812) and the MCP route
+ * plan both assemble through this, so the two cannot drift: the loaded task's type, version, earth model,
  * take-off window and tolerance survive the edit; gates are de-duplicated
  * and sorted on the comp's own clock (its flying day is contiguous there,
  * while UTC can wrap midnight), then stored as UTC.
