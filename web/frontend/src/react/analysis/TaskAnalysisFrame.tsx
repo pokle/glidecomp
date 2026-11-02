@@ -44,9 +44,11 @@ export interface TaskAnalysisFrameProps {
   /**
    * The section a page one level further down hangs off — "Metric details"
    * for one metric's full-size chart. It becomes the trail's last crumb, and
-   * takes the report's view state with it, as the chapter does for a section.
+   * takes the report's view state with it, as the chapter does for a section —
+   * or, given `search`, that query instead: the thermal map knows which of its
+   * own parameters the Thermals section reads.
    */
-  parent?: { slug: string; label: string };
+  parent?: { slug: string; label: string; search?: string };
   /** Shown beside the class select. Only pages with per-pilot rows want it. */
   pilotPicker?: boolean;
   children: (ctx: {
@@ -126,7 +128,7 @@ export function TaskAnalysisFrame({
               },
             ]
           : chapterCrumbs,
-        search
+        parent?.search ?? search
       )
     : underTask(compId, comp?.name, taskId, task?.name);
 
@@ -176,7 +178,7 @@ export function TaskAnalysisFrame({
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">{heading}</h1>
-          <p className="text-sm text-muted-foreground">{lede}</p>
+          {lede ? <p className="text-sm text-muted-foreground">{lede}</p> : null}
         </div>
         {/* Pure navigation/actions. */}
         <div className="flex items-center gap-2">

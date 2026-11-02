@@ -194,6 +194,11 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   // there is nothing to server-render; it is an interactive tool rather than a
   // document, so there is nothing here for a crawler either.
   /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/similar\/?$/,
+  // One thermal's rose and map at the size of the screen (#816), a leaf of the
+  // SSR'd thermals section. The page is there to show the map, which is
+  // browser-only, and all it says about the thermal is already server-rendered
+  // on the section — a second indexed copy would only duplicate it.
+  /^\/comp\/[^/]+\/task\/[^/]+\/analysis\/thermals\/map\/?$/,
 ];
 
 /**

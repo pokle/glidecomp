@@ -25,6 +25,7 @@ import {
   compUrlId,
   taskAnalysisMetricPath,
   taskAnalysisSectionPath,
+  taskThermalMapPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
@@ -40,7 +41,7 @@ import { TaskDebrief } from "../analysis/TaskDebrief";
 import { MetricGlossary } from "../analysis/MetricGlossary";
 import { ExcludedPilots, MethodNote } from "../analysis/Footnotes";
 import { StyleClusters } from "../analysis/StyleClusters";
-import { ThermalsPanel } from "../analysis/thermals/ThermalsPanel";
+import { NoThermalsNote, ThermalsPanel } from "../analysis/thermals/ThermalsPanel";
 import { DayProfilePanel } from "../analysis/charts/day-profile/DayProfilePanel";
 import { WeatherNotesBlock } from "../weather/WeatherNotesBlock";
 import {
@@ -236,16 +237,12 @@ function ThermalsSection({
   bundle: ReturnType<typeof useTaskAnalysis>;
   report: FrameCtx["report"];
 }) {
-  const { comp, compId, taskId, weather, weatherPending } = bundle;
+  const { comp, task, compId, taskId, weather, weatherPending } = bundle;
 
   if (!bundle.hasThermalsSection || !report.thermals) {
     return (
       <Card>
-        <p className="text-sm text-muted-foreground">
-          No thermal on this task was shared by two pilots, so there is nothing
-          to reconstruct: a thermal's shape comes from the tracks that circled
-          it together.
-        </p>
+        <NoThermalsNote />
       </Card>
     );
   }
@@ -263,6 +260,13 @@ function ThermalsSection({
         replayHrefFor={(thermalId) =>
           compId && taskId
             ? `/replay?comp=${encodeURIComponent(compId)}&task=${encodeURIComponent(taskId)}&thermal=${thermalId}`
+            : null
+        }
+        // Built from whatever names have loaded: the ids are what route it,
+        // and the map page settles its own slugs (useCanonicalPath).
+        mapPath={
+          compId && taskId
+            ? taskThermalMapPath(compUrlId(comp, compId), comp?.name, taskId, task?.name)
             : null
         }
       />

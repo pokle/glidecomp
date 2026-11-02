@@ -528,38 +528,6 @@ test("wide: the thermals census and its detail sit side by side", async () => {
   expect(await page.evaluate(() => history.length)).toBe(entries);
 });
 
-test("the map's maximise control fills the screen, and the same control restores it", async () => {
-  await openSection("thermals");
-  await setViewport(390, 780);
-  const thermalsCard = page.locator("section", {
-    has: page.getByRole("heading", { name: THERMALS_HEADING }),
-  });
-  await thermalsCard.scrollIntoViewIfNeeded();
-  // Stacked, the rose is on the DETAIL view — so get to it. (The wide test
-  // above may have left a thermal chosen, in which case it already is.)
-  if (await census().isVisible()) await chooseFirstThermal();
-  await expect(thermalPane()).toBeVisible();
-  // The map (and its corner controls) only exist with a Mapbox token.
-  const mapToggle = thermalsCard.getByRole("button", { name: "Map", exact: true });
-  test.skip((await mapToggle.count()) === 0, "no Mapbox token in this environment");
-  await mapToggle.click();
-  await thermalsCard.getByRole("button", { name: "Maximise map" }).click();
-
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor();
-  // The rose itself is in the sheet, and Close has focus so Escape is not
-  // the only way out (accessibility standard §4.1).
-  await expect(dialog.getByRole("img", { name: /Top-down lift rose/ })).toBeVisible();
-  await expect(page.locator(":focus")).toHaveText("Close");
-
-  // The SAME control, in the same corner of the map, brings it back.
-  await dialog.getByRole("button", { name: "Restore map size" }).click();
-  await expect(dialog).toHaveCount(0);
-
-  // Serial suite: leave the page as found — fold the map away again.
-  await mapToggle.click();
-});
-
 test("the pilot picker pins a highlight page-wide, through the URL", async () => {
   await openSection("metrics");
   await setViewport(1600, 1000);

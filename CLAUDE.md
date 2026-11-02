@@ -415,8 +415,7 @@ These are the standing imperatives. Each links to the reference that explains it
     review, CIVL fill), [#811](https://github.com/pokle/glidecomp/issues/811)
     (waypoint details, altitude review, full-screen map),
     [#812](https://github.com/pokle/glidecomp/issues/812) (turnpoint sheet,
-    quick entry), [#816](https://github.com/pokle/glidecomp/issues/816) (task
-    analysis thermal view); then [#817](https://github.com/pokle/glidecomp/issues/817)
+    quick entry); then [#817](https://github.com/pokle/glidecomp/issues/817)
     deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
     `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
     do not add a new user of any of it.

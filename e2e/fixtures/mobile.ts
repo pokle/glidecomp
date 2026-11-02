@@ -81,6 +81,11 @@ export const MOBILE_SPEC_FILES = [
   // overlay. A phone is where the inline chart is too small to read, so it is
   // the width this page exists for.
   "task-analysis-metric-chart.spec.ts",
+  // The thermal map (#816): one thermal's rose and map at the size of the
+  // screen, a page where it was a full-screen sheet. The page has to fit a
+  // phone — no sideways scroll, the figure no taller than the screen — and
+  // Back has to work there.
+  "task-thermal-map.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */

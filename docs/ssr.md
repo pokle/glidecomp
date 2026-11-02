@@ -46,6 +46,7 @@ shell rather than 404, and there is nothing here for a crawler:
 | `/comp/:id/task/:id/pilot/:id/manual-flight` | recording a manual flight |
 | `/comp/:id/task/:id/qr` | the task's QR code (#813) — public, but a picture for a camera |
 | `/comp/:id/task/:id/analysis/similar` | the pilot-similarity sheet, derived client-side |
+| `/comp/:id/task/:id/analysis/thermals/map` | one thermal's rose and map at the size of the screen (#816) — the map is browser-only, and everything readable about the thermal is server-rendered on `/analysis/thermals` |
 
 All but the last two are admin-only editors, and every one of them was a dialog over
 a public page until #636/#637 — which is why the list grew: converting a dialog

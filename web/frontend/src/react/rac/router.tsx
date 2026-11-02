@@ -5,7 +5,19 @@
  * under both BrowserRouter and the server's StaticRouter.
  */
 import { RouterProvider } from "react-aria-components";
-import { useHref, useNavigate } from "react-router-dom";
+import { useHref, useNavigate, type NavigateOptions } from "react-router-dom";
+
+/**
+ * A RAC Link's `routerOptions` are react-router's navigate options, so a link
+ * can carry history state — e.g. the thermal map's maximise link marks the
+ * entry it pushes, so the page's restore control knows Back is the way home
+ * (analysis/thermals/ThermalsPanel.tsx).
+ */
+declare module "react-aria-components" {
+  interface RouterConfig {
+    routerOptions: NavigateOptions;
+  }
+}
 
 /**
  * True for an href that is NOT an app route: anything carrying a scheme
@@ -65,7 +77,7 @@ export function RacRouterProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   return (
     <RouterProvider
-      navigate={(to) => {
+      navigate={(to, options) => {
         // Same rule on the navigate side: react-router would push an external
         // URL onto the history stack as a path. RAC only reaches here for a
         // link it decided to client-navigate, so this is belt and braces.
@@ -75,7 +87,7 @@ export function RacRouterProvider({ children }: { children: React.ReactNode }) {
         // would render the 404 page over a URL the server answers fine.
         if (isExternalHref(to) || isServerHref(to, window.location.href)) {
           window.location.href = to;
-        } else void navigate(to);
+        } else void navigate(to, options);
       }}
       useHref={useAppHref}
     >
