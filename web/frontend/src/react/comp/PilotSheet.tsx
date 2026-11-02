@@ -39,8 +39,10 @@ import { toast } from "../lib/toast";
 import { formatRankingMonth, listLabel } from "./civl-rankings";
 import { emptyRow, normalizeRow, pilotToRow, type CompPilot, type ParsedRow } from "./csv";
 import { createBody, draftProblems, isBlankDraft, isDirtyDraft, patchBody } from "./pilot-edit";
+import { TeamField } from "./TeamField";
+import { matchTeam, teamKey, type RosterTeam } from "./team-names";
 
-/** The sporting-body IDs behind the "Other IDs" fold, in the CSV's order. */
+/** The sporting-body IDs in the "Other IDs" group, in the CSV's order. */
 const OTHER_IDS = [
   ["safa_id", "SAFA ID"],
   ["ushpa_id", "USHPA ID"],
@@ -81,6 +83,7 @@ export function PilotSheet({
   compClasses,
   pilot,
   initialName,
+  teams,
   onSaved,
   onRemoved,
   onClose,
@@ -89,6 +92,8 @@ export function PilotSheet({
   compClasses: string[];
   /** The pilot to edit, or null for a new one. */
   pilot: CompPilot | null;
+  /** The roster's teams, for the Team field (comp/TeamField.tsx). */
+  teams: RosterTeam[];
   /** A new pilot's name, from a search that found nobody. */
   initialName?: string;
   onSaved: (saved: CompPilot) => void;
@@ -100,6 +105,31 @@ export function PilotSheet({
     pilot ? pilotToRow(pilot) : { ...emptyRow(compClasses), name: initialName ?? "" }
   );
   const [draft, setDraft] = useState<ParsedRow>(start);
+  // The team name "New team" was chosen for, if any: a name that is no team
+  // saves only once that choice has been made.
+  const [newTeam, setNewTeam] = useState<string | null>(null);
+
+  /**
+   * The draft as it will be sent: a team name that IS a roster team (only
+   * case, spacing or accents differ) goes under the roster's spelling.
+   */
+  const toSend = (): ParsedRow => {
+    const team = draft.team_name?.trim() ?? "";
+    const exact = team ? matchTeam(team, teams).exact : null;
+    return exact ? { ...draft, team_name: exact.name } : draft;
+  };
+
+  /** The form's own checks: the draft's, then the team's. */
+  const problems = (): Record<string, string | undefined> => {
+    const found: Record<string, string | undefined> = draftProblems(draft, compClasses);
+    const team = draft.team_name?.trim() ?? "";
+    const unchanged = !!pilot && teamKey(team) === teamKey(pilot.team_name ?? "");
+    const chosen = newTeam !== null && teamKey(newTeam) === teamKey(team);
+    if (team && !unchanged && !chosen && !matchTeam(team, teams).exact) {
+      found.team_name = `Choose a team from the list, or New team: ${team}.`;
+    }
+    return found;
+  };
 
   /** Whether closing would lose anything. */
   const unsaved = pilot ? isDirtyDraft(start, draft) : !isBlankDraft(draft);
@@ -122,18 +152,18 @@ export function PilotSheet({
             })
           : true
       }
-      validate={() => (unsaved ? draftProblems(draft, compClasses) : {})}
+      validate={() => (unsaved ? problems() : {})}
       fieldNames={SERVER_FIELDS}
       onSubmit={async () => {
         if (!unsaved) return undefined;
         return pilot
           ? api.api.comp[":comp_id"].pilot[":comp_pilot_id"].$patch({
               param: { comp_id: compId, comp_pilot_id: pilot.comp_pilot_id },
-              json: patchBody(pilot, draft),
+              json: patchBody(pilot, toSend()),
             })
           : api.api.comp[":comp_id"].pilot.$post({
               param: { comp_id: compId },
-              json: createBody(draft),
+              json: createBody(toSend()),
             });
       }}
       onSuccess={async (res) => {
@@ -152,6 +182,8 @@ export function PilotSheet({
         pilot={pilot}
         draft={draft}
         setDraft={setDraft}
+        teams={teams}
+        onNewTeam={setNewTeam}
         onRemoved={onRemoved}
       />
     </FormSheet>
@@ -165,6 +197,8 @@ function PilotFields({
   pilot,
   draft,
   setDraft,
+  teams,
+  onNewTeam,
   onRemoved,
 }: {
   compId: string;
@@ -172,6 +206,8 @@ function PilotFields({
   pilot: CompPilot | null;
   draft: ParsedRow;
   setDraft: React.Dispatch<React.SetStateAction<ParsedRow>>;
+  teams: RosterTeam[];
+  onNewTeam: (name: string) => void;
   onRemoved: (removed: CompPilot) => void;
 }) {
   const confirm = useConfirm();
@@ -219,7 +255,7 @@ function PilotFields({
 
   return (
     <>
-      {/* Five named parts, in the order an organiser fills them in, and none
+      {/* Six named parts, in the order an organiser fills them in, and none
           folds away: Other IDs used to, and a field behind a fold is one
           nobody finds — the reader scanning for it, or the kit moving focus
           to it when it is the field with the problem. */}
@@ -249,6 +285,20 @@ function PilotFields({
               ))}
             </div>
           </RadioGroup>
+        </FormSection>
+
+        {/* The glider is how people pick the pilot out in the air (and a
+            rough read of their flying). Nothing scores it, so it can be as
+            descriptive as a spotter needs. */}
+        <FormSection title="In the air">
+          <TextField
+            label="Glider"
+            name="glider"
+            autoComplete="off"
+            value={text("glider")}
+            onChange={(v) => set("glider", v)}
+            description="Make, model and colours, so they can be picked out in the air — e.g. green and yellow Airborne F2-190."
+          />
         </FormSection>
 
         <FormSection title="Contact">
@@ -294,12 +344,11 @@ function PilotFields({
         </FormSection>
 
         <FormSection title="Team">
-          <TextField
-            label="Team"
-            name="team_name"
-            autoComplete="off"
+          <TeamField
             value={text("team_name")}
             onChange={(v) => set("team_name", v)}
+            teams={teams}
+            onNewTeam={onNewTeam}
           />
           <TextField
             label="Driver"
@@ -323,15 +372,6 @@ function PilotFields({
           ))}
         </FormSection>
 
-        <FormSection title="Glider">
-          <TextField
-            label="Glider"
-            name="glider"
-            autoComplete="off"
-            value={text("glider")}
-            onChange={(v) => set("glider", v)}
-          />
-        </FormSection>
       </div>
 
       {pilot ? (

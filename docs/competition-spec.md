@@ -78,7 +78,7 @@ Tables referenced from the auth-api worker:
   - registered_pilot_fai_id (TEXT)
   - registered_pilot_glider (TEXT) — admin-entered glider
   - pilot_class (TEXT NOT NULL) — e.g. 'open', 'novice', 'sport', 'floater'. Must be one of the comp's `pilot_classes` values. A pilot belongs to exactly one class per competition. Set to `comp.default_pilot_class` when auto-registered.
-  - team_name (TEXT)
+  - team_name (TEXT) — stored under the spelling the roster already uses: a name that differs only in case, spacing or accents joins the existing team (`competition-api/src/team-name.ts`), because teams are scored by their exact name. A near miss is stored as given.
   - driver_contact (TEXT) — driver name, phone, radio channel
   - wprs_points (REAL) — the pilot's WPRS score, copied from the CIVL rankings when the roster was built (migrations 0029/0030; `civl_ranking_slug` / `civl_ranking_date` record which list and month, NULL when an organiser typed the number). The score rather than a rank because a rank is only a position within one list's pool, and two pilots taken from different lists cannot be compared by it — see [civl-rankings.md](civl-rankings.md).
   - first_start_order (INTEGER) — pilot's starting order for the first competition day only (typically reverse WPRS order). For subsequent days, starting order is computed on-demand: reverse the previous day's top N scores for the same pilot classes, where N = the number of pilots with a day-1 `starting_order` set.

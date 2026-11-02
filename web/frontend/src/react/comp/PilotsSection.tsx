@@ -37,6 +37,7 @@ import { useBottomBar } from "../lib/use-bottom-bar";
 import { fetchWithRetry } from "./types";
 import { exportCsvContent, pilotToRow, slugify, type CompPilot } from "./csv";
 import { filterPilots, queryWords } from "./pilot-search";
+import { rosterTeams } from "./team-names";
 import { PilotList } from "./PilotList";
 import { PilotSheet } from "./PilotSheet";
 import {
@@ -139,6 +140,7 @@ export function PilotsSection({
     () => (pilots ? sortPilots(filterPilots(pilots, query), sortBy) : []),
     [pilots, query, sortBy]
   );
+  const teams = useMemo(() => rosterTeams(pilots ?? []), [pilots]);
   const searching = queryWords(query).length > 0;
   const nobodyMatches = searching && shown.length === 0;
   const typedName = query.trim();
@@ -309,6 +311,7 @@ export function PilotsSection({
           compClasses={compClasses}
           pilot={editing.pilot}
           initialName={editing.initialName}
+          teams={teams}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             setPilots((list) => [

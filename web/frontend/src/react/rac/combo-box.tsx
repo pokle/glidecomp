@@ -8,8 +8,12 @@
  * arrow-key virtual focus that keeps the caret in the input — none of which a
  * searchbox sitting beside a detached listbox provides.
  *
- * Filtering is the caller's job: RAC does none for a controlled `items`, so
- * pass items already narrowed with useFilter's `contains`. Map an empty query
+ * Filtering is the caller's job, so pass items already narrowed (usually with
+ * useFilter's `contains`). The wrapper turns RAC's own filter off: `items`
+ * lands on the ListBox, not the ComboBox, so RAC still tested every option's
+ * textValue for containing the input, and hid any option the caller meant to
+ * show that does not: the Team field's "Did you mean Alpha Gliders?" for
+ * "Alpha Gilders", or a geocoder's result labelled differently from the query. Map an empty query
  * to an empty list so the popover stays shut at rest, and gate
  * `allowsEmptyCollection` on having a query so `renderEmptyState`'s "no
  * matches" still shows while searching.
@@ -20,15 +24,28 @@
  *
  * Styled to match SearchField (same bordered group + search icon) so the two
  * read as one control; the popover reuses rac/select.tsx's popoverClass.
+ *
+ * `variant="field"` is the other job a combo box does: a FORM field whose
+ * value is usually one of a known few (the pilot sheet's Team, which offers
+ * the roster's teams). It looks like the TextField beside it, the same height
+ * and no magnifier, because it is one. A tap on it opens the list even when it
+ * already has focus. React Aria closes the list whenever anything around the
+ * field scrolls, and a scroll follows focus more often than not: the browser
+ * bringing a half-hidden field into view, or the kit form centring the field
+ * it is reporting (rac/form.tsx). Without the tap, the list that focus opened
+ * was gone a frame later, and only typing brought it back.
  */
+import { useContext } from "react";
 import {
   ComboBox as AriaComboBox,
+  ComboBoxStateContext,
   Input as AriaInput,
   ListBox as AriaListBox,
   ListBoxItem as AriaListBoxItem,
   Popover,
   Group,
   type ComboBoxProps as AriaComboBoxProps,
+  type InputProps,
   type ListBoxItemProps,
 } from "react-aria-components";
 import { SearchIcon } from "lucide-react";
@@ -36,6 +53,9 @@ import { SearchIcon } from "lucide-react";
 import { cn } from "@/react/lib/utils";
 import { Label, Description, FieldError } from "./field";
 import { popoverClass } from "./select";
+
+/** The caller filters (see the note at the top), so RAC shows what it is given. */
+const showEverything = () => true;
 
 export function ComboBox<T extends object>({
   label,
@@ -46,9 +66,12 @@ export function ComboBox<T extends object>({
   listClassName,
   items,
   renderEmptyState,
+  variant = "search",
   children,
   ...props
 }: Omit<AriaComboBoxProps<T>, "className" | "children" | "items"> & {
+  /** A search box (the default), or a form field (see the note above). */
+  variant?: "search" | "field";
   label?: React.ReactNode;
   description?: React.ReactNode;
   errorMessage?: string;
@@ -64,23 +87,30 @@ export function ComboBox<T extends object>({
     <AriaComboBox
       className={cn("group flex flex-col gap-2", className)}
       menuTrigger="input"
+      defaultFilter={showEverything}
       {...props}
     >
       {label ? <Label>{label}</Label> : <Label className="sr-only">Search</Label>}
       <Group
         className={cn(
-          "flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 transition-colors",
+          "flex w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-card transition-colors",
+          variant === "field" ? "h-9 px-3" : "h-8 px-2.5",
           "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50 dark:bg-input/30"
         )}
       >
-        <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        {variant === "search" ? (
+          <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        ) : null}
         {/* Same reasoning as SearchField (see the note there), and it matters
             more here: this input already owns a suggestion popover, so a
             browser autofill panel would fight it for the same screen space. */}
-        <AriaInput
+        <ComboBoxInput
+          opensOnTap={variant === "field"}
           placeholder={placeholder}
           autoComplete="off"
-          autoCapitalize="none"
+          // A name in a form field starts its words with capitals; a search
+          // does not care. Never autocorrect: it "fixes" names into typos.
+          autoCapitalize={variant === "field" ? "words" : "none"}
           autoCorrect="off"
           spellCheck={false}
           className="w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground md:text-sm"
@@ -103,6 +133,25 @@ export function ComboBox<T extends object>({
         </AriaListBox>
       </Popover>
     </AriaComboBox>
+  );
+}
+
+/** The combo box's input; `opensOnTap` is the field variant's tap (see the note at the top). */
+function ComboBoxInput({ opensOnTap, ...props }: InputProps & { opensOnTap: boolean }) {
+  const state = useContext(ComboBoxStateContext);
+  return (
+    <AriaInput
+      {...props}
+      onClick={
+        opensOnTap
+          ? () => {
+              // Open only: a tap to move the caret must not close the list.
+              // Nothing to show is not opened, rather than flashed empty.
+              if (state && !state.isOpen && state.collection.size > 0) state.open(null, "manual");
+            }
+          : undefined
+      }
+    />
   );
 }
 

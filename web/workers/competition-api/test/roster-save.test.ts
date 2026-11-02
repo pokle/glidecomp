@@ -392,3 +392,89 @@ describe("a refusal names the field it is about", () => {
     });
   });
 });
+
+describe("a team is stored under the spelling the roster already uses", () => {
+  async function teamsOf(compId: string): Promise<Record<string, string | null>> {
+    const res = await authRequest("GET", `/api/comp/${compId}/pilot`);
+    const { pilots } = (await res.json()) as { pilots: Pilot[] };
+    return Object.fromEntries(pilots.map((p) => [p.name, p.team_name]));
+  }
+
+  test("a new pilot joins the team their team name IS", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [{ registered_pilot_name: "Ada", pilot_class: "open", team_name: "Alpha Gliders" }],
+      remove: [],
+    });
+    const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bo",
+      pilot_class: "open",
+      team_name: "  alpha   GLIDERS ",
+    });
+    expect(res.status).toBe(201);
+    expect((await teamsOf(compId)).Bo).toBe("Alpha Gliders");
+  });
+
+  test("a near miss may be a different team, and is left as given", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [{ registered_pilot_name: "Ada", pilot_class: "open", team_name: "Alpha Gliders" }],
+      remove: [],
+    });
+    await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bo",
+      pilot_class: "open",
+      team_name: "Alpha Gilders",
+    });
+    expect((await teamsOf(compId)).Bo).toBe("Alpha Gilders");
+  });
+
+  test("an edit joins the team; a team of one can still have its capitals fixed", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [
+        { registered_pilot_name: "Ada", pilot_class: "open", team_name: "Alpha Gliders" },
+        { registered_pilot_name: "Bo", pilot_class: "open", team_name: "bravo" },
+      ],
+      remove: [],
+    });
+    const before = await authRequest("GET", `/api/comp/${compId}/pilot`);
+    const { pilots } = (await before.json()) as { pilots: Pilot[] };
+    const bo = pilots.find((p) => p.name === "Bo")!;
+
+    await authRequest("PATCH", `/api/comp/${compId}/pilot/${bo.comp_pilot_id}`, {
+      team_name: "Bravo",
+    });
+    expect((await teamsOf(compId)).Bo).toBe("Bravo");
+
+    await authRequest("PATCH", `/api/comp/${compId}/pilot/${bo.comp_pilot_id}`, {
+      team_name: "ALPHA gliders",
+    });
+    expect((await teamsOf(compId)).Bo).toBe("Alpha Gliders");
+  });
+
+  test("one import spelling a new team two ways makes one team, and an import can rename one", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [
+        { registered_pilot_name: "Ada", pilot_class: "open", team_name: "Sky Kings" },
+        { registered_pilot_name: "Bo", pilot_class: "open", team_name: "sky  kings" },
+        { registered_pilot_name: "Cy", pilot_class: "open", team_name: "alpha" },
+        { registered_pilot_name: "Di", pilot_class: "open", team_name: "alpha" },
+      ],
+      remove: [],
+    });
+    expect(await teamsOf(compId)).toMatchObject({ Ada: "Sky Kings", Bo: "Sky Kings" });
+
+    const before = await authRequest("GET", `/api/comp/${compId}/pilot`);
+    const { pilots } = (await before.json()) as { pilots: Pilot[] };
+    const res = await bulk(compId, {
+      pilots: pilots
+        .filter((p) => p.name === "Cy" || p.name === "Di")
+        .map((p) => ({ ...unchanged(p), team_name: "Alpha" })),
+      remove: [],
+    });
+    expect(res.status).toBe(200);
+    expect(await teamsOf(compId)).toMatchObject({ Cy: "Alpha", Di: "Alpha" });
+  });
+});

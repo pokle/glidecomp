@@ -134,6 +134,11 @@ interface FormState {
    * where every other error is.
    */
   setFormError: (message: string | null) => void;
+  /**
+   * Clear one field's error, for a field whose value changes without an
+   * `input` event of its own (a choice picked from a combo box's list).
+   */
+  clearFieldError: (name: string) => void;
 }
 
 const FormContext = createContext<FormState | null>(null);
@@ -145,7 +150,7 @@ export function useFormState(): FormState {
   return state;
 }
 
-const FOCUSABLE = "input, textarea, select, button";
+const FOCUSABLE = 'input:not([type="hidden"]), textarea, select, button';
 
 /**
  * The first thing in `form` a reader has to fix — the control itself, not the
@@ -195,6 +200,14 @@ export function Form({
   const [refused, setRefused] = useState(0);
   const inFlight = useRef(false);
 
+  /** One field's error gone; also handed to fields through useFormState. */
+  const clearFieldError = (name: string) =>
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
   /**
    * Editing a field clears its error. Bubbled up through React (see the note
    * at the top: never from a native listener), from every kind of field the
@@ -202,13 +215,7 @@ export function Form({
    */
   const clearEdited = (e: { target: EventTarget | null }) => {
     const name = (e.target as HTMLInputElement | null)?.name;
-    if (!name) return;
-    setFieldErrors((prev) => {
-      if (!(name in prev)) return prev;
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
+    if (name) clearFieldError(name);
   };
 
   useEffect(() => {
@@ -263,7 +270,9 @@ export function Form({
   }
 
   return (
-    <FormContext.Provider value={{ pending, fieldErrors, formError, setFormError }}>
+    <FormContext.Provider
+      value={{ pending, fieldErrors, formError, setFormError, clearFieldError }}
+    >
       <AriaForm
         ref={formRef}
         validationBehavior="aria"

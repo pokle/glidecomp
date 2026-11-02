@@ -21,7 +21,7 @@
  * Each test builds its own comp through the API (named through e2eCompName so
  * a killed run is swept) and the suite deletes them afterwards.
  */
-import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
+import { test, expect, type APIRequestContext, type Locator, type Page } from "./fixtures/test";
 import { e2eCompName } from "./fixtures/stack";
 
 const TEST_USER = {
@@ -92,6 +92,7 @@ interface Pilot {
   comp_pilot_id: string;
   name: string;
   team_name: string | null;
+  driver_contact: string | null;
   pilot_class: string;
 }
 
@@ -211,9 +212,8 @@ test("a pilot is saved on Done, and Back with unsaved edits asks first", async (
   await rows(page).first().click();
 
   const sheet = page.getByRole("dialog", { name: "Jo Ridge details" });
-  const team = sheet.getByRole("textbox", { name: "Team" });
-  await expect(team).toHaveValue("Alpha");
-  await team.fill("Bravo");
+  const driver = sheet.getByRole("textbox", { name: "Driver" });
+  await driver.fill("Sam 0400 111 222");
 
   // Back with an unsaved edit asks. Keep editing leaves the reader where they
   // were, with the edit intact and the next Back still aimed at the sheet.
@@ -221,19 +221,20 @@ test("a pilot is saved on Done, and Back with unsaved edits asks first", async (
   const ask = page.getByRole("alertdialog");
   await expect(ask).toContainText("Discard changes?");
   await ask.getByRole("button", { name: "Keep editing" }).click();
-  await expect(team).toHaveValue("Bravo");
+  await expect(driver).toHaveValue("Sam 0400 111 222");
 
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden({ timeout: 20_000 });
-  expect((await rosterOf(compId)).find((p) => p.name === "Jo Ridge")?.team_name).toBe("Bravo");
+  const saved = () => rosterOf(compId).then((r) => r.find((p) => p.name === "Jo Ridge"));
+  expect((await saved())?.driver_contact).toBe("Sam 0400 111 222");
 
   // Discard changes throws the edit away, and nothing is sent.
   await rows(page).first().click();
-  await sheet.getByRole("textbox", { name: "Team" }).fill("Charlie");
+  await sheet.getByRole("textbox", { name: "Driver" }).fill("Kim 0400 999 999");
   await page.goBack();
   await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
   await expect(sheet).toBeHidden();
-  expect((await rosterOf(compId)).find((p) => p.name === "Jo Ridge")?.team_name).toBe("Bravo");
+  expect((await saved())?.driver_contact).toBe("Sam 0400 111 222");
 
   // Back from an untouched sheet just closes it — and leaves the page alone.
   await rows(page).first().click();
@@ -242,6 +243,88 @@ test("a pilot is saved on Done, and Back with unsaved edits asks first", async (
   await expect(sheet).toBeHidden();
   await expect(page).toHaveURL(new RegExp(`/comp/.*${compId}.*/pilots`));
   await expect(list(page)).toBeVisible();
+});
+
+test("the Team field offers the roster's teams, and a new team is a deliberate choice", async ({
+  page,
+}) => {
+  // Teams are scored by their exact name, so a typo published a second team.
+  const compId = await makeComp([
+    { registered_pilot_name: "Ada", pilot_class: "open", team_name: "Alpha Gliders" },
+    { registered_pilot_name: "Bo", pilot_class: "open", team_name: "Alpha Gliders" },
+    { registered_pilot_name: "Cy", pilot_class: "open", team_name: "Bravo" },
+    { registered_pilot_name: "Di", pilot_class: "open" },
+    { registered_pilot_name: "Ed", pilot_class: "open" },
+    { registered_pilot_name: "Fay", pilot_class: "open" },
+  ]);
+  await openPage(page, compId);
+  const teamOf = async (name: string) =>
+    (await rosterOf(compId)).find((p) => p.name === name)?.team_name;
+  const open = async (name: string) => {
+    await search(page).fill(name);
+    await rows(page).first().click();
+    return page.getByRole("dialog", { name: `${name} details` });
+  };
+  // A tap on a field already in view, as a person makes one. React Aria
+  // closes an open list whenever its field's container scrolls, and a
+  // Playwright click that scrolls the field into view does so a frame AFTER
+  // the focus that opened it.
+  const tapTeam = async (sheet: Locator) => {
+    const team = sheet.getByRole("combobox", { name: "Team" });
+    await team.scrollIntoViewIfNeeded();
+    await team.click();
+    return team;
+  };
+
+  // The teams there are, with their pilots: pick one.
+  let sheet = await open("Di");
+  let team = await tapTeam(sheet);
+  await expect(page.getByRole("option", { name: "Alpha Gliders (2)" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Bravo (1)" })).toBeVisible();
+  await page.getByRole("option", { name: "Alpha Gliders (2)" }).click();
+  await expect(team).toHaveValue("Alpha Gliders");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  expect(await teamOf("Di")).toBe("Alpha Gliders");
+
+  // A slip is caught: Done will not make a new team of it unasked, and
+  // "Did you mean" puts it right.
+  sheet = await open("Ed");
+  team = await tapTeam(sheet);
+  await team.fill("Alpha Gilders");
+  await expect(page.getByRole("option", { name: "Did you mean Alpha Gliders?" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "New team: Alpha Gilders" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toContainText("Choose a team from the list, or New team: Alpha Gilders.");
+  await expect(team).toBeFocused();
+  // Centring the field closed the list its focus opened; a tap brings it
+  // back without retyping.
+  await team.click();
+  await page.getByRole("option", { name: "Did you mean Alpha Gliders?" }).click();
+  await expect(team).toHaveValue("Alpha Gliders");
+  await expect(sheet).not.toContainText("Choose a team from the list");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  expect(await teamOf("Ed")).toBe("Alpha Gliders");
+
+  // A new team takes one deliberate tap; the same name in other capitals
+  // needs none, and lands under the roster's spelling.
+  sheet = await open("Fay");
+  team = await tapTeam(sheet);
+  await team.fill("Thermal Hunters");
+  await page.getByRole("option", { name: "New team: Thermal Hunters" }).click();
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  expect(await teamOf("Fay")).toBe("Thermal Hunters");
+
+  sheet = await open("Cy");
+  team = await tapTeam(sheet);
+  await team.fill("alpha  GLIDERS");
+  await page.keyboard.press("Escape");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  expect(await teamOf("Cy")).toBe("Alpha Gliders");
 });
 
 test("a refusal lands under the field it is about, focused and in view", async ({ page }) => {

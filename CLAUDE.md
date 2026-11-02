@@ -167,6 +167,19 @@ These are the standing imperatives. Each links to the reference that explains it
   - **Every submission emails the registered pilot** (`track-notice-email.ts`),
     and the submit form promises that upfront. A route that skipped it would
     make the copy a lie. See [docs/track-submission.md](docs/track-submission.md).
+- **A team is one name, spelt the roster's way.** Teams are scored by their
+  exact name (`aggregateTeams()` in `src/scores-views.ts`, and the results
+  record), so "Alpha Gliders" and "alpha  gliders" published two teams with
+  two totals. Every write of `team_name` goes through `TeamSpellings`
+  (`competition-api/src/team-name.ts`), which stores a name that differs only
+  in case, spacing or accents under the spelling the roster already uses — so
+  a CSV import, an API key or an assistant cannot split a team either. The
+  pilot sheet's Team field (`comp/TeamField.tsx`) offers the roster's teams
+  and makes a new team a deliberate choice.
+  - **A near miss is offered, never applied.** "Alpha Gilders" may be a
+    different team, so it gets "Did you mean Alpha Gliders?" in the sheet and
+    is stored exactly as given everywhere else: names may propose, never
+    dispose, as with pilot registrations above.
 - **Every mutation that could affect a competition's scores MUST be
   audit-logged.** Use `audit()` in `web/workers/competition-api/src/audit.ts`
   from every mutating route handler (comp / task / pilot / track / penalty /

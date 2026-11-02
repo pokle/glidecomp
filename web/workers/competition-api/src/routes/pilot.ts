@@ -20,6 +20,7 @@ import { audit, auditAll, describeChange, describePrivateChange } from "../audit
 import { mapWithConcurrency } from "../lib/concurrency";
 import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
 import { deleteTrackFiles, trackFileKeysForPilots } from "../track-files";
+import { TeamSpellings, rosterTeamNames } from "../team-name";
 
 /** How many pilot-link lookups to run at once on a bulk roster import. */
 const PILOT_RESOLVE_CONCURRENCY = 10;
@@ -591,7 +592,11 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         }
       }
 
-      const insertValues = buildInsertValues(compId, resolved.pilot_id, body);
+      // A team goes in under the spelling the roster already uses for it.
+      const team_name = new TeamSpellings(await rosterTeamNames(c.env.DB, compId)).spell(
+        body.team_name
+      );
+      const insertValues = buildInsertValues(compId, resolved.pilot_id, { ...body, team_name });
       const res = await c.env.DB.prepare(INSERT_COMP_PILOT_SQL)
         .bind(...insertValues)
         .run();
@@ -735,6 +740,21 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         ? [...removeIds].filter((id) => existingById.has(id))
         : [...existingById.keys()].filter((id) => !updatedIds.has(id));
       const deleting = new Set(toDelete);
+
+      // Teams go in under the spelling the roster already uses — the roster
+      // as this save leaves it, so the rows it rewrites can rename a team
+      // (an import that corrects "alpha" to "Alpha" for all five members),
+      // and two new rows spelling one new team two ways become one team.
+      const spellings = new TeamSpellings(
+        existingRows.results
+          .filter((r) => !updatedIds.has(r.comp_pilot_id) && !deleting.has(r.comp_pilot_id))
+          .map((r) => r.team_name)
+      );
+      for (const p of planned) {
+        if (p.row.team_name !== undefined) {
+          p.row = { ...p.row, team_name: spellings.spell(p.row.team_name) };
+        }
+      }
 
       // Resolve linking for each row that needs one. Each resolution is an
       // independent D1 read, so they overlap rather than queueing: a 250-row
@@ -996,6 +1016,15 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       // field could ever be cleared: a driver's number, once typed, stayed.)
       const overlay = <T,>(sent: T | undefined, stored: T): T =>
         sent !== undefined ? sent : stored;
+      // A team goes in under the spelling the REST of the roster uses for it
+      // — this pilot's own row left out, so a team of one can still have its
+      // capitals corrected.
+      const teamName =
+        body.team_name === undefined
+          ? existing.team_name
+          : new TeamSpellings(await rosterTeamNames(c.env.DB, compId, [compPilotId])).spell(
+              body.team_name
+            );
       const merged = {
         registered_pilot_name: overlay(body.registered_pilot_name, existing.registered_pilot_name),
         registered_pilot_email: overlay(body.registered_pilot_email, existing.registered_pilot_email),
@@ -1008,7 +1037,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         registered_pilot_fai_id: overlay(body.registered_pilot_fai_id, existing.registered_pilot_fai_id),
         registered_pilot_glider: overlay(body.registered_pilot_glider, existing.registered_pilot_glider),
         pilot_class: overlay(body.pilot_class, existing.pilot_class),
-        team_name: overlay(body.team_name, existing.team_name),
+        team_name: teamName,
         driver_contact: overlay(body.driver_contact, existing.driver_contact),
         wprs_points: overlay(body.wprs_points, existing.wprs_points),
         // The source travels with the number: a PATCH that moves the score

@@ -75,7 +75,8 @@ export function draftProblems(
     problems.email = "Enter an email address like name@example.com.";
   }
   if (row.wprs_points !== null && parsePoints(row.wprs_points) === null) {
-    problems.wprs_points = "Enter WPRS points as a number above 0, like 261.5.";
+    problems.wprs_points =
+      "Enter World Pilot Ranking Scheme points as a number above 0, like 261.5.";
   }
   return problems;
 }
