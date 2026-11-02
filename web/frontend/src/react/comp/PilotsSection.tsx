@@ -1,7 +1,7 @@
 /**
  * The pilots page's roster editor (/comp/:id/pilots, admin-only): a LIST of
- * pilots, each opening a full-screen sheet, with a search box and a + riding
- * at the bottom of the screen.
+ * pilots, each opening that pilot's own page, under a search box and a +
+ * that stay at the top of the screen as the list scrolls.
  *
  * Mobile first (see the rule in CLAUDE.md). It replaced a read-only RAC table
  * and, behind an Edit button, a fourteen-column Tabulator grid in a dialog —
@@ -11,18 +11,25 @@
  *
  *   - comp/PilotList.tsx — a row per pilot: name, then class · glider ·
  *     points · whether their tracks can find them.
- *   - comp/PilotSheet.tsx — one pilot, saved the moment Done is pressed.
- *     Nothing on this page waits for a page-level Save, so there is none.
- *   - The bottom bar — search and +, side by side the way iOS Contacts puts
- *     them: in thumb reach while scrolling 150 pilots, which a search box at
- *     the top of the page is not. The search finds a pilot by any field
- *     (comp/pilot-search.ts); when it finds nobody, + opens a new pilot with
- *     the typed name already in it, so "search first, then add" is the natural
- *     order at a registration desk — and the way duplicates are avoided.
+ *   - pages/CompPilotPage.tsx (form: comp/PilotForm.tsx) — one pilot, on a
+ *     page of its own, saved the moment Done is pressed. Nothing on this page
+ *     waits for a page-level Save, so there is none.
+ *   - The search bar — search and +, side by side, sticky at the top. It sat
+ *     at the bottom of the screen like iOS Contacts' until 2026-11, which
+ *     meant a fixed bar lifted over the keyboard by hand, and on an iPhone it
+ *     once stuck halfway up the screen: the keyboard comes up from the
+ *     bottom, and a bar at the top never has to dodge it. The search finds a
+ *     pilot by any field (comp/pilot-search.ts); when it finds nobody, + opens
+ *     a new pilot with the typed name already in it, so "search first, then
+ *     add" is the natural order at a registration desk — and the way
+ *     duplicates are avoided.
+ *   - The search and the sort are in the URL (`?q=`, `?sort=`), so Back from
+ *     a pilot's page returns to the list exactly as it was left.
  *   - comp/RosterActions.tsx — the ⋯ menu's import, export, CIVL fill and
  *     test pilots, each previewing what it will write.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PlusIcon } from "lucide-react";
 import { Badge } from "@/react/rac/badge";
 import { Button } from "@/react/rac/button";
@@ -33,13 +40,12 @@ import { SectionHeader } from "../components/SectionHeader";
 import { api } from "../../comp/api";
 import { downloadFile } from "../lib/format";
 import { toast } from "../lib/toast";
-import { useBottomBar } from "../lib/use-bottom-bar";
 import { fetchWithRetry } from "./types";
 import { exportCsvContent, pilotToRow, slugify, type CompPilot } from "./csv";
+import { compPilotPath } from "../lib/slug";
 import { filterPilots, queryWords } from "./pilot-search";
 import { groupByTeam, rosterTeams } from "./team-names";
 import { PilotList } from "./PilotList";
-import { PilotSheet } from "./PilotSheet";
 import {
   CivlFillSheet,
   ImportCsvDialog,
@@ -49,6 +55,7 @@ import {
 import type { ImportPlan } from "./roster-import";
 
 type SortBy = "name" | "wprs_points" | "team";
+const SORTS: SortBy[] = ["name", "wprs_points", "team"];
 
 /**
  * The roster in the chosen order. WPRS points run highest first — the order
@@ -73,8 +80,6 @@ function sortPilots(pilots: CompPilot[], by: SortBy): CompPilot[] {
   });
 }
 
-/** The sheet open over the list, if any. */
-type Editing = { pilot: CompPilot | null; initialName?: string } | null;
 
 export function PilotsSection({
   compId,
@@ -98,14 +103,28 @@ export function PilotsSection({
 }) {
   const [pilots, setPilots] = useState<CompPilot[] | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortBy>("name");
-  const [editing, setEditing] = useState<Editing>(null);
+  // In the URL, so Back from a pilot's page returns the list as it was left.
+  // Replaced, never pushed: a keystroke is not a place to go Back to.
+  const [params, setParams] = useSearchParams();
+  const query = params.get("q") ?? "";
+  const sortBy: SortBy = SORTS.includes(params.get("sort") as SortBy)
+    ? (params.get("sort") as SortBy)
+    : "name";
+  const setParam = (key: string, value: string, fallback: string) => {
+    // From the address bar itself, not the render's copy: a sort and a
+    // keystroke a moment apart must not each undo the other.
+    const next = new URLSearchParams(window.location.search);
+    if (value === fallback) next.delete(key);
+    else next.set(key, value);
+    setParams(next, { replace: true, preventScrollReset: true });
+  };
+  const setQuery = (q: string) => setParam("q", q, "");
+  const setSortBy = (v: SortBy) => setParam("sort", v, "name");
+  const navigate = useNavigate();
   const [importing, setImporting] = useState(false);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [fillingCivl, setFillingCivl] = useState(false);
 
-  const barRef = useBottomBar();
 
   const loadPilots = useCallback(async () => {
     try {
@@ -164,7 +183,11 @@ export function PilotsSection({
    * carrying the name that was searched for.
    */
   const add = () =>
-    setEditing({ pilot: null, initialName: nobodyMatches ? typedName : undefined });
+    navigate(
+      compPilotPath(compId, compName, "new") +
+        (nobodyMatches ? `?${new URLSearchParams({ name: typedName })}` : ""),
+      { state: { fromList: true } }
+    );
 
   async function addTestPilots() {
     if (!pilots) return;
@@ -247,7 +270,31 @@ export function PilotsSection({
         <Loading className="mt-4">Loading pilots…</Loading>
       ) : (
         <>
-          <div className="mt-4 mb-2 flex items-center justify-between gap-3">
+          {/* Search and +, sticky at the top of the screen — under the site
+              header where that sticks (wider screens), at the very top where
+              it scrolls away (phones, short landscape). A bar at the bottom
+              had to dodge the keyboard by hand; up here the keyboard never
+              reaches it. */}
+          <div className="sticky top-0 z-20 mt-4 bg-background/90 py-2 backdrop-blur sm:top-[61px] [@media(max-height:500px)]:top-0 print:hidden">
+            <div className="flex items-center gap-3">
+              <SearchField
+                variant="floating"
+                aria-label="Find a pilot"
+                placeholder="Find a pilot"
+                value={query}
+                onChange={setQuery}
+                className="min-w-0 flex-1"
+              />
+              <Button
+                aria-label={nobodyMatches ? `Add a pilot named ${typedName}` : "Add pilot"}
+                onPress={add}
+                className="size-12 shrink-0 rounded-full shadow-lg"
+              >
+                <PlusIcon className="size-6" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+          <div className="mt-2 mb-2 flex items-center justify-between gap-3">
             {/* Always in the DOM, so a screen reader hears the count change as
                 the search narrows; empty while nothing is being searched,
                 because the heading already says how many there are. */}
@@ -280,70 +327,15 @@ export function PilotsSection({
             }
             onOpen={(id) => {
               const pilot = pilots.find((p) => p.comp_pilot_id === id);
-              if (pilot) setEditing({ pilot });
+              if (pilot) {
+                navigate(compPilotPath(compId, compName, pilot.comp_pilot_id, pilot.name), {
+                  state: { fromList: true },
+                });
+              }
             }}
           />
         </>
       )}
-
-      {/* The search-and-add bar. Fixed to the bottom of the screen and lifted
-          over the keyboard by useBottomBar; the outer layers let presses
-          through to the rows beside its two controls. Lined up with the page's
-          content column, so on a wide screen it sits under the list it belongs
-          to rather than in the middle of the window. */}
-      {/* Not while a sheet is open: it has nothing to offer there, and its +
-          showed through the sheet's translucent backdrop. */}
-      {pilots !== null && !editing && !plan && !fillingCivl ? (
-        <div
-          ref={barRef}
-          className="pointer-events-none fixed inset-x-0 z-20 print:hidden"
-          style={{ bottom: "var(--keyboard-inset, 0px)" }}
-        >
-          <div className="mx-auto max-w-6xl px-gutter-safe pt-2 pb-gutter-safe">
-            <div className="pointer-events-auto flex max-w-2xl items-center gap-3">
-              <SearchField
-                variant="floating"
-                aria-label="Find a pilot"
-                placeholder="Find a pilot"
-                value={query}
-                onChange={setQuery}
-                className="min-w-0 flex-1"
-              />
-              <Button
-                aria-label={nobodyMatches ? `Add a pilot named ${typedName}` : "Add pilot"}
-                onPress={add}
-                className="size-12 rounded-full shadow-lg"
-              >
-                <PlusIcon className="size-6" aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {editing ? (
-        <PilotSheet
-          compId={compId}
-          compClasses={compClasses}
-          pilot={editing.pilot}
-          initialName={editing.initialName}
-          teams={teams}
-          onClose={() => setEditing(null)}
-          onSaved={(saved) => {
-            setPilots((list) => [
-              ...(list ?? []).filter((p) => p.comp_pilot_id !== saved.comp_pilot_id),
-              saved,
-            ]);
-            setEditing(null);
-          }}
-          onRemoved={(removed) => {
-            setPilots((list) =>
-              (list ?? []).filter((p) => p.comp_pilot_id !== removed.comp_pilot_id)
-            );
-            setEditing(null);
-          }}
-        />
-      ) : null}
 
       {importing && pilots ? (
         <ImportCsvDialog

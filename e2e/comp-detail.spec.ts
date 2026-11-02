@@ -591,7 +591,7 @@ test("scores page: Download menu saves a long-form CSV and offers the Sheets for
   await expect(download).toBeFocused();
 });
 
-test("pilots page: a list that opens each pilot's sheet, and closing one untouched sends nothing", async ({
+test("pilots page: a list that opens each pilot's page, and leaving one untouched sends nothing", async ({
   page,
 }) => {
   // The roster editor is its own admin-only page now.
@@ -607,20 +607,20 @@ test("pilots page: a list that opens each pilot's sheet, and closing one untouch
   await expect(roster.getByRole("row").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".tabulator")).toHaveCount(0);
 
-  // A row opens that pilot's sheet, and Done on an untouched pilot closes it
-  // without a request: each pilot is saved on Done, but only if it changed.
+  // A row opens that pilot's own page, and Done on an untouched pilot goes
+  // back without a request: each pilot is saved on Done, but only if it
+  // changed.
   const name = (await roster.getByRole("row").first().locator("p.font-medium").innerText()).trim();
   await roster.getByRole("row").first().click();
-  const sheet = page.getByRole("dialog", { name: `${name} details` });
-  await expect(sheet.getByRole("textbox", { name: "Name" })).toHaveValue(name);
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("main").getByRole("textbox", { name: "Name" })).toHaveValue(name);
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(roster).toBeVisible();
 
-  // Back from an untouched sheet closes it too, and leaves the page alone.
+  // Back from an untouched pilot is the browser's Back, back to the list.
   await roster.getByRole("row").first().click();
-  await expect(sheet).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   await page.goBack();
-  await expect(sheet).toBeHidden();
   await expect(roster).toBeVisible();
 
   expect(mutated()).toBe(false);

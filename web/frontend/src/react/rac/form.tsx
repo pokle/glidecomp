@@ -130,7 +130,7 @@ interface FormState {
   formError: string | null;
   /**
    * Report an error in the form's one fixed place — for an action inside the
-   * form that is not its submit (the pilot sheet's Remove), so it is seen
+   * form that is not its submit (the pilot page's Remove), so it is seen
    * where every other error is.
    */
   setFormError: (message: string | null) => void;
@@ -343,8 +343,10 @@ export function FormErrorBanner({ className }: { className?: string }) {
  * A form at full screen: a sheet whose header carries the submit, with the
  * form-level error pinned beneath that header — outside the body that
  * scrolls, so it is on screen however far down the reader was when they
- * pressed it. The shape the pilot sheet, the roster import review and the
- * CIVL fill use.
+ * pressed it. The shape the roster import review and the CIVL fill use —
+ * until they become pages of their own, as the overlays rule in CLAUDE.md
+ * now asks of anything with a field in it. A new form goes on a page with
+ * `Form`, not in one of these.
  */
 export function FormSheet({
   label,

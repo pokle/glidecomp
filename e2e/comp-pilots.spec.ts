@@ -1,8 +1,9 @@
 /**
- * The pilots page (/comp/:id/pilots): a list of pilots that open full-screen
- * sheets, with a search box and a + riding at the bottom of the screen — at
- * every width. It replaced a fourteen-column Tabulator grid in a dialog, which
- * on a phone showed about one and a half columns at a time.
+ * The pilots page (/comp/:id/pilots): a list of pilots, each opening a page
+ * of its own (/comp/:id/pilots/:pilotId, or /pilots/new), under a sticky
+ * search box and + — at every width. It replaced a fourteen-column Tabulator
+ * grid in a dialog, which on a phone showed about one and a half columns at a
+ * time.
  *
  * Runs in BOTH Playwright projects (fixtures/mobile.ts): the phone is the
  * width the page was designed for, and the desktop must not grow a second
@@ -11,12 +12,13 @@
  *   - the search finds a pilot by any field, words in any order, accents
  *     ignored; and + carries the searched-for name into a new pilot;
  *   - a pilot is saved the moment Done is pressed (nothing waits for a
- *     page-level Save), and Back with unsaved edits asks first;
+ *     page-level Save); Back is the browser's Back, and returns the list
+ *     searched, sorted and scrolled as it was left;
  *   - Remove asks before it removes;
  *   - an import shows what it will add, update and remove before it does any
  *     of it, and an exported roster comes back as the same pilots;
  *   - the page never scrolls sideways, its targets are thumb-sized, and the
- *     last pilot scrolls clear of the bar.
+ *     search bar stays in reach without covering a focused row.
  *
  * Each test builds its own comp through the API (named through e2eCompName so
  * a killed run is swept) and the suite deletes them afterwards.
@@ -120,6 +122,41 @@ const list = (page: Page) => page.getByRole("grid", { name: "Pilots" });
 const rows = (page: Page) => list(page).getByRole("row");
 const search = (page: Page) => page.getByRole("searchbox", { name: "Find a pilot" });
 
+/** A pilot's own page, once its heading says whose it is. */
+async function editorFor(page: Page, heading: string): Promise<Locator> {
+  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible({
+    timeout: 20_000,
+  });
+  return page.getByRole("main");
+}
+
+/**
+ * A field in the middle of the screen, as a person taps one. React Aria
+ * closes a combo box's list whenever the page scrolls, and a Playwright click
+ * on an option below the fold scrolls the page to reach it.
+ */
+async function centre(field: Locator): Promise<void> {
+  await field.evaluate((el) => el.scrollIntoView({ block: "center" }));
+}
+
+/**
+ * Tap a combo box and wait for its list to SHOW. On a touch device React Aria
+ * holds the list invisible until the on-screen keyboard has opened (600 ms at
+ * most); headless Chromium never opens one, so a click in that window lands
+ * on an invisible option.
+ */
+async function openList(page: Page, field: Locator): Promise<void> {
+  await centre(field);
+  await field.click();
+  await expect(page.locator('[data-trigger="ComboBox"]')).toHaveCSS("opacity", "1");
+}
+
+/** Back on the list, after a Done, a Remove or a Back. */
+async function backOnList(page: Page): Promise<void> {
+  await expect(page).toHaveURL(/\/pilots(\?|$)/, { timeout: 20_000 });
+  await expect(list(page)).toBeVisible();
+}
+
 async function openPage(page: Page, compId: string): Promise<void> {
   await page.goto(`/comp/${compId}/pilots`);
   await expect(rows(page).first()).toBeVisible({ timeout: 20_000 });
@@ -179,16 +216,19 @@ test("+ after a search that finds nobody adds a pilot with that name", async ({ 
   await expect(list(page)).toContainText('No pilot matches "Zara New".');
 
   await page.getByRole("button", { name: "Add a pilot named Zara New" }).click();
-  const sheet = page.getByRole("dialog", { name: "New pilot" });
+  await expect(page).toHaveURL(/\/pilots\/new\?name=Zara/);
+  const sheet = await editorFor(page, "Zara New");
   await expect(sheet.getByRole("textbox", { name: "Name" })).toHaveValue("Zara New");
   // The option's TEXT, not the radio: the kit hides the input under its
   // label (rac gotcha #13, as task-settings-pages.spec.ts does).
   await sheet.getByText("sport", { exact: true }).click();
   await expect(sheet.getByRole("radio", { name: "sport" })).toBeChecked();
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
 
-  // Saved on Done: there is no page-level Save to press.
+  // Saved on Done: there is no page-level Save to press. The list is back
+  // where it was left, searching for the name it was given.
+  await expect(search(page)).toHaveValue("Zara New");
   await expect.poll(() => names(page)).toEqual(["Zara New"]);
   // And the section nav's count follows the list, rather than keeping the
   // number the page loaded with. At a phone's width the nav folds "Pilots"
@@ -205,44 +245,45 @@ test("+ after a search that finds nobody adds a pilot with that name", async ({ 
   expect(saved?.pilot_class).toBe("sport");
 });
 
-test("a pilot is saved on Done, and Back with unsaved edits asks first", async ({ page }) => {
+test("a pilot is saved on Done, and Back is the browser's Back", async ({ page }) => {
   const compId = await makeComp();
   await openPage(page, compId);
   await search(page).fill("jo ridge");
   await rows(page).first().click();
 
-  const sheet = page.getByRole("dialog", { name: "Jo Ridge details" });
-  const driver = sheet.getByRole("textbox", { name: "Driver" });
-  await driver.fill("Sam 0400 111 222");
+  // The pilot has a page and an address of its own.
+  await expect(page).toHaveURL(/\/pilots\/jo-ridge-[a-z]+$/);
+  let sheet = await editorFor(page, "Jo Ridge");
+  await sheet.getByRole("textbox", { name: "Driver" }).fill("Sam 0400 111 222");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await backOnList(page);
+  const saved = () => rosterOf(compId).then((r) => r.find((p) => p.name === "Jo Ridge"));
+  expect((await saved())?.driver_contact).toBe("Sam 0400 111 222");
+  // Done went BACK to the list, so the list is as it was left.
+  await expect(search(page)).toHaveValue("jo ridge");
 
-  // Back with an unsaved edit asks. Keep editing leaves the reader where they
-  // were, with the edit intact and the next Back still aimed at the sheet.
+  // Back leaves without saving and without asking, as on any page — and
+  // Forward comes back to the pilot.
+  await rows(page).first().click();
+  sheet = await editorFor(page, "Jo Ridge");
+  await sheet.getByRole("textbox", { name: "Driver" }).fill("Kim 0400 999 999");
   await page.goBack();
+  await backOnList(page);
+  expect((await saved())?.driver_contact).toBe("Sam 0400 111 222");
+  await page.goForward();
+  await editorFor(page, "Jo Ridge");
+
+  // A link away with unsaved edits does ask: "Pilots" in the trail.
+  await page.getByRole("main").getByRole("textbox", { name: "Driver" }).fill("Lee");
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Pilots", exact: true }).click();
   const ask = page.getByRole("alertdialog");
   await expect(ask).toContainText("Discard changes?");
   await ask.getByRole("button", { name: "Keep editing" }).click();
-  await expect(driver).toHaveValue("Sam 0400 111 222");
+  await expect(page.getByRole("main").getByRole("textbox", { name: "Driver" })).toHaveValue("Lee");
 
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
-  const saved = () => rosterOf(compId).then((r) => r.find((p) => p.name === "Jo Ridge"));
-  expect((await saved())?.driver_contact).toBe("Sam 0400 111 222");
-
-  // Discard changes throws the edit away, and nothing is sent.
-  await rows(page).first().click();
-  await sheet.getByRole("textbox", { name: "Driver" }).fill("Kim 0400 999 999");
-  await page.goBack();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
-  await expect(sheet).toBeHidden();
-  expect((await saved())?.driver_contact).toBe("Sam 0400 111 222");
-
-  // Back from an untouched sheet just closes it — and leaves the page alone.
-  await rows(page).first().click();
-  await expect(sheet).toBeVisible();
-  await page.goBack();
-  await expect(sheet).toBeHidden();
-  await expect(page).toHaveURL(new RegExp(`/comp/.*${compId}.*/pilots`));
-  await expect(list(page)).toBeVisible();
+  // And the page stands on its own: reloaded, it is still Jo Ridge's.
+  await page.reload();
+  await editorFor(page, "Jo Ridge");
 });
 
 test("the Team field offers the roster's teams, and a new team is a deliberate choice", async ({
@@ -263,7 +304,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   const open = async (name: string) => {
     await search(page).fill(name);
     await rows(page).first().click();
-    return page.getByRole("dialog", { name: `${name} details` });
+    return editorFor(page, name);
   };
   // A tap on a field already in view, as a person makes one. React Aria
   // closes an open list whenever its field's container scrolls, and a
@@ -271,8 +312,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   // the focus that opened it.
   const tapTeam = async (sheet: Locator) => {
     const team = sheet.getByRole("combobox", { name: "Team" });
-    await team.scrollIntoViewIfNeeded();
-    await team.click();
+    await openList(page, team);
     return team;
   };
 
@@ -284,7 +324,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   await page.getByRole("option", { name: "Alpha Gliders (2)" }).click();
   await expect(team).toHaveValue("Alpha Gliders");
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
   expect(await teamOf("Di")).toBe("Alpha Gliders");
 
   // A slip is caught: Done will not make a new team of it unasked, and
@@ -300,12 +340,12 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   await expect(team).toBeFocused();
   // Centring the field closed the list its focus opened; a tap brings it
   // back without retyping.
-  await team.click();
+  await openList(page, team);
   await page.getByRole("option", { name: "Did you mean Alpha Gliders?" }).click();
   await expect(team).toHaveValue("Alpha Gliders");
   await expect(sheet).not.toContainText("Choose a team from the list");
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
   expect(await teamOf("Ed")).toBe("Alpha Gliders");
 
   // A new team takes one deliberate tap; the same name in other capitals
@@ -315,7 +355,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   await team.fill("Thermal Hunters");
   await page.getByRole("option", { name: "New team: Thermal Hunters" }).click();
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
   expect(await teamOf("Fay")).toBe("Thermal Hunters");
 
   sheet = await open("Cy");
@@ -323,7 +363,7 @@ test("the Team field offers the roster's teams, and a new team is a deliberate c
   await team.fill("alpha  GLIDERS");
   await page.keyboard.press("Escape");
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
   expect(await teamOf("Cy")).toBe("Alpha Gliders");
 });
 
@@ -370,46 +410,42 @@ test("Sort: Team files the pilots under their teams, the teamless last", async (
   await expect.poll(() => names(page)).toEqual(["Cy"]);
   await search(page).fill("");
 
-  // The rows are the same rows: one opens its sheet, and a pilot who joins a
-  // team moves under it.
+  // The rows are the same rows: one opens its page, and a pilot who joins a
+  // team moves under it — with the list still sorted by team on the way back.
   await rows(page).filter({ hasText: "Ada" }).click();
-  const sheet = page.getByRole("dialog", { name: "Ada details" });
+  const sheet = await editorFor(page, "Ada");
   const team = sheet.getByRole("combobox", { name: "Team" });
-  await team.scrollIntoViewIfNeeded();
-  await team.click();
+  await openList(page, team);
   await page.getByRole("option", { name: "Bravo (1)" }).click();
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
   await expect.poll(headings).toEqual(["Alpha Gliders · 2 pilots", "Bravo · 2 pilots"]);
   await expect.poll(() => names(page)).toEqual(["Bo", "Cy", "Ada", "Zoe"]);
 });
 
-test("a sheet opened over a scrolled list keeps the page at the top, and closing it puts the list back", async ({
+test("Back from a pilot returns the list scrolled, searched and sorted as it was left", async ({
   page,
 }) => {
-  // Found on an iPhone: with the page scrolled under the sheet (and a
-  // keyboard's pan left behind), Safari hit-tested the fixed sheet in the
-  // wrong place and a tap on Name fell through to the inert page. Chromium
-  // cannot show that mismatch, so this holds the condition that prevents it.
+  // The list's state is the URL's (and the scroll is the router's), so the
+  // browser's own Back restores it — nothing hands it across in memory.
   const compId = await makeComp();
   await openPage(page, compId);
+  await page.getByRole("button", { name: /Sort/ }).click();
+  await page.getByRole("option", { name: "WPRS points" }).click();
+  await search(page).fill("filler");
+  await expect(page).toHaveURL(/q=filler/);
+  await expect(page).toHaveURL(/sort=wprs_points/);
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const scrolled = await page.evaluate(() => window.scrollY);
   expect(scrolled).toBeGreaterThan(100);
 
   await rows(page).last().click();
-  const sheet = page.getByRole("dialog", { name: /details/ });
-  await expect(sheet).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-  const top = await sheet.evaluate((el) => el.closest(".fixed")!.getBoundingClientRect().top);
-  expect(top).toBe(0);
-
-  await page.keyboard.press("Escape");
-  await expect(sheet).toBeHidden();
-  // Back where it was, give or take the bottom bar: focus returns to the
-  // last row, and the page's scroll-padding lifts that row clear of the bar.
-  const bar = await page.evaluate(() => parseFloat(document.body.style.paddingBottom) || 0);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(scrolled - bar - 1);
+  await editorFor(page, "Filler Pilot 30");
+  await page.goBack();
+  await backOnList(page);
+  await expect(search(page)).toHaveValue("filler");
+  await expect(page.getByRole("button", { name: /Sort/ })).toContainText("WPRS points");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled - 5);
 });
 
 test("a refusal lands under the field it is about, focused and in view", async ({ page }) => {
@@ -426,13 +462,13 @@ test("a refusal lands under the field it is about, focused and in view", async (
   await openPage(page, compId);
 
   await page.getByRole("button", { name: "Add pilot" }).click();
-  const sheet = page.getByRole("dialog", { name: "New pilot" });
+  const sheet = await editorFor(page, "New pilot");
   await sheet.getByRole("textbox", { name: "Name" }).fill("Moosh");
   await sheet.getByText("open", { exact: true }).click();
   const email = sheet.getByRole("textbox", { name: "Email" });
   await email.fill(TEST_USER.email);
   // Scrolled down past the email, the way the organiser was.
-  await sheet.getByRole("textbox", { name: "Driver" }).scrollIntoViewIfNeeded();
+  await sheet.getByRole("textbox", { name: "FAI ID" }).scrollIntoViewIfNeeded();
   await sheet.getByRole("button", { name: "Done" }).click();
 
   await expect(sheet).toContainText("Org Self is already registered with this email.");
@@ -445,7 +481,7 @@ test("a refusal lands under the field it is about, focused and in view", async (
   await expect(email).toHaveValue("moosh@example.com");
   await expect(sheet).not.toContainText("already registered");
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
   expect((await rosterOf(compId)).some((p) => p.name === "Moosh")).toBe(true);
 });
 
@@ -455,7 +491,7 @@ test("Remove asks before it removes", async ({ page }) => {
   await search(page).fill("ana");
   await rows(page).first().click();
 
-  const sheet = page.getByRole("dialog", { name: "Ana Müller details" });
+  const sheet = await editorFor(page, "Ana Müller");
   await sheet.getByRole("button", { name: "Remove this pilot" }).click();
   const ask = page.getByRole("alertdialog");
   await expect(ask).toContainText("Remove Ana Müller?");
@@ -464,7 +500,7 @@ test("Remove asks before it removes", async ({ page }) => {
 
   await sheet.getByRole("button", { name: "Remove this pilot" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await backOnList(page);
   await expect(list(page)).toContainText('No pilot matches "ana".');
   expect((await rosterOf(compId)).some((p) => p.name === "Ana Müller")).toBe(false);
 });
@@ -537,7 +573,7 @@ test("an exported roster re-imports as the same pilots", async ({ page }) => {
   await expect(review.getByRole("button", { name: "Apply" })).toHaveCount(0);
 });
 
-test("the page never scrolls sideways, its targets are thumb-sized, and the last pilot clears the bar", async ({
+test("the page never scrolls sideways, its targets are thumb-sized, and the search bar stays in reach", async ({
   page,
 }) => {
   const compId = await makeComp();
@@ -549,129 +585,54 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the last
   expect(searchBox!.height, "the search box height").toBeGreaterThanOrEqual(44);
   await expectThumbSized(page, "a pilot row", await rows(page).first().boundingBox());
 
-  // Scroll to the end: the last pilot, and the footer after it, must sit
-  // above the bar rather than stop behind it.
+  // Scrolled to the end of the list, search and + are still on screen, at the
+  // top: sticky in the page's flow, never fixed to the screen.
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const plus = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
-  const last = await rows(page).last().boundingBox();
-  expect(last!.y + last!.height, "the last pilot ends above the bar").toBeLessThanOrEqual(plus!.y);
-  const footer = await page.locator("footer").last().boundingBox();
-  expect(footer!.y + footer!.height, "the footer ends above the bar").toBeLessThanOrEqual(plus!.y);
+  expect(plus!.y, "the + stays on screen").toBeGreaterThanOrEqual(0);
+  expect(plus!.y, "the + stays near the top").toBeLessThan(200);
+  expect(
+    await page.getByRole("button", { name: "Add pilot" }).evaluate((el) => {
+      for (let n: Element | null = el; n; n = n.parentElement) {
+        if (getComputedStyle(n).position === "fixed") return true;
+      }
+      return false;
+    }),
+    "nothing on this page is fixed to the screen"
+  ).toBe(false);
 
-  // A row reached from the keyboard is never left under the bar (WCAG
-  // 2.4.11): PageDown moves focus a screen down the list, and the browser
-  // scrolls it into view — above the bar, by the page's scroll-padding.
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await rows(page).first().focus();
+  // A row reached from the keyboard is never left under the sticky bar (WCAG
+  // 2.4.11): walk focus back up the list from the bottom.
+  await rows(page).last().focus();
   for (let i = 0; i < 3; i++) {
-    await page.keyboard.press("PageDown");
-    const focused = await page.evaluate(() => {
-      const r = document.activeElement!.getBoundingClientRect();
-      return { bottom: r.bottom };
-    });
+    await page.keyboard.press("PageUp");
+    const top = await page.evaluate(() => document.activeElement!.getBoundingClientRect().top);
     const bar = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
-    expect(focused.bottom, "the focused row ends above the bar").toBeLessThanOrEqual(bar!.y);
+    expect(top, "the focused row starts below the search bar").toBeGreaterThanOrEqual(bar!.y + bar!.height);
   }
 
-  // A sheet is full screen and does not scroll sideways either.
+  // A pilot's page does not scroll sideways either.
   await rows(page).first().click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  const editor = await editorFor(page, (await rosterOf(compId)).map((p) => p.name).sort((a, b) => a.localeCompare(b))[0]);
   await expectNoSidewaysScroll(page);
 
   // Its fields come in named groups, and none of them folds away.
-  for (const group of ["Required", "Contact", "CIVL", "Team", "Other IDs"]) {
-    await expect(page.getByRole("dialog").getByRole("group", { name: group })).toBeAttached();
+  for (const group of ["Required", "In the air", "Contact", "CIVL", "Team", "Other IDs"]) {
+    await expect(editor.getByRole("group", { name: group })).toBeAttached();
   }
   await expect(
-    page.getByRole("group", { name: "Other IDs" }).getByRole("textbox", { name: "FAI ID" })
+    editor.getByRole("group", { name: "Other IDs" }).getByRole("textbox", { name: "FAI ID" })
   ).toBeAttached();
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Other IDs" })).toHaveCount(0);
+  await expect(editor.getByRole("button", { name: "Other IDs" })).toHaveCount(0);
 
   // Its fields stand out from the page behind them. They were transparent,
   // which on the grey page background made an input the same grey as the
   // page — hard to find on a phone in daylight.
-  const [fieldBg, pageBg] = await page
-    .getByRole("dialog")
+  const [fieldBg, pageBg] = await editor
     .getByRole("textbox", { name: "Name" })
     .evaluate((el) => [
       getComputedStyle(el).backgroundColor,
       getComputedStyle(document.body).backgroundColor,
     ]);
   expect(fieldBg, "an input must not be the page's own colour").not.toBe(pageBg);
-});
-
-/**
- * Stand in for a phone's on-screen keyboard. Headless Chromium has none, so
- * `visualViewport` is replaced with one the test can shrink — which is all a
- * keyboard does to it on iOS Safari. `quietly` changes the height without a
- * `resize`, the way iOS put its keyboard away when the sheet closed on a real
- * iPhone (the bug this guards).
- */
-async function stubKeyboard(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const vv = new EventTarget() as EventTarget & {
-      height: number;
-      width: number;
-      offsetTop: number;
-      offsetLeft: number;
-      scale: number;
-    };
-    Object.assign(vv, {
-      height: window.innerHeight,
-      width: window.innerWidth,
-      offsetTop: 0,
-      offsetLeft: 0,
-      scale: 1,
-    });
-    Object.defineProperty(window, "visualViewport", { configurable: true, get: () => vv });
-    (window as unknown as Record<string, unknown>).__keyboard = (px: number, quietly = false) => {
-      vv.height = window.innerHeight - px;
-      if (!quietly) vv.dispatchEvent(new Event("resize"));
-    };
-  });
-}
-
-async function keyboard(page: Page, px: number, quietly = false): Promise<void> {
-  await page.evaluate(
-    ([h, q]) =>
-      (window as unknown as { __keyboard: (px: number, q: boolean) => void }).__keyboard(h, q),
-    [px, quietly] as const
-  );
-}
-
-/** How far the bar's + sits above the bottom of the screen. */
-async function barLift(page: Page): Promise<number> {
-  const plus = await page.getByRole("button", { name: /^Add (pilot|a pilot named)/ }).boundingBox();
-  const height = await page.evaluate(() => window.innerHeight);
-  return height - (plus!.y + plus!.height);
-}
-
-test("the bar rises over its own keyboard only, and never stays up", async ({ page }) => {
-  await stubKeyboard(page);
-  const compId = await makeComp(ROSTER.slice(0, 3));
-  await openPage(page, compId);
-  const resting = await barLift(page);
-  expect(resting, "the bar starts at the bottom").toBeLessThan(60);
-
-  // Add a pilot. The sheet's keyboard is up when Done closes it and brings
-  // the bar back — then goes away without a resize, as it did on an iPhone.
-  await page.getByRole("button", { name: "Add pilot" }).click();
-  const sheet = page.getByRole("dialog", { name: "New pilot" });
-  await sheet.getByRole("textbox", { name: "Name" }).fill("Kim Keyboard");
-  await sheet.getByText("open", { exact: true }).click();
-  await keyboard(page, 300);
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
-  await keyboard(page, 0, true);
-  expect(await barLift(page), "the sheet's keyboard must not leave the bar up").toBeCloseTo(resting, 0);
-
-  // The search's own keyboard lifts the bar above it...
-  await search(page).click();
-  await keyboard(page, 300);
-  expect(await barLift(page)).toBeGreaterThanOrEqual(resting + 300 - 1);
-
-  // ...and leaving the search drops it at once, resize or no resize.
-  await page.getByRole("heading", { level: 1 }).click();
-  await keyboard(page, 0, true);
-  expect(await barLift(page), "leaving the search drops the bar").toBeCloseTo(resting, 0);
 });

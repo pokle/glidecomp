@@ -35,7 +35,9 @@ export function useCanonicalPath(canonicalPath: string | null): void {
       // Same page, corrected address: scroll restoration must not treat this
       // as arriving somewhere new. The names this waits on can land seconds
       // after the reader has started scrolling.
-      state: { preserveScroll: true },
+      // Whatever the page was navigated in with is kept: a correction is not
+      // a new arrival (the pilot page reads `fromList` off it).
+      state: { ...(location.state as object | null), preserveScroll: true },
     });
-  }, [canonicalPath, location.pathname, location.search, location.hash, navigate]);
+  }, [canonicalPath, location.pathname, location.search, location.hash, location.state, navigate]);
 }

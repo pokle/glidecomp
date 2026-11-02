@@ -34,17 +34,8 @@ export function AppToaster() {
   // body-level dialog portals no matter its z-index — toasts fired while a
   // dialog is open would be hidden behind it. At body level sonner's own
   // z-index wins and toasts stay on top of open dialogs.
-  //
-  // The offsets are sonner's own defaults (24px, 16px on a phone) plus the
-  // height of any bottom bar the page carries — see lib/use-bottom-bar.ts. A
-  // toast that lands on top of the pilots page's search-and-add bar hides the
-  // + it was reporting on.
   return createPortal(
-    <Toaster
-      position="bottom-right"
-      offset={{ bottom: "calc(24px + var(--bottom-bar, 0px))" }}
-      mobileOffset={{ bottom: "calc(16px + var(--bottom-bar, 0px))" }}
-    />,
+    <Toaster position="bottom-right" />,
     document.body
   );
 }

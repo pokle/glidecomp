@@ -16,6 +16,7 @@ import {
   taskPath,
   taskAnalysisPath,
   compSettingsPath,
+  compPilotsPath,
   pilotPath,
 } from "./slug";
 
@@ -52,6 +53,14 @@ export function underComp(compId: string | undefined, compName: string | null | 
   return [
     COMPETITIONS,
     { label: compName || "Competition", to: compId ? compPath(compId, compName) : "/comp" },
+  ];
+}
+
+/** Ancestors of one pilot's editor: the competition, then its roster. */
+export function underCompPilots(compId: string | undefined, compName: string | null | undefined): Crumb[] {
+  return [
+    ...underComp(compId, compName),
+    { label: "Pilots", to: compId ? compPilotsPath(compId, compName) : "/comp" },
   ];
 }
 

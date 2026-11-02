@@ -78,6 +78,9 @@ const CompPilotsPage = lazy(() =>
 const CompSettingsPage = lazy(() =>
   import("./pages/CompSettingsPage").then((m) => ({ default: m.CompSettingsPage }))
 );
+const CompPilotPage = lazy(() =>
+  import("./pages/CompPilotPage").then((m) => ({ default: m.CompPilotPage }))
+);
 const TaskSettingsPage = lazy(() =>
   import("./pages/TaskSettingsPage").then((m) => ({ default: m.TaskSettingsPage }))
 );
@@ -190,6 +193,10 @@ export function AppRoutes() {
             <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
             {/* Admin-only roster editor — noindex shell in the SSR Function. */}
             <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
+            {/* One pilot's editor, and a blank one — pages rather than sheets
+                over the list (the overlays rule in CLAUDE.md). Noindex shells. */}
+            <Route path="/comp/:compId/pilots/new" element={<CompPilotPage />} />
+            <Route path="/comp/:compId/pilots/:pilotId" element={<CompPilotPage />} />
             {/* Admin-only settings pages (index + one sub-page per group) —
                 noindex shell in the SSR Function, like /pilots. */}
             <Route path="/comp/:compId/settings" element={<CompSettingsPage />} />

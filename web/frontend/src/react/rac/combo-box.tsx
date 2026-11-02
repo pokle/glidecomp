@@ -26,7 +26,7 @@
  * read as one control; the popover reuses rac/select.tsx's popoverClass.
  *
  * `variant="field"` is the other job a combo box does: a FORM field whose
- * value is usually one of a known few (the pilot sheet's Team, which offers
+ * value is usually one of a known few (the pilot page's Team, which offers
  * the roster's teams). It looks like the TextField beside it, the same height
  * and no magnifier, because it is one. A tap on it opens the list even when it
  * already has focus. React Aria closes the list whenever anything around the

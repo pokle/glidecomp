@@ -12,7 +12,7 @@
  * tap on the Name field landed on the inert page behind it. Scrolling the
  * window back to 0 from the inspector made the very next tap work.
  *
- * It took a keyboard to set up (the bottom bar's search, or a field in an
+ * It took a keyboard to set up (the pilots page's search, or a field in an
  * earlier sheet) and a scrolled page, so it came and went with no fixed
  * steps. Hence two halves:
  *
@@ -70,7 +70,7 @@ export function useSheetScrollReset(): void {
         const at = saved;
         saved = null;
         // A frame later: what the sheet hid comes back in the same commit
-        // (the pilots page's bottom bar, and the page padding it adds), and
+        // (a bar the page hid while the sheet was up), and
         // until it has, the page is too short to scroll back to `at.y`.
         const frame = requestAnimationFrame(() => {
           pending = null;

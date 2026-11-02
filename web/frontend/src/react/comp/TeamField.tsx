@@ -1,5 +1,5 @@
 /**
- * The pilot sheet's Team field: a combo box over the roster's teams.
+ * The pilot page's Team field: a combo box over the roster's teams.
  *
  * Teams are scored by their exact name, so a typo published a second team
  * with its own total. This field makes the roster's own spelling the easy
@@ -9,7 +9,7 @@
  *     as you type. Usually you pick one.
  *   - **A new team is a deliberate choice.** A name that is no team appears at
  *     the foot of the list as "New team: …", and the sheet will not save one
- *     until it is chosen (PilotSheet's `validate`).
+ *     until it is chosen (PilotForm's `validate`).
  *   - **A near miss is caught.** A name a slip away from a team is offered as
  *     "Did you mean …?" above "New team". A name that differs only in case,
  *     spacing or accents simply IS that team, and saves under its spelling.

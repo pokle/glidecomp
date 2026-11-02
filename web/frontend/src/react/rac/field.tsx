@@ -177,11 +177,10 @@ export function NumberField({
 /**
  * The two shapes a search box takes.
  *
- * `floating` is the pill that rides at the bottom of the screen over a list
- * (the pilots page's search-and-add bar, after iOS Contacts): thumb height, an
- * opaque surface because rows scroll underneath it, and a clear button big
- * enough to hit with a thumb rather than the 20px a desktop field gets away
- * with.
+ * `floating` is the pill that rides over a list as it scrolls (the pilots
+ * page's sticky search bar): thumb height, an opaque surface because rows
+ * scroll underneath it, and a clear button big enough to hit with a thumb
+ * rather than the 20px a desktop field gets away with.
  */
 const SEARCH_GROUP = {
   default: "h-9 rounded-lg bg-card px-3 dark:bg-input/30",

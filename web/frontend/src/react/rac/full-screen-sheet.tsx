@@ -89,8 +89,8 @@ export function FullScreenSheet({
    * own button closes it; that button is the caller's to wire.
    *
    * For a sheet whose way out SAVES to the server, where closing is not
-   * free: the pilot sheet asks "Discard changes?" here when its draft is
-   * dirty. A sheet whose draft is applied on the way out (the waypoint and
+   * free: the pilot editor asked "Discard changes?" here while it was a
+   * sheet and its draft was dirty. A sheet whose draft is applied on the way out (the waypoint and
    * turnpoint sheets) has nothing to ask, and leaves this out.
    *
    * On a Back, the press has already used up the sheet's history entry, so it

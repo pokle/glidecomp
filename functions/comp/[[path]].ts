@@ -160,6 +160,8 @@ interface HeadTags {
 const NOINDEX_SHELL_ROUTES: RegExp[] = [
   // Pilot roster editor — admin-only management surface, nothing for crawlers.
   /^\/comp\/[^/]+\/pilots\/?$/,
+  // One pilot's editor (and /pilots/new) — admin-only, like the roster.
+  /^\/comp\/[^/]+\/pilots\/[^/]+\/?$/,
   // Competition settings pages (index + group sub-pages) — admin-only.
   /^\/comp\/[^/]+\/settings(\/[^/]+)?\/?$/,
   // The task's three admin-only editors, the routed replacements for the Task

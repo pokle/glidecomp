@@ -1,6 +1,6 @@
 /**
- * Pure CSV / row helpers for the pilots page: the row shape the pilot sheet
- * edits (comp/PilotSheet.tsx), and the CSV import and export
+ * Pure CSV / row helpers for the pilots page: the row shape the pilot page
+ * edits (comp/PilotForm.tsx), and the CSV import and export
  * (comp/roster-import.ts). They take the comp's classes and current pilots as
  * explicit arguments so they stay pure and unit-testable.
  *

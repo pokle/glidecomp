@@ -5,7 +5,7 @@
  * Teams are scored by their exact name — the public Teams tab and the
  * results record group pilots with `aggregateTeams()` — so "Alpha Gliders"
  * and "Alpha Gilders" are published as two teams with two totals. A team
- * field that took any text made that a typo away. The pilot sheet's Team
+ * field that took any text made that a typo away. The pilot page's Team
  * field (comp/TeamField.tsx) offers the roster's teams instead, makes a new
  * one a deliberate choice, and catches the near misses worked out here.
  *

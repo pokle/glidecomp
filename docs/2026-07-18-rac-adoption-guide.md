@@ -73,10 +73,23 @@ undid that one grid at a time: the waypoints grid became a list of rows that
 open sheets, and on 2026-11-01 the pilots grid followed, at every width — on a
 phone its frozen ✕ and name columns left room for about one and a half of the
 other twelve. Tabulator, `comp/TabulatorGrid.tsx` and `comp/tabulator-grid.css`
-went with it. An editable collection is now a `GridList` of rows opening
-`FullScreenSheet`s (`comp/WaypointList.tsx`, `comp/PilotList.tsx`), and work
+went with it. An editable collection is now a `GridList` of rows, and work
 that really is spreadsheet-shaped goes to a spreadsheet through CSV export and
-import. Gotcha #16 and the history below still mention Tabulator; they
+import.
+
+**No full-screen overlays (2026-11-02, owner decision).** Each row opens a
+PAGE with its own URL, not a `FullScreenSheet`: the pilot editor
+(`comp/PilotList.tsx` → `pages/CompPilotPage.tsx`) is the model. A sheet over
+a scrolled page was hit-tested in the wrong place by iOS Safari once a
+keyboard had come and gone, and everything that kept sheets usable (React
+Aria's iOS scroll lock, `lib/use-back-dismiss.ts`, `lib/use-sheet-scroll-reset.ts`)
+imitated what a page does natively. The rule is in CLAUDE.md; the remaining
+sheets (the waypoints list's among them) are pokle/glidecomp#810–#816, and
+#817 removes the machinery. Small overlays — a confirm, a menu, a combo box's
+list — are fine. And a combo box on a touch device holds its list invisible
+until the on-screen keyboard opens (600 ms at most): an e2e that clicks an
+option must wait for the popover's opacity first (see `openList()` in
+`e2e/comp-pilots.spec.ts`). Gotcha #16 and the history below still mention Tabulator; they
 describe code that no longer exists.
 
 ## What exists

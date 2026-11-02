@@ -1,5 +1,5 @@
 /**
- * What the pilot sheet sends when Done is pressed, worked out without the
+ * What the pilot page sends when Done is pressed, worked out without the
  * sheet: the draft is the same ParsedRow the CSV import uses, so the
  * trimming, the blank-means-null rule and the WPRS parsing are the import's
  * own (csv.ts), not a second copy.

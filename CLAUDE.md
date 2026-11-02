@@ -174,10 +174,10 @@ These are the standing imperatives. Each links to the reference that explains it
   (`competition-api/src/team-name.ts`), which stores a name that differs only
   in case, spacing or accents under the spelling the roster already uses — so
   a CSV import, an API key or an assistant cannot split a team either. The
-  pilot sheet's Team field (`comp/TeamField.tsx`) offers the roster's teams
+  pilot page's Team field (`comp/TeamField.tsx`) offers the roster's teams
   and makes a new team a deliberate choice.
   - **A near miss is offered, never applied.** "Alpha Gilders" may be a
-    different team, so it gets "Did you mean Alpha Gliders?" in the sheet and
+    different team, so it gets "Did you mean Alpha Gliders?" in the editor and
     is stored exactly as given everywhere else: names may propose, never
     dispose, as with pilot registrations above.
 - **Every mutation that could affect a competition's scores MUST be
@@ -378,16 +378,50 @@ These are the standing imperatives. Each links to the reference that explains it
     "Show on the map" button in the waypoint sheet that duplicated the list
     row's pin, and a status line that pre-judged a set nobody had asked about.
     A second way to do something is a thing to keep working, explain and test.
-  - **A sheet is dismissable with Back.** A sheet lives in React state, not in
-    the URL, so the history stack cannot see it and Back would skip past it to
-    the previous page — from a waypoint's details, one press left the whole
-    editor and its unsaved work. `lib/use-back-dismiss.ts` gives every
-    `FullScreenSheet` a history entry while it is open and pops it again on the
-    way out; nested sheets stack, so Back walks out one layer at a time. Read
-    its note before touching it: a popstate reaches every listener, popping our
-    own entry looks like a user Back to the layer underneath, and StrictMode
-    runs the effect twice — all three broke it, and all three were caught by
-    the e2e rather than by review.
+- **No full-screen overlays: a screen of its own is a PAGE, with its own URL**
+  (owner decision, 2026-11-02). Anything that takes over the screen — an
+  editor, a review, a picker with fields, a figure at full size — is a route
+  the reader reaches by a link or `navigate()` and leaves with the browser's
+  Back. Browser navigation must simply work; we do not imitate it.
+  - **Why.** A full-screen sheet is a `position: fixed` layer over a scrolled
+    page, and on an iPhone, after a keyboard had come and gone, Safari drew
+    the pilot sheet in one place and hit-tested it in another: taps on Name
+    fell through to the inert page behind it, with no error anywhere. Every
+    piece of machinery that made sheets usable — React Aria's iOS scroll lock
+    (which patches `HTMLElement.prototype.focus`), `lib/use-back-dismiss.ts`'s
+    history entries for Back, `lib/use-sheet-scroll-reset.ts`, a bottom bar
+    lifted over the keyboard by hand — re-implemented something a page does
+    natively, and each grew its own iOS bug. A page gets Back, scroll
+    restoration, the keyboard and focus from the browser, which is the most
+    tested path there is.
+  - **The worked example is the pilot editor**: `/comp/:id/pilots/:pilotId`
+    and `/pilots/new` (`pages/CompPilotPage.tsx`, form in
+    `comp/PilotForm.tsx`). The list keeps its search and sort in the URL
+    (`?q=`, `?sort=`), so Back returns it exactly as it was left, and
+    `lib/scroll-restoration.ts` restores its scroll. State a page needs goes
+    in the URL or is fetched by the page — never handed over in memory from
+    the page underneath, which a reload or a shared link would not have.
+  - **Small overlays are fine**: a confirmation ("Discard changes?"), a menu,
+    a combo box's list, a date picker. Nothing that fills the screen, and
+    nothing with text fields that bring up the keyboard.
+  - **No bars fixed to the screen's edges.** A toolbar that should stay in
+    reach is `sticky` in the page's flow (the pilots list's search and +),
+    never `fixed`: a fixed bar has to be moved around the keyboard by hand,
+    and on an iPhone the pilots page's bottom bar once stuck halfway up the
+    screen doing that. A sticky bar at the top never meets the keyboard.
+  - **What is left to convert** is tracked one page at a time:
+    [#810](https://github.com/pokle/glidecomp/issues/810) (roster import
+    review, CIVL fill), [#811](https://github.com/pokle/glidecomp/issues/811)
+    (waypoint details, altitude review, full-screen map),
+    [#812](https://github.com/pokle/glidecomp/issues/812) (turnpoint sheet,
+    quick entry), [#813](https://github.com/pokle/glidecomp/issues/813)
+    (task QR), [#814](https://github.com/pokle/glidecomp/issues/814) (task
+    diagram), [#815](https://github.com/pokle/glidecomp/issues/815) and
+    [#816](https://github.com/pokle/glidecomp/issues/816) (task analysis
+    figures), then [#817](https://github.com/pokle/glidecomp/issues/817)
+    deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
+    `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
+    do not add a new user of any of it.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)
@@ -411,25 +445,17 @@ These are the standing imperatives. Each links to the reference that explains it
     already makes a row `flex items-center gap-3`, so restating that says
     nothing.
   - **There is no editable grid.** An editable collection is a list of rows
-    that open sheets, built from `rac/grid-list.tsx` and
-    `rac/full-screen-sheet.tsx`; the waypoints page and the pilots page
-    (`comp/PilotsSection.tsx`) are the worked examples. Tabulator went with its
+    (`rac/grid-list.tsx`) that each open a page of their own — the pilots
+    page (`comp/PilotsSection.tsx` → `pages/CompPilotPage.tsx`) is the worked
+    example; the waypoints page still opens sheets until #811. Tabulator went with its
     last grid on 2026-11-01: the pilots roster, fourteen columns in a dialog,
     of which a phone showed about one and a half. Spreadsheet-shaped work goes
     to a real spreadsheet through CSV export and import instead, so that round
     trip must be lossless (the export's `glidecomp_id` column). Don't bring a
     grid back for the desktop alone — that is two editors.
-  - **A bar fixed to the bottom of the screen goes through
-    `lib/use-bottom-bar.ts`**, as the pilots page's search-and-add bar does.
-    It publishes the bar's height as `--bottom-bar`, which the toaster and the
-    Preview-as pill add to their offsets (they would otherwise sit on the
-    bar's +), pads the page so its end scrolls clear of the bar, and lifts the
-    bar above an on-screen keyboard — only while focus is INSIDE the bar. It
-    once lifted for any keyboard, and on an iPhone it stuck halfway up the
-    screen: the bar came back as the pilot sheet closed, measured the sheet's
-    keyboard on its way out, and iOS never said when it had gone.
-  - **Every form submits through the kit form, `rac/form.tsx`** (`Form`, or
-    the `FormSheet` shape), and a failed save is never a toast. It owns what
+  - **Every form submits through the kit form, `rac/form.tsx`** (`Form`, on
+    a page — `FormSheet` is only for the sheets awaiting #810–#812), and a
+    failed save is never a toast. It owns what
     happens when Save does not work, so no page writes that again: an error
     about a field goes UNDER that field, which is focused and scrolled into
     view; one about no field is pinned where it cannot scroll away (under a
@@ -528,7 +554,8 @@ These are the standing imperatives. Each links to the reference that explains it
     accepted. A difference of exactly zero prints nothing — the absence of a
     finding is not a finding — and inside a waypoint both Back and Done return
     to the LIST, never out of the review.
-  - **The waypoints page is a list of sheets, at every width** — see the
+  - **The waypoints page is a list of sheets, at every width** (pages from
+    #811 on) — see the
     mobile-first rule above for what it replaced. `comp-waypoints.spec.ts` runs
     in both Playwright projects, and asserts that the page never scrolls
     sideways.

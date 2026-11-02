@@ -145,6 +145,12 @@ async function names(page: Page): Promise<string[]> {
   return (await rows(page).locator("p.font-medium").allInnerTexts()).map((t) => t.trim());
 }
 
+/** A pilot's own page (it was a sheet over the roster until 2026-11). */
+async function pilotPage(page: Page, name: string) {
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible({ timeout: 20_000 });
+  return page.getByRole("main");
+}
+
 test("one press fills IDs by name and then rankings by ID, and shows what it will set first", async ({
   page,
 }) => {
@@ -175,18 +181,18 @@ test("one press fills IDs by name and then rankings by ID, and shows what it wil
     timeout: 20_000,
   });
 
-  // The roster now carries the numbers, and each pilot's sheet says which
+  // The roster now carries the numbers, and each pilot's page says which
   // list and month theirs came from — the difference between a checkable rank
   // and a bare one.
   await expect(rowOf(page, "Bruno Ridge")).toContainText("pts");
   await expect(rowOf(page, "Twin Ambiguity")).not.toContainText("pts");
   await rowOf(page, "Bruno Ridge").click();
-  const sheet = page.getByRole("dialog", { name: "Bruno Ridge details" });
+  const sheet = await pilotPage(page, "Bruno Ridge");
   await expect(sheet).toContainText("From Sample World Ranking");
   const points = await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).inputValue();
   expect(points).toMatch(/^\d+(\.\d+)?$/);
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden();
+  await expect(page).toHaveURL(/\/pilots(\?|$)/);
 
   // Ask again on the same roster. "Add when missing" means exactly that:
   // there is nothing left to set, and the sheet says why rather than
@@ -225,17 +231,18 @@ test("the roster sorts by WPRS points, highest first, unscored pilots last", asy
 test("a score typed over by hand stops claiming a source", async ({ page }) => {
   await openRoster(page, compId);
   await rowOf(page, "Ada Thermal").click();
-  const sheet = page.getByRole("dialog", { name: "Ada Thermal details" });
+  let sheet = await pilotPage(page, "Ada Thermal");
   await expect(sheet).toContainText("From Sample World Ranking");
 
   await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).fill("99");
   // The moment it is typed, not at save: the number is the organiser's now.
   await expect(sheet).toContainText("Set by an organiser");
   await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden({ timeout: 20_000 });
+  await expect(page).toHaveURL(/\/pilots(\?|$)/, { timeout: 20_000 });
   await expect(rowOf(page, "Ada Thermal")).toContainText("99 pts");
 
   await rowOf(page, "Ada Thermal").click();
+  sheet = await pilotPage(page, "Ada Thermal");
   await expect(sheet).toContainText("Set by an organiser");
   await expect(sheet).not.toContainText("Sample World Ranking");
 });

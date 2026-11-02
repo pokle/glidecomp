@@ -135,11 +135,10 @@ differs. Know which surface you're touching:
   `--ring` (which must keep ≥ 3:1 against its background, see §3.1).
 - Never set `outline: none` without providing a replacement indicator.
 - Focus must not be obscured (WCAG 2.4.11): sticky headers (the 60px chrome,
-  the mobile anchor bar), bars fixed to the bottom of the screen (the pilots
-  page's search-and-add bar) and toasts (`sonner`) must not cover the focused
-  element. A bottom bar goes through `lib/use-bottom-bar.ts`, whose height
-  becomes the page's `scroll-padding-bottom`, so focus scrolls a row clear of
-  it.
+  the mobile anchor bar, the pilots page's sticky search bar) and toasts
+  (`sonner`) must not cover the focused element. Rows under a sticky bar carry
+  a `scroll-mt-*` at least as tall as what sticks above them, so focus scrolls
+  a row clear of it (`comp/PilotList.tsx`).
 - **Focus order follows reading order** (WCAG 2.4.3). When a dialog opens, focus
   moves into it; when it closes, focus returns to the trigger. The route editor
   deep-link (`#edit-route`) and `#scores` redirect must land focus sensibly, not

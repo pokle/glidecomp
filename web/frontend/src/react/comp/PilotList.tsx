@@ -1,6 +1,6 @@
 /**
- * The roster as a LIST — one row per pilot, each opening that pilot's sheet
- * (comp/PilotSheet.tsx), at every width.
+ * The roster as a LIST — one row per pilot, each opening that pilot's own
+ * page (pages/CompPilotPage.tsx), at every width.
  *
  * It replaced a fourteen-column Tabulator grid in a dialog. On a phone that
  * grid froze its ✕ and name columns at 176px, more than half the screen, and
@@ -58,7 +58,15 @@ export function PilotList({
   onOpen: (compPilotId: string) => void;
 }) {
   const row = (p: CompPilot & { id: string }) => (
-    <GridListItem variant="rows" id={p.id} textValue={p.name} className="cursor-pointer">
+    // The scroll margin keeps a row reached by keyboard out from under the
+    // sticky search bar (and the site header above it on wider screens):
+    // WCAG 2.4.11, Focus Not Obscured.
+    <GridListItem
+      variant="rows"
+      id={p.id}
+      textValue={p.name}
+      className="cursor-pointer scroll-mt-16 sm:scroll-mt-32"
+    >
       <RowContent title={p.name} detail={pilotDetail(p)} chevron />
     </GridListItem>
   );

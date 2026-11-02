@@ -56,6 +56,14 @@ export function useUnsavedChangesGuard(
     message: string;
     confirmLabel?: string;
     cancelLabel?: string;
+    /**
+     * Ask on Back too (the default). False leaves Back to the browser: the
+     * routed editors that replaced sheets (the pilot page) are short forms
+     * whose Back is plain navigation, and holding a history entry for them
+     * is the kind of work the overlays rule in CLAUDE.md retired. Reloads,
+     * tab closes and in-app links still ask.
+     */
+    guardBack?: boolean;
   }
 ): void {
   const confirm = useConfirm();
@@ -113,7 +121,7 @@ export function useUnsavedChangesGuard(
       // then one real step back — which is the one they made.
       if (ok) guard.layer?.unwind(() => window.history.back());
     });
-  }, dirty, true);
+  }, dirty && options.guardBack !== false, true);
   guardRef.current.layer = layer;
 
   useEffect(() => {

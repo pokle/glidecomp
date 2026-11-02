@@ -192,6 +192,19 @@ export function compPilotsPath(id: string, name?: string | null): string {
 }
 
 /**
+ * One pilot's editor on the roster, or `"new"` for the blank one. A page and
+ * not a sheet over the list: see the overlays rule in CLAUDE.md.
+ */
+export function compPilotPath(
+  id: string,
+  name: string | null | undefined,
+  pilotId: string | "new",
+  pilotName?: string | null
+): string {
+  return `${compPilotsPath(id, name)}/${pilotId === "new" ? "new" : slugSegment(pilotId, pilotName)}`;
+}
+
+/**
  * The admin-only competition settings pages. Without `group`, the index of
  * grouped rows; with one (e.g. "scoring"), that group's sub-page.
  */
