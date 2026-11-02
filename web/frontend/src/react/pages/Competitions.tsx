@@ -1,5 +1,6 @@
 /**
- * Competition list + site search. Starting a new competition is a page of its
+ * Competition list + site search, under a sticky bar of search and + (the
+ * pilots page's layout). Starting a new competition is a page of its
  * own (/comp/new, pages/NewCompPage.tsx). Built on the RAC kit
  * (src/react/rac/) — see docs/2026-07-18-rac-adoption-guide.md.
  *
@@ -23,13 +24,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Link as AriaLink, useFilter } from "react-aria-components";
-import { Button, LinkButton } from "@/react/rac/button";
+import { PlusIcon } from "lucide-react";
+import { LinkButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { cardSurface } from "@/react/rac/card";
 import { cn } from "@/react/lib/utils";
 import { SearchField } from "@/react/rac/field";
 import { api } from "../../comp/api";
-import { useGoToSignIn, useUser } from "../lib/user";
+import { useUser } from "../lib/user";
 import {
   formatDate,
   formatTaskDateRange,
@@ -45,8 +47,7 @@ import type { CompListEntry, CompetitionsLoaderData } from "../loaders";
 type Comp = CompListEntry;
 
 export function Competitions() {
-  const { user, previewRole } = useUser();
-  const goToSignIn = useGoToSignIn();
+  const { previewRole } = useUser();
   // SSR: seed from the server loader so the list is in the first paint and the
   // client hydrates the same markup. Client boot / SPA navigations start null.
   const initial = useInitialData<CompetitionsLoaderData>();
@@ -124,23 +125,35 @@ export function Competitions() {
 
   return (
     <section>
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchField
-          aria-label="Search competitions, tasks, pilots and turnpoints"
-          placeholder="Search comps, tasks, pilots, turnpoints…"
-          value={query}
-          onChange={handleQueryChange}
-          className="w-full max-w-sm"
-        />
-        <span className="ml-auto">
-          {user ? (
-            <LinkButton href="/comp/new">Start a new competition</LinkButton>
-          ) : (
-            <Button type="button" variant="outline" onPress={() => goToSignIn("/comp")}>
-              Sign in to start a competition
-            </Button>
-          )}
-        </span>
+      {/* Search and +, side by side and sticky at the top of the screen — the
+          pilots page's bar (comp/PilotsSection.tsx), so the two lists that
+          are searched first and added to second look and work alike. Under
+          the site header where that sticks (61px, wider screens); on a phone
+          and in a short landscape window the header scrolls away, so the bar
+          goes to the very top.
+
+          The + is the same link for everyone: /comp/new offers a signed-out
+          reader sign-in itself, and coming back from it lands them on the
+          form they asked for. It also means the server and the client render
+          the same button, so nothing swaps in once the user resolves. */}
+      <div className="sticky top-0 z-20 -mt-2 bg-background/90 py-2 backdrop-blur sm:top-[61px] [@media(max-height:500px)]:top-0 print:hidden">
+        <div className="flex items-center gap-3">
+          <SearchField
+            variant="floating"
+            aria-label="Search competitions, tasks, pilots and turnpoints"
+            placeholder="Search comps, tasks, pilots, turnpoints…"
+            value={query}
+            onChange={handleQueryChange}
+            className="min-w-0 flex-1"
+          />
+          <LinkButton
+            href="/comp/new"
+            aria-label="Start a new competition"
+            className="size-12 shrink-0 rounded-full shadow-lg"
+          >
+            <PlusIcon className="size-6" aria-hidden="true" />
+          </LinkButton>
+        </div>
       </div>
 
       {/* Announce filter results to screen readers as the list narrows. The
@@ -151,58 +164,63 @@ export function Competitions() {
           : ""}
       </p>
 
-      {searching ? (
-        <SearchResults state={searchState} query={query} />
-      ) : loadError ? (
-        <p role="alert" className="mt-4">
-          Failed to load competitions. Please reload the page.
-        </p>
-      ) : filteredComps === null ? (
-        <Loading className="mt-4">Loading competitions…</Loading>
-      ) : filteredComps.length === 0 ? (
-        <p className="mt-4 text-muted-foreground">
-          {words.length > 0
-            ? `No competitions match “${query.trim()}”.`
-            : "No competitions found"}
-        </p>
-      ) : (
-        <ul className="mt-4 space-y-2.5">
-          {filteredComps.map((comp) => (
-            <li key={comp.comp_id}>
-              <AriaLink
-                href={compPath(compUrlId(comp, comp.comp_id), comp.name)}
-                className={cn(
-                  cardSurface,
-                  "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
-                )}
-              >
-                <span>
-                  <span className="block font-semibold">
-                    {comp.name}
-                    {comp.test ? (
-                      <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
-                        Hidden
-                      </span>
-                    ) : null}
+      {/* The scroll margin keeps a link reached by keyboard out from under
+          the sticky bar (and the site header above it on wider screens):
+          WCAG 2.4.11, Focus Not Obscured. */}
+      <div className="[&_a]:scroll-mt-20 sm:[&_a]:scroll-mt-36">
+        {searching ? (
+          <SearchResults state={searchState} query={query} />
+        ) : loadError ? (
+          <p role="alert" className="mt-4">
+            Failed to load competitions. Please reload the page.
+          </p>
+        ) : filteredComps === null ? (
+          <Loading className="mt-4">Loading competitions…</Loading>
+        ) : filteredComps.length === 0 ? (
+          <p className="mt-4 text-muted-foreground">
+            {words.length > 0
+              ? `No competitions match “${query.trim()}”.`
+              : "No competitions found"}
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-2.5">
+            {filteredComps.map((comp) => (
+              <li key={comp.comp_id}>
+                <AriaLink
+                  href={compPath(compUrlId(comp, comp.comp_id), comp.name)}
+                  className={cn(
+                    cardSurface,
+                    "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors outline-none data-hovered:bg-muted data-focus-visible:border-ring data-focus-visible:ring-3 data-focus-visible:ring-ring/50"
+                  )}
+                >
+                  <span>
+                    <span className="block font-semibold">
+                      {comp.name}
+                      {comp.test ? (
+                        <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
+                          Hidden
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="block text-sm text-muted-foreground">
+                      {[
+                        categoryLabel(comp.category),
+                        scoringFormatLabel(comp.scoring_format),
+                        comp.pilot_classes.join(", "),
+                      ].join(" · ")}
+                    </span>
                   </span>
-                  <span className="block text-sm text-muted-foreground">
-                    {[
-                      categoryLabel(comp.category),
-                      scoringFormatLabel(comp.scoring_format),
-                      comp.pilot_classes.join(", "),
-                    ].join(" · ")}
+                  <span className="ml-auto text-sm whitespace-nowrap text-muted-foreground">
+                    {comp.first_task_date && comp.last_task_date
+                      ? formatTaskDateRange(comp.first_task_date, comp.last_task_date)
+                      : `created ${formatDate(comp.creation_date)}`}
                   </span>
-                </span>
-                <span className="ml-auto text-sm whitespace-nowrap text-muted-foreground">
-                  {comp.first_task_date && comp.last_task_date
-                    ? formatTaskDateRange(comp.first_task_date, comp.last_task_date)
-                    : `created ${formatDate(comp.creation_date)}`}
-                </span>
-              </AriaLink>
-            </li>
-          ))}
-        </ul>
-      )}
+                </AriaLink>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }
