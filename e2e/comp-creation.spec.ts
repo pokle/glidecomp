@@ -70,9 +70,9 @@ test("dev login, create competition and task", async ({ page, request }) => {
   await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/comp");
 
-  // Step 3: Create a competition. "Start a new competition" renders once the
-  // signed-in user resolves (click auto-waits), and opens a page of its own,
-  // /comp/new (e2e/comp-new.spec.ts holds that page's URL, Back and reload).
+  // Step 3: Create a competition. "Start a new competition" (the + beside the
+  // search) opens a page of its own, /comp/new (e2e/comp-new.spec.ts holds
+  // that page's URL, Back and reload).
   await page.getByRole("link", { name: "Start a new competition" }).click();
   await expect(page).toHaveURL(/\/comp\/new$/);
   const createForm = page.getByRole("main");

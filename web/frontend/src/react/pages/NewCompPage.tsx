@@ -1,7 +1,9 @@
 /**
  * Starting a new competition (/comp/new) — a PAGE of its own, reached from the
- * competitions list's "Start a new competition". Signed-in only, and NOT
- * SSR'd: functions/comp/[[path]].ts serves it a noindex shell.
+ * + beside the competitions list's search ("Start a new competition"). That +
+ * is offered to everyone, so a signed-out reader lands here and is offered
+ * sign-in, coming back to this form. Signed-in only, and NOT SSR'd:
+ * functions/comp/[[path]].ts serves it a noindex shell.
  *
  * It was a dialog over the list until 2026-11, and a dialog with a text field
  * is the shape the overlays rule in CLAUDE.md retires: on an iPhone, the
