@@ -116,15 +116,25 @@ test("the glyph links to the page, and Back returns to the same scroll", async (
   expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
 
-  // Brought into view, which on this short screen means scrolled down. Only
-  // once the scores above the list have loaded: a section that changes height
-  // above it moves the scroll (the browser's scroll anchoring), and the offset
-  // to come back to is the one the reader leaves from. Not "networkidle": the
-  // scores' freshness poll keeps the network busy.
+  // Brought into view, which on this short screen means scrolled down. Once
+  // the scores above the list have loaded, so their height is settled. (Not
+  // "networkidle": the scores' freshness poll keeps the network busy.)
   await expect(page.getByText("Loading scores…")).toHaveCount(0);
   await link.scrollIntoViewIfNeeded();
   const scrolled = await page.evaluate(() => window.scrollY);
   expect(scrolled).toBeGreaterThan(0);
+  const leftAt = (await link.boundingBox())!.y;
+
+  // On the way back the scores load again, above the list. The offset is
+  // restored as soon as the page is tall enough (lib/scroll-restoration.ts),
+  // which can be before they land: "Loading scores…" is a line shorter than
+  // what replaces it, and the browser's scroll anchoring then keeps the screen
+  // where the restore put it — a line off where the reader left. CI's runners
+  // land either side of that race, so it is made to happen every time.
+  await page.route("**/api/comp/*/scores", async (route) => {
+    await new Promise((r) => setTimeout(r, 800));
+    await route.continue();
+  });
 
   await link.click();
   await expect(page).toHaveURL(diagramUrl(compId));
@@ -137,13 +147,14 @@ test("the glyph links to the page, and Back returns to the same scroll", async (
   await page.goBack();
   await expect(page).toHaveURL(compUrl(compId));
   await expect(compHeading(page)).toBeVisible();
-  // Where it was left — give or take the scores section, which loads again
-  // above the list and can shift it by a line or two. A restore that failed would be at the top,
-  // hundreds of pixels away.
-  await expect
-    .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - scrolled))
-    .toBeLessThanOrEqual(40);
+  await expect(page.getByText("Loading scores…")).toHaveCount(0);
+  // Where it was left, give or take that line (22 px at desktop width, 42 on
+  // a phone, where the empty state wraps): the glyph back on the screen near
+  // where it was. A restore that failed would leave the page at the top, and
+  // the glyph hundreds of pixels below the fold.
   await expect(link).toBeInViewport();
+  expect(Math.abs((await link.boundingBox())!.y - leftAt)).toBeLessThanOrEqual(60);
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
 });
 
 test("a reload keeps the page, and Back still leaves it", async ({ page }) => {
