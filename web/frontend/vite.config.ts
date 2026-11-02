@@ -433,7 +433,8 @@ export default defineConfig({
     //    silently fails over the tunnel.
     // Gated so normal localhost HMR (which needs the real port) is unaffected.
     ...(process.env.TUNNEL ? {
-      allowedHosts: ['.trycloudflare.com'] as string[],
+      // .glidecomp.com covers named tunnels (e.g. clarke.glidecomp.com).
+      allowedHosts: ['.trycloudflare.com', '.glidecomp.com'] as string[],
       hmr: { clientPort: 443 },
     } : {}),
     fs: {
