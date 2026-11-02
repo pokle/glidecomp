@@ -32,7 +32,7 @@ export function TaskSettingsPage() {
   // showing what it loaded before the edit.
   const [refresh, setRefresh] = useState(0);
 
-  const { comp, task, isAdmin, notFound, loading } = useTaskAdminPage(
+  const { comp, task, isAdmin, notFound, loading, current } = useTaskAdminPage(
     compId,
     taskId,
     (t) => `GlideComp - ${t.name} settings`,
@@ -40,9 +40,9 @@ export function TaskSettingsPage() {
   );
 
   // Settle the address bar on the canonical slugged path once both names are
-  // known — the comp's name is half of it.
+  // known — the comp's name is half of it — for THIS URL's ids.
   useCanonicalPath(
-    comp && task
+    comp && task && current
       ? taskSettingsPath(compUrlId(comp, compId), comp.name, taskId, task.name)
       : null
   );

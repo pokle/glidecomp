@@ -88,11 +88,15 @@ export function TaskDetail() {
   // client boot / SPA navigations, where the effect below fetches instead.
   const initial = useInitialData<TaskDetailLoaderData>();
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
+  // The comp id `comp` was loaded for — see the canonical path below.
+  const [compLoadedFor, setCompLoadedFor] = useState<string | null>(
+    initial?.comp ? compId : null
+  );
 
   const [refresh, setRefresh] = useState(0);
   // The task is the page. A dead task id is a dead URL; the comp above is
   // supporting detail the page degrades without.
-  const { data: task, notFound } = useSeededResource<TaskDetailData>({
+  const { data: task, notFound, current: taskCurrent } = useSeededResource<TaskDetailData>({
     ids: [compId, taskId],
     seed: initial?.task ?? null,
     load: ([comp_id, task_id]) =>
@@ -104,9 +108,12 @@ export function TaskDetail() {
   });
 
   // Canonicalise once both names are known (comp is a non-critical fetch, so
-  // wait for it rather than 301-ing to a bare comp segment).
+  // wait for it rather than 301-ing to a bare comp segment), and only from
+  // what was loaded for THIS URL: while the ids in the path change, both still
+  // hold the previous URL's, and a path built from them would undo the
+  // navigation.
   useCanonicalPath(
-    comp && task
+    comp && task && taskCurrent && compLoadedFor === compId
       ? taskPath(compUrlId(comp, compId), comp.name, taskId, task.name)
       : null
   );
@@ -133,7 +140,10 @@ export function TaskDetail() {
           param: { comp_id: compId },
         });
         if (!cancelled && res.ok) {
-          setComp((await res.json()) as unknown as CompDetailData);
+          const body = (await res.json()) as unknown as CompDetailData;
+          if (cancelled) return;
+          setComp(body);
+          setCompLoadedFor(compId);
         }
       } catch {
         // Degrade gracefully — no admin features.

@@ -165,6 +165,23 @@ test("the Google Sheets formula is the private link, and works signed out", asyn
 
 test("Reset link retires every link shared so far", async ({ page, playwright }) => {
   const oldKey = shareKey;
+  // Every path the address bar takes, as the page writes it. React Router
+  // moves the address bar only through these two calls, and the record is
+  // kept in the page, so even a flick that lasts one render is caught.
+  await page.addInitScript(() => {
+    const paths: string[] = [];
+    (window as unknown as { __addressBar: string[] }).__addressBar = paths;
+    for (const method of ["pushState", "replaceState"] as const) {
+      const original = history[method];
+      history[method] = function (this: History, ...args: Parameters<History["pushState"]>) {
+        original.apply(this, args);
+        paths.push(location.pathname);
+      };
+    }
+  });
+  const addressBar = () =>
+    page.evaluate(() => (window as unknown as { __addressBar: string[] }).__addressBar.slice());
+
   await devLogin(page);
   await page.goto(`/comp/${fixture.compId}_${oldKey}/settings/access`);
   await expect(page.getByRole("heading", { name: "Access", exact: true })).toBeVisible();
@@ -180,16 +197,32 @@ test("Reset link retires every link shared so far", async ({ page, playwright })
   const reset = page.waitForResponse(
     (r) => r.url().endsWith("/share-key") && r.request().method() === "POST"
   );
+  // The page reading the comp again under its new key, after which nothing
+  // is left for the canonical path to wait on.
+  const refetchPath = new RegExp(`^/api/comp/${fixture.compId}_(?!${oldKey})[a-z0-9]{12}$`);
+  const refetched = page.waitForResponse(
+    (r) => r.request().method() === "GET" && refetchPath.test(new URL(r.url()).pathname)
+  );
+  // Nothing moves the address bar between this click and the POST's answer,
+  // so whatever is recorded from here on is the page's reaction to the reset.
+  const beforeReset = (await addressBar()).length;
   await confirm.getByRole("button", { name: "Reset link" }).click();
   expect((await reset).ok()).toBe(true);
   shareKey = await readShareKey();
   expect(shareKey).not.toBe(oldKey);
 
-  // The page moves onto the new key: the address bar is the new link. Polled
-  // to the new key itself rather than merely off the old one: on the way, the
-  // canonical-path rewrite can put the old key back for a moment while the
-  // page still holds the comp it loaded before the reset (run 41430947899).
+  // The page moves onto the new key: the address bar is the new link.
   await expect.poll(() => urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
+  expect((await refetched).ok()).toBe(true);
+  await expect.poll(() => urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
+
+  // And it never stepped back onto the dead link on the way. The canonical
+  // path used to be built from the comp the page loaded BEFORE the reset, so
+  // the old key came back until the refetch landed (run 41430947899) — long
+  // enough for an organiser to copy it.
+  const afterReset = (await addressBar()).slice(beforeReset);
+  expect(afterReset.length, "the reset moved the address bar").toBeGreaterThan(0);
+  expect(afterReset.filter((path) => path.includes(`_${oldKey}`))).toEqual([]);
 
   const anon = await playwright.request.newContext({ baseURL: BASE_URL });
   try {

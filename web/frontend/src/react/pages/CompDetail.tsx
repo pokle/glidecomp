@@ -71,7 +71,7 @@ export function CompDetail() {
   // the first paint and hydrate the same markup. Null on client boot / SPA nav.
   const initial = useInitialData<CompDetailLoaderData>();
   const [refresh, setRefresh] = useState(0);
-  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, current } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: initial?.comp ?? null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
@@ -80,8 +80,9 @@ export function CompDetail() {
   });
   const [createOpen, setCreateOpen] = useState(false);
 
-  // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
-  useCanonicalPath(comp ? compPath(compUrlId(comp, compId), comp.name) : null);
+  // Settle the address bar on the canonical `${slug}-${id}` once the name loads
+  // (for THIS id, not the one the page was on before).
+  useCanonicalPath(comp && current ? compPath(compUrlId(comp, compId), comp.name) : null);
 
   // Deep links like /comp/:id#scores (the old /scores page redirects there):
   // scroll once the sections exist.
