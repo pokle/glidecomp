@@ -1,12 +1,12 @@
 /**
- * The full-bleed modal shell, `rac/full-screen-sheet.tsx`, through the two
- * callers that had no cover: the task route glyph (#476) and the waypoint/task
- * export QR (#312). The third caller — the task-analysis metric chart (#455)
- * — is exercised by task-analysis.spec.ts, which owns the assertions specific
- * to it (that expanding really enlarges the plot, and that tapping a dot does
- * NOT dismiss).
+ * The full-bleed modal shell, `rac/full-screen-sheet.tsx`, through the caller
+ * that had no cover: the task route glyph (#476). The task export QR (#312)
+ * was the other until it became a page of its own (#813, task-qr-page.spec.ts).
+ * The metric chart (#455) is exercised by task-analysis.spec.ts, which owns
+ * the assertions specific to it (that expanding really enlarges the plot, and
+ * that tapping a dot does NOT dismiss).
  *
- * These two existed for weeks with no automated cover, which only became a
+ * These existed for weeks with no automated cover, which only became a
  * problem when all three were rewritten onto the shared shell. What is pinned
  * here is what the shell promises, not how it looks:
  *
@@ -34,7 +34,6 @@ import { FRONTEND_URL } from "./fixtures/stack";
 const COMP_NAME = "Corryong Cup 2026";
 
 let compPath: string;
-let taskPath: string;
 
 test.beforeAll(async ({ playwright }) => {
   test.setTimeout(300_000);
@@ -61,12 +60,11 @@ test.beforeAll(async ({ playwright }) => {
   const { tasks } = (await detail.json()) as {
     tasks: Array<{ task_id: string; has_xctsk: boolean }>;
   };
-  // Both overlays need a route: the glyph draws one, the QR encodes one.
+  // The glyph draws a route, so the comp must have a task with one.
   const task = tasks.find((t) => t.has_xctsk);
   if (!task) throw new Error(`No task with an xctsk in "${COMP_NAME}"`);
 
   compPath = `/comp/${compId}`;
-  taskPath = `/comp/${compId}/task/${task.task_id}`;
   await api.dispose();
 });
 
@@ -137,35 +135,6 @@ test("a picture sheet dismisses on a tap anywhere, and on Escape", async ({ page
   await trigger.click();
   await dialog.waitFor();
   await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  expect(await rootOverflow(page)).toBe("");
-});
-
-test("the export QR fills the screen on a high-contrast backdrop", async ({ page }) => {
-  await page.goto(taskPath, { waitUntil: "domcontentloaded" });
-  const trigger = page.getByRole("button", { name: "QR code" });
-  await trigger.waitFor({ timeout: 30_000 });
-  // The QR is encoded from a turnpoint fetch, so the sheet arrives a beat
-  // after the press.
-  await trigger.click();
-
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor({ timeout: 30_000 });
-  await expect(dialog).toHaveAttribute("aria-label", "QR code");
-  await expect(dialog.locator("svg").first()).toBeVisible();
-
-  // `backdrop="contrast"`, not the app surface: a QR is read by a camera, so
-  // it needs black behind the white card in either theme. Chromium serialises
-  // the token as `oklab(0 0 0 / 0.9)` or `rgba(0, 0, 0, 0.9)` depending on
-  // version — both contain the three zero channels, and neither the light nor
-  // the dark `--background` does.
-  const backdrop = await page.evaluate(() => {
-    const overlay = document.querySelector('[role="dialog"]')!.closest("[class*='fixed']")!;
-    return getComputedStyle(overlay).backgroundColor;
-  });
-  expect(backdrop.replace(/,/g, "")).toContain("0 0 0");
-
-  await dialog.locator("p").last().click();
   await expect(dialog).toHaveCount(0);
   expect(await rootOverflow(page)).toBe("");
 });

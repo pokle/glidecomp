@@ -415,8 +415,7 @@ These are the standing imperatives. Each links to the reference that explains it
     review, CIVL fill), [#811](https://github.com/pokle/glidecomp/issues/811)
     (waypoint details, altitude review, full-screen map),
     [#812](https://github.com/pokle/glidecomp/issues/812) (turnpoint sheet,
-    quick entry), [#813](https://github.com/pokle/glidecomp/issues/813)
-    (task QR), [#814](https://github.com/pokle/glidecomp/issues/814) (task
+    quick entry), [#814](https://github.com/pokle/glidecomp/issues/814) (task
     diagram), [#816](https://github.com/pokle/glidecomp/issues/816) (task
     analysis thermal view); then [#817](https://github.com/pokle/glidecomp/issues/817)
     deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and

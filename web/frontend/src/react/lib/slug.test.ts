@@ -12,6 +12,7 @@ import {
   taskAnalysisPath,
   taskAnalysisMetricPath,
   metricSegment,
+  taskQrPath,
   pilotPath,
   bareCompId,
   compUrlId,
@@ -108,6 +109,9 @@ describe("path builders", () => {
     );
     expect(taskAnalysisPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)")).toBe(
       "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/analysis"
+    );
+    expect(taskQrPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)")).toBe(
+      "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/qr"
     );
     expect(pilotPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)", "abcd", "Jane Doe")).toBe(
       "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/pilot/jane-doe-abcd"

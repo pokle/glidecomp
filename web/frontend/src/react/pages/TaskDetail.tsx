@@ -16,7 +16,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
-import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
+import { type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
 import { Loading } from "@/react/rac/progress";
 import { LinkButton, buttonVariants } from "@/react/rac/button";
@@ -65,7 +65,7 @@ import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
-import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskQrPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
@@ -302,7 +302,7 @@ export function TaskDetail() {
             compId={compId}
             taskId={taskId}
             taskName={task.name}
-            records={xctaskTurnpointsToRecords(task.xctsk.turnpoints)}
+            qrHref={taskQrPath(compUrlId(comp, compId), comp?.name, taskId, task.name)}
           />
         ) : null}
         {/* Plain anchors (not RAC Links): these leave the SPA for the vanilla
