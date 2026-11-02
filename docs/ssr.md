@@ -42,9 +42,10 @@ shell rather than 404, and there is nothing here for a crawler:
 | `/comp/:id/task/:id/route` | the route editor |
 | `/comp/:id/task/:id/weather` | the weather notes |
 | `/comp/:id/task/:id/pilot/:id/manual-flight` | recording a manual flight |
+| `/comp/:id/task/:id/qr` | the task's QR code (#813) — public, but a picture for a camera |
 | `/comp/:id/task/:id/analysis/similar` | the pilot-similarity sheet, derived client-side |
 
-All but the last are admin-only editors, and every one of them was a dialog over
+All but the last two are admin-only editors, and every one of them was a dialog over
 a public page until #636/#637 — which is why the list grew: converting a dialog
 to a routed page creates a URL the SSR Function has to have an answer for, and
 without an entry here that answer is a genuine 404. The route editor has a

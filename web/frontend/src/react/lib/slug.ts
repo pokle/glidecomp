@@ -295,6 +295,19 @@ export function taskTestIgcPath(
 }
 
 /**
+ * The task's XCTrack `XCTSK:` QR code, at the size a phone camera wants. Public,
+ * like the task page it hangs off.
+ */
+export function taskQrPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/qr`;
+}
+
+/**
  * The per-task analysis. A child of the TASK: it is the one task's
  * report, it is where a reader arrives from, and the breadcrumbs say the same
  * (lib/crumbs.ts). The whole-comp report at {@link compAnalysisPath} collects
