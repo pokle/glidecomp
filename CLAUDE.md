@@ -421,9 +421,8 @@ These are the standing imperatives. Each links to the reference that explains it
     [#816](https://github.com/pokle/glidecomp/issues/816) (task analysis
     figures), and the dialogs with text fields:
     [#820](https://github.com/pokle/glidecomp/issues/820) (submit track on
-    the task page), [#821](https://github.com/pokle/glidecomp/issues/821)
-    (API key), [#822](https://github.com/pokle/glidecomp/issues/822) (test
-    IGC); then [#817](https://github.com/pokle/glidecomp/issues/817)
+    the task page), [#822](https://github.com/pokle/glidecomp/issues/822)
+    (test IGC); then [#817](https://github.com/pokle/glidecomp/issues/817)
     deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
     `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
     do not add a new user of any of it.

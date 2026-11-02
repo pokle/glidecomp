@@ -59,6 +59,10 @@ export const MOBILE_SPEC_FILES = [
   // Starting a new competition: a page rather than a dialog with a text
   // field, which is the shape the phone could not use (#818).
   "comp-new.spec.ts",
+  // Creating an API key on Settings (#821): it was two dialogs, one with a
+  // text field, which is the keyboard trouble the overlays rule is about. Now
+  // a form on the page, with the new key shown in place.
+  "settings-api-keys.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */
