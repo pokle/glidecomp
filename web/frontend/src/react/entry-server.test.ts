@@ -67,6 +67,41 @@ describe("entry-server render (SSR)", () => {
     expect(html).toContain("Corryong Cup 2026");
   });
 
+  // The full-size route diagram (#814): the SVG is drawn by a pure layout
+  // module, so the route is in the server's HTML, not painted in afterwards.
+  it("draws the task's route diagram in the HTML, with the turnpoint names", async () => {
+    const tp = (name: string, lat: number, lon: number, type?: "SSS" | "ESS") => ({
+      type,
+      radius: 400,
+      waypoint: { name, lat, lon },
+    });
+    const data = {
+      comp: { comp_id: "abc", name: "Corryong Cup 2026", test: false },
+      task: {
+        task_id: "t1",
+        name: "Task 1",
+        xctsk: {
+          taskType: "CLASSIC",
+          version: 1,
+          turnpoints: [
+            tp("LAUNCH", -36.2, 147.9),
+            tp("STARTC", -36.25, 147.95, "SSS"),
+            tp("MIDWAY", -36.5, 148.3),
+            tp("GOALPT", -36.72, 148.52, "ESS"),
+          ],
+          sss: { type: "RACE", direction: "EXIT" },
+          goal: { type: "CYLINDER" },
+        },
+      },
+    };
+    const html = await renderToString("/comp/corryong-cup-2026-abc/task/task-1-t1/diagram", data);
+    expect(html).toContain("Route for Task 1");
+    expect(html).toContain("<svg");
+    expect(html).toContain("MIDWAY");
+    // The trail back to the task and the comp.
+    expect(html).toContain('href="/comp/corryong-cup-2026-abc/task/task-1-t1"');
+  });
+
   // The server used to render the pathname alone, so `?class=floater` came out
   // as the default class and the client — which does see the query — hydrated
   // a different tree. Every shared deep link was a hydration mismatch.

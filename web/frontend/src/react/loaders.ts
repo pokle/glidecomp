@@ -291,6 +291,34 @@ export async function loadTaskDetail(
   return { task, comp, score };
 }
 
+// ── /comp/:compId/task/:taskId/diagram ───────────────────────────────────────
+
+export interface TaskDiagramLoaderData {
+  task: TaskDetailData;
+  /** The names in the trail, and the id its links carry (a hidden comp's
+   *  share key with it). */
+  comp: CompDetailData;
+}
+
+/**
+ * The task's route at full size. Two fetches, both critical: the picture is
+ * the task's route, and the comp is what the page hangs off. Each 404s for a
+ * hidden comp read without its link, which is the page's own 404.
+ */
+export async function loadTaskDiagram(
+  f: FetchFn,
+  compId: string,
+  taskId: string
+): Promise<TaskDiagramLoaderData> {
+  const cid = encodeURIComponent(compId);
+  const tid = encodeURIComponent(taskId);
+  const [task, comp] = await Promise.all([
+    getJson<TaskDetailData>(f, `/api/comp/${cid}/task/${tid}`),
+    getJson<CompDetailData>(f, `/api/comp/${cid}`),
+  ]);
+  return { task, comp };
+}
+
 // ── /comp/:compId/task/:taskId/pilot/:pilotId ────────────────────────────────
 
 export interface PilotScoreLoaderData {

@@ -42,6 +42,7 @@ import { CompDetail } from "./pages/CompDetail";
 import { CompScoresPage } from "./pages/CompScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
+import { TaskDiagramPage } from "./pages/TaskDiagramPage";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { CompAnalysis } from "./pages/CompAnalysis";
 import { TaskAnalysis } from "./pages/TaskAnalysis";
@@ -234,6 +235,14 @@ export function AppRoutes() {
                 router ranks the static `new` above `:taskId` by itself. */}
             <Route path="/comp/:compId/task/new" element={<CompNewTaskPage />} />
             <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+            {/* The task's route at full size, opened from the glyph beside
+                each task on the competition page (#814; it was an overlay).
+                Public and server-rendered, but noindexed: the task page is
+                the indexable form of the same route. */}
+            <Route
+              path="/comp/:compId/task/:taskId/diagram"
+              element={<TaskDiagramPage />}
+            />
             {/* The task's three admin-only editors, all SIBLINGS: each is
                 reached from the part of the task page it edits, so none nests
                 under another. Noindex shells in the SSR Function, like /pilots.

@@ -237,6 +237,19 @@ export function taskPath(
 }
 
 /**
+ * The task's route diagram at full size — the readable version of the glyph
+ * beside each task on the competition page. Public, like the task page.
+ */
+export function taskDiagramPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/diagram`;
+}
+
+/**
  * The admin-only page that creates a task. A page and not a dialog over the
  * comp: see the overlays rule in CLAUDE.md. `new` can never be a task's id
  * (a sqid is at least four letters), so it cannot shadow a real task.

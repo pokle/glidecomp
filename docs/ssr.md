@@ -19,6 +19,7 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 | `/comp/:id/scores` | the canonical full-scores page; `?task=` deep-links the scores-by-task view |
 | `/comp/:id/waypoints` | |
 | `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
+| `/comp/:id/task/:id/diagram` | the route diagram at full size (#814); always `noindex` — the task page is the indexable form |
 | `/comp/:id/task/:id/pilot/:id` | the report card |
 | `/comp/:id/analysis` | the COMP analysis: every task's read against each other |
 | `/comp/:id/task/:id/analysis` | the TASK analysis (a contents list for the six below) |

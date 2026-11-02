@@ -1,8 +1,9 @@
 /**
- * The full-bleed modal shell, `rac/full-screen-sheet.tsx`, through the two
- * callers that had no cover: the task route glyph (#476) and the waypoint/task
- * export QR (#312). The third caller — the task-analysis metric chart (#455)
- * — is exercised by task-analysis.spec.ts, which owns the assertions specific
+ * The full-bleed modal shell, `rac/full-screen-sheet.tsx`, through the caller
+ * that had no cover: the waypoint/task export QR (#312). The task route glyph
+ * (#476) was the other, until it became a page of its own (#814,
+ * task-diagram-page.spec.ts). The third caller — the task-analysis metric
+ * chart (#455) — is exercised by task-analysis.spec.ts, which owns the assertions specific
  * to it (that expanding really enlarges the plot, and that tapping a dot does
  * NOT dismiss).
  *
@@ -33,7 +34,6 @@ import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";
 
-let compPath: string;
 let taskPath: string;
 
 test.beforeAll(async ({ playwright }) => {
@@ -61,11 +61,10 @@ test.beforeAll(async ({ playwright }) => {
   const { tasks } = (await detail.json()) as {
     tasks: Array<{ task_id: string; has_xctsk: boolean }>;
   };
-  // Both overlays need a route: the glyph draws one, the QR encodes one.
+  // The QR encodes the task's route, so the task needs one.
   const task = tasks.find((t) => t.has_xctsk);
   if (!task) throw new Error(`No task with an xctsk in "${COMP_NAME}"`);
 
-  compPath = `/comp/${compId}`;
   taskPath = `/comp/${compId}/task/${task.task_id}`;
   await api.dispose();
 });
@@ -76,70 +75,6 @@ test.beforeAll(async ({ playwright }) => {
 function rootOverflow(page: Page) {
   return page.evaluate(() => document.documentElement.style.overflow);
 }
-
-/** The route glyph on the comp page — the first task in the list. */
-function routeGlyph(page: Page) {
-  return page.getByRole("button", { name: /^Show the route for / }).first();
-}
-
-test("the route glyph opens the task full screen and gives focus a way out", async ({
-  page,
-}) => {
-  await page.goto(compPath, { waitUntil: "domcontentloaded" });
-  const trigger = routeGlyph(page);
-  await trigger.waitFor({ timeout: 30_000 });
-  const triggerName = await trigger.getAttribute("aria-label");
-
-  expect(await rootOverflow(page)).toBe("");
-  await trigger.click();
-
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor();
-  // Named for what it shows, not "dialog" — the sheet takes the whole screen,
-  // so its name is the only orientation a screen-reader user gets.
-  await expect(dialog).toHaveAttribute("aria-label", /^Route for /);
-  await expect(dialog.locator("svg").first()).toBeVisible();
-  // Focus goes to the exit, not to the dialog container (which is what RAC
-  // would focus otherwise, leaving Escape as the only way out).
-  await expect(page.locator(":focus")).toHaveText("Close");
-  expect(await rootOverflow(page)).toBe("hidden");
-
-  await page.getByRole("button", { name: "Close" }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(trigger).toBeFocused();
-  expect(triggerName).toMatch(/^Show the route for /);
-  // Released, not left behind — a stuck lock silently kills the whole page.
-  expect(await rootOverflow(page)).toBe("");
-});
-
-test("a picture sheet dismisses on a tap anywhere, and on Escape", async ({ page }) => {
-  await page.goto(compPath, { waitUntil: "domcontentloaded" });
-  const trigger = routeGlyph(page);
-  await trigger.waitFor({ timeout: 30_000 });
-
-  // dismissOnPress: the diagram is a picture, so the whole sheet is a close
-  // target. (The metric chart deliberately is not — see task-analysis.spec.)
-  await trigger.click();
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor();
-  await dialog.locator("p").first().click();
-  await expect(dialog).toHaveCount(0);
-  // Wait for the close to finish settling before pressing again. `toHaveCount(0)`
-  // only says the sheet has left the DOM; react-aria restores focus and releases
-  // the scroll lock just after that, and a press that lands in the gap is
-  // swallowed by the overlay still tearing down — the sheet never reopens and the
-  // `waitFor` below times out instead. That is a real flake, seen once in CI on an
-  // otherwise green shard. Focus restore is the signal because it is the last step
-  // of the close AND a promise the shell makes for every exit path (WCAG 2.4.3,
-  // see the file header) — the Close-button test above waits on exactly this.
-  await expect(trigger).toBeFocused();
-
-  await trigger.click();
-  await dialog.waitFor();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  expect(await rootOverflow(page)).toBe("");
-});
 
 test("the export QR fills the screen on a high-contrast backdrop", async ({ page }) => {
   await page.goto(taskPath, { waitUntil: "domcontentloaded" });

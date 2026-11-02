@@ -34,6 +34,7 @@ import {
   compPath,
   compSettingsPath,
   submitTrackPath,
+  taskDiagramPath,
   taskPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -47,7 +48,7 @@ import {
 import { CompScoresSummary } from "../comp/CompScoresSummary";
 import { CompSetupProgress } from "../comp/CompSetupProgress";
 import { CompWrapUp } from "../comp/CompWrapUp";
-import { TaskDiagramOverlay } from "../comp/TaskDiagramOverlay";
+import { TaskDiagram } from "../comp/TaskDiagram";
 import {
   isPastCloseDate,
   type CompDetailData,
@@ -545,16 +546,39 @@ function TasksList({
                   ) : null}
                 </Link>
                 {/* Tiny route glyph: enough to tell one day's task from
-                    another's at a glance, and tappable for the readable
-                    version — at this size the shape is all it can carry, so
-                    "which turnpoints is that?" is one press away instead of
-                    a page load. Nothing is reserved when a task has no
-                    route: the glyphs are right-aligned, so an empty box
-                    buys no alignment and only pads the row — which on a
-                    phone (or against a comp-api that predates the `route`
-                    field) turns the whole list into dead space. */}
+                    another's at a glance, and a link to the readable version
+                    — at this size the shape is all it can carry, so "which
+                    turnpoints is that?" is one press away. A page of its own
+                    (#814), left with Back, which returns here at the same
+                    scroll; it was a full-screen overlay. It is the row's
+                    SECOND target, beside the task link rather than inside it,
+                    so opening the diagram never takes the row's main action.
+                    Nothing is reserved when a task has no route: the glyphs
+                    are right-aligned, so an empty box buys no alignment and
+                    only pads the row — which on a phone (or against a
+                    comp-api that predates the `route` field) turns the whole
+                    list into dead space. */}
                 {row.task.route ? (
-                  <TaskDiagramOverlay task={row.task.route} taskName={row.task.name} />
+                  <LinkButton
+                    variant="ghost"
+                    // h-auto + tight padding: a frame around the glyph, not a
+                    // chrome-bearing control — about 80×58 px, well past the
+                    // pointer-target floor (WCAG 2.5.8).
+                    className="h-auto shrink-0 p-1"
+                    href={taskDiagramPath(compId, compName, row.task.task_id, row.task.name)}
+                    aria-label={`Show the route for ${row.task.name}`}
+                  >
+                    {/* size-auto is load-bearing: the button's base style
+                        crushes an SVG without a `size-` class to 16px. The
+                        glyph is decorative — the link's name says what it
+                        opens. */}
+                    <TaskDiagram
+                      task={row.task.route}
+                      size="xs"
+                      label={null}
+                      className="size-auto"
+                    />
+                  </LinkButton>
                 ) : null}
               </li>
             ))}
