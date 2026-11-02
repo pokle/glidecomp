@@ -270,12 +270,13 @@ export function PilotsSection({
         <Loading className="mt-4">Loading pilots…</Loading>
       ) : (
         <>
-          {/* Search and +, sticky at the top of the screen — under the site
-              header where that sticks (wider screens), at the very top where
-              it scrolls away (phones, short landscape). A bar at the bottom
-              had to dodge the keyboard by hand; up here the keyboard never
-              reaches it. */}
-          <div className="sticky top-0 z-20 mt-4 bg-background/90 py-2 backdrop-blur sm:top-[61px] [@media(max-height:500px)]:top-0 print:hidden">
+          {/* Search and +, sticky at the top of the screen, under the comp's
+              section tabs (CompSectionNav, 37px), which stick too — and under
+              the site header where that sticks as well (61px, wider screens).
+              In a short landscape window neither sticks, so the bar goes to
+              the very top. A bar at the bottom had to dodge the keyboard by
+              hand; up here the keyboard never reaches it. */}
+          <div className="sticky top-[37px] z-20 mt-4 bg-background/90 py-2 backdrop-blur sm:top-[98px] [@media(max-height:500px)]:top-0 print:hidden">
             <div className="flex items-center gap-3">
               <SearchField
                 variant="floating"

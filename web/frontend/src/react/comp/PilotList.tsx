@@ -59,13 +59,14 @@ export function PilotList({
 }) {
   const row = (p: CompPilot & { id: string }) => (
     // The scroll margin keeps a row reached by keyboard out from under the
-    // sticky search bar (and the site header above it on wider screens):
+    // sticky search bar and the section tabs above it (and the site header
+    // above those on wider screens):
     // WCAG 2.4.11, Focus Not Obscured.
     <GridListItem
       variant="rows"
       id={p.id}
       textValue={p.name}
-      className="cursor-pointer scroll-mt-16 sm:scroll-mt-32"
+      className="cursor-pointer scroll-mt-28 sm:scroll-mt-44"
     >
       <RowContent title={p.name} detail={pilotDetail(p)} chevron />
     </GridListItem>

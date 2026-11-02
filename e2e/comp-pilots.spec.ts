@@ -591,6 +591,10 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the sear
   const plus = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
   expect(plus!.y, "the + stays on screen").toBeGreaterThanOrEqual(0);
   expect(plus!.y, "the + stays near the top").toBeLessThan(200);
+  // ... and wholly below the comp's section tabs, which stick too.
+  const tabs = await page.getByRole("navigation", { name: "Sections" }).boundingBox();
+  const scrolledSearch = await page.getByRole("group").filter({ has: search(page) }).first().boundingBox();
+  expect(scrolledSearch!.y, "the search box clears the section tabs").toBeGreaterThanOrEqual(tabs!.y + tabs!.height);
   expect(
     await page.getByRole("button", { name: "Add pilot" }).evaluate((el) => {
       for (let n: Element | null = el; n; n = n.parentElement) {
@@ -609,6 +613,8 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the sear
     const top = await page.evaluate(() => document.activeElement!.getBoundingClientRect().top);
     const bar = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
     expect(top, "the focused row starts below the search bar").toBeGreaterThanOrEqual(bar!.y + bar!.height);
+    const tabsNow = await page.getByRole("navigation", { name: "Sections" }).boundingBox();
+    expect(top, "the focused row starts below the section tabs").toBeGreaterThanOrEqual(tabsNow!.y + tabsNow!.height);
   }
 
   // A pilot's page does not scroll sideways either.
