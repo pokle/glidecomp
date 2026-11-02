@@ -135,23 +135,31 @@ export function NavActionRow({
   onPress,
   label,
   description,
+  value,
   icon,
   destructive,
+  isDisabled,
   className,
 }: {
   onPress: () => void;
   label: string;
   description?: string;
+  /** Right-aligned muted summary, as on a NavRow. */
+  value?: React.ReactNode;
   icon?: React.ReactNode;
   destructive?: boolean;
+  /** While the action is already under way (a list of choices, one taken). */
+  isDisabled?: boolean;
   className?: string;
 }) {
   return (
     <li>
       <AriaButton
         onPress={onPress}
+        isDisabled={isDisabled}
         className={cn(
           rowClass,
+          "data-disabled:opacity-60",
           destructive && "font-medium text-destructive",
           className
         )}
@@ -159,6 +167,7 @@ export function NavActionRow({
         <RowBody
           label={label}
           description={description}
+          value={value}
           icon={icon}
           chevron={false}
         />

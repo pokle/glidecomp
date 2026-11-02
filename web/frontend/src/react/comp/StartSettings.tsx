@@ -1,9 +1,9 @@
 /**
  * Start (SSS) settings — type, direction and gates.
  *
- * Shared by the route page's Start disclosure and the turnpoint sheet, so
- * opening the start cylinder and expanding the page panel edit the same
- * state and cannot drift.
+ * Shared by the route page's Start disclosure and the start turnpoint's own
+ * page (both through comp/RouteSettings.tsx), so opening the start cylinder
+ * and expanding the page panel edit the same draft and cannot drift.
  */
 import type { SSSConfig } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";

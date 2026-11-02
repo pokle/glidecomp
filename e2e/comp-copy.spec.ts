@@ -13,7 +13,8 @@
  *   already on the roster as already here, copies only the rest, and returns
  *   to the list;
  * - copying a route lists the nearest routes first and loads the chosen one
- *   into the editor as UNSAVED work, which Save then stores.
+ *   into the route editor's draft as UNSAVED work (a reload keeps it), which
+ *   Save then stores.
  *
  * The rules themselves (who is the same pilot, how near is measured, what a
  * clone leaves behind) are competition-api's comp-copy.test.ts and
@@ -202,7 +203,7 @@ test("Copy a route lists the nearest first and loads the choice as unsaved work"
   const task = await createTask(thisYear, "Day 1");
 
   await page.goto(`/comp/${thisYear}/task/${task}/route`);
-  await page.getByRole("link", { name: "Copy from another competition" }).click();
+  await page.getByRole("button", { name: "Copy from another competition" }).click();
   await expect(page).toHaveURL(/\/route\/copy$/);
   await expect(h1(page, "Copy a route")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("status").filter({ hasText: "Nearest to this competition’s waypoints first." })).toBeVisible({
@@ -214,16 +215,20 @@ test("Copy a route lists the nearest first and loads the choice as unsaved work"
     .getByRole("searchbox", { name: "Search by competition or task name" })
     .fill(`Route Last Year ${testInfo.project.name}`);
   await expect(page).toHaveURL(/[?&]q=/);
-  const row = page.getByRole("link", { name: /Elliot to Khancoban/ });
+  const row = page.getByRole("button", { name: /Elliot to Khancoban/ });
   await expect(row).toContainText("under 1 km away");
   await expect(row).toContainText("ELLIOT → CORRYG → KHANCO");
   await row.click();
 
-  // Back in the editor, with the route loaded and not yet saved.
-  await expect(page).toHaveURL(/\/route\?from_comp=.+&from_task=.+$/, { timeout: 20_000 });
+  // Back on the route — the route editor's own page, by Back — with the
+  // route loaded into its draft and not yet saved.
+  await expect(page).toHaveURL(new RegExp(`/task/[^/]*${task}/route$`), { timeout: 20_000 });
   const turnpoints = page.getByRole("grid", { name: /^Turnpoints/ }).getByRole("row");
   await expect(turnpoints).toHaveCount(3, { timeout: 20_000 });
   expect(((await (await api.get(`/api/comp/${thisYear}/task/${task}`)).json()) as { xctsk: unknown }).xctsk).toBeNull();
+  // The draft is in this tab's storage, so a reload finds it.
+  await page.reload();
+  await expect(turnpoints).toHaveCount(3, { timeout: 20_000 });
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/task/[^/]*${task}$`), { timeout: 20_000 });

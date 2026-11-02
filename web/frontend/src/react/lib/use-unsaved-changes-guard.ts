@@ -50,21 +50,6 @@ import { useNavigate } from "react-router-dom";
 import { useConfirm } from "./confirm";
 import { useBackDismiss, type BackDismissLayer } from "./use-back-dismiss";
 
-/** What a page can ask of its guard. */
-export interface UnsavedChangesGuard {
-  /**
-   * Leave on purpose — a save that worked — giving the guard's history
-   * entry back FIRST and only then running `then` (the page's own
-   * navigation). Keep the guard armed until this is called.
-   *
-   * Disarming instead raced: the release is a `history.back()` that lands a
-   * moment later, and when the save was quick the page's `navigate()` landed
-   * first, so the release stepped back off the page it had just reached. The
-   * route editor stayed on screen after "Route saved".
-   */
-  leave(then: () => void): void;
-}
-
 export function useUnsavedChangesGuard(
   dirty: boolean,
   options: {
@@ -94,7 +79,7 @@ export function useUnsavedChangesGuard(
      */
     onDiscard?: () => void;
   }
-): UnsavedChangesGuard {
+): void {
   const confirm = useConfirm();
   const navigate = useNavigate();
 
@@ -199,13 +184,4 @@ export function useUnsavedChangesGuard(
       document.removeEventListener("click", onClickCapture, true);
     };
   }, [dirty]);
-
-  const leaveRef = useRef<UnsavedChangesGuard>({
-    leave(then) {
-      const held = guardRef.current.layer;
-      if (held) held.unwind(then);
-      else then();
-    },
-  });
-  return leaveRef.current;
 }

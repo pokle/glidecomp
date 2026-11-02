@@ -381,6 +381,13 @@ test.describe("SSR — isolation and fallback", () => {
     // Creating a task (#819): the same shape as the public task page, so it
     // must be caught before the task route would try to render (and 404) it.
     "/comp/anything/task/new",
+    // The route editor and its other pages (#812): admin-only, under the
+    // SSR'd task route, which they must not be mistaken for.
+    "/comp/anything/task/anything/route",
+    "/comp/anything/task/anything/route/1",
+    "/comp/anything/task/anything/route/quick",
+    "/comp/anything/task/anything/route/xcontest",
+    "/comp/anything/task/anything/route/add-waypoint",
     // Create a test IGC (#822): admin-only, under the SSR'd task route, which
     // it must not be mistaken for.
     "/comp/anything/task/anything/test-igc",

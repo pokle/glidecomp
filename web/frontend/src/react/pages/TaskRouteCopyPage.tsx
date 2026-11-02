@@ -1,8 +1,9 @@
 /**
- * Choosing a route to copy into this task
- * (/comp/:compId/task/:taskId/route/copy[?q=…]) — ADMIN-ONLY and NOT SSR'd
- * (functions/comp/[[path]].ts serves it a noindex shell). Reached from the
- * route editor's "Copy from another competition".
+ * Copy from another competition (/comp/:c/task/:t/route/copy[?q=…]) — a whole
+ * route from another task's saved one. A page of the route editor, like Load
+ * from XContest (#812): ADMIN-ONLY and NOT SSR'd (a noindex shell in
+ * functions/comp/[[path]].ts), and it edits the same DRAFT
+ * (comp/route-draft.ts), so going here and back is not leaving the editor.
  *
  * Every saved route the organiser can see, nearest first: measured from each
  * route's take-off to the nearest of this competition's waypoints and route
@@ -10,36 +11,35 @@
  * (competition-api's route-sources.ts). A competition that knows no place
  * yet lists the newest first. The distance orders the list and never filters
  * it, and the search box narrows it by competition or task name for a route
- * flown somewhere else. The search is in the URL (`?q=`), so Back from the
- * editor returns to the list as it was left.
+ * flown somewhere else. The search is in the URL (`?q=`), so a reload or
+ * Back keeps it.
  *
- * Choosing a route opens the editor with it loaded as UNSAVED work
- * (`taskRouteCopyFromPath`): the source is in the URL, so the editor fetches
- * it itself rather than being handed it in memory, and nothing is written
- * until Save, which is the ordinary route save with its own checks, audit
- * entry and rescoring.
+ * Choosing a route reads that task through the ordinary task route (so a
+ * hidden competition's route is there for its organisers and nobody else),
+ * moves its start gates, goal deadline and take-off window to the same LOCAL
+ * time on this task's day (`rebaseRouteTimes`), puts it into the draft —
+ * asking first when that would replace turnpoints already there — and goes
+ * back to the route. Nothing is saved until Save on the route.
  */
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { NotFound } from "@/react/components/NotFound";
+import { useSearchParams } from "react-router-dom";
+import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { Button } from "@/react/rac/button";
 import { SearchField } from "@/react/rac/field";
-import { NavList, NavRow } from "@/react/rac/nav-list";
+import { NavActionRow, NavList } from "@/react/rac/nav-list";
 import { Loading } from "@/react/rac/progress";
+import type { XCTask } from "@glidecomp/engine";
 import { api } from "../../comp/api";
-import { formatRouteDistance } from "../comp/comp-copy";
-import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "../comp/types";
+import { SectionHeader } from "../components/SectionHeader";
+import { formatRouteDistance, rebaseRouteTimes } from "../comp/comp-copy";
+import { routeEditorGate } from "../comp/RouteEditorGate";
+import { fetchWithRetry } from "../comp/types";
+import { useLoadRoute, useRouteEditor, type RouteEditorState } from "../comp/use-route-editor";
 import { underTaskRoute } from "../lib/crumbs";
 import { formatTaskDate } from "../lib/format";
-import {
-  compUrlId,
-  idFromSegment,
-  taskRouteCopyFromPath,
-  taskRouteCopyPath,
-} from "../lib/slug";
+import { taskRouteCopyPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
-import { useSeededResource } from "../lib/use-seeded-resource";
-import { useAdminView, useUser } from "../lib/user";
 
 const TITLE = "Copy a route";
 
@@ -66,83 +66,29 @@ interface RouteSources {
 }
 
 export function TaskRouteCopyPage() {
-  const { compId: compParam, taskId: taskParam } = useParams<{
-    compId: string;
-    taskId: string;
-  }>();
-  const compId = idFromSegment(compParam ?? "");
-  const taskId = idFromSegment(taskParam ?? "");
-  const { loading } = useUser();
-
-  const { data: comp, notFound: compNotFound, current: compCurrent } =
-    useSeededResource<CompDetailData>({
-      ids: [compId],
-      seed: null,
-      load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
-    });
-  const { data: task, notFound: taskNotFound, current: taskCurrent } =
-    useSeededResource<TaskDetailData>({
-      ids: [compId, taskId],
-      seed: null,
-      load: ([comp_id, task_id]) =>
-        api.api.comp[":comp_id"].task[":task_id"].$get({ param: { comp_id, task_id } }),
-      title: (t) => `GlideComp - Copy a route into ${t.name}`,
-    });
-  const urlId = comp ? compUrlId(comp, compId) : compId;
+  const editor = useRouteEditor();
+  const { urlId, compName, taskId, taskName } = editor;
   useCanonicalPath(
-    comp && task && compCurrent && taskCurrent
-      ? taskRouteCopyPath(urlId, comp.name, taskId, task.name)
+    editor.comp && editor.task && editor.current
+      ? taskRouteCopyPath(urlId, compName, taskId, taskName)
       : null
   );
-  const isAdmin = useAdminView(!!comp?.is_admin);
-
-  if (compNotFound || taskNotFound || !compId || !taskId) {
-    return <NotFound title="Task not found" />;
-  }
-  if (!comp || !task || loading) return <Loading>Loading…</Loading>;
-
-  const crumbs = underTaskRoute(urlId, comp.name, taskId, task.name);
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs items={crumbs} current={TITLE} />
-        <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-        <p className="mt-2 text-muted-foreground">
-          Editing a task&rsquo;s route is for the competition’s organisers.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-2xl">
-      <Breadcrumbs items={crumbs} current={TITLE} />
-      <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Choose a route to load into {task.name}. Nothing is saved until you press Save in the
-        route editor.
-      </p>
-      <RouteSourceList compId={urlId} comp={comp} taskId={taskId} task={task} />
-    </div>
-  );
+  const gate = routeEditorGate(editor);
+  if (gate) return gate;
+  return <CopyRoute editor={editor} />;
 }
 
-function RouteSourceList({
-  compId,
-  comp,
-  taskId,
-  task,
-}: {
-  compId: string;
-  comp: CompDetailData;
-  taskId: string;
-  task: TaskDetailData;
-}) {
+function CopyRoute({ editor }: { editor: RouteEditorState }) {
+  const { urlId, compName, taskId, taskName } = editor;
+  const loadRoute = useLoadRoute(editor);
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState(() => params.get("q") ?? "");
   const [query, setQuery] = useState(text.trim());
   const [result, setResult] = useState<{ query: string; data: RouteSources } | null>(null);
   const [failed, setFailed] = useState(false);
+  /** The route being read, between the press and the draft. */
+  const [choosing, setChoosing] = useState<RouteSource | null>(null);
+  const [chooseError, setChooseError] = useState<string | null>(null);
 
   // The search box is in the URL, replacing rather than pushing, so Back
   // leaves the page instead of walking back through every letter typed.
@@ -165,7 +111,7 @@ function RouteSourceList({
         const res = await fetchWithRetry(
           () =>
             api.api.comp[":comp_id"].task[":task_id"]["route-sources"].$get(
-              { param: { comp_id: compId, task_id: taskId }, query: query ? { q: query } : {} },
+              { param: { comp_id: urlId, task_id: taskId }, query: query ? { q: query } : {} },
               { init: { signal: controller.signal } }
             ),
           { signal: controller.signal }
@@ -181,50 +127,105 @@ function RouteSourceList({
       }
     })();
     return () => controller.abort();
-  }, [compId, taskId, query]);
+  }, [urlId, taskId, query]);
+
+  async function choose(source: RouteSource) {
+    setChoosing(source);
+    setChooseError(null);
+    try {
+      const res = await fetchWithRetry(() =>
+        api.api.comp[":comp_id"].task[":task_id"].$get({
+          param: { comp_id: source.comp_id, task_id: source.task_id },
+        })
+      );
+      const body = res.ok
+        ? ((await res.json()) as unknown as { task_date: string; xctsk: XCTask | null })
+        : null;
+      if (!body?.xctsk) {
+        setChooseError(`Could not read the route of ${source.task_name}. Try again.`);
+        return;
+      }
+      const task = rebaseRouteTimes(
+        body.xctsk,
+        body.task_date,
+        editor.task?.task_date ?? body.task_date,
+        editor.tz
+      );
+      const label = source.this_comp
+        ? source.task_name
+        : `${source.task_name} (${source.comp_name})`;
+      // The load may have asked first ("Replace the route…?").
+      if (await loadRoute(task, label)) editor.leave({ afterConfirm: true });
+    } catch {
+      setChooseError("Network error. Check your connection, then try again.");
+    } finally {
+      setChoosing(null);
+    }
+  }
 
   const data = result?.data ?? null;
   return (
-    <div className="mt-6 flex flex-col gap-4">
-      <SearchField
-        aria-label="Search by competition or task name"
-        placeholder="Search by competition or task name"
-        value={text}
-        onChange={setText}
+    <div className="max-w-2xl">
+      <Breadcrumbs items={underTaskRoute(urlId, compName, taskId, taskName)} current={TITLE} />
+      <SectionHeader
+        as="h1"
+        className="mt-2"
+        title={TITLE}
+        action={
+          <Button variant="outline" onPress={() => editor.leave()}>
+            Cancel
+          </Button>
+        }
       />
-      {failed ? (
-        <p className="text-muted-foreground">Could not load the routes. Try again.</p>
-      ) : !data ? (
-        <Loading>Loading routes…</Loading>
-      ) : (
-        <>
-          <p className="text-sm text-muted-foreground" role="status">
-            {orderNote(data, result?.query ?? "")}
-          </p>
-          {data.routes.length > 0 ? (
-            <NavList>
-              {data.routes.map((r) => (
-                <NavRow
-                  key={r.task_id}
-                  to={taskRouteCopyFromPath(compId, comp.name, taskId, task.name, {
-                    compId: r.comp_id,
-                    taskId: r.task_id,
-                  })}
-                  label={r.task_name}
-                  description={[
-                    r.this_comp ? "This competition" : r.comp_name,
-                    formatTaskDate(r.task_date),
-                    routeNames(r.turnpoints),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  value={formatRouteDistance(r.distance_m) ?? undefined}
-                />
-              ))}
-            </NavList>
-          ) : null}
-        </>
-      )}
+      <p className="mt-2 text-sm text-muted-foreground">
+        Choose a route to load into {taskName}. It replaces the route; nothing is saved until
+        you press Save.
+      </p>
+      <div className="mt-6 flex flex-col gap-4">
+        <SearchField
+          aria-label="Search by competition or task name"
+          placeholder="Search by competition or task name"
+          value={text}
+          onChange={setText}
+        />
+        {chooseError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{chooseError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {choosing ? <Loading>Loading {choosing.task_name}…</Loading> : null}
+        {failed ? (
+          <p className="text-muted-foreground">Could not load the routes. Try again.</p>
+        ) : !data ? (
+          <Loading>Loading routes…</Loading>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground" role="status">
+              {orderNote(data, result?.query ?? "")}
+            </p>
+            {data.routes.length > 0 ? (
+              <NavList>
+                {data.routes.map((r) => (
+                  <NavActionRow
+                    key={r.task_id}
+                    onPress={() => void choose(r)}
+                    isDisabled={choosing !== null}
+                    label={r.task_name}
+                    description={[
+                      r.this_comp ? "This competition" : r.comp_name,
+                      formatTaskDate(r.task_date),
+                      routeNames(r.turnpoints),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    value={formatRouteDistance(r.distance_m) ?? undefined}
+                  />
+                ))}
+              </NavList>
+            ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 }

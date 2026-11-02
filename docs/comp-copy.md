@@ -108,10 +108,13 @@ distances are WGS84 geodesics from `geo.ts`. They are exact: a chord through
 the ellipsoid is a lower bound on the geodesic (`chordLowerBound`), so most
 Vincenty calls can be skipped without changing the answer.
 
-When the organiser chooses a route, the route editor opens with
-`?from_comp=…&from_task=…`. It fetches that task through the ordinary task
-route and loads it as **unsaved** work. Save is the ordinary route save, with
-its own checks, audit entry and score bump.
+The page is one of the route editor's own pages (#812), like Load from
+XContest, so it edits the same **draft** of the route (`comp/route-draft.ts`,
+[drafts.md](drafts.md)). When the organiser chooses a route, the page reads
+that task through the ordinary task route and loads it into the draft. If the
+draft already holds turnpoints, it asks first. Then it goes back to the route.
+The route is **unsaved** work, and a reload keeps it. Save is the ordinary
+route save, with its own checks, audit entry and score bump.
 
 Start gates, the goal deadline and the take-off window keep their **local**
 time (`rebaseRouteTimes()` in `comp/comp-copy.ts`). An `.xctsk` stores these

@@ -18,9 +18,9 @@ import {
   compSettingsPath,
   compPilotsPath,
   pilotPath,
-  taskRoutePath,
   compWaypointsPath,
   compAltitudeReviewPath,
+  taskRoutePath,
 } from "./slug";
 
 export type Crumb = { label: string; to: string };
@@ -122,7 +122,10 @@ export function underTask(
   ];
 }
 
-/** Ancestors of a page under a task's route editor (copying a route in). */
+/**
+ * Ancestors of the route editor's pages (one turnpoint, Quick entry, Load from
+ * XContest, Add waypoint): the task, then its route.
+ */
 export function underTaskRoute(
   compId: string | undefined,
   compName: string | null | undefined,

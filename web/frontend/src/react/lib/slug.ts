@@ -349,8 +349,45 @@ export function taskRoutePath(
 }
 
 /**
- * Choosing a route from another task to copy into this one's route editor.
- * The choice comes back to the editor as {@link taskRouteCopyFromPath}.
+ * The route editor's other pages (#812), each a page of its own rather than
+ * a sheet or a dialog over the route: see the overlays rule in CLAUDE.md. A
+ * turnpoint is addressed by the editor's row id, not its code or position —
+ * see comp/route-draft.ts for why.
+ */
+export function taskRouteTurnpointPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  rowId: number
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/${rowId}`;
+}
+
+/** The whole route typed as one line. */
+export function taskRouteQuickPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/quick`;
+}
+
+/** Loading a route from an XContest / XCTrack task code. */
+export function taskRouteXContestPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/xcontest`;
+}
+
+/**
+ * Copying another task's saved route into this one (comp-copy): a page of
+ * the route editor like Load from XContest, which loads the chosen route
+ * into the same draft and goes back to the route.
  */
 export function taskRouteCopyPath(
   compId: string,
@@ -361,19 +398,15 @@ export function taskRouteCopyPath(
   return `${taskRoutePath(compId, compName, taskId, taskName)}/copy`;
 }
 
-/**
- * The route editor with another task's route loaded into it as unsaved
- * work. The source is in the URL, so a reload loads it again.
- */
-export function taskRouteCopyFromPath(
+/** Adding a competition waypoint from the route's map; `search` carries the map pick. */
+export function taskRouteAddWaypointPath(
   compId: string,
   compName: string | null | undefined,
   taskId: string,
   taskName: string | null | undefined,
-  from: { compId: string; taskId: string }
+  search = ""
 ): string {
-  const query = new URLSearchParams({ from_comp: from.compId, from_task: from.taskId });
-  return `${taskRoutePath(compId, compName, taskId, taskName)}?${query.toString()}`;
+  return `${taskRoutePath(compId, compName, taskId, taskName)}/add-waypoint${search}`;
 }
 
 /** The organiser's account of what the day did. */

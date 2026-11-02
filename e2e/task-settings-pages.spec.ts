@@ -17,7 +17,11 @@
  * - the weather-notes round trip, and that the task page links to it rather
  *   than opening a dialog;
  * - the route editor as a real route, with its unsaved-changes guard;
- * - start and goal settings on the SSS / last-turnpoint sheets (as well as
+ * - the route editor's own pages (#812) — a turnpoint, Quick entry, Load
+ *   from XContest, Add waypoint, each a sheet or a dialog until then — over
+ *   one draft of the route that survives going between them, Back and a
+ *   reload;
+ * - start and goal settings on the SSS / last-turnpoint pages (as well as
  *   the page disclosures);
  * - non-admin fallback, and that a made-up editor segment is a dead URL;
  * - the whole journey with no horizontal overflow, which is the point of the
@@ -325,22 +329,45 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   ).toBeVisible();
   await noHorizontalOverflow("the route editor");
 
-  // Its Save is fixed to the bottom of the VIEWPORT, so it is reachable
-  // without scrolling past the whole page.
+  // Its Save is sticky to the bottom of the VIEWPORT — sticky in the page's
+  // flow, never fixed (the overlays rule) — so it is reachable without
+  // scrolling past the whole page.
   const save = page.getByRole("button", { name: "Save" });
   const saveBox = await save.boundingBox();
   const viewport = page.viewportSize()!;
   expect(saveBox, "the route editor's Save has a bounding box").not.toBeNull();
-  expect(saveBox!.y).toBeLessThanOrEqual(viewport.height);
+  expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(viewport.height);
+  expect(
+    await page
+      .getByRole("button", { name: "Save" })
+      .evaluate((el) => getComputedStyle(el.closest("form")!).position)
+  ).toBe("sticky");
+
+  // The route editor's other pages (#812), where they were a full-screen
+  // sheet and a dialog: each a page that fits the phone.
+  await page.goto(`/comp/${compId}/task/${taskId}/route/xcontest`);
+  await expect(
+    page.getByRole("heading", { name: "Load from XContest", exact: true })
+  ).toBeVisible();
+  await noHorizontalOverflow("Load from XContest");
+  await page.goto(`/comp/${compId}/task/${taskId}/route/add-waypoint?at=-36.9,148.1`);
+  await expect(page.getByRole("heading", { name: "Add waypoint", exact: true })).toBeVisible();
+  await noHorizontalOverflow("Add waypoint");
 });
 
 /**
- * The route without the syntax (#661).
+ * The route without the syntax (#661), and since #812 without overlays.
  *
- * The three pieces that replaced the read-only listing plus a text field: rows
- * that open a full-screen turnpoint sheet, a Reorder MODE carrying Move up /
- * Move down (no drag — see RAC gotcha #4), and Quick entry as its own sheet
- * applied by an explicit press.
+ * The pieces that replaced the read-only listing plus a text field: rows that
+ * open a turnpoint's own PAGE (/route/:n — a full-screen sheet until #812), a
+ * Reorder MODE carrying Move up / Move down (no drag — see RAC gotcha #4), and
+ * Quick entry, Load from XContest and Add waypoint as pages of their own.
+ * They all edit one DRAFT of the route, kept in the tab's storage
+ * (comp/route-draft.ts), so going to one and back — by Done or by Back — and
+ * reloading all find the route as it was left.
+ *
+ * URLs are compared by the ids in them: the pages rewrite themselves to the
+ * canonical slug form once the names arrive.
  */
 const ROUTE_WAYPOINTS = [
   { code: "ALPHA", name: "Alpha Hill", latitude: -36.5, longitude: 147.8, altitude: 900, radius: 400 },
@@ -391,7 +418,30 @@ async function routeRows(page: Page): Promise<string[]> {
   return (await rows.allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim());
 }
 
-test("a turnpoint is edited in a sheet, and reordered in a mode", async ({
+/**
+ * The turnpoint codes, in route order: each row's first word that is not its
+ * role, its Exit badge or (while reordering) its position.
+ */
+async function routeCodes(page: Page): Promise<string[]> {
+  return (await routeRows(page)).map(
+    (t) => t.split(" ").find((w) => !/^(TAKEOFF|SSS|ESS|GOAL|Exit|\d+\.)$/.test(w)) ?? ""
+  );
+}
+
+/**
+ * Open a turnpoint's page from its row. Scrolled into view first: on a phone
+ * the sticky Save bar can sit over the row a click is aimed at.
+ */
+async function openTurnpoint(page: Page, code: string) {
+  const row = page.getByRole("row").filter({ hasText: code });
+  await row.scrollIntoViewIfNeeded();
+  await row.click();
+}
+
+/** The route editor's own page, whatever slug the URL has settled on. */
+const ROUTE_URL = /\/route$/;
+
+test("a turnpoint is edited on its own page, and reordered in a mode", async ({
   page,
 }) => {
   await devLogin(page, ADMIN_USER);
@@ -400,41 +450,67 @@ test("a turnpoint is edited in a sheet, and reordered in a mode", async ({
 
   expect(await routeRows(page)).toHaveLength(3);
 
-  // A row opens the turnpoint sheet — over the editor, not away from it, so
-  // the unsaved route survives (and the unsaved-changes guard never fires on
-  // the way in, which a link would).
-  await page.getByRole("row").filter({ hasText: "BRAVO" }).click();
-  const sheet = page.getByRole("dialog", { name: /^Edit / });
-  await expect(sheet.getByRole("heading", { name: "Edit turnpoint" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(1);
+  // A row opens the turnpoint's PAGE, addressed by the draft's row id — not
+  // an overlay: nothing traps focus or dims the route behind it.
+  await openTurnpoint(page, "BRAVO");
+  await expect(page).toHaveURL(/\/route\/2$/);
+  await expect(page.getByRole("heading", { name: "Edit turnpoint" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // There is no Cancel: nothing here is saved, so Done and Back both keep
+  // the edits, and Delete is the only way to lose a turnpoint.
+  await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(0);
 
-  // There is no Cancel: nothing here is saved, so Done and the back gesture
-  // both keep the edits, and Delete is the only way to lose a turnpoint.
-  await sheet.getByRole("button", { name: "Set radius 2000 metres" }).click();
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden();
-  expect((await routeRows(page)).join("\n")).toContain("BRAVO");
+  await page.getByRole("button", { name: "Set radius 2000 metres" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
+  expect(await routeRows(page)).toEqual(
+    expect.arrayContaining([expect.stringContaining("r. 2 km")])
+  );
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // The route is a draft in this tab's storage: a reload finds it.
+  await page.reload();
   expect(await routeRows(page)).toEqual(
     expect.arrayContaining([expect.stringContaining("r. 2 km")])
   );
 
-  // THE reason the sheet is a sheet: the route is dirty now, and
-  // use-unsaved-changes-guard intercepts every same-origin anchor click while
-  // it is. A row that navigated would ask "Discard route changes?" on the way
-  // IN to editing a turnpoint — so opening one must raise no dialog at all.
-  await page.getByRole("row").filter({ hasText: "CHARL" }).click();
-  await expect(sheet.getByRole("heading", { name: "Edit turnpoint" })).toBeVisible();
+  // The route is dirty now, and the guard asks before a link LEAVES it — but
+  // a turnpoint's page is inside the editor, so opening one asks nothing.
+  await openTurnpoint(page, "CHARL");
+  await expect(page).toHaveURL(/\/route\/3$/);
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden();
+  await page.getByRole("button", { name: "Set radius 5000 metres" }).click();
+  // Back keeps the edit as surely as Done does: it went into the draft as it
+  // was made.
+  await page.goBack();
+  await expect(page).toHaveURL(ROUTE_URL);
+  expect((await routeRows(page)).find((t) => t.includes("CHARL"))).toContain("r. 5 km");
+
+  // Delete is on the turnpoint's page, and takes it out of the route.
+  await openTurnpoint(page, "CHARL");
+  await page.getByRole("button", { name: "Delete turnpoint" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO"]);
+  // A link to the deleted turnpoint names nothing now, not some other row.
+  await page.goto(`/comp/${compId}/task/${taskId}/route/3`);
+  await expect(page.getByRole("heading", { name: "Turnpoint not found" })).toBeVisible();
+
+  // Throwing the draft away on purpose: Cancel asks, then the saved route is
+  // back.
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL"]);
+  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
   // Reorder is a MODE: at rest the rows carry no per-row chrome at all.
   await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
   await page.getByRole("button", { name: "Reorder", exact: true }).click();
   await page.getByRole("button", { name: "Move CHARL up" }).click();
 
-  const order = (await routeRows(page)).map((t) => t.split(" ")[1]);
-  expect(order).toEqual(["ALPHA", "CHARL", "BRAVO"]);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "CHARL", "BRAVO"]);
   // Rows swapping places is invisible to a screen reader, so it is said.
   await expect(page.getByText("CHARL moved to 2 of 3")).toBeAttached();
   // Focus follows the turnpoint, not the position it left — otherwise a
@@ -443,6 +519,11 @@ test("a turnpoint is edited in a sheet, and reordered in a mode", async ({
 
   await page.getByRole("button", { name: "Done reordering" }).click();
   await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+
+  // A row id follows its turnpoint through the reorder: CHARL is still 3.
+  await openTurnpoint(page, "CHARL");
+  await expect(page).toHaveURL(/\/route\/3$/);
+  await expect(page.getByRole("textbox", { name: "Code" })).toHaveValue("CHARL");
 });
 
 test("start and goal settings live on the turnpoint they belong to", async ({
@@ -455,37 +536,34 @@ test("start and goal settings live on the turnpoint they belong to", async ({
   // Opening the start cylinder is how you change start type, direction and
   // gates — the page disclosure still has them, but that is not where an
   // organiser looking at the SSS row goes.
-  await page.getByRole("row").filter({ hasText: "BRAVO" }).click();
-  const sheet = page.getByRole("dialog", { name: /^Edit / });
+  await openTurnpoint(page, "BRAVO");
   await expect(
-    sheet.getByRole("heading", { name: "Start Speed Section (SSS)" })
+    page.getByRole("heading", { name: "Start Speed Section (SSS)" })
   ).toBeVisible();
-  await expect(sheet.getByRole("radio", { name: /^Enter start/ })).toBeVisible();
-  await expect(sheet.getByRole("radio", { name: /^Goal line/ })).toHaveCount(0);
-  await expect(
-    sheet.getByRole("radio", { name: "Turnpoint", exact: true })
-  ).toBeVisible();
-  await expect(
-    sheet.getByRole("radio", { name: "Turnpoint (last is goal)" })
-  ).toHaveCount(0);
-  await sheet.getByText("Enter start — cross inward").click();
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden();
+  await expect(page.getByRole("radio", { name: /^Enter start/ })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /^Goal line/ })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Turnpoint", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Turnpoint (last is goal)" })).toHaveCount(0);
+  await page.getByText("Enter start — cross inward").click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
   // The Start disclosure badge reads the live config without expanding.
   await expect(page.getByText(/enter start/)).toBeVisible();
 
-  // The last turnpoint is the goal: its sheet carries type and deadline.
-  await page.getByRole("row").filter({ hasText: "CHARL" }).click();
-  await expect(sheet.getByRole("heading", { name: "Goal" })).toBeVisible();
-  await expect(sheet.getByRole("radio", { name: /^Goal line/ })).toBeVisible();
-  await expect(sheet.getByRole("radio", { name: /^Enter start/ })).toHaveCount(0);
-  await expect(
-    sheet.getByRole("radio", { name: "Turnpoint (last is goal)" })
-  ).toBeVisible();
-  await expect(sheet.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
-  await sheet.getByText("Goal line — perpendicular to the last leg").click();
-  await sheet.getByRole("button", { name: "Done" }).click();
-  await expect(sheet).toBeHidden();
+  // The last turnpoint is the goal: its page carries type and deadline.
+  await openTurnpoint(page, "CHARL");
+  await expect(page.getByRole("heading", { name: "Goal", exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /^Goal line/ })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /^Enter start/ })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Turnpoint (last is goal)" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await page.getByText("Goal line — perpendicular to the last leg").click();
+  // A reload of the turnpoint's page keeps what was chosen on it.
+  await page.reload();
+  await expect(page.getByRole("radio", { name: /^Goal line/ })).toBeChecked();
+  // And Done after the reload still lands on the route.
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
 
   await page.getByRole("button", { name: /^Goal$/ }).click();
   await expect(page.getByRole("radio", { name: /^Goal line/ })).toBeChecked();
@@ -499,43 +577,56 @@ test("adding a turnpoint infers Takeoff, Start, then Goal after a Goal", async (
   await page.goto(`/comp/${compId}/task/${taskId}/route`);
 
   // Seeded last (CHARL) is untyped in the file, so the UI loads it as Goal.
+  // Add turnpoint opens a page for the new one, under a row id of its own.
   await page.getByRole("button", { name: "Add turnpoint" }).click();
-  const add = page.getByRole("dialog", { name: /^Add / });
-  await expect(add.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
-  await add.getByRole("textbox", { name: "Code" }).fill("DELTA");
-  await add.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.8, 148.1");
-  await add.getByRole("button", { name: "Done" }).click();
-  await expect(add).toBeHidden();
+  await expect(page).toHaveURL(/\/route\/4$/);
+  await expect(page.getByRole("heading", { name: "Add turnpoint" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await page.getByRole("textbox", { name: "Code" }).fill("DELTA");
+  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.8, 148.1");
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
 
   // The new last is Goal; the previous Goal is an ordinary Turnpoint.
-  await page.getByRole("row").filter({ hasText: "CHARL" }).click();
-  const edit = page.getByRole("dialog", { name: /^Edit / });
-  await expect(edit.getByRole("radio", { name: "Turnpoint", exact: true })).toBeChecked();
-  await expect(edit.getByRole("heading", { name: "Goal" })).toHaveCount(0);
-  await edit.getByRole("button", { name: "Done" }).click();
+  await openTurnpoint(page, "CHARL");
+  await expect(page.getByRole("radio", { name: "Turnpoint", exact: true })).toBeChecked();
+  await expect(page.getByRole("heading", { name: "Goal", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Done" }).click();
 
-  await page.getByRole("row").filter({ hasText: "DELTA" }).click();
-  await expect(edit.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
-  await expect(edit.getByRole("heading", { name: "Goal" })).toBeVisible();
-  await edit.getByRole("button", { name: "Done" }).click();
+  await openTurnpoint(page, "DELTA");
+  await expect(page.getByRole("radio", { name: "Goal", exact: true })).toBeChecked();
+  await expect(page.getByRole("heading", { name: "Goal", exact: true })).toBeVisible();
+  // Coordinates that do not read as coordinates are refused under their
+  // field, and Done stays on the page.
+  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("nowhere");
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toBeVisible();
+  await expect(page).toHaveURL(/\/route\/4$/);
+  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.8, 148.1");
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
 
   await page.getByRole("button", { name: "Clear turnpoints" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Clear" }).click();
   await page.getByRole("button", { name: "Add turnpoint" }).click();
-  await expect(add.getByRole("radio", { name: "Takeoff" })).toBeChecked();
-  await expect(add.getByRole("heading", { name: "Goal" })).toHaveCount(0);
-  await add.getByRole("textbox", { name: "Code" }).fill("ONE");
-  await add.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 147.8");
-  await add.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("radio", { name: "Takeoff" })).toBeChecked();
+  await expect(page.getByRole("heading", { name: "Goal", exact: true })).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Code" }).fill("ONE");
+  await page.getByRole("textbox", { name: "Coordinates (lat, lon)" }).fill("-36.5, 147.8");
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
 
   await page.getByRole("button", { name: "Add turnpoint" }).click();
   await expect(
-    add.getByRole("radio", { name: "Start Speed Section (SSS)", exact: true })
+    page.getByRole("radio", { name: "Start Speed Section (SSS)", exact: true })
   ).toBeChecked();
-  await expect(add.getByRole("heading", { name: "Goal" })).toHaveCount(0);
-  await expect(
-    add.getByRole("heading", { name: "Start Speed Section (SSS)" })
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Goal", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Start Speed Section (SSS)" })).toBeVisible();
+
+  // An Add left empty adds nothing: Back from it, and the route is as it was.
+  await page.goBack();
+  await expect(page).toHaveURL(ROUTE_URL);
+  expect(await routeCodes(page)).toEqual(["ONE"]);
 });
 
 test("Quick entry rebuilds the route without losing what the line can't say", async ({
@@ -548,44 +639,154 @@ test("Quick entry rebuilds the route without losing what the line can't say", as
 
   // Set a radius the ALPHA waypoint record does not carry, so a rebuild from
   // the waypoints would visibly lose it.
-  await page.getByRole("row").filter({ hasText: "ALPHA" }).click();
-  const tp = page.getByRole("dialog", { name: /^Edit / });
-  await tp.getByRole("button", { name: "Set radius 3000 metres" }).click();
-  await tp.getByRole("button", { name: "Done" }).click();
-  await expect(tp).toBeHidden();
+  await openTurnpoint(page, "ALPHA");
+  await page.getByRole("button", { name: "Set radius 3000 metres" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
 
+  // Quick entry is a page of its own now, not a sheet over the route.
   await page.getByRole("button", { name: "Quick entry" }).click();
-  const quick = page.getByRole("dialog", { name: "Quick entry" });
-  const line = quick.getByRole("textbox", { name: "Enter task" });
-  // The sheet opens showing the route that is loaded — it edits a route as
-  // well as entering one.
+  await expect(page).toHaveURL(/\/route\/quick$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const line = page.getByRole("textbox", { name: "Enter task" });
+  // It opens showing the route in the draft — it edits a route as well as
+  // entering one.
   await expect(line).toHaveValue(/ALPHA/);
   await expect(line).toHaveValue(/CHARL/);
 
   await line.fill("ALPHA, BRAVO");
-  await quick.getByRole("button", { name: "Use this route" }).click();
-  await expect(quick).toBeHidden();
+  await page.getByRole("button", { name: "Use this route" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
 
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO"]);
   const rows = await routeRows(page);
-  expect(rows.map((t) => t.split(" ")[1])).toEqual(["ALPHA", "BRAVO"]);
   // Reconciled, not rebuilt: the hand-set radius rode through the apply even
   // though the grammar has no way to have said it.
   expect(rows[0]).toContain("r. 3 km");
 
   // Leaving with the text changed asks first — the press is the commit.
   await page.getByRole("button", { name: "Quick entry" }).click();
-  await quick.getByRole("textbox", { name: "Enter task" }).fill("ALPHA");
-  await quick.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("textbox", { name: "Enter task" }).fill("ALPHA");
+  await page.getByRole("button", { name: "Cancel" }).click();
   const discard = page.getByRole("alertdialog");
   await expect(discard.getByText("Discard this text?")).toBeVisible();
   await discard.getByRole("button", { name: "Keep editing" }).click();
-  await expect(quick).toBeVisible();
-  await quick.getByRole("button", { name: "Cancel" }).click();
+  // Gone, rather than closing: on its way out the dialog's own buttons fall
+  // back to their default words, one of which is "Cancel".
+  await expect(discard).toHaveCount(0);
+  await expect(page).toHaveURL(/\/route\/quick$/);
+  await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Discard" }).click();
-  await expect(quick).toBeHidden();
-  // The route is untouched by a dismissed sheet.
-  expect((await routeRows(page)).map((t) => t.split(" ")[1])).toEqual([
-    "ALPHA",
-    "BRAVO",
-  ]);
+  await expect(page).toHaveURL(ROUTE_URL);
+  // The route is untouched by a line that was not used.
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO"]);
+
+  // And Back is the browser's: it leaves without using the line, too.
+  await page.getByRole("button", { name: "Quick entry" }).click();
+  await page.getByRole("textbox", { name: "Enter task" }).fill("BRAVO");
+  await page.goBack();
+  await expect(page).toHaveURL(ROUTE_URL);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO"]);
+});
+
+test("Load from XContest is a page, and refuses a code under its field", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page);
+
+  // XContest is not ours to call from a test: answer for it. An unknown code
+  // is a 404 there.
+  const xcontest = "https://tools.xcontest.org/api/xctsk/load/**";
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  await page.route(xcontest, (route) =>
+    route.request().url().endsWith("/NOPE")
+      ? route.fulfill({ status: 404, headers: cors, body: "" })
+      : route.fulfill({
+          status: 200,
+          headers: { ...cors, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            taskType: "CLASSIC",
+            version: 1,
+            turnpoints: [
+              { type: "TAKEOFF", radius: 400, waypoint: { name: "XC1", lat: -36.1, lon: 147.1, altSmoothed: 500 } },
+              { radius: 1000, waypoint: { name: "XC2", lat: -36.2, lon: 147.2, altSmoothed: 600 } },
+            ],
+          }),
+        })
+  );
+
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  await page.getByRole("button", { name: "Load from XContest" }).click();
+  await expect(page).toHaveURL(/\/route\/xcontest$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  const code = page.getByRole("textbox", { name: "Task code" });
+  await code.fill("NOPE");
+  await page.getByRole("button", { name: "Load", exact: true }).click();
+  // Under the field it is about, which keeps what was typed.
+  await expect(page.getByText('Task code "NOPE" not found')).toBeVisible();
+  await expect(code).toHaveValue("NOPE");
+  await expect(code).toHaveAttribute("aria-invalid", "true");
+
+  await code.fill("ABC123");
+  await page.getByRole("button", { name: "Load", exact: true }).click();
+  // The route already has turnpoints, so it asks before replacing them.
+  await page.getByRole("alertdialog").getByRole("button", { name: "Replace" }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
+  expect(await routeCodes(page)).toEqual(["XC1", "XC2"]);
+
+  // Back to the route leaves the editor's draft where it was; Cancel there
+  // throws it away so the next test starts from the seeded route.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
+});
+
+test("a waypoint added from the route's map is a page, and is saved with the route", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await seedRoute(page);
+
+  // What a tap on the map with "Add from map" armed opens: the tap rides in
+  // the URL, so this is the page as the tap leaves it (and as a reload finds
+  // it). Reached without the route underneath, its way out is the route.
+  await page.goto(`/comp/${compId}/task/${taskId}/route/add-waypoint?at=-36.9,148.2`);
+  await expect(page.getByRole("heading", { name: "Add waypoint", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Coordinates (lat, lon)" })).toHaveValue(
+    "-36.9,148.2"
+  );
+  await page.getByRole("textbox", { name: "Code" }).fill("ECHO");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page).toHaveURL(ROUTE_URL);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL", "ECHO"]);
+  await expect(
+    page.getByText("1 new — saved to the competition when you save the route")
+  ).toBeVisible();
+
+  // Nothing reached the competition yet.
+  const before = await page.request.get(`/api/comp/${compId}/waypoints`);
+  expect(
+    ((await before.json()) as { waypoints: { code: string }[] }).waypoints.map((w) => w.code)
+  ).not.toContain("ECHO");
+
+  // Save writes the waypoint, then the route, and goes back to the task.
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
+  const after = await page.request.get(`/api/comp/${compId}/waypoints`);
+  expect(
+    ((await after.json()) as { waypoints: { code: string }[] }).waypoints.map((w) => w.code)
+  ).toContain("ECHO");
+  const task = await page.request.get(`/api/comp/${compId}/task/${taskId}`);
+  expect(
+    ((await task.json()) as { xctsk: { turnpoints: { waypoint: { name: string } }[] } }).xctsk
+      .turnpoints.map((t) => t.waypoint.name)
+  ).toEqual(["ALPHA", "BRAVO", "CHARL", "ECHO"]);
+
+  // Saved, the draft is gone: the route opens clean.
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  expect(await routeCodes(page)).toEqual(["ALPHA", "BRAVO", "CHARL", "ECHO"]);
+  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 });
