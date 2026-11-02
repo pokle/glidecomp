@@ -42,10 +42,12 @@ import { CompDetail } from "./pages/CompDetail";
 import { CompScoresPage } from "./pages/CompScoresPage";
 import { CompWaypoints } from "./pages/CompWaypoints";
 import { TaskDetail } from "./pages/TaskDetail";
+import { TaskDiagramPage } from "./pages/TaskDiagramPage";
 import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { CompAnalysis } from "./pages/CompAnalysis";
 import { TaskAnalysis } from "./pages/TaskAnalysis";
 import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
+import { TaskAnalysisMetricChart } from "./pages/TaskAnalysisMetricChart";
 
 /*
  * Everything else is signed-in, admin-only or otherwise never server-rendered,
@@ -103,6 +105,12 @@ const TaskWeatherPage = lazy(() =>
 );
 const TaskTestIgcPage = lazy(() =>
   import("./pages/TaskTestIgcPage").then((m) => ({ default: m.TaskTestIgcPage }))
+);
+// Public, but a noindex shell rather than SSR'd: a QR code is a picture for a
+// camera, with nothing in it for a crawler. Lazy, so `qrcode.react` stays out
+// of the entry bundles.
+const TaskQrPage = lazy(() =>
+  import("./pages/TaskQrPage").then((m) => ({ default: m.TaskQrPage }))
 );
 // Client-only (a noindex shell in the SSR Function), and lazy so it costs
 // nothing on the pages that do not open it.
@@ -239,6 +247,14 @@ export function AppRoutes() {
                 router ranks the static `new` above `:taskId` by itself. */}
             <Route path="/comp/:compId/task/new" element={<CompNewTaskPage />} />
             <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
+            {/* The task's route at full size, opened from the glyph beside
+                each task on the competition page (#814; it was an overlay).
+                Public and server-rendered, but noindexed: the task page is
+                the indexable form of the same route. */}
+            <Route
+              path="/comp/:compId/task/:taskId/diagram"
+              element={<TaskDiagramPage />}
+            />
             {/* The task's three admin-only editors, all SIBLINGS: each is
                 reached from the part of the task page it edits, so none nests
                 under another. Noindex shells in the SSR Function, like /pilots.
@@ -265,6 +281,12 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/test-igc"
               element={<TaskTestIgcPage />}
+            />
+            {/* The task's QR code, for a phone camera: a page of its own
+                (#813), where it was a full-screen overlay over the task page. */}
+            <Route
+              path="/comp/:compId/task/:taskId/qr"
+              element={<TaskQrPage />}
             />
             {/* This task's own TASK analysis, collected by the comp analysis: a summary, with
                 a box per section linking to the section's own page. */}
@@ -296,6 +318,14 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/analysis/:section"
               element={<TaskAnalysisSection />}
+            />
+            {/* One metric's chart at full size (#815), under the Metric
+                details section that holds every metric. Public and SSR'd
+                like the sections, but noindexed: it is a bigger copy of a
+                chart the strategies page already shows. */}
+            <Route
+              path="/comp/:compId/task/:taskId/analysis/metrics/:metric"
+              element={<TaskAnalysisMetricChart />}
             />
             {/* Where the per-task analysis lived while it was nested under the
                 comp report (July–August 2026). */}

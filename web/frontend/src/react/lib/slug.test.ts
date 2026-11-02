@@ -10,6 +10,9 @@ import {
   compSettingsPath,
   taskPath,
   taskAnalysisPath,
+  taskAnalysisMetricPath,
+  metricSegment,
+  taskQrPath,
   pilotPath,
   bareCompId,
   compUrlId,
@@ -107,9 +110,21 @@ describe("path builders", () => {
     expect(taskAnalysisPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)")).toBe(
       "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/analysis"
     );
+    expect(taskQrPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)")).toBe(
+      "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/qr"
+    );
     expect(pilotPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)", "abcd", "Jane Doe")).toBe(
       "/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/pilot/jane-doe-abcd"
     );
+  });
+
+  test("a metric's full-size chart: its id as a dot-free segment under Metric details", () => {
+    // No dot in the path: the dev and e2e servers treat a dotted path as a
+    // file and never hand it to the app (isSpaRoute, src/dev-routing.ts).
+    expect(metricSegment("climb.time_to_core")).toBe("climb-time-to-core");
+    expect(
+      taskAnalysisMetricPath("voqc", "Corryong Cup 2026", "zqfs", "Task 3 (Open)", "climb.time_to_core")
+    ).toBe("/comp/corryong-cup-2026-voqc/task/task-3-open-zqfs/analysis/metrics/climb-time-to-core");
   });
 
   test("a missing name degrades to a bare-id segment", () => {
@@ -146,6 +161,12 @@ describe("hidden competitions' share links", () => {
     );
     expect(submitTrackPath("vzuq")).toBe("/submit?comp=vzuq");
     expect(submitTrackPath("vzuq", null)).toBe("/submit?comp=vzuq");
+  });
+
+  test("the key rides into a metric's full-size chart", () => {
+    expect(
+      taskAnalysisMetricPath(compUrlId(hidden, "vzuq"), "Corryong Cup 2027", "abcd", "Task 1", "glide.ld")
+    ).toBe("/comp/corryong-cup-2027-vzuq_7hq2m9xk4rwd/task/task-1-abcd/analysis/metrics/glide-ld");
   });
 
   test("bareCompId drops the key, for comparing ids", () => {

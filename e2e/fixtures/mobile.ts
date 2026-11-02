@@ -38,6 +38,13 @@ export const MOBILE_SPEC_FILES = [
   // (#820): Back, reload and the keyboard are the browser's, which is the
   // whole reason it moved, and a phone is where a dialog's went wrong.
   "task-submit-link.spec.ts",
+  // The task's QR code (#813), a page where it was a full-screen overlay: a
+  // phone is both what shows it to a camera and where overlays went wrong.
+  "task-qr-page.spec.ts",
+  // The task's route at full size (#814): a page under the task where it was
+  // a full-screen overlay over the competition page, opened from a glyph in
+  // a list read on a phone.
+  "task-diagram-page.spec.ts",
   // The routed task editors (#637) — settings, weather notes and the route
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
@@ -70,6 +77,10 @@ export const MOBILE_SPEC_FILES = [
   // text field, which is the keyboard trouble the overlays rule is about. Now
   // a form on the page, with the new key shown in place.
   "settings-api-keys.spec.ts",
+  // A metric's chart at full size (#815), a page where it was a full-screen
+  // overlay. A phone is where the inline chart is too small to read, so it is
+  // the width this page exists for.
+  "task-analysis-metric-chart.spec.ts",
   // The thermal map (#816): one thermal's rose and map at the size of the
   // screen, a page where it was a full-screen sheet. The page has to fit a
   // phone — no sideways scroll, the figure no taller than the screen — and

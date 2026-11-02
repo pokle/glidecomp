@@ -98,13 +98,14 @@ export const E2E_SHARDS = {
     "trusted-types.spec.ts", // 57.1s
     "report-card.spec.ts", // 28.4s
     "task-analysis.spec.ts", // 20.6s
+    "task-analysis-metric-chart.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-thermal-map.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "explain-affordance.spec.ts", // 4.5s
     "lazy-map-in-view.spec.ts", // 2.0s
   ],
 
   /*
-   * What an organiser does, in three shards. Nine of the twelve `mobile` specs
+   * What an organiser does, in three shards. Nine of the sixteen `mobile` specs
    * are in them, because the organiser's pages are built mobile-first (#636,
    * #637, and the waypoints and pilots lists), so most of these run twice.
    */
@@ -157,7 +158,8 @@ export const E2E_SHARDS = {
   "public-and-pilot": [
     "track-submission.spec.ts", // 25.9s (chromium + mobile)
     "task-submit-link.spec.ts", // new — measure on its first CI run (chromium + mobile)
-    "full-screen-sheets.spec.ts", // 19.6s, ~17s of it seeding the sample comp
+    "task-qr-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
+    "task-diagram-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "legal-notice.spec.ts", // 12.9s
     "settings-save-ux.spec.ts", // 7.2s
     "settings-api-keys.spec.ts", // new — creating an API key (chromium + mobile)

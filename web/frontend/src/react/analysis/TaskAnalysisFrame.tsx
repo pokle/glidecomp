@@ -27,7 +27,7 @@ import {
   underTaskAnalysis,
   type Crumb,
 } from "../lib/crumbs";
-import { compAnalysisPath } from "../lib/slug";
+import { compAnalysisPath, taskAnalysisSectionPath } from "../lib/slug";
 import { PilotHighlightProvider } from "./PilotHighlightContext";
 import { PilotPicker } from "./PilotPicker";
 import type { TaskReportBundle } from "./use-task-report";
@@ -42,11 +42,13 @@ export interface TaskAnalysisFrameProps {
    */
   section?: { label: string; lede: string };
   /**
-   * Crumbs between the chapter and this page, for a page one level below a
-   * section (the thermal map under Thermals). Each carries its own query: the
-   * page building it knows which of its parameters the parent reads.
+   * The section a page one level further down hangs off — "Metric details"
+   * for one metric's full-size chart. It becomes the trail's last crumb, and
+   * takes the report's view state with it, as the chapter does for a section —
+   * or, given `search`, that query instead: the thermal map knows which of its
+   * own parameters the Thermals section reads.
    */
-  parents?: Crumb[];
+  parent?: { slug: string; label: string; search?: string };
   /** Shown beside the class select. Only pages with per-pilot rows want it. */
   pilotPicker?: boolean;
   children: (ctx: {
@@ -58,7 +60,7 @@ export interface TaskAnalysisFrameProps {
 export function TaskAnalysisFrame({
   bundle,
   section,
-  parents = [],
+  parent,
   pilotPicker = false,
   children,
 }: TaskAnalysisFrameProps) {
@@ -105,11 +107,29 @@ export function TaskAnalysisFrame({
   // page of the report. Walking up out of a section and arriving back at the
   // default class would undo a choice the reader made two clicks ago. The
   // crumbs above it are other pages and take none of it.
+  const chapterCrumbs = underTaskAnalysis(compId, comp?.name, taskId, task?.name);
   const crumbs = section
-    ? [
-        ...withQuery(underTaskAnalysis(compId, comp?.name, taskId, task?.name), search),
-        ...parents,
-      ]
+    ? withQuery(
+        parent
+          ? [
+              ...chapterCrumbs,
+              {
+                label: parent.label,
+                to:
+                  compId && taskId
+                    ? taskAnalysisSectionPath(
+                        compId,
+                        comp?.name,
+                        taskId,
+                        task?.name,
+                        parent.slug
+                      )
+                    : "/comp",
+              },
+            ]
+          : chapterCrumbs,
+        parent?.search ?? search
+      )
     : underTask(compId, comp?.name, taskId, task?.name);
 
   // Gate on `status` only, never on the user session: the content is public,

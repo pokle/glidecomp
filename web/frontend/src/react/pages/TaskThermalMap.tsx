@@ -94,7 +94,11 @@ export function TaskThermalMap() {
           ? `${selected.pilotCount} pilots, ${selected.useCount} climbs`
           : "",
       }}
-      parents={[{ label: thermalsSection.label, to: sectionHref }]}
+      parent={{
+        slug: thermalsSection.slug,
+        label: thermalsSection.label,
+        search: sectionQuery.toString(),
+      }}
     >
       {({ report }) =>
         report.thermals && report.thermals.shapes.length > 0 ? (

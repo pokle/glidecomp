@@ -237,6 +237,19 @@ export function taskPath(
 }
 
 /**
+ * The task's route diagram at full size — the readable version of the glyph
+ * beside each task on the competition page. Public, like the task page.
+ */
+export function taskDiagramPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/diagram`;
+}
+
+/**
  * The admin-only page that creates a task. A page and not a dialog over the
  * comp: see the overlays rule in CLAUDE.md. `new` can never be a task's id
  * (a sqid is at least four letters), so it cannot shadow a real task.
@@ -295,6 +308,19 @@ export function taskTestIgcPath(
 }
 
 /**
+ * The task's XCTrack `XCTSK:` QR code, at the size a phone camera wants. Public,
+ * like the task page it hangs off.
+ */
+export function taskQrPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined
+): string {
+  return `${taskPath(compId, compName, taskId, taskName)}/qr`;
+}
+
+/**
  * The per-task analysis. A child of the TASK: it is the one task's
  * report, it is where a reader arrives from, and the breadcrumbs say the same
  * (lib/crumbs.ts). The whole-comp report at {@link compAnalysisPath} collects
@@ -321,6 +347,36 @@ export function taskAnalysisSectionPath(
   section: string
 ): string {
   return `${taskAnalysisPath(compId, compName, taskId, taskName)}/${section}`;
+}
+
+/**
+ * The URL segment for one task-analysis metric: its engine id with the dots
+ * and underscores turned into dashes (`climb.time_to_core` →
+ * `climb-time-to-core`). Derived from the id, never from the label, so it is
+ * as stable as the id itself. Not the raw id, because a path with a dot in it
+ * is a FILE to the dev server and to the e2e's (`isSpaRoute` in
+ * src/dev-routing.ts), which would never hand it to the app.
+ *
+ * A page resolves the segment by comparing it with this function's output
+ * for each metric its report carries — never by inverting it.
+ */
+export function metricSegment(metricId: string): string {
+  return slugify(metricId);
+}
+
+/**
+ * One metric's rank scatter at full size, on its own page (#815). It hangs
+ * off the "Metric details" section — the page that holds every metric — and
+ * is reached from the chart beside the Winning strategies ranking.
+ */
+export function taskAnalysisMetricPath(
+  compId: string,
+  compName: string | null | undefined,
+  taskId: string,
+  taskName: string | null | undefined,
+  metricId: string
+): string {
+  return `${taskAnalysisSectionPath(compId, compName, taskId, taskName, "metrics")}/${metricSegment(metricId)}`;
 }
 
 /** The pilot-similarity sheet, hung off the task's analysis. */

@@ -10,6 +10,7 @@
  * READ-ONLY against the seeded sample comp — nothing is created, so there is
  * nothing to clean up (see the state-hygiene notes in e2e/fixtures/stack.ts).
  */
+import { execSync } from "node:child_process";
 import { test, expect, type APIRequestContext } from "./fixtures/test";
 import { FRONTEND_URL } from "./fixtures/stack";
 import { compScoresPath, pilotPath, taskPath } from "../web/frontend/src/react/lib/slug";
@@ -72,8 +73,17 @@ async function findLivePilotScore(request: APIRequestContext): Promise<Live> {
 let live: Live;
 
 test.beforeAll(async ({ playwright }) => {
+  test.setTimeout(300_000);
   const api = await playwright.request.newContext({ baseURL: BASE_URL });
-  live = await findLivePilotScore(api);
+  try {
+    live = await findLivePilotScore(api);
+  } catch {
+    // Seeds the sample comp itself rather than relying on a spec that ran
+    // before it in the shard: full-screen-sheets.spec.ts used to, and went
+    // when its overlays became pages (#813, #814).
+    execSync("bun run seed corryong-cup-2026", { stdio: "inherit", timeout: 240_000 });
+    live = await findLivePilotScore(api);
+  }
   await api.dispose();
 });
 

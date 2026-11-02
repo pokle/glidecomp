@@ -19,10 +19,12 @@ All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
 | `/comp/:id/scores` | the canonical full-scores page; `?task=` deep-links the scores-by-task view |
 | `/comp/:id/waypoints` | |
 | `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
+| `/comp/:id/task/:id/diagram` | the route diagram at full size (#814); always `noindex` — the task page is the indexable form |
 | `/comp/:id/task/:id/pilot/:id` | the report card |
 | `/comp/:id/analysis` | the COMP analysis: every task's read against each other |
 | `/comp/:id/task/:id/analysis` | the TASK analysis (a contents list for the six below) |
 | `/comp/:id/task/:id/analysis/:section` | one section of that chapter — `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
+| `/comp/:id/task/:id/analysis/metrics/:metric` | one metric's chart at full size (#815) — always noindexed, a bigger copy of a chart on `strategies`; an unknown metric is a 404 |
 
 A cold task-analysis report server-renders its pending notice and is noindexed
 **per request**, not shell-noindexed. The section route's pattern is built from
@@ -42,6 +44,7 @@ shell rather than 404, and there is nothing here for a crawler:
 | `/comp/:id/task/:id/route` | the route editor |
 | `/comp/:id/task/:id/weather` | the weather notes |
 | `/comp/:id/task/:id/pilot/:id/manual-flight` | recording a manual flight |
+| `/comp/:id/task/:id/qr` | the task's QR code (#813) — public, but a picture for a camera |
 | `/comp/:id/task/:id/analysis/similar` | the pilot-similarity sheet, derived client-side |
 | `/comp/:id/task/:id/analysis/thermals/map` | one thermal's rose and map at the size of the screen (#816) — the map is browser-only, and everything readable about the thermal is server-rendered on `/analysis/thermals` |
 
