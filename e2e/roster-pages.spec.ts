@@ -195,3 +195,115 @@ test("Fill from CIVL is a page: its own URL, Back leaves it, and a reload asks a
   await page.goBack();
   await backOnSearchedList(page);
 });
+
+/**
+ * A file the comp cannot take as it stands — the commonest being a roster
+ * exported from another competition, whose classes this one does not have.
+ * The review says so once per class rather than once per row, and offers the
+ * two ways out: add the class to the comp, or put those pilots in its default
+ * class. Each test has a comp of its own, since both change it.
+ */
+test.describe("a file with a class the comp does not have", () => {
+  const STRAY_CSV = ["name,class", "Ada Floater,floater", "Bo Floater,floater", "Cy Open,open"].join(
+    "\n"
+  );
+
+  async function newComp(name: string, classes: string[], defaultClass: string): Promise<string> {
+    const res = await api.post("/api/comp", {
+      data: { name, category: "hg", pilot_classes: classes, default_pilot_class: defaultClass },
+    });
+    expect(res.ok(), await res.text()).toBe(true);
+    return ((await res.json()) as { comp_id: string }).comp_id;
+  }
+
+  async function openBlockedReview(page: Page, id: string): Promise<void> {
+    await page.goto(`/comp/${id}/pilots/import`);
+    await expect(h1(page, "Import CSV")).toBeVisible({ timeout: 20_000 });
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Choose file" }).click();
+    await (await chooser).setFiles({
+      name: "other-comp.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(STRAY_CSV),
+    });
+    await expect(h1(page, "Import other-comp.csv")).toBeVisible();
+    await expect(page.getByText("This file can’t be imported yet.")).toBeVisible();
+    // Nothing to apply while anything blocks.
+    await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
+  }
+
+  async function classesOf(id: string): Promise<Record<string, string>> {
+    const body = (await (await api.get(`/api/comp/${id}/pilot`)).json()) as {
+      pilots: Array<{ name: string; pilot_class: string }>;
+    };
+    return Object.fromEntries(body.pilots.map((p) => [p.name, p.pilot_class]));
+  }
+
+  test("says what is wrong once, and Put them in … uses the default class, through a reload", async ({
+    page,
+  }) => {
+    const name = e2eCompName("Roster stray class");
+    const id = await newComp(name, ["open", "sport"], "sport");
+    try {
+      await openBlockedReview(page, id);
+      await expect(
+        page.getByText(
+          `2 pilots are in the class "floater", which ${name} doesn’t have. Its classes are open and sport.`
+        )
+      ).toBeVisible();
+      await expect(
+        page.getByText('Either add the class to the competition, or put those pilots in "sport".')
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: 'Add class "floater"' })).toBeVisible();
+
+      // The rows are there, folded behind the sentence that sums them up.
+      const rows = page.getByRole("button", { name: "Show the 2 rows" });
+      await rows.click();
+      await expect(page.getByText(/Row 1 \(Ada Floater\): class "floater" is not valid/)).toBeVisible();
+
+      await page.getByRole("button", { name: 'Put them in "sport"' }).click();
+      const moved = page.getByText('2 pilots from "floater" will be in "sport".');
+      await expect(moved).toBeVisible();
+      await expect(page.getByText("This file can’t be imported yet.")).toHaveCount(0);
+
+      // Undo takes the choice back; the choice is in the draft, so a reload keeps it.
+      await page.getByRole("button", { name: "Undo" }).click();
+      await expect(page.getByText("This file can’t be imported yet.")).toBeVisible();
+      await page.getByRole("button", { name: 'Put them in "sport"' }).click();
+      await page.reload();
+      await expect(moved).toBeVisible({ timeout: 20_000 });
+
+      await page.getByRole("button", { name: "Apply" }).click();
+      await expect(page.getByRole("grid", { name: "Pilots" })).toBeVisible({ timeout: 20_000 });
+      expect(await classesOf(id)).toEqual({
+        "Ada Floater": "sport",
+        "Bo Floater": "sport",
+        "Cy Open": "open",
+      });
+    } finally {
+      await api.delete(`/api/comp/${id}`);
+    }
+  });
+
+  test("Add class … gives the comp the class, and the pilots keep it", async ({ page }) => {
+    const id = await newComp(e2eCompName("Roster add class"), ["open"], "open");
+    try {
+      await openBlockedReview(page, id);
+      await page.getByRole("button", { name: 'Add class "floater"' }).click();
+      await expect(page.getByRole("button", { name: "Apply" })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText("This file can’t be imported yet.")).toHaveCount(0);
+      const comp = (await (await api.get(`/api/comp/${id}`)).json()) as { pilot_classes: string[] };
+      expect(comp.pilot_classes).toEqual(["open", "floater"]);
+
+      await page.getByRole("button", { name: "Apply" }).click();
+      await expect(page.getByRole("grid", { name: "Pilots" })).toBeVisible({ timeout: 20_000 });
+      expect(await classesOf(id)).toEqual({
+        "Ada Floater": "floater",
+        "Bo Floater": "floater",
+        "Cy Open": "open",
+      });
+    } finally {
+      await api.delete(`/api/comp/${id}`);
+    }
+  });
+});

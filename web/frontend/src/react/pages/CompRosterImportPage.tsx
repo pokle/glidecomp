@@ -26,7 +26,7 @@ import { useMemo } from "react";
 import { useDraft } from "../lib/use-draft";
 import { compPilotsImportPath } from "../lib/slug";
 import { ImportCsvPicker, ImportReview, rosterImportDraft } from "../comp/RosterActions";
-import { planImport } from "../comp/roster-import";
+import { fallbackClass, planImport } from "../comp/roster-import";
 import { useRosterAdminPage } from "../comp/use-roster-admin-page";
 
 export function CompRosterImportPage() {
@@ -44,7 +44,12 @@ export function CompRosterImportPage() {
   const roster = page.ready ? page.roster : null;
   const classes = page.ready ? page.comp.pilot_classes : null;
   const plan = useMemo(
-    () => (roster && classes && draft ? planImport(draft.text, draft.fileName, roster, classes) : null),
+    () =>
+      roster && classes && draft
+        ? planImport(draft.text, draft.fileName, roster, classes, {
+            unknownClassAs: draft.unknownClassAs,
+          })
+        : null,
     [roster, classes, draft]
   );
 
@@ -67,13 +72,22 @@ export function CompRosterImportPage() {
     rosterImportDraft.clear([page.comp.comp_id]);
     page.leave();
   };
+  const comp = page.comp;
+  // "Put them in …" is the comp's default class. The choice is part of the
+  // draft, so a reload keeps it; Undo takes it out again.
+  const fallback = fallbackClass(comp.pilot_classes, comp.default_pilot_class);
   return (
     <ImportReview
       compId={page.urlId}
-      compName={page.comp.name}
+      compName={comp.name}
       plan={plan}
+      compClasses={comp.pilot_classes}
+      fallback={fallback}
       onCancel={finish}
       onApplied={finish}
+      onUseFallback={() => draft && setDraft({ ...draft, unknownClassAs: fallback })}
+      onUndoFallback={() => draft && setDraft({ fileName: draft.fileName, text: draft.text })}
+      onClassesAdded={(pilot_classes) => page.updateComp({ pilot_classes })}
     />
   );
 }

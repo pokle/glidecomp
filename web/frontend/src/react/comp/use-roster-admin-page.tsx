@@ -38,6 +38,8 @@ export type RosterAdminPage =
       urlId: string;
       /** The signed-in user's id: whose draft this page may read. */
       userId: string;
+      /** Take in a change this page made to the comp (its classes, say). */
+      updateComp: (change: Partial<CompDetailData>) => void;
       /** Back to the list: see the note at the top. */
       leave: () => void;
     };
@@ -57,7 +59,7 @@ export function useRosterAdminPage({
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { data: comp, notFound, current: fresh } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, current: fresh, setData: setComp } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
@@ -132,6 +134,7 @@ export function useRosterAdminPage({
     roster,
     urlId,
     userId: user.id,
+    updateComp: (change) => setComp((c) => (c ? { ...c, ...change } : c)),
     leave: () => {
       if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1);
       else navigate(compPilotsPath(urlId, comp.name), { replace: true });

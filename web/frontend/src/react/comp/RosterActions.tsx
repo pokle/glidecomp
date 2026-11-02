@@ -36,7 +36,15 @@ import { EllipsisIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
-import { Form, FormErrorBanner, SubmitButton, useFormState } from "@/react/rac/form";
+import { Disclosure } from "@/react/rac/disclosure";
+import {
+  Form,
+  FormErrorBanner,
+  SubmitButton,
+  UNREACHABLE,
+  readRefusal,
+  useFormState,
+} from "@/react/rac/form";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
 import { Loading } from "@/react/rac/progress";
 import { SettingsPage } from "../components/SettingsPage";
@@ -60,7 +68,13 @@ import {
   type BulkPilotRow,
   type CompPilot,
 } from "./csv";
-import { planChanges, planRequest, type ImportPlan } from "./roster-import";
+import {
+  listInWords,
+  planChanges,
+  planRequest,
+  type ImportPlan,
+  type ProblemRows,
+} from "./roster-import";
 
 export function RosterActionsMenu({
   onImport,
@@ -99,6 +113,11 @@ export function RosterActionsMenu({
 export interface RosterImportDraft {
   fileName: string;
   text: string;
+  /**
+   * The review's "Put them in …": every pilot in a class the comp does not
+   * have goes in this one. Part of the draft so a reload keeps the choice.
+   */
+  unknownClassAs?: string;
 }
 
 /** One per comp (keyed `[bareCompId]`), in this tab, for the signed-in user. */
@@ -109,7 +128,8 @@ export const rosterImportDraft = defineDraft<RosterImportDraft>({
     typeof v === "object" &&
     v !== null &&
     typeof (v as RosterImportDraft).fileName === "string" &&
-    typeof (v as RosterImportDraft).text === "string",
+    typeof (v as RosterImportDraft).text === "string" &&
+    ["string", "undefined"].includes(typeof (v as RosterImportDraft).unknownClassAs),
 });
 
 /**
@@ -207,16 +227,31 @@ export function ImportReview({
   compId,
   compName,
   plan,
+  compClasses,
+  fallback,
   onCancel,
   onApplied,
+  onUseFallback,
+  onUndoFallback,
+  onClassesAdded,
 }: {
   compId: string;
   compName: string;
   plan: ImportPlan;
+  /** The comp's classes now, for "Its classes are …" and for adding to. */
+  compClasses: string[];
+  /** The class "Put them in …" puts pilots in: the comp's default. */
+  fallback: string;
   /** Discard the file and leave. */
   onCancel: () => void;
   /** Applied: forget the file and leave. */
   onApplied: () => void;
+  /** Put the pilots of every class the comp lacks in `fallback`. */
+  onUseFallback: () => void;
+  /** Take that back. */
+  onUndoFallback: () => void;
+  /** The comp now has these classes too. */
+  onClassesAdded: (classes: string[]) => void;
 }) {
   const changes = planChanges(plan);
   const summary = [
@@ -251,14 +286,29 @@ export function ImportReview({
         <FormErrorBanner className="mt-3" />
         <div className="mt-4 flex flex-col gap-6">
           {plan.errors.length > 0 ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                <ul className="list-disc pl-5">
-                  {plan.errors.slice(0, 20).map((e, i) => (
-                    <li key={i}>{e}</li>
+            <ImportBlocked
+              compId={compId}
+              compName={compName}
+              plan={plan}
+              compClasses={compClasses}
+              fallback={fallback}
+              onUseFallback={onUseFallback}
+              onClassesAdded={onClassesAdded}
+            />
+          ) : null}
+          {plan.remapped.length > 0 ? (
+            <Alert>
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-2 [&_p:not(:last-child)]:mb-0">
+                <div>
+                  {plan.remapped.map((r) => (
+                    <p key={r.from}>
+                      {pilots(r.count)} from "{r.from}" will be in "{r.to}".
+                    </p>
                   ))}
-                  {plan.errors.length > 20 ? <li>… and {plan.errors.length - 20} more</li> : null}
-                </ul>
+                </div>
+                <Button variant="outline" size="sm" onPress={onUndoFallback}>
+                  Undo
+                </Button>
               </AlertDescription>
             </Alert>
           ) : null}
@@ -301,6 +351,154 @@ export function ImportReview({
         </div>
       </Form>
     </div>
+  );
+}
+
+/** "1 pilot", "25 pilots". */
+function pilots(n: number): string {
+  return `${n} ${n === 1 ? "pilot" : "pilots"}`;
+}
+
+/**
+ * Why a file cannot be imported, said once per kind of problem rather than
+ * once per row — and, for the commonest one (a class this comp does not
+ * have, as in a roster exported from another competition), the two ways out:
+ * add the class, or put those pilots in the comp's default class. Each
+ * group's rows are behind a disclosure, in the parser's own words.
+ */
+function ImportBlocked({
+  compId,
+  compName,
+  plan,
+  compClasses,
+  fallback,
+  onUseFallback,
+  onClassesAdded,
+}: {
+  compId: string;
+  compName: string;
+  plan: ImportPlan;
+  compClasses: string[];
+  fallback: string;
+  onUseFallback: () => void;
+  onClassesAdded: (classes: string[]) => void;
+}) {
+  const { pending, setFormError } = useFormState();
+  const [adding, setAdding] = useState(false);
+  const { unknownClasses, noName, noClass, other } = plan.problems;
+  const missing = unknownClasses.map((g) => g.cls);
+  const quoted = listInWords(missing.map((c) => `"${c}"`));
+  const strayCount = unknownClasses.reduce((n, g) => n + g.rows.length, 0);
+
+  // The comp's PATCH, as the Classes settings page sends it: the server
+  // audits it and marks the scores stale. A refusal goes where the form's
+  // own do, never to a toast.
+  const addClasses = async () => {
+    setAdding(true);
+    setFormError(null);
+    try {
+      const classes = [...compClasses, ...missing];
+      const res = await api.api.comp[":comp_id"].$patch({
+        param: { comp_id: compId },
+        json: { pilot_classes: classes },
+      });
+      if (!res.ok) {
+        setFormError((await readRefusal(res)).message);
+        return;
+      }
+      onClassesAdded(classes);
+    } catch {
+      setFormError(UNREACHABLE);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <Alert variant="destructive">
+      {/* The gaps are the stack's: the kit's paragraph margin would double them. */}
+      <AlertDescription className="flex flex-col gap-3 [&_p:not(:last-child)]:mb-0">
+        <p className="font-semibold">This file can’t be imported yet.</p>
+        {unknownClasses.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {unknownClasses.map((g) => (
+              <p key={g.cls}>
+                {g.rows.length === 1 ? "1 pilot is" : `${g.rows.length} pilots are`} in the class "
+                {g.cls}", which {compName} doesn’t have. Its classes are{" "}
+                {listInWords(compClasses)}.
+              </p>
+            ))}
+            <p>
+              Either add the {missing.length === 1 ? "class" : "classes"} to the competition, or
+              put {strayCount === 1 ? "that pilot" : "those pilots"} in "{fallback}".
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                isPending={adding}
+                pendingLabel="Adding"
+                isDisabled={pending}
+                onPress={() => void addClasses()}
+              >
+                Add {missing.length === 1 ? "class" : "classes"} {quoted}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                isDisabled={pending || adding}
+                onPress={onUseFallback}
+              >
+                Put them in "{fallback}"
+              </Button>
+            </div>
+            <ProblemRowList rows={unknownClasses.flatMap((g) => g.rows)} />
+          </div>
+        ) : null}
+        {noName.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <p>
+              {noName.length === 1
+                ? "1 row has no name, so it would be skipped."
+                : `${noName.length} rows have no name, so they would be skipped.`}
+            </p>
+            <ProblemRowList rows={noName} />
+          </div>
+        ) : null}
+        {noClass.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <p>
+              {noClass.length === 1 ? "1 pilot has no class." : `${noClass.length} pilots have no class.`}
+            </p>
+            <ProblemRowList rows={noClass} />
+          </div>
+        ) : null}
+        {other.length > 0 ? (
+          <ul className="list-disc pl-5">
+            {other.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        ) : null}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/** A group's rows, folded away: the sentence above them is the finding. */
+function ProblemRowList({ rows }: { rows: ProblemRows }) {
+  return (
+    <Disclosure
+      title={rows.length === 1 ? "Show the row" : `Show the ${rows.length} rows`}
+      headingLevel={3}
+      className="border-t-0 pt-0"
+    >
+      <ul className="mt-1 list-disc pl-5">
+        {rows.map((r) => (
+          <li key={r.row}>{r.message}</li>
+        ))}
+      </ul>
+    </Disclosure>
   );
 }
 
