@@ -5,10 +5,15 @@ import { isValidTimezone } from "@glidecomp/engine/timezone";
 
 /**
  * zValidator with a hook that turns zod failures into the API's standard
- * `{ error: string }` shape (e.g. "admin_emails.1: Invalid email address"). Without
- * the hook the default 400 body nests the raw ZodError object under `error`,
- * which clients expecting a string render as nothing at all — the request
- * fails silently. All routes must use this instead of bare zValidator.
+ * `{ error: string, field?: string }` shape (e.g. error "admin_emails.1:
+ * Invalid email address", field "admin_emails.1"). Without the hook the
+ * default 400 body nests the raw ZodError object under `error`, which clients
+ * expecting a string render as nothing at all — the request fails silently.
+ * All routes must use this instead of bare zValidator.
+ *
+ * `field` is the path of the input the refusal is about, so a form can put
+ * the message under that field (the kit form, src/react/rac/form.tsx) rather
+ * than in a toast nobody can connect to anything.
  */
 export function validated<T extends z.ZodType, Target extends keyof ValidationTargets>(
   target: Target,
@@ -17,8 +22,14 @@ export function validated<T extends z.ZodType, Target extends keyof ValidationTa
   return zValidator(target, schema, (result, c) => {
     if (!result.success) {
       const issue = result.error.issues[0];
-      const path = issue && issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-      return c.json({ error: `${path}${issue?.message ?? "Invalid request"}` }, 400);
+      const field = issue && issue.path.length > 0 ? issue.path.join(".") : undefined;
+      return c.json(
+        {
+          error: `${field ? `${field}: ` : ""}${issue?.message ?? "Invalid request"}`,
+          ...(field ? { field } : {}),
+        },
+        400
+      );
     }
   });
 }

@@ -1,13 +1,19 @@
 ---
 name: dev-tunnel
-description: Expose the local GlideComp dev server (Vite on :3000) over a public Cloudflare Quick Tunnel so it can be opened from a phone or another device, with live reload (HMR) working over the tunnel. Use when asked for a "dev tunnel", to test on a phone/mobile, share the local dev URL, or reach localhost:3000 from another device.
+description: Expose the local GlideComp dev server (Vite on :3000) at a named Cloudflare Tunnel on <word>.glidecomp.com (word taken from the branch name) so it can be opened from a phone or another device, with sign-in and live reload (HMR) working. Use when asked for a "dev tunnel", to test on a phone/mobile, share the local dev URL, or reach localhost:3000 from another device.
 ---
 
 # Dev Tunnel
 
-Expose the running GlideComp dev server to a phone or another device via a
-Cloudflare Quick Tunnel (`cloudflared tunnel --url`), keeping Vite's live
-reload (HMR) working over the public URL.
+Expose the running GlideComp dev server to a phone or another device at
+**`https://<word>.glidecomp.com`**, via a named Cloudflare Tunnel, keeping
+Vite's live reload (HMR) working over the public URL.
+
+**Use a named tunnel on a `glidecomp.com` subdomain by default — the owner's
+standing preference.** Sign-in works there: auth cookies and trusted origins
+cover `*.glidecomp.com`, which a random `*.trycloudflare.com` host does not.
+Fall back to a Quick Tunnel (below) only when `~/.cloudflared/cert.pem` is
+missing (e.g. a cloud container with no Cloudflare login).
 
 ## How it's wired
 
@@ -20,64 +26,82 @@ Two Vite settings in [`web/frontend/vite.config.ts`](../../../web/frontend/vite.
 make the tunnel work, both **gated behind the `TUNNEL` env var** so normal
 localhost dev is unaffected:
 
-- `allowedHosts: ['.trycloudflare.com']` — the leading dot matches the random
-  `*.trycloudflare.com` hostname cloudflared assigns each run. Without it Vite
-  returns `Blocked request. This host … is not allowed`.
+- `allowedHosts: ['.trycloudflare.com', '.glidecomp.com']` — without it Vite
+  returns `Blocked request. This host … is not allowed`. The leading dot
+  matches every subdomain, so no config change per tunnel name.
 - `hmr: { clientPort: 443 }` — the tunnel terminates TLS at :443, so the HMR
   websocket must target that, not the raw dev port, or live reload silently
   fails. This is why it's gated: on plain localhost the client needs the real
-  port, so setting 443 unconditionally would break local HMR.
+  port.
+
+## Pick the subdomain
+
+Take one short, readable word from the current branch name, lowercased:
+skip `claude`, random suffixes like `7eon59`, and generic words (`fix`,
+`feature`, `update`). Prefer the most distinctive word of 3–10 letters.
+`claude/intelligent-clarke-7eon59` → `clarke`. Never pick a name that is a
+real production host (`www`, `api`, `app`, `mcp`, `auth`, `mail`, …): check
+first with `dig +short <word>.glidecomp.com` — if it resolves and is **not**
+already a `cfargotunnel.com` CNAME of ours (`cloudflared tunnel list`), pick
+another word.
+
+Name the tunnel `glidecomp-<word>`.
 
 ## Run it
 
-Two terminals:
-
 ```bash
-# terminal 1 — dev stack with tunnel mode on
+WORD=clarke   # from the branch, per above
+
+# one-time per word (skip each step if it already exists — `cloudflared tunnel list`)
+cloudflared tunnel create glidecomp-$WORD
+cloudflared tunnel route dns glidecomp-$WORD $WORD.glidecomp.com
+
+# background 1 — dev stack with tunnel mode on
 TUNNEL=1 bun run dev
 
-# terminal 2 — public tunnel to the Vite port
-cloudflared tunnel --url http://localhost:3000
+# background 2 — the tunnel to the Vite port
+cloudflared tunnel run --url http://localhost:3000 glidecomp-$WORD
 ```
 
-`TUNNEL=1` propagates down through `bun run dev` → the frontend `dev` script →
-`vite`, so `process.env.TUNNEL` is set when the config evaluates.
+If a dev server is already listening on :3000 **without** `TUNNEL=1`, it will
+block the host — restart it with the flag. `TUNNEL=1` propagates down through
+`bun run dev` → the frontend `dev` script → `vite`.
 
-cloudflared prints a `https://<random>.trycloudflare.com` URL — open it on the
-phone. Edits hot-reload over the tunnel.
+Verify before reporting: poll `curl -s -o /dev/null -w '%{http_code}'
+https://$WORD.glidecomp.com/` until 200 (DNS for a new record can take a
+minute), and check `/api/auth/me` answers too.
 
 ## Show a QR code of the tunnel URL
 
-Always finish by displaying the tunnel URL as a QR code in the chat so it can
-be scanned straight off the screen with the phone camera:
+Finish by sending the URL as a QR code **PNG** (SendUserFile) alongside the
+plain URL — utf8 block-character QR codes don't render reliably in this
+environment:
 
 ```bash
-bunx qrcode -t utf8 -o <scratchpad>/dev-tunnel-qr.txt 'https://<random>.trycloudflare.com'
+bunx qrcode -o <scratchpad>/dev-tunnel-qr.png -w 400 "https://$WORD.glidecomp.com"
 ```
 
-Then Read the file and paste its contents into the reply inside a fenced code
-block, alongside the plain URL.
+## Cleanup
 
-- The `utf8` renderer emits plain `▀▄█` half-block characters, which render
-  correctly in a markdown code block. Do **not** use the default terminal
-  renderer (`bunx qrcode '<url>'` with no `-t`) — it emits ANSI color escapes
-  that don't render in chat output. `-t utf8` requires `-o <file>`.
-- On dark terminal themes the code appears inverted (light on dark); phone
-  cameras usually scan it anyway. Add `-i` to flip colors if scanning fails.
+Tunnels and their CNAMEs persist and are reusable on the next run of the same
+branch. To remove one: `cloudflared tunnel delete glidecomp-<word>` and delete
+the `<word>` CNAME in the Cloudflare dashboard (cloudflared can't remove DNS).
+
+## Quick Tunnel fallback (no Cloudflare login)
+
+```bash
+TUNNEL=1 bun run dev
+cloudflared tunnel --url http://localhost:3000
+```
+
+Prints a random `https://<random>.trycloudflare.com` URL. Needs no account,
+but **sign-in won't work** there (the origin is outside `*.glidecomp.com`).
 
 ## Notes
 
-- **`cloudflared` must be installed** (`brew install cloudflared`). Quick
-  Tunnels need no Cloudflare account or login.
-- **A random hostname each run** is expected; `.trycloudflare.com` in
-  `allowedHosts` covers all of them, so no config change between runs.
-- **Auth cookies are per-origin.** A session on `localhost:3000` does not carry
-  to the tunnel host — sign in fresh there (dev-login sets its cookie on the
-  tunnel origin, so it works, just separately).
+- **`cloudflared` must be installed** (`brew install cloudflared`); named
+  tunnels also need `cloudflared tunnel login` once (writes `cert.pem`).
 - **Simpler LAN alternative** (same Wi-Fi, no tunnel): add `host: true` to the
-  Vite `server` block and open `http://<mac-lan-ip>:3000`. Hitting it by IP
-  needs no `allowedHosts` entry. Prefer this when both devices are on the same
-  network; use the tunnel for locked-down/guest Wi-Fi or sharing externally.
+  Vite `server` block and open `http://<mac-lan-ip>:3000`.
 - **If HMR still won't connect** over the tunnel, also set `hmr.protocol: 'wss'`
-  alongside `clientPort`. `clientPort: 443` alone is usually enough because Vite
-  infers the protocol from the page's `https:` origin.
+  alongside `clientPort`.

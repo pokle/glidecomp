@@ -18,14 +18,23 @@
  *   but needs a collection underneath: the route editor's turnpoint list is a
  *   GridList because its rows hold buttons, which a NavList's `<a>` rows
  *   cannot legally contain.
+ *
+ * A list can be cut into named groups with {@link GridListSection} and
+ * {@link GridListHeader} (the pilots page's team view): React Aria makes each
+ * group a `rowgroup` named by its header, and arrow keys step over the
+ * headers to the rows.
  */
 import type { ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import {
   GridList as AriaGridList,
+  GridListHeader as AriaGridListHeader,
   GridListItem as AriaGridListItem,
+  GridListSection as AriaGridListSection,
   type GridListProps,
   type GridListItemProps,
+  type GridListHeaderProps,
+  type GridListSectionProps,
 } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
@@ -86,6 +95,42 @@ export function GridListItem<T extends object>({
       {...props}
     />
   );
+}
+
+// A group's rows are divided as the list's are; in "rows" the list's own
+// divide-y then rules a line between one group and the next.
+const sectionClass: Record<GridListVariant, string> = {
+  cards: "flex flex-col gap-2",
+  rows: "divide-y divide-border",
+};
+
+const headerClass: Record<GridListVariant, string> = {
+  cards: "px-1 pt-2 text-sm text-muted-foreground",
+  rows: "bg-muted/50 px-4 py-2 text-sm text-muted-foreground",
+};
+
+/** A named group of rows: a {@link GridListHeader}, then its items. */
+export function GridListSection<T extends object>({
+  className,
+  variant = "cards",
+  ...props
+}: Omit<GridListSectionProps<T>, "className"> & {
+  className?: string;
+  variant?: GridListVariant;
+}) {
+  return <AriaGridListSection className={cn(sectionClass[variant], className)} {...props} />;
+}
+
+/** A group's heading; its text is what a screen reader names the group. */
+export function GridListHeader({
+  className,
+  variant = "cards",
+  ...props
+}: Omit<GridListHeaderProps, "className"> & {
+  className?: string;
+  variant?: GridListVariant;
+}) {
+  return <AriaGridListHeader className={cn(headerClass[variant], className)} {...props} />;
 }
 
 /**

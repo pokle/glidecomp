@@ -1,10 +1,10 @@
 /**
  * CIVL world rankings on the pilot roster (/comp/:id/pilots).
  *
- * The organiser's workflow, end to end: open the roster editor, fill the CIVL
- * IDs the rankings can identify by name, fill each pilot's WPRS score from
- * their ID, save, and read the roster down the points column to build a
- * launch order.
+ * The organiser's workflow, end to end: open the pilots page, ask the
+ * rankings what they can fill — CIVL IDs by exact name, then each pilot's WPRS
+ * score by ID — see exactly what that will set, fill it, and sort the roster
+ * by points to build a launch order.
  *
  * Runs against a SYNTHETIC list (`bun run seed-civl-rankings` — slug
  * `sample-world-ranking`, never one of CIVL's ten). The real rankings arrive
@@ -46,7 +46,7 @@ const MATCHING_ROSTER = [
 ];
 
 /**
- * Padding: a roster long enough to be a realistic grid, and to keep the
+ * Padding: a roster long enough to be a realistic list, and to keep the
  * "3 of N" count honest about a roster most of which the rankings cannot
  * place. None of these names is in any ranking list.
  */
@@ -105,6 +105,7 @@ test.beforeAll(async ({ playwright }) => {
   const roster = await api.post(`/api/comp/${compId}/pilot/bulk`, {
     data: {
       pilots: ROSTER.map((p) => ({ ...p, pilot_class: "open" })),
+      remove: [],
     },
   });
   expect(roster.ok(), await roster.text()).toBe(true);
@@ -122,165 +123,135 @@ test.beforeEach(async ({ page }) => {
   await signIn(page);
 });
 
-/**
- * Wait for the editor's grid to be built and its ranking lookup answered.
- *
- * The grid builds lazily (Tabulator is loaded on demand), so a test that
- * starts editing before its first row exists is testing an empty table. The
- * enabled Fill button is the second half: it is what the roster actions wait
- * on.
- */
-async function expectGridReady(page: Page): Promise<void> {
-  await expect(page.locator("#pilots-grid .tabulator-row").first()).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(page.getByRole("button", { name: "Fill from CIVL…" })).toBeEnabled({
-    timeout: 20_000,
-  });
+const rows = (page: Page) => page.getByRole("grid", { name: "Pilots" }).getByRole("row");
+const rowOf = (page: Page, name: string) => rows(page).filter({ hasText: name }).first();
+const fillHeading = (page: Page) =>
+  page.getByRole("heading", { name: "Fill from CIVL rankings" });
+
+async function openRoster(page: Page, id: string): Promise<void> {
+  await page.goto(`/comp/${id}/pilots`);
+  await expect(rows(page).first()).toBeVisible({ timeout: 20_000 });
 }
 
-/**
- * Open the fill's own dialog from the roster editor.
- *
- * The picker and its button used to sit under the grid, where on a phone they
- * cost about a fifth of the editor whether or not anyone was filling anything.
- */
-async function openCivlDialog(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Fill from CIVL…" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Fill from CIVL rankings" })
-  ).toBeVisible({ timeout: 20_000 });
+/** Open the fill's sheet from the page's ⋯ menu. */
+async function openFill(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Roster actions" }).click();
+  await page.getByRole("menuitem", { name: "Fill from CIVL…" }).click();
+  await expect(fillHeading(page)).toBeVisible({ timeout: 20_000 });
 }
 
-test("one press fills IDs by name and then rankings by ID, and shows where they came from", async ({
+/** The visible names, top to bottom. */
+async function names(page: Page): Promise<string[]> {
+  return (await rows(page).locator("p.font-medium").allInnerTexts()).map((t) => t.trim());
+}
+
+/** A pilot's own page (it was a sheet over the roster until 2026-11). */
+async function pilotPage(page: Page, name: string) {
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible({ timeout: 20_000 });
+  return page.getByRole("main");
+}
+
+test("one press fills IDs by name and then rankings by ID, and shows what it will set first", async ({
   page,
 }) => {
-  await page.goto(`/comp/${compId}/pilots`);
-  await page.getByRole("button", { name: "Edit" }).click();
-  await openCivlDialog(page);
+  await openRoster(page, compId);
+  await openFill(page);
 
   // Three are placeable: Bruno by his ID, Ada and Cleo by name. Twin
   // Ambiguity (two DIFFERENT ranked humans, one name), Unranked Nobody and
-  // every filler are not. The dialog says so before anything is pressed.
+  // every filler are not. The sheet says so before anything is pressed, and
+  // lists what Fill will set — nothing has been written yet.
   await expect(
     page.getByText(new RegExp(`3 of ${ROSTER.length} pilots have one`))
   ).toBeVisible({ timeout: 20_000 });
+  const preview = page.getByRole("list", { name: "What Fill will set" });
+  for (const name of ["Ada Thermal", "Bruno Ridge", "Cleo Vario"]) {
+    await expect(preview).toContainText(name);
+  }
+  await expect(preview).not.toContainText("Twin Ambiguity");
+  await expect(preview).toContainText("Sample World Ranking");
 
   // ONE press. Ids first, then the ranks that only become fillable once the
   // ids are in — the ordering the organiser used to have to know about.
   await page.getByRole("button", { name: "Fill", exact: true }).click();
+  await expect(fillHeading(page)).toBeHidden({ timeout: 20_000 });
   // Ada and Cleo gain ids (Bruno already had one, Twin Ambiguity is refused);
   // all three are then ranked BY ID, including the two just filled.
-  // The fill dialog closes on its way out, so the outcome lands under the
-  // grid rather than behind the dialog that started it.
-  await expect(
-    page.getByRole("heading", { name: "Fill from CIVL rankings" })
-  ).toBeHidden({ timeout: 20_000 });
-  await expect(
-    page.getByText(/2 CIVL IDs and 3 WPRS scores filled in/)
-  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/2 CIVL IDs and 3 WPRS scores filled in/)).toBeVisible({
+    timeout: 20_000,
+  });
 
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("dialog")).toBeHidden({ timeout: 20_000 });
+  // The roster now carries the numbers, and each pilot's page says which
+  // list and month theirs came from — the difference between a checkable rank
+  // and a bare one.
+  await expect(rowOf(page, "Bruno Ridge")).toContainText("pts");
+  await expect(rowOf(page, "Twin Ambiguity")).not.toContainText("pts");
+  await rowOf(page, "Bruno Ridge").click();
+  const sheet = await pilotPage(page, "Bruno Ridge");
+  await expect(sheet).toContainText("From Sample World Ranking");
+  const points = await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).inputValue();
+  expect(points).toMatch(/^\d+(\.\d+)?$/);
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(/\/pilots(\?|$)/);
 
-  // The roster now carries the numbers, each saying which list and month it
-  // came from — the difference between a checkable rank and a bare one.
-  const brunoRow = page.getByRole("row", { name: /Bruno Ridge/ });
-  await expect(brunoRow).toContainText("Sample World Ranking");
-  await expect(page.getByRole("row", { name: /Twin Ambiguity/ })).not.toContainText(
-    "Sample World Ranking"
-  );
-  const brunoScore = (await brunoRow.innerText()).match(/\b(\d+(?:\.\d+)?)\b/)?.[1];
-  expect(brunoScore).toBeTruthy();
-
-  // Press it again on the same roster. "Add when missing" means exactly that:
-  // nothing is rewritten, and the outcome says why rather than leaving
-  // "0 rankings filled in" to be read as a failure.
-  await page.getByRole("button", { name: "Edit" }).click();
-  await openCivlDialog(page);
-  await page.getByRole("button", { name: "Fill", exact: true }).click();
-  await expect(
-    page.getByText(/3 already had a score and were left alone/)
-  ).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(/0 CIVL IDs and 0 WPRS scores filled in/)).toBeVisible();
-
+  // Ask again on the same roster. "Add when missing" means exactly that:
+  // there is nothing left to set, and the sheet says why rather than
+  // offering a Fill that would do nothing.
+  await openFill(page);
+  await expect(page.getByText(/3 already had a score and were left alone/)).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole("button", { name: "Fill", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("dialog")).toBeHidden({ timeout: 20_000 });
-  await expect(page.getByRole("row", { name: /Bruno Ridge/ })).toContainText(
-    brunoScore!
-  );
+  await expect(fillHeading(page)).toBeHidden();
+  await expect(rowOf(page, "Bruno Ridge")).toContainText(`${points} pts`);
 });
 
-test("the roster sorts by WPRS points, unscored pilots last either way", async ({
+test("the roster sorts by WPRS points, highest first, unscored pilots last", async ({
   page,
 }) => {
-  await page.goto(`/comp/${compId}/pilots`);
-  const rankHeader = page.getByRole("columnheader", { name: "WPRS points" });
-  await expect(rankHeader).toBeVisible({ timeout: 20_000 });
+  await openRoster(page, compId);
 
-  const names = async (): Promise<string[]> => {
-    const cells = await page.getByRole("rowheader").allInnerTexts();
-    return cells.map((t) => t.trim());
-  };
+  await page.getByRole("button", { name: /Sort/ }).click();
+  await page.getByRole("option", { name: "WPRS points" }).click();
 
-  // aria-sort is the sync point. Reading the rows straight after the click
-  // races the re-render, and the roster's default order is by name — which
-  // here is also points order, so the race would pass silently.
-  //
-  // The fixture ranks by name, so Ada scores MOST and Cleo least. Ascending
-  // therefore puts Cleo first: fewest points, which is also the task-1 launch
-  // order (reverse ranking order).
-  await rankHeader.click();
-  await expect(rankHeader).toHaveAttribute("aria-sort", "ascending");
-  const ascending = await names();
-  expect(ascending.slice(0, 3)).toEqual(["Cleo Vario", "Bruno Ridge", "Ada Thermal"]);
-  expect(ascending.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
-  expect(ascending.indexOf("Unranked Nobody")).toBeGreaterThan(2);
-
-  await rankHeader.click();
-  await expect(rankHeader).toHaveAttribute("aria-sort", "descending");
-  const descending = await names();
-  expect(descending.slice(0, 3)).toEqual(["Ada Thermal", "Bruno Ridge", "Cleo Vario"]);
-  // Pinned last in BOTH directions: no score is not a bad score.
-  expect(descending.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
-  expect(descending.indexOf("Unranked Nobody")).toBeGreaterThan(2);
+  // The fixture ranks by name, so Ada scores MOST and Cleo least — the order
+  // the rankings are read in. No score is not a bad score: the unranked come
+  // after everyone who has one.
+  await expect.poll(async () => (await names(page)).slice(0, 3)).toEqual([
+    "Ada Thermal",
+    "Bruno Ridge",
+    "Cleo Vario",
+  ]);
+  const sorted = await names(page);
+  expect(sorted.indexOf("Twin Ambiguity")).toBeGreaterThan(2);
+  expect(sorted.indexOf("Unranked Nobody")).toBeGreaterThan(2);
 });
 
 test("a score typed over by hand stops claiming a source", async ({ page }) => {
-  await page.goto(`/comp/${compId}/pilots`);
-  await page.getByRole("button", { name: "Edit" }).click();
-  await expectGridReady(page);
+  await openRoster(page, compId);
+  await rowOf(page, "Ada Thermal").click();
+  let sheet = await pilotPage(page, "Ada Thermal");
+  await expect(sheet).toContainText("From Sample World Ranking");
 
-  // Tabulator edits on a cell click; the points column is a plain input.
-  const cell = page.locator('.tabulator-row', { hasText: "Ada Thermal" }).first()
-    .locator('[tabulator-field="wprs_points"]');
-  await cell.click();
-  await page.keyboard.press("ControlOrMeta+A");
-  await page.keyboard.type("99");
-  await page.keyboard.press("Enter");
+  await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).fill("99");
+  // The moment it is typed, not at save: the number is the organiser's now.
+  await expect(sheet).toContainText("Set by an organiser");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(page).toHaveURL(/\/pilots(\?|$)/, { timeout: 20_000 });
+  await expect(rowOf(page, "Ada Thermal")).toContainText("99 pts");
 
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("dialog")).toBeHidden({ timeout: 20_000 });
-
-  const adaRow = page.getByRole("row", { name: /Ada Thermal/ });
-  await expect(adaRow).toContainText("99");
-  await expect(adaRow).toContainText("set by organiser");
-  await expect(adaRow).not.toContainText("Sample World Ranking");
+  await rowOf(page, "Ada Thermal").click();
+  sheet = await pilotPage(page, "Ada Thermal");
+  await expect(sheet).toContainText("Set by an organiser");
+  await expect(sheet).not.toContainText("Sample World Ranking");
 });
 
-test("the fill reads the grid as it is NOW, not as it was loaded", async ({
-  page,
-  playwright,
-}) => {
-  // The bug: the rankings were asked about the roster once, when the grid
-  // finished loading, and the answer reused for every fill afterwards. Two
-  // ways that goes wrong, and this exercises the worse one.
-  //
-  //  1. A name corrected in the grid was still matched against the name it
-  //     had on load, so the fill did nothing — which is how it was found.
-  //  2. The matches are keyed by ROW INDEX. Delete a row and every index
-  //     below it shifts, so a stale answer applies one pilot's ID to a
-  //     DIFFERENT pilot's row. Silent, and wrong in the roster.
+test("the fill asks about the roster as it is NOW", async ({ page, playwright }) => {
+  // The bug this guards: the rankings were asked about the roster once and
+  // the answer reused. The matches are keyed by ROW INDEX, so after a pilot
+  // is removed every index below shifts, and a stale answer applies one
+  // pilot's ID to a DIFFERENT pilot's row. Silent, and wrong in the roster.
   //
   // Its own comp, with its own ID-less roster: the shared one has ids saved
   // into it by the first test, and an already-identified roster has no name
@@ -297,44 +268,39 @@ test("the fill reads the grid as it is NOW, not as it was loaded", async ({
         pilots: ["Ada Thermal", "Bruno Ridge", "Cleo Vario", "Zulu Nobody"].map(
           (registered_pilot_name) => ({ registered_pilot_name, pilot_class: "open" })
         ),
+        remove: [],
       },
     });
 
-    await page.goto(`/comp/${staleCompId}/pilots`);
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expectGridReady(page);
+    await openRoster(page, staleCompId);
+    // Look first, so any answer cached from here on is about four pilots.
+    await openFill(page);
+    await expect(page.getByText(/3 of 4 pilots have one/)).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Cancel" }).click();
 
-    // Ada sorts first, so the answer taken at load has HER name match at
-    // index 0. Removing her row shifts Bruno into that index.
-    const adaRow = page
-      .locator("#pilots-grid .tabulator-row", { hasText: "Ada Thermal" })
-      .first();
-    await adaRow.locator('[title="Remove pilot"]').click();
-    await expect(
-      page.locator("#pilots-grid .tabulator-row", { hasText: "Ada Thermal" })
-    ).toHaveCount(0);
+    // Ada sorts first, so her name match sat at index 0. Removing her shifts
+    // Bruno into that index.
+    await rowOf(page, "Ada Thermal").click();
+    await page.getByRole("button", { name: "Remove this pilot" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+    await expect(rowOf(page, "Ada Thermal")).toHaveCount(0, { timeout: 20_000 });
 
-    await openCivlDialog(page);
+    await openFill(page);
     await page.getByRole("button", { name: "Fill", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { name: "Fill from CIVL rankings" })
-    ).toBeHidden({ timeout: 20_000 });
+    await expect(fillHeading(page)).toBeHidden({ timeout: 20_000 });
 
-    // Bruno gets Bruno's id. Against the stale answer he was handed Ada's
+    // Bruno gets Bruno's id. Against a stale answer he was handed Ada's
     // (9000001) — a real pilot, a plausible-looking roster, the wrong human.
-    const bruno = page
-      .locator("#pilots-grid .tabulator-row", { hasText: "Bruno Ridge" })
-      .first();
-    await expect(bruno.locator('[tabulator-field="civl_id"]')).toHaveText("9000002");
-    const cleo = page
-      .locator("#pilots-grid .tabulator-row", { hasText: "Cleo Vario" })
-      .first();
-    await expect(cleo.locator('[tabulator-field="civl_id"]')).toHaveText("9000003");
+    const roster = await api.get(`/api/comp/${staleCompId}/pilot`);
+    const byName = Object.fromEntries(
+      ((await roster.json()) as { pilots: Array<{ name: string; civl_id: string | null }> }).pilots.map(
+        (p) => [p.name, p.civl_id]
+      )
+    );
+    expect(byName["Bruno Ridge"]).toBe("9000002");
+    expect(byName["Cleo Vario"]).toBe("9000003");
     // Nobody in any list: still empty, not handed the leftovers.
-    const zulu = page
-      .locator("#pilots-grid .tabulator-row", { hasText: "Zulu Nobody" })
-      .first();
-    await expect(zulu.locator('[tabulator-field="civl_id"]')).toHaveText("");
+    expect(byName["Zulu Nobody"]).toBeNull();
   } finally {
     await api.delete(`/api/comp/${staleCompId}`);
     await api.dispose();

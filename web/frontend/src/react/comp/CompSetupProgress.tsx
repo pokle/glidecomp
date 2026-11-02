@@ -142,11 +142,12 @@ export function CompSetupProgress({
           </Link>
         );
       case "pilots":
-        // #edit-pilots opens the pilots page's edit dialog on arrival. The
-        // roster editor is still a dialog, so this hash is still how it opens
-        // — unlike the route editor below, which has a URL of its own now.
+        // The pilots page IS the roster editor — a list with a + — so there
+        // is no dialog to open on arrival any more. This was
+        // `/pilots#edit-pilots`, a hash the page watched for while the editor
+        // was a grid behind an Edit button.
         return (
-          <Link className={linkClass} to={`/comp/${compId}/pilots#edit-pilots`}>
+          <Link className={linkClass} to={`/comp/${compId}/pilots`}>
             {step.label}
           </Link>
         );

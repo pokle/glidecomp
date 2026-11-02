@@ -14,12 +14,13 @@ import {
   validated,
 } from "../validators";
 import { matchRoster, type RankedEntry } from "../civl-ranking-match";
-import { resolvePilotId } from "../pilot-resolver";
+import { resolvePilotId, type MatchedBy } from "../pilot-resolver";
 import { linkExistingRegistrations } from "../pilot-linker";
 import { audit, auditAll, describeChange, describePrivateChange } from "../audit";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { bumpAndRevalidateScores, taskIdsForPilots } from "../score-store";
 import { deleteTrackFiles, trackFileKeysForPilots } from "../track-files";
+import { TeamSpellings, rosterTeamNames } from "../team-name";
 
 /** How many pilot-link lookups to run at once on a bulk roster import. */
 const PILOT_RESOLVE_CONCURRENCY = 10;
@@ -426,6 +427,45 @@ async function nextPilotLink(
   return madeByOldIdentity ? null : before.pilot_id;
 }
 
+/** What the resolver matched on, as the request field and the words for it. */
+const MATCHED_FIELD: Record<NonNullable<MatchedBy>, { field: string; noun: string }> = {
+  email: { field: "registered_pilot_email", noun: "email" },
+  civl_id: { field: "registered_pilot_civl_id", noun: "CIVL ID" },
+  safa_id: { field: "registered_pilot_safa_id", noun: "SAFA ID" },
+  ushpa_id: { field: "registered_pilot_ushpa_id", noun: "USHPA ID" },
+  bhpa_id: { field: "registered_pilot_bhpa_id", noun: "BHPA ID" },
+  dhv_id: { field: "registered_pilot_dhv_id", noun: "DHV ID" },
+  ffvl_id: { field: "registered_pilot_ffvl_id", noun: "FFVL ID" },
+  fai_id: { field: "registered_pilot_fai_id", noun: "FAI ID" },
+};
+
+/**
+ * The refusal for a row whose email or ID belongs to a pilot already on the
+ * roster: who they are, and which field said so — so the form can put it
+ * under that field ("Tushar Pokle is already registered with this email.")
+ * instead of leaving the organiser to work out which of eight fields it means.
+ */
+async function alreadyRegistered(
+  db: D1Database,
+  compId: number,
+  pilotId: number,
+  matchedBy: MatchedBy,
+  exceptCompPilotId: number | null = null
+): Promise<{ error: string; field?: string }> {
+  const row = await db
+    .prepare(
+      `SELECT registered_pilot_name FROM comp_pilot
+        WHERE comp_id = ? AND pilot_id = ? AND comp_pilot_id IS NOT ?`
+    )
+    .bind(compId, pilotId, exceptCompPilotId)
+    .first<{ registered_pilot_name: string }>();
+  const who = row?.registered_pilot_name ?? "This pilot";
+  const matched = matchedBy ? MATCHED_FIELD[matchedBy] : null;
+  return matched
+    ? { error: `${who} is already registered with this ${matched.noun}.`, field: matched.field }
+    : { error: `${who} is already registered in this competition.` };
+}
+
 export const pilotRoutes = new Hono<AuthedEnv>()
   // ── GET /api/comp/pilot ── Get current user's pilot profile
   // (literal path — must be registered before /api/comp/:comp_id/pilot)
@@ -546,13 +586,17 @@ export const pilotRoutes = new Hono<AuthedEnv>()
           .first();
         if (dupe) {
           return c.json(
-            { error: "This pilot is already registered in the competition" },
+            await alreadyRegistered(c.env.DB, compId, resolved.pilot_id, resolved.matched_by),
             409
           );
         }
       }
 
-      const insertValues = buildInsertValues(compId, resolved.pilot_id, body);
+      // A team goes in under the spelling the roster already uses for it.
+      const team_name = new TeamSpellings(await rosterTeamNames(c.env.DB, compId)).spell(
+        body.team_name
+      );
+      const insertValues = buildInsertValues(compId, resolved.pilot_id, { ...body, team_name });
       const res = await c.env.DB.prepare(INSERT_COMP_PILOT_SQL)
         .bind(...insertValues)
         .run();
@@ -696,6 +740,21 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         ? [...removeIds].filter((id) => existingById.has(id))
         : [...existingById.keys()].filter((id) => !updatedIds.has(id));
       const deleting = new Set(toDelete);
+
+      // Teams go in under the spelling the roster already uses — the roster
+      // as this save leaves it, so the rows it rewrites can rename a team
+      // (an import that corrects "alpha" to "Alpha" for all five members),
+      // and two new rows spelling one new team two ways become one team.
+      const spellings = new TeamSpellings(
+        existingRows.results
+          .filter((r) => !updatedIds.has(r.comp_pilot_id) && !deleting.has(r.comp_pilot_id))
+          .map((r) => r.team_name)
+      );
+      for (const p of planned) {
+        if (p.row.team_name !== undefined) {
+          p.row = { ...p.row, team_name: spellings.spell(p.row.team_name) };
+        }
+      }
 
       // Resolve linking for each row that needs one. Each resolution is an
       // independent D1 read, so they overlap rather than queueing: a 250-row
@@ -957,6 +1016,15 @@ export const pilotRoutes = new Hono<AuthedEnv>()
       // field could ever be cleared: a driver's number, once typed, stayed.)
       const overlay = <T,>(sent: T | undefined, stored: T): T =>
         sent !== undefined ? sent : stored;
+      // A team goes in under the spelling the REST of the roster uses for it
+      // — this pilot's own row left out, so a team of one can still have its
+      // capitals corrected.
+      const teamName =
+        body.team_name === undefined
+          ? existing.team_name
+          : new TeamSpellings(await rosterTeamNames(c.env.DB, compId, [compPilotId])).spell(
+              body.team_name
+            );
       const merged = {
         registered_pilot_name: overlay(body.registered_pilot_name, existing.registered_pilot_name),
         registered_pilot_email: overlay(body.registered_pilot_email, existing.registered_pilot_email),
@@ -969,7 +1037,7 @@ export const pilotRoutes = new Hono<AuthedEnv>()
         registered_pilot_fai_id: overlay(body.registered_pilot_fai_id, existing.registered_pilot_fai_id),
         registered_pilot_glider: overlay(body.registered_pilot_glider, existing.registered_pilot_glider),
         pilot_class: overlay(body.pilot_class, existing.pilot_class),
-        team_name: overlay(body.team_name, existing.team_name),
+        team_name: teamName,
         driver_contact: overlay(body.driver_contact, existing.driver_contact),
         wprs_points: overlay(body.wprs_points, existing.wprs_points),
         // The source travels with the number: a PATCH that moves the score
@@ -997,8 +1065,11 @@ export const pilotRoutes = new Hono<AuthedEnv>()
           .bind(compId, newPilotId, compPilotId)
           .first();
         if (dupe) {
+          // Ask the resolver again for WHICH field matched: the refusal names
+          // it, and this is the one path that needs to know.
+          const { matched_by } = await resolvePilotId(c.env.DB, resolverFields(merged));
           return c.json(
-            { error: "Another row in this competition already links to that pilot" },
+            await alreadyRegistered(c.env.DB, compId, newPilotId, matched_by, compPilotId),
             409
           );
         }

@@ -29,7 +29,7 @@ export const MOBILE_SPEC_FILES = [
   // designed for.
   "comp-settings-pages.spec.ts",
   // The comp and scores pages: the score-view tab strip (#640), the sortable
-  // score tables, the pilots grid and the activity feed.
+  // score tables, the pilots list and the activity feed.
   "comp-detail.spec.ts",
   // Submitting a track — the flow whose whole premise is a pilot who has just
   // landed, standing on a hill, holding a phone.
@@ -44,6 +44,15 @@ export const MOBILE_SPEC_FILES = [
   // asserted never to scroll sideways, and a sheet to be dismissable with the
   // back gesture.
   "comp-waypoints.spec.ts",
+  // The pilots page, the same shape as the waypoints page for the same reason:
+  // a list of pilots opening sheets, with search and + at the bottom of the
+  // screen in thumb reach. The fourteen-column grid it replaced showed about
+  // one and a half columns at this width.
+  "comp-pilots.spec.ts",
+  // The kit form (rac/form.tsx), whose rules are about where an error lands
+  // on the screen — which is exactly what a phone's height, its keyboard and
+  // a sheet's fixed header change.
+  "forms.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */

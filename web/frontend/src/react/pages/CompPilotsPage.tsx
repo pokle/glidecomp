@@ -3,11 +3,8 @@
  * (functions/comp/[[path]].ts serves it a noindex shell). The roster used to
  * be a section of the comp page; it moved here
  * because for visitors it duplicated the score tables, while for admins it
- * is a management surface (paste-in roster setup, CSV import, the Tabulator
- * edit grid) that deserves room of its own.
- *
- * The #edit-pilots deep link (used by the comp setup guide) opens the edit
- * dialog on load — PilotsSection handles that hash itself.
+ * is a management surface (a list of pilots that open sheets, CSV import and
+ * export, the CIVL fill) that deserves room of its own. See PilotsSection.
  */
 import { Link, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
@@ -30,7 +27,7 @@ export function CompPilotsPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { loading } = useUser();
-  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, setData } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
@@ -84,8 +81,11 @@ export function CompPilotsPage() {
         compId={compId}
         compName={comp.name}
         compClasses={comp.pilot_classes}
-        isAdmin={isAdmin}
         openRegistration={comp.open_registration}
+        // Keeps the section nav's "Pilots (n)" in step with the list below it.
+        onCountChange={(n) =>
+          setData((c) => (c && c.pilot_count !== n ? { ...c, pilot_count: n } : c))
+        }
         headingAs="h1"
       />
     </div>

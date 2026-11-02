@@ -34,5 +34,8 @@ export function AppToaster() {
   // body-level dialog portals no matter its z-index — toasts fired while a
   // dialog is open would be hidden behind it. At body level sonner's own
   // z-index wins and toasts stay on top of open dialogs.
-  return createPortal(<Toaster position="bottom-right" />, document.body);
+  return createPortal(
+    <Toaster position="bottom-right" />,
+    document.body
+  );
 }

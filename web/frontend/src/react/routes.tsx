@@ -51,7 +51,7 @@ import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
  * Everything else is signed-in, admin-only or otherwise never server-rendered,
  * so it has no business in the bundle an anonymous visitor downloads to read a
  * scoreboard. Splitting these keeps the dashboard, settings, onboarding, the
- * admin screens and the Tabulator-backed pilots roster out of the entry chunk.
+ * admin screens and the pilots roster editor out of the entry chunk.
  */
 const Dashboard = lazy(() =>
   import("./pages/Dashboard").then((m) => ({ default: m.Dashboard }))
@@ -66,11 +66,20 @@ const OAuthConsent = lazy(() =>
 const SignIn = lazy(() =>
   import("./pages/SignIn").then((m) => ({ default: m.SignIn }))
 );
+// The kit form's test bench, for e2e/forms.spec.ts. Development builds only:
+// `import.meta.env.DEV` is false in a production build, so neither the route
+// nor the page is in it.
+const KitFormFixture = import.meta.env.DEV
+  ? lazy(() => import("./pages/KitFormFixture").then((m) => ({ default: m.KitFormFixture })))
+  : null;
 const CompPilotsPage = lazy(() =>
   import("./pages/CompPilotsPage").then((m) => ({ default: m.CompPilotsPage }))
 );
 const CompSettingsPage = lazy(() =>
   import("./pages/CompSettingsPage").then((m) => ({ default: m.CompSettingsPage }))
+);
+const CompPilotPage = lazy(() =>
+  import("./pages/CompPilotPage").then((m) => ({ default: m.CompPilotPage }))
 );
 const TaskSettingsPage = lazy(() =>
   import("./pages/TaskSettingsPage").then((m) => ({ default: m.TaskSettingsPage }))
@@ -176,11 +185,18 @@ export function AppRoutes() {
             {/* Inside Shell: /submit is a destination with somewhere to go
                 afterwards, not a dead end like /signin. */}
             <Route path="/submit" element={<SubmitTrack />} />
+            {KitFormFixture ? (
+              <Route path="/__kit/form" element={<KitFormFixture />} />
+            ) : null}
             <Route path="/comp" element={<Competitions />} />
             <Route path="/comp/:compId" element={<CompDetail />} />
             <Route path="/comp/:compId/scores" element={<CompScoresPage />} />
             {/* Admin-only roster editor — noindex shell in the SSR Function. */}
             <Route path="/comp/:compId/pilots" element={<CompPilotsPage />} />
+            {/* One pilot's editor, and a blank one — pages rather than sheets
+                over the list (the overlays rule in CLAUDE.md). Noindex shells. */}
+            <Route path="/comp/:compId/pilots/new" element={<CompPilotPage />} />
+            <Route path="/comp/:compId/pilots/:pilotId" element={<CompPilotPage />} />
             {/* Admin-only settings pages (index + one sub-page per group) —
                 noindex shell in the SSR Function, like /pilots. */}
             <Route path="/comp/:compId/settings" element={<CompSettingsPage />} />

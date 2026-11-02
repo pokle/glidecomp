@@ -63,7 +63,7 @@ export const CONTENT_SECURITY_POLICY = CSP_DIRECTIVES.map(([k, v]) => `${k} ${v}
  * functions/api/csp-report.ts what it would have refused and blocks nothing.
  * It is a separate header from the enforced CSP above (a page may carry both),
  * and `public/_headers` applies it to those two paths only — the SPA, with
- * Tabulator and React's own internals, is not yet covered.
+ * React's own internals, is not yet covered.
  * `e2e/trusted-types.spec.ts` loads both pages with this policy ENFORCED and
  * fails on any violation, so the switch to enforcing is a header rename once
  * production reports are quiet.

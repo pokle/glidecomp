@@ -135,8 +135,10 @@ differs. Know which surface you're touching:
   `--ring` (which must keep ≥ 3:1 against its background, see §3.1).
 - Never set `outline: none` without providing a replacement indicator.
 - Focus must not be obscured (WCAG 2.4.11): sticky headers (the 60px chrome,
-  the mobile anchor bar) and toasts (`sonner`) must not cover the focused
-  element.
+  the mobile anchor bar, the pilots page's sticky search bar) and toasts
+  (`sonner`) must not cover the focused element. Rows under a sticky bar carry
+  a `scroll-mt-*` at least as tall as what sticks above them, so focus scrolls
+  a row clear of it (`comp/PilotList.tsx`).
 - **Focus order follows reading order** (WCAG 2.4.3). When a dialog opens, focus
   moves into it; when it closes, focus returns to the trigger. The route editor
   deep-link (`#edit-route`) and `#scores` redirect must land focus sensibly, not
@@ -268,10 +270,9 @@ differs. Know which surface you're touching:
   must expose the same name/role/value and states (`aria-expanded`,
   `aria-pressed`, `aria-selected`, `aria-current`) — the
   `aria-pressed`/`aria-current` usage in `Shell.tsx` is the reference.
-  Editable-grid surfaces are Tabulator by policy (see the guide); the RAC
-  chrome around them carries the dialog/button semantics, and grid cell
-  content must never reach `innerHTML` unescaped (build formatter nodes with
-  `textContent`).
+  There is no editable grid: an editable collection is a `GridList` of rows
+  that open `FullScreenSheet`s, so every field in it is a kit field with its
+  own label, and a row's whole width is its tap target (see the guide).
 - **The active tab** carries `aria-current="page"` (in addition to the visual
   underline).
 - **Status messages** (WCAG 4.1.3): toasts (`sonner`), async save results,

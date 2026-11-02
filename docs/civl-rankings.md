@@ -201,15 +201,17 @@ pilots to 6,875 — see [One number per pilot](#one-number-per-pilot-wprs-points
 below. The migration converts every stored rank back to the points it came
 from, by the (list, month, pilot) it recorded.
 
-**Filling the roster in** happens in the pilots editor (`/comp/:id/pilots` →
-Edit, `src/react/comp/PilotsSection.tsx` + `civl-rankings.ts`).
+**Filling the roster in** happens on the pilots page (`/comp/:id/pilots`,
+`src/react/comp/RosterActions.tsx` + `civl-rankings.ts`).
 
-**"Fill from CIVL…"**, in the editor's footer with the other grid-wide
-actions. It opens a dialog of its own (`CivlFillDialog`) saying how many of
-these pilots the rankings can place, and the button that places them. It was
-a bar under the grid, and on a phone it cost about a fifth of the editor's
-height permanently, for a step most rosters take once. It closes on the way
-out so the outcome lands under the grid, beside the rows it changed.
+**"Fill from CIVL…"**, in the page's ⋯ menu with the other roster-wide
+actions. It opens a sheet (`CivlFillSheet`) that works the whole fill out in
+memory first and lists what it will set — each pilot's new CIVL ID and points,
+and the list and month the points come from — with the button that sets them.
+Nothing is written until Fill is pressed, and then only the rows that change
+(one bulk save with an empty `remove` list). It used to fill an editable grid
+that waited for the editor's Save; the grid is gone, so the preview is where a
+fill the organiser disagrees with is turned down.
 
 The fill does two passes, in this order and for this reason:
 
@@ -225,8 +227,8 @@ matched by it on the second, which is what makes their ranks fillable at all.
 This was two buttons, and the ordering was the organiser's to know — pressing
 them the other way round simply did less.
 
-**Neither pass overwrites.** The dialog promises "Add CIVL IDs and rankings
-when missing", and a number already in the grid is somebody's answer — typed
+**Neither pass overwrites.** The sheet promises "Add CIVL IDs and WPRS points
+when missing", and a number already on the roster is somebody's answer — typed
 for a pilot the lists have wrong or have missed, or filled from an earlier
 import. The cost is the refresh path: when CIVL publishes a new month, filling
 again adds nothing to a roster that is already scored, and **clearing a score
@@ -242,16 +244,16 @@ are **not** folded, because SQLite's `NOCASE` is ASCII-only and the fold would
 claim matches the query could never fetch. Rules and reasoning:
 `web/workers/competition-api/src/civl-ranking-match.ts`.
 
-The button reads `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
-which answers about the rows in the **grid** — the organiser is mid-edit when
-they press it, and asking about the SAVED roster would answer about a state
-they are in the middle of leaving. The dialog asks again every time it opens,
-for the same reason: a name corrected since the grid loaded is the commonest
-reason to press the button at all, and the matches are keyed by row index, so
-a stale answer does not merely miss — it can put one pilot's id on another
-pilot's row. Nothing is written until Save.
+The sheet reads `POST /api/comp/:comp_id/pilot/civl-rankings` (admin only),
+which answers about the rows it is SENT rather than the stored roster: the
+second pass has to ask about the IDs the first pass has only just found, and
+those exist in memory, not yet in the database. The sheet asks again every
+time it opens, because the matches are keyed by row index, and a stale answer
+does not merely miss — it can put one pilot's id on another pilot's row. Each
+pilot is now saved on its own, so the roster the sheet opens on is the saved
+one: a name corrected a moment ago is already there to be matched.
 
-Writes go through the ordinary roster save, so they are `audit()`ed like any
+Writes go through the ordinary bulk save, so they are `audit()`ed like any
 other roster change. They take **no** `bumpAndRevalidateScores()` call: a world
 ranking is not a scoring input and cannot change a task score.
 

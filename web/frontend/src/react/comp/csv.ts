@@ -1,12 +1,12 @@
 /**
- * Pure CSV / row helpers for the pilots edit dialog, ported from
- * src/comp/pilots-section.ts. The Tabulator grid is gone — these functions
- * take the comp's classes and current pilots as explicit arguments so they
- * stay pure and unit-testable.
+ * Pure CSV / row helpers for the pilots page: the row shape the pilot page
+ * edits (comp/PilotForm.tsx), and the CSV import and export
+ * (comp/roster-import.ts). They take the comp's classes and current pilots as
+ * explicit arguments so they stay pure and unit-testable.
  *
- * All mutations funnel through POST /api/comp/:comp_id/pilot/bulk so the
- * backend's diff-and-write logic is the single source of truth for
- * inserts / updates / deletes.
+ * One pilot is saved through its own PATCH/POST; anything that changes many
+ * pilots at once goes through POST /api/comp/:comp_id/pilot/bulk with only the
+ * rows that change and an explicit `remove` list.
  */
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -337,9 +337,24 @@ export function removedPilotIds(shown: CompPilot[], payload: BulkPilotRow[]): st
  * visible in the read-only table) so re-importing is a no-op. The header
  * row is always written, so an empty table still yields a fillable template.
  */
+/**
+ * The column that carries each pilot's GlideComp id through a spreadsheet.
+ *
+ * Last, and not in {@link COLUMNS}, because it is not something an organiser
+ * fills in — it is how an exported roster comes back as the SAME pilots. A
+ * pilot who joined by uploading a track has no email or ID on their roster
+ * row, so without it an export, edit and re-import matched them to nobody:
+ * the import added them again and removed the originals, tracks and all.
+ * Leave it blank (a new row, or a fresh template) and matching falls back to
+ * IDs and email as before.
+ */
+export const ID_HEADER = "glidecomp_id";
+
 export function exportCsvContent(rows: ParsedRow[]): string {
-  const header = COLUMNS.map((c) => c.header).join(",");
-  const lines = rows.map((r) => COLUMNS.map((c) => csvEscape(r[c.key])).join(","));
+  const header = [...COLUMNS.map((c) => c.header), ID_HEADER].join(",");
+  const lines = rows.map((r) =>
+    [...COLUMNS.map((c) => csvEscape(r[c.key])), csvEscape(r.comp_pilot_id ?? "")].join(",")
+  );
   return [header, ...lines].join("\n") + "\n";
 }
 
@@ -413,6 +428,7 @@ export function parseImportedCsv(
   }
 
   const columnKeys: (ColumnDef["key"] | null)[] = headerCells.map((h) => keyOf.get(h) ?? null);
+  const idColumn = headerCells.findIndex((h) => h === ID_HEADER || h === "comp_pilot_id");
 
   if (!columnKeys.includes("name")) {
     return {
@@ -441,6 +457,10 @@ export function parseImportedCsv(
         (row as unknown as Record<string, unknown>)[key] = stripFormulaGuard(value) || null;
       }
     }
+    // Only ever a candidate: classifyImportRows keeps it if this roster
+    // holds that pilot and drops it otherwise.
+    const id = idColumn >= 0 ? (cells[idColumn] ?? "").trim() : "";
+    if (id) row.comp_pilot_id = id;
     if (!row.name) {
       errors.push(`Row ${i}: name is required — row skipped`);
       continue;
@@ -573,8 +593,19 @@ export function classifyImportRows(
     }
   }
 
+  const byId = new Map(currentPilots.map((p) => [p.comp_pilot_id, p]));
+
   const out: ImportClassifiedRow[] = [];
-  for (const r of rows) {
+  for (const fileRow of rows) {
+    // The file's own id (an exported roster's glidecomp_id column) settles it
+    // when this roster holds that pilot. One it does not hold — a file from
+    // another comp — is dropped rather than sent: it names nobody here.
+    const { comp_pilot_id: fileId, ...r } = fileRow;
+    if (fileId && byId.has(fileId)) {
+      out.push({ parsed: r, action: "match", matchedId: fileId });
+      continue;
+    }
+
     let matched: CompPilot | undefined;
     if (r.civl_id && byCivl.has(r.civl_id)) {
       matched = byCivl.get(r.civl_id);

@@ -29,7 +29,7 @@ import { cn } from "@/react/lib/utils";
 import { MinusIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 
 export const inputClass =
-  "h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-3 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground data-focused:border-ring data-focused:ring-3 data-focused:ring-ring/50 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:bg-input/50 data-disabled:opacity-50 data-invalid:border-destructive data-invalid:ring-destructive/20 md:text-sm dark:bg-input/30";
+  "h-9 w-full min-w-0 rounded-lg border border-input bg-card px-3 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground data-focused:border-ring data-focused:ring-3 data-focused:ring-ring/50 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:bg-input/50 data-disabled:opacity-50 data-invalid:border-destructive data-invalid:ring-destructive/20 md:text-sm dark:bg-input/30";
 
 export function Label({ className, ...props }: React.ComponentProps<typeof AriaLabel>) {
   return (
@@ -139,7 +139,7 @@ export function NumberField({
         className={cn(
           // 44px tall on a coarse pointer (issue #641), which is what makes
           // the steppers beside it a full 44px target rather than a 28×36 sliver.
-          "flex h-9 w-full min-w-0 items-stretch overflow-hidden rounded-lg border border-input bg-transparent transition-colors pointer-coarse:h-11",
+          "flex h-9 w-full min-w-0 items-stretch overflow-hidden rounded-lg border border-input bg-card transition-colors pointer-coarse:h-11",
           "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50",
           "data-disabled:pointer-events-none data-disabled:opacity-50 data-invalid:border-destructive dark:bg-input/30"
         )}
@@ -174,14 +174,34 @@ export function NumberField({
   );
 }
 
+/**
+ * The two shapes a search box takes.
+ *
+ * `floating` is the pill that rides over a list as it scrolls (the pilots
+ * page's sticky search bar): thumb height, an opaque surface because rows
+ * scroll underneath it, and a clear button big enough to hit with a thumb
+ * rather than the 20px a desktop field gets away with.
+ */
+const SEARCH_GROUP = {
+  default: "h-9 rounded-lg bg-card px-3 dark:bg-input/30",
+  floating:
+    "h-12 rounded-full bg-card/95 px-4 shadow-lg backdrop-blur-sm dark:bg-card/95",
+} as const;
+const SEARCH_CLEAR = {
+  default: "size-5 rounded",
+  floating: "-mr-2 size-10 rounded-full",
+} as const;
+
 /** Search input with the built-in clear (Esc / ✕) behaviour. */
 export function SearchField({
   label,
   description,
   placeholder,
   className,
+  variant = "default",
   ...props
-}: Omit<SearchFieldProps, "className"> & FieldExtras & { className?: string }) {
+}: Omit<SearchFieldProps, "className"> &
+  FieldExtras & { className?: string; variant?: keyof typeof SEARCH_GROUP }) {
   return (
     <AriaSearchField
       className={cn("group flex flex-col gap-2", className)}
@@ -194,8 +214,9 @@ export function SearchField({
       )}
       <Group
         className={cn(
-          "flex h-9 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-transparent px-3 transition-colors",
-          "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50 dark:bg-input/30"
+          "flex w-full min-w-0 items-center gap-1.5 border border-input transition-colors",
+          SEARCH_GROUP[variant],
+          "data-focus-within:border-ring data-focus-within:ring-3 data-focus-within:ring-ring/50"
         )}
       >
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -214,9 +235,17 @@ export function SearchField({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          className="w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground md:text-sm [&::-webkit-search-cancel-button]:hidden"
+          className={cn(
+            "w-full min-w-0 bg-transparent py-1 text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden",
+            variant === "default" && "md:text-sm"
+          )}
         />
-        <AriaButton className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground outline-none group-data-empty:invisible data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50">
+        <AriaButton
+          className={cn(
+            "flex shrink-0 items-center justify-center text-muted-foreground outline-none group-data-empty:invisible data-hovered:text-foreground data-focus-visible:ring-2 data-focus-visible:ring-ring/50",
+            SEARCH_CLEAR[variant]
+          )}
+        >
           <XIcon className="size-3.5" />
           <span className="sr-only">Clear search</span>
         </AriaButton>

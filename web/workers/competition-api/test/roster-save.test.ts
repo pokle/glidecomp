@@ -326,3 +326,155 @@ describe("the roster says how many tracks each pilot holds", () => {
     expect(pilots[0].track_count).toBe(1);
   });
 });
+
+describe("a refusal names the field it is about", () => {
+  test("a request that fails validation says which field", async () => {
+    const compId = await createComp();
+    const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Alice",
+      registered_pilot_email: "not an email",
+      pilot_class: "open",
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; field?: string };
+    expect(body.field).toBe("registered_pilot_email");
+    // The old string is unchanged, for anything that still reads it.
+    expect(body.error).toMatch(/^registered_pilot_email: /);
+  });
+
+  test("adding a pilot already on the roster names them, and the field that matched", async () => {
+    await env.DB.prepare("INSERT INTO pilot (user_id, name) VALUES (?, ?)")
+      .bind("user-3", "Pilot Three")
+      .run();
+    const compId = await createComp();
+    const first = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Pilot Three",
+      registered_pilot_email: "pilot3@test.com",
+      pilot_class: "open",
+    });
+    expect(first.status).toBe(201);
+
+    const again = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Moosh",
+      registered_pilot_email: "pilot3@test.com",
+      pilot_class: "open",
+    });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toEqual({
+      error: "Pilot Three is already registered with this email.",
+      field: "registered_pilot_email",
+    });
+  });
+
+  test("editing a pilot onto someone else's CIVL ID names them, and the field", async () => {
+    await env.DB.prepare("INSERT INTO pilot (user_id, name, civl_id) VALUES (?, ?, ?)")
+      .bind("user-3", "Pilot Three", "C-42")
+      .run();
+    const compId = await createComp();
+    await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Pilot Three",
+      registered_pilot_civl_id: "C-42",
+      pilot_class: "open",
+    });
+    const other = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Moosh",
+      pilot_class: "open",
+    });
+    const { comp_pilot_id } = (await other.json()) as Pilot;
+
+    const res = await authRequest("PATCH", `/api/comp/${compId}/pilot/${comp_pilot_id}`, {
+      registered_pilot_civl_id: "C-42",
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: "Pilot Three is already registered with this CIVL ID.",
+      field: "registered_pilot_civl_id",
+    });
+  });
+});
+
+describe("a team is stored under the spelling the roster already uses", () => {
+  async function teamsOf(compId: string): Promise<Record<string, string | null>> {
+    const res = await authRequest("GET", `/api/comp/${compId}/pilot`);
+    const { pilots } = (await res.json()) as { pilots: Pilot[] };
+    return Object.fromEntries(pilots.map((p) => [p.name, p.team_name]));
+  }
+
+  test("a new pilot joins the team their team name IS", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [{ registered_pilot_name: "Ada", pilot_class: "open", team_name: "Alpha Gliders" }],
+      remove: [],
+    });
+    const res = await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bo",
+      pilot_class: "open",
+      team_name: "  alpha   GLIDERS ",
+    });
+    expect(res.status).toBe(201);
+    expect((await teamsOf(compId)).Bo).toBe("Alpha Gliders");
+  });
+
+  test("a near miss may be a different team, and is left as given", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [{ registered_pilot_name: "Ada", pilot_class: "open", team_name: "Alpha Gliders" }],
+      remove: [],
+    });
+    await authRequest("POST", `/api/comp/${compId}/pilot`, {
+      registered_pilot_name: "Bo",
+      pilot_class: "open",
+      team_name: "Alpha Gilders",
+    });
+    expect((await teamsOf(compId)).Bo).toBe("Alpha Gilders");
+  });
+
+  test("an edit joins the team; a team of one can still have its capitals fixed", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [
+        { registered_pilot_name: "Ada", pilot_class: "open", team_name: "Alpha Gliders" },
+        { registered_pilot_name: "Bo", pilot_class: "open", team_name: "bravo" },
+      ],
+      remove: [],
+    });
+    const before = await authRequest("GET", `/api/comp/${compId}/pilot`);
+    const { pilots } = (await before.json()) as { pilots: Pilot[] };
+    const bo = pilots.find((p) => p.name === "Bo")!;
+
+    await authRequest("PATCH", `/api/comp/${compId}/pilot/${bo.comp_pilot_id}`, {
+      team_name: "Bravo",
+    });
+    expect((await teamsOf(compId)).Bo).toBe("Bravo");
+
+    await authRequest("PATCH", `/api/comp/${compId}/pilot/${bo.comp_pilot_id}`, {
+      team_name: "ALPHA gliders",
+    });
+    expect((await teamsOf(compId)).Bo).toBe("Alpha Gliders");
+  });
+
+  test("one import spelling a new team two ways makes one team, and an import can rename one", async () => {
+    const compId = await createComp();
+    await bulk(compId, {
+      pilots: [
+        { registered_pilot_name: "Ada", pilot_class: "open", team_name: "Sky Kings" },
+        { registered_pilot_name: "Bo", pilot_class: "open", team_name: "sky  kings" },
+        { registered_pilot_name: "Cy", pilot_class: "open", team_name: "alpha" },
+        { registered_pilot_name: "Di", pilot_class: "open", team_name: "alpha" },
+      ],
+      remove: [],
+    });
+    expect(await teamsOf(compId)).toMatchObject({ Ada: "Sky Kings", Bo: "Sky Kings" });
+
+    const before = await authRequest("GET", `/api/comp/${compId}/pilot`);
+    const { pilots } = (await before.json()) as { pilots: Pilot[] };
+    const res = await bulk(compId, {
+      pilots: pilots
+        .filter((p) => p.name === "Cy" || p.name === "Di")
+        .map((p) => ({ ...unchanged(p), team_name: "Alpha" })),
+      remove: [],
+    });
+    expect(res.status).toBe(200);
+    expect(await teamsOf(compId)).toMatchObject({ Cy: "Alpha", Di: "Alpha" });
+  });
+});

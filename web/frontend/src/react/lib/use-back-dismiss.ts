@@ -321,3 +321,32 @@ export function useBackDismiss(
 
   return layer.current;
 }
+
+/**
+ * Go Back one page, AFTER any overlay that has just closed has given back its
+ * history entry.
+ *
+ * A dialog releases its entry a task after it closes (see the cleanup above),
+ * so a page that answers a confirm by leaving — the pilot page's Remove —
+ * would otherwise race that release: two `history.back()`s in flight, and the
+ * reader left where they were. This queues behind the release, steps over any
+ * dead entry it left, and then takes the one real step back.
+ *
+ * Goes when the last overlay stops using this module (pokle/glidecomp#817).
+ */
+export function backPastClosedOverlays(): void {
+  if (typeof window === "undefined") return;
+  const started = Date.now();
+  const go = () => {
+    // A closing dialog keeps its layer through its exit animation and
+    // releases it a task after unmounting; wait until nothing holds an entry
+    // and no walk is under way (bounded, so a stuck layer cannot strand the
+    // reader).
+    if ((layers.length > 0 || unwinding) && Date.now() - started < 2000) {
+      window.setTimeout(go, 16);
+      return;
+    }
+    walkBack(isDead, () => window.history.back());
+  };
+  window.setTimeout(go, 0);
+}
