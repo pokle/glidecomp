@@ -25,6 +25,10 @@
  *   - **An error about no field in particular has one fixed place**, the
  *     {@link FormErrorBanner} — beside the button that submits, and focus
  *     moves to it, scrolling it into view. Never a toast: toasts are for "Saved".
+ *     A refusal can carry more than its sentence for that place — who to
+ *     write to, a sign-in, when to try again — as `help`, which a form adds
+ *     in `shapeRefusal` (the submit-track form's organiser `mailto:`). Under a
+ *     field only the sentence is shown: the field IS the help there.
  *   - **One submit at a time**, and the submit button says so
  *     ({@link SubmitButton}). Enter submits, as a form does.
  *   - **A request that never got an answer** says {@link UNREACHABLE}, and
@@ -52,7 +56,7 @@ import {
 import { Form as AriaForm } from "react-aria-components";
 
 import { cn } from "@/react/lib/utils";
-import { Alert, AlertDescription } from "./alert";
+import { Alert, AlertDescription, AlertTitle } from "./alert";
 import { Button } from "./button";
 import { CardTitle, cardSurface } from "./card";
 
@@ -75,6 +79,12 @@ export interface Refusal {
   message: string;
   /** The server's name for the field, when the refusal is about one. */
   field?: string;
+  /**
+   * What the reader can do about it, beyond the sentence: who to ask, a
+   * sign-in, when to try again. Shown under the message when the refusal
+   * lands beside the submit ({@link FormErrorBanner}); never under a field.
+   */
+  help?: ReactNode;
 }
 
 /**
@@ -123,12 +133,14 @@ interface FormState {
   fieldErrors: Record<string, string>;
   /** The error that belongs to no field, shown by FormErrorBanner. */
   formError: string | null;
+  /** The refusal's `help`, shown with `formError`. */
+  formErrorHelp: ReactNode;
   /**
    * Report an error in the form's one fixed place — for an action inside the
    * form that is not its submit (the pilot page's Remove), so it is seen
-   * where every other error is.
+   * where every other error is. `help` as a refusal's.
    */
-  setFormError: (message: string | null) => void;
+  setFormError: (message: string | null, help?: ReactNode) => void;
   /**
    * Clear one field's error, for a field whose value changes without an
    * `input` event of its own (a choice picked from a combo box's list).
@@ -206,6 +218,7 @@ export function Form({
   onSuccess,
   validate,
   fieldNames,
+  shapeRefusal,
   className,
   children,
 }: {
@@ -224,13 +237,25 @@ export function Form({
   validate?: () => Record<string, string | undefined | null | false>;
   /** The server's field names, mapped onto this form's field `name`s. */
   fieldNames?: Record<string, string>;
+  /**
+   * Reshape a refusal before it is shown, from the response's JSON body (null
+   * when it was not JSON): name the field it is about when the server's body
+   * says so another way (a `code`), or give it `help` for the pinned error.
+   */
+  shapeRefusal?: (refusal: Refusal, body: unknown) => Refusal;
   className?: string;
   children: ReactNode;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormErrorOnly] = useState<string | null>(null);
+  const [formErrorHelp, setFormErrorHelp] = useState<ReactNode>(null);
+  /** The pinned error, and its help (none, unless a refusal brought some). */
+  const setFormError = (message: string | null, help: ReactNode = null) => {
+    setFormErrorOnly(message);
+    setFormErrorHelp(help);
+  };
   // Bumped after every refusal, so the focus move runs after the errors it is
   // moving to have rendered — and runs again for the same error twice.
   const [refused, setRefused] = useState(0);
@@ -305,10 +330,26 @@ export function Form({
     }
 
     if (res && !res.ok) {
-      const refusal = await readRefusal(res);
+      let refusal: Refusal;
+      if (shapeRefusal) {
+        // Read once, for both readRefusal and the form's own reading of it.
+        const text = await res.text().catch(() => "");
+        let body: unknown = null;
+        try {
+          body = JSON.parse(text);
+        } catch {
+          // Not JSON: the form is handed null.
+        }
+        refusal = shapeRefusal(
+          await readRefusal({ status: res.status, text: async () => text }),
+          body
+        );
+      } else {
+        refusal = await readRefusal(res);
+      }
       const name = fieldFor(formRef.current, refusal.field, fieldNames);
       if (name) setFieldErrors({ [name]: refusal.message });
-      else setFormError(refusal.message);
+      else setFormError(refusal.message, refusal.help);
       setRefused((n) => n + 1);
       return;
     }
@@ -317,7 +358,7 @@ export function Form({
 
   return (
     <FormContext.Provider
-      value={{ pending, fieldErrors, formError, setFormError, clearFieldError }}
+      value={{ pending, fieldErrors, formError, formErrorHelp, setFormError, clearFieldError }}
     >
       <AriaForm
         ref={formRef}
@@ -377,14 +418,33 @@ export function SubmitButton({
  * page's header when Done is at the top, above Save when Save is at the foot.
  * Focus moves here when it appears (scrolling it into view), so it is read out
  * as well as seen.
+ *
+ * `title` heads every error shown here, for a form that names what failed
+ * ("We could not accept that track"). A refusal's `help` follows its message.
  */
-export function FormErrorBanner({ className }: { className?: string }) {
-  const { formError } = useFormState();
+export function FormErrorBanner({
+  className,
+  title,
+}: {
+  className?: string;
+  title?: ReactNode;
+}) {
+  const { formError, formErrorHelp } = useFormState();
   if (!formError) return null;
   return (
     <div className={className}>
       <Alert variant="destructive" data-form-error tabIndex={-1} className="outline-none">
-        <AlertDescription>{formError}</AlertDescription>
+        {title ? <AlertTitle>{title}</AlertTitle> : null}
+        <AlertDescription>
+          {formErrorHelp ? (
+            <>
+              <p>{formError}</p>
+              {formErrorHelp}
+            </>
+          ) : (
+            formError
+          )}
+        </AlertDescription>
       </Alert>
     </div>
   );

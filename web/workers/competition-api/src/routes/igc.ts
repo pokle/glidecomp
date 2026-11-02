@@ -20,14 +20,29 @@ import {
   supersedeActiveManualFlights,
   markLandedFromEvidence,
 } from "../manual-flight-store";
-import { ingestTrackSubmission } from "../track-upload";
+import { ingestTrackSubmission, type TrackSubmissionRejection } from "../track-upload";
 import {
   isCompClosed,
   maskEmail,
   organisersOf,
   submissionsClosedBody,
+  SUBMIT_FIELD,
 } from "../submission-gate";
 import { hiddenFromCaller, hiddenFromViewer } from "../comp-visibility";
+
+/**
+ * The signed-in routes' answer when the pipeline refuses a file. A bad file
+ * names the file field, so the form shows the message under it; a full task is
+ * the organiser's to fix, so it names no field.
+ */
+function uploadRejection(rejection: TrackSubmissionRejection): {
+  error: string;
+  field?: typeof SUBMIT_FIELD.file;
+} {
+  return rejection.kind === "invalid_file"
+    ? { error: rejection.message, field: SUBMIT_FIELD.file }
+    : { error: rejection.message };
+}
 
 /**
  * Ensure a `pilot` row exists for the given user. Returns the pilot_id.
@@ -279,13 +294,13 @@ export const igcRoutes = new Hono<AuthedEnv>()
         }>();
 
       if (!comp) {
-        return c.json({ error: "Competition not found" }, 404);
+        return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
       }
 
       // A hidden test comp answers exactly as a missing one does — being
       // signed in is not a claim to somebody's rehearsal.
       if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
-        return c.json({ error: "Competition not found" }, 404);
+        return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
       }
 
       if (isCompClosed(comp.close_date)) {
@@ -303,13 +318,16 @@ export const igcRoutes = new Hono<AuthedEnv>()
         .first<{ task_id: number; name: string; submissions_closed: number }>();
 
       if (!task) {
-        return c.json({ error: "Task not found" }, 404);
+        return c.json({ error: "Task not found", field: SUBMIT_FIELD.task }, 404);
       }
 
       // Closed for the day. Before the body read: a refusal should cost a
       // header parse, not a megabyte and a decompression.
       if (task.submissions_closed && !(await isCompAdmin(c.env.DB, compId, user))) {
-        return c.json(await submissionsClosedBody(c.env.DB, compId, taskId), 403);
+        return c.json(
+          { ...(await submissionsClosedBody(c.env.DB, compId, taskId)), field: SUBMIT_FIELD.task },
+          403
+        );
       }
 
       // WHO before WHAT. Identity is resolved ahead of the body read so an
@@ -319,7 +337,10 @@ export const igcRoutes = new Hono<AuthedEnv>()
       // having uploaded anything yet.
       const parsedClaim = readSelfClaim(c.req.header(COMP_PILOT_HEADER), alphabet);
       if (parsedClaim === "invalid") {
-        return c.json({ error: "That is not a registration we can look up." }, 400);
+        return c.json(
+          { error: "That is not a registration we can look up.", field: SUBMIT_FIELD.registration },
+          400
+        );
       }
 
       const pilotId = await ensurePilot(c.env.DB, user.id, user.name);
@@ -356,6 +377,7 @@ export const igcRoutes = new Hono<AuthedEnv>()
           {
             error: `Which registration are you in ${comp.name}?`,
             code: "identity_ambiguous",
+            field: SUBMIT_FIELD.registration,
             comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
             candidates: ensured.candidates.map((cand) => ({
               ...cand,
@@ -378,6 +400,7 @@ export const igcRoutes = new Hono<AuthedEnv>()
           {
             error: message,
             code: "claim_rejected",
+            field: SUBMIT_FIELD.registration,
             reason: ensured.reason,
             comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
             organisers: await organisersOf(c.env.DB, compId),
@@ -446,7 +469,7 @@ export const igcRoutes = new Hono<AuthedEnv>()
         describeUpload: ({ replaced, size, previously }) =>
           `${replaced ? "Replaced" : "Uploaded"} IGC for ${filedForName} (${size})${previously}`,
       });
-      if (!ingested.ok) return c.json({ error: ingested.rejection.message }, 400);
+      if (!ingested.ok) return c.json(uploadRejection(ingested.rejection), 400);
 
       return c.json(ingested.result, ingested.status);
     }
@@ -478,12 +501,12 @@ export const igcRoutes = new Hono<AuthedEnv>()
           open_igc_upload: number;
           test: number;
         }>();
-      if (!comp) return c.json({ error: "Competition not found" }, 404);
+      if (!comp) return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
 
       // As the self route: a hidden test comp is missing to everyone but its
       // admins, whichever pilot the track is being filed for.
       if (await hiddenFromCaller(c.env.DB, compId, comp.test, user)) {
-        return c.json({ error: "Competition not found" }, 404);
+        return c.json({ error: "Competition not found", field: SUBMIT_FIELD.task }, 404);
       }
 
       if (isCompClosed(comp.close_date)) {
@@ -526,13 +549,16 @@ export const igcRoutes = new Hono<AuthedEnv>()
         .first<{ task_id: number; name: string; submissions_closed: number }>();
 
       if (!task) {
-        return c.json({ error: "Task not found" }, 404);
+        return c.json({ error: "Task not found", field: SUBMIT_FIELD.task }, 404);
       }
 
       // Closed for the day. `isAdmin` is already resolved above, so the
       // organiser bypass costs nothing extra here.
       if (task.submissions_closed && !isAdmin) {
-        return c.json(await submissionsClosedBody(c.env.DB, compId, taskId), 403);
+        return c.json(
+          { ...(await submissionsClosedBody(c.env.DB, compId, taskId)), field: SUBMIT_FIELD.task },
+          403
+        );
       }
 
       // Verify comp_pilot exists and belongs to this comp
@@ -567,7 +593,7 @@ export const igcRoutes = new Hono<AuthedEnv>()
         describeUpload: ({ replaced, size, previously }) =>
           `${replaced ? "Replaced" : "Uploaded"} IGC for ${targetPilotName} on behalf (${size})${previously}`,
       });
-      if (!ingested.ok) return c.json({ error: ingested.rejection.message }, 400);
+      if (!ingested.ok) return c.json(uploadRejection(ingested.rejection), 400);
 
       return c.json(ingested.result, ingested.status);
     }

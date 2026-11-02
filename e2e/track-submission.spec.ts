@@ -368,12 +368,18 @@ test.describe("submitting a track without an account", () => {
     await expect(page.getByRole("link", { name: "Go to the task" })).toHaveCount(0);
   });
 
-  test("a wrong identifier is shown in the page with a way to fix it", async ({
+  // The form is the kit form (rac/form.tsx). A refusal one step can fix is
+  // shown under that step's field, focused; a refusal no field can fix is
+  // pinned beside Submit with who to ask. docs/track-submission.md, "Errors are
+  // repairable".
+
+  test("a wrong identifier is shown under the identifier, which is focused", async ({
     page,
   }) => {
     await page.goto(`${BASE_URL}/submit`);
     await pickTask(page, "Today's Task");
-    await page.getByRole("textbox", { name: "Email address" }).fill("nobody@nowhere.test");
+    const identifier = page.getByRole("textbox", { name: "Email address" });
+    await identifier.fill("nobody@nowhere.test");
     await page.locator('input[type="file"]').setInputFiles({
       name: "forged.igc",
       mimeType: "application/octet-stream",
@@ -381,11 +387,108 @@ test.describe("submitting a track without an account", () => {
     });
     await page.getByRole("button", { name: "Submit track" }).click();
 
-    await expect(page.getByText("We could not accept that track")).toBeVisible({
-      timeout: 15_000,
+    // The server's sentence, under the field it is about and read out with it.
+    await expect(identifier).toHaveAttribute("aria-invalid", "true", { timeout: 15_000 });
+    await expect(identifier).toHaveAccessibleDescription(
+      new RegExp(`No pilot with that .* is registered for ${fixture.compName}`)
+    );
+    await expect(identifier).toBeFocused();
+    await expect(identifier).toBeInViewport();
+    // Not the panel: the field IS the way to fix it.
+    await expect(page.getByText("We could not accept that track")).toHaveCount(0);
+
+    // Editing it clears the error, and keeps what was typed.
+    await identifier.fill(PILOT_EMAIL);
+    await expect(identifier).not.toHaveAttribute("aria-invalid", "true");
+    await expect(identifier).toHaveValue(PILOT_EMAIL);
+  });
+
+  test("a file that is not a tracklog is shown under the file, which is focused", async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/submit`);
+    await pickTask(page, "Today's Task");
+    await page.getByRole("textbox", { name: "Email address" }).fill(PILOT_EMAIL);
+    // Named .igc, so the form sends it: the server is what refuses it.
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "holiday-photo.igc",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from("Not a tracklog at all.\r\n"),
     });
-    // The organiser's address has to be a real mailto, not prose about one.
-    await expect(page.locator('a[href^="mailto:"]')).toBeVisible();
+    await page.getByRole("button", { name: "Submit track" }).click();
+
+    const fileButton = page.getByRole("button", { name: "Change file…" });
+    await expect(fileButton).toHaveAccessibleDescription(
+      "File does not look like an IGC track log",
+      { timeout: 15_000 }
+    );
+    await expect(fileButton).toBeFocused();
+    await expect(fileButton).toBeInViewport();
+    await expect(page.getByText("We could not accept that track")).toHaveCount(0);
+  });
+
+  test("a refusal no field can fix is pinned beside Submit, with who to ask", async ({
+    page,
+  }) => {
+    // A competition that asks pilots to sign in. The pilot cannot fix that in
+    // any field: what they need is the sign-in, and the organiser's address.
+    const compName = e2eCompName("sign-in-first");
+    const compRes = await admin.post("/api/comp", {
+      data: { name: compName, category: "hg", pilot_classes: ["open"], test: false },
+    });
+    expect(compRes.ok()).toBeTruthy();
+    const { comp_id: compId } = (await compRes.json()) as { comp_id: string };
+    try {
+      expect(
+        (
+          await admin.patch(`/api/comp/${compId}`, {
+            data: { admin_emails: [E2E_ORGANISER.email], open_igc_upload: false },
+          })
+        ).ok()
+      ).toBeTruthy();
+      const taskRes = await admin.post(`/api/comp/${compId}/task`, {
+        data: { name: "Today's Task", task_date: today(), pilot_classes: ["open"] },
+      });
+      expect(taskRes.ok()).toBeTruthy();
+      const { task_id: taskId } = (await taskRes.json()) as { task_id: string };
+
+      await page.goto(`${BASE_URL}/submit?comp=${compId}&task=${taskId}`);
+      await expect(page.getByText(new RegExp(`Today's Task.*${compName}`))).toBeVisible({
+        timeout: 20_000,
+      });
+      await page.getByRole("textbox", { name: "Email address" }).fill(PILOT_EMAIL);
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "forged.igc",
+        mimeType: "application/octet-stream",
+        buffer: Buffer.from(PLAIN_IGC),
+      });
+      const submit = page.getByRole("button", { name: "Submit track" });
+      await submit.click();
+
+      const pinned = page
+        .getByRole("alert")
+        .filter({ hasText: "We could not accept that track" });
+      await expect(pinned).toContainText(`${compName} asks pilots to sign in`, {
+        timeout: 15_000,
+      });
+      await expect(pinned).toBeFocused();
+      // Beside Submit, both on screen at once.
+      await expect(pinned).toBeInViewport();
+      await expect(submit).toBeInViewport();
+      // The help it carries: the sign-in, back to this page, and the organiser.
+      await expect(pinned.getByRole("link", { name: "Sign in to submit" })).toHaveAttribute(
+        "href",
+        `/signin?next=${encodeURIComponent("/submit")}`
+      );
+      await expect(pinned).toContainText(`Organiser: ${E2E_ORGANISER.name}`);
+      await expect(
+        pinned.getByRole("link", { name: E2E_ORGANISER.email })
+      ).toHaveAttribute("href", `mailto:${E2E_ORGANISER.email}`);
+      // No field to blame: nothing is marked invalid.
+      await expect(page.locator('[aria-invalid="true"], [data-invalid]')).toHaveCount(0);
+    } finally {
+      await admin.delete(`/api/comp/${compId}`);
+    }
   });
 
   test("an unknown identifier names the comp and the organiser to email", async ({
