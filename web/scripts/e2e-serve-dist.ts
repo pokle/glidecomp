@@ -92,18 +92,23 @@ const HOP_BY_HOP = new Set([
   "te",
   "trailer",
   "host",
-  // Bun's fetch decodes compressed bodies itself; asking for identity keeps
-  // the bytes and the headers in agreement.
-  "accept-encoding",
 ]);
 
-/** Response headers that no longer describe the body once it is re-sent. */
+/**
+ * Response headers that describe this hop rather than the body. The body's own
+ * Content-Encoding is NOT among them: the bytes are passed through exactly as
+ * the Worker sent them (`decompress: false` below), so the header still
+ * describes them. That matters — a track download is gzip inside a gzip
+ * Content-Encoding, and the page's gunzipResponse() only removes the inner
+ * layer when it can see the header. Decoding here and dropping the header
+ * handed the page gzip it took for text, and the report card's cleaning chart
+ * never drew.
+ */
 const STALE_RESPONSE_HEADERS = new Set([
   "connection",
   "keep-alive",
   "transfer-encoding",
-  "content-encoding",
-  "content-length",
+  "content-length", // Bun sets it again from the bytes it sends
   "set-cookie", // re-added one by one below; joined, they would not parse
 ]);
 
@@ -202,6 +207,9 @@ async function proxy(req: Request, upstreamPath: string): Promise<Response> {
       // the request at wrangler's end.
       body: hasBody ? await req.arrayBuffer() : undefined,
       redirect: "manual",
+      // Pass the bytes through as sent, as the dev server's proxy does — see
+      // STALE_RESPONSE_HEADERS for why decoding here broke a page.
+      decompress: false,
     });
   } catch (err) {
     return new Response(`API Workers not reachable at ${API_ORIGIN}: ${String(err)}\n`, {

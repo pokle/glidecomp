@@ -361,6 +361,18 @@ test("the browser back button closes a sheet, not the page", async ({ page }) =>
   await (await firstWaypointRow(page)).click();
   await page.getByRole("dialog").getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Done releases the sheet's history entry on the way out: a passive effect
+  // after the sheet has left the screen, then a history.back(). A production
+  // build takes the sheet off screen fast enough that a Back pressed in the
+  // same instant landed on that entry before it was released — no reader is
+  // that quick, so wait for the release the way their next Back would.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (history.state as { gcBackDismiss?: number } | null)?.gcBackDismiss ?? null
+      )
+    )
+    .toBeNull();
   await page.goBack();
   await expect(page).not.toHaveURL(url);
   await page.goForward();
