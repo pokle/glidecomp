@@ -148,13 +148,14 @@ test("the glyph links to the page, and Back returns to the same scroll", async (
   await expect(page).toHaveURL(compUrl(compId));
   await expect(compHeading(page)).toBeVisible();
   await expect(page.getByText("Loading scores…")).toHaveCount(0);
-  // Where it was left, give or take that line (22 px at desktop width, 42 on
-  // a phone, where the empty state wraps): the glyph back on the screen near
-  // where it was. A restore that failed would leave the page at the top, and
+  // Where it was left, give or take a line or two: the glyph back on the
+  // screen, and the page scrolled about as far. Not pixel-exact — that line,
+  // and on a phone whatever else above it settles late (22 to 74 px seen in
+  // CI), move it. A restore that failed would leave the page at the top, and
   // the glyph hundreds of pixels below the fold.
   await expect(link).toBeInViewport();
-  expect(Math.abs((await link.boundingBox())!.y - leftAt)).toBeLessThanOrEqual(60);
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  expect(Math.abs((await link.boundingBox())!.y - leftAt)).toBeLessThan(150);
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled / 2);
 });
 
 test("a reload keeps the page, and Back still leaves it", async ({ page }) => {
