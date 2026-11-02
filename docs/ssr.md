@@ -37,6 +37,7 @@ shell rather than 404, and there is nothing here for a crawler:
 |---|---|
 | `/comp/:id/pilots` | the roster editor (admin-only) |
 | `/comp/:id/settings[/:group]` | competition settings, index + group sub-pages |
+| `/comp/:id/task/new` | creating a task (#819) — the public task page's shape, so it must be caught first |
 | `/comp/:id/task/:id/settings` | task settings |
 | `/comp/:id/task/:id/route` | the route editor |
 | `/comp/:id/task/:id/weather` | the weather notes |

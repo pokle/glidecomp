@@ -177,12 +177,19 @@ test("Reset link retires every link shared so far", async ({ page, playwright })
   await page.getByRole("button", { name: "Reset link" }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm.getByText("Every link you’ve shared so far stops working.")).toBeVisible();
+  const reset = page.waitForResponse(
+    (r) => r.url().endsWith("/share-key") && r.request().method() === "POST"
+  );
   await confirm.getByRole("button", { name: "Reset link" }).click();
-
-  // The page moves onto the new key: the address bar is the new link.
-  await expect.poll(() => urlCompId(page)).not.toBe(`${fixture.compId}_${oldKey}`);
+  expect((await reset).ok()).toBe(true);
   shareKey = await readShareKey();
-  expect(urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
+  expect(shareKey).not.toBe(oldKey);
+
+  // The page moves onto the new key: the address bar is the new link. Polled
+  // to the new key itself rather than merely off the old one: on the way, the
+  // canonical-path rewrite can put the old key back for a moment while the
+  // page still holds the comp it loaded before the reset (run 41430947899).
+  await expect.poll(() => urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
 
   const anon = await playwright.request.newContext({ baseURL: BASE_URL });
   try {

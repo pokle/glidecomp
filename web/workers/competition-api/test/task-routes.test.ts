@@ -56,8 +56,10 @@ describe("POST /api/comp/:comp_id/task", () => {
       pilot_classes: ["open", "novice"],
     });
     expect(res.status).toBe(400);
-    const data = (await res.json()) as { error: string };
+    const data = (await res.json()) as { error: string; field?: string };
     expect(data.error).toContain("novice");
+    // Named, so the new-task page's form shows it under the classes field.
+    expect(data.field).toBe("pilot_classes");
   });
 
   test("rejects invalid task_date format", async () => {
@@ -69,6 +71,8 @@ describe("POST /api/comp/:comp_id/task", () => {
       pilot_classes: ["open"],
     });
     expect(res.status).toBe(400);
+    const data = (await res.json()) as { field?: string };
+    expect(data.field).toBe("task_date");
   });
 
   test("rejects unauthenticated requests", async () => {
@@ -533,8 +537,9 @@ describe("Open distance task geometry", () => {
       xctsk: multiTurnpoint,
     });
     expect(res.status).toBe(400);
-    const data = (await res.json()) as { error: string };
+    const data = (await res.json()) as { error: string; field?: string };
     expect(data.error).toContain("Takeoff");
+    expect(data.field).toBe("xctsk");
   });
 
   test("rejects a single non-Takeoff turnpoint", async () => {

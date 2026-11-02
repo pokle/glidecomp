@@ -2,31 +2,19 @@
  * Competition detail page — the comp "hub" (IA v2 #277): a pilot bookmarks
  * this one URL and every job is served here or one click away. Tasks (as a
  * date → class tree), inline competition scores, pilots, activity, admins.
- * Mutations that used to window.location.reload() instead bump a refresh
- * counter that re-runs the comp fetch.
+ * It changes nothing itself: creating a task, the one mutation it used to
+ * host in a dialog, is a page of its own (pages/CompNewTaskPage.tsx).
  *
  * Built on the RAC kit (src/react/rac/) like the task detail page.
  */
-import { Fragment, useEffect, useId, useState } from "react";
+import { Fragment, useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { EyeOffIcon } from "lucide-react";
 import { NotFound } from "@/react/components/NotFound";
-import { Form } from "react-aria-components";
-import { Button, LinkButton } from "@/react/rac/button";
+import { LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
 import { Loading } from "@/react/rac/progress";
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Modal,
-} from "@/react/rac/dialog";
-import { TextField, Label } from "@/react/rac/field";
-import { DatePicker } from "@/react/rac/date-picker";
-import { CheckList } from "@/react/rac/choice-list";
 import { api } from "../../comp/api";
-import { toast } from "../lib/toast";
 import { useAdminView } from "../lib/user";
 import { isSuperAdminEmail } from "../lib/super-admin";
 import {
@@ -39,7 +27,15 @@ import {
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Disclosure } from "@/react/rac/disclosure";
 import { compCrumbs } from "../lib/crumbs";
-import { compUrlId, idFromSegment, compPath, compSettingsPath, submitTrackPath, taskPath } from "../lib/slug";
+import {
+  compUrlId,
+  idFromSegment,
+  compNewTaskPath,
+  compPath,
+  compSettingsPath,
+  submitTrackPath,
+  taskPath,
+} from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { SectionHeader } from "../components/SectionHeader";
@@ -70,15 +66,12 @@ export function CompDetail() {
   // SSR seed: the server ran loadCompDetail for this URL, so render the comp in
   // the first paint and hydrate the same markup. Null on client boot / SPA nav.
   const initial = useInitialData<CompDetailLoaderData>();
-  const [refresh, setRefresh] = useState(0);
   const { data: comp, notFound } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: initial?.comp ?? null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
     title: (c) => `GlideComp - ${c.name}`,
-    refresh,
   });
-  const [createOpen, setCreateOpen] = useState(false);
 
   // Settle the address bar on the canonical `${slug}-${id}` once the name loads.
   useCanonicalPath(comp ? compPath(compUrlId(comp, compId), comp.name) : null);
@@ -100,17 +93,13 @@ export function CompDetail() {
     );
   }
 
-  // The SSR seed ("today" + scores) applies only to the first, un-mutated
-  // render; after a refresh the sections fetch fresh data themselves.
-  const seeded = initial && refresh === 0 ? initial : null;
+  // The SSR seed ("today" + scores), when the server rendered this URL.
+  const seeded = initial;
 
   return (
     <CompDetailView
       compId={compId}
       comp={comp}
-      createOpen={createOpen}
-      setCreateOpen={setCreateOpen}
-      setRefresh={setRefresh}
       today={seeded?.today}
       initialScores={seeded?.scores ?? undefined}
       initialScoresEtag={seeded?.scoresEtag ?? undefined}
@@ -121,18 +110,12 @@ export function CompDetail() {
 function CompDetailView({
   compId,
   comp,
-  createOpen,
-  setCreateOpen,
-  setRefresh,
   today,
   initialScores,
   initialScoresEtag,
 }: {
   compId: string;
   comp: CompDetailData;
-  createOpen: boolean;
-  setCreateOpen: (open: boolean) => void;
-  setRefresh: React.Dispatch<React.SetStateAction<number>>;
   /** SSR-computed "today" (comp tz) so the section order matches across
    *  hydration. Omitted on client navigations. */
   today?: string;
@@ -145,6 +128,9 @@ function CompDetailView({
   // after hydration rather than differ from the server's markup.
   const mounted = useMounted();
   const isClosed = isPastCloseDate(comp.close_date);
+  // Creating a task is a page of its own (#819), not a dialog over this one.
+  // Built from compUrlId so a hidden comp's share key rides along.
+  const newTaskHref = compNewTaskPath(compUrlId(comp, compId), comp.name);
 
   // Credit the people who run THIS competition — real `comp_admin` rows,
   // never the site super admin (who can administer without organising).
@@ -172,9 +158,9 @@ function CompDetailView({
         title="Tasks"
         action={
           isAdmin ? (
-            <Button variant="outline" size="sm" onPress={() => setCreateOpen(true)}>
+            <LinkButton variant="outline" size="sm" href={newTaskHref}>
               New task
-            </Button>
+            </LinkButton>
           ) : null
         }
       />
@@ -186,7 +172,7 @@ function CompDetailView({
         compId={compId}
         compName={comp.name}
         isAdmin={isAdmin}
-        onCreateTask={() => setCreateOpen(true)}
+        newTaskHref={newTaskHref}
       />
     </Card>
   );
@@ -298,7 +284,7 @@ function CompDetailView({
         <CompSetupProgress
           compId={compId}
           comp={comp}
-          onCreateTask={() => setCreateOpen(true)}
+          newTaskHref={newTaskHref}
         />
       ) : null}
       {/* The other end of the same idea: after the close date, the next job
@@ -324,18 +310,6 @@ function CompDetailView({
           <ActivitySection compId={compId} collapsible />
         </Card>
       </div>
-
-      {isAdmin && createOpen ? (
-        <CreateTaskDialog
-          compId={compId}
-          pilotClasses={comp.pilot_classes}
-          onClose={() => setCreateOpen(false)}
-          onCreated={() => {
-            setCreateOpen(false);
-            setRefresh((n) => n + 1);
-          }}
-        />
-      ) : null}
 
     </div>
   );
@@ -468,7 +442,7 @@ function TasksList({
   compId,
   compName,
   isAdmin,
-  onCreateTask,
+  newTaskHref,
 }: {
   tasks: TaskSummary[];
   /** The comp's declared classes, in the order the organizers listed them —
@@ -477,7 +451,8 @@ function TasksList({
   compId: string;
   compName: string;
   isAdmin: boolean;
-  onCreateTask: () => void;
+  /** Where "New task" goes: the page that creates one. */
+  newTaskHref: string;
 }) {
   if (tasks.length === 0) {
     // Role-aware empty state: visitors get an explanation, admins also get
@@ -486,9 +461,9 @@ function TasksList({
       <div className="mt-2 text-muted-foreground">
         <p>The organisers haven't published any tasks yet.</p>
         {isAdmin ? (
-          <Button variant="outline" size="sm" className="mt-3" onPress={onCreateTask}>
+          <LinkButton variant="outline" size="sm" className="mt-3" href={newTaskHref}>
             New task
-          </Button>
+          </LinkButton>
         ) : null}
       </div>
     );
@@ -655,112 +630,4 @@ function groupTasksByDateAndClass(
         });
       return { date, rows, taskCount: dayTasks.length };
     });
-}
-
-function CreateTaskDialog({
-  compId,
-  pilotClasses,
-  onClose,
-  onCreated,
-}: {
-  compId: string;
-  pilotClasses: string[];
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const dateId = useId();
-  const [name, setName] = useState("");
-  const [taskDate, setTaskDate] = useState(new Date().toISOString().split("T")[0]);
-  // All classes checked by default, matching the vanilla dialog.
-  const [selectedClasses, setSelectedClasses] = useState<string[]>(pilotClasses);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function submit() {
-    if (selectedClasses.length === 0) {
-      toast.warning("Select at least one pilot class");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const res = await api.api.comp[":comp_id"].task.$post({
-        param: { comp_id: compId },
-        json: { name: name.trim(), task_date: taskDate, pilot_classes: selectedClasses },
-      });
-
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to create task");
-        return;
-      }
-
-      onCreated();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Modal
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      className="sm:max-w-lg"
-    >
-      <Dialog>
-        <DialogHeader>
-          <DialogTitle>Create task</DialogTitle>
-        </DialogHeader>
-        <Form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit();
-          }}
-          className="flex flex-col gap-4"
-        >
-          <TextField
-            label="Name"
-            isRequired
-            maxLength={128}
-            autoFocus
-            placeholder="e.g. Day 1 - Ridge Run"
-            value={name}
-            onChange={setName}
-            errorMessage="Enter a task name"
-          />
-          {/* The same two controls the task's settings page uses (#638), so a
-              task looks the same the moment after it is created as it does
-              when it is next edited. This one stays a dialog: there is no task
-              yet, so there is nothing for a URL to name. */}
-          <div className="flex flex-col gap-2">
-            <Label id={dateId}>Date</Label>
-            <DatePicker
-              inline
-              required
-              aria-labelledby={dateId}
-              value={taskDate}
-              onChange={setTaskDate}
-            />
-          </div>
-          <CheckList
-            label="Pilot classes"
-            value={selectedClasses}
-            onChange={setSelectedClasses}
-            options={pilotClasses.map((cls) => ({ value: cls, label: cls }))}
-          />
-          <DialogFooter>
-            <Button slot="close" variant="outline">
-              Cancel
-            </Button>
-            <Button type="submit" isDisabled={submitting}>
-              {submitting ? "Creating..." : "Create"}
-            </Button>
-          </DialogFooter>
-        </Form>
-      </Dialog>
-    </Modal>
-  );
 }
