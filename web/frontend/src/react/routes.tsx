@@ -117,6 +117,22 @@ const TaskSettingsPage = lazy(() =>
 const TaskRoutePage = lazy(() =>
   import("./pages/TaskRoutePage").then((m) => ({ default: m.TaskRoutePage }))
 );
+// The route editor's other pages (#812): one turnpoint, Quick entry, Load
+// from XContest and Add waypoint, where they were sheets and dialogs.
+const TaskRouteTurnpointPage = lazy(() =>
+  import("./pages/TaskRouteTurnpointPage").then((m) => ({ default: m.TaskRouteTurnpointPage }))
+);
+const TaskRouteQuickPage = lazy(() =>
+  import("./pages/TaskRouteQuickPage").then((m) => ({ default: m.TaskRouteQuickPage }))
+);
+const TaskRouteXContestPage = lazy(() =>
+  import("./pages/TaskRouteXContestPage").then((m) => ({ default: m.TaskRouteXContestPage }))
+);
+const TaskRouteAddWaypointPage = lazy(() =>
+  import("./pages/TaskRouteAddWaypointPage").then((m) => ({
+    default: m.TaskRouteAddWaypointPage,
+  }))
+);
 const ManualFlightPage = lazy(() =>
   import("./pages/ManualFlightPage").then((m) => ({ default: m.ManualFlightPage }))
 );
@@ -309,6 +325,25 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/route"
               element={<TaskRoutePage />}
+            />
+            {/* The route editor's other pages (#812), over the same stored
+                draft of the route (comp/route-draft.ts). The static segments
+                rank above the turnpoint's row id by themselves. */}
+            <Route
+              path="/comp/:compId/task/:taskId/route/quick"
+              element={<TaskRouteQuickPage />}
+            />
+            <Route
+              path="/comp/:compId/task/:taskId/route/xcontest"
+              element={<TaskRouteXContestPage />}
+            />
+            <Route
+              path="/comp/:compId/task/:taskId/route/add-waypoint"
+              element={<TaskRouteAddWaypointPage />}
+            />
+            <Route
+              path="/comp/:compId/task/:taskId/route/:rowId"
+              element={<TaskRouteTurnpointPage />}
             />
             <Route
               path="/comp/:compId/task/:taskId/weather"

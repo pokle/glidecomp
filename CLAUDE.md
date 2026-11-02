@@ -420,16 +420,19 @@ These are the standing imperatives. Each links to the reference that explains it
     for an editor of several pages over one draft — a waypoint's page, Add
     waypoint, the map at full size and the altitude review all read and
     write the same stored file (`comp/use-waypoints-editor.ts`), its items
-    addressed by the draft's own ids, its review's snapshot kept in it. See
-    [docs/drafts.md](docs/drafts.md).
-  - **What is left to convert** is tracked one page at a time, in the
-    order set out in [#823](https://github.com/pokle/glidecomp/issues/823):
-    [#812](https://github.com/pokle/glidecomp/issues/812) (turnpoint sheet,
-    quick entry, and the route editor's Add waypoint dialog, whose fields
-    are already shared in `comp/AddWaypointForm.tsx`); then [#817](https://github.com/pokle/glidecomp/issues/817)
-    deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
-    `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
-    do not add a new user of any of it.
+    addressed by the draft's own ids, its review's snapshot kept in it. The
+    route editor (#812) is the same shape over a task's route
+    (`comp/use-route-editor.ts`). See [docs/drafts.md](docs/drafts.md).
+  - **What is left to do** is [#817](https://github.com/pokle/glidecomp/issues/817)
+    (the last step of [#823](https://github.com/pokle/glidecomp/issues/823)):
+    every overlay is a page since the route editor's turnpoint, Quick entry,
+    Load from XContest and Add waypoint became pages over a stored draft of
+    the route (#812), so #817 deletes `FullScreenSheet`, `FormSheet`,
+    `use-back-dismiss` and `use-sheet-scroll-reset`. Until then only the
+    kit's own bench (`/__kit/form`), `rac/dialog.tsx`'s Back handling, the
+    unsaved-changes guard's `guardBack` and `backPastClosedOverlays()` (the
+    pilot page and the route editor, leaving by Back just after a
+    confirmation) still use them; do not add a new user of any of it.
 - **One component kit — react-aria-components, in `src/react/rac/`.** Every page,
   dialog and piece of shared chrome uses it. Read
   [docs/2026-07-18-rac-adoption-guide.md](docs/2026-07-18-rac-adoption-guide.md)

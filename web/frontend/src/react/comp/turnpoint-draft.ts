@@ -1,8 +1,8 @@
 /**
  * What one turnpoint's editable fields are, and the small vocabulary the
- * turnpoint sheet and the route list both speak about them.
+ * turnpoint's page and the route list both speak about them.
  *
- * Shared so the route editor, its turnpoint sheet and the Quick entry
+ * Shared so the route editor, its turnpoint page and the Quick entry
  * reconcile agree by construction rather than by all happening to say 1000
  * and "1 km".
  */
@@ -80,11 +80,11 @@ export function moveRowToEnd<T extends { id: number }>(rows: T[], id: number): T
 }
 
 /**
- * Whether the turnpoint sheet shows Goal settings (and the Type option
+ * Whether a turnpoint's page shows Goal settings (and the Type option
  * "Turnpoint (last is goal)").
  *
  * The last turnpoint of a race is the scoring goal. A brand-new Takeoff or
- * Start being appended is not treated as that yet — those sheets are about
+ * Start being appended is not treated as that yet — those pages are about
  * launch and start, and Goal is picked later (or appears once that row is
  * last and you open it again).
  */
@@ -171,9 +171,9 @@ export function blankDraft(type: RouteRow["type"] = ""): TurnpointDraft {
  *
  * The waypoint's values are COPIED in, so a later edit to the competition's
  * waypoint never changes a task that was set from it. Shared by every route
- * that turns a waypoint into a turnpoint — the map pick, the details sheet's
+ * that turns a waypoint into a turnpoint — the map pick, the turnpoint page's
  * "Load from a waypoint" (through {@link draftWithRecord}), and the Quick entry
- * reconcile. **The conversion lives here only.** TurnpointSheet used to keep
+ * reconcile. **The conversion lives here only.** The turnpoint sheet (now a page) used to keep
  * its own copy of it, which is how a waypoint at sea level went on losing its
  * 0 to "unknown" after this function had been fixed not to.
  */
@@ -191,7 +191,7 @@ export function draftFromRecord(rec: WaypointFileRecord): TurnpointDraft {
 }
 
 /**
- * A waypoint loaded INTO a draft that already exists — the details sheet's
+ * A waypoint loaded INTO a draft that already exists — the turnpoint page's
  * "Load from a waypoint", where the turnpoint is half filled in already.
  *
  * Everything the waypoint knows comes from {@link draftFromRecord}; the two

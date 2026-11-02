@@ -782,7 +782,7 @@ export interface QuickTaskApply {
  * point typed by hand) would come back as whatever fuzzy match ranked first,
  * silently.
  *
- * DOM-free, so both the Quick entry sheet's action and the field's own status
+ * DOM-free, so both the Quick entry page's action and the field's own status
  * line read the same answer off the same text (quick-task.test.ts).
  */
 export function quickTaskApply(

@@ -188,6 +188,11 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   // Settings, route and weather-notes dialogs. The route editor has a second
   // reason never to be server-rendered: it pulls Mapbox.
   /^\/comp\/[^/]+\/task\/[^/]+\/(settings|route|weather)\/?$/,
+  // The route editor's other pages (#812): one turnpoint (/route/:n), Quick
+  // entry (/quick), Load from XContest (/xcontest) and Add waypoint
+  // (/add-waypoint) — admin-only, and all of them edit a draft only the
+  // browser has.
+  /^\/comp\/[^/]+\/task\/[^/]+\/route\/[^/]+\/?$/,
   // Create a test IGC — admin-only like the editors, and nothing on it but a
   // form whose result is a file made in the browser.
   /^\/comp\/[^/]+\/task\/[^/]+\/test-igc\/?$/,
