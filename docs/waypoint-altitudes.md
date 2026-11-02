@@ -88,10 +88,13 @@ gone: the check does the fill's job better, because it shows what it would
 write before writing it, and the status line was a verdict on a question nobody
 had put yet — standing clutter on the page. One way to do a thing.
 
-The review is a **full-screen sheet** (`comp/AltitudeReviewSheet.tsx`). It began
-as three extra columns in the Tabulator grid the page used to be, which is the
-right shape on a desktop and a poor one on a phone — see the editor section
-below for what that cost.
+The review is **two pages** (`pages/CompAltitudeReviewPage.tsx`, content in
+`comp/AltitudeReview.tsx`): the list of what the check found at
+`/comp/:id/waypoints/altitudes`, and one waypoint of it at `/altitudes/:n`. It
+began as three extra columns in the Tabulator grid the page used to be, which
+is the right shape on a desktop and a poor one on a phone — see the editor
+section below for what that cost. It was then a full-screen sheet until #811,
+when the overlays rule in CLAUDE.md made each of its two views a page.
 
 ### What the review shows
 
@@ -110,23 +113,32 @@ altitude in a column the reader had to scroll away from to see the map's, so a
 disagreement was reported with one of its two halves off screen.
 
 A trailing button takes the map's value without leaving the list; tapping the
-row body opens **a detail view** for that one waypoint — the two altitudes
-side by side, a sentence saying which of them to doubt, the accept, and both
-the altitude and the coordinates editable in place.
+row body opens **that waypoint's page** — the two altitudes side by side, a
+sentence saying which of them to doubt, the accept, and both the altitude and
+the coordinates editable in place.
 
-Inside a waypoint, **Back and Done both return to the LIST**. Done used to close
-the whole sheet from there, which dropped the reader out to the waypoints page
-half way down a list of twelve: "done with this waypoint" is not "done with the
-check". Only the list's own Done leaves the review, and going back IS "leave it
-as it is", so no third button says so.
+Inside a waypoint, **Back, Done and "All N" all return to the review's LIST**.
+Done used to close the whole review from there, which dropped the reader out to
+the waypoints page half way down a list of twelve: "done with this waypoint" is
+not "done with the check". Only the list's own Done leaves the review, and going
+back IS "leave it as it is", so no third button says so. The browser's Back
+walks the same way, one page per press: the waypoint, the review, the
+waypoints. Back from the review leaves it open, for Forward to find; Done
+closes it, and its readings go with it.
 
-There is deliberately **no map in the detail view**: the page owns a single
-Mapbox instance and hands it between the inline pane and the full-screen map
-via one camera ref, so a third claimant would be a second instance. Editing
-the coordinates as text is what a pasted correction needs anyway.
+There is deliberately **no map on a waypoint's page**: editing the coordinates
+as text is what a pasted correction needs anyway.
 
-Accepting is an ordinary unsaved edit to the page's rows, so the page's Save
-and its discard-on-leave guard stay the commit and the undo.
+While that page is open it shows the reading the waypoint had when it opened,
+however the coordinates change. A reading belongs to where the waypoint WAS
+(`readingFor()` in `comp/waypoints-draft.ts` drops it once the coordinates
+differ from the ones it was read at), and applied per keystroke that took the
+comparison away mid-paste: "From the map" fell to "—" and the accept button
+unmounted on the first character typed. Back on the list, the moved waypoint
+reads "no map reading".
+
+Accepting is an ordinary unsaved edit to the waypoints draft, so Save on the
+waypoints page stays the commit, and "Discard changes" beside it the undo.
 
 A difference of exactly zero prints **nothing**. The absence of a finding is not
 a finding, and "0 m" beside a row the reader has just fixed is noise where the
@@ -152,7 +164,7 @@ The thresholds and the arithmetic live in
 
 ### The list holds still — membership AND order
 
-The rows the check picked out are a snapshot taken when the sheet opens, and so
+The rows the check picked out are a snapshot taken when the check runs, and so
 is **the order they are in**. Both halves matter, and the second was learned the
 hard way: with only the membership frozen, accepting a row sent it to the bottom
 of the list the instant its disagreement became zero, because the sort is by the
@@ -162,18 +174,43 @@ reader's thumb still moved. An e2e assertion caught it.
 So a row never moves while a reader works down the list. Its Δ goes to 0 where
 it sits, and the counts in the header do the counting.
 
-### The editor: a list of sheets
+The snapshot lives in the waypoints draft (`AltitudeReviewSnapshot`,
+`comp/waypoints-draft.ts`), not in the review page's memory, because the review
+is two pages: going into one waypoint and back, or reloading, must find the
+same list in the same order. `waypoint-altitude-review.spec.ts` reloads it to
+make sure.
+
+### The editor: a list of pages, over one draft
 
 `comp/WaypointList.tsx` is a row per waypoint — code, name, coordinates,
 altitude and radius, on two lines, with a chevron saying there is more behind it
-and a pin that flies the page's map. Tapping the row opens
-`comp/WaypointSheet.tsx`: every field of that one waypoint, the radius chips,
-and Remove. The draft applies on the way OUT, like the route editor's turnpoint
-sheet, because the page repaints its map markers from `rows` on every change.
+and a pin that flies the page's map. Tapping the row opens that waypoint's page,
+`/comp/:id/waypoints/:n` (`pages/CompWaypointPage.tsx`): every field of that one
+waypoint, the radius chips, and Remove. Add waypoint (`/waypoints/new`) and the
+map at full size (`/waypoints/map`) are pages too. They were sheets and a dialog
+over the list until #811; the overlays rule in CLAUDE.md says why they are
+pages now.
 
-There is no "show on the map" button in the sheet: the row it opened from has a
-pin that does exactly that, and one waypoint does not need two ways to be looked
-at.
+What all of them edit is the waypoint FILE, saved as a set — so the file is a
+**draft** in this tab's storage (`comp/waypoints-draft.ts`,
+`comp/use-waypoints-editor.ts`, [drafts.md](drafts.md)). Each page reads it when
+it mounts and writes every change straight back, so a waypoint's page edits
+live: Done and Back both keep the edit, and so does a reload. Nothing is saved
+until Save on the list, and "Discard changes" beside it throws the draft away.
+A waypoint is addressed by the draft's own row id rather than its code, because
+the code is one of the fields its page edits and a waypoint added a minute ago
+exists only in the draft; with no draft the rows are numbered 1..N in file
+order, the same numbers on every page.
+
+Why a whole-file draft and not a save per waypoint, as the pilot page does:
+the server holds the set as one document (`PUT /api/comp/:id/waypoints`, one
+audit entry per save), and the editor's biggest changes are set-wide — upload a
+file, convert from feet, take the map's altitude for all of them. A save per
+waypoint would be a read-modify-write of the whole set on every tap.
+
+There is no "show on the map" button on a waypoint's page: the row it opened
+from has a pin that does exactly that, and one waypoint does not need two ways
+to be looked at.
 
 It was a Tabulator grid until 2026-09-19, and Tabulator was the app's standard
 for an editable table. What settled it is that GlideComp is used from a hill
@@ -195,10 +232,10 @@ above it did not move.
 **The locate pin is the row's whole left-hand strip**, and read-only the whole
 ROW flies the map. The pin began as a 28x28 px icon with 300 px of inert row
 beside it, which is a poor thing to ask a thumb to find on a hill. In the editor
-the row opens the waypoint's sheet, so the pin is a separate action and keeps
+the row opens the waypoint's page, so the pin is a separate action and keeps
 its own target — 48x44 px, flush to the card's edge, and RAC does not fire a
 row's action when a focusable child of it is pressed. Read-only there is no
-sheet, so the row does the pin's job too; the pin stays because it is what names
+page behind a row, so the row does the pin's job too; the pin stays because it is what names
 the action ("Show BEACH on the map") for a reader who cannot see the map move.
 The e2e measures the rendered box, because tailwind-merge does not resolve
 `size-*` against `h-*`/`w-*` and a `size` prop added later would leave the
@@ -209,20 +246,26 @@ the waypoint FILE edited in place, so it is metric throughout and its rows and
 fields say so. A read-only row is an altitude PRINTED to a reader, so it honours
 the unit preference like every other altitude in the app (issue #662).
 
-### Back closes one sheet, not the page
+### Back is the browser's
 
-The sheets are React state rather than routes — the page behind them is unsaved
-work, so a sibling route would unmount it and `use-unsaved-changes-guard` would
-prompt on the way in. That left them invisible to the history stack, and one
-Back from a waypoint's details left the whole editor.
+The editor's screens were sheets, React state over the list, because the list
+held the unsaved work and a sibling route would have unmounted it. That left
+them invisible to the history stack, and `lib/use-back-dismiss.ts` gave each one
+a history entry so Back could close it — machinery that broke three ways
+(StrictMode, a popstate reaching every listener, our own pop looking like the
+reader's), and whose e2e tests were the flaky ones in CI.
 
-`lib/use-back-dismiss.ts` gives each sheet a history entry while it is open and
-pops it again on the way out, so Back walks a detail view → its list → the page,
-one press per layer, and closing from the UI leaves the stack as it was found.
-Read its note before touching it: a popstate reaches every listener, popping our
-own entry looks like a user Back to the layer underneath, and StrictMode runs
-the effect twice. All three broke it, and all three were caught by the e2e
-rather than by review.
+With the work in a stored draft, the screens are pages and none of that is
+needed: Back walks out of a waypoint, the review or the map one page per press
+because they ARE pages. Opened from the list, each page's Done is a real Back,
+so the list returns at the scroll it was left at (`lib/scroll-restoration.ts`);
+opened from a bookmark or a reload, Done replaces the page with the list.
+
+Leaving the editor asks only when it should. Going between its own pages is
+not leaving (`isWithin` on `use-unsaved-changes-guard`); a link OUT of the
+editor with unsaved edits asks "Discard changes?", and discarding forgets the
+draft. Back out of the editor does not ask: it means "not now", and the draft is
+there when the reader comes back.
 
 Number fields commit on blur rather than per keystroke, which is RAC's
 behaviour; tapping Done blurs first, and `comp-waypoints.spec.ts` asserts that
@@ -233,9 +276,9 @@ because losing it would be silent.
 
 Worth recording because it used to be a live hazard: Tabulator's `getData()`
 returned rows in *display* order, so a header sort rewrote the stored waypoint
-set in that order the next time any cell was edited. With the grid gone, React
-`rows` state is the only copy and it keeps the file's order by construction —
-there is nothing left to mirror back.
+set in that order the next time any cell was edited. With the grid gone, the
+draft's `rows` are the only copy and they keep the file's order by
+construction — there is nothing left to mirror back.
 
 ### What it does not reach
 
@@ -336,9 +379,15 @@ waypoints spec now drives the review through a partially transparent tile.
   partially transparent pixel at every alpha, the case a canvas destroys), the
   plausibility range and its limit, the 3x3 median against a corrupt pixel and
   a cliff edge, and the four real recorded Mapbox tiles.
-- `e2e/comp-waypoints.spec.ts` — the review sheet and both editors, over a flat
-  synthetic DEM (`stubTerrainElevations` in `e2e/fixtures/mapbox.ts`) so the
-  disagreements are arithmetic the test chose, and at alpha 128 so the coastal
-  no-data case is exercised end to end. The spec runs in **both** Playwright
-  projects (it is in `MOBILE_SPEC_FILES`), asserts that the page never scrolls
-  sideways, and covers Back closing one layer at a time.
+- `web/frontend/src/react/comp/waypoints-draft.test.ts` — the draft: row ids
+  that keep meaning one waypoint, a stored draft against a saved set that
+  moved, the review's snapshot holding still, and a reading dropped once its
+  waypoint moves.
+- `e2e/comp-waypoints.spec.ts` — the list and the editor's pages (one
+  waypoint, Add waypoint, the map), the draft across pages and reloads, and
+  leaving. `e2e/waypoint-altitude-review.spec.ts` — the review's two pages,
+  over a flat synthetic DEM (`stubTerrainElevations` in
+  `e2e/fixtures/mapbox.ts`) so the disagreements are arithmetic the test chose,
+  and at alpha 128 so the coastal no-data case is exercised end to end. Both
+  run in **both** Playwright projects (they are in `MOBILE_SPEC_FILES`), assert
+  that the pages never scroll sideways, and cover Back from each page.

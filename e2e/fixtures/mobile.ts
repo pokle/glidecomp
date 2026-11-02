@@ -55,12 +55,17 @@ export const MOBILE_SPEC_FILES = [
   // Create a test IGC (#822), a page under the task where it was a dialog —
   // because a dialog with text fields is what misbehaved on a phone.
   "task-test-igc.spec.ts",
-  // The waypoints page, whose editor is a list of waypoints opening
-  // full-screen sheets, at every width — the Tabulator grid it replaced did
-  // not work at this one. This project is what holds that: the page is
-  // asserted never to scroll sideways, and a sheet to be dismissable with the
-  // back gesture.
+  // The waypoints page, whose editor is a list of waypoints opening a page
+  // each (#811; they were full-screen sheets), at every width — the Tabulator
+  // grid it replaced did not work at this one. This project is what holds
+  // that: the pages are asserted never to scroll sideways, and Back to leave
+  // each one.
   "comp-waypoints.spec.ts",
+  // The waypoints' altitude review (#811), two pages where it was one
+  // full-screen sheet: Back from one waypoint has to land on the review's
+  // list, and the list has to hold still across it, on the phone the check
+  // is run from.
+  "waypoint-altitude-review.spec.ts",
   // The pilots page, the same shape as the waypoints page for the same reason:
   // a list of pilots opening sheets, with search and + at the bottom of the
   // screen in thumb reach. The fourteen-column grid it replaced showed about

@@ -725,8 +725,8 @@ Points worth knowing before you reach for one:
     z-index decides and the sheet wins — the dialog is mounted, focused and
     invisible. `Modal` therefore takes one stacking knob, `elevated`, which
     lifts its overlay to `z-[110]`; pass it through from whatever opened the
-    dialog (`AddWaypointDialog`'s `elevated` prop, set while the waypoints
-    editor's map is maximised). Nothing else about the overlay is
+    dialog. (Its one caller, the Add waypoint dialog over the waypoints
+    editor's maximised map, went in #811, when both became pages.) Nothing else about the overlay is
     overridable, deliberately — the same reasoning as the thermal rose's
     legend popover, which carries `z-[110]` for exactly this reason.
 
@@ -1035,8 +1035,9 @@ rather than "how to convert one".
    `scrollLabel` if it can overflow. Row-click navigation = `onRowAction` plus
    a real AriaLink in the name cell (keeps a crawlable anchor).
 4. **There is no editable grid.** An editable collection is a `GridList` of
-   rows opening `FullScreenSheet`s — `comp/WaypointList.tsx` and
-   `comp/PilotList.tsx` are the worked examples (see the superseded Tabulator
+   rows each opening a PAGE (never a `FullScreenSheet` any more — the
+   overlays rule in CLAUDE.md) — `comp/PilotList.tsx` and
+   `comp/WaypointList.tsx` are the worked examples (see the superseded Tabulator
    policy at the top of this doc).
 5. Measurement vs completion: `rac/meter` for a reading within a range,
    `rac/progress` for a task running to completion. They document the split
