@@ -622,7 +622,9 @@ Two front ends, one engine, so they cannot drift into making different files:
 - **`bun run forge-igc`** — the CLI. Lists what is open (`--open`), writes a
   file (`--out`), or submits one straight to the anonymous route
   (`--submit --ident`).
-- **Create a test IGC**, a dialog on the task page (`comp/ForgeIgcDialog.tsx`).
+- **Create a test IGC**, a page under the task
+  (`/comp/:id/task/:id/test-igc`, `pages/TaskTestIgcPage.tsx` with the form
+  in `comp/ForgeIgcForm.tsx`), linked from the task page for its admins.
   Opens with that task's own route, date and competition zone; downloads the file.
   It never uploads — submitting it through the real flow is the thing being
   tested.
@@ -696,6 +698,6 @@ everyone else's bundle.
 | Open competitions | `web/workers/competition-api/src/routes/open-comps.ts` |
 | Flight summary | `web/engine/src/flight-summary.ts` |
 | Forging a test tracklog | `web/engine/src/forge-igc.ts` |
-| IGC Forge dialog | `src/react/comp/ForgeIgcDialog.tsx` |
+| IGC Forge page | `src/react/pages/TaskTestIgcPage.tsx`, `src/react/comp/ForgeIgcForm.tsx` |
 | IGC Forge CLI | `web/scripts/forge-igc.ts` |
 | Coverage | `test/igc-anon.test.ts`, `test/igc-routes.test.ts`, `test/registration-resolve.test.ts`, `test/open-comps.test.ts`, `e2e/track-submission.spec.ts` |

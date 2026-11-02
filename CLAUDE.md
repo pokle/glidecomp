@@ -419,9 +419,7 @@ These are the standing imperatives. Each links to the reference that explains it
     (task QR), [#814](https://github.com/pokle/glidecomp/issues/814) (task
     diagram), [#815](https://github.com/pokle/glidecomp/issues/815) and
     [#816](https://github.com/pokle/glidecomp/issues/816) (task analysis
-    figures), and the dialogs with text fields:
-    [#822](https://github.com/pokle/glidecomp/issues/822) (test IGC); then
-    [#817](https://github.com/pokle/glidecomp/issues/817)
+    figures); then [#817](https://github.com/pokle/glidecomp/issues/817)
     deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
     `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
     do not add a new user of any of it.

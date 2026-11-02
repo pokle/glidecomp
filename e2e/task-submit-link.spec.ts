@@ -121,8 +121,6 @@ test("Submit track on the task page is a page of its own: URL, reload and Back",
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Linked Task", {
     timeout: 20_000,
   });
-  const taskPathname = new URL(page.url()).pathname;
-
   // Both of the task page's Submit tracks — the action row's and the Scores
   // section's — are links to the same page. (Scoped to main: the site
   // header's own Submit track is a link to the bare /submit.)
@@ -151,7 +149,11 @@ test("Submit track on the task page is a page of its own: URL, reload and Back",
 
   // Back is the browser's, and returns to the task page.
   await page.goBack();
-  await expect.poll(() => new URL(page.url()).pathname).toBe(taskPathname);
+  // The same task by its ids: the page may still have been on its bare-id URL
+  // when it was opened, and only later replaced it with the canonical slug one.
+  await expect
+    .poll(() => new URL(page.url()).pathname)
+    .toMatch(new RegExp(`^/comp/(?:[^/]*-)?${open.compId}/task/(?:[^/]*-)?${open.taskId}/?$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Linked Task", {
     timeout: 20_000,
   });

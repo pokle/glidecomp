@@ -45,6 +45,9 @@ export const MOBILE_SPEC_FILES = [
   // Creating a task (#819): a page rather than a dialog with a text field,
   // which is what the overlays rule moved off a phone.
   "task-new-page.spec.ts",
+  // Create a test IGC (#822), a page under the task where it was a dialog —
+  // because a dialog with text fields is what misbehaved on a phone.
+  "task-test-igc.spec.ts",
   // The waypoints page, whose editor is a list of waypoints opening
   // full-screen sheets, at every width — the Tabulator grid it replaced did
   // not work at this one. This project is what holds that: the page is

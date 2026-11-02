@@ -12,14 +12,14 @@
  * (comp/RouteEditorDialog) covering turnpoints, start gates, goal, and
  * .xctsk / XContest import-export (#270).
  */
-import { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Form } from "react-aria-components";
 import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
 import { Loading } from "@/react/rac/progress";
-import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
+import { LinkButton, buttonVariants } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import {
   Dialog,
@@ -56,8 +56,6 @@ import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { goalSummary, startConfigSummary } from "../comp/route";
-// Comp admins only, so its code has no business in every pilot's bundle.
-const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
 import {
   isPastCloseDate,
   type CompDetailData,
@@ -67,7 +65,7 @@ import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
-import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskWeatherPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
@@ -122,7 +120,6 @@ export function TaskDetail() {
   // separate component with its own score fetch) pick up the change too.
   const [resultsRefresh, setResultsRefresh] = useState(0);
   const [replayAvailable, setReplayAvailable] = useState(false);
-  const [forgeOpen, setForgeOpen] = useState(false);
 
   // The comp, for the admin check and the comp name in the trail. Non-critical
   // and deliberately its own request: it used to run only after the task
@@ -351,30 +348,20 @@ export function TaskDetail() {
             gated like every other manage action on this page. `useAdminView`
             is the right check precisely because it also makes the button
             disappear while a super admin previews as a pilot. Nothing here
-            reaches the server — the dialog makes a file and offers it as a
+            reaches the server — the page makes a file and offers it as a
             download — so this widens who SEES it and nothing more. A route is
-            required because there is nothing to fly without one. */}
+            required because there is nothing to fly without one. A page of
+            its own (#822), so the comp id carries a hidden comp's share key. */}
         {isAdmin && comp && task.xctsk ? (
-          <Button variant="outline" size="sm" onPress={() => setForgeOpen(true)}>
+          <LinkButton
+            variant="outline"
+            size="sm"
+            href={taskTestIgcPath(compUrlId(comp, compId), comp.name, taskId, task.name)}
+          >
             Create test IGC
-          </Button>
+          </LinkButton>
         ) : null}
       </div>
-
-      {forgeOpen && comp && task.xctsk ? (
-        <Suspense fallback={null}>
-          <ForgeIgcDialog
-            open
-            onClose={() => setForgeOpen(false)}
-            taskName={task.name}
-            taskDate={task.task_date}
-            compName={comp.name}
-            timezone={comp.timezone ?? null}
-            category={comp.category === "pg" ? "pg" : "hg"}
-            xctsk={task.xctsk}
-          />
-        </Suspense>
-      ) : null}
 
       {/* The sections below are cards; the stack owns the rhythm between them
           (SectionHeader no longer carries a margin of its own). */}
