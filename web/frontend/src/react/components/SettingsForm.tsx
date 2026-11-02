@@ -4,27 +4,47 @@
  * preferences, so nothing saves until the admin says so), plus the
  * unsaved-changes guard so edits can't be lost to a stray tap on a link.
  *
+ * It is the kit `Form` (rac/form.tsx), which owns what happens when Save does
+ * not work: the page's own checks (`validate`) and the server's refusals land
+ * under the field they are about — every field carries a `name`, and
+ * `fieldNames` maps the server's name for a field onto it where the two
+ * differ — and an error about no field is shown beside Save, the button the
+ * reader just pressed. A failed save is never a toast.
+ *
  * Save stays enabled even when clean: an untouched Save is meaningful (the
  * server counts any settings save as "settings reviewed" for the setup
  * guide). The dirty hint tells the reader when there is genuinely something
  * to save.
  */
-import { Form } from "react-aria-components";
-import { Button } from "@/react/rac/button";
+import type { ReactNode } from "react";
+import {
+  Form,
+  FormErrorBanner,
+  SubmitButton,
+  useFormState,
+  type SubmitResponse,
+} from "@/react/rac/form";
 import { useUnsavedChangesGuard } from "@/react/lib/use-unsaved-changes-guard";
 
 export function SettingsForm({
-  onSave,
-  saving,
+  onSubmit,
+  onSuccess,
+  validate,
+  fieldNames,
   dirty,
   children,
 }: {
   /** Builds and sends the sub-page's PATCH; the caller owns the payload. */
-  onSave: () => Promise<void> | void;
-  saving: boolean;
+  onSubmit: () => Promise<SubmitResponse>;
+  /** After the server said yes. */
+  onSuccess: () => void;
+  /** The page's own checks: field name → message (see rac/form.tsx). */
+  validate?: () => Record<string, string | undefined | null | false>;
+  /** The server's field names, mapped onto this page's field `name`s. */
+  fieldNames?: Record<string, string>;
   /** Arms the navigation guard and shows the unsaved hint. */
   dirty: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   useUnsavedChangesGuard(dirty, {
     title: "Discard changes?",
@@ -33,23 +53,32 @@ export function SettingsForm({
 
   return (
     <Form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void onSave();
-      }}
+      onSubmit={onSubmit}
+      onSuccess={() => onSuccess()}
+      validate={validate}
+      fieldNames={fieldNames}
       className="flex flex-col gap-6"
     >
       {children}
+      <SaveRow dirty={dirty} />
+    </Form>
+  );
+}
+
+/** Save, with the error that belongs to no field directly above it. */
+function SaveRow({ dirty }: { dirty: boolean }) {
+  const { pending } = useFormState();
+  return (
+    <div className="flex flex-col gap-3">
+      <FormErrorBanner />
       <div className="flex items-center gap-3">
-        <Button type="submit" isPending={saving} pendingLabel="Saving">
-          Save
-        </Button>
+        <SubmitButton>Save</SubmitButton>
         {/* The dirty hint doubles as the explanation for what Save will do;
             role=status so the state change is announced. */}
         <span role="status" className="text-sm text-muted-foreground">
-          {dirty && !saving ? "Unsaved changes" : ""}
+          {dirty && !pending ? "Unsaved changes" : ""}
         </span>
       </div>
-    </Form>
+    </div>
   );
 }

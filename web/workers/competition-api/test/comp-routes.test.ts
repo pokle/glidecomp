@@ -251,9 +251,28 @@ describe("POST /api/comp", () => {
       admin_emails: ["admin@example.com", "not-an-email"],
     });
     expect(res.status).toBe(400);
-    const data = (await res.json()) as { error: unknown };
+    const data = (await res.json()) as { error: unknown; field?: unknown };
     expect(typeof data.error).toBe("string");
     expect(data.error).toBe("admin_emails.1: Invalid email address");
+    expect(data.field).toBe("admin_emails.1");
+  });
+
+  test("a default class outside the class list is refused, naming the field", async () => {
+    const comp = await authRequest("POST", "/api/comp", {
+      name: "Default Class Comp",
+      category: "hg",
+      pilot_classes: ["open", "sport"],
+    });
+    const { comp_id } = (await comp.json()) as { comp_id: string };
+    const res = await authRequest("PATCH", `/api/comp/${comp_id}`, {
+      pilot_classes: ["open"],
+      default_pilot_class: "sport",
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string; field?: string };
+    expect(data.error).toBe("default_pilot_class must be one of pilot_classes");
+    // So the settings page puts it under the Default pilot class field.
+    expect(data.field).toBe("default_pilot_class");
   });
 });
 
@@ -709,7 +728,10 @@ describe("PATCH /api/comp/:comp_id", () => {
       },
     });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toContain("rigid");
+    const refusal = (await res.json()) as { error: string; field?: string };
+    expect(refusal.error).toContain("rigid");
+    // Named, so the settings page puts it under the Class 2 field.
+    expect(refusal.field).toBe("gap_params.hgClass2Classes");
 
     const created = await authRequest("POST", "/api/comp", {
       name: "C2", category: "hg", pilot_classes: ["open"],
