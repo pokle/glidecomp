@@ -79,6 +79,7 @@ export const E2E_SHARDS = {
   organiser: [
     "comp-detail.spec.ts", // 64.8s (chromium + mobile)
     "task-settings-pages.spec.ts", // 31.4s (chromium + mobile)
+    "task-new-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "comp-waypoints.spec.ts", // 26.7s
     "comp-settings-pages.spec.ts", // 22.4s (chromium + mobile)
     "scoring-mutations.spec.ts", // 22.3s

@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/react/lib/utils";
+import { FieldError } from "./field";
 
 /** Day-first segments (DD/MM/YYYY), matching the app's en-GB date rendering. */
 const LOCALE = "en-GB";
@@ -211,6 +212,12 @@ function CalendarPopover() {
 
 interface PickerBaseProps {
   id?: string;
+  /**
+   * The field's name in a form. A kit `Form` (rac/form.tsx) shows its own
+   * check, or the server's refusal, for this name under the field (the date
+   * picker renders one; the others have had no form to report into yet).
+   */
+  name?: string;
   /** True to render a trailing clear (×) button when a value is set. */
   clearable?: boolean;
   required?: boolean;
@@ -268,6 +275,7 @@ export function DatePicker({
             </AriaButton>
           )}
         </Group>
+        <FieldError className="mt-2 block" />
         {inline ? (
           <div className="mt-2 w-fit max-w-full overflow-x-auto rounded-lg border border-border p-3">
             <CalendarBody scale="touch" />

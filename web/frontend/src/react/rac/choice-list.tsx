@@ -255,6 +255,7 @@ export function CheckList({
   label,
   description,
   errorMessage,
+  name,
   value,
   onChange,
   options,
@@ -263,6 +264,11 @@ export function CheckList({
 }: {
   label?: React.ReactNode;
   description?: React.ReactNode;
+  /**
+   * The group's name in a form. A kit `Form` (rac/form.tsx) shows its own
+   * check, or the server's refusal, for this name under the group.
+   */
+  name?: string;
   errorMessage?: string;
   value: string[];
   onChange: (value: string[]) => void;
@@ -273,6 +279,7 @@ export function CheckList({
 }) {
   return (
     <AriaCheckboxGroup
+      name={name}
       value={value}
       onChange={onChange}
       aria-label={ariaLabel}
@@ -314,7 +321,9 @@ export function CheckList({
         ))}
       </div>
       {description ? <Description>{description}</Description> : null}
-      {errorMessage ? <FieldError>{errorMessage}</FieldError> : null}
+      {/* Always there: it shows nothing until the group is invalid, which is
+          also how a kit form's error for `name` reaches the reader. */}
+      <FieldError>{errorMessage}</FieldError>
     </AriaCheckboxGroup>
   );
 }

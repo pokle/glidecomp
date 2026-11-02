@@ -421,7 +421,6 @@ These are the standing imperatives. Each links to the reference that explains it
     [#816](https://github.com/pokle/glidecomp/issues/816) (task analysis
     figures), and the dialogs with text fields:
     [#818](https://github.com/pokle/glidecomp/issues/818) (new competition),
-    [#819](https://github.com/pokle/glidecomp/issues/819) (new task),
     [#820](https://github.com/pokle/glidecomp/issues/820) (submit track on
     the task page), [#821](https://github.com/pokle/glidecomp/issues/821)
     (API key), [#822](https://github.com/pokle/glidecomp/issues/822) (test

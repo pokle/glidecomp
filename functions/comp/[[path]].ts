@@ -162,6 +162,10 @@ const NOINDEX_SHELL_ROUTES: RegExp[] = [
   /^\/comp\/[^/]+\/pilots\/?$/,
   // One pilot's editor (and /pilots/new) — admin-only, like the roster.
   /^\/comp\/[^/]+\/pilots\/[^/]+\/?$/,
+  // Creating a task (#819) — admin-only. It shares its shape with the public
+  // task page below, and must be caught here first: `new` is no task's id (a
+  // sqid is at least four letters), so the task route would only 404 it.
+  /^\/comp\/[^/]+\/task\/new\/?$/,
   // Competition settings pages (index + group sub-pages) — admin-only.
   /^\/comp\/[^/]+\/settings(\/[^/]+)?\/?$/,
   // The task's three admin-only editors, the routed replacements for the Task

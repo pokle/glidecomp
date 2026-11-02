@@ -81,6 +81,9 @@ const CompSettingsPage = lazy(() =>
 const CompPilotPage = lazy(() =>
   import("./pages/CompPilotPage").then((m) => ({ default: m.CompPilotPage }))
 );
+const CompNewTaskPage = lazy(() =>
+  import("./pages/CompNewTaskPage").then((m) => ({ default: m.CompNewTaskPage }))
+);
 const TaskSettingsPage = lazy(() =>
   import("./pages/TaskSettingsPage").then((m) => ({ default: m.TaskSettingsPage }))
 );
@@ -214,6 +217,11 @@ export function AppRoutes() {
                 its pending notice server-side (noindex) while the client polls.
                 A hidden `test` comp still 404s for non-admins. */}
             <Route path="/comp/:compId/analysis" element={<CompAnalysis />} />
+            {/* Creating a task: a page, not a dialog over the comp (#819).
+                Admin-only, so a noindex shell in the SSR Function, listed
+                ahead of the public task route, whose URL shape it shares. The
+                router ranks the static `new` above `:taskId` by itself. */}
+            <Route path="/comp/:compId/task/new" element={<CompNewTaskPage />} />
             <Route path="/comp/:compId/task/:taskId" element={<TaskDetail />} />
             {/* The task's three admin-only editors, all SIBLINGS: each is
                 reached from the part of the task page it edits, so none nests

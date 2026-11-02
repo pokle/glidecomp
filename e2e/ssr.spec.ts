@@ -338,6 +338,9 @@ test.describe("SSR — isolation and fallback", () => {
     // Admin-only settings pages (index + a group sub-page).
     "/comp/anything/settings",
     "/comp/anything/settings/scoring",
+    // Creating a task (#819): the same shape as the public task page, so it
+    // must be caught before the task route would try to render (and 404) it.
+    "/comp/anything/task/new",
     // The pilot-similarity prototype: a real SPA route that derives everything
     // client-side from the report it fetches, so it has nothing to
     // server-render and must reach the shell rather than the 404 fallback.
