@@ -70,20 +70,24 @@ test("dev login, create competition and task", async ({ page, request }) => {
   await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/comp");
 
-  // Step 3: Create a competition. The "Start a new competition" button renders
-  // once the signed-in user resolves; click auto-waits.
-  await page.getByRole("button", { name: "Start a new competition" }).click();
-  const createDialog = page.getByRole("dialog");
-  await createDialog.getByLabel("Name").fill(COMP_NAME);
+  // Step 3: Create a competition. "Start a new competition" renders once the
+  // signed-in user resolves (click auto-waits), and opens a page of its own,
+  // /comp/new (e2e/comp-new.spec.ts holds that page's URL, Back and reload).
+  await page.getByRole("link", { name: "Start a new competition" }).click();
+  await expect(page).toHaveURL(/\/comp\/new$/);
+  const createForm = page.getByRole("main");
+  await createForm.getByLabel("Name").fill(COMP_NAME);
   // Category defaults to HG — no change needed. There is no visibility
   // choice here: every new comp starts hidden, and going public is the setup
   // guide's last step.
-  await expect(createDialog.getByText("Hidden?")).toHaveCount(0);
-  await createDialog.getByRole("button", { name: "Create" }).click();
+  await expect(createForm.getByText("Hidden?")).toHaveCount(0);
+  await createForm.getByRole("button", { name: "Create" }).click();
 
   // Client-side navigation to the competition detail page; the heading
   // assertion polls until the comp fetch resolves.
-  await page.waitForURL("**/comp/*");
+  await page.waitForURL(
+    (url) => /^\/comp\/[^/]+$/.test(url.pathname) && url.pathname !== "/comp/new"
+  );
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(COMP_NAME);
   // Born hidden, and opened on the URL that carries its share key: the
   // organiser's address bar is the link to share. The path segment is the
