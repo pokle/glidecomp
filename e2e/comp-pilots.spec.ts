@@ -435,6 +435,13 @@ test("Back from a pilot returns the list scrolled, searched and sorted as it was
   await search(page).fill("filler");
   await expect(page).toHaveURL(/q=filler/);
   await expect(page).toHaveURL(/sort=wprs_points/);
+  // The address bar changes the moment the sort or the search lands, but the
+  // list re-renders after it: React Router renders a navigation as a
+  // transition. Measure the list the reader will come back to, not the one it
+  // is replacing — 33 rows scrolled to the bottom clamp short once they
+  // become 30, and Back then rightly restores the shorter offset.
+  await expect(page.getByRole("button", { name: /Sort/ })).toContainText("WPRS points");
+  await expect(rows(page)).toHaveCount(30);
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const scrolled = await page.evaluate(() => window.scrollY);
   expect(scrolled).toBeGreaterThan(100);
