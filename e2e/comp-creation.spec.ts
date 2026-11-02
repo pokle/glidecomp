@@ -152,24 +152,30 @@ test("dev login, create competition and task", async ({ page, request }) => {
     .poll(() => idFromSegment(new URL(page.url()).pathname.split("/")[2]))
     .toBe(createdCompId);
 
-  // Step 4: Create a task. Two "New task" buttons exist on an empty comp
-  // (section header + the empty-state CTA in the section body).
-  await page.getByRole("button", { name: "New task" }).first().click();
-  const taskDialog = page.getByRole("dialog");
-  await taskDialog.getByLabel("Name").fill("Day 1 - Ridge Run");
+  // Step 4: Create a task. Two "New task" links exist on an empty comp
+  // (section header + the empty-state CTA in the section body); both go to
+  // the page that creates one (#819).
+  await page.getByRole("link", { name: "New task" }).first().click();
+  await expect(page).toHaveURL(/\/task\/new$/);
+  const taskForm = page.getByRole("main");
+  await taskForm.getByRole("textbox", { name: "Name" }).fill("Day 1 - Ridge Run");
   // The Date field is a segmented picker (react-aria), not a native input, so
   // it can't be filled — type into its day segment; en-GB order is D/M/Y and
   // each segment auto-advances (15 → 04 → 2026 = 2026-04-15).
-  const dateField = taskDialog.getByRole("group", { name: "Date" });
+  const dateField = taskForm.getByRole("group", { name: "Date" });
   await dateField.getByRole("spinbutton", { name: /day/ }).click();
   await page.keyboard.type("15042026");
   // Pilot class checkboxes default to all checked (just "open")
-  await taskDialog.getByRole("button", { name: "Create" }).click();
+  await taskForm.getByRole("button", { name: "Create" }).click();
 
-  // A successful create closes the dialog and re-fetches the comp; the task
-  // link assertion polls until the refreshed task list renders. Scoped to
-  // the Tasks section — the setup guide's "Set the route for…" link also
-  // carries the task name.
+  // Create goes to the task it made; the comp's trail leads back to the
+  // guide. The task link is scoped to the Tasks section — the setup guide's
+  // "Set the route for…" link also carries the task name.
+  await expect(page.getByRole("heading", { level: 1, name: "Day 1 - Ridge Run" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: COMP_NAME })
+    .click();
   await expect(
     page.locator("#tasks").getByRole("link", { name: /Day 1 - Ridge Run/ })
   ).toBeVisible();

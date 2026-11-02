@@ -38,6 +38,9 @@ export const MOBILE_SPEC_FILES = [
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
   "task-settings-pages.spec.ts",
+  // Creating a task (#819): a page rather than a dialog with a text field,
+  // which is what the overlays rule moved off a phone.
+  "task-new-page.spec.ts",
   // The waypoints page, whose editor is a list of waypoints opening
   // full-screen sheets, at every width — the Tabulator grid it replaced did
   // not work at this one. This project is what holds that: the page is
