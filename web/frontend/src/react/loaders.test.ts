@@ -4,6 +4,7 @@ import {
   loadCompDetail,
   loadCompWaypoints,
   loadTaskDetail,
+  loadTaskDiagram,
   loadPilotScoreDetail,
   NotFoundError,
   type FetchFn,
@@ -144,6 +145,38 @@ describe("loadTaskDetail", () => {
       "/api/comp/abc/task/t1/score": { status: 404 },
     });
     await expect(loadTaskDetail(fetch, "abc", "t1")).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("loadTaskDiagram", () => {
+  it("returns the task and the comp, and nothing else", async () => {
+    const { fetch, calls } = fakeFetch({
+      "/api/comp/abc/task/t1": { body: { task_id: "t1", name: "Task 1" } },
+      "/api/comp/abc": { body: { comp_id: "abc", name: "Corryong" } },
+    });
+    const data = await loadTaskDiagram(fetch, "abc", "t1");
+    expect(calls.sort()).toEqual(["/api/comp/abc", "/api/comp/abc/task/t1"]);
+    expect(data.task.name).toBe("Task 1");
+    expect(data.comp.name).toBe("Corryong");
+  });
+
+  // A hidden comp read without its link 404s at the comp as well as the task:
+  // either one is the page's 404.
+  it("throws NotFoundError when either the task or the comp is missing", async () => {
+    const noTask = fakeFetch({
+      "/api/comp/abc/task/t1": { status: 404 },
+      "/api/comp/abc": { body: { name: "Corryong" } },
+    });
+    await expect(loadTaskDiagram(noTask.fetch, "abc", "t1")).rejects.toBeInstanceOf(
+      NotFoundError
+    );
+    const noComp = fakeFetch({
+      "/api/comp/abc/task/t1": { body: { name: "Task 1" } },
+      "/api/comp/abc": { status: 404 },
+    });
+    await expect(loadTaskDiagram(noComp.fetch, "abc", "t1")).rejects.toBeInstanceOf(
+      NotFoundError
+    );
   });
 });
 

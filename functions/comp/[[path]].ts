@@ -27,6 +27,7 @@ import {
   loadCompScores,
   loadCompWaypoints,
   loadTaskDetail,
+  loadTaskDiagram,
   loadPilotScoreDetail,
   loadCompAnalysis,
   loadTaskAnalysis,
@@ -53,6 +54,7 @@ import {
   compWaypointsPath,
   compAnalysisPath,
   taskPath,
+  taskDiagramPath,
   taskAnalysisPath,
   taskAnalysisSectionPath,
   pilotPath,
@@ -349,6 +351,41 @@ const ROUTES: Array<{
                 [data.task.name, taskPath(compId, data.comp?.name, taskId, data.task.name)],
               ])
             ),
+        },
+      };
+    },
+  },
+  {
+    // The task's route at full size (#814 — it was an overlay over the comp
+    // page). Server-rendered because the SVG costs nothing to draw here and a
+    // reader on a weak signal gets the route in the first response; noindexed
+    // because it says nothing the task page does not, and the task page is the
+    // indexable form.
+    pattern: /^\/comp\/([^/]+)\/task\/([^/]+)\/diagram\/?$/,
+    async run(f, m, origin) {
+      const urlCompId = idFromSegment(m[1]);
+      const taskId = idFromSegment(m[2]);
+      const data = await loadTaskDiagram(f, urlCompId, taskId);
+      // The id this viewer's URLs carry: plus the share key on a hidden comp.
+      const compId = compUrlId(data.comp, urlCompId);
+      const c = data.comp;
+      const t = data.task;
+      const canonical = taskDiagramPath(compId, c.name, taskId, t.name);
+      return {
+        data,
+        canonicalPath: canonical,
+        head: {
+          title: `Route for ${t.name} — ${c.name}`,
+          description: `The route of ${t.name} (${c.name}), drawn at full size, on GlideComp.`,
+          noindex: true,
+          extra: jsonLd(
+            breadcrumb(origin, [
+              ["Competitions", "/comp"],
+              [c.name, compPath(compId, c.name)],
+              [t.name, taskPath(compId, c.name, taskId, t.name)],
+              ["Route diagram", canonical],
+            ])
+          ),
         },
       };
     },

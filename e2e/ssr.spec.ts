@@ -223,6 +223,25 @@ test.describe("SSR — content is in the server HTML (no JS)", () => {
     expect(html.toLowerCase()).toMatch(/turnpoint|start|goal/);
   });
 
+  test("task diagram page draws the route in the server HTML, noindexed", async ({
+    request,
+  }) => {
+    const { compId, taskId } = await discover(request);
+    const res = await request.get(`/comp/${compId}/task/${taskId}/diagram`);
+    expect(res.ok()).toBeTruthy();
+    // Settled on the canonical slug URL, still the diagram.
+    expect(new URL(res.url()).pathname).toMatch(
+      new RegExp(`/comp/[a-z0-9-]+-${compId}/task/[a-z0-9-]+-${taskId}/diagram$`)
+    );
+    const html = await res.text();
+    expect(html).toContain('id="__SSR_DATA__"');
+    // The drawing itself, named for the route it shows.
+    expect(html).toMatch(/<svg[^>]*role="img"[^>]*aria-label="Task route: /);
+    expect(html).toContain("Route for ");
+    // The task page is the indexable form of the same route.
+    expect(html).toContain('name="robots" content="noindex"');
+  });
+
   test("waypoints page lists the comp's shared waypoints", async ({ request }) => {
     const { compId, compName } = await discover(request);
     const wpRes = await request.get(`/api/comp/${compId}/waypoints`);
@@ -739,6 +758,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
     ":scores",
     ":waypoints",
     ":task",
+    ":taskDiagram",
     ":pilot",
     ":compAnalysis",
     ":taskAnalysis",
@@ -765,6 +785,7 @@ test.describe("SSR — hydration is clean (real browser)", () => {
         ":scores": `/comp/${d.compId}/scores`,
         ":waypoints": `/comp/${d.compId}/waypoints`,
         ":task": `/comp/${d.compId}/task/${d.taskId}`,
+        ":taskDiagram": `/comp/${d.compId}/task/${d.taskId}/diagram`,
         ":pilot": `/comp/${d.compId}/task/${d.taskId}/pilot/${d.pilotId}`,
         ":compAnalysis": `/comp/${d.compId}/analysis`,
         ":taskAnalysis": `/comp/${d.compId}/task/${d.taskId}/analysis`,

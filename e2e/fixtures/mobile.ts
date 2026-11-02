@@ -41,6 +41,10 @@ export const MOBILE_SPEC_FILES = [
   // The task's QR code (#813), a page where it was a full-screen overlay: a
   // phone is both what shows it to a camera and where overlays went wrong.
   "task-qr-page.spec.ts",
+  // The task's route at full size (#814): a page under the task where it was
+  // a full-screen overlay over the competition page, opened from a glyph in
+  // a list read on a phone.
+  "task-diagram-page.spec.ts",
   // The routed task editors (#637) — settings, weather notes and the route
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
