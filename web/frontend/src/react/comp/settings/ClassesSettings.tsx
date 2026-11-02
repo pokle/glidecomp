@@ -8,7 +8,6 @@ import { useState } from "react";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { api } from "@/comp/api";
-import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { PilotClassesField } from "../fields";
@@ -18,7 +17,6 @@ export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const savedText = comp.pilot_classes.join(", ");
   const [pilotClassesText, setPilotClassesText] = useState(savedText);
   const [defaultClass, setDefaultClass] = useState(comp.default_pilot_class);
-  const [saving, setSaving] = useState(false);
 
   // Live class list for the default-class dropdown.
   const classes = pilotClassesText
@@ -35,39 +33,28 @@ export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     pilotClassesText !== savedText ||
     effectiveDefault !== comp.default_pilot_class;
 
-  async function save() {
-    if (classes.length === 0) {
-      toast.warning("At least one pilot class is required");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].$patch({
-        param: { comp_id: compId },
-        json: {
-          pilot_classes: classes,
-          default_pilot_class: effectiveDefault,
-        },
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to update competition");
-        return;
-      }
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <SettingsPage
       crumbs={underCompSettings(compId, comp.name)}
       title="Pilot classes"
     >
-      <SettingsForm onSave={save} saving={saving} dirty={dirty}>
+      <SettingsForm
+        dirty={dirty}
+        validate={() => ({
+          pilot_classes: classes.length === 0 && "At least one pilot class is required",
+        })}
+        onSubmit={() =>
+          api.api.comp[":comp_id"].$patch({
+            param: { comp_id: compId },
+            json: {
+              pilot_classes: classes,
+              default_pilot_class: effectiveDefault,
+            },
+          })
+        }
+        onSuccess={onSaved}
+      >
+        {/* Named as the API names them, so a refusal lands under its field. */}
         <PilotClassesField
           value={pilotClassesText}
           onChange={setPilotClassesText}
@@ -76,6 +63,7 @@ export function ClassesSettings({ compId, comp, onSaved }: SettingsGroupProps) {
 
         <ChoiceList
           label="Default pilot class"
+          name="default_pilot_class"
           value={effectiveDefault}
           onChange={setDefaultClass}
           options={classes.map((cls) => ({ value: cls, label: cls }))}

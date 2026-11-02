@@ -63,6 +63,7 @@ export function ChoiceList({
   onChange,
   options,
   ariaLabel,
+  name,
   className,
 }: {
   label?: React.ReactNode;
@@ -72,6 +73,8 @@ export function ChoiceList({
   options: Choice[];
   /** Use when there is no visible `label` to name the group. */
   ariaLabel?: string;
+  /** The field's name in a kit form, where its error is shown under it. */
+  name?: string;
   className?: string;
 }) {
   return (
@@ -79,6 +82,7 @@ export function ChoiceList({
       value={value}
       onChange={onChange}
       aria-label={ariaLabel}
+      name={name}
       className={cn("flex flex-col gap-2", className)}
     >
       {label ? <Label>{label}</Label> : null}
@@ -112,6 +116,7 @@ export function ChoiceList({
         ))}
       </div>
       {description ? <Description>{description}</Description> : null}
+      <FieldError />
     </AriaRadioGroup>
   );
 }
@@ -259,6 +264,7 @@ export function CheckList({
   onChange,
   options,
   ariaLabel,
+  name,
   className,
 }: {
   label?: React.ReactNode;
@@ -269,6 +275,8 @@ export function CheckList({
   options: Choice[];
   /** Use when there is no visible `label` to name the group. */
   ariaLabel?: string;
+  /** The field's name in a kit form, where its error is shown under it. */
+  name?: string;
   className?: string;
 }) {
   return (
@@ -276,6 +284,7 @@ export function CheckList({
       value={value}
       onChange={onChange}
       aria-label={ariaLabel}
+      name={name}
       className={cn("flex flex-col gap-2", className)}
     >
       {label ? <Label>{label}</Label> : null}
@@ -314,7 +323,9 @@ export function CheckList({
         ))}
       </div>
       {description ? <Description>{description}</Description> : null}
-      {errorMessage ? <FieldError>{errorMessage}</FieldError> : null}
+      {/* Renders only when the group is invalid: an `errorMessage`, or one a
+          kit form hands it by `name`. */}
+      <FieldError>{errorMessage}</FieldError>
     </AriaCheckboxGroup>
   );
 }

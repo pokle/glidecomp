@@ -298,6 +298,83 @@ test("Back on a dirty sub-page is guarded: Keep stays put, Discard leaves", asyn
   ).toContainText(COMP_NAME);
 });
 
+/**
+ * The settings pages are the kit form (rac/form.tsx through
+ * components/SettingsForm.tsx), and `e2e/forms.spec.ts` holds the kit's rules.
+ * What is pinned here is these pages' own half: their fields carry the names
+ * the server's refusals are about, so a refusal lands under its field rather
+ * than in a toast that fades.
+ */
+test("a refused save lands under the field it is about, focused, and never as a toast", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await page.goto(`/comp/${compId}/settings/access`);
+  const heading = page.getByRole("heading", { name: "Access", exact: true });
+  await expect(heading).toBeVisible();
+
+  // The server refuses one ADDRESS ("admin_emails.1"); it belongs under the
+  // field the whole list is typed in.
+  const admins = page.getByRole("textbox", { name: "Admin emails" });
+  const typed = `${ADMIN_USER.email}, not-an-email`;
+  await admins.fill(typed);
+  const [res] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PATCH" && r.url().includes("/api/comp/")
+    ),
+    page.getByRole("button", { name: "Save" }).click(),
+  ]);
+  expect(res.status()).toBe(400);
+
+  await expect(admins).toHaveAttribute("aria-invalid", "true");
+  await expect(admins).toHaveAccessibleDescription(/Invalid email address/);
+  await expect(admins).toBeFocused();
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+  // Nothing typed is lost, and the page stays put.
+  await expect(heading).toBeVisible();
+  await expect(admins).toHaveValue(typed);
+
+  // Editing the field clears its error.
+  await admins.fill(ADMIN_USER.email);
+  await expect(admins).not.toHaveAttribute("aria-invalid", "true");
+});
+
+test("Scoring: a refused GAP parameter unfolds Advanced and lands under its own field", async ({
+  page,
+}) => {
+  await devLogin(page, ADMIN_USER);
+  await page.goto(`/comp/${compId}/settings/scoring`);
+  await expect(page.getByRole("heading", { name: "Scoring", exact: true })).toBeVisible();
+
+  // A nominal time of 0 passes the field's own bounds and is refused by the
+  // server as `gap_params.nominalTime` — the page's `fieldNames` is what puts
+  // that under "Nominal time (min)".
+  const advanced = page.getByText("Advanced scoring settings");
+  await advanced.click();
+  // The textbox, not the steppers beside it, which the label names too.
+  const nominalTime = page.getByRole("textbox", { name: "Nominal time (min)" });
+  await nominalTime.fill("0");
+  // Folded away again before Save: the field with the problem must not stay
+  // hidden behind the disclosure.
+  await advanced.click();
+  await expect(nominalTime).toBeHidden();
+
+  const [res] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PATCH" && r.url().includes("/api/comp/")
+    ),
+    page.getByRole("button", { name: "Save" }).click(),
+  ]);
+  expect(res.status()).toBe(400);
+  expect(((await res.json()) as { field?: string }).field).toBe("gap_params.nominalTime");
+
+  await expect(nominalTime).toBeVisible();
+  await expect(nominalTime).toHaveAttribute("aria-invalid", "true");
+  await expect(nominalTime).not.toHaveAccessibleDescription("");
+  await expect(nominalTime).toBeFocused();
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+});
+
 test("the whole journey fits a phone: no horizontal overflow", async ({
   page,
   isMobile,
