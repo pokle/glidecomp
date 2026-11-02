@@ -124,10 +124,12 @@ endpoints return an `ETag`; send it back as `If-None-Match` to get a cheap
 | `PATCH` | `/api/comp/:comp_id` | Edit name, category, dates, scoring format, GAP params — **admin** |
 | `DELETE` | `/api/comp/:comp_id` | Delete the comp and everything under it — **admin** |
 | `POST` | `/api/comp/:comp_id/share-key` | Reset a hidden comp's link: a new `share_key`, and every link shared before stops working — **admin** |
+| `POST` | `/api/comp/:comp_id/clone` | Start a new hidden comp from this one: its settings, and its waypoints, pilots and other admins unless `waypoints`, `pilots` or `admins` is `false`. Never its tasks — **admin** |
 | `POST` | `/api/comp/:comp_id/task` | Add a task — **admin** |
 | `GET` | `/api/comp/:comp_id/task/:task_id` | Task metadata and its `xctsk` definition |
 | `PATCH` | `/api/comp/:comp_id/task/:task_id` | Edit the task's date, classes or route — **admin** |
 | `DELETE` | `/api/comp/:comp_id/task/:task_id` | Delete the task — **admin** |
+| `GET` | `/api/comp/:comp_id/task/:task_id/route-sources` | Other tasks' saved routes to copy into this one, nearest first; `?q=` narrows by comp or task name — **admin** |
 | `GET` | `/api/comp/:comp_id/audit` | The comp's transparency log: every change, who made it, when |
 
 Every mutation above is audit-logged and, where it can move a score, marks the
@@ -314,6 +316,9 @@ Returns one entry per submitted track (`comp_pilot_id`, `pilot_name`,
 | `POST` | `/api/comp/:comp_id/pilot` | Register one pilot — **admin** |
 | `POST` | `/api/comp/:comp_id/pilot/bulk` | Register many at once — **admin** |
 | `POST` | `/api/comp/:comp_id/pilot/civl-rankings` | Attach CIVL world ranking points to the roster — **admin** |
+| `GET` | `/api/comp/:comp_id/pilot/copy-sources` | Your other comps that have pilots, to copy a roster from — **admin** |
+| `GET` | `/api/comp/:comp_id/pilot/copy` | What copying another comp's roster in would do (`?from=` its id); writes nothing — **admin** of both |
+| `POST` | `/api/comp/:comp_id/pilot/copy` | Copy another comp's pilots in (`from_comp_id`). Adds only; a pilot already here is left out — **admin** of both |
 | `PATCH` | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Edit a roster entry — **admin** |
 | `DELETE` | `/api/comp/:comp_id/pilot/:comp_pilot_id` | Remove a pilot — **admin** |
 | `POST` | `/api/comp/:comp_id/registration/resolve` | Say which unclaimed roster entry you are, before uploading |
