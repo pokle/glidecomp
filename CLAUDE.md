@@ -472,8 +472,8 @@ These are the standing imperatives. Each links to the reference that explains it
     lost the reader: on an iPhone the pilot sheet's Done spun and stopped,
     with the reason at the top of a body scrolled past it.
     `e2e/forms.spec.ts` holds the rules on a phone and a desktop against a
-    development-only bench (`/__kit/form`), so a form built on the kit tests
-    only its own fields.
+    bench built only in development and in the e2e suite's `e2e`-mode build
+    (`/__kit/form`), so a form built on the kit tests only its own fields.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
