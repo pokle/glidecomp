@@ -27,12 +27,8 @@
  *      alone; Back and the in-page control return to the list; arrows move
  *      focus without navigating, Enter chooses, focus follows the view.
  *
- * A second group covers the full-screen overlay (MetricChartOverlay). The
- * inline plot already spends most of a phone's height on the rank axis;
- * Expand is the way to the remaining width, so labels come up to a readable
- * size. The assertion that matters is that the sheet really does grow the
- * viewBox — a full-screen dialog that kept BASE_H would letterbox the same
- * strip the page already showed.
+ * The chart's full-size view is a page of its own since #815, with its own
+ * spec: task-analysis-metric-chart.spec.ts.
  *
  * READ-ONLY against the seeded "Corryong Cup 2026" sample comp: nothing is
  * created, so there is nothing to clean up (an e2e-created comp is exactly
@@ -195,12 +191,6 @@ function rankingCard() {
   return page.locator("section", {
     has: page.getByRole("heading", { name: RANKING_HEADING }),
   });
-}
-
-/** The ranking pane's Expand button. Scoped to the ranking's card, which also
- * keeps it honest if anything else on the page grows a full-screen control. */
-function rankingExpand() {
-  return rankingCard().getByRole("button", { name: /full screen$/ }).first();
 }
 
 /** The selected-metric pane. Scoped to the ranking's own card — the thermals
@@ -404,67 +394,6 @@ test("narrow: arrowing through the ranking does not navigate; Enter does", async
 
   await page.goBack();
   await expect(ranking()).toBeVisible();
-});
-
-test("expanding the chart grows the viewBox to fill the sheet", async () => {
-  await openSection("strategies");
-  for (const [label, width, height] of [
-    ["portrait", 390, 780],
-    ["landscape", 780, 390],
-  ] as const) {
-    // The inline plot is re-measured after each resize, so both orientations
-    // compare like with like without reloading between them.
-    await setViewport(width, height);
-    await ensureRankingDetail();
-
-    const inline = (await page.locator('svg[role="group"]').first().boundingBox())!;
-    await rankingExpand().click();
-
-    const dialog = page.getByRole("dialog");
-    await dialog.waitFor();
-    // One frame for the ResizeObserver to report the sheet's box.
-    await page.waitForTimeout(400);
-    const expanded = (await dialog.locator('svg[role="group"]').boundingBox())!;
-    const viewBox = await dialog.locator('svg[role="group"]').getAttribute("viewBox");
-    const viewBoxHeight = Number(viewBox?.split(" ")[3]);
-
-    // The inline plot already spends most of a portrait viewport on the rank
-    // axis, so Expand is no longer a 2× jump. What it still has to do is grow
-    // the viewBox to match the sheet — otherwise portrait letterboxes BASE_H
-    // in a full-screen dialog. Landscape is already full-width; the sheet
-    // must not shrink it.
-    expect(expanded.width, `${label} width`).toBeGreaterThanOrEqual(inline.width - 1);
-    if (label === "portrait") {
-      expect(viewBoxHeight, "portrait sheet should grow the viewBox").toBeGreaterThan(316);
-    }
-
-    await page.keyboard.press("Escape");
-    await expect(dialog).toHaveCount(0);
-  }
-});
-
-test("the expanded chart stays open when you tap a dot, and returns focus on close", async () => {
-  await openSection("strategies");
-  await setViewport(390, 780);
-  await ensureRankingDetail();
-
-  const trigger = rankingExpand();
-  await trigger.click();
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor();
-
-  // RAC focuses the Close button, so Escape is not the only way out.
-  await expect(page.locator(":focus")).toHaveText("Close");
-
-  // The deliberate departure from the QR / task-glyph overlays: those make the
-  // whole sheet a close target because their content is a picture. Every dot
-  // here is interactive, so tapping one must NOT dismiss.
-  await dialog.locator("svg g[tabindex]").first().click({ force: true });
-  await expect(dialog).toBeVisible();
-
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(trigger).toBeFocused();
 });
 
 /** The thermal census (the master). The print-only copy of every row is

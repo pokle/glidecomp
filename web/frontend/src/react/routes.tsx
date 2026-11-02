@@ -46,6 +46,7 @@ import { PilotScoreDetail } from "./pages/PilotScoreDetail";
 import { CompAnalysis } from "./pages/CompAnalysis";
 import { TaskAnalysis } from "./pages/TaskAnalysis";
 import { TaskAnalysisSection } from "./pages/TaskAnalysisSection";
+import { TaskAnalysisMetricChart } from "./pages/TaskAnalysisMetricChart";
 
 /*
  * Everything else is signed-in, admin-only or otherwise never server-rendered,
@@ -282,6 +283,14 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/analysis/:section"
               element={<TaskAnalysisSection />}
+            />
+            {/* One metric's chart at full size (#815), under the Metric
+                details section that holds every metric. Public and SSR'd
+                like the sections, but noindexed: it is a bigger copy of a
+                chart the strategies page already shows. */}
+            <Route
+              path="/comp/:compId/task/:taskId/analysis/metrics/:metric"
+              element={<TaskAnalysisMetricChart />}
             />
             {/* Where the per-task analysis lived while it was nested under the
                 comp report (July–August 2026). */}

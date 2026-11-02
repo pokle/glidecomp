@@ -17,11 +17,15 @@
  * paper in one go; that is no longer a goal, and each page prints as itself.
  */
 import { useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Card } from "@/react/rac/card";
 import { Explain } from "@/react/rac/explain";
 import { NotFound } from "../components/NotFound";
-import { compUrlId, idFromSegment, taskAnalysisSectionPath } from "../lib/slug";
+import {
+  compUrlId,
+  taskAnalysisMetricPath,
+  taskAnalysisSectionPath,
+} from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { TaskAnalysisFrame } from "../analysis/TaskAnalysisFrame";
 import { useTaskAnalysis } from "../analysis/use-task-report";
@@ -133,6 +137,24 @@ function StrategiesSection({
   active: FrameCtx["active"];
   report: FrameCtx["report"];
 }) {
+  const { compId, taskId, comp, task } = bundle;
+  const [searchParams] = useSearchParams();
+  // The full-size chart is a page (#815). The report's view state goes with
+  // the reader — the class being read and the pinned pilot — but not
+  // `?metric=`, which is this page's selection and is in the path there.
+  const chartHref = (metricId: string) => {
+    const query = new URLSearchParams(searchParams);
+    query.delete("metric");
+    const search = query.toString();
+    return `${taskAnalysisMetricPath(
+      compUrlId(comp, compId),
+      comp?.name,
+      taskId,
+      task?.name,
+      metricId
+    )}${search ? `?${search}` : ""}`;
+  };
+
   return (
     <>
       <Card aria-labelledby="separation-heading" className="gap-3">
@@ -148,7 +170,11 @@ function StrategiesSection({
             <OneDayCaveatNote behaviourCount={rankMetrics(report.metrics).length} />
           </Explain>
         </h2>
-        <SeparationRanking metrics={report.metrics} report={report} />
+        <SeparationRanking
+          metrics={report.metrics}
+          report={report}
+          chartHref={chartHref}
+        />
       </Card>
 
       {/* Renders nothing unless this task actually ran against the consensus

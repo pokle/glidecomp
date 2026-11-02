@@ -70,6 +70,10 @@ export const MOBILE_SPEC_FILES = [
   // text field, which is the keyboard trouble the overlays rule is about. Now
   // a form on the page, with the new key shown in place.
   "settings-api-keys.spec.ts",
+  // A metric's chart at full size (#815), a page where it was a full-screen
+  // overlay. A phone is where the inline chart is too small to read, so it is
+  // the width this page exists for.
+  "task-analysis-metric-chart.spec.ts",
 ] as const;
 
 /** The same list as Playwright `testMatch` patterns. */

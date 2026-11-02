@@ -30,6 +30,7 @@ import type { Key, Selection } from "react-aria-components";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { DivergingMeter, ProportionMeter } from "@/react/rac/meter";
 import { Badge } from "@/react/rac/badge";
+import { LinkButton } from "@/react/rac/button";
 import { MasterDetail } from "@/react/components/MasterDetail";
 import { useMasterDetailSelection } from "@/react/components/use-master-detail-selection";
 import { cn } from "@/react/lib/utils";
@@ -43,7 +44,7 @@ import {
 } from "./ReadingNotes";
 import { verdictWords } from "./units";
 import { MetricDetailPanel } from "./charts/MetricDetailPanel";
-import { MetricChartOverlay } from "./charts/MetricChartOverlay";
+import { ExpandIcon } from "./charts/ExpandIcon";
 import {
   FAMILY_LABELS,
   MIN_CORRELATION_N,
@@ -95,11 +96,15 @@ export function VerdictBadge({ correlation }: { correlation: MetricCorrelation }
 export function SeparationRanking({
   metrics,
   report,
+  chartHref,
 }: {
   metrics: MetricReport[];
   /** When provided, rows are selectable and the selected metric is plotted
    * against rank beside the table. */
   report?: TaskAnalysisReport;
+  /** The page holding a metric's chart at full size (#815). The pane links
+   * to it when given. */
+  chartHref?: (metricId: string) => string;
 }) {
   const ranked = rankMetrics(metrics);
   // The outcome checks, ranked the same way but shown apart (below the
@@ -269,14 +274,25 @@ export function SeparationRanking({
                 fillViewport
                 // The inline plot is still a few hundred pixels on a phone;
                 // this is the way to the whole screen. Useful at every
-                // width, so it is not narrow-only.
+                // width, so it is not narrow-only. A LINK to a page of its
+                // own, left with Back — never an overlay (CLAUDE.md, "No
+                // full-screen overlays").
                 headerAction={
-                  <MetricChartOverlay
-                    metric={selectedMetric}
-                    pilots={report.pilots}
-                    showAllLabels={showAllLabels}
-                    onShowAllLabelsChange={setShowAllLabels}
-                  />
+                  chartHref ? (
+                    <LinkButton
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 print:hidden"
+                      href={chartHref(selectedMetric.id)}
+                      // Names the metric: on a page of chart panels "Expand"
+                      // alone would give a screen reader a list of identical
+                      // links.
+                      aria-label={`Show ${selectedMetric.label} full size`}
+                    >
+                      <ExpandIcon />
+                      Expand
+                    </LinkButton>
+                  ) : null
                 }
               />
             ) : null

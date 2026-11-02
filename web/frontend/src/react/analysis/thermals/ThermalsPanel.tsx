@@ -48,7 +48,7 @@ import { Button, ToggleButton } from "@/react/rac/button";
 import { FullScreenSheet } from "@/react/rac/full-screen-sheet";
 import { MasterDetail } from "@/react/components/MasterDetail";
 import { useMasterDetailSelection } from "@/react/components/use-master-detail-selection";
-import { ExpandIcon } from "../charts/MetricChartOverlay";
+import { ExpandIcon } from "../charts/ExpandIcon";
 import { cn } from "@/react/lib/utils";
 import { Popover, PopoverTrigger } from "@/react/rac/popover";
 import { Explain } from "@/react/rac/explain";

@@ -417,9 +417,8 @@ These are the standing imperatives. Each links to the reference that explains it
     [#812](https://github.com/pokle/glidecomp/issues/812) (turnpoint sheet,
     quick entry), [#813](https://github.com/pokle/glidecomp/issues/813)
     (task QR), [#814](https://github.com/pokle/glidecomp/issues/814) (task
-    diagram), [#815](https://github.com/pokle/glidecomp/issues/815) and
-    [#816](https://github.com/pokle/glidecomp/issues/816) (task analysis
-    figures); then [#817](https://github.com/pokle/glidecomp/issues/817)
+    diagram), [#816](https://github.com/pokle/glidecomp/issues/816) (task
+    analysis thermal view); then [#817](https://github.com/pokle/glidecomp/issues/817)
     deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
     `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
     do not add a new user of any of it.
