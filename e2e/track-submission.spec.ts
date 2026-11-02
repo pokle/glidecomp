@@ -696,8 +696,9 @@ test.describe("submitting a track without an account", () => {
       await expect(
         visitorPage.getByText("This task is closed for track submissions.")
       ).toBeVisible({ timeout: 20_000 });
+      // In main: the site header's own Submit track is always there.
       await expect(
-        visitorPage.getByRole("button", { name: "Submit track" })
+        visitorPage.getByRole("main").getByRole("link", { name: "Submit track" })
       ).toHaveCount(0);
 
       // And /submit stops offering it — the only user-side coverage of the
@@ -713,7 +714,7 @@ test.describe("submitting a track without an account", () => {
 
       // The organiser still can — the stop is aimed at pilots, not at them.
       await expect(
-        page.getByRole("button", { name: "Submit track" }).first()
+        page.getByRole("main").getByRole("link", { name: "Submit track" }).first()
       ).toBeVisible();
 
       // Put it back so the rest of the file's expectations still hold — and
@@ -826,8 +827,11 @@ test.describe("submitting a track without an account", () => {
     // on first paint — the assertion is waiting for hydration, not for a
     // render. On the default 5s this failed on CI at 6.2s while every
     // neighbouring assertion in this file already used 15-20s.
+    //
+    // A link to /submit, not a dialog (#820) — task-submit-link.spec.ts
+    // follows it. In main: the site header carries a Submit track of its own.
     await expect(
-      page.getByRole("button", { name: "Submit track" }).first()
+      page.getByRole("main").getByRole("link", { name: "Submit track" }).first()
     ).toBeVisible({ timeout: 20_000 });
   });
 });

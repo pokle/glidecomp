@@ -186,6 +186,17 @@ export function compAnalysisPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/analysis`;
 }
 
+/**
+ * The submit-track page with the comp (and, from a task page, the task)
+ * already chosen. `compId` as it goes in URLs — a hidden comp's share key
+ * rides in `?comp=` like it does in a path. A link, not a dialog: see the
+ * overlays rule in CLAUDE.md.
+ */
+export function submitTrackPath(compId: string, taskId?: string | null): string {
+  const comp = `comp=${encodeURIComponent(compId)}`;
+  return taskId ? `/submit?${comp}&task=${encodeURIComponent(taskId)}` : `/submit?${comp}`;
+}
+
 /** The roster. Where a matched pilot who has not flown a task yet is found. */
 export function compPilotsPath(id: string, name?: string | null): string {
   return `${compPath(id, name)}/pilots`;

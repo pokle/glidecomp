@@ -29,37 +29,60 @@ scores without an account"*. It asks three things:
 `?comp=` and `?task=` prefill the first step, so the URL is worth putting on a
 poster or behind a QR code at launch.
 
-### One flow, two presentations
+### One flow, one page
 
 The logic lives in `src/react/comp/SubmitTrackForm.tsx` and its DOM-free half
-in `submit-track.ts`. Two things render it:
+in `submit-track.ts`, and `pages/SubmitTrack.tsx` is the only thing that
+renders it. Every other way in is a **link** to that page, built by
+`submitTrackPath()` in `lib/slug.ts`:
 
-- `pages/SubmitTrack.tsx` — as page content.
-- `comp/SubmitTrackDialog.tsx` — a `Modal` wrapper, for the **task page**
-  (`pages/TaskDetail.tsx` and, inside it, `comp/TaskScoresPublic.tsx`), where comp
-  and task are already known and those steps collapse to a line with a
+- The **task page** (`pages/TaskDetail.tsx`, and the Scores section inside it,
+  `comp/TaskScoresPublic.tsx`) links to `/submit?comp=<id>&task=<id>`. The task
+  is already known, so that step collapses to a line naming it, with a
   **Change** button.
+- The **comp page** (`pages/CompDetail.tsx`) links to `/submit?comp=<id>`.
+  From a comp page the task is still an open question, and the page is where
+  that question gets asked.
 
-The comp page is the third way in, and it opens neither: `pages/CompDetail.tsx`
-links to `/submit?comp=<id>`. From a comp page the task is still an open
-question, and the page is where that question gets asked — a dialog opening onto
-a task picker would only be the page in a smaller box. Both the comp and the
-task button are mount-gated, because both pages are server-rendered, and neither
-is gated on a session.
+Until #820 the task page opened the form in a dialog (`SubmitTrackDialog`) over
+itself. That is the overlay CLAUDE.md's "no full-screen overlays" rule retired:
+a dialog with text fields brings up the keyboard over a fixed layer, which is
+where the iPhone bugs were. As a page it gets the browser's Back (which returns
+to the task page), a reload that keeps the same task, and a URL that can be
+shared.
+
+Nothing is handed to the page in memory, because a reload or a shared link
+would not have it. So the page works out for itself what the dialog used to be
+told:
+
+- **The task's names**, which it looks up from the two ids (see below).
+- **Whether this person may submit for other pilots**, and the roster to pick
+  from: an admin of the chosen comp always, and a pilot on its roster when the
+  comp has `open_igc_upload` on. It asks again whenever the chosen comp
+  changes. On `/submit` this used to be absent, so an organiser who reached the
+  page from the nav could only submit for themselves.
+- **A hidden comp's share key** rides in `?comp=`, as it does in a comp URL
+  (`compUrlId()`), so the comp still resolves for its organiser. Its link's
+  visitors are never offered the link at all, because every write route
+  refuses them.
+
+Both the comp page's link and the task page's are mount-gated, because both
+pages are server-rendered and whether the link shows depends on who is asking
+(an organiser keeps it on a closed or hidden task). Neither is gated on a
+session.
 
 A step never simply disappears when it is prefilled. Filing a track against
 yesterday's task without ever being shown which task it was is the commonest
 way this kind of flow fails.
 
-The only behavioural difference between the two is what happens on success: the
-dialog closes itself after a clean upload (and never when there are
-track-quality findings — it would take the warning away before it was read),
-and the page has nothing to close.
+On success the form is replaced by what was received, and stays there until the
+pilot leaves. Its first action, **View provisional score card**, goes to what
+was made; Back still returns to the page they came from.
 
 ### The admin grid, and the size rule
 
 `comp/TaskScoresAdmin.tsx` — the admin manage grid — deliberately does **not**
-open the form. The pilot is already known from the row, so a dialog that asked
+open the form. The pilot is already known from the row, so a form that asked
 which pilot would be worse than the `FileTrigger` it has. What it must share is
 the *rules*, and it did not: it carried an invented `file.size > 5 MB` check on
 the uncompressed file.
@@ -101,8 +124,8 @@ visible parts are laid out with a flex gap and would otherwise be read as
 
 **Choosing does not close the list.** The picker collapses to a line with a
 **Change** button in exactly one case: the caller already named the task, which
-is the dialog on a task page where the flow is a two-field form and a list of
-one is noise. It never collapses because the pilot picked something.
+is the task page's link, where the pilot has just been looking at that task and
+a list of one is noise. It never collapses because the pilot picked something.
 Selecting a task is not finishing with it — confirming the choice against the
 dates either side is the entire reason the dates are printed, and a control
 that answers once and shuts turns a glance into two taps. The chosen comp also
@@ -486,8 +509,16 @@ somebody generating failures pays. A budget on every submission instead would
 ### Errors are repairable
 
 Every failure answers `{ error, code, ...context }`. `error` is the sentence a
-person reads; `code` is what the dialog branches on, via `repairStepFor()`,
+person reads; `code` is what the form branches on, via `repairStepFor()`,
 to reopen the step that can fix it.
+
+This form is **not yet on the kit form** (`rac/form.tsx`), which every other
+form now uses. Its refusals are richer than the kit's `{ error, field }`: one
+can carry the organisers to email, a sign-in, or a time to wait, and it is
+shown by highlighting the STEP that can fix it rather than under one field.
+Moving it onto the kit means deciding where that extra help goes, and adding
+`field` to the refusals of all three upload routes, so it is a change of its
+own rather than part of #820.
 
 | code | Status | Repairs by |
 |---|---|---|
@@ -506,7 +537,7 @@ to reopen the step that can fix it.
 | `claim_rejected` | 409 | Picking another, or the organiser |
 
 Where the pilot cannot fix it, the answer names the organiser and carries their
-address so the dialog can render a `mailto:` — the same thing the public comp
+address so the form can render a `mailto:` — the same thing the public comp
 page already does (`CompDetail.tsx`). A hidden `test` comp answers exactly as a
 missing one, so this is never how somebody discovers one exists.
 
@@ -652,7 +683,6 @@ everyone else's bundle.
 |---|---|
 | The flow | `src/react/comp/SubmitTrackForm.tsx` |
 | Its DOM-free logic + tests | `src/react/comp/submit-track.ts` |
-| Dialog wrapper | `src/react/comp/SubmitTrackDialog.tsx` |
 | Admin per-row upload | `src/react/comp/TaskScoresAdmin.tsx` |
 | The page | `src/react/pages/SubmitTrack.tsx` |
 | Anonymous route | `web/workers/competition-api/src/routes/igc-anon.ts` |

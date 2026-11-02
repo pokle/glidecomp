@@ -237,7 +237,7 @@ differs. Know which surface you're touching:
   does both wirings for you; the input styling reacts to the same state via
   `data-invalid`. Supply the message — never the colour alone.
 - Autocomplete: use `autocomplete` tokens on identity/login fields (WCAG 1.3.5).
-- The shared `SubmitTrackDialog` "Submitting for" row must remain a real,
+- The submit-track form's (`SubmitTrackForm`) "Submitting for" row must remain a real,
   labelled control (select/combobox) — its auto-selection of a pilot from the
   IGC header must be announced (see §6) and correctable, per IA v2 §10.
 
@@ -276,7 +276,7 @@ differs. Know which surface you're touching:
 - **The active tab** carries `aria-current="page"` (in addition to the visual
   underline).
 - **Status messages** (WCAG 4.1.3): toasts (`sonner`), async save results,
-  score-staleness/recompute notices, and the SubmitTrackDialog's auto-detected
+  score-staleness/recompute notices, and the submit-track form's auto-detected
   pilot must be announced via an appropriate live region (`aria-live="polite"`,
   or `role="alert"`/`aria-live="assertive"` for errors) without moving focus.
 - Do not put interactive ARIA roles on the wrong element (no `role="button"` on
@@ -401,7 +401,7 @@ they're closed deliberately rather than rediscovered:
    `keydown` handlers (`analysis/main.ts`, `replay/main.ts`), but nothing has
    confirmed that every pan/zoom/layer/playback affordance has a keyboard
    equivalent, or that the scene's essential content is available as text.
-2. **Live-region coverage is partial** (§6) — the SubmitTrackDialog's *status*
+2. **Live-region coverage is partial** (§6) — the submit-track form's *status*
    line is a proper `role="status"`/`role="alert"` region, but the sentence
    announcing the auto-detected pilot ("Pilot named in the IGC file: … —
    matched to a registered pilot above") appears silently. Confirm `sonner`

@@ -33,6 +33,7 @@ import {
   compNewTaskPath,
   compPath,
   compSettingsPath,
+  submitTrackPath,
   taskPath,
 } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
@@ -247,15 +248,14 @@ function CompDetailView({
           ) : null}
         </div>
         {/* Submitting is the one thing a pilot comes to a live comp to DO, so
-            it leads. It goes to /submit with the comp prefilled rather than
-            opening the dialog here: from the comp page the task is still an
-            open question, and the page is where that question is answered.
-            Mount-gated for the same reason as the task page's button — this
-            page is server-rendered. */}
+            it leads. It goes to /submit with the comp prefilled: from the
+            comp page the task is still an open question, and that page is
+            where it is answered. Mount-gated for the same reason as the task
+            page's link — this page is server-rendered. */}
         {/* Not for a hidden comp's link visitors: the link is for reading a
             draft, and every write route refuses anyone but its admins. */}
         {mounted && !isClosed && (!comp.test || isAdmin) ? (
-          <LinkButton size="sm" href={`/submit?comp=${encodeURIComponent(compId)}`}>
+          <LinkButton size="sm" href={submitTrackPath(compUrlId(comp, compId))}>
             Submit track
           </LinkButton>
         ) : null}

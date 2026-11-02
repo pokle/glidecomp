@@ -103,7 +103,7 @@ test("a visitor with the link reads the comp signed out and keeps the key", asyn
     await page.getByRole("link", { name: "Task 4" }).first().click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Task 4");
     expect(urlCompId(page)).toBe(`${fixture.compId}_${shareKey}`);
-    await expect(page.getByRole("main").getByRole("button", { name: "Submit track" })).toHaveCount(0);
+    await expect(page.getByRole("main").getByRole("link", { name: "Submit track" })).toHaveCount(0);
 
     // The id alone opens nothing.
     await page.goto(`/comp/${fixture.compId}`);

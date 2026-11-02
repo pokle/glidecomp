@@ -56,7 +56,6 @@ import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { goalSummary, startConfigSummary } from "../comp/route";
-import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 // Comp admins only, so its code has no business in every pilot's bundle.
 const ForgeIgcDialog = lazy(() => import("../comp/ForgeIgcDialog"));
 import {
@@ -68,7 +67,7 @@ import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
-import { compUrlId, idFromSegment, compPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskWeatherPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
@@ -123,7 +122,6 @@ export function TaskDetail() {
   // separate component with its own score fetch) pick up the change too.
   const [resultsRefresh, setResultsRefresh] = useState(0);
   const [replayAvailable, setReplayAvailable] = useState(false);
-  const [submitOpen, setSubmitOpen] = useState(false);
   const [forgeOpen, setForgeOpen] = useState(false);
 
   // The comp, for the admin check and the comp name in the trail. Non-critical
@@ -169,11 +167,11 @@ export function TaskDetail() {
     });
   }, [location.hash, isAdmin, task, comp, compId, taskId, navigate]);
 
-  const canUploadOnBehalf = useCanUploadOnBehalf(
-    compId ?? "",
-    Boolean(comp?.open_igc_upload),
-    isAdmin
-  );
+  // Submitting is a page of its own (/submit), not a dialog over this one:
+  // see the overlays rule in CLAUDE.md. The comp and task go in the URL — a
+  // hidden comp's share key with the comp — so a reload or a shared link
+  // lands on the same form, and Back comes back here.
+  const submitHref = submitTrackPath(compUrlId(comp, compId), taskId);
 
   // Fetched ONCE here and handed down, rather than in each consumer: the
   // weather section and the route views both want it, and the endpoint can
@@ -280,18 +278,18 @@ export function TaskDetail() {
           share, map, replay, analysis — is a uniform outline cluster, because
           those are places to go rather than things to do. */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {/* Mount-gated: the dialog's contents still depend on who is asking
-            (the on-behalf picker), and the server renders this page for
-            anyone, so the markup must settle after hydration rather than
-            before. The button itself no longer depends on a session —
+        {/* Mount-gated: whether it shows depends on who is asking (an
+            organiser keeps it on a closed or hidden task), and the server
+            renders this page for anyone, so the markup must settle after
+            hydration rather than before. It no longer depends on a session —
             submitting is open to anyone the comp's roster knows. */}
         {/* A hidden comp's share link is for READING a draft: every write
             route refuses anyone but its admins, so no visitor is offered a
             button that can only fail. */}
         {mounted && !isClosed && (!task.submissions_closed || isAdmin) && (!comp?.test || isAdmin) ? (
-          <Button size="sm" onPress={() => setSubmitOpen(true)}>
+          <LinkButton size="sm" href={submitHref}>
             Submit track
-          </Button>
+          </LinkButton>
         ) : null}
         {/* A sentence, not a disabled button: a greyed-out control invites
             tapping and explains nothing. Admins see it AND keep the button,
@@ -378,24 +376,6 @@ export function TaskDetail() {
         </Suspense>
       ) : null}
 
-      {submitOpen ? (
-        <SubmitTrackDialog
-          compId={compId}
-          taskId={taskId}
-          compName={comp?.name}
-          taskName={task.name}
-          canUploadOnBehalf={canUploadOnBehalf}
-          onClose={() => setSubmitOpen(false)}
-          onUploaded={() => {
-            setSubmitOpen(false);
-            // The podium and the "your track is in" line below are a separate
-            // fetch — tell them something changed, or the pilot's own upload
-            // is the one thing the page fails to show them.
-            setResultsRefresh((n) => n + 1);
-          }}
-        />
-      ) : null}
-
       {/* The sections below are cards; the stack owns the rhythm between them
           (SectionHeader no longer carries a margin of its own). */}
       <div className="mt-6 flex flex-col gap-6">
@@ -440,7 +420,7 @@ export function TaskDetail() {
           isClosed={isClosed}
           // A hidden comp takes no submissions from its link's visitors.
           submissionsClosed={(task.submissions_closed || !!comp?.test) && !isAdmin}
-          canUploadOnBehalf={canUploadOnBehalf}
+          submitHref={submitHref}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}
           initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}

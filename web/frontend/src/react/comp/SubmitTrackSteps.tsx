@@ -50,7 +50,6 @@ export function StepBox({
   answered,
   onChange,
   highlight,
-  compact,
 }: {
   n: number;
   title: string;
@@ -58,32 +57,18 @@ export function StepBox({
   answered?: string | null;
   onChange?: () => void;
   highlight?: boolean;
-  compact?: boolean;
 }) {
-  // `compact` is the dialog flow, where the dialog is already the panel — the
-  // steps must NOT be cards there or it is panels inside a panel. Everywhere
-  // else a step is a real card: these were bordered boxes with no background,
-  // so on the tinted ground they read as three holes rather than three steps.
+  // A step is a real card: these were bordered boxes with no background, so on
+  // the tinted ground they read as three holes rather than three steps.
   //
   // A highlighted step keeps the card background and states itself with the
   // border. A translucent `bg-destructive/5` would have replaced `bg-card`
   // rather than sitting on it, tinting the page through instead of the panel.
-  const Box = compact ? "section" : Card;
   return (
-    <Box
-      className={
-        compact
-          ? "flex flex-col gap-4"
-          : highlight
-            ? "border-destructive/40"
-            : undefined
-      }
-    >
+    <Card className={highlight ? "border-destructive/40" : undefined}>
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">
-          {compact ? null : (
-            <span className="mr-2 text-muted-foreground">{n}.</span>
-          )}
+          <span className="mr-2 text-muted-foreground">{n}.</span>
           {title}
         </h2>
         {answered && onChange ? (
@@ -97,7 +82,7 @@ export function StepBox({
       ) : (
         <div>{children}</div>
       )}
-    </Box>
+    </Card>
   );
 }
 
@@ -426,11 +411,9 @@ export function SubmitFailure({ failure }: { failure: SubmitError }) {
 export function TrackAccepted({
   result,
   onAnother,
-  onDone,
 }: {
   result: SubmitTrackResult;
   onAnother: () => void;
-  onDone?: () => void;
 }) {
   const s = result.flightSummary;
   const findings = result.trackQuality.findings;
@@ -524,7 +507,6 @@ export function TrackAccepted({
             result.compPilotId,
             result.pilotName
           )}
-          onPress={onDone}
         >
           View provisional score card
         </LinkButton>

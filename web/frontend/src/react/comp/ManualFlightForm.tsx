@@ -13,7 +13,7 @@
  * NumberField/ChoiceList. The coordinates field uses RAC's `validate` so "must
  * be lat, lon" shows inline as the user types, not as a toast on save.
  *
- * Pre-scoped to one pilot (unlike SubmitTrackDialog, which picks the pilot
+ * Pre-scoped to one pilot (unlike SubmitTrackForm, which picks the pilot
  * inside). The made-good distance is computed live by the SAME engine helpers
  * the server scores with, so the number shown before saving is the number that
  * will be scored.
