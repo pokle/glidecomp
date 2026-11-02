@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link as AriaLink } from "react-aria-components";
-import { Button, LinkButton } from "@/react/rac/button";
+import { LinkButton } from "@/react/rac/button";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useUser } from "../lib/user";
@@ -28,7 +28,6 @@ import { useCompName } from "./comp-name-context";
 import { HistoricalRulesNotice, RulesEditionBadge } from "./RulesEdition";
 import { SectionHeader } from "../components/SectionHeader";
 import { ScoreFreshness } from "./ScoreFreshness";
-import { SubmitTrackDialog } from "./SubmitTrackDialog";
 import { Card } from "@/react/rac/card";
 import type {
   ClassScore,
@@ -84,7 +83,7 @@ export function TaskScoresPublic({
   isAuthenticated,
   isClosed,
   submissionsClosed = false,
-  canUploadOnBehalf,
+  submitHref,
   refresh,
   onReplayAvailable,
   initialScore,
@@ -103,7 +102,8 @@ export function TaskScoresPublic({
    * will refuse — this component renders its own header action, so gating the
    * page's action row is not enough. */
   submissionsClosed?: boolean;
-  canUploadOnBehalf: boolean;
+  /** The /submit page with this comp and task chosen (submitTrackPath). */
+  submitHref: string;
   /** Parent bump to refetch scores (route edits, admin mutations). */
   refresh: number;
   onReplayAvailable: (available: boolean) => void;
@@ -114,12 +114,6 @@ export function TaskScoresPublic({
 }) {
   const { user } = useUser();
   const mounted = useMounted();
-  const [uploadOpen, setUploadOpen] = useState(false);
-  // Bumped after this section's own Submit-track dialog uploads, so the
-  // "your track is in" line below re-fetches. The parent's `refresh` covers
-  // the scores; nothing else covers this.
-  const [mineRefresh, setMineRefresh] = useState(0);
-  const refreshMine = () => setMineRefresh((n) => n + 1);
 
   const [score, setScore] = useState<TaskScoreData | null>(initialScore ?? null);
   const [scoreState, setScoreState] = useState<
@@ -208,7 +202,7 @@ export function TaskScoresPublic({
     return () => {
       cancelled = true;
     };
-  }, [mounted, user, compId, taskId, refresh, mineRefresh]);
+  }, [mounted, user, compId, taskId, refresh]);
 
   const scoresHref = `/comp/${encodeURIComponent(compId)}/scores?task=${encodeURIComponent(taskId)}`;
 
@@ -218,31 +212,16 @@ export function TaskScoresPublic({
         title="Scores"
         action={
           // No longer gated on a session: submitting is open to anyone the
-          // comp's roster knows. Still mount-gated, because what the dialog
-          // shows inside depends on who is asking.
+          // comp's roster knows. Still mount-gated, because whether it shows
+          // depends on who is asking (submissionsClosed is false for an
+          // organiser). A link to the /submit page, like the action row's.
           mounted && !isClosed && !submissionsClosed ? (
-            <Button variant="outline" size="sm" onPress={() => setUploadOpen(true)}>
+            <LinkButton variant="outline" size="sm" href={submitHref}>
               Submit track
-            </Button>
+            </LinkButton>
           ) : null
         }
       />
-
-      {uploadOpen ? (
-        <SubmitTrackDialog
-          compId={compId}
-          taskId={taskId}
-          canUploadOnBehalf={canUploadOnBehalf}
-          onClose={() => setUploadOpen(false)}
-          onUploaded={() => {
-            // The "your track is in" line below is this component's own
-            // fetch — without this, the one thing the section fails to show
-            // is the upload that just happened.
-            setUploadOpen(false);
-            refreshMine();
-          }}
-        />
-      ) : null}
 
       {mounted && mySubmission?.registered ? (
         <p className="mt-2 text-sm text-muted-foreground" role="status">

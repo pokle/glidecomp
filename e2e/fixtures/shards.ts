@@ -102,6 +102,7 @@ export const E2E_SHARDS = {
    */
   "public-and-pilot": [
     "track-submission.spec.ts", // 67.0s (chromium + mobile)
+    "task-submit-link.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "email-otp-signin.spec.ts", // 13.9s
     "last-used-sign-in.spec.ts", // ~14s locally — not yet measured in CI
     "static-pages.spec.ts", // 13.4s

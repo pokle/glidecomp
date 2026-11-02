@@ -231,7 +231,8 @@ describe code that no longer exists.
   grid → RAC Table → GridList card list → RAC Table again via the shared
   read-only `comp/TurnpointsTable.tsx` → **`comp/TurnpointList.tsx`, a GridList
   styled as NavList rows**, #661 — see "Route editor: how it works now"),
-  `comp/SubmitTrackDialog.tsx`,
+  `comp/SubmitTrackDialog.tsx` (since deleted: the task page links to
+  `/submit`, #820),
   `comp/ManualFlightDialog.tsx`, `comp/AddWaypointDialog.tsx`,
   `comp/TaskExportButtons.tsx`, `comp/ScoreFreshness.tsx` (button only),
   `pages/TaskAnalysis.tsx` + `pages/CompAnalysis.tsx` and all of

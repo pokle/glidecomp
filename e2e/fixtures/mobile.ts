@@ -34,6 +34,10 @@ export const MOBILE_SPEC_FILES = [
   // Submitting a track — the flow whose whole premise is a pilot who has just
   // landed, standing on a hill, holding a phone.
   "track-submission.spec.ts",
+  // The task page's Submit track, a link to /submit rather than a dialog
+  // (#820): Back, reload and the keyboard are the browser's, which is the
+  // whole reason it moved, and a phone is where a dialog's went wrong.
+  "task-submit-link.spec.ts",
   // The routed task editors (#637) — settings, weather notes and the route
   // editor. Same reason as the comp settings pages: built mobile-first, and
   // the route editor is the surface that most needed it.
