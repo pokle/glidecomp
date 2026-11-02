@@ -1,5 +1,5 @@
 /**
- * The kit form's test bench (/__kit/form) — DEVELOPMENT BUILDS ONLY.
+ * The kit form's test bench (/__kit/form) — DEVELOPMENT AND E2E BUILDS ONLY.
  *
  * `e2e/forms.spec.ts` drives this page to hold the kit form's rules
  * (rac/form.tsx) on a phone and on a desktop, apart from any real page's
@@ -13,9 +13,9 @@
  * BOTTOM, with ten more between them, so on a phone each is off screen when
  * the other is in view.
  *
- * Not routed in a production build (`import.meta.env.DEV` in routes.tsx), so
- * neither this page nor its route ships. The copy here is the bench's, never
- * a reader's.
+ * Not routed in a production build (`import.meta.env.DEV`, or the `e2e` mode
+ * the e2e suite builds with, in routes.tsx), so neither this page nor its
+ * route ships. The copy here is the bench's, never a reader's.
  */
 import { useState } from "react";
 import { Button } from "@/react/rac/button";

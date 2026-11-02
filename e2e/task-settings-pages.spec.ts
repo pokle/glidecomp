@@ -32,7 +32,7 @@
  * desktop-only pass would exercise them at the one width they were not
  * designed for.
  */
-import { test, expect, phoneOnly, type Page } from "./fixtures/test";
+import { test, expect, PHONE_ONLY, type Page } from "./fixtures/test";
 import { e2eCompName } from "./fixtures/stack";
 
 const ADMIN_USER = {
@@ -279,16 +279,14 @@ test("the route editor is a route, and guards unsaved work", async ({ page }) =>
   await expect(page.getByRole("heading", { name: TASK_NAME })).toBeVisible();
 });
 
-test("the whole journey fits a phone: no horizontal overflow", async ({
+test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY }, async ({
   page,
-  isMobile,
 }) => {
   // The viewport comes from the `mobile` project (issue #643), which also
   // brings touch, a mobile user agent and `(pointer: coarse)`. The other tests
   // in this file run in both projects, so the pages are driven at a phone
   // width regardless; what is left here is the assertion that only means
   // something there.
-  phoneOnly(isMobile);
   await devLogin(page, ADMIN_USER);
 
   const noHorizontalOverflow = async (where: string) => {

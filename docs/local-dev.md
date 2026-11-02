@@ -18,7 +18,9 @@ exposes only the primary's port, which is the entire reason the router exists.
 
 Vite proxies all of `/api` to it. Nothing addresses `:8788`/`:8789`/`:8787` any
 more, so **a routing change belongs in three places at once**: `functions/api/`,
-`dev-router/src/index.ts` (pinned by its unit test), and the Vite proxy.
+`dev-router/src/index.ts` (pinned by its unit test), and `API_PROXY_PREFIXES` in
+`web/frontend/src/dev-routing.ts` — the one table both the Vite dev server and
+the e2e suite's server for the built output read.
 
 ## `astro dev` must stay in the foreground
 
@@ -61,22 +63,56 @@ they need different servers:
 
 | Command | Serves the frontend with | Covers |
 |---|---|---|
-| `bun run test:e2e` | the Vite dev server (+ `astro dev` for the content pages) | everything except `e2e/ssr.spec.ts` |
-| `bun run test:e2e:ssr` | `wrangler pages dev` over the BUILT output | `e2e/ssr.spec.ts` only — server-rendered HTML, canonical redirects, the sitemap, clean hydration |
+| `bun run test:e2e` | a PRODUCTION build, with the dev server's routing and no SSR (`web/scripts/e2e-frontend.sh`) | everything except `e2e/ssr.spec.ts` |
+| `bun run test:e2e:ssr` | `wrangler pages dev` over the BUILT output, SSR Function included | `e2e/ssr.spec.ts` only — server-rendered HTML, canonical redirects, the sitemap, clean hydration |
 
 CI runs both, as the parallel `E2E Tests (…)` and `E2E Tests (SSR)` jobs in
 `.github/workflows/deploy.yml`. Run both locally before a PR that touches
-anything the server-rendered comp pages import — the dev server never
-server-renders, so `test:e2e` alone cannot fail when SSR breaks.
+anything the server-rendered comp pages import — `test:e2e` never
+server-renders, so it alone cannot fail when SSR breaks.
+
+### Why `test:e2e` drives a build, not the dev server
+
+Every test opens a fresh browser context, so every page load is a cold one. On
+the Vite dev server that was about 330 unbundled modules per load: a signed-in
+`/comp/:id/waypoints` took 1529 ms to be ready, against 647 ms from the build
+(986 ms against 466 ms to the load event), and the organiser tests made 180
+page loads a run. `web/scripts/e2e-frontend.sh` builds (`vite build --mode e2e`
+and `astro build` side by side, ~5 s warm, ~20 s with Astro's image cache cold)
+and hands `dist/` to `web/scripts/e2e-serve-dist.ts`, which:
+
+- routes exactly as the dev server does — both read
+  `web/frontend/src/dev-routing.ts` — so the SPA shell answers every app route
+  and a spec's `page.route()` stub still sees the page's first request;
+- serves the CSV and results-record downloads through the same handlers as the
+  Pages Function;
+- reads every API answer in full before replying, so a request the browser
+  cancels mid-flight no longer severs wrangler's connection (the crash
+  `dev-workers.sh` restarts it from).
+
+The `e2e` mode is the production build plus one route: the kit form's bench at
+`/__kit/form`, which `e2e/forms.spec.ts` drives. A deploy builds in the default
+`production` mode, which has no bench.
+
+To iterate on a spec with HMR instead of a rebuild per run:
+
+```bash
+E2E_FRONTEND=dev bun run test:e2e e2e/comp-pilots.spec.ts
+```
+
+Outside CI an existing server on the port is reused whichever kind it is, so a
+`bun run dev` left running means `test:e2e` drives the dev server.
 
 ## The e2e suite is sharded in CI
 
 `test:e2e` runs the whole suite locally, as it always has. In CI it is split
-across three runners, because the suite runs `workers: 1` (shared mutable
+across five runners, because the suite runs `workers: 1` (shared mutable
 fixtures — see the note in `playwright.config.ts`) and its wall clock is
 therefore the SUM of every test. That reached ~9m of test execution and made
 the E2E job the entire build's critical path: every other job, deploy included,
-was finished by minute five while E2E ran to eleven.
+was finished by minute five while E2E ran to eleven. Three shards fixed that in
+August; by November the organiser one had tripled and was the long pole on
+every run (a median of 10m40s over 15 runs), so it became three.
 
 The groups are in **`e2e/fixtures/shards.ts`**, balanced by measured duration
 and named by subject:
@@ -84,17 +120,23 @@ and named by subject:
 | Shard | Roughly |
 |---|---|
 | `maps-and-analysis` | the map, the analysis page, the charts that explain a score |
-| `organiser` | comp/task settings, the pilots page, waypoints, scoring mutations |
+| `organiser-comp` | the comp's pages and settings, starting a comp, sharing, the results record |
+| `organiser-pilots` | the pilots list and pilot pages, the CIVL fill, scoring mutations, the kit form |
+| `organiser-tasks` | the waypoints page and the task's own pages (settings, route, weather) |
 | `public-and-pilot` | track submission, sign-in, content pages, search, the API doc |
 
 Run one locally the way CI does:
 
 ```bash
-E2E_SHARD=organiser bun run test:e2e
+E2E_SHARD=organiser-tasks bun run test:e2e
 ```
 
 An unrecognised name fails immediately rather than falling back to the full
-suite — a typo that quietly ran everything three times would stay green.
+suite — a typo that quietly ran everything five times would stay green.
+
+GitHub's runners are not all one speed: the same 146 tests took 7.2m on some
+runs and 10.2–10.6m on others, and about two jobs in three get the slow kind.
+Size a shard for the slow one.
 
 **They are explicit lists, not `--shard=i/N`.** Playwright balances shards by
 test *count*, and this suite's durations are nowhere near uniform:
@@ -109,8 +151,8 @@ nobody wired into the matrix, silently stops running while CI stays green. It
 is a `bun test`, so it runs in the `test` job without the stack.
 
 Rebalance when a shard becomes the long pole on its own. There is little point
-below ~3 minutes: the `test` → `deploy` chain is ~4m49s and is the floor for
-the whole build.
+going below the `test` → `deploy` chain, the floor for the whole build: Test's
+job has a median of 3m38s and Deploy's 1m26s on a branch (about 2m on master).
 
 ## The `mobile` project — a phone, structurally
 
@@ -149,10 +191,16 @@ Two things to know when adding to it:
   installs chromium alone, so an iPhone descriptor (webkit) would send the run
   looking for a browser nothing here has.
 
-A test that only means something on a phone calls `phoneOnly(isMobile)` from
-`e2e/fixtures/test.ts` as its first line. There is no `desktopOnly` counterpart
-on purpose: everything else in a listed spec runs in both projects, because the
-second pass is the whole point.
+A test that only means something on a phone carries the `PHONE_ONLY` tag
+(`test("…", { tag: PHONE_ONLY }, …)`, from `e2e/fixtures/test.ts`), and the
+desktop project never schedules it. It used to call `phoneOnly(isMobile)` as its
+first line instead, which skipped correctly but only after the file's
+`beforeEach` had signed in and loaded a page for nothing — about a second per
+skip, eight skips a run. `DESKTOP_ONLY` is the reverse, for a behaviour a phone
+deliberately lacks (a coarse pointer gets "Open in app" where a mouse gets a
+download menu). Neither is for a test that fails on one device: everything else
+in a listed spec runs in both projects, because the second pass is the whole
+point.
 
 ## E2E on a fresh clone
 
@@ -349,7 +397,8 @@ Give the second worktree its own ports:
 DEV_FRONTEND_PORT=3100 DEV_API_PORT=8890 DEV_API_ORIGIN=http://localhost:8890   DEV_INSPECTOR_PORT=9330 bun run test:e2e
 ```
 
-- `DEV_FRONTEND_PORT` — Vite (`web/frontend/vite.config.ts`).
+- `DEV_FRONTEND_PORT` — Vite (`web/frontend/vite.config.ts`) and the e2e
+  suite's server for the build (`web/scripts/e2e-serve-dist.ts`).
 - `DEV_API_PORT` — the one wrangler session (`web/scripts/dev-workers.sh`).
   `DEV_API_ORIGIN` must agree, because it is what the specs talk to directly.
 - `DEV_INSPECTOR_PORT` — wrangler's devtools port. Without it the collision is

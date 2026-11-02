@@ -13,6 +13,24 @@
  * that forces `workers: 1` never arises BETWEEN shards. Inside a shard nothing
  * changes.
  *
+ * It needed doing twice. The August split made three shards; by November the
+ * organiser one had tripled (56 tests and 204s of wall clock on run
+ * 32481474298, about 150 tests and 426–677s by run 41422433753), because the
+ * mobile-first pages it covers run every test twice, desktop and phone. Its
+ * test step had a median of 10m40s over 15 runs and finished last in all 15 —
+ * longer than the whole unsplit suite had been. So it is now three shards
+ * (organiser-comp, organiser-pilots, organiser-tasks), and the suite drives a
+ * production build instead of the Vite dev server, which halved the cost of a
+ * page load (web/scripts/e2e-serve-dist.ts).
+ *
+ * ── Plan for the slow runner ────────────────────────────────────────────────
+ *
+ * GitHub's runners are not all one speed. The same 146 tests took 7.2m on
+ * three runs (41422433753, 41421051154, 41420543044) and 10.2–10.6m on three
+ * others (41420589270, 41419728049, 41418101252): every spec 1.35–1.5× slower,
+ * server startup 8s → 12s. About two jobs in three land on the slow kind. A
+ * shard sized on a fast run will be the long pole on most runs.
+ *
  * ── Why an explicit list rather than Playwright's `--shard=i/N` ─────────────
  *
  * Because `--shard` balances by test COUNT and this suite's per-test durations
@@ -42,14 +60,16 @@
  * the phone pass.
  *
  * Rebalance when a shard drifts far enough to become the long pole on its own.
- * There is no point chasing much below ~3 minutes: the `test` → `deploy` chain
- * is ~4m49s, so that is the floor for the whole build until the deploy path
- * changes.
+ * There is no point chasing much below the `test` → `deploy` chain: Test's job
+ * has a median of 3m38s and Deploy's 1m26s on a branch (about 2m on master,
+ * which deploys the Workers too), so that ~5–5.5 minutes is the floor for the
+ * whole build until the deploy path changes.
  */
 
 /**
  * The shards, subject by subject. Seconds are the measured chromium+mobile
- * total for that spec from run 32355085390.
+ * wall clock for that spec on run 41422433753 (a fast runner, still on the dev
+ * server); a slow runner takes about 1.45× as long.
  */
 export const E2E_SHARDS = {
   /**
@@ -69,28 +89,48 @@ export const E2E_SHARDS = {
     "trusted-types.spec.ts", // new — measure on its first CI run
   ],
 
-  /**
-   * What an organiser does to a competition: the comp and task settings pages,
-   * the pilots page, the waypoint editor, the rankings fill, and the mutations
-   * that must move a score. Seven of the eight `mobile` specs are here, because
-   * the organiser's pages are built mobile-first (#636, #637, and the
-   * waypoints and pilots lists).
+  /*
+   * What an organiser does, in three shards. Seven of the eight `mobile` specs
+   * are in them, because the organiser's pages are built mobile-first (#636,
+   * #637, and the waypoints and pilots lists), so most of these run twice.
    */
-  organiser: [
-    "comp-detail.spec.ts", // 64.8s (chromium + mobile)
-    "task-settings-pages.spec.ts", // 31.4s (chromium + mobile)
-    "comp-waypoints.spec.ts", // 26.7s
-    "comp-settings-pages.spec.ts", // 22.4s (chromium + mobile)
-    "scoring-mutations.spec.ts", // 22.3s
-    "civl-rankings.spec.ts", // 16.7s
-    "comp-pilots.spec.ts", // new — measure on its first CI run (chromium + mobile)
-    "forms.spec.ts", // new — the kit form's rules (chromium + mobile)
-    "comp-creation.spec.ts", // 4.0s
+
+  /**
+   * The competition itself: its pages and settings, starting one, sharing a
+   * hidden one, its results record, and an assistant acting on it. A spec
+   * about creating something on a comp page (a task, a test IGC) goes here.
+   */
+  "organiser-comp": [
+    "comp-detail.spec.ts", // 67.6s (chromium + mobile), ~10s of it seeding the sample comp
+    "comp-settings-pages.spec.ts", // 32.2s (chromium + mobile)
     "comp-new.spec.ts", // new — measure on its first CI run (chromium + mobile)
-    "hidden-comp-share-link.spec.ts", // new — measure on its first CI run
-    "results-record.spec.ts", // new — measure on its first CI run
-    "popover-position.spec.ts", // 2.8s
-    "mcp.spec.ts", // new — measure on its first CI run
+    "hidden-comp-share-link.spec.ts", // 7.3s
+    "results-record.spec.ts", // 6.7s
+    "mcp.spec.ts", // 5.1s
+    "comp-creation.spec.ts", // 3.6s
+    "popover-position.spec.ts", // 2.1s
+  ],
+
+  /**
+   * The roster: the pilots list and each pilot's page, the CIVL rankings fill,
+   * and the mutations to pilots and tracks that must move a score — plus the
+   * kit form's own rules, whose worked example is the pilot page.
+   */
+  "organiser-pilots": [
+    "comp-pilots.spec.ts", // 75.6s (chromium + mobile)
+    "civl-rankings.spec.ts", // 25.6s, ~9s of it seeding 14,535 ranked pilots
+    "forms.spec.ts", // 20.0s (chromium + mobile)
+    "scoring-mutations.spec.ts", // 18.4s
+  ],
+
+  /**
+   * Where the task flies: the waypoint file and the task's own pages (its
+   * settings, the route editor, weather notes). comp-waypoints is the single
+   * heaviest spec an organiser has.
+   */
+  "organiser-tasks": [
+    "comp-waypoints.spec.ts", // 108.8s (chromium + mobile)
+    "task-settings-pages.spec.ts", // 52.8s (chromium + mobile)
   ],
 
   /**

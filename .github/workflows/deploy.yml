@@ -7,21 +7,30 @@ name: Deploy
 # branch-preview and production paths can never drift — the drift that let the
 # git-sha smoke check silently rot on master while it was green on branches.
 #
-# Job graph: `test`, the three `e2e` shards and `e2e-ssr` all start together;
+# Job graph: `test`, the five `e2e` shards and `e2e-ssr` all start together;
 # `deploy` waits on `test`. Making E2E queue behind `test` would add the whole
 # test job to every build's wall clock while consuming nothing it produced —
 # each builds its own stack from the checkout.
 #
 # E2E was the long pole by a wide margin until it was sharded: on run
 # 32355085390 the job ran 11m04s while every other job finished inside 5
-# minutes, so the build's wall clock WAS the E2E job. It is now split three
-# ways by measured duration (e2e/fixtures/shards.ts), which puts the worst
-# shard at roughly 5 minutes.
+# minutes, so the build's wall clock WAS the E2E job. Split three ways in
+# August, it was the long pole again by November: the organiser shard's test
+# step had a median of 10m40s over 15 runs, finished last in all 15, and set a
+# median run of 11m32s. It is now five shards (e2e/fixtures/shards.ts), and the
+# suite drives a production build rather than the Vite dev server, which halves
+# what each page load costs (web/scripts/e2e-serve-dist.ts).
 #
-# That is about the floor worth chasing. The remaining critical path is
-# `test` (~2m23s) → `deploy` (~2m21s) ≈ 4m49s, so a fourth shard would buy
-# almost nothing while adding another runner's ~1m51s of setup to the bill.
-# Re-measure before adding one.
+# The floor worth chasing is the `test` → `deploy` chain: Test's job has a
+# median of 3m38s and Deploy's 1m26s on a branch (about 2m on master, which
+# deploys the Workers too). A shard that ends before that costs nothing.
+#
+# More shards cost no money — the repository is public, so GitHub-hosted
+# runners are free — but they do cost concurrency: the account runs at most 20
+# jobs at once, and seven start together per push. When five pushes landed
+# together (run 41421064017) jobs queued for up to 5½ minutes. Total runner
+# time per push hardly changes with the split, so a burst drains about as fast.
+#
 # The trade is that a commit failing unit tests still burns E2E minutes; the
 # deploy is still gated, so nothing reaches Cloudflare on a red suite.
 on:
@@ -98,7 +107,7 @@ jobs:
           git fetch --no-tags --depth=100 origin master || true
           bun run check:scoring-note
 
-  # Sharded across three runners. See e2e/fixtures/shards.ts for the groups and
+  # Sharded across five runners. See e2e/fixtures/shards.ts for the groups and
   # why they are explicit lists rather than Playwright's `--shard=i/N` (that
   # balances by test COUNT, and this suite's durations are far from uniform —
   # a naive 4-way split put the three heaviest specs on one runner and left it
@@ -108,7 +117,7 @@ jobs:
   # fixtures that force `workers: 1` inside a run cannot collide BETWEEN shards.
   # That isolation is what makes this safe without touching the fixtures.
   #
-  # fail-fast is off: one shard going red should not cancel the other two, or a
+  # fail-fast is off: one shard going red should not cancel the others, or a
   # single failure hides whatever else broke and every fix takes another full
   # round trip.
   e2e:
@@ -117,7 +126,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [maps-and-analysis, organiser, public-and-pilot]
+        shard: [maps-and-analysis, organiser-comp, organiser-pilots, organiser-tasks, public-and-pilot]
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -190,15 +199,26 @@ jobs:
           BETTER_AUTH_URL=http://localhost:3000
           EOF
 
-      # Probe wrangler & d1 migrations directly (no `bun run --filter`)
-      # so any crash surfaces real stderr instead of being swallowed by
-      # bun's prefixed-output buffer.
-      - name: Probe auth-api startup
-        run: |
-          cd web/workers/auth-api
-          bunx wrangler --version
-          CI=true bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state
+      # The e2e suite builds the frontend for production before it runs
+      # (web/scripts/e2e-frontend.sh). Most of a cold build is Astro
+      # re-encoding the content pages' 51 screenshots to AVIF and WebP (~16s);
+      # with its cache it is ~2s. The cache is content-addressed (source image
+      # + transform), so an entry restored for an image that has since changed
+      # is simply not used. Keyed on the images and the lockfile (the encoder
+      # is a dependency).
+      - name: Cache Astro image optimisation
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: web/frontend/static/node_modules/.astro
+          key: ${{ runner.os }}-astro-images-${{ hashFiles('web/frontend/static/src/assets/**', 'bun.lock') }}
+          restore-keys: ${{ runner.os }}-astro-images-
 
+      # There used to be a "Probe auth-api startup" step here (11–16s a job):
+      # `wrangler d1 migrations apply taskscore-auth`, run directly so a crash
+      # showed wrangler's own stderr. `test:e2e` runs that exact command again
+      # moments later (`db:migrate`), also directly rather than through
+      # `bun run --filter`, so its stderr is just as visible — the probe was the
+      # same work twice.
       - name: Run E2E tests
         run: bun run test:e2e
         env:
@@ -223,10 +243,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          # Per shard: upload-artifact v4 refuses a duplicate name, so three
-          # shards sharing "playwright-report" would fail whichever two
-          # finished last — on a green run. Same reason the SSR job has its own
-          # name below.
+          # Per shard: upload-artifact v4 refuses a duplicate name, so shards
+          # sharing "playwright-report" would fail all but the first to
+          # finish — on a green run. Same reason the SSR job has its own name
+          # below.
           name: playwright-report-${{ matrix.shard }}
           # test-results/ holds the per-failure trace.zip files referenced by
           # playwright.config.ts's `trace: "retain-on-failure"`. They're
@@ -238,9 +258,9 @@ jobs:
 
   # The OTHER e2e suite: e2e/ssr.spec.ts against the BUILT output served by the
   # real Pages runtime (wrangler pages dev + the SSR Function), which is the
-  # only place server rendering happens at all — the dev server the `e2e` job
-  # drives serves the SPA shell with no SSR, so nothing in that job can fail
-  # when a public comp page stops server-rendering.
+  # only place server rendering happens at all — the `e2e` job serves its
+  # production build with the SPA shell for every app route and no SSR, so
+  # nothing in that job can fail when a public comp page stops server-rendering.
   #
   # Its own job rather than a second step on `e2e`: it builds the frontend
   # twice over (SPA + SSR bundle) before it can serve anything, so bolting it
@@ -308,14 +328,16 @@ jobs:
           BETTER_AUTH_URL=http://localhost:3100
           EOF
 
-      # Same reason as the E2E job: run wrangler directly so a crash shows its
-      # own stderr instead of bun's buffered, prefixed output.
-      - name: Probe auth-api startup
-        run: |
-          cd web/workers/auth-api
-          bunx wrangler --version
-          CI=true bunx wrangler d1 migrations apply taskscore-auth --local --persist-to ../../.wrangler/state
+      # See the note on the E2E job: the build's cold cost is Astro's images.
+      - name: Cache Astro image optimisation
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: web/frontend/static/node_modules/.astro
+          key: ${{ runner.os }}-astro-images-${{ hashFiles('web/frontend/static/src/assets/**', 'bun.lock') }}
+          restore-keys: ${{ runner.os }}-astro-images-
 
+      # No auth-api probe step, for the reason given on the E2E job:
+      # `test:e2e:ssr` runs the same migration directly itself.
       - name: Run SSR E2E tests
         run: bun run test:e2e:ssr
 
@@ -387,6 +409,18 @@ jobs:
           fi
         env:
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+
+      # This job is the build's critical path, so the ~10–15s Astro spends
+      # re-encoding images on a cold build comes straight off the run. The
+      # output is identical either way (see the note on the E2E job), and a
+      # master run only ever restores a cache master wrote: GitHub scopes
+      # caches by branch, and a branch cannot write the default branch's.
+      - name: Cache Astro image optimisation
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: web/frontend/static/node_modules/.astro
+          key: ${{ runner.os }}-astro-images-${{ hashFiles('web/frontend/static/src/assets/**', 'bun.lock') }}
+          restore-keys: ${{ runner.os }}-astro-images-
 
       - name: Build
         run: bun run build
