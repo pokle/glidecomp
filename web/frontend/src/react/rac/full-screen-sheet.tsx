@@ -59,6 +59,7 @@ import {
 
 import { cn } from "@/react/lib/utils";
 import { useBackDismiss, type BackDismissLayer } from "@/react/lib/use-back-dismiss";
+import { useSheetScrollReset } from "@/react/lib/use-sheet-scroll-reset";
 
 const BACKDROPS = {
   /** The app's own surface — for themed content. A chart or a diagram drawn
@@ -127,6 +128,10 @@ export function FullScreenSheet({
     }
   };
   layer.current = useBackDismiss(() => requestClose(true));
+  // The page behind sits at the top while the sheet is open: Safari on iOS
+  // otherwise hit-tests a fixed sheet over a scrolled page in the wrong place
+  // (see the hook's note), and taps fall through to the inert page.
+  useSheetScrollReset();
 
   return (
     <ModalOverlay

@@ -384,6 +384,34 @@ test("Sort: Team files the pilots under their teams, the teamless last", async (
   await expect.poll(() => names(page)).toEqual(["Bo", "Cy", "Ada", "Zoe"]);
 });
 
+test("a sheet opened over a scrolled list keeps the page at the top, and closing it puts the list back", async ({
+  page,
+}) => {
+  // Found on an iPhone: with the page scrolled under the sheet (and a
+  // keyboard's pan left behind), Safari hit-tested the fixed sheet in the
+  // wrong place and a tap on Name fell through to the inert page. Chromium
+  // cannot show that mismatch, so this holds the condition that prevents it.
+  const compId = await makeComp();
+  await openPage(page, compId);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const scrolled = await page.evaluate(() => window.scrollY);
+  expect(scrolled).toBeGreaterThan(100);
+
+  await rows(page).last().click();
+  const sheet = page.getByRole("dialog", { name: /details/ });
+  await expect(sheet).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  const top = await sheet.evaluate((el) => el.closest(".fixed")!.getBoundingClientRect().top);
+  expect(top).toBe(0);
+
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  // Back where it was, give or take the bottom bar: focus returns to the
+  // last row, and the page's scroll-padding lifts that row clear of the bar.
+  const bar = await page.evaluate(() => parseFloat(document.body.style.paddingBottom) || 0);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(scrolled - bar - 1);
+});
+
 test("a refusal lands under the field it is about, focused and in view", async ({ page }) => {
   // The bug, found on an iPhone: an email that already belonged to someone on
   // the roster was refused, the refusal went to the top of a body scrolled
