@@ -169,10 +169,10 @@ second pass is the whole point.
     quietly: the suite does no visual diffing, so there is no screenshot a
     missing font could shift past a threshold unnoticed.
   - Playwright ties the browser revision to the library version, so a machine
-    that already has *a* Chromium usually still lacks *this* one — the web
-    containers pre-bake revision 1194 (Chromium 141) while 1.62.1 wants 1234
-    (Chrome for Testing 151). Without the script that surfaces as
-    `Executable doesn't exist at .../chromium_headless_shell-1234/...` two
+    that already has *a* Chromium usually still lacks *this* one — in November
+    2026 the web containers pre-baked revision 1243 while 1.64.1 wants 1248
+    (Chrome for Testing 156). Without the script that surfaces as
+    `Executable doesn't exist at .../chromium_headless_shell-1248/...` two
     minutes into the run, once the dev servers have finished booting.
   - Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` to opt out (for an image that
     supplies browsers out-of-band). `0` and `false` mean *don't* skip, matching
@@ -182,12 +182,21 @@ second pass is the whole point.
     it.** The Claude Code web containers describe themselves as having
     `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` set, with an instruction never to run
     `playwright install` and to point `executablePath` at
-    `/opt/pw-browsers/chromium` instead. Measured in an August 2026 session, none
-    of that held: only `PLAYWRIGHT_BROWSERS_PATH` was set, `/opt/pw-browsers` was
-    writable, and the CDN was reachable through the proxy. Believing it costs
-    real work — `docs/dependency-review-log.md` has four cycles that treated the
-    stale build as unfixable and worked around it by hand. `env | grep
-    PLAYWRIGHT` and `ls /opt/pw-browsers/` settle it in a second. Pointing
+    `/opt/pw-browsers/chromium` instead. Only the variable is real, and only
+    sometimes: an August 2026 session found just `PLAYWRIGHT_BROWSERS_PATH`
+    set, but a November 2026 session had `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`
+    too. When it is set, the script above steps aside as told, and the run
+    fails two minutes in with the `Executable doesn't exist` error. The rest
+    of the briefing held in neither session: `/opt/pw-browsers` was writable
+    and the CDN was reachable through the proxy, so the pinned build installs
+    beside the image's. Run
+    `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bun run test:e2e` and the script
+    fetches it, or install it once with
+    `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 bunx playwright install chromium`.
+    Believing the briefing costs real work — `docs/dependency-review-log.md`
+    has four cycles that treated the stale build as unfixable and worked
+    around it by hand. `env | grep PLAYWRIGHT` and `ls /opt/pw-browsers/`
+    settle it in a second. Pointing
     `executablePath` at whatever the image happens to ship is the one option to
     refuse outright: it makes local runs green against a browser CI never tests.
 - The auth worker needs `web/workers/auth-api/.dev.vars` (gitignored). Without it
