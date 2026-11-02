@@ -28,6 +28,7 @@ import { FileTrigger, Link as AriaLink } from "react-aria-components";
 import type { XCTask } from "@glidecomp/engine";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card } from "@/react/rac/card";
+import { ActionErrorBanner, UNREACHABLE, useAction } from "@/react/rac/form";
 import { SimpleSelect } from "@/react/rac/select";
 import { Table, TableHeader, TableBody, Column, Row, Cell } from "@/react/rac/table";
 import { Tooltip, TooltipTrigger } from "@/react/rac/tooltip";
@@ -620,7 +621,11 @@ function RowManage({
   manualHref: string;
   onMutated: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
+  // Every action on the row shares one: one press at a time, and a refusal
+  // shown under the row's buttons — where the organiser just pressed — not in
+  // a toast that is gone before it is read (rac/form.tsx, `useAction`).
+  const action = useAction();
+  const busy = action.pending;
 
   // The pilot is already known from the row, so the Track button skips the
   // pilot-picker dialog and uploads straight to this pilot's IGC endpoint.
@@ -629,91 +634,71 @@ function RowManage({
     const file = files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".igc")) {
-      toast.error(NOT_AN_IGC_MESSAGE);
+      action.refuse(NOT_AN_IGC_MESSAGE);
       return;
     }
-    setBusy(true);
+    let compressed: ArrayBuffer;
     try {
-      const compressed = await compressIgc(file);
-      // The size rule is the server's, both halves of it. This used to be an
-      // invented 5 MB check on the raw file, which matched neither.
-      const tooLarge = tooLargeReason(file.size, compressed.byteLength);
-      if (tooLarge) {
-        toast.error(tooLarge);
-        return;
-      }
-      const res = await fetch(
+      compressed = await compressIgc(file);
+    } catch {
+      action.refuse(UNREACHABLE);
+      return;
+    }
+    // The size rule is the server's, both halves of it. This used to be an
+    // invented 5 MB check on the raw file, which matched neither.
+    const tooLarge = tooLargeReason(file.size, compressed.byteLength);
+    if (tooLarge) {
+      action.refuse(tooLarge);
+      return;
+    }
+    const res = await action.run(() =>
+      fetch(
         `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}`,
         { method: "POST", credentials: "include", body: compressed }
-      );
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(err.error || "Upload failed");
-        return;
-      }
-      const data = (await res.json()) as {
-        replaced?: boolean;
-        track_quality?: TrackQualityWire | null;
-      };
-      // A withheld track must not be announced as a plain success — the pilot
-      // it belongs to is not here to notice, so the admin is the only one who
-      // can act on it.
-      const outcome = describeUploadOutcome(row.name, !!data.replaced, data.track_quality);
-      toast[outcome.tone](outcome.message);
-      onMutated();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setBusy(false);
-    }
+      )
+    );
+    if (!res) return;
+    const data = (await res.json().catch(() => ({}))) as {
+      replaced?: boolean;
+      track_quality?: TrackQualityWire | null;
+    };
+    // A withheld track must not be announced as a plain success — the pilot
+    // it belongs to is not here to notice, so the admin is the only one who
+    // can act on it. The upload itself succeeded, so this stays a toast.
+    const outcome = describeUploadOutcome(row.name, !!data.replaced, data.track_quality);
+    toast[outcome.tone](outcome.message);
+    onMutated();
   }
 
   // The status the admin controls directly: Present (clear) / Absent / DNF.
-  // Landed is derived from evidence and never hand-set.
+  // Landed is derived from evidence and never hand-set. A refused change
+  // leaves the select showing the stored status, with the reason beneath.
   const statusKey = statuses.get(row.compPilotId)?.status_key ?? "";
   const statusValue = statusKey === "absent" || statusKey === "dnf" ? statusKey : "";
 
   async function setStatus(next: string) {
-    setBusy(true);
-    try {
-      if (next === "") {
-        const res = await api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][
-          ":comp_pilot_id"
-        ].$delete({
-          param: { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId },
-        });
-        if (!res.ok) throw new Error();
-      } else {
-        const res = await api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][
-          ":comp_pilot_id"
-        ].$put({
-          param: { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId },
-          json: { status_key: next as "absent" | "dnf", note: null },
-        });
-        if (!res.ok) throw new Error();
-      }
-      onMutated();
-    } catch {
-      toast.error("Failed to update status");
-    } finally {
-      setBusy(false);
-    }
+    const param = { comp_id: compId, task_id: taskId, comp_pilot_id: row.compPilotId };
+    const endpoint =
+      api.api.comp[":comp_id"].task[":task_id"]["pilot-status"][":comp_pilot_id"];
+    const res = await action.run(() =>
+      next === ""
+        ? endpoint.$delete({ param })
+        : endpoint.$put({
+            param,
+            json: { status_key: next as "absent" | "dnf", note: null },
+          })
+    );
+    if (res) onMutated();
   }
 
   async function restoreTrack() {
-    setBusy(true);
-    try {
-      const res = await fetch(
+    const res = await action.run(() =>
+      fetch(
         `/api/comp/${encodeURIComponent(compId)}/task/${encodeURIComponent(taskId)}/igc/${encodeURIComponent(row.compPilotId)}/restore`,
         { method: "POST", credentials: "include" }
-      );
-      if (!res.ok) throw new Error();
-      onMutated();
-    } catch {
-      toast.error("Failed to restore track");
-    } finally {
-      setBusy(false);
-    }
+      )
+    );
+    if (res) onMutated();
   }
 
   // A manual flight needs a route to measure against (GAP course or take-off
@@ -787,7 +772,20 @@ function RowManage({
           <Tooltip>Restore this pilot's superseded track</Tooltip>
         </TooltipTrigger>
       ) : null}
-
+      {/* On a line of its own under the buttons. `w-0 min-w-full`: as wide
+          as the cell, but never what widens the column. The wrapper keeps the
+          grid out of it: a press on the words would open the score card, as
+          a press on the row does, and the grid answers focus arriving in a
+          cell by taking it for the row — away from the refusal, which is
+          where the kit puts it so that it is read out. */}
+      <div
+        className="w-0 min-w-full basis-full empty:hidden"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onFocus={(e) => e.stopPropagation()}
+      >
+        <ActionErrorBanner action={action} />
+      </div>
     </div>
   );
 }

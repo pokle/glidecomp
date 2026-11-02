@@ -161,6 +161,9 @@ describe("PUT /api/comp/:comp_id/task/:task_id/pilot-status/:comp_pilot_id", () 
       { status_key: "safely_landed" }
     );
     expect(res.status).toBe(400);
+    // The refusal names the input it is about (#808).
+    const body = (await res.json()) as { error: string; field?: string };
+    expect(body.field).toBe("status_key");
   });
 
   test("anonymous request is denied", async () => {

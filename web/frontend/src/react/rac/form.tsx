@@ -391,6 +391,112 @@ export function FormErrorBanner({ className }: { className?: string }) {
 }
 
 /**
+ * The same rules for an action that is not a form: one control, pressed, and
+ * sent — a row's status menu, an Upload track button, a menu item. There is
+ * no field for a refusal to go under, so it goes in one fixed place beside
+ * the control ({@link ActionErrorBanner}), never in a toast; one press runs at
+ * a time; a request that never got an answer says {@link UNREACHABLE}. The
+ * next press clears it.
+ *
+ * `run` hands back the response when the server said yes, and null when it
+ * did not (the refusal is already showing). `refuse` is for a check made
+ * before anything is sent — a file that is not an IGC.
+ */
+export interface ActionState {
+  pending: boolean;
+  error: string | null;
+  /** Bumped on every refusal, so the banner takes focus again for the same words. */
+  refused: number;
+  refuse: (message: string) => void;
+  run: (send: () => Promise<SubmitResponse>) => Promise<SubmitResponse | null>;
+}
+
+export function useAction(): ActionState {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refused, setRefused] = useState(0);
+  const inFlight = useRef(false);
+
+  const refuse = (message: string) => {
+    setError(message);
+    setRefused((n) => n + 1);
+  };
+
+  async function run(send: () => Promise<SubmitResponse>): Promise<SubmitResponse | null> {
+    if (inFlight.current) return null;
+    inFlight.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await send();
+      if (!res.ok) {
+        refuse((await readRefusal(res)).message);
+        return null;
+      }
+      return res;
+    } catch {
+      refuse(UNREACHABLE);
+      return null;
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+    }
+  }
+
+  return { pending, error, refused, refuse, run };
+}
+
+/**
+ * An action's refusal, where {@link FormErrorBanner} puts a form's: beside the
+ * control that was pressed. Focus moves here when it appears, scrolling it
+ * into view, so it is read out as well as seen.
+ */
+export function ActionErrorBanner({
+  action,
+  className,
+}: {
+  action: ActionState;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (action.refused === 0) return;
+    let frame = 0;
+    let settled = 0;
+    // An action pressed from a popover (a row's status menu) can be refused
+    // while that popover is still animating shut, and a popover gives focus
+    // back to its trigger as it goes — taking it straight off the refusal.
+    // So wait until nothing is closing, and a frame after, then move focus.
+    const show = () => {
+      if (document.querySelector("[data-exiting]")) settled = 0;
+      else settled++;
+      if (settled < 2) {
+        frame = requestAnimationFrame(show);
+        return;
+      }
+      ref.current?.scrollIntoView({ block: "center" });
+      ref.current?.focus({ preventScroll: true });
+    };
+    show();
+    return () => cancelAnimationFrame(frame);
+  }, [action.refused]);
+  if (!action.error) return null;
+  return (
+    <div className={className}>
+      <Alert
+        ref={ref}
+        variant="destructive"
+        data-action-error
+        tabIndex={-1}
+        className="outline-none"
+      >
+        <AlertDescription>{action.error}</AlertDescription>
+      </Alert>
+    </div>
+  );
+}
+
+/**
  * A group of fields under a heading — a card of them, the way the settings
  * pages group theirs, so a long form reads as a few named parts rather than
  * one column of boxes. A `group` labelled by its heading: a screen reader
