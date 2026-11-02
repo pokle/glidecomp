@@ -410,6 +410,15 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the last
   await expect(page.getByRole("dialog")).toBeVisible();
   await expectNoSidewaysScroll(page);
 
+  // Its fields come in named groups, and none of them folds away.
+  for (const group of ["Required", "Contact", "CIVL", "Team", "Other IDs"]) {
+    await expect(page.getByRole("dialog").getByRole("group", { name: group })).toBeAttached();
+  }
+  await expect(
+    page.getByRole("group", { name: "Other IDs" }).getByRole("textbox", { name: "FAI ID" })
+  ).toBeAttached();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Other IDs" })).toHaveCount(0);
+
   // Its fields stand out from the page behind them. They were transparent,
   // which on the grey page background made an input the same grey as the
   // page — hard to find on a phone in daylight.

@@ -183,7 +183,7 @@ test("one press fills IDs by name and then rankings by ID, and shows what it wil
   await rowOf(page, "Bruno Ridge").click();
   const sheet = page.getByRole("dialog", { name: "Bruno Ridge details" });
   await expect(sheet).toContainText("From Sample World Ranking");
-  const points = await sheet.getByRole("textbox", { name: "WPRS points" }).inputValue();
+  const points = await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).inputValue();
   expect(points).toMatch(/^\d+(\.\d+)?$/);
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden();
@@ -228,7 +228,7 @@ test("a score typed over by hand stops claiming a source", async ({ page }) => {
   const sheet = page.getByRole("dialog", { name: "Ada Thermal details" });
   await expect(sheet).toContainText("From Sample World Ranking");
 
-  await sheet.getByRole("textbox", { name: "WPRS points" }).fill("99");
+  await sheet.getByRole("textbox", { name: "World Pilot Ranking Scheme points" }).fill("99");
   // The moment it is typed, not at save: the number is the organiser's now.
   await expect(sheet).toContainText("Set by an organiser");
   await sheet.getByRole("button", { name: "Done" }).click();

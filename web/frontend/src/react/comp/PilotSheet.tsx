@@ -30,9 +30,8 @@
 import { useState } from "react";
 import { Trash2Icon } from "lucide-react";
 import { Button } from "@/react/rac/button";
-import { Disclosure } from "@/react/rac/disclosure";
 import { TextField } from "@/react/rac/field";
-import { FormSheet, UNREACHABLE, readRefusal, useFormState } from "@/react/rac/form";
+import { FormSection, FormSheet, UNREACHABLE, readRefusal, useFormState } from "@/react/rac/form";
 import { Radio, RadioGroup } from "@/react/rac/radio-group";
 import { api } from "../../comp/api";
 import { useConfirm } from "../lib/confirm";
@@ -176,9 +175,8 @@ function PilotFields({
   onRemoved: (removed: CompPilot) => void;
 }) {
   const confirm = useConfirm();
-  const { fieldErrors, pending, setFormError } = useFormState();
+  const { pending, setFormError } = useFormState();
   const [removing, setRemoving] = useState(false);
-  const [othersOpen, setOthersOpen] = useState(false);
 
   const set = (key: DraftKey, value: string) =>
     setDraft((d) =>
@@ -189,13 +187,6 @@ function PilotFields({
         : { ...d, [key]: value }
     );
   const text = (key: DraftKey) => (draft[key] ?? "") as string;
-
-  // An error on a field behind the fold opens the fold: the kit focuses the
-  // field with the problem, and a collapsed one cannot take focus.
-  const otherIdError = OTHER_IDS.some(([key]) => fieldErrors[key]);
-  const otherIdsSet = OTHER_IDS.filter(([key]) => text(key).trim() !== "").map(([, label]) =>
-    label.replace(" ID", "")
-  );
 
   async function remove() {
     if (!pilot) return;
@@ -228,119 +219,119 @@ function PilotFields({
 
   return (
     <>
+      {/* Five named parts, in the order an organiser fills them in, and none
+          folds away: Other IDs used to, and a field behind a fold is one
+          nobody finds — the reader scanning for it, or the kit moving focus
+          to it when it is the field with the problem. */}
       <div className="flex flex-col gap-4">
-        {pilot?.linked ? (
-          <p className="text-sm text-muted-foreground">
-            {pilot.linked_username
-              ? `Linked to @${pilot.linked_username}`
-              : "Linked to a GlideComp account"}
-          </p>
-        ) : null}
+        <FormSection title="Required">
+          <TextField
+            label="Name"
+            name="name"
+            value={text("name")}
+            onChange={(v) => set("name", v)}
+            autoComplete="off"
+          />
+          <RadioGroup
+            label="Class"
+            name="pilot_class"
+            value={draft.pilot_class || null}
+            onChange={(v) => set("pilot_class", v)}
+            orientation="horizontal"
+          >
+            {/* A row of thumb-sized targets: the kit's radio is as tall as its
+                text, and a comp's classes are few enough to sit side by side. */}
+            <div className="flex flex-wrap gap-x-5">
+              {compClasses.map((c) => (
+                <Radio key={c} value={c} className="min-h-11 pr-1 text-base md:text-sm">
+                  {c}
+                </Radio>
+              ))}
+            </div>
+          </RadioGroup>
+        </FormSection>
 
-        <TextField
-          label="Name"
-          name="name"
-          value={text("name")}
-          onChange={(v) => set("name", v)}
-          autoComplete="off"
-        />
+        <FormSection title="Contact">
+          {pilot?.linked ? (
+            <p className="text-sm text-muted-foreground">
+              {pilot.linked_username
+                ? `Linked to @${pilot.linked_username}`
+                : "Linked to a GlideComp account"}
+            </p>
+          ) : null}
+          <TextField
+            label="Email"
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="off"
+            value={text("email")}
+            onChange={(v) => set("email", v)}
+            description="The address they sign in with — it's how their tracks find them."
+          />
+        </FormSection>
 
-        <RadioGroup
-          label="Class"
-          name="pilot_class"
-          value={draft.pilot_class || null}
-          onChange={(v) => set("pilot_class", v)}
-          orientation="horizontal"
-        >
-          {/* A row of thumb-sized targets: the kit's radio is as tall as its
-              text, and a comp's classes are few enough to sit side by side. */}
-          <div className="flex flex-wrap gap-x-5">
-            {compClasses.map((c) => (
-              <Radio key={c} value={c} className="min-h-11 pr-1 text-base md:text-sm">
-                {c}
-              </Radio>
-            ))}
-          </div>
-        </RadioGroup>
+        <FormSection title="CIVL">
+          <TextField
+            label="CIVL ID"
+            name="civl_id"
+            inputMode="numeric"
+            autoComplete="off"
+            value={text("civl_id")}
+            onChange={(v) => set("civl_id", v)}
+          />
+          {/* Spelled out: an organiser filling in a roster may not know the
+              acronym, and this is where they meet the number. */}
+          <TextField
+            label="World Pilot Ranking Scheme points"
+            name="wprs_points"
+            inputMode="decimal"
+            autoComplete="off"
+            value={text("wprs_points")}
+            onChange={(v) => set("wprs_points", v)}
+            description={pointsSource(draft)}
+          />
+        </FormSection>
 
-        <TextField
-          label="Email"
-          name="email"
-          type="email"
-          inputMode="email"
-          autoComplete="off"
-          value={text("email")}
-          onChange={(v) => set("email", v)}
-          description="The address they sign in with — it's how their tracks find them."
-        />
+        <FormSection title="Team">
+          <TextField
+            label="Team"
+            name="team_name"
+            autoComplete="off"
+            value={text("team_name")}
+            onChange={(v) => set("team_name", v)}
+          />
+          <TextField
+            label="Driver"
+            name="driver_contact"
+            autoComplete="off"
+            value={text("driver_contact")}
+            onChange={(v) => set("driver_contact", v)}
+          />
+        </FormSection>
 
-        <TextField
-          label="Glider"
-          name="glider"
-          autoComplete="off"
-          value={text("glider")}
-          onChange={(v) => set("glider", v)}
-        />
+        <FormSection title="Other IDs">
+          {OTHER_IDS.map(([key, label]) => (
+            <TextField
+              key={key}
+              label={label}
+              name={key}
+              autoComplete="off"
+              value={text(key)}
+              onChange={(v) => set(key, v)}
+            />
+          ))}
+        </FormSection>
 
-        <TextField
-          label="WPRS points"
-          name="wprs_points"
-          inputMode="decimal"
-          autoComplete="off"
-          value={text("wprs_points")}
-          onChange={(v) => set("wprs_points", v)}
-          description={pointsSource(draft)}
-        />
-
-        <TextField
-          label="CIVL ID"
-          name="civl_id"
-          inputMode="numeric"
-          autoComplete="off"
-          value={text("civl_id")}
-          onChange={(v) => set("civl_id", v)}
-        />
-
-        <TextField
-          label="Team"
-          name="team_name"
-          autoComplete="off"
-          value={text("team_name")}
-          onChange={(v) => set("team_name", v)}
-        />
-
-        <TextField
-          label="Driver"
-          name="driver_contact"
-          autoComplete="off"
-          value={text("driver_contact")}
-          onChange={(v) => set("driver_contact", v)}
-        />
-
-        <Disclosure
-          title="Other IDs"
-          headingLevel={3}
-          isExpanded={othersOpen || otherIdError}
-          onExpandedChange={setOthersOpen}
-          badge={
-            otherIdsSet.length > 0 ? (
-              <span className="text-sm text-muted-foreground">({otherIdsSet.join(", ")} set)</span>
-            ) : null
-          }
-        >
-          <div className="flex flex-col gap-4 pt-3">
-            {OTHER_IDS.map(([key, label]) => (
-              <TextField
-                key={key}
-                label={label}
-                name={key}
-                autoComplete="off"
-                value={text(key)}
-                onChange={(v) => set(key, v)}
-              />
-            ))}
-          </div>
-        </Disclosure>
+        <FormSection title="Glider">
+          <TextField
+            label="Glider"
+            name="glider"
+            autoComplete="off"
+            value={text("glider")}
+            onChange={(v) => set("glider", v)}
+          />
+        </FormSection>
       </div>
 
       {pilot ? (

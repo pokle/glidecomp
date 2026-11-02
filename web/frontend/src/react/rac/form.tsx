@@ -44,14 +44,17 @@ import {
   createContext,
   useContext,
   useEffect,
+  useId,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { Form as AriaForm } from "react-aria-components";
 
+import { cn } from "@/react/lib/utils";
 import { Alert, AlertDescription } from "./alert";
 import { Button } from "./button";
+import { CardTitle, cardSurface } from "./card";
 import {
   FullScreenSheet,
   SheetBody,
@@ -387,5 +390,36 @@ export function FormSheet({
         <SheetBody className={bodyClassName}>{children}</SheetBody>
       </Form>
     </FullScreenSheet>
+  );
+}
+
+/**
+ * A group of fields under a heading — a card of them, the way the settings
+ * pages group theirs, so a long form reads as a few named parts rather than
+ * one column of boxes. A `group` labelled by its heading: a screen reader
+ * announces "Contact, group" on the way in, and a heading-to-heading jump
+ * lands on each part.
+ *
+ * Nothing in it folds away. A section that collapsed hid its fields from the
+ * reader scanning for them, and from the kit's focus move when one of them
+ * was the field with the problem.
+ */
+export function FormSection({
+  title,
+  children,
+  className,
+}: {
+  title: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={id} className={cn(cardSurface, "flex flex-col gap-4 p-4", className)}>
+      <CardTitle as="h3" id={id}>
+        {title}
+      </CardTitle>
+      {children}
+    </div>
   );
 }
