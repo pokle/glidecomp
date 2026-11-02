@@ -9,7 +9,7 @@
  * .test.ts exists to prevent, and the same fix: enforce it here.
  */
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { MOBILE_SPEC_FILES, MOBILE_TEST_MATCH } from "./mobile";
 
@@ -42,5 +42,19 @@ describe("the mobile project's spec list", () => {
     expect(MOBILE_TEST_MATCH).toEqual(
       MOBILE_SPEC_FILES.map((f) => `**/${f}`)
     );
+  });
+
+  test("a spec that tags a test PHONE_ONLY is one the mobile project runs", () => {
+    // The desktop project never schedules a PHONE_ONLY test, so in a spec the
+    // mobile project does not run either, the tag would mean "never".
+    const listed = new Set<string>(MOBILE_SPEC_FILES);
+    const stranded = readdirSync(E2E_DIR)
+      .filter((f) => f.endsWith(".spec.ts") && !listed.has(f))
+      .filter((f) => /\bPHONE_ONLY\b/.test(readFileSync(join(E2E_DIR, f), "utf8")));
+    expect(
+      stranded,
+      "these specs tag a test PHONE_ONLY but are not in MOBILE_SPEC_FILES, so " +
+        "that test runs in no project at all"
+    ).toEqual([]);
   });
 });

@@ -13,6 +13,36 @@
  * that forces `workers: 1` never arises BETWEEN shards. Inside a shard nothing
  * changes.
  *
+ * It needed doing twice. The August split made three shards; by November the
+ * organiser one had tripled (56 tests and 204s of wall clock on run
+ * 32481474298, about 150 tests and 426–677s by run 41422433753), because the
+ * mobile-first pages it covers run every test twice, desktop and phone. Its
+ * test step had a median of 10m40s over 15 runs and finished last in all 15 —
+ * longer than the whole unsplit suite had been. So it is now three shards
+ * (organiser-comp, organiser-pilots, organiser-tasks), and the suite drives a
+ * production build instead of the Vite dev server, which halved the cost of a
+ * page load (web/scripts/e2e-serve-dist.ts).
+ *
+ * Measured on run 41430947899, the first green run of both changes, against
+ * the 15-run median before them:
+ *
+ *   organiser tests        10m40s in one shard → 1m31s / 1m51s / 2m32s in three
+ *   maps-and-analysis       4m33s → 3m33s
+ *   public-and-pilot        4m12s → 2m14s
+ *   the whole run          11m32s → 5m16s, with Test → Deploy now the long pole
+ *
+ * The same organiser specs took 292s of wall clock across their three shards,
+ * against 426s in one on the fastest dev-server run (41422433753) — and that
+ * 293s includes seeding the sample comp in two shards rather than one.
+ *
+ * ── Plan for the slow runner ────────────────────────────────────────────────
+ *
+ * GitHub's runners are not all one speed. The same 146 tests took 7.2m on
+ * three runs (41422433753, 41421051154, 41420543044) and 10.2–10.6m on three
+ * others (41420589270, 41419728049, 41418101252): every spec 1.35–1.5× slower,
+ * server startup 8s → 12s. About two jobs in three land on the slow kind. A
+ * shard sized on a fast run will be the long pole on most runs.
+ *
  * ── Why an explicit list rather than Playwright's `--shard=i/N` ─────────────
  *
  * Because `--shard` balances by test COUNT and this suite's per-test durations
@@ -42,80 +72,100 @@
  * the phone pass.
  *
  * Rebalance when a shard drifts far enough to become the long pole on its own.
- * There is no point chasing much below ~3 minutes: the `test` → `deploy` chain
- * is ~4m49s, so that is the floor for the whole build until the deploy path
- * changes.
+ * There is no point chasing much below the `test` → `deploy` chain: Test's job
+ * has a median of 3m38s and Deploy's 1m26s on a branch (about 2m on master,
+ * which deploys the Workers too), so that ~5–5.5 minutes is the floor for the
+ * whole build until the deploy path changes.
  */
 
 /**
  * The shards, subject by subject. Seconds are the measured chromium+mobile
- * total for that spec from run 32355085390.
+ * wall clock for that spec on run 41430947899 (production build), including
+ * any seeding that ran just before it; a slow runner takes about 1.45× as long.
  */
 export const E2E_SHARDS = {
   /**
    * The map, the analysis page and the charts that explain a score — the
    * heaviest specs in the suite, and heavy for real reasons: they render
    * Mapbox (from recordings), draw charts, and wait on the analysis the engine
-   * computes. task-analysis alone is 78.9s, and it is `mode: "serial"` with a
-   * shared `beforeAll` page, so it cannot be split further. It sets the floor
-   * for how fast any shard can be.
+   * computes. With page loads cheap, this is now the slowest shard; most of it
+   * is the map itself, which a production build does not make faster.
+   * task-analysis is `mode: "serial"` with a shared `beforeAll` page, so it
+   * cannot be split further.
    */
   "maps-and-analysis": [
-    "task-analysis.spec.ts", // 78.9s
-    "analysis-map.spec.ts", // 72.8s
-    "explain-affordance.spec.ts", // 39.9s
-    "report-card.spec.ts", // 7.4s
-    "lazy-map-in-view.spec.ts", // 4.9s
-    "trusted-types.spec.ts", // new — measure on its first CI run
+    "analysis-map.spec.ts", // 76.8s
+    "trusted-types.spec.ts", // 57.1s
+    "report-card.spec.ts", // 28.4s
+    "task-analysis.spec.ts", // 20.6s
+    "explain-affordance.spec.ts", // 4.5s
+    "lazy-map-in-view.spec.ts", // 2.0s
+  ],
+
+  /*
+   * What an organiser does, in three shards. Seven of the eight `mobile` specs
+   * are in them, because the organiser's pages are built mobile-first (#636,
+   * #637, and the waypoints and pilots lists), so most of these run twice.
+   */
+
+  /**
+   * The competition itself: its pages and settings, starting one, sharing a
+   * hidden one, its results record, and an assistant acting on it. A spec
+   * about creating something on a comp page (a task, a test IGC) goes here.
+   */
+  "organiser-comp": [
+    "comp-detail.spec.ts", // 33.5s (chromium + mobile), ~12s of it seeding the sample comp
+    "comp-settings-pages.spec.ts", // 21.2s (chromium + mobile)
+    "comp-new.spec.ts", // 5.0s (chromium + mobile)
+    "hidden-comp-share-link.spec.ts", // 4.9s
+    "results-record.spec.ts", // 2.9s
+    "comp-creation.spec.ts", // 2.5s
+    "mcp.spec.ts", // 2.3s
+    "popover-position.spec.ts", // 1.3s
   ],
 
   /**
-   * What an organiser does to a competition: the comp and task settings pages,
-   * the pilots page, the waypoint editor, the rankings fill, and the mutations
-   * that must move a score. Seven of the eight `mobile` specs are here, because
-   * the organiser's pages are built mobile-first (#636, #637, and the
-   * waypoints and pilots lists).
+   * The roster: the pilots list and each pilot's page, the CIVL rankings fill,
+   * and the mutations to pilots and tracks that must move a score — plus the
+   * kit form's own rules, whose worked example is the pilot page.
    */
-  organiser: [
-    "comp-detail.spec.ts", // 64.8s (chromium + mobile)
-    "task-settings-pages.spec.ts", // 31.4s (chromium + mobile)
-    "comp-waypoints.spec.ts", // 26.7s
-    "comp-settings-pages.spec.ts", // 22.4s (chromium + mobile)
-    "scoring-mutations.spec.ts", // 22.3s
-    "civl-rankings.spec.ts", // 16.7s
-    "comp-pilots.spec.ts", // new — measure on its first CI run (chromium + mobile)
-    "forms.spec.ts", // new — the kit form's rules (chromium + mobile)
-    "comp-creation.spec.ts", // 4.0s
-    "comp-new.spec.ts", // new — measure on its first CI run (chromium + mobile)
-    "hidden-comp-share-link.spec.ts", // new — measure on its first CI run
-    "results-record.spec.ts", // new — measure on its first CI run
-    "popover-position.spec.ts", // 2.8s
-    "mcp.spec.ts", // new — measure on its first CI run
+  "organiser-pilots": [
+    "comp-pilots.spec.ts", // 54.4s (chromium + mobile)
+    "civl-rankings.spec.ts", // 20.8s, ~11s of it seeding 14,535 ranked pilots
+    "forms.spec.ts", // 10.0s (chromium + mobile)
+    "scoring-mutations.spec.ts", // 7.2s
+  ],
+
+  /**
+   * Where the task flies: the waypoint file and the task's own pages (its
+   * settings, the route editor, weather notes). comp-waypoints is the single
+   * heaviest spec an organiser has.
+   */
+  "organiser-tasks": [
+    "comp-waypoints.spec.ts", // 89.0s (chromium + mobile), ~17s of it seeding the sample comp
+    "task-settings-pages.spec.ts", // 36.7s (chromium + mobile)
   ],
 
   /**
    * What everyone else sees: submitting a track, signing in, the prerendered
    * content pages, search, the repairable 404, and the public API's own
-   * documentation. The lightest group, which is where api-doc.spec.ts belongs
-   * on both counts — it is about the public API surface, and it is skipped in
-   * CI today, so its true cost is unmeasured and this shard has the most room
-   * to absorb it.
+   * documentation (api-doc.spec.ts, which is about the public API surface).
    */
   "public-and-pilot": [
-    "track-submission.spec.ts", // 67.0s (chromium + mobile)
-    "email-otp-signin.spec.ts", // 13.9s
-    "last-used-sign-in.spec.ts", // ~14s locally — not yet measured in CI
-    "static-pages.spec.ts", // 13.4s
-    "user-files-upload.spec.ts", // 13.2s
-    "transient-api-failure.spec.ts", // 11.4s
-    "search.spec.ts", // 10.6s
-    "settings-save-ux.spec.ts", // 10.1s
-    "account-name-sync.spec.ts", // new — not yet measured
-    "legal-notice.spec.ts", // new — not yet measured
-    "not-found-suggestions.spec.ts", // 9.9s
-    "full-screen-sheets.spec.ts", // 6.4s
-    "non-route-links.spec.ts", // 2.2s
-    "api-doc.spec.ts", // skipped in CI
+    "track-submission.spec.ts", // 25.9s (chromium + mobile)
+    "full-screen-sheets.spec.ts", // 19.6s, ~17s of it seeding the sample comp
+    "legal-notice.spec.ts", // 12.9s
+    "settings-save-ux.spec.ts", // 7.2s
+    "user-files-upload.spec.ts", // 5.6s
+    "email-otp-signin.spec.ts", // 5.4s
+    "account-name-sync.spec.ts", // 5.3s
+    "static-pages.spec.ts", // 5.1s
+    "search.spec.ts", // 4.6s
+    "transient-api-failure.spec.ts", // 4.5s
+    "not-found-suggestions.spec.ts", // 4.4s
+    "last-used-sign-in.spec.ts", // 3.8s
+    "api-doc.spec.ts", // 2.3s
+    "non-route-links.spec.ts", // 0.7s
   ],
 } as const satisfies Record<string, readonly string[]>;
 

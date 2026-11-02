@@ -66,10 +66,11 @@ const OAuthConsent = lazy(() =>
 const SignIn = lazy(() =>
   import("./pages/SignIn").then((m) => ({ default: m.SignIn }))
 );
-// The kit form's test bench, for e2e/forms.spec.ts. Development builds only:
-// `import.meta.env.DEV` is false in a production build, so neither the route
-// nor the page is in it.
-const KitFormFixture = import.meta.env.DEV
+// The kit form's test bench, for e2e/forms.spec.ts. Development builds and the
+// e2e suite's build (`vite build --mode e2e`, web/scripts/e2e-frontend.sh)
+// only: in the production build both conditions are constant false, so neither
+// the route nor the page is in it.
+const KitFormFixture = import.meta.env.DEV || import.meta.env.MODE === "e2e"
   ? lazy(() => import("./pages/KitFormFixture").then((m) => ({ default: m.KitFormFixture })))
   : null;
 // Starting a competition — signed-in only, a noindex shell in the SSR Function.

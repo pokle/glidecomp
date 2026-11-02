@@ -22,7 +22,7 @@
  * mobile-first, so a desktop-only pass would exercise them at the one width
  * they were not designed for.
  */
-import { test, expect, phoneOnly, type Page } from "./fixtures/test";
+import { test, expect, PHONE_ONLY, type Page } from "./fixtures/test";
 import { e2eCompName } from "./fixtures/stack";
 
 const ADMIN_USER = {
@@ -375,9 +375,8 @@ test("Scoring: a refused GAP parameter unfolds Advanced and lands under its own 
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
 });
 
-test("the whole journey fits a phone: no horizontal overflow", async ({
+test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY }, async ({
   page,
-  isMobile,
 }) => {
   // The viewport used to be set here, by hand, at 390×844. It comes from the
   // `mobile` project now (issue #643) — which also brings touch, a mobile user
@@ -385,7 +384,6 @@ test("the whole journey fits a phone: no horizontal overflow", async ({
   // three tests in this file run in BOTH projects, so the pages themselves are
   // driven at a phone width regardless; what is left here is the assertion
   // that only means something there.
-  phoneOnly(isMobile);
   await devLogin(page, ADMIN_USER);
 
   const noHorizontalOverflow = async (where: string) => {
