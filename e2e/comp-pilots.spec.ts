@@ -606,15 +606,26 @@ test("the page never scrolls sideways, its targets are thumb-sized, and the sear
   ).toBe(false);
 
   // A row reached from the keyboard is never left under the sticky bar (WCAG
-  // 2.4.11): walk focus back up the list from the bottom.
+  // 2.4.11): walk focus back up the list from the bottom, a row at a time,
+  // so each step scrolls the page just far enough to show the row, which is
+  // where the bar would cover it.
   await rows(page).last().focus();
-  for (let i = 0; i < 3; i++) {
-    await page.keyboard.press("PageUp");
-    const top = await page.evaluate(() => document.activeElement!.getBoundingClientRect().top);
-    const bar = await page.getByRole("button", { name: "Add pilot" }).boundingBox();
-    expect(top, "the focused row starts below the search bar").toBeGreaterThanOrEqual(bar!.y + bar!.height);
-    const tabsNow = await page.getByRole("navigation", { name: "Sections" }).boundingBox();
-    expect(top, "the focused row starts below the section tabs").toBeGreaterThanOrEqual(tabsNow!.y + tabsNow!.height);
+  const steps = (await rows(page).count()) - 1;
+  for (let i = 0; i < steps; i++) {
+    await page.keyboard.press("ArrowUp");
+    // Polled: React Aria scrolls the newly focused row into view a moment
+    // after focus moves, and a slow CI runner measured in between.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const top = document.activeElement!.getBoundingClientRect().top;
+          const bar = document.querySelector('[aria-label="Add pilot"]')!.getBoundingClientRect();
+          const tabs = document.querySelector('nav[aria-label="Sections"]')!.getBoundingClientRect();
+          return top >= bar.bottom && top >= tabs.bottom;
+        }),
+        { message: "the focused row starts below the search bar and the section tabs" }
+      )
+      .toBe(true);
   }
 
   // A pilot's page does not scroll sideways either.
