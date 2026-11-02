@@ -77,6 +77,64 @@ async function managedRow(page: Page) {
 
 const pilotId = () => fixture.pilotIds.get(PILOT)!;
 
+test("the manage list never scrolls sideways, and Add manual flight is in reach", async ({
+  page,
+}) => {
+  // It was a six-column table, and on an iPhone the status select, Upload
+  // track and Add manual flight were all off to the right of a sideways
+  // scroll: the owner could not find how to add a manual flight. It is a list
+  // of pilots now, at every width.
+  const row = await managedRow(page);
+  const section = page
+    .getByRole("heading", { name: "Manage pilots & tracks", exact: true })
+    .locator("..");
+
+  const page_ = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  expect(page_.scrollWidth, "the page must not scroll sideways").toBeLessThanOrEqual(
+    page_.innerWidth
+  );
+  const own = await section.evaluate((el) => ({
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  }));
+  expect(own.scrollWidth, "the section must not scroll sideways").toBeLessThanOrEqual(
+    own.clientWidth
+  );
+  // …nor anything inside it: the table scrolled inside a box of its own, which
+  // a check on the page and the section alone would not see.
+  const scrollers = await section.evaluate((el) =>
+    [...el.querySelectorAll<HTMLElement>("*")]
+      .filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowX))
+      .filter((e) => e.scrollWidth > e.clientWidth + 1)
+      .map((e) => e.className)
+  );
+  expect(scrollers, "nothing in the section may scroll sideways").toEqual([]);
+
+  // In reach: inside the screen's width before anything is scrolled, then on
+  // screen once scrolled to (down only), and a thumb-sized target.
+  const add = row.getByRole("link", { name: "Add manual flight" });
+  const before = await add.boundingBox();
+  expect(before!.x).toBeGreaterThanOrEqual(0);
+  expect(before!.x + before!.width).toBeLessThanOrEqual(page_.innerWidth);
+  await add.scrollIntoViewIfNeeded();
+  await expect(add).toBeInViewport({ ratio: 1 });
+  expect(await page.evaluate(() => window.scrollX)).toBe(0);
+  const box = await add.boundingBox();
+  expect(box!.height, "Add manual flight height").toBeGreaterThanOrEqual(44);
+  for (const name of [`Status for ${PILOT}`, "Upload track"]) {
+    const b = await row.getByRole("button", { name }).boundingBox();
+    expect(b!.height, `${name} height`).toBeGreaterThanOrEqual(44);
+  }
+
+  await add.click();
+  await expect(page.getByRole("heading", { name: "Record manual flight" })).toBeVisible({
+    timeout: 20_000,
+  });
+});
+
 test("a row action's refusal shows under that pilot's row, never in a toast", async ({
   page,
 }) => {
