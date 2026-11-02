@@ -213,9 +213,10 @@ size (`/waypoints/map`) and the altitude review (`/waypoints/altitudes`, and
 - **Leaving.** Going between the editor's own pages is not leaving it, so the
   unsaved-changes guard is told which links are inside (`isWithin`). A link
   out asks "Discard changes?", and discarding clears the draft (`onDiscard`).
-  Back does not ask (`guardBack: false`): it means "not now", and the draft
-  waits. A reload keeps the draft too, so the list has a "Discard changes"
-  button beside Save for throwing it away on purpose. Save clears it.
+  Back does not ask — nothing in the app asks on Back since #817 — and here
+  it means "not now": the draft waits. A reload keeps the draft too, so the
+  list has a "Discard changes" button beside Save for throwing it away on
+  purpose. Save clears it.
 
 ## How the route editor uses it
 

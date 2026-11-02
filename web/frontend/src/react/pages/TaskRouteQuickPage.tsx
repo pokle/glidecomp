@@ -115,7 +115,7 @@ function QuickEntryForm({ editor }: { editor: RouteEditorState }) {
       cancelLabel: "Keep editing",
       destructive: true,
     });
-    if (ok) editor.leave({ afterConfirm: true });
+    if (ok) editor.leave();
   }
 
   return (
@@ -129,9 +129,7 @@ function QuickEntryForm({ editor }: { editor: RouteEditorState }) {
         onSubmit={async () => undefined}
         onSuccess={() => {
           editor.update((d) => applyQuickEntry(d, parsed, { openDistance }));
-          // A "Discard this text?" that was answered "Keep editing" may still
-          // be giving back its history entry.
-          editor.leave({ afterConfirm: true });
+          editor.leave();
         }}
       >
         <SectionHeader

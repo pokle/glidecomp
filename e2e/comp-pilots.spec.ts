@@ -527,11 +527,31 @@ test("Remove asks before it removes", async ({ page }) => {
   await ask.getByRole("button", { name: "Cancel" }).click();
   expect((await rosterOf(compId)).some((p) => p.name === "Ana Müller")).toBe(true);
 
+  // Back with the question still open is the browser's Back: the page goes,
+  // the question goes with it (it is the app-wide confirm, so it would
+  // otherwise float over the list), and nothing is removed. The dialog holds
+  // no history entry of its own, so one press is one page (#817).
+  await sheet.getByRole("button", { name: "Remove this pilot" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Remove Ana Müller?");
+  await page.goBack();
+  await backOnList(page);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  expect((await rosterOf(compId)).some((p) => p.name === "Ana Müller")).toBe(true);
+  await page.goForward();
+  await editorFor(page, "Ana Müller");
+
+  // A confirmed Remove goes Back to the list at once. It used to have to
+  // wait for the closing dialog to give its history entry back, or the two
+  // raced and the reader was left on the pilot's page.
   await sheet.getByRole("button", { name: "Remove this pilot" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
   await backOnList(page);
   await expect(list(page)).toContainText('No pilot matches "ana".');
   expect((await rosterOf(compId)).some((p) => p.name === "Ana Müller")).toBe(false);
+  // Exactly one step back, and nothing pushed on the way: Forward is the
+  // removed pilot's page.
+  await page.goForward();
+  await expect(page).toHaveURL(/\/pilots\/ana-[a-z]+/);
 });
 
 test("an import says what it will add, update and remove before it does any of it", async ({

@@ -24,7 +24,6 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { WaypointFileRecord, XCTask } from "@glidecomp/engine";
 import { api } from "../../comp/api";
 import { useConfirm } from "../lib/confirm";
-import { backPastClosedOverlays } from "../lib/use-back-dismiss";
 import { bareCompId, compUrlId, idFromSegment, taskRoutePath } from "../lib/slug";
 import { toast } from "../lib/toast";
 import { useDraft } from "../lib/use-draft";
@@ -119,13 +118,9 @@ export interface RouteEditorState {
   addSavedWaypoints: (records: WaypointFileRecord[]) => void;
   /**
    * Leave this page for the route: a real Back when it was opened with
-   * {@link FROM_ROUTE}, else replace it with the route. `afterConfirm`: a
-   * confirmation has just closed — its dialog gives back a history entry of
-   * its own a moment later, and the Back must wait for that or the two race
-   * and the reader stays where they were (see backPastClosedOverlays, which
-   * goes with that machinery in #817).
+   * {@link FROM_ROUTE}, else replace it with the route.
    */
-  leave: (opts?: { afterConfirm?: boolean }) => void;
+  leave: () => void;
 }
 
 /** Whether `url` is a page of this task's route editor. */
@@ -238,7 +233,6 @@ export function useRouteEditor(): RouteEditorState {
   useUnsavedChangesGuard(dirty, {
     title: "Discard route changes?",
     message: "This route has unsaved changes. Leaving will discard them.",
-    guardBack: false,
     isWithin: (url) => inEditor(url, bareId, taskId),
     onDiscard: () => routeDraft.clear([bareId, taskId]),
   });
@@ -285,11 +279,10 @@ export function useRouteEditor(): RouteEditorState {
     addSavedWaypoints(records) {
       setSavedWaypoints((prev) => [...prev, ...records]);
     },
-    leave(opts) {
+    leave() {
       const state = location.state as Record<string, unknown> | null;
-      if (!state?.[FROM_ROUTE]) navigate(routePath, { replace: true });
-      else if (opts?.afterConfirm) backPastClosedOverlays();
-      else navigate(-1);
+      if (state?.[FROM_ROUTE]) navigate(-1);
+      else navigate(routePath, { replace: true });
     },
   };
 }

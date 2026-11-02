@@ -116,7 +116,9 @@ differs. Know which surface you're touching:
   nothing traps focus (except a modal, which traps *intentionally* and releases
   on close — `rac/dialog.tsx`'s `Modal`/`Dialog` (and the `role="alertdialog"`
   variant behind `rac/confirm.tsx`) handle this; use them rather than rolling
-  your own).
+  your own). Escape, the ✕ or the dialog's own buttons close a dialog. Back
+  is the browser's Back: it navigates, and the dialog closes with the page it
+  was over (#817).
 - **No click-only handlers.** Do not attach behaviour to a non-interactive
   element (`div`/`span` with `onClick`). Use `<button>`, `<a>`, or the kit
   primitive. If a design truly needs a custom widget, it needs `role`,
@@ -271,8 +273,9 @@ differs. Know which surface you're touching:
   `aria-pressed`, `aria-selected`, `aria-current`) — the
   `aria-pressed`/`aria-current` usage in `Shell.tsx` is the reference.
   There is no editable grid: an editable collection is a `GridList` of rows
-  that open `FullScreenSheet`s, so every field in it is a kit field with its
-  own label, and a row's whole width is its tap target (see the guide).
+  that each open a page of their own, so every field in it is a kit field
+  with its own label, and a row's whole width is its tap target (see the
+  guide).
 - **The active tab** carries `aria-current="page"` (in addition to the visual
   underline).
 - **Status messages** (WCAG 4.1.3): toasts (`sonner`), async save results,

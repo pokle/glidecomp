@@ -8,8 +8,9 @@
  * - the index rows and their current-value summaries, and that a group save
  *   PATCHes ONLY that group's fields (the server diffs per field, so a page
  *   sending another group's values would silently widen every save);
- * - the Discard/Keep navigation guard on a dirty sub-page, reached both by a
- *   link click and by the browser's Back;
+ * - the Discard/Keep navigation guard on a dirty sub-page, reached by a link
+ *   click, and the browser's own question on a reload — while Back is the
+ *   browser's Back and leaves without asking (#817);
  * - the whole journey with no horizontal overflow — the point of the
  *   restructure;
  * - non-admin fallback and the unknown-group 404.
@@ -250,14 +251,14 @@ test("leaving a dirty sub-page is guarded: Keep stays, Discard leaves", async ({
 });
 
 /**
- * The same guard, reached with the back gesture instead of a link.
- *
- * Neither `beforeunload` nor the capture-phase click interceptor sees a
- * `popstate`, so Back used to discard a sub-page's edits in silence. The guard
- * holds a history entry of its own while the form is dirty
- * (`lib/use-back-dismiss.ts`), which is what gives it a press to answer.
+ * Back is the browser's Back, on a dirty sub-page too (#817; CLAUDE.md, "No
+ * full-screen overlays"). The guard asks before a link (above), a reload or a
+ * tab close — never on Back. It used to: it held a history entry of its own
+ * while the form was dirty so that Back could be answered with a question,
+ * and that imitation of navigation is what was deleted. These pages keep no
+ * draft, so Back leaves the edits behind, as any web form does.
  */
-test("Back on a dirty sub-page is guarded: Keep stays put, Discard leaves", async ({
+test("Back on a dirty sub-page leaves without asking; a reload still asks", async ({
   page,
 }) => {
   await devLogin(page, ADMIN_USER);
@@ -269,33 +270,29 @@ test("Back on a dirty sub-page is guarded: Keep stays put, Discard leaves", asyn
   await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
 
   const name = page.getByLabel("Name");
-  await name.fill(`${COMP_NAME} (back)`);
+  await name.fill(`${COMP_NAME} (reload)`);
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  // Keep editing: the reader is left where they were, still editing.
-  await page.goBack();
-  const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByText("Discard changes?")).toBeVisible();
-  await dialog.getByRole("button", { name: "Keep editing" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.getByRole("heading", { name: "General", exact: true })).toBeVisible();
-  await expect(name).toHaveValue(`${COMP_NAME} (back)`);
+  // A reload with unsaved edits asks first: the browser's own "Leave site?"
+  // (beforeunload). Answered "stay", the edits are still there.
+  const asked = page.waitForEvent("dialog");
+  void page.reload().catch(() => {});
+  const leave = await asked;
+  expect(leave.type()).toBe("beforeunload");
+  await leave.dismiss();
+  await expect(name).toHaveValue(`${COMP_NAME} (reload)`);
 
-  // …and the stack is as it was found, so the next press asks again rather
-  // than appearing to do nothing.
+  // Back does not ask. One press is one page: the index, with nothing saved.
   await page.goBack();
-  await expect(page.getByRole("alertdialog")).toBeVisible();
-  await page
-    .getByRole("alertdialog")
-    .getByRole("button", { name: "Discard changes" })
-    .click();
-
-  // Discard finishes the press, and nothing was saved.
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(
     page.getByRole("main").getByRole("link", { name: /^General/ })
   ).toContainText(COMP_NAME);
+  await expect(
+    page.getByRole("main").getByRole("link", { name: /^General/ })
+  ).not.toContainText("(reload)");
 });
 
 /**

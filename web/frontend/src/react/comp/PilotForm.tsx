@@ -155,7 +155,6 @@ export function PilotForm({
   useUnsavedChangesGuard(unsaved && !finished, {
     title: "Discard changes?",
     message: pilot ? `Your changes to ${pilot.name} are not saved.` : "This pilot is not saved.",
-    guardBack: false,
   });
 
   const finish = () => {
