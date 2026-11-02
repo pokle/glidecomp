@@ -105,6 +105,12 @@ const TaskWeatherPage = lazy(() =>
 const TaskTestIgcPage = lazy(() =>
   import("./pages/TaskTestIgcPage").then((m) => ({ default: m.TaskTestIgcPage }))
 );
+// Public, but a noindex shell rather than SSR'd: a QR code is a picture for a
+// camera, with nothing in it for a crawler. Lazy, so `qrcode.react` stays out
+// of the entry bundles.
+const TaskQrPage = lazy(() =>
+  import("./pages/TaskQrPage").then((m) => ({ default: m.TaskQrPage }))
+);
 // Client-only (a noindex shell in the SSR Function), and lazy so it costs
 // nothing on the pages that do not open it.
 const TaskPilotSimilarity = lazy(() =>
@@ -269,6 +275,12 @@ export function AppRoutes() {
             <Route
               path="/comp/:compId/task/:taskId/test-igc"
               element={<TaskTestIgcPage />}
+            />
+            {/* The task's QR code, for a phone camera: a page of its own
+                (#813), where it was a full-screen overlay over the task page. */}
+            <Route
+              path="/comp/:compId/task/:taskId/qr"
+              element={<TaskQrPage />}
             />
             {/* This task's own TASK analysis, collected by the comp analysis: a summary, with
                 a box per section linking to the section's own page. */}

@@ -156,7 +156,7 @@ export const E2E_SHARDS = {
   "public-and-pilot": [
     "track-submission.spec.ts", // 25.9s (chromium + mobile)
     "task-submit-link.spec.ts", // new — measure on its first CI run (chromium + mobile)
-    "full-screen-sheets.spec.ts", // 19.6s, ~17s of it seeding the sample comp
+    "task-qr-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "task-diagram-page.spec.ts", // new — measure on its first CI run (chromium + mobile)
     "legal-notice.spec.ts", // 12.9s
     "settings-save-ux.spec.ts", // 7.2s

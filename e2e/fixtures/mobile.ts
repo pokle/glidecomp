@@ -38,6 +38,9 @@ export const MOBILE_SPEC_FILES = [
   // (#820): Back, reload and the keyboard are the browser's, which is the
   // whole reason it moved, and a phone is where a dialog's went wrong.
   "task-submit-link.spec.ts",
+  // The task's QR code (#813), a page where it was a full-screen overlay: a
+  // phone is both what shows it to a camera and where overlays went wrong.
+  "task-qr-page.spec.ts",
   // The task's route at full size (#814): a page under the task where it was
   // a full-screen overlay over the competition page, opened from a glyph in
   // a list read on a phone.

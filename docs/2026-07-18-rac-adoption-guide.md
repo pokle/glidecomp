@@ -270,7 +270,8 @@ describe code that no longer exists.
   Checkbox — retired `ui/checkbox`, file deleted), and `comp/FullScreenQR.tsx`
   (was a bare `fixed inset-0` div with hand-rolled Esc/scroll-lock listeners;
   now RAC ModalOverlay/Modal/Dialog primitives, so focus trap/restore, Esc
-  and scroll-locking come from react-aria).
+  and scroll-locking come from react-aria; since deleted: the task's QR is a
+  page of its own, `pages/TaskQrPage.tsx`, #813).
   Note that dialogs like SubmitTrackDialog/AddWaypointDialog are **shared** —
   which is why they could be converted ahead of every page that renders them:
   RAC components work fine outside converted pages (`RacRouterProvider` is
