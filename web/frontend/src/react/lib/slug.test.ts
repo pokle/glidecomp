@@ -15,6 +15,7 @@ import {
   compUrlId,
   pathCarriesShareKey,
   redactShareKeys,
+  submitTrackPath,
 } from "./slug";
 
 describe("slugify", () => {
@@ -137,6 +138,14 @@ describe("hidden competitions' share links", () => {
       "vzuq_aaaaaaaaaaaa"
     );
     expect(compUrlId(null, "vzuq")).toBe("vzuq");
+  });
+
+  test("submitTrackPath: the key goes to /submit with the comp id", () => {
+    expect(submitTrackPath(compUrlId(hidden, "vzuq"), "t-1-abcd")).toBe(
+      "/submit?comp=vzuq_7hq2m9xk4rwd&task=t-1-abcd"
+    );
+    expect(submitTrackPath("vzuq")).toBe("/submit?comp=vzuq");
+    expect(submitTrackPath("vzuq", null)).toBe("/submit?comp=vzuq");
   });
 
   test("bareCompId drops the key, for comparing ids", () => {

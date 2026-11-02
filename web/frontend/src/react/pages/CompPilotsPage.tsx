@@ -27,15 +27,16 @@ export function CompPilotsPage() {
   const { compId: compParam } = useParams<{ compId: string }>();
   const compId = idFromSegment(compParam ?? "");
   const { loading } = useUser();
-  const { data: comp, notFound, setData } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, current, setData } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
     title: (c) => `GlideComp - ${c.name} pilots`,
   });
-  // Settle the address bar on the canonical `${slug}-${id}/pilots` once loaded.
+  // Settle the address bar on the canonical `${slug}-${id}/pilots` once loaded
+  // (for THIS id, not the one the page was on before).
   useCanonicalPath(
-    comp ? `${compPath(compUrlId(comp, compId), comp.name)}/pilots` : null
+    comp && current ? `${compPath(compUrlId(comp, compId), comp.name)}/pilots` : null
   );
 
   const isAdmin = useAdminView(!!comp?.is_admin);

@@ -19,7 +19,7 @@ import { Form } from "react-aria-components";
 import { xctaskTurnpointsToRecords, type XCTask } from "@glidecomp/engine";
 import { Badge } from "@/react/rac/badge";
 import { Loading } from "@/react/rac/progress";
-import { Button, LinkButton, buttonVariants } from "@/react/rac/button";
+import { LinkButton, buttonVariants } from "@/react/rac/button";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import {
   Dialog,
@@ -56,7 +56,6 @@ import { TaskScoresAdmin } from "../comp/TaskScoresAdmin";
 import { TurnpointsTable } from "../comp/TurnpointsTable";
 import { TaskDiagram } from "../comp/TaskDiagram";
 import { goalSummary, startConfigSummary } from "../comp/route";
-import { SubmitTrackDialog, useCanUploadOnBehalf } from "../comp/SubmitTrackDialog";
 import {
   isPastCloseDate,
   type CompDetailData,
@@ -66,7 +65,7 @@ import { useInitialData } from "../lib/initial-data";
 import { useMounted } from "../lib/use-mounted";
 import type { TaskDetailLoaderData } from "../loaders";
 import { underComp, TASK_ANALYSIS_LABEL } from "../lib/crumbs";
-import { compUrlId, idFromSegment, compPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
+import { compUrlId, idFromSegment, compPath, submitTrackPath, taskPath, taskAnalysisPath, taskSettingsPath, taskRoutePath, taskTestIgcPath, taskWeatherPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { cn } from "../lib/utils";
@@ -86,11 +85,15 @@ export function TaskDetail() {
   // client boot / SPA navigations, where the effect below fetches instead.
   const initial = useInitialData<TaskDetailLoaderData>();
   const [comp, setComp] = useState<CompDetailData | null>(initial?.comp ?? null);
+  // The comp id `comp` was loaded for — see the canonical path below.
+  const [compLoadedFor, setCompLoadedFor] = useState<string | null>(
+    initial?.comp ? compId : null
+  );
 
   const [refresh, setRefresh] = useState(0);
   // The task is the page. A dead task id is a dead URL; the comp above is
   // supporting detail the page degrades without.
-  const { data: task, notFound } = useSeededResource<TaskDetailData>({
+  const { data: task, notFound, current: taskCurrent } = useSeededResource<TaskDetailData>({
     ids: [compId, taskId],
     seed: initial?.task ?? null,
     load: ([comp_id, task_id]) =>
@@ -102,9 +105,12 @@ export function TaskDetail() {
   });
 
   // Canonicalise once both names are known (comp is a non-critical fetch, so
-  // wait for it rather than 301-ing to a bare comp segment).
+  // wait for it rather than 301-ing to a bare comp segment), and only from
+  // what was loaded for THIS URL: while the ids in the path change, both still
+  // hold the previous URL's, and a path built from them would undo the
+  // navigation.
   useCanonicalPath(
-    comp && task
+    comp && task && taskCurrent && compLoadedFor === compId
       ? taskPath(compUrlId(comp, compId), comp.name, taskId, task.name)
       : null
   );
@@ -114,7 +120,6 @@ export function TaskDetail() {
   // separate component with its own score fetch) pick up the change too.
   const [resultsRefresh, setResultsRefresh] = useState(0);
   const [replayAvailable, setReplayAvailable] = useState(false);
-  const [submitOpen, setSubmitOpen] = useState(false);
 
   // The comp, for the admin check and the comp name in the trail. Non-critical
   // and deliberately its own request: it used to run only after the task
@@ -130,7 +135,10 @@ export function TaskDetail() {
           param: { comp_id: compId },
         });
         if (!cancelled && res.ok) {
-          setComp((await res.json()) as unknown as CompDetailData);
+          const body = (await res.json()) as unknown as CompDetailData;
+          if (cancelled) return;
+          setComp(body);
+          setCompLoadedFor(compId);
         }
       } catch {
         // Degrade gracefully — no admin features.
@@ -156,11 +164,11 @@ export function TaskDetail() {
     });
   }, [location.hash, isAdmin, task, comp, compId, taskId, navigate]);
 
-  const canUploadOnBehalf = useCanUploadOnBehalf(
-    compId ?? "",
-    Boolean(comp?.open_igc_upload),
-    isAdmin
-  );
+  // Submitting is a page of its own (/submit), not a dialog over this one:
+  // see the overlays rule in CLAUDE.md. The comp and task go in the URL — a
+  // hidden comp's share key with the comp — so a reload or a shared link
+  // lands on the same form, and Back comes back here.
+  const submitHref = submitTrackPath(compUrlId(comp, compId), taskId);
 
   // Fetched ONCE here and handed down, rather than in each consumer: the
   // weather section and the route views both want it, and the endpoint can
@@ -267,18 +275,18 @@ export function TaskDetail() {
           share, map, replay, analysis — is a uniform outline cluster, because
           those are places to go rather than things to do. */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {/* Mount-gated: the dialog's contents still depend on who is asking
-            (the on-behalf picker), and the server renders this page for
-            anyone, so the markup must settle after hydration rather than
-            before. The button itself no longer depends on a session —
+        {/* Mount-gated: whether it shows depends on who is asking (an
+            organiser keeps it on a closed or hidden task), and the server
+            renders this page for anyone, so the markup must settle after
+            hydration rather than before. It no longer depends on a session —
             submitting is open to anyone the comp's roster knows. */}
         {/* A hidden comp's share link is for READING a draft: every write
             route refuses anyone but its admins, so no visitor is offered a
             button that can only fail. */}
         {mounted && !isClosed && (!task.submissions_closed || isAdmin) && (!comp?.test || isAdmin) ? (
-          <Button size="sm" onPress={() => setSubmitOpen(true)}>
+          <LinkButton size="sm" href={submitHref}>
             Submit track
-          </Button>
+          </LinkButton>
         ) : null}
         {/* A sentence, not a disabled button: a greyed-out control invites
             tapping and explains nothing. Admins see it AND keep the button,
@@ -355,24 +363,6 @@ export function TaskDetail() {
         ) : null}
       </div>
 
-      {submitOpen ? (
-        <SubmitTrackDialog
-          compId={compId}
-          taskId={taskId}
-          compName={comp?.name}
-          taskName={task.name}
-          canUploadOnBehalf={canUploadOnBehalf}
-          onClose={() => setSubmitOpen(false)}
-          onUploaded={() => {
-            setSubmitOpen(false);
-            // The podium and the "your track is in" line below are a separate
-            // fetch — tell them something changed, or the pilot's own upload
-            // is the one thing the page fails to show them.
-            setResultsRefresh((n) => n + 1);
-          }}
-        />
-      ) : null}
-
       {/* The sections below are cards; the stack owns the rhythm between them
           (SectionHeader no longer carries a margin of its own). */}
       <div className="mt-6 flex flex-col gap-6">
@@ -417,7 +407,7 @@ export function TaskDetail() {
           isClosed={isClosed}
           // A hidden comp takes no submissions from its link's visitors.
           submissionsClosed={(task.submissions_closed || !!comp?.test) && !isAdmin}
-          canUploadOnBehalf={canUploadOnBehalf}
+          submitHref={submitHref}
           refresh={scoresRefresh + resultsRefresh}
           onReplayAvailable={setReplayAvailable}
           initialScore={initial && refresh === 0 ? (initial.score ?? undefined) : undefined}

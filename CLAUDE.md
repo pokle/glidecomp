@@ -419,9 +419,7 @@ These are the standing imperatives. Each links to the reference that explains it
     (task QR), [#814](https://github.com/pokle/glidecomp/issues/814) (task
     diagram), [#815](https://github.com/pokle/glidecomp/issues/815) and
     [#816](https://github.com/pokle/glidecomp/issues/816) (task analysis
-    figures), and the dialogs with text fields:
-    [#820](https://github.com/pokle/glidecomp/issues/820) (submit track on
-    the task page); then [#817](https://github.com/pokle/glidecomp/issues/817)
+    figures); then [#817](https://github.com/pokle/glidecomp/issues/817)
     deletes `FullScreenSheet`, `FormSheet`, `use-back-dismiss` and
     `use-sheet-scroll-reset`. Until then those sheets keep the machinery;
     do not add a new user of any of it.
@@ -495,8 +493,10 @@ These are the standing imperatives. Each links to the reference that explains it
   `src/react/lib/crumbs.ts` rather than inline (the parent crumb is where a page
   *belongs* in the IA, not where the user came from); every Submit-track entry
   point goes through the one `SubmitTrackForm`
-  ([docs/track-submission.md](docs/track-submission.md)) — as the `/submit`
-  page, or wrapped in `SubmitTrackDialog` where comp and task are already known;
+  ([docs/track-submission.md](docs/track-submission.md)), which only the
+  `/submit` page renders — the task and comp pages LINK there with
+  `submitTrackPath()` (`?comp=&task=` / `?comp=`), never open it in a dialog
+  (#820);
   **anything waiting on an API response says
   so** via `src/react/rac/progress.tsx` — `<Loading>` for a fetching section (a
   `role="status"` live region), `<Button isPending pendingLabel="Saving">` for an

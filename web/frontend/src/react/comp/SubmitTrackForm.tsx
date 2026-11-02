@@ -1,13 +1,14 @@
 /**
  * Submitting a track: the three things it takes, and what came of it.
  *
- * One component, two presentations. On `/submit` it is the page — a pilot who
- * has just landed arrives from the homepage knowing nothing but their own
- * name and their file, so all three steps are asked. Opened from a task page
- * it is wrapped in the compact dialog (SubmitTrackDialog), where comp and task
- * are already known and those steps collapse to a line. (The comp page has no
- * task to name yet, so it links to /submit?comp= instead of opening the
- * dialog.)
+ * The `/submit` page (pages/SubmitTrack.tsx) is its only presentation. A pilot
+ * who has just landed arrives from the homepage knowing nothing but their own
+ * name and their file, so all three steps are asked. The comp page links to
+ * `/submit?comp=`, and the task page to `/submit?comp=&task=`, where the task
+ * is already known and that step collapses to a line. The task page used to
+ * open this form in a dialog instead (SubmitTrackDialog, deleted in #820): a
+ * dialog with text fields is the overlay the "no full-screen overlays" rule in
+ * CLAUDE.md retired, and a page gets Back, reload and the keyboard for free.
  *
  * A step that arrives prefilled shows its answer with a Change button rather
  * than disappearing: the commonest failure of a flow like this is filing a
@@ -26,7 +27,7 @@ import { Label } from "@/react/rac/field";
 import { Input } from "@/react/rac/field";
 import { SearchableChoiceList } from "@/react/rac/choice-list";
 import { api } from "../../comp/api";
-import { useUser } from "../lib/user";
+import { useAdminView, useUser } from "../lib/user";
 import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
 import {
   IDENTIFIER_KINDS,
@@ -87,23 +88,7 @@ export interface SubmitTrackResult {
 // importable from here.
 export { igcPilotNameFromText };
 
-export function SubmitTrackForm({
-  prefill,
-  canUploadOnBehalf = false,
-  onUploaded,
-  onDone,
-  compact = false,
-}: {
-  prefill?: SubmitTrackPrefill;
-  /** Signed-in on-behalf rights, unchanged from today. */
-  canUploadOnBehalf?: boolean;
-  /** Fired on every successful upload, so a host page can refresh. */
-  onUploaded?: (result: SubmitTrackResult) => void;
-  /** The dialog's "close"; absent on the page, which has nothing to close. */
-  onDone?: () => void;
-  /** Compact chrome for the dialog presentation. */
-  compact?: boolean;
-}) {
+export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
   const { user } = useUser();
 
   // ── What we are submitting to
@@ -118,16 +103,15 @@ export function SubmitTrackForm({
   const [compId, setCompId] = useState(prefill?.compId ?? "");
   const [taskId, setTaskId] = useState(prefill?.taskId ?? "");
   // Whether the task list is on screen. It starts closed ONLY when the caller
-  // already named the task — the dialog on a comp or task page, where the flow
-  // is a two-field form and a list of one is noise. Once open it stays open;
-  // nothing the pilot does in the list closes it.
+  // already named the task — the task page's link, where the pilot has just
+  // been looking at that task and a list of one is noise. Once open it stays
+  // open; nothing the pilot does in the list closes it.
   const [editingTask, setEditingTask] = useState(!prefill?.taskId);
 
   // ── Who it is for
   const [identifierKind, setIdentifierKind] = useState<IdentifierKind>("email");
   const [identifierValue, setIdentifierValue] = useState("");
   const [onBehalfOf, setOnBehalfOf] = useState(SELF);
-  const [pilots, setPilots] = useState<PilotListEntry[]>([]);
   // Which registration in this comp the signed-in pilot is (or must pick).
   // Null while unknown — which is not the same as "new", and must never be
   // rendered as though it were.
@@ -211,7 +195,7 @@ export function SubmitTrackForm({
     const wantComp = prefill?.compId;
     const wantTask = prefill?.taskId;
     if (!wantComp || !wantTask) return;
-    if (prefill?.compName && prefill?.taskName) return; // the dialog knows both
+    if (prefill?.compName && prefill?.taskName) return; // the caller named both
     let cancelled = false;
     (async () => {
       try {
@@ -247,8 +231,7 @@ export function SubmitTrackForm({
     };
   }, [prefill?.compId, prefill?.taskId, prefill?.compName, prefill?.taskName]);
 
-  // A signed-in pilot's own identity, and the on-behalf roster when they have
-  // the right to use it. Both unchanged from the dialog's existing behaviour.
+  // A signed-in pilot's own identity.
   useEffect(() => {
     if (!user) return;
     if (!identityTouched.current) {
@@ -257,17 +240,45 @@ export function SubmitTrackForm({
     }
   }, [user]);
 
+  // Whether this signed-in person may submit for OTHER pilots of the chosen
+  // comp, and the roster they would choose from: its admins always, and a
+  // pilot on the roster when the comp has `open_igc_upload` on. The form
+  // works this out itself rather than being told, because the page is reached
+  // by a link — a reload or a shared URL has nobody to tell it.
+  const [onBehalf, setOnBehalf] = useState<{
+    compId: string;
+    isAdmin: boolean;
+    openIgcUpload: boolean;
+    pilots: PilotListEntry[];
+  } | null>(null);
   useEffect(() => {
-    if (!canUploadOnBehalf || !compId) return;
+    setOnBehalfOf(SELF);
+    if (!user || !compId) {
+      setOnBehalf(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.api.comp[":comp_id"].pilot.$get({
+        const compRes = await api.api.comp[":comp_id"].$get({
           param: { comp_id: compId },
         });
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as { pilots: PilotListEntry[] };
-        if (!cancelled) setPilots(data.pilots);
+        if (!compRes.ok || cancelled) return;
+        const comp = (await compRes.json()) as {
+          is_admin?: boolean;
+          open_igc_upload?: boolean;
+        };
+        const isAdmin = !!comp.is_admin;
+        const openIgcUpload = !!comp.open_igc_upload;
+        let pilots: PilotListEntry[] = [];
+        if (isAdmin || openIgcUpload) {
+          const res = await api.api.comp[":comp_id"].pilot.$get({
+            param: { comp_id: compId },
+          });
+          if (cancelled) return;
+          if (res.ok) pilots = ((await res.json()) as { pilots: PilotListEntry[] }).pilots;
+        }
+        if (!cancelled) setOnBehalf({ compId, isAdmin, openIgcUpload, pilots });
       } catch {
         // Non-fatal: the user can still submit for themselves.
       }
@@ -275,7 +286,14 @@ export function SubmitTrackForm({
     return () => {
       cancelled = true;
     };
-  }, [compId, canUploadOnBehalf]);
+  }, [compId, user]);
+  const actsAsAdmin = useAdminView(!!onBehalf?.isAdmin);
+  const canUploadOnBehalf =
+    !!user &&
+    onBehalf?.compId === compId &&
+    (actsAsAdmin ||
+      (onBehalf.openIgcUpload && onBehalf.pilots.some((p) => p.linked_email === user.email)));
+  const pilots = canUploadOnBehalf ? onBehalf.pilots : [];
 
   // Which registration in this comp is this signed-in pilot? Asked NOW, while
   // they are still choosing a file, because the upload route refuses to guess
@@ -444,7 +462,6 @@ export function SubmitTrackForm({
       }
 
       setResult(uploaded);
-      onUploaded?.(uploaded);
     } catch {
       fail("We could not reach GlideComp. Check your connection and try again.");
     } finally {
@@ -452,8 +469,8 @@ export function SubmitTrackForm({
     }
   }
 
-  // ── The result replaces the form. On the page it stays until the pilot
-  // leaves; the dialog decides for itself whether to close (see the wrapper).
+  // ── The result replaces the form, and stays until the pilot leaves. Its
+  // first action goes to what was made — the pilot's provisional score card.
   if (result) {
     return (
       <TrackAccepted
@@ -463,7 +480,6 @@ export function SubmitTrackForm({
           setFile(null);
           setIgcPilotName(null);
         }}
-        onDone={onDone}
       />
     );
   }
@@ -475,7 +491,6 @@ export function SubmitTrackForm({
       <StepBox
         n={1}
         title="Which task did you fly?"
-        compact={compact}
         answered={
           !editingTask && !!taskId
             ? taskLine(selectedComp, selectedTask, prefill, linkedNames)
@@ -502,7 +517,6 @@ export function SubmitTrackForm({
       <StepBox
         n={2}
         title="Who is the track for?"
-        compact={compact}
         highlight={repairStep === "identity"}
       >
         {user ? (
@@ -599,7 +613,6 @@ export function SubmitTrackForm({
       <StepBox
         n={3}
         title="Your IGC file"
-        compact={compact}
         highlight={repairStep === "file"}
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -632,11 +645,6 @@ export function SubmitTrackForm({
         >
           Submit track
         </Button>
-        {onDone ? (
-          <Button variant="outline" onPress={onDone}>
-            Cancel
-          </Button>
-        ) : null}
       </div>
     </div>
   );

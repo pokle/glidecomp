@@ -44,7 +44,7 @@ export function CompPilotPage() {
   const navigate = useNavigate();
   const { loading } = useUser();
 
-  const { data: comp, notFound } = useSeededResource<CompDetailData>({
+  const { data: comp, notFound, current } = useSeededResource<CompDetailData>({
     ids: [compId],
     seed: null,
     load: ([comp_id]) => api.api.comp[":comp_id"].$get({ param: { comp_id } }),
@@ -85,7 +85,7 @@ export function CompPilotPage() {
   const urlId = comp ? compUrlId(comp, compId) : compId;
 
   useCanonicalPath(
-    comp && (pilot || !pilotId)
+    comp && current && (pilot || !pilotId)
       ? compPilotPath(urlId, comp.name, pilot ? pilot.comp_pilot_id : "new", pilot?.name)
       : null
   );

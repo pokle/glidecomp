@@ -32,6 +32,12 @@ export interface TaskAdminPage {
   notFound: boolean;
   /** Still waiting on a resource or on the session. */
   loading: boolean;
+  /**
+   * Both resources were loaded for the ids the page names now, not for the
+   * URL it was on before — gate `useCanonicalPath` on it (see
+   * `useSeededResource`'s `current`).
+   */
+  current: boolean;
 }
 
 export function useTaskAdminPage(
@@ -44,7 +50,7 @@ export function useTaskAdminPage(
 ): TaskAdminPage {
   const { loading: userLoading } = useUser();
 
-  const { data: comp, notFound: compNotFound } =
+  const { data: comp, notFound: compNotFound, current: compCurrent } =
     useSeededResource<CompDetailData>({
       ids: [compId],
       seed: null,
@@ -52,7 +58,7 @@ export function useTaskAdminPage(
       refresh,
     });
 
-  const { data: task, notFound: taskNotFound } =
+  const { data: task, notFound: taskNotFound, current: taskCurrent } =
     useSeededResource<TaskDetailData>({
       ids: [compId, taskId],
       seed: null,
@@ -72,5 +78,6 @@ export function useTaskAdminPage(
     isAdmin,
     notFound: compNotFound || taskNotFound || !compId || !taskId,
     loading: !comp || !task || userLoading,
+    current: compCurrent && taskCurrent,
   };
 }
