@@ -20,12 +20,32 @@ import { SettingsForm } from "@/react/components/SettingsForm";
 import { Button } from "@/react/rac/button";
 import { NumberField } from "@/react/rac/field";
 import { api } from "@/comp/api";
-import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { CheckList, ChoiceList } from "@/react/rac/choice-list";
 import { SwitchField, SwitchList } from "@/react/rac/switch";
 import type { ScoringFormat, SeriesScoring } from "../types";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
+
+/**
+ * The server's name for each field → the field's `name` on this page, so a
+ * refusal lands under the field it is about. The GAP parameters travel inside
+ * `gap_params` under the engine's names; the fields above them are named as
+ * the API names them already.
+ */
+const SERVER_FIELDS: Record<string, string> = {
+  "gap_params.nominalDistance": "nominal_distance",
+  "gap_params.nominalTime": "nominal_time",
+  "gap_params.minimumDistance": "minimum_distance",
+  "gap_params.jumpTheGunFactor": "jtg_factor",
+  "gap_params.jumpTheGunMaxSeconds": "jtg_max",
+  "gap_params.essNotGoalFactor": "ess_not_goal",
+  "gap_params.useLeading": "use_leading",
+  "gap_params.useArrival": "use_arrival",
+  "gap_params.useDistanceDifficulty": "use_difficulty",
+  "gap_params.leadingTimeRatio": "leading_time_ratio",
+  "gap_params.distanceOrigin": "distance_origin",
+  "gap_params.hgClass2Classes": "class2_classes",
+};
 
 export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const wing: "hg" | "pg" = comp.category === "pg" ? "pg" : "hg";
@@ -53,8 +73,6 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const [essNotGoal, setEssNotGoal] = useState(init.essNotGoal);
   // FAI HG Class 2 (S7F §11, issue #601).
   const [class2Classes, setClass2Classes] = useState<string[]>(init.class2Classes);
-
-  const [saving, setSaving] = useState(false);
 
   // Dirty = any field differs from its first-render value. One snapshot
   // rather than fourteen comparisons; NaN survives the JSON round-trip as
@@ -100,31 +118,22 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     setEssNotGoal(d.essNotGoal);
   }
 
-  async function save() {
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].$patch({
-        param: { comp_id: compId },
-        json: scoringPatch(snapshot, comp) as never,
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to update competition");
-        return;
-      }
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <SettingsPage crumbs={underCompSettings(compId, comp.name)} title="Scoring">
-      <SettingsForm onSave={save} saving={saving} dirty={dirty}>
+      <SettingsForm
+        dirty={dirty}
+        fieldNames={SERVER_FIELDS}
+        onSubmit={() =>
+          api.api.comp[":comp_id"].$patch({
+            param: { comp_id: compId },
+            json: scoringPatch(snapshot, comp) as never,
+          })
+        }
+        onSuccess={onSaved}
+      >
         <ChoiceList
           label="Scoring format"
+          name="scoring_format"
           value={scoringFormat}
           onChange={(v) => setScoringFormat(v as ScoringFormat)}
           options={[
@@ -140,6 +149,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
           <div className="flex flex-col gap-2">
             <ChoiceList
               label="Series scoring"
+              name="series_scoring"
               value={seriesScoring}
               onChange={(v) => setSeriesScoring(v as SeriesScoring)}
               options={[
@@ -151,6 +161,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
             {seriesScoring === "ftv" ? (
               <ChoiceList
                 label="FTV discard fraction"
+                name="ftv_factor"
                 value={ftvFactorPct}
                 onChange={setFtvFactorPct}
                 options={[
@@ -170,6 +181,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
         {scoringFormat !== "open_distance" && wing === "hg" ? (
           <CheckList
             label="FAI Class 2 classes"
+            name="class2_classes"
             value={class2Classes}
             onChange={setClass2Classes}
             options={comp.pilot_classes.map((c) => ({ value: c, label: c }))}
@@ -223,6 +235,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               </div>
               <NumberField
                 label="Nominal distance (km)"
+                name="nominal_distance"
                 minValue={0}
                 step={1}
                 formatOptions={{ useGrouping: false }}
@@ -233,6 +246,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               />
               <NumberField
                 label="Nominal time (min)"
+                name="nominal_time"
                 minValue={0}
                 step={1}
                 formatOptions={{ useGrouping: false }}
@@ -241,6 +255,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               />
               <NumberField
                 label="Minimum distance (km)"
+                name="minimum_distance"
                 minValue={0}
                 step={0.1}
                 formatOptions={{ useGrouping: false }}
@@ -250,6 +265,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
 
               <NumberField
                 label="Jump-the-gun: seconds per penalty point (HG)"
+                name="jtg_factor"
                 minValue={0.1}
                 step={0.1}
                 formatOptions={{ useGrouping: false }}
@@ -259,6 +275,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               />
               <NumberField
                 label="Jump-the-gun: maximum seconds early (HG)"
+                name="jtg_max"
                 minValue={0}
                 step={1}
                 formatOptions={{ useGrouping: false }}
@@ -268,6 +285,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               />
               <NumberField
                 label="ESS but not goal: points kept (%, HG)"
+                name="ess_not_goal"
                 minValue={0}
                 maxValue={100}
                 step={1}
@@ -279,16 +297,19 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
 
               <SwitchList>
                 <SwitchField
+                  name="use_leading"
                   checked={useLeading}
                   onChange={setUseLeading}
                   label="Leading (departure) points"
                 />
                 <SwitchField
+                  name="use_arrival"
                   checked={useArrival}
                   onChange={setUseArrival}
                   label="Arrival points (HG only)"
                 />
                 <SwitchField
+                  name="use_difficulty"
                   checked={useDifficulty}
                   onChange={setUseDifficulty}
                   label="Distance difficulty (HG only)"
@@ -298,6 +319,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
 
               <NumberField
                 label="Leading-time ratio (%)"
+                name="leading_time_ratio"
                 minValue={0}
                 maxValue={26}
                 step={0.5}
@@ -312,6 +334,7 @@ export function ScoringSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               />
               <ChoiceList
                 label="Distance origin"
+                name="distance_origin"
                 value={distanceOrigin}
                 onChange={(v) => setDistanceOrigin(v as "takeoff" | "start")}
                 options={[

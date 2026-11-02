@@ -12,10 +12,9 @@ import { TextField as AriaTextField } from "react-aria-components";
 import { SettingsPage } from "@/react/components/SettingsPage";
 import { SettingsForm } from "@/react/components/SettingsForm";
 import { api } from "@/comp/api";
-import { toast } from "@/react/lib/toast";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { SearchableChoiceList } from "@/react/rac/choice-list";
-import { Description, Label, TextArea } from "@/react/rac/field";
+import { Description, FieldError, Label, TextArea } from "@/react/rac/field";
 import { CategoryField, NameField } from "../fields";
 import type { SettingsGroupProps } from "./CompSettingsIndex";
 
@@ -49,7 +48,6 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const [timezone, setTimezone] = useState(comp.timezone ?? "auto");
   const savedNotes = comp.organiser_notes ?? "";
   const [notes, setNotes] = useState(savedNotes);
-  const [saving, setSaving] = useState(false);
 
   const dirty =
     name !== comp.name ||
@@ -57,34 +55,27 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
     timezone !== (comp.timezone ?? "auto") ||
     notes.trim() !== savedNotes.trim();
 
-  async function save() {
-    setSaving(true);
-    try {
-      const res = await api.api.comp[":comp_id"].$patch({
-        param: { comp_id: compId },
-        json: {
-          name: name.trim(),
-          category,
-          timezone: timezone === "auto" ? null : timezone,
-          organiser_notes: notes.trim(),
-        },
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to update competition");
-        return;
-      }
-      onSaved();
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <SettingsPage crumbs={underCompSettings(compId, comp.name)} title="General">
-      <SettingsForm onSave={save} saving={saving} dirty={dirty}>
+      <SettingsForm
+        dirty={dirty}
+        validate={() => ({ name: !name.trim() && "Enter a competition name" })}
+        onSubmit={() =>
+          api.api.comp[":comp_id"].$patch({
+            param: { comp_id: compId },
+            json: {
+              name: name.trim(),
+              category,
+              timezone: timezone === "auto" ? null : timezone,
+              organiser_notes: notes.trim(),
+            },
+          })
+        }
+        onSuccess={onSaved}
+      >
+        {/* Named as the API names them, so a refusal lands under its field.
+            The timezone row has no input to carry a name: a refusal about it
+            is shown beside Save. */}
         <NameField value={name} onChange={setName} />
 
         <CategoryField value={category} onChange={setCategory} />
@@ -100,6 +91,7 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
         />
 
         <AriaTextField
+          name="organiser_notes"
           value={notes}
           onChange={setNotes}
           maxLength={MAX_ORGANISER_NOTES}
@@ -117,6 +109,7 @@ export function GeneralSettings({ compId, comp, onSaved }: SettingsGroupProps) {
             Shown under the organisers on the competition's page. Plain text.
             Up to 4,000 characters.
           </Description>
+          <FieldError />
         </AriaTextField>
       </SettingsForm>
     </SettingsPage>
