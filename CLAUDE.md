@@ -479,6 +479,10 @@ These are the standing imperatives. Each links to the reference that explains it
     `e2e/forms.spec.ts` holds the rules on a phone and a desktop against a
     bench built only in development and in the e2e suite's `e2e`-mode build
     (`/__kit/form`), so a form built on the kit tests only its own fields.
+    A one-control action that is not a form (a grid row's status menu or
+    Upload track, a ⋯ menu item) keeps the same rules through `useAction` +
+    `ActionErrorBanner` in the same file: its refusal sits beside the
+    control, focused — `comp/TaskScoresAdmin.tsx` is the worked example.
   - The analysis page is vanilla TS and shares tokens via `src/analysis.css`,
     which defines its small set of vanilla component classes (`.btn*`, `.input`,
     `.alert*`, `.tabs`, `.command`) — extend those there rather than adding a UI
