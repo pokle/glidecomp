@@ -40,6 +40,12 @@
  *     set from a native listener re-rendered the field before React's handler
  *     ran, put the old value back, and swallowed what was typed.
  *
+ * An action that is not a form — one control, pressed and sent: a row's
+ * status menu, an Upload track button — follows the same rules through
+ * {@link useAction} and {@link ActionErrorBanner}: there is no field, so every
+ * refusal goes beside the control, and only its sentence is read (a `field`
+ * the server sends — the upload routes' `file` — is ignored there).
+ *
  * `validationBehavior="aria"`, deliberately: the browser's own constraint
  * checks would refuse a submit before `validate` runs, in the browser's words
  * rather than ours.
