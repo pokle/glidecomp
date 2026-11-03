@@ -106,7 +106,10 @@ export function ActivitySection({
         ) : (
           <ul className="mt-2 space-y-1">
             {digest.map((entry) => (
-              <li key={entry.audit_id}>
+              // A description can end in a URL (an imported comp's source),
+              // which has nowhere to wrap: it breaks anywhere rather than
+              // push the page sideways on a phone (WCAG 1.4.10).
+              <li key={entry.audit_id} className="wrap-anywhere">
                 <span className="text-muted-foreground">
                   {formatAuditTime(entry.timestamp)}
                 </span>{" "}
@@ -155,7 +158,7 @@ export function ActivitySection({
           ) : (
             <ul className="space-y-1">
               {entries.map((entry) => (
-                <li key={entry.audit_id}>
+                <li key={entry.audit_id} className="wrap-anywhere">
                   <span className="text-muted-foreground">
                     {formatAuditTime(entry.timestamp)}
                   </span>{" "}
