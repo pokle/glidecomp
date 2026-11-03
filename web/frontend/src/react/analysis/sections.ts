@@ -17,29 +17,26 @@
  * separated the field, then the day that shaped it, then where each pilot sat
  * in it. Method last: it is consulted once.
  *
- * The pilot-similarity sheet sits in the same list of boxes on the summary but
+ * The pilot-similarity page sits in the same list of boxes on the summary but
  * is NOT here: it predates these pages, has its own route, and is a tool
  * rather than a section of the report. The summary places it beside the flying
  * style it extends, which is to say ahead of the method note.
+ *
+ * The slug type is derived FROM this list, so a slug named in code — the
+ * metric chart under `metrics`, the thermal map under `thermals`, their routes
+ * in comp-routes.ts — is checked by the compiler against the sections that
+ * really exist.
  */
 
-export type TaskAnalysisSectionSlug =
-  | "strategies"
-  | "weather"
-  | "thermals"
-  | "metrics"
-  | "style"
-  | "method";
-
-export interface TaskAnalysisSectionDef {
-  slug: TaskAnalysisSectionSlug;
+interface SectionEntry {
+  slug: string;
   /** Heading of the section's own page, and the box that leads to it. */
   label: string;
   /** The section page's standfirst, under its heading. Not shown on the box. */
   lede: string;
 }
 
-export const TASK_ANALYSIS_SECTIONS: TaskAnalysisSectionDef[] = [
+export const TASK_ANALYSIS_SECTIONS = [
   {
     slug: "strategies",
     label: "Winning strategies",
@@ -70,7 +67,13 @@ export const TASK_ANALYSIS_SECTIONS: TaskAnalysisSectionDef[] = [
     label: "How this was measured",
     lede: "Who could not be analysed, how the field is compared, and what each metric means.",
   },
-];
+] as const satisfies readonly SectionEntry[];
+
+export type TaskAnalysisSectionSlug = (typeof TASK_ANALYSIS_SECTIONS)[number]["slug"];
+
+export interface TaskAnalysisSectionDef extends SectionEntry {
+  slug: TaskAnalysisSectionSlug;
+}
 
 export function findTaskAnalysisSection(
   slug: string | undefined

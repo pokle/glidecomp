@@ -19,7 +19,7 @@ import { SectionHeader } from "../components/SectionHeader";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button } from "@/react/rac/button";
 import { TextField } from "@/react/rac/field";
-import { Form, FormErrorBanner, SubmitButton, type SubmitResponse } from "@/react/rac/form";
+import { Form, FormErrorBanner, SubmitButton, refusal } from "@/react/rac/form";
 import { fetchTaskByCodeWithRaw } from "../../analysis/xctsk-fetch";
 import { underTaskRoute } from "../lib/crumbs";
 import { taskRouteXContestPath } from "../lib/slug";
@@ -29,14 +29,6 @@ import { routeEditorGate } from "../comp/RouteEditorGate";
 
 /** The task code field's name, as the kit form knows it. */
 const CODE = "code";
-
-/** XContest's refusal, in the shape the kit form reads, under the code field. */
-function refusal(message: string): SubmitResponse {
-  return new Response(JSON.stringify({ error: message, field: CODE }), {
-    status: 422,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 export function TaskRouteXContestPage() {
   const editor = useRouteEditor();
@@ -74,7 +66,9 @@ function XContestForm({ editor }: { editor: RouteEditorState }) {
           } catch (err) {
             // A request that never got an answer is the kit form's to say.
             if (err instanceof TypeError) throw err;
-            return refusal(err instanceof Error ? err.message : "Failed to load XContest task");
+            return refusal(err instanceof Error ? err.message : "Failed to load XContest task", {
+              field: CODE,
+            });
           }
         }}
         onSuccess={async () => {

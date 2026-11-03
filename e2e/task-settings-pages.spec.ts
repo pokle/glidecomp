@@ -37,6 +37,7 @@
  * designed for.
  */
 import { test, expect, PHONE_ONLY, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { e2eCompName } from "./fixtures/stack";
 
 const ADMIN_USER = {
@@ -115,16 +116,18 @@ test.afterAll(async ({ playwright }) => {
   await api.dispose();
 });
 
-test("a visitor gets the admin-only notice, and a made-up editor 404s", async ({
+test("a visitor is sent to the task, and a made-up editor 404s", async ({
   page,
 }) => {
-  // Before any admin test reshapes the task: a signed-in non-admin reaches the
-  // URL but not the settings.
+  // Before any admin test reshapes the task: a signed-in non-admin reaching
+  // the URL is sent to the task page, where the task is to read.
   await devLogin(page, VISITOR_USER);
   await page.goto(`/comp/${compId}/task/${taskId}/settings`);
-  await expect(
-    page.getByText("Task settings are for the competition’s organisers.")
-  ).toBeVisible();
+  await expect(page.getByText("That page is for the competition’s organisers.")).toBeVisible({ timeout: 20_000 });
+  await expect(page).not.toHaveURL(/\/settings/);
+  // The route editor's pages send them the same way.
+  await page.goto(`/comp/${compId}/task/${taskId}/route`);
+  await expect(page).not.toHaveURL(/\/route/, { timeout: 20_000 });
 
   // Settings is flat — it has no sub-pages — so anything below it is a dead
   // URL, not an empty page.
@@ -293,16 +296,6 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   // something there.
   await devLogin(page, ADMIN_USER);
 
-  const noHorizontalOverflow = async (where: string) => {
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth
-    );
-    expect(
-      overflow,
-      `${where} must not scroll sideways on a phone`
-    ).toBeLessThanOrEqual(0);
-  };
-
   await page.goto(`/comp/${compId}/task/${taskId}/settings`);
   await expect(
     page.getByRole("heading", { name: "Settings", exact: true })
@@ -312,7 +305,7 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   await expect(page.getByRole("main").getByRole("gridcell").first()).toBeVisible({
     timeout: 15_000,
   });
-  await noHorizontalOverflow("task settings");
+  await expectNoSidewaysScroll(page, "task settings");
 
   // The Danger-zone row is comfortably tappable.
   const deleteRow = page.getByRole("button", { name: "Delete task" });
@@ -327,7 +320,7 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   await expect(
     page.getByRole("heading", { name: "Route", exact: true })
   ).toBeVisible();
-  await noHorizontalOverflow("the route editor");
+  await expectNoSidewaysScroll(page, "the route editor");
 
   // Its Save is sticky to the bottom of the VIEWPORT — sticky in the page's
   // flow, never fixed (the overlays rule) — so it is reachable without
@@ -349,10 +342,10 @@ test("the whole journey fits a phone: no horizontal overflow", { tag: PHONE_ONLY
   await expect(
     page.getByRole("heading", { name: "Load from XContest", exact: true })
   ).toBeVisible();
-  await noHorizontalOverflow("Load from XContest");
+  await expectNoSidewaysScroll(page, "Load from XContest");
   await page.goto(`/comp/${compId}/task/${taskId}/route/add-waypoint?at=-36.9,148.1`);
   await expect(page.getByRole("heading", { name: "Add waypoint", exact: true })).toBeVisible();
-  await noHorizontalOverflow("Add waypoint");
+  await expectNoSidewaysScroll(page, "Add waypoint");
 });
 
 /**

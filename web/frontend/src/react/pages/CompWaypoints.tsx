@@ -65,7 +65,7 @@ import {
 } from "@/react/components/MasterDetail";
 import { Loading } from "@/react/rac/progress";
 import { SearchField } from "@/react/rac/field";
-import { Form, FormErrorBanner, SubmitButton, type SubmitResponse } from "@/react/rac/form";
+import { Form, FormErrorBanner, SubmitButton, refusal } from "@/react/rac/form";
 import { api } from "../../comp/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../lib/confirm";
@@ -73,6 +73,7 @@ import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { underComp } from "../lib/crumbs";
 import {
   compAltitudeReviewPath,
+  compPath,
   compWaypointPath,
   compWaypointsMapPath,
   compWaypointsNewPath,
@@ -85,11 +86,13 @@ import { WaypointList } from "../comp/WaypointList";
 import { WaypointDeviceExport } from "../comp/WaypointDeviceExport";
 import { CompSectionNav } from "../comp/CompSectionNav";
 import {
-  FROM_WAYPOINTS,
+  WAYPOINTS_DISCARD,
   useAltitudeCheck,
   useWaypointsEditor,
   waypointCameras,
 } from "../comp/use-waypoints-editor";
+import { DraftNotices } from "../comp/DraftNotices";
+import { openedHere } from "../lib/leave";
 import {
   cleanCodes,
   fromRow,
@@ -109,14 +112,6 @@ const RouteMap = lazy(() => import("../comp/RouteMap"));
  * would then be remembered under a name nothing reads back.
  */
 const MAP_LABEL = "map";
-
-/** A refusal the page decided itself, in the shape the kit form reads. */
-function refusal(message: string): SubmitResponse {
-  return new Response(JSON.stringify({ error: message }), {
-    status: 422,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 export function CompWaypoints() {
   const editor = useWaypointsEditor();
@@ -170,7 +165,7 @@ export function CompWaypoints() {
   });
 
   /** Into one of the editor's pages, marked so it can come back here by Back. */
-  const fromHere = { state: { [FROM_WAYPOINTS]: true } };
+  const fromHere = openedHere();
 
   async function loadFile(file: File | null) {
     if (!file) return;
@@ -216,15 +211,22 @@ export function CompWaypoints() {
     }
   }
 
+  /**
+   * Throw the edits away and leave for the competition, as the route
+   * editor's Cancel leaves for the task: Back and a reload keep the draft,
+   * so this is the way to discard it on purpose — and staying on the page
+   * afterwards only looked as if nothing had happened.
+   */
   async function discard() {
     const ok = await confirm({
-      title: "Discard changes?",
-      message: "Every change since the last save will be lost.",
+      ...WAYPOINTS_DISCARD,
       confirmLabel: "Discard changes",
       cancelLabel: "Keep editing",
       destructive: true,
     });
-    if (ok) editor.discard();
+    if (!ok) return;
+    editor.discard();
+    navigate(compPath(urlId, compName));
   }
 
   const mapFallback = (
@@ -296,21 +298,27 @@ export function CompWaypoints() {
         </div>
       ) : null}
 
-      {/* The saved file moved under a draft with edits in it: another
-          organiser (or another tab) saved meanwhile. The draft is the
-          reader's work and stays; Save would replace what they saved. */}
-      {isAdmin && editor.serverChanged ? (
-        <Alert className="mb-4">
+      {isAdmin ? (
+        <DraftNotices
+          className="mb-4"
+          serverChanged={editor.serverChanged}
+          notKept={editor.notKept}
+          changed="The saved waypoints have changed since these edits were started. Saving replaces them with the list below."
+        />
+      ) : null}
+      {/* Not "this competition has no waypoints" (#481): they failed to
+          arrive, and an empty editor's Save would replace the real ones. */}
+      {editor.loadError ? (
+        <Alert variant="destructive" className="mb-4">
           <AlertDescription>
-            The saved waypoints have changed since these edits were started.
-            Saving replaces them with the list below.
+            Could not load the waypoints. Reload the page to try again.
           </AlertDescription>
         </Alert>
       ) : null}
 
       {editor.loading ? (
         <Loading className="text-sm">Loading waypoints…</Loading>
-      ) : (
+      ) : editor.loadError ? null : (
         <MasterDetail
           detailLabel={MAP_LABEL}
           fold={mapFold}
@@ -470,7 +478,7 @@ export function CompWaypoints() {
 
           A kit form, so a refused save says why beside the button rather than
           in a toast. */}
-      {isAdmin && !editor.loading ? (
+      {isAdmin && !editor.loading && !editor.loadError ? (
         <Form
           className="sticky bottom-0 z-20 mt-6 border-t border-border bg-background/95 pt-3 pb-gutter-safe backdrop-blur-sm print:hidden"
           onSubmit={async () => {
@@ -493,6 +501,7 @@ export function CompWaypoints() {
               json: { waypoints },
             });
           }}
+          onPendingChange={editor.setSaving}
           onSuccess={() => {
             const waypoints = saving.current;
             editor.markSaved(waypoints);

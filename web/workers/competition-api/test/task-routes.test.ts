@@ -57,7 +57,7 @@ describe("POST /api/comp/:comp_id/task", () => {
     });
     expect(res.status).toBe(400);
     const data = (await res.json()) as { error: string; field?: string };
-    expect(data.error).toContain("novice");
+    expect(data.error).toBe(`"novice" is not one of this competition's pilot classes (open).`);
     // Named, so the new-task page's form shows it under the classes field.
     expect(data.field).toBe("pilot_classes");
   });
@@ -243,7 +243,7 @@ describe("PATCH /api/comp/:comp_id/task/:task_id", () => {
     );
     expect(res.status).toBe(400);
     const data = (await res.json()) as { error: string; field?: string };
-    expect(data.error).toContain("novice");
+    expect(data.error).toBe(`"novice" is not one of this competition's pilot classes (open).`);
     // So the task's settings page puts it under the Pilot classes field.
     expect(data.field).toBe("pilot_classes");
   });

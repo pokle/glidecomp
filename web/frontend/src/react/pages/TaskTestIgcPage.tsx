@@ -17,11 +17,11 @@
  */
 import { useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { underTask } from "../lib/crumbs";
-import { compUrlId, idFromSegment, taskTestIgcPath } from "../lib/slug";
-import { useCanonicalPath } from "../lib/use-canonical-path";
+import { idFromSegment, taskPath, taskTestIgcPath } from "../lib/slug";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
 import { ForgeIgcForm } from "../comp/ForgeIgcForm";
 
@@ -35,33 +35,28 @@ export function TaskTestIgcPage() {
   const compId = idFromSegment(compParam ?? "");
   const taskId = idFromSegment(taskParam ?? "");
 
-  const { comp, task, isAdmin, notFound, loading } = useTaskAdminPage(
+  // `urlId` is the id every link carries: a hidden comp's share key rides
+  // along. The address bar settles only once both resources are this URL's.
+  const { comp, task, urlId, isAdmin, notFound, loading } = useTaskAdminPage({
     compId,
     taskId,
-    (t) => `GlideComp - ${t.name} test IGC`
-  );
-  // The id every link carries: a hidden comp's share key rides along.
-  const urlId = compUrlId(comp, compId);
-
-  useCanonicalPath(
-    comp && task ? taskTestIgcPath(urlId, comp.name, taskId, task.name) : null
-  );
+    title: (t) => `GlideComp - ${t.name} test IGC`,
+    path: taskTestIgcPath,
+  });
 
   if (notFound) return <NotFound title="Task not found" />;
   if (loading || !comp || !task) return <Loading>Loading…</Loading>;
 
-  const crumbs = underTask(urlId, comp.name, taskId, task.name);
-  if (!isAdmin || !task.xctsk) {
+  if (!isAdmin) return <OrganisersOnly to={taskPath(urlId, comp.name, taskId, task.name)} />;
+  if (!task.xctsk) {
+    // The task page offers this only once there is a route: there is nothing
+    // to fly without one.
     return (
       <div>
-        <Breadcrumbs items={crumbs} current={TITLE} />
+        <Breadcrumbs items={underTask(urlId, comp.name, taskId, task.name)} current={TITLE} />
         <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
         <p className="mt-2 text-muted-foreground">
-          {!isAdmin
-            ? "Creating a test IGC is for the competition’s organisers."
-            : // The task page offers this only once there is a route: there
-              // is nothing to fly without one.
-              "This task has no route yet, so there is no flight to make."}
+          This task has no route yet, so there is no flight to make.
         </p>
       </div>
     );

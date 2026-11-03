@@ -154,7 +154,10 @@ describe("POST /api/comp", () => {
     });
     expect(res.status).toBe(400);
     const data = (await res.json()) as { error: string; field?: string };
-    expect(data.error).toContain("default_pilot_class");
+    // In the organiser's words: the class, the classes there are, and why.
+    expect(data.error).toBe(
+      `"novice" is not one of this competition's pilot classes (open), so it cannot be the default pilot class.`
+    );
     // Names the input it refuses, so a form can show it under that field.
     expect(data.field).toBe("default_pilot_class");
   });
@@ -270,7 +273,10 @@ describe("POST /api/comp", () => {
     });
     expect(res.status).toBe(400);
     const data = (await res.json()) as { error: string; field?: string };
-    expect(data.error).toBe("default_pilot_class must be one of pilot_classes");
+    // Against the classes as they will be after this save, not before it.
+    expect(data.error).toBe(
+      `"sport" is not one of this competition's pilot classes (open), so it cannot be the default pilot class.`
+    );
     // So the settings page puts it under the Default pilot class field.
     expect(data.field).toBe("default_pilot_class");
   });
@@ -609,13 +615,76 @@ describe("PATCH /api/comp/:comp_id", () => {
     expect(rows.results.length).toBe(2);
   });
 
-  test("rejects admin_emails with no registered users", async () => {
-    const compId = await createComp();
+  test("rejects admin_emails with no registered users, and saves nothing", async () => {
+    // The Access page saves its switches, its close date and its admin list
+    // in ONE request. The admin list used to be checked only after the comp
+    // row and its audit lines were written, so a list naming nobody answered
+    // 500 with half the form saved.
+    const compId = await createComp({ close_date: "2030-01-01" });
+    const id = decodeId(env.SQIDS_ALPHABET, compId)!;
+    const row = () =>
+      env.DB.prepare(
+        "SELECT test, close_date, open_igc_upload, open_registration, settings_reviewed FROM comp WHERE comp_id = ?"
+      )
+        .bind(id)
+        .first();
+    const admins = () =>
+      env.DB.prepare("SELECT user_id FROM comp_admin WHERE comp_id = ? ORDER BY user_id")
+        .bind(id)
+        .all();
+    const rowBefore = await row();
+    const adminsBefore = (await admins()).results;
+    const before = await lastAuditId();
 
     const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      test: true,
+      open_registration: false,
+      open_igc_upload: false,
+      close_date: "2031-06-30",
       admin_emails: ["nobody@test.com"],
     });
-    expect(res.status).toBe(500); // updateAdmins throws
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string; field?: string };
+    expect(data.error).toBe(
+      "No GlideComp account uses that address. At least one admin must have a GlideComp account."
+    );
+    // So the Access page puts it under the Admin emails field.
+    expect(data.field).toBe("admin_emails");
+
+    // Nothing written: not the switches, not the close date, not the admins,
+    // and not a line in the public log claiming any of it.
+    expect(await row()).toEqual(rowBefore);
+    expect((await admins()).results).toEqual(adminsBefore);
+    expect(await lastAuditId()).toBe(before);
+
+    // More than one address, none of them an account: the same, in the plural.
+    const many = await authRequest("PATCH", `/api/comp/${compId}`, {
+      admin_emails: ["nobody@test.com", "nobody-else@test.com"],
+    });
+    expect(many.status).toBe(400);
+    expect(((await many.json()) as { error: string }).error).toBe(
+      "No GlideComp account uses any of these addresses. At least one admin must have a GlideComp account."
+    );
+  });
+
+  test("an admin list replaces the old one, and the log counts who was written", async () => {
+    const compId = await createComp();
+    const id = decodeId(env.SQIDS_ALPHABET, compId)!;
+    const before = await lastAuditId();
+
+    // One address is an account and one is not: the account becomes the only
+    // admin, and the audit line counts the admins the comp now HAS.
+    const res = await authRequest("PATCH", `/api/comp/${compId}`, {
+      admin_emails: ["admin2@test.com", "nobody@test.com"],
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { admins: Array<{ email: string }> };
+    expect(data.admins.map((a) => a.email)).toEqual(["admin2@test.com"]);
+    const rows = await env.DB.prepare("SELECT user_id FROM comp_admin WHERE comp_id = ?")
+      .bind(id)
+      .all();
+    expect(rows.results.length).toBe(1);
+    expect(await compAuditLines(before)).toContain("Updated admin list (1 admin)");
   });
 
   test("rejects inconsistent default_pilot_class", async () => {
@@ -729,18 +798,25 @@ describe("PATCH /api/comp/:comp_id", () => {
     });
     expect(res.status).toBe(400);
     const refusal = (await res.json()) as { error: string; field?: string };
-    expect(refusal.error).toContain("rigid");
+    // In the words of the Scoring page's "FAI Class 2 classes" field.
+    expect(refusal.error).toBe(
+      `"rigid" is not one of this competition's pilot classes (open), so it cannot fly FAI Class 2.`
+    );
     // Named, so the settings page puts it under the Class 2 field.
     expect(refusal.field).toBe("gap_params.hgClass2Classes");
 
+    // The create route asks the same question in the same words.
     const created = await authRequest("POST", "/api/comp", {
       name: "C2", category: "hg", pilot_classes: ["open"],
       gap_params: {
         nominalTime: 5400, minimumDistance: 5000, scoring: "HG",
-        useLeading: true, useArrival: true, hgClass2Classes: ["floater"],
+        useLeading: true, useArrival: true, hgClass2Classes: ["floater", "rigid"],
       },
     });
     expect(created.status).toBe(400);
+    expect(((await created.json()) as { error: string }).error).toBe(
+      `"floater" and "rigid" are not among this competition's pilot classes (open), so they cannot fly FAI Class 2.`
+    );
   });
 
   // ── The first settings save on an untouched comp (issue #633) ────────────

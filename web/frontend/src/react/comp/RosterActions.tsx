@@ -41,8 +41,7 @@ import {
   Form,
   FormErrorBanner,
   SubmitButton,
-  UNREACHABLE,
-  readRefusal,
+  useFormAction,
   useFormState,
 } from "@/react/rac/form";
 import { Menu, MenuItem, MenuTrigger } from "@/react/rac/menu";
@@ -383,8 +382,8 @@ function ImportBlocked({
   onUseFallback: () => void;
   onClassesAdded: (classes: string[]) => void;
 }) {
-  const { pending, setFormError } = useFormState();
-  const [adding, setAdding] = useState(false);
+  const { pending } = useFormState();
+  const adding = useFormAction();
   const { unknownClasses, noName, noClass, other } = plan.problems;
   const missing = unknownClasses.map((g) => g.cls);
   const quoted = listInWords(missing.map((c) => `"${c}"`));
@@ -394,24 +393,14 @@ function ImportBlocked({
   // audits it and marks the scores stale. A refusal goes where the form's
   // own do, never to a toast.
   const addClasses = async () => {
-    setAdding(true);
-    setFormError(null);
-    try {
-      const classes = [...compClasses, ...missing];
-      const res = await api.api.comp[":comp_id"].$patch({
+    const classes = [...compClasses, ...missing];
+    const res = await adding.run(() =>
+      api.api.comp[":comp_id"].$patch({
         param: { comp_id: compId },
         json: { pilot_classes: classes },
-      });
-      if (!res.ok) {
-        setFormError((await readRefusal(res)).message);
-        return;
-      }
-      onClassesAdded(classes);
-    } catch {
-      setFormError(UNREACHABLE);
-    } finally {
-      setAdding(false);
-    }
+      })
+    );
+    if (res) onClassesAdded(classes);
   };
 
   return (
@@ -436,7 +425,7 @@ function ImportBlocked({
               <Button
                 variant="outline"
                 size="sm"
-                isPending={adding}
+                isPending={adding.pending}
                 pendingLabel="Adding"
                 isDisabled={pending}
                 onPress={() => void addClasses()}
@@ -446,7 +435,7 @@ function ImportBlocked({
               <Button
                 variant="outline"
                 size="sm"
-                isDisabled={pending || adding}
+                isDisabled={pending || adding.pending}
                 onPress={onUseFallback}
               >
                 Put them in "{fallback}"

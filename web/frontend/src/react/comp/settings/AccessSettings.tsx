@@ -21,6 +21,7 @@ import { Label, TextField } from "@/react/rac/field";
 import { DatePicker } from "@/react/rac/date-picker";
 import { api } from "@/comp/api";
 import { toast } from "@/react/lib/toast";
+import { ActionErrorBanner, useAction } from "@/react/rac/form";
 import { underCompSettings } from "@/react/lib/crumbs";
 import { useConfirm } from "@/react/lib/confirm";
 import { bareCompId, compSettingsPath, compUrlId } from "@/react/lib/slug";
@@ -39,7 +40,8 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
   const [openUpload, setOpenUpload] = useState(comp.open_igc_upload ?? true);
   const [closeDate, setCloseDate] = useState(savedCloseDate);
   const [adminsText, setAdminsText] = useState(savedAdmins);
-  const [resetting, setResetting] = useState(false);
+  // A one-press action inside the form: its refusal goes beside it.
+  const reset = useAction();
   const navigate = useNavigate();
   const confirm = useConfirm();
 
@@ -65,31 +67,21 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
       destructive: true,
     });
     if (!confirmed) return;
-    setResetting(true);
-    try {
-      const res = await api.api.comp[":comp_id"]["share-key"].$post({
-        param: { comp_id: compId },
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        toast.error(err.error || "Failed to reset the link");
-        return;
-      }
-      const { share_key } = (await res.json()) as { share_key: string };
-      toast.success("Link reset");
-      navigate(
-        compSettingsPath(
-          compUrlId({ comp_id: bareCompId(comp.comp_id), test: true, share_key }, compId),
-          comp.name,
-          "access"
-        ),
-        { replace: true }
-      );
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setResetting(false);
-    }
+    const res = await reset.run(
+      () => api.api.comp[":comp_id"]["share-key"].$post({ param: { comp_id: compId } }),
+      { fallback: "Failed to reset the link." }
+    );
+    if (!res) return;
+    const { share_key } = (await res.json()) as { share_key: string };
+    toast.success("Link reset");
+    navigate(
+      compSettingsPath(
+        compUrlId({ comp_id: bareCompId(comp.comp_id), test: true, share_key }, compId),
+        comp.name,
+        "access"
+      ),
+      { replace: true }
+    );
   }
 
   return (
@@ -149,11 +141,12 @@ export function AccessSettings({ compId, comp, onSaved }: SettingsGroupProps) {
               variant="outline"
               size="sm"
               onPress={() => void resetLink()}
-              isPending={resetting}
+              isPending={reset.pending}
               pendingLabel="Resetting link"
             >
               Reset link
             </Button>
+            <ActionErrorBanner action={reset} />
             <p className="text-xs text-muted-foreground">
               Every link you’ve shared so far stops working.
             </p>

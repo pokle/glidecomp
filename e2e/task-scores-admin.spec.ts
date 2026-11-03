@@ -22,6 +22,7 @@
  * by checking the server holds nothing new.
  */
 import { test, expect, type APIRequestContext, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL, SUPER_ADMIN } from "./fixtures/stack";
 import { createScoredComp, type ScoredComp } from "./fixtures/scored-comp";
 
@@ -89,13 +90,7 @@ test("the manage list never scrolls sideways, and Add manual flight is in reach"
     .getByRole("heading", { name: "Manage pilots & tracks", exact: true })
     .locator("..");
 
-  const page_ = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-  }));
-  expect(page_.scrollWidth, "the page must not scroll sideways").toBeLessThanOrEqual(
-    page_.innerWidth
-  );
+  await expectNoSidewaysScroll(page);
   const own = await section.evaluate((el) => ({
     scrollWidth: el.scrollWidth,
     clientWidth: el.clientWidth,
@@ -211,7 +206,7 @@ test("manual flight: a missing or refused landing point is said under the field"
   await record.click();
   await expect(landing).toHaveAttribute("aria-invalid", "true");
   await expect(landing).toBeFocused();
-  await expect(page.getByText('Enter the landing point as "latitude, longitude"')).toBeVisible();
+  await expect(page.getByText('Enter the coordinates as "lat, lon"')).toBeVisible();
   expect(sent).toBe(0);
 
   // Typing clears it; the server's refusal of landing_lat lands on the same

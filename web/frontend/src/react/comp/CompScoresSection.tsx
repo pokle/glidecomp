@@ -31,6 +31,7 @@ import {
 } from "../../scores-views";
 import { ScoresSection } from "./ScoresSection";
 import { toast } from "../lib/toast";
+import { useAction, type ActionState } from "@/react/rac/form";
 import { formatRankedScore, formatTaskDate, ordinal } from "../lib/format";
 import { pilotPath } from "../lib/slug";
 import { CompNameProvider, useCompName } from "./comp-name-context";
@@ -55,7 +56,12 @@ export function useCompScores(
   compId: string,
   initialScores?: CompScores,
   initialScoresEtag?: string | null
-): { state: CompScoresState; rescoring: boolean; rescore: () => Promise<void> } {
+): {
+  state: CompScoresState;
+  /** The rescore press: busy, and its refusal for an ActionErrorBanner. */
+  rescoring: ActionState;
+  rescore: () => Promise<void>;
+} {
   const [state, setState] = useState<CompScoresState>(
     initialScores
       ? { kind: "ready", scores: initialScores, etag: initialScoresEtag ?? null }
@@ -65,7 +71,7 @@ export function useCompScores(
   // fetch once per compId. When seeded from SSR, that first fetch is already
   // satisfied; skip it so the first render stays identical to the server.
   const seededRef = useRef(initialScores != null);
-  const [rescoring, setRescoring] = useState(false);
+  const rescoring = useAction();
 
   useEffect(() => {
     if (seededRef.current) {
@@ -102,30 +108,27 @@ export function useCompScores(
    * notice — giving the explicit rescore affordance Tom asked for.
    */
   async function rescore() {
-    setRescoring(true);
-    try {
-      const res = await fetch(`/api/comp/${encodeURIComponent(compId)}/rescore`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        toast.error("Couldn't start the re-score. Please try again.");
-        return;
-      }
-      const refreshed = await fetch(
-        `/api/comp/${encodeURIComponent(compId)}/scores`,
-        { credentials: "include" }
-      );
-      if (refreshed.ok) {
-        const scores = (await refreshed.json()) as CompScores;
-        setState({ kind: "ready", scores, etag: refreshed.headers.get("ETag") });
-      }
-      toast.success("Re-scoring started — scores will refresh shortly.");
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setRescoring(false);
-    }
+    // The scores are re-read inside the action, so the button stays busy
+    // until the now-stale body is showing.
+    const res = await rescoring.run(
+      async () => {
+        const res = await fetch(`/api/comp/${encodeURIComponent(compId)}/rescore`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!res.ok) return res;
+        const refreshed = await fetch(`/api/comp/${encodeURIComponent(compId)}/scores`, {
+          credentials: "include",
+        });
+        if (refreshed.ok) {
+          const scores = (await refreshed.json()) as CompScores;
+          setState({ kind: "ready", scores, etag: refreshed.headers.get("ETag") });
+        }
+        return res;
+      },
+      { fallback: "Couldn't start the re-score. Please try again." }
+    );
+    if (res) toast.success("Re-scoring started — scores will refresh shortly.");
   }
 
   return { state, rescoring, rescore };

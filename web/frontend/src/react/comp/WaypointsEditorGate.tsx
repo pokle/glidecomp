@@ -6,12 +6,12 @@
  * Those pages are the editor's own — one waypoint, Add waypoint, the map at
  * full size, the altitude review — so a visitor is sent to the list, which is
  * the read-only view of the same waypoints, rather than shown an editor they
- * cannot use. That matches the list itself, where a visitor's rows open
- * nothing.
+ * cannot use (components/OrganisersOnly.tsx; signed out, to sign in first).
+ * That matches the list itself, where a visitor's rows open nothing.
  */
 import type { ReactElement } from "react";
-import { Navigate } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Loading } from "@/react/rac/progress";
 import { compWaypointsPath } from "../lib/slug";
 import type { WaypointsEditor } from "./use-waypoints-editor";
@@ -23,7 +23,7 @@ export function waypointsEditorGate(editor: WaypointsEditor): ReactElement | nul
     return <Loading>Loading waypoints…</Loading>;
   }
   if (!editor.isAdmin) {
-    return <Navigate replace to={compWaypointsPath(editor.urlId, editor.compName)} />;
+    return <OrganisersOnly to={compWaypointsPath(editor.urlId, editor.compName)} />;
   }
   if (!editor.draftReady) return <Loading>Loading waypoints…</Loading>;
   return null;

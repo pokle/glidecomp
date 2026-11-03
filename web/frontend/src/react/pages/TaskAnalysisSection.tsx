@@ -71,7 +71,7 @@ export function TaskAnalysisSection() {
   );
 
   // An unknown slug is a dead URL, not an empty section. The SSR Function's
-  // route pattern lists the five, so this is reachable only by a client-side
+  // route pattern lists the six, so this is reachable only by a client-side
   // navigation to a typo'd path.
   if (!section) return <NotFound title="Task analysis section not found" />;
 

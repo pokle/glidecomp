@@ -33,8 +33,9 @@
  * 422 "cannot be analysed") that this hook's plain found/not-found would have
  * to grow branches to express. `PilotScoreDetail` likewise resolves four
  * requests into one derived narrative and distinguishes "scores are still
- * computing" from "no such pilot". `CompWaypoints` fetches two resources in
- * parallel and writes five pieces of state from them.
+ * computing" from "no such pilot". The waypoints editor
+ * (`comp/use-waypoints-editor.ts`) fetches two resources in parallel and tells
+ * a comp it could not find from waypoints that did not arrive.
  *
  * Those are different questions, not the same question written differently, and
  * folding them in would buy a shared name at the cost of a hook that branches

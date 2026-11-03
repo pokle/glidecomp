@@ -5,7 +5,7 @@
  * A deliberate FORK rather than a shared component with an `editable` prop.
  * The read-only listing is server-rendered on the public task page, carries the
  * day's leg wind, and is a RAC `Table`; this one is a RAC `GridList` whose rows
- * open a sheet and, in Reorder mode, hold buttons — which an `<a>` row cannot
+ * open the turnpoint's page and, in Reorder mode, hold buttons — which an `<a>` row cannot
  * legally contain. They present the same facts in the same order (role and Exit
  * badge, the turnpoint with its radius and elevation under it, the optimised leg
  * into it, closed by the optimised total) and diverge only where editing needs

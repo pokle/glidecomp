@@ -19,38 +19,36 @@
  * overlays rule in CLAUDE.md) and means "not now": the draft stays, and
  * opening the route again finds it. A reload finds it too.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import type { WaypointFileRecord, XCTask } from "@glidecomp/engine";
 import { api } from "../../comp/api";
 import { useConfirm } from "../lib/confirm";
 import { bareCompId, compUrlId, idFromSegment, taskRoutePath } from "../lib/slug";
 import { toast } from "../lib/toast";
-import { useDraft } from "../lib/use-draft";
+import { useDraftEditor } from "../lib/draft-editor";
+import { useLeave } from "../lib/leave";
 import { useMounted } from "../lib/use-mounted";
 import { useTaskAdminPage } from "../lib/use-task-admin-page";
-import { useUnsavedChangesGuard } from "../lib/use-unsaved-changes-guard";
 import { useUser } from "../lib/user";
 import { utcToZonedHHMM, zonedToUtcHHMM, zoneNameWithOffset } from "../lib/time";
 import { fetchWithRetry, type CompDetailData, type TaskDetailData } from "./types";
 import {
+  freshDraft,
   hasTurnpoints,
-  isDirty,
   loadTask,
-  resolveDraft,
   routeDraft,
-  savedKey,
+  routeModel,
   type RouteDraft,
   type RouteDraftContext,
 } from "./route-draft";
 
-/**
- * How a page was reached, set on the `navigate()` state that opens it. A page
- * leaves by a real Back when the flag is there — the route then returns as it
- * was left, scroll and all — and by replacing itself with the route when it
- * is not (a reload of a bookmark, a link opened elsewhere).
- */
-export const FROM_ROUTE = "fromRoute";
+/** The question asked before the route editor is left with unsaved edits. */
+export const ROUTE_DISCARD = {
+  title: "Discard route changes?",
+  message: "This route has unsaved changes. Leaving will discard them.",
+};
+
 /**
  * Set by "Add turnpoint" on the turnpoint page it opens: the Type the new
  * turnpoint started as. That page is then "Add turnpoint", and shows the goal
@@ -99,12 +97,20 @@ export interface RouteEditorState {
   /** The saved waypoints, verbatim. */
   savedWaypoints: WaypointFileRecord[];
   wpLoading: boolean;
+  /**
+   * The competition's waypoints did not load, after retries. Not "none":
+   * Save writes the saved ones back with any made here, so it must not run
+   * on a list that only failed to arrive.
+   */
+  wpError: boolean;
   /** The editor's working copy: the stored draft, or the saved route. */
   draft: RouteDraft;
   /** The working copy differs from the saved route. */
   dirty: boolean;
-  /** The saved route changed after this draft was started (see resolveDraft). */
+  /** The saved route changed after this draft was started (see resolveStoredDraft). */
   serverChanged: boolean;
+  /** The browser is not storing the draft: a reload will lose it. */
+  notKept: boolean;
   /** Change the draft; the change is in storage before this returns. */
   update: (change: (d: RouteDraft) => RouteDraft) => void;
   /** Forget the draft: back to the saved route. */
@@ -116,9 +122,11 @@ export interface RouteEditorState {
   markSaved: () => void;
   /** Waypoints just written to the competition (before the route itself). */
   addSavedWaypoints: (records: WaypointFileRecord[]) => void;
+  /** A save is in flight (the kit form's `onPendingChange`). */
+  setSaving: (saving: boolean) => void;
   /**
-   * Leave this page for the route: a real Back when it was opened with
-   * {@link FROM_ROUTE}, else replace it with the route.
+   * Leave this page for the route: a real Back when a page of the editor
+   * opened it, else replace it with the route (lib/leave.ts).
    */
   leave: () => void;
 }
@@ -142,36 +150,40 @@ export function useRouteEditor(): RouteEditorState {
   const taskId = idFromSegment(taskParam ?? "");
   const bareId = bareCompId(compId);
   const { user } = useUser();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const leave = useLeave();
   const mounted = useMounted();
 
-  const { comp, task, isAdmin, notFound, loading, current } = useTaskAdminPage(
+  const { comp, task, isAdmin, notFound, loading, current } = useTaskAdminPage({
     compId,
     taskId,
-    (t) => `GlideComp - ${t.name} route`
-  );
+    title: (t) => `GlideComp - ${t.name} route`,
+  });
 
   // The competition's waypoints: turnpoints are picked from these (the task
   // copies each one's details in, so editing a waypoint later never changes a
   // task set from it).
   const [savedWaypoints, setSavedWaypoints] = useState<WaypointFileRecord[]>([]);
   const [wpLoading, setWpLoading] = useState(true);
+  const [wpError, setWpError] = useState(false);
   useEffect(() => {
     if (!compId) return;
     let cancelled = false;
+    setWpError(false);
     void (async () => {
       try {
         const res = await fetchWithRetry(() =>
           api.api.comp[":comp_id"].waypoints.$get({ param: { comp_id: compId } })
         );
         if (cancelled) return;
-        const data = res.ok
-          ? ((await res.json()) as unknown as { waypoints: WaypointFileRecord[] })
-          : { waypoints: [] };
+        // A failure to ask is not an answer (#481): not "no waypoints".
+        if (!res.ok) {
+          setWpError(true);
+          return;
+        }
+        const data = (await res.json()) as unknown as { waypoints: WaypointFileRecord[] };
         if (!cancelled) setSavedWaypoints(data.waypoints);
       } catch {
-        /* leave the list empty; the empty state points at the waypoints page */
+        if (!cancelled) setWpError(true);
       } finally {
         if (!cancelled) setWpLoading(false);
       }
@@ -198,43 +210,22 @@ export function useRouteEditor(): RouteEditorState {
     ? zoneNameWithOffset(new Date(`${taskDate}T12:00:00Z`), tz)
     : "UTC";
 
-  // Only an organiser has a draft, and only once mounted (see the note above).
-  const draftOn = mounted && isAdmin && !!comp && !!task && !loading;
-  const key = draftOn ? [bareId, taskId] : null;
-  const stored = useDraft(routeDraft, key, draftOn && user ? user.id : null);
-  const saved = task?.xctsk ?? null;
-  const resolved = useMemo(
-    () => resolveDraft(stored.draft, saved, ctx),
-    [stored.draft, saved, ctx]
-  );
-  const base = useMemo(() => savedKey(saved, ctx), [saved, ctx]);
-
-  // A stored draft that resolveDraft passed over (an unedited copy of an
-  // older save) is never going to be read: it does not stay.
-  const passedOver = stored.draft !== null && !resolved.fromStorage;
-  useEffect(() => {
-    if (passedOver) routeDraft.clear([bareId, taskId]);
-  }, [passedOver, bareId, taskId]);
-
-  // The latest working copy, so two changes in one event both land.
-  const latest = useRef(resolved.draft);
-  latest.current = resolved.draft;
-
-  const dirty = useMemo(
-    () => isAdmin && isDirty(resolved.draft, base),
-    [isAdmin, resolved.draft, base]
-  );
-
   const urlId = comp ? compUrlId(comp, compId) : compId;
   const compName = comp?.name ?? "";
   const taskName = task?.name ?? "";
   const routePath = taskRoutePath(urlId, compName, taskId, taskName);
 
-  useUnsavedChangesGuard(dirty, {
-    title: "Discard route changes?",
-    message: "This route has unsaved changes. Leaving will discard them.",
-    isWithin: (url) => inEditor(url, bareId, taskId),
-    onDiscard: () => routeDraft.clear([bareId, taskId]),
+  const saved = task?.xctsk ?? null;
+  const fresh = useMemo(() => freshDraft(saved, ctx), [saved, ctx]);
+  const editor = useDraftEditor({
+    store: routeDraft,
+    draftKey: [bareId, taskId],
+    owner: user?.id ?? null,
+    // Only an organiser has a draft, and only once mounted (see the note above).
+    enabled: mounted && isAdmin && !!comp && !!task && !loading,
+    fresh,
+    model: routeModel,
+    guard: { ...ROUTE_DISCARD, isWithin: (url) => inEditor(url, bareId, taskId) },
   });
 
   return {
@@ -251,39 +242,28 @@ export function useRouteEditor(): RouteEditorState {
     notFound,
     current,
     isAdmin,
-    draftReady: draftOn && !!user,
+    draftReady: editor.ready,
     openDistance: comp?.scoring_format === "open_distance",
     tz,
     timeZoneLabel,
     ctx,
     toUtcTime,
-    waypoints: [...savedWaypoints, ...resolved.draft.pendingWaypoints],
+    waypoints: [...savedWaypoints, ...editor.draft.pendingWaypoints],
     savedWaypoints,
     wpLoading,
-    draft: resolved.draft,
-    dirty,
-    serverChanged: resolved.serverChanged,
-    update(change) {
-      const next = change(latest.current);
-      if (next === latest.current) return;
-      latest.current = next;
-      stored.setDraft(next);
-    },
-    discard() {
-      stored.clearDraft();
-      latest.current = resolveDraft(null, saved, ctx).draft;
-    },
-    markSaved() {
-      routeDraft.clear([bareId, taskId]);
-    },
+    wpError,
+    draft: editor.draft,
+    dirty: editor.dirty,
+    serverChanged: editor.serverChanged,
+    notKept: editor.notKept,
+    update: editor.update,
+    discard: () => editor.discard(),
+    markSaved: editor.forget,
     addSavedWaypoints(records) {
       setSavedWaypoints((prev) => [...prev, ...records]);
     },
-    leave() {
-      const state = location.state as Record<string, unknown> | null;
-      if (state?.[FROM_ROUTE]) navigate(-1);
-      else navigate(routePath, { replace: true });
-    },
+    setSaving: editor.setSaving,
+    leave: () => leave(routePath),
   };
 }
 

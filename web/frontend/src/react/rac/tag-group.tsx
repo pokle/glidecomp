@@ -3,7 +3,7 @@
  * tags. Used for the task's pilot classes (read-only: reads as a list to AT
  * instead of loose text), and as a compact multi-select where a column of
  * checkboxes would cost more vertical space than the choice is worth — the
- * behaviour filters on the pilot-similarity sheet.
+ * behaviour filters on the pilot-similarity page.
  *
  * Pass `selectionMode="multiple"` with `selectedKeys`/`onSelectionChange` for
  * the second shape. Note what RAC actually emits there: a TagGroup is a

@@ -35,27 +35,12 @@ export function TaskExportButtons({
   taskId,
   taskName,
   qrHref,
-  size = "sm",
-  qrFirst = false,
-  primary,
-  asMenu = false,
 }: {
   compId: string;
   taskId: string;
   taskName: string;
   /** The task's QR page — build it with `taskQrPath()`, from `compUrlId()`. */
   qrHref: string;
-  size?: "sm" | "default";
-  /** Show the QR code button before Share task (role-based button order). */
-  qrFirst?: boolean;
-  /** Which of the two buttons is the primary action (role-based button order). */
-  primary?: "share" | "qr";
-  /**
-   * Collapse the two buttons into ONE "Share" menu (Share / download… + QR
-   * code) — the de-cluttered form. The share dialog and the QR page behave
-   * identically either way.
-   */
-  asMenu?: boolean;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [swap, setSwap] = useState(false);
@@ -71,56 +56,16 @@ export function TaskExportButtons({
     `/api/comp/${compId}/task/${taskId}/waypoints/${fmt}` +
     (swap && fmt !== "xctsk" ? "?swap=1" : "");
 
-  const shareButton = (
-    <Button
-      key="share"
-      variant={primary === "share" ? "default" : "outline"}
-      size={size}
-      onPress={() => setShareOpen(true)}
-    >
-      <Share2Icon className="size-4" aria-hidden />
-      Share task
-    </Button>
-  );
-  const qrButton = (
-    <LinkButton
-      key="qr"
-      variant={primary === "qr" ? "default" : "outline"}
-      size={size}
-      href={qrHref}
-    >
-      <QrCodeIcon className="size-4" aria-hidden />
-      QR code
-    </LinkButton>
-  );
-
   return (
     <>
-      {asMenu ? (
-        <MenuTrigger>
-          <Button variant="outline" size={size}>
-            <Share2Icon className="size-4" aria-hidden />
-            Share
-            <ChevronDownIcon className="size-4 opacity-60" aria-hidden />
-          </Button>
-          <Menu>
-            <MenuItem onAction={() => setShareOpen(true)}>
-              Share / download task…
-            </MenuItem>
-            <MenuItem href={qrHref}>QR code</MenuItem>
-          </Menu>
-        </MenuTrigger>
-      ) : qrFirst ? (
-        <>
-          {qrButton}
-          {shareButton}
-        </>
-      ) : (
-        <>
-          {shareButton}
-          {qrButton}
-        </>
-      )}
+      <Button variant="outline" size="sm" onPress={() => setShareOpen(true)}>
+        <Share2Icon className="size-4" aria-hidden />
+        Share task
+      </Button>
+      <LinkButton variant="outline" size="sm" href={qrHref}>
+        <QrCodeIcon className="size-4" aria-hidden />
+        QR code
+      </LinkButton>
 
       <Modal isOpen={shareOpen} onOpenChange={setShareOpen}>
         <Dialog className="gap-3">

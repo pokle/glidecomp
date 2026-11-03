@@ -38,12 +38,11 @@ import {
   useHeldReading,
 } from "../comp/AltitudeReview";
 import {
-  FROM_ALTITUDE_REVIEW,
-  FROM_WAYPOINTS,
   useAltitudeCheck,
   useWaypointsEditor,
   type WaypointsEditor,
 } from "../comp/use-waypoints-editor";
+import { openedHere } from "../lib/leave";
 import { waypointsEditorGate } from "../comp/WaypointsEditorGate";
 import {
   acceptMapAltitudes,
@@ -115,7 +114,7 @@ export function CompAltitudeReviewPage() {
         editor={editor}
         entry={entry}
         listedCount={review.listed.length}
-        onBack={() => editor.leave(reviewPath, FROM_ALTITUDE_REVIEW)}
+        onBack={() => editor.leave(reviewPath)}
       />
     );
   }
@@ -143,9 +142,7 @@ export function CompAltitudeReviewPage() {
         setSearchParams(all ? { all: "1" } : {}, { replace: true, state: location.state })
       }
       onOpen={(rowId) =>
-        navigate(compAltitudeReviewPath(urlId, compName, rowId), {
-          state: { [FROM_ALTITUDE_REVIEW]: true },
-        })
+        navigate(compAltitudeReviewPath(urlId, compName, rowId), openedHere())
       }
       onAccept={(rowIds) => {
         let accepted = 0;
@@ -174,7 +171,7 @@ export function CompAltitudeReviewPage() {
         // Closed on the way out — in storage only, so this page stays as it
         // is until it has gone rather than flash its "no review" state.
         editor.updateOnLeave(endReview);
-        editor.leave(compWaypointsPath(urlId, compName), FROM_WAYPOINTS);
+        editor.leave(compWaypointsPath(urlId, compName));
       }}
     />
   );

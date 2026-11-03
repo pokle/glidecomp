@@ -36,6 +36,7 @@
  *   matches "Edit waypoints", so exact names are passed `exact: true`.
  */
 import { test, expect, DESKTOP_ONLY, type Page, type Locator } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL } from "./fixtures/stack";
 import {
   COMP_NAME,
@@ -67,19 +68,6 @@ test.beforeEach(async ({ page }) => {
   await expect(h1(page, "Waypoints")).toBeVisible();
   await onEditorList(page, waypoints.length);
 });
-
-/**
- * The page must never scroll sideways, at either project's width. That is the
- * failure the list replaced the grid over, so it is asserted rather than
- * assumed — for an admin and for a visitor, who used to get a table in its own
- * horizontal scroll region.
- */
-async function expectNoSidewaysScroll(page: Page): Promise<void> {
-  const scrolls = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-  );
-  expect(scrolls, "the page must not scroll sideways").toBe(false);
-}
 
 /**
  * A target a thumb can actually hit.
@@ -123,7 +111,7 @@ async function editWaypoint(
   page: Page,
   row: Locator,
   code: string,
-  field: "Code" | "Name" | "Coordinates" | "Altitude (m)" | "Radius (m)",
+  field: "Code" | "Name" | "Coordinates (lat, lon)" | "Altitude (m)" | "Radius (m)",
   value: string
 ) {
   await openWaypoint(page, row, code);
@@ -187,7 +175,7 @@ test("the editor lists waypoints, edits one on its own page, and blocks bad coor
 
   // A row opens one waypoint — a page, with every field it has.
   await openWaypoint(page, firstRow, code);
-  for (const label of ["Code", "Name", "Coordinates", "Altitude (m)", "Radius (m)"]) {
+  for (const label of ["Code", "Name", "Coordinates (lat, lon)", "Altitude (m)", "Radius (m)"]) {
     await expect(page.getByRole("textbox", { name: label, exact: true })).toBeVisible();
   }
   await expectNoSidewaysScroll(page);
@@ -217,10 +205,10 @@ test("the editor lists waypoints, edits one on its own page, and blocks bad coor
   // Done will not leave with coordinates that do not parse: it is a kit form,
   // so the reason is under the field, and the field has focus.
   await openWaypoint(page, await firstWaypointRow(page), code);
-  const coords = page.getByRole("textbox", { name: "Coordinates", exact: true });
+  const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)", exact: true });
   await coords.fill("not coordinates");
   await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByText("Enter coordinates as “lat, lon”")).toBeVisible();
+  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toBeVisible();
   await expect(coords).toBeFocused();
   await expect(page).toHaveURL(waypointUrl);
 
@@ -322,17 +310,19 @@ test("the draft survives a reload, on the waypoint's page and on the list", asyn
   await expect(await firstWaypointRow(page)).toContainText("E2E Reloaded");
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  // Discard changes is how the draft goes on purpose — asked first.
+  // Discard changes is how the draft goes on purpose — asked first — and,
+  // as the route editor's Cancel does, it leaves for the competition.
   await page.getByRole("button", { name: "Discard changes" }).click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Discard changes" }).click();
+  await expect(page).toHaveURL(new RegExp(`/comp/${compId}[^/]*$`));
+  // Coming back finds the saved set: the draft really is gone.
+  await page.goto(`/comp/${compId}/waypoints`);
+  await onEditorList(page, waypoints.length);
   await expect(page.getByText("Unsaved changes")).toBeHidden();
   await expect(await firstWaypointRow(page)).not.toContainText("E2E Reloaded");
   await expect(saveButton(page)).toBeDisabled();
-  await page.reload();
-  await onEditorList(page, waypoints.length);
-  await expect(page.getByText("Unsaved changes")).toBeHidden();
 
   expect(mutated()).toBe(false);
 });
@@ -360,7 +350,7 @@ test("remove a waypoint, and add one on a page of its own (nothing saved)", asyn
   // field, which takes focus.
   await page.getByRole("button", { name: "Add", exact: true }).click();
   const coords = page.getByRole("textbox", { name: "Coordinates (lat, lon)" });
-  await expect(page.getByText('Enter "lat, lon" decimal degrees')).toBeVisible();
+  await expect(page.getByText('Enter the coordinates as "lat, lon"')).toBeVisible();
   await expect(coords).toBeFocused();
 
   await coords.fill("-36.5, 148.2");
@@ -666,6 +656,24 @@ test("the device panel follows the SAVED set, not the editor's rows", async ({ p
     });
     expect(restore.ok()).toBe(true);
   }
+});
+
+test("waypoints that fail to load are said to, not shown as none, and offer no Save", async ({
+  page,
+}) => {
+  // A failure to ask is not an answer (#481): an empty editor here offered a
+  // Save that would have replaced the real set with nothing.
+  await page.route("**/api/comp/*/waypoints", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 503, contentType: "text/plain", body: "unavailable" })
+      : route.fallback()
+  );
+  await page.goto(`/comp/${compId}/waypoints`);
+  await expect(page.getByText("Could not load the waypoints. Reload the page to try again.")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(saveButton(page)).toHaveCount(0);
+  await expect(page.getByText("No waypoints")).toHaveCount(0);
 });
 
 test("anonymous visitors get the same list, read-only, and no editor pages", async ({ page }) => {

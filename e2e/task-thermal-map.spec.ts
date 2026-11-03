@@ -37,6 +37,7 @@
  */
 import { execSync } from "node:child_process";
 import { test, expect, type Page } from "./fixtures/test";
+import { expectNoSidewaysScroll } from "./fixtures/layout";
 import { FRONTEND_URL } from "./fixtures/stack";
 
 const COMP_NAME = "Corryong Cup 2026";
@@ -168,14 +169,6 @@ async function expectScrollRestoredTo(page: Page, y: number) {
   await expect.poll(offBy).toBeLessThanOrEqual(3);
   await page.waitForTimeout(1000);
   expect(await offBy()).toBeLessThanOrEqual(3);
-}
-
-/** Nothing on the page reaches past the viewport's right edge. */
-async function expectNoSidewaysScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
 }
 
 test("maximise is a link to the thermal map page: reload keeps it, Back returns", async ({

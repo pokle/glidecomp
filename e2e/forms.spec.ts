@@ -175,3 +175,53 @@ test("one submit at a time, and the button says it is busy", async ({ page }) =>
   await expect(done(page)).not.toHaveAttribute("data-pending", "true");
   expect(saves()).toBe(1);
 });
+
+test("busy until the save has been acted on, not only answered", async ({ page }) => {
+  // Create API key reads the answer and then reloads the list: a second press
+  // in that gap made a second key, because the button was live again the
+  // moment the first response arrived.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/__kit/form-after", async (route) => {
+    await held;
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  const saves = await server(page, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
+  );
+  await openForm(page);
+  await field(page, "Name").fill("Ana");
+
+  await done(page).click();
+  await expect.poll(saves).toBe(1);
+  await expect(done(page)).toHaveAttribute("data-pending", "true");
+  await done(page).click({ force: true });
+  await field(page, "Name").press("Enter");
+  release();
+
+  await expect(page.getByText("Saved the test form")).toBeVisible({ timeout: 20_000 });
+  await expect(done(page)).not.toHaveAttribute("data-pending", "true");
+  expect(saves()).toBe(1);
+});
+
+test("an action inside the form is refused in the form's banner, focused and on screen", async ({
+  page,
+}) => {
+  // The pilot page's Remove sits at the foot and its refusal in the banner at
+  // the top: on a phone, a refusal that only appeared there was never seen.
+  await page.route("**/__kit/form-action", (route) =>
+    refuse(409, { error: "That one cannot be removed." })(route)
+  );
+  await openForm(page);
+  const remove = form(page).getByRole("button", { name: "Remove" });
+  await remove.scrollIntoViewIfNeeded();
+  await remove.click();
+  // Asked first: the dialog gives focus back to Remove as it closes, which
+  // must not take it off the refusal.
+  await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+
+  const banner = form(page).getByRole("alert").filter({ hasText: "That one cannot be removed." });
+  await expect(banner).toBeFocused();
+  await expectInView(page, banner, "the refusal");
+  await expect(page.getByText("Removed the test")).toHaveCount(0);
+});

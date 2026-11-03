@@ -13,6 +13,7 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
 import { Button } from "@/react/rac/button";
+import { ActionErrorBanner } from "@/react/rac/form";
 import { Loading } from "@/react/rac/progress";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Card } from "@/react/rac/card";
@@ -96,7 +97,7 @@ export function CompScoresPage() {
                 variant="outline"
                 size="sm"
                 onPress={() => void rescore()}
-                isPending={rescoring}
+                isPending={rescoring.pending}
                 pendingLabel="Re-scoring"
               >
                 Recompute scores
@@ -105,6 +106,7 @@ export function CompScoresPage() {
           </div>
         ) : null}
       </div>
+      <ActionErrorBanner action={rescoring} className="mt-3" />
 
       <CompSectionNav {...compSectionNavProps(compId, comp, isAdmin)} />
 

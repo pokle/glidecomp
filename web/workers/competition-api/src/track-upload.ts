@@ -473,7 +473,8 @@ export interface TrackSubmissionResult {
   pilot_name: string;
 }
 
-/** A refusal the pipeline itself produces, for the route to phrase. */
+/** A refusal the pipeline itself produces, phrased by `uploadRejection()` in
+ * submission-gate.ts for all three routes alike. */
 export type TrackSubmissionRejection =
   | { kind: "invalid_file"; message: string; reason: string }
   | { kind: "task_pilot_limit"; message: string };
@@ -487,9 +488,9 @@ export type TrackSubmissionRejection =
  * → audit the upload → audit any quality finding → set the pilot's status →
  * email the registered pilot → answer.
  *
- * Returns either the wire result or a rejection for the caller to phrase in
- * its own vocabulary — the three routes answer with different codes and
- * different repair affordances, and that is the half that belongs to them.
+ * Returns either the wire result or a rejection, which every route answers
+ * through `uploadRejection()` (submission-gate.ts) — so a signed-in pilot who
+ * hits the task's pilot limit is told who to write to, as an anonymous one is.
  */
 export async function ingestTrackSubmission(
   c: ScoreStoreContext & { env: Env; executionCtx: { waitUntil(p: Promise<unknown>): void } },

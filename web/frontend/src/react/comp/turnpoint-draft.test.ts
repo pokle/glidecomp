@@ -1,6 +1,6 @@
 /**
  * The one conversion from a competition waypoint to a turnpoint draft, and
- * the Type list the sheet and the add-inference share.
+ * the Type list the turnpoint page and the add-inference share.
  *
  * Mostly about a single character: a waypoint at sea level carries 0, and only
  * an ABSENT altitude is blank. That distinction was fixed in
@@ -182,7 +182,7 @@ describe("draftFromRecord", () => {
   });
 });
 
-/** A half-filled turnpoint, as the details sheet has it before a load. */
+/** A half-filled turnpoint, as the turnpoint page has it before a load. */
 const started = (over: Partial<TurnpointDraft> = {}): TurnpointDraft => ({
   ...blankDraft(),
   ...over,

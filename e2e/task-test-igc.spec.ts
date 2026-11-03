@@ -152,16 +152,14 @@ test("a bad take-off time is refused under its field", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Download .igc" })).toBeVisible();
 });
 
-test("a visitor gets the organisers-only notice", async ({ page }) => {
+test("a visitor is sent to the task page", async ({ page }) => {
   await devLogin(page, VISITOR_USER);
   await page.goto(`/comp/${compId}/task/${taskId}/test-igc`);
-  await expect(
-    page.getByText("Creating a test IGC is for the competition’s organisers.")
-  ).toBeVisible();
+  await expect(page.getByText("That page is for the competition’s organisers.")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Create", exact: true })).toHaveCount(0);
 
-  // And the task page offers no link to it.
-  await page.goto(`/comp/${compId}/task/${taskId}`);
+  // It lands on the task page, which offers no link to it.
+  await expect(page).not.toHaveURL(/test-igc/);
   await expect(page.getByRole("heading", { level: 1, name: TASK_NAME })).toBeVisible();
   await expect(page.getByRole("link", { name: "Create test IGC" })).toHaveCount(0);
 });

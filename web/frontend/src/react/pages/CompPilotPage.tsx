@@ -9,20 +9,22 @@
  * by the list's + when a search found nobody.
  *
  * Leaving goes back the way the reader came. Opened from the list (the row or
- * the + marks it with `state.fromList`), that is a real Back, so the list
+ * the + marks it with `openedHere()`, lib/leave.ts), that is a real Back, so the list
  * returns with its search, its sort and its scroll exactly as they were.
  * Opened any other way (a bookmark, a reload), it replaces this entry with
  * the list instead, so Back from there does not land on a saved form.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { useLeave } from "../lib/leave";
 import { NotFound } from "@/react/components/NotFound";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
 import { underCompPilots } from "../lib/crumbs";
-import { compPilotPath, compPilotsPath, compUrlId, idFromSegment } from "../lib/slug";
+import { compPilotPath, compPilotsPath, compScoresPath, compUrlId, idFromSegment } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { fetchWithRetry, type CompDetailData } from "../comp/types";
@@ -39,8 +41,7 @@ export function CompPilotPage() {
   // No :pilotId is the /new route.
   const pilotId = pilotParam ? idFromSegment(pilotParam) : null;
   const [searchParams] = useSearchParams();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const leave = useLeave();
   const { loading } = useUser();
 
   const { data: comp, notFound, current } = useSeededResource<CompDetailData>({
@@ -97,16 +98,8 @@ export function CompPilotPage() {
   }
 
   const crumbs = underCompPilots(urlId, comp.name);
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs items={crumbs} current="Pilot" />
-        <p className="mt-2 text-muted-foreground">
-          Pilot management is for the competition’s organisers.
-        </p>
-      </div>
-    );
-  }
+  // Visitors find every pilot in the score tables.
+  if (!isAdmin) return <OrganisersOnly to={compScoresPath(urlId, comp.name)} />;
   if (rosterError) {
     return (
       <div>
@@ -119,8 +112,7 @@ export function CompPilotPage() {
   if (pilotId && !pilot) return <NotFound title="Pilot not found" />;
 
   const backToList = () => {
-    if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1);
-    else navigate(compPilotsPath(urlId, comp.name), { replace: true });
+    leave(compPilotsPath(urlId, comp.name));
   };
 
   return (

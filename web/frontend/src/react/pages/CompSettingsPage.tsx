@@ -16,12 +16,11 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { Loading } from "@/react/rac/progress";
 import { api } from "../../comp/api";
 import { useAdminView, useUser } from "../lib/user";
-import { underComp } from "../lib/crumbs";
-import { compUrlId, idFromSegment, compSettingsPath } from "../lib/slug";
+import { compPath, compUrlId, idFromSegment, compSettingsPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import type { CompDetailData } from "../comp/types";
@@ -71,17 +70,7 @@ export function CompSettingsPage() {
     return <Loading>Loading settings…</Loading>;
   }
 
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs items={underComp(compId, comp.name)} current="Settings" />
-        <h1 className="mt-2 text-2xl font-bold">Settings</h1>
-        <p className="mt-2 text-muted-foreground">
-          Competition settings are for the competition’s organisers.
-        </p>
-      </div>
-    );
-  }
+  if (!isAdmin) return <OrganisersOnly to={compPath(compUrlId(comp, compId), comp.name)} />;
 
   if (group === undefined) {
     return <CompSettingsIndex compId={compId} comp={comp} />;

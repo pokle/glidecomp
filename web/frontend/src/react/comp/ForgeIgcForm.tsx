@@ -58,7 +58,13 @@ import { Button } from "@/react/rac/button";
 import { Alert, AlertDescription, AlertTitle } from "@/react/rac/alert";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { NumberField, TextField } from "@/react/rac/field";
-import { Form, FormErrorBanner, SubmitButton, type SubmitResponse } from "@/react/rac/form";
+import {
+  Form,
+  FormErrorBanner,
+  SubmitButton,
+  refusal,
+  type SubmitResponse,
+} from "@/react/rac/form";
 import { SimpleSelect } from "@/react/rac/select";
 import { Slider } from "@/react/rac/slider";
 import { SectionHeader } from "../components/SectionHeader";
@@ -86,18 +92,6 @@ interface Verdict {
 
 /** The take-off time's form-field name. */
 const START = "start";
-
-/**
- * The engine's refusal, in the shape the kit form reads a server's in — so
- * "nothing to fly" is shown in the form's one fixed place for an error that
- * belongs to no field, like any other refusal.
- */
-function refusal(message: string): SubmitResponse {
-  return new Response(JSON.stringify({ error: message }), {
-    status: 422,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 const SABOTAGE: { value: ForgeSabotage; label: string }[] = [
   { value: "none", label: "Clean flight" },
@@ -250,7 +244,6 @@ export function ForgeIgcForm({
             {offset}).
           </p>
         </div>
-        <FormErrorBanner />
 
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-3">
           <TextField label="Pilot name" name="pilot" value={pilot} onChange={setPilot} />
@@ -318,6 +311,8 @@ export function ForgeIgcForm({
           </p>
         )}
 
+        {/* Beside Create, the button the reader just pressed. */}
+        <FormErrorBanner />
         <div className="flex flex-wrap gap-2">
           <SubmitButton pendingLabel="Creating">
             {verdict ? "Create again" : "Create"}

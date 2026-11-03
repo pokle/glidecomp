@@ -24,8 +24,8 @@
 import { useId, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { NotFound } from "@/react/components/NotFound";
+import { OrganisersOnly } from "@/react/components/OrganisersOnly";
 import { SettingsPage } from "@/react/components/SettingsPage";
-import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { CheckList } from "@/react/rac/choice-list";
 import { DatePicker } from "@/react/rac/date-picker";
 import { Label, TextField } from "@/react/rac/field";
@@ -35,7 +35,7 @@ import { api } from "../../comp/api";
 import type { CompDetailData } from "../comp/types";
 import { underComp } from "../lib/crumbs";
 import { todayInZone } from "../lib/format";
-import { compNewTaskPath, compUrlId, idFromSegment, taskPath } from "../lib/slug";
+import { compNewTaskPath, compPath, compUrlId, idFromSegment, taskPath } from "../lib/slug";
 import { useCanonicalPath } from "../lib/use-canonical-path";
 import { useSeededResource } from "../lib/use-seeded-resource";
 import { useAdminView, useUser } from "../lib/user";
@@ -64,17 +64,7 @@ export function CompNewTaskPage() {
   if (notFound || !compId) return <NotFound title="Competition not found" />;
   if (!comp || loading) return <Loading>Loading competition…</Loading>;
 
-  if (!isAdmin) {
-    return (
-      <div>
-        <Breadcrumbs items={underComp(urlId, comp.name)} current={TITLE} />
-        <h1 className="mt-2 text-2xl font-bold">{TITLE}</h1>
-        <p className="mt-2 text-muted-foreground">
-          Creating tasks is for the competition’s organisers.
-        </p>
-      </div>
-    );
-  }
+  if (!isAdmin) return <OrganisersOnly to={compPath(urlId, comp.name)} />;
 
   return <NewTaskForm compId={urlId} comp={comp} />;
 }
@@ -110,7 +100,6 @@ function NewTaskForm({ compId, comp }: { compId: string; comp: CompDetailData })
         }}
         className="flex flex-col gap-6"
       >
-        <FormErrorBanner />
         <TextField
           label="Name"
           name="name"
@@ -140,6 +129,9 @@ function NewTaskForm({ compId, comp }: { compId: string; comp: CompDetailData })
           onChange={setSelectedClasses}
           options={comp.pilot_classes.map((cls) => ({ value: cls, label: cls }))}
         />
+        {/* The error that belongs to no field sits beside Create, the
+            button the reader just pressed. */}
+        <FormErrorBanner />
         <div>
           <SubmitButton pendingLabel="Creating">Create</SubmitButton>
         </div>

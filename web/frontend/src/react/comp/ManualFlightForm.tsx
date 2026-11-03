@@ -39,7 +39,8 @@ import {
   manualOpenDistanceGeometry,
 } from "@glidecomp/engine";
 import { Button } from "@/react/rac/button";
-import { NumberField, TextField } from "@/react/rac/field";
+import { NumberField } from "@/react/rac/field";
+import { CoordsField, coordsProblem } from "./fields";
 import { Form, FormErrorBanner, SubmitButton } from "@/react/rac/form";
 import { ChoiceList } from "@/react/rac/choice-list";
 import { SettingsPage } from "@/react/components/SettingsPage";
@@ -185,9 +186,7 @@ export function ManualFlightForm({
       <Form
         className="flex flex-col gap-6"
         validate={() => ({
-          landing: landing
-            ? null
-            : 'Enter the landing point as "latitude, longitude"',
+          landing: coordsProblem(coords, true),
         })}
         onSubmit={save}
         onSuccess={() => {
@@ -218,20 +217,12 @@ export function ManualFlightForm({
           />
         ) : null}
 
-        <TextField
+        <CoordsField
           label="Landing point"
           name="landing"
-          placeholder="-36.550979, 147.890395"
           description="Latitude, longitude — paste straight from Google Maps."
           value={coords}
           onChange={setCoords}
-          // Inline validation: flags a malformed pair as the user types
-          // (only once touched), instead of a toast at save time.
-          validate={(v) =>
-            v.trim() === "" || parseCoords(v) !== null
-              ? null
-              : 'Enter "latitude, longitude" decimal degrees'
-          }
         />
 
         {madeGoal ? (

@@ -9,14 +9,17 @@
  * 26 lowercase letters — no digits, no dashes), so the id is always the text
  * after the LAST dash. A hidden competition's id carries its share key after
  * an underscore (`vzuq_7hq2m9xk4rwd`, see `compUrlId` below); the key is
- * `[a-z0-9]` with no dash either, so it simply rides along as part of the id. That makes a bare `${id}` (the pre-slug URLs we still
- * support) and a slugged `${slug}-${id}` parse identically, and it makes the
- * whole canonical URL lowercase (the id already is).
+ * `[a-z0-9]` with no dash either, so it simply rides along as part of the id.
+ * That makes a bare `${id}` (the pre-slug URLs we still support) and a slugged
+ * `${slug}-${id}` parse identically, and it makes the whole canonical URL
+ * lowercase (the id already is).
  *
  * This module is PURE (no React, no DOM) so both the SSR Pages Function and the
  * SPA can import it. The client-side redirect that uses it lives in
  * lib/use-canonical-path.ts.
  */
+
+import type { TaskAnalysisSectionSlug } from "../analysis/sections";
 
 // Combining diacritical marks (U+0300–U+036F), stripped after NFKD so accented
 // names slugify to their ASCII base (e.g. "Épreuve" → "epreuve").
@@ -143,11 +146,23 @@ export function pathCarriesShareKey(pathname: string): boolean {
 }
 
 // ── Canonical path builders ──────────────────────────────────────────────────
-// Each takes the bare id(s) plus the name(s) and returns the canonical path.
-// A missing name degrades to a bare-id segment (still a working URL).
+// Each takes the id(s) as a URL carries them plus the name(s), and returns the
+// canonical path. A comp id is `compUrlId`'s, so a hidden comp's share key is
+// part of it and rides into every path built from it. A missing name degrades
+// to a bare-id segment (still a working URL).
 
 export function compPath(id: string, name?: string | null): string {
   return `/comp/${slugSegment(id, name)}`;
+}
+
+/**
+ * Starting a new competition — signed-in only, a page of its own (see the
+ * overlays rule in CLAUDE.md). A static segment beside `/comp/:compId`: `new`
+ * can never be a comp's id (a sqid is at least four letters), so it cannot
+ * shadow a real one.
+ */
+export function newCompPath(): string {
+  return "/comp/new";
 }
 
 export function compScoresPath(id: string, name?: string | null): string {
@@ -434,7 +449,7 @@ export function taskAnalysisSectionPath(
   compName: string | null | undefined,
   taskId: string,
   taskName: string | null | undefined,
-  section: string
+  section: TaskAnalysisSectionSlug
 ): string {
   return `${taskAnalysisPath(compId, compName, taskId, taskName)}/${section}`;
 }
@@ -469,7 +484,7 @@ export function taskAnalysisMetricPath(
   return `${taskAnalysisSectionPath(compId, compName, taskId, taskName, "metrics")}/${metricSegment(metricId)}`;
 }
 
-/** The pilot-similarity sheet, hung off the task's analysis. */
+/** The pilot-similarity page, hung off the task's analysis. */
 export function taskSimilarityPath(
   compId: string,
   compName: string | null | undefined,

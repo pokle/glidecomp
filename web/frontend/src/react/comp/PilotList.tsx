@@ -21,7 +21,7 @@
  * heading per team — "Alpha Gliders · 3 pilots", the teamless last under
  * "No team" — as named groups a screen reader announces. The groups are a
  * sort with headings, not a second list: the same rows, opening the same
- * sheet.
+ * pages.
  */
 import { Collection } from "react-aria-components";
 import {

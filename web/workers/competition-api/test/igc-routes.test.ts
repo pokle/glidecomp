@@ -428,8 +428,14 @@ describe("POST .../igc (upload)", () => {
     // Now try to upload as user-1 (new pilot, 251st)
     const res = await uploadIgc(compId, taskId);
     expect(res.status).toBe(400);
-    const data = (await res.json()) as { error: string };
+    const data = (await res.json()) as Record<string, unknown>;
     expect(data.error).toContain("250");
+    // A full task is the organiser's to fix, so a signed-in pilot is told who
+    // to write to — the same body the anonymous route answers with. Until
+    // 2026-11 the signed-in routes dropped the code and the organisers.
+    expect(data.code).toBe("task_pilot_limit");
+    expect(data.organisers).toEqual([{ email: "pilot@test.com", name: "Test Pilot" }]);
+    expect(data).not.toHaveProperty("field");
   }, 30_000);
 });
 

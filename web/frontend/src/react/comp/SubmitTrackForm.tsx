@@ -37,6 +37,7 @@ import {
   Form,
   FormErrorBanner,
   SubmitButton,
+  refusal,
   type Refusal,
   type SubmitResponse,
 } from "@/react/rac/form";
@@ -46,6 +47,7 @@ import { compressIgc, fetchWithRetry, type PilotListEntry } from "./types";
 import {
   IDENTIFIER_KINDS,
   NOT_AN_IGC_MESSAGE,
+  UNREADABLE_FILE_MESSAGE,
   igcPilotNameFromText,
   inferIdentifierKind,
   pickDefaultTask,
@@ -78,18 +80,12 @@ import {
 const SELF = "self";
 
 /**
- * A refusal the form makes itself, shaped as the server's are, so it lands by
- * the same rule: under the field that can fix it, or else beside Submit.
+ * A refusal the form makes itself, with the code the server would have sent
+ * (kit `refusal()`), so it lands by the same rule: under the field that can
+ * fix it, or else beside Submit.
  */
-function ownRefusal(error: string, code?: SubmitError["code"]): SubmitResponse {
-  const body: SubmitError = { error, code };
-  return {
-    ok: false,
-    status: 400,
-    text: async () => JSON.stringify(body),
-    json: async () => body,
-  };
-}
+const ownRefusal = (error: string, code: SubmitError["code"]): SubmitResponse =>
+  refusal(error, { code });
 
 /** What the caller already knows. Anything absent becomes a step to ask. */
 export interface SubmitTrackPrefill {
@@ -427,9 +423,16 @@ export function SubmitTrackForm({ prefill }: { prefill?: SubmitTrackPrefill }) {
       );
     }
 
+    // A file the browser cannot read is the file's problem, not the
+    // connection's: it goes under the file, in its own words.
+    let compressed: ArrayBuffer;
+    try {
+      compressed = await compressIgc(file);
+    } catch {
+      return ownRefusal(UNREADABLE_FILE_MESSAGE, "invalid_file");
+    }
     // A throw from here on is a request that never got an answer, which the
     // kit form reports in its own words, keeping everything chosen.
-    const compressed = await compressIgc(file);
     const tooLarge = tooLargeReason(file.size, compressed.byteLength);
     if (tooLarge) return ownRefusal(tooLarge, "invalid_file");
 

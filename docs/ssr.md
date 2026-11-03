@@ -1,6 +1,6 @@
 # SSR for the public competition pages
 
-The public comp pages (the `ROUTES` table below) are server-rendered. This is the SEO strategy:
+The public comp pages (`COMP_SSR_ROUTES`, below) are server-rendered. This is the SEO strategy:
 crawlers and link-preview bots must see the text, not an empty `#root`.
 
 Current-state reference. For the original design reasoning see
@@ -10,49 +10,61 @@ Current-state reference. For the original design reasoning see
 
 ## The routes
 
-All owned by the Pages Function `functions/comp/[[path]].ts` (`ROUTES`):
+All owned by the Pages Function `functions/comp/[[path]].ts`, and **listed in
+one place: `web/frontend/src/react/comp-routes.ts`**. Every `/comp` pattern the
+Function answers is there, in the router's own syntax, with a line on why it is
+answered the way it is:
 
-| Route | Notes |
-|---|---|
-| `/comp` | |
-| `/comp/:id` | hub: merged task list + top-3 scores summary |
-| `/comp/:id/scores` | the canonical full-scores page; `?task=` deep-links the scores-by-task view |
-| `/comp/:id/waypoints` | |
-| `/comp/:id/task/:id` | route + public top-3 results; the admin manage grid is client-only |
-| `/comp/:id/task/:id/diagram` | the route diagram at full size (#814); always `noindex` — the task page is the indexable form |
-| `/comp/:id/task/:id/pilot/:id` | the report card |
-| `/comp/:id/analysis` | the COMP analysis: every task's read against each other |
-| `/comp/:id/task/:id/analysis` | the TASK analysis (a contents list for the six below) |
-| `/comp/:id/task/:id/analysis/:section` | one section of that chapter — `strategies`, `weather`, `thermals`, `metrics`, `style`, `method` |
-| `/comp/:id/task/:id/analysis/metrics/:metric` | one metric's chart at full size (#815) — always noindexed, a bigger copy of a chart on `strategies`; an unknown metric is a 404 |
+- `COMP_SSR_ROUTES` — server-rendered. Each has a loader in the Function's
+  `ROUTE_RUNS`, a `Record` over the routes' names, so a route without a loader
+  (or a loader without a route) does not compile.
+- `COMP_SHELL_ROUTES` — the plain SPA shell, `noindex`.
+- `LEGACY_TASK_ANALYSIS` — a 301 (below).
+
+The Function builds its regexes from those tables. `comp-routes.test.ts` reads
+`routes.tsx` and fails unless every `/comp` route in it is answered exactly once,
+and every table entry answers a real route; `e2e/ssr.spec.ts` builds its shell
+URLs from the shell table. This page used to copy the lists out by hand, and the
+copy drifted — read the module for the current set.
+
+**Server-rendered**: the competitions list; a competition's hub, its scores
+(`?task=` deep-links the scores-by-task view), its waypoints and its COMP
+analysis; a task's page, its route diagram at full size (#814), each pilot's
+report card, the TASK analysis, each of its sections (`/analysis/:section`) and
+one metric's chart at full size (`/analysis/metrics/:metric`, #815). The route
+diagram and the metric chart are always `noindex`: each is a bigger copy of
+something an indexable page already shows. An unknown metric is a 404.
 
 A cold task-analysis report server-renders its pending notice and is noindexed
 **per request**, not shell-noindexed. The section route's pattern is built from
 `analysis/sections.ts`, so a section added there cannot be a 404 here; an
 unknown slug falls through to the 404 shell like any other junk `/comp` URL.
 
-`NOINDEX_SHELL_ROUTES` (checked *before* `ROUTES`) covers the `/comp` paths that
-are real SPA routes but have nothing to server-render — they must reach the
-shell rather than 404, and there is nothing here for a crawler:
+**The noindex shell** (`COMP_SHELL_ROUTES`, checked *before* the SSR table)
+covers the `/comp` paths that are real SPA routes but have nothing to
+server-render — they must reach the shell rather than 404, and there is nothing
+in them for a crawler. Being checked first is what lets `/comp/new` and
+`/comp/:id/task/new` share a public page's shape: `new` never reaches a loader
+as an id.
 
-| Path | What it is |
-|---|---|
-| `/comp/:id/pilots` | the roster editor (admin-only) |
-| `/comp/:id/settings[/:group]` | competition settings, index + group sub-pages |
-| `/comp/:id/task/new` | creating a task (#819) — the public task page's shape, so it must be caught first |
-| `/comp/:id/task/:id/settings` | task settings |
-| `/comp/:id/task/:id/route` | the route editor |
-| `/comp/:id/task/:id/weather` | the weather notes |
-| `/comp/:id/task/:id/pilot/:id/manual-flight` | recording a manual flight |
-| `/comp/:id/task/:id/qr` | the task's QR code (#813) — public, but a picture for a camera |
-| `/comp/:id/task/:id/analysis/similar` | the pilot-similarity sheet, derived client-side |
-| `/comp/:id/task/:id/analysis/thermals/map` | one thermal's rose and map at the size of the screen (#816) — the map is browser-only, and everything readable about the thermal is server-rendered on `/analysis/thermals` |
+- **Public**: the task's QR code (`/task/:id/qr`, #813 — a picture for a
+  camera), the pilot-similarity page (`/task/:id/analysis/similar`, derived
+  client-side) and one thermal's rose and map at the size of the screen
+  (`/analysis/thermals/map`, #816 — the map is browser-only, and everything
+  readable about the thermal is server-rendered on `/analysis/thermals`).
+- **Signed-in**: starting a competition (`/comp/new`; a signed-out reader is
+  offered sign-in there).
+- **Admin-only**, everything else: the roster, a pilot's editor and the
+  roster's import and CIVL fill; the competition settings; the waypoints
+  editor's pages under the SSR'd list; creating a task; the task's settings,
+  route and weather-notes editors and the route editor's pages; Create a test
+  IGC; and recording a manual flight.
 
-All but the last two are admin-only editors, and every one of them was a dialog over
-a public page until #636/#637 — which is why the list grew: converting a dialog
-to a routed page creates a URL the SSR Function has to have an answer for, and
-without an entry here that answer is a genuine 404. The route editor has a
-second reason never to be server-rendered: it pulls Mapbox.
+Nearly every one of them was a dialog or a sheet over a public page until it
+became a page of its own (#636/#637 onwards) — which is why the list grew:
+converting a dialog to a routed page creates a URL the SSR Function has to have
+an answer for, and without an entry the answer is a genuine 404. The route
+editor has a second reason never to be server-rendered: it pulls Mapbox.
 
 Superseded public URLs are the other case the Function answers itself, ahead
 of both tables: `/comp/:id/analysis/task/:id` (and `/similar` below it) is where
@@ -62,10 +74,11 @@ URL was server-rendered and indexable while it stood — a crawler handed a
 noindex shell would learn the page was gone rather than where it went. The SPA
 carries the same redirect for in-app and back/forward navigation.
 
-**Adding a routed admin editor means adding it here.** The Function's fallback
-for an unmatched `/comp` path is a real 404 with `noindex` — deliberately, so
-junk URLs stop looking valid — so a new page that skips this list works in dev
-(where the SPA shell is served for everything) and 404s in production.
+**Adding a routed page under `/comp` means adding it to `comp-routes.ts`.** The
+Function's fallback for an unmatched `/comp` path is a real 404 with `noindex` —
+deliberately, so junk URLs stop looking valid — so a new page that skips the
+tables works in dev (where the SPA shell is served for everything) and 404s in
+production. `comp-routes.test.ts` is there to fail first.
 
 One query string is checked alongside them: `/comp?q=…` — a search on the
 competitions page ([site search](2026-08-01-site-search.md)) — also gets the
@@ -109,6 +122,8 @@ it via `_routes.json` because `_redirects` can't match hosts.
 - Upstream 404/400 → a real 404 plus `noindex`. Hidden `test` comps 404
   anonymously — unless the URL carries the comp's share key
   (`/comp/<slug>-<id>_<key>`, see `compUrlId` in `lib/slug.ts`).
+- Any loader or render error → the plain SPA shell. **SSR can never make a page
+  less available than the pure-client version.**
 
 ### Hidden competitions
 
@@ -121,8 +136,6 @@ published settles on the clean one. Every redirect into or out of a keyed URL
 is a **302**, never a 301: a browser keeps a 301, and would go on sending its
 reader to a key that "Reset link" retired. The CSV and the results record
 link back with the key, or a shared sheet's links would all be dead.
-- Any loader or render error → the plain SPA shell. **SSR can never make a page
-  less available than the pure-client version.**
 
 ## `/comp/:id/scores.csv`
 

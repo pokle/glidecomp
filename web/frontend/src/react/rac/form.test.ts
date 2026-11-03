@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readRefusal } from "./form";
+import { readRefusal, refusal } from "./form";
 
 const response = (status: number, body: string) => ({ status, text: async () => body });
 
@@ -61,5 +61,32 @@ describe("readRefusal", () => {
     expect(
       await readRefusal(response(401, JSON.stringify({ error: "Not authenticated" })), "Fallback.")
     ).toEqual({ message: "Not authenticated", field: undefined });
+  });
+});
+
+describe("refusal", () => {
+  it("is a refusal in the server's shape, read by the same rule", async () => {
+    const own = refusal("Choose your IGC file.", { field: "file", code: "invalid_file" });
+    expect(own.ok).toBe(false);
+    expect(await readRefusal(own)).toEqual({ message: "Choose your IGC file.", field: "file" });
+    expect(await own.json()).toEqual({
+      error: "Choose your IGC file.",
+      field: "file",
+      code: "invalid_file",
+    });
+  });
+
+  it("names no field unless asked to, so it lands in the banner", async () => {
+    expect(await readRefusal(refusal("Every waypoint needs valid coordinates."))).toEqual({
+      message: "Every waypoint needs valid coordinates.",
+      field: undefined,
+    });
+  });
+
+  it("keeps its own message over an `error` in the extra body", async () => {
+    expect(await readRefusal(refusal("Mine.", { error: "Not mine." }))).toEqual({
+      message: "Mine.",
+      field: undefined,
+    });
   });
 });

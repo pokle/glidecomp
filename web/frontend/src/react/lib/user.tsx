@@ -104,10 +104,10 @@ export function useAdminView(realIsAdmin: boolean): boolean {
  * into Google OAuth. Pass `next` (an internal path) to return the user where
  * they started after signing in.
  */
-export function useGoToSignIn(): (next?: string) => void {
+export function useGoToSignIn(): (next?: string, options?: { replace?: boolean }) => void {
   const navigate = useNavigate();
   return useCallback(
-    (next?: string) => {
+    (next?: string, options?: { replace?: boolean }) => {
       // While a superadmin previews a signed-out/pilot view, "Sign in" means
       // "back to my real self", not a real sign-in round trip. This one stays
       // a real reload: the preview role is read out of sessionStorage at boot.
@@ -130,9 +130,11 @@ export function useGoToSignIn(): (next?: string) => void {
       // successful sign-in) must stay a full page load, because the current
       // user is resolved once per page load and a client-side hop would carry
       // the stale signed-out answer into the signed-in page. See SignIn.tsx.
-      navigate(
-        validated ? `/signin?next=${encodeURIComponent(validated)}` : "/signin"
-      );
+      // `replace` for a redirect (components/OrganisersOnly.tsx): the page
+      // that sent the reader here would only send them on again from Back.
+      navigate(validated ? `/signin?next=${encodeURIComponent(validated)}` : "/signin", {
+        replace: options?.replace ?? false,
+      });
     },
     [navigate]
   );

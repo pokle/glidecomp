@@ -33,6 +33,11 @@
 import type { GoalConfig, SSSConfig, WaypointFileRecord, XCTask } from "@glidecomp/engine";
 import { defineDraft } from "../lib/draft-store";
 import {
+  resolveStoredDraft,
+  type DraftModel,
+  type DraftResolution,
+} from "../lib/draft-editor";
+import {
   editableGates,
   gateToHHMM,
   turnpointsToRows,
@@ -105,11 +110,16 @@ export function isBlankRow(r: Pick<RouteRow, "name" | "coords">): boolean {
 /**
  * Everything the organiser can change, as one string: two drafts with the same
  * key would save the same route. Row ids are left out (a reloaded route is
- * renumbered, and is not an edit), and so are blank rows.
+ * renumbered, and is not an edit), and so are blank rows — and the loaded
+ * task's own turnpoints, which Save never sends (the rows replace them,
+ * `assembleRouteTask`): only what it carries through is content. Keyed on
+ * them, a draft whose rows say exactly what the saved route says still read
+ * as different from it, because it was loaded from the route before.
  */
 export function contentKey(d: Omit<RouteDraft, "base" | "nextId">): string {
+  const carried = d.baseTask ? { ...d.baseTask, turnpoints: undefined } : null;
   return JSON.stringify([
-    d.baseTask,
+    carried,
     d.rows
       .filter((r) => !isBlankRow(r))
       .map((r) => [
@@ -170,22 +180,26 @@ export function isDirty(d: RouteDraft, base: string): boolean {
 }
 
 /**
+ * How the editor reads a draft against the saved route (lib/draft-editor.ts):
+ * its content is everything Save would send, pending waypoints included.
+ */
+export const routeModel: DraftModel<RouteDraft> = {
+  base: (d) => d.base,
+  content: contentKey,
+  rebase: (d, base) => ({ ...d, base }),
+};
+
+/**
  * The draft to edit, given the one in storage (if any) and the route the
- * server holds now — the waypoints editor's rule (comp/waypoints-draft.ts): a
- * stored draft with no edits of its own is only a copy of an older save, and
- * is dropped when the saved route has moved; one WITH edits is kept, and
- * `serverChanged` says the saved route moved under it.
+ * server holds now — the shared rule, `resolveStoredDraft` in
+ * lib/draft-editor.ts, the waypoints editor's too.
  */
 export function resolveDraft(
   stored: RouteDraft | null,
   saved: XCTask | null,
   ctx: RouteDraftContext
-): { draft: RouteDraft; fromStorage: boolean; serverChanged: boolean } {
-  const fresh = freshDraft(saved, ctx);
-  if (!stored) return { draft: fresh, fromStorage: false, serverChanged: false };
-  if (stored.base === fresh.base) return { draft: stored, fromStorage: true, serverChanged: false };
-  if (!isDirty(stored, stored.base)) return { draft: fresh, fromStorage: false, serverChanged: false };
-  return { draft: stored, fromStorage: true, serverChanged: true };
+): DraftResolution<RouteDraft> {
+  return resolveStoredDraft(stored, freshDraft(saved, ctx), routeModel);
 }
 
 /** One row as a new row of `d`, under the next id. */

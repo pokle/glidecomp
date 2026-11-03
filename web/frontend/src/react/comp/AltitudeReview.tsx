@@ -30,11 +30,12 @@ import { ChevronLeftIcon } from "lucide-react";
 import { Breadcrumbs } from "@/react/rac/breadcrumbs";
 import { Button, ToggleButton } from "@/react/rac/button";
 import { GridList, GridListItem, RowContent } from "@/react/rac/grid-list";
-import { NumberField, TextField } from "@/react/rac/field";
+import { NumberField } from "@/react/rac/field";
 import { SectionHeader } from "../components/SectionHeader";
 import { underAltitudeReview, underCompWaypoints } from "../lib/crumbs";
 import { cn } from "@/react/lib/utils";
 import { parseCoords } from "./route-editor";
+import { CoordsField } from "./fields";
 import {
   COORD_SUSPECT_DELTA_M,
   SUSPECT_DELTA_M,
@@ -313,7 +314,6 @@ export function AltitudeReviewDetail({
 }) {
   const pair = pairOf({ ...entry, mapAlt });
   const delta = altitudeDelta(pair);
-  const coordsValid = parseCoords(entry.coords) !== null;
 
   return (
     <div className="max-w-2xl">
@@ -391,13 +391,11 @@ export function AltitudeReviewDetail({
           onChange={(v) => onEditAltitude(Number.isNaN(v) ? undefined : v)}
           formatOptions={{ maximumFractionDigits: 0, useGrouping: false }}
         />
-        <TextField
-          label="Coordinates"
+        <CoordsField
           value={entry.coords}
           onChange={onEditCoords}
+          required
           className="font-mono"
-          isInvalid={!coordsValid}
-          errorMessage={coordsValid ? undefined : "Enter coordinates as “lat, lon”"}
         />
       </div>
     </div>

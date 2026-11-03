@@ -43,6 +43,7 @@ interface FileDraft {
 
 function setup(version = 1, maxAgeMs?: number) {
   const storage = new MemoryStorage();
+  const memory = new Map<string, string>();
   let clock = 1_000_000;
   const store = defineDraft<FileDraft>({
     kind: "roster-import",
@@ -55,9 +56,11 @@ function setup(version = 1, maxAgeMs?: number) {
       typeof (v as FileDraft).text === "string",
     now: () => clock,
     storage: () => storage,
+    memory,
   });
   return {
     storage,
+    memory,
     store,
     tick: (ms: number) => {
       clock += ms;
@@ -152,18 +155,52 @@ describe("defineDraft", () => {
     expect(store.load(["c1"], "u1")).toBeNull();
   });
 
-  it("says so when storage refuses the draft", () => {
+  it("says so when storage refuses the draft, and keeps it in this tab's memory", () => {
     const { store, storage } = setup();
     storage.full = true;
     expect(store.save(["c1"], "u1", FILE)).toBe(false);
-    expect(store.load(["c1"], "u1")).toBeNull();
+    // The editor's next page still finds it; a reload (a new memory) would not.
+    expect(store.load(["c1"], "u1")).toEqual(FILE);
+    expect(store.heldInMemory(["c1"])).toBe(true);
+    // The same rules as stored ones: never another account's.
+    expect(store.load(["c1"], "u2")).toBeNull();
+    expect(store.heldInMemory(["c1"])).toBe(false);
   });
 
-  it("does nothing, and fails nothing, where there is no storage", () => {
-    const store = defineDraft<FileDraft>({ kind: "k", version: 1, storage: () => null });
+  it("moves back into storage once storage takes it, and clear forgets both", () => {
+    const { store, storage } = setup();
+    storage.full = true;
+    store.save(["c1"], "u1", FILE);
+    storage.full = false;
+    expect(store.save(["c1"], "u1", { ...FILE, text: "later" })).toBe(true);
+    expect(store.heldInMemory(["c1"])).toBe(false);
+    expect(store.load(["c1"], "u1")?.text).toBe("later");
+    storage.full = true;
+    store.save(["c2"], "u1", FILE);
+    store.clear(["c2"]);
+    expect(store.load(["c2"], "u1")).toBeNull();
+  });
+
+  it("does nothing, and fails nothing, where there is no storage and no memory (the server)", () => {
+    const store = defineDraft<FileDraft>({
+      kind: "k",
+      version: 1,
+      storage: () => null,
+      memory: null,
+    });
     expect(store.save(["c1"], "u1", FILE)).toBe(false);
     expect(store.load(["c1"], "u1")).toBeNull();
+    expect(store.heldInMemory(["c1"])).toBe(false);
     expect(() => store.clear(["c1"])).not.toThrow();
+  });
+
+  it("reads a draft through a clock set back a few minutes, not one from far ahead", () => {
+    const { store, tick } = setup();
+    store.save(["c1"], "u1", FILE);
+    tick(-5 * 60 * 1000);
+    expect(store.load(["c1"], "u1")).toEqual(FILE);
+    tick(-60 * 60 * 1000);
+    expect(store.load(["c1"], "u1")).toBeNull();
   });
 
   it("keeps kinds apart, and a key part cannot forge another key", () => {
@@ -182,5 +219,13 @@ describe("clearAllDrafts", () => {
     clearAllDrafts(storage);
     expect(storage.length).toBe(1);
     expect(storage.getItem("glidecomp:preview-role")).toBe("pilot");
+  });
+
+  it("forgets the drafts held only in memory too", () => {
+    const { store, storage, memory } = setup();
+    storage.full = true;
+    store.save(["c1"], "u1", FILE);
+    clearAllDrafts(storage, memory);
+    expect(store.load(["c1"], "u1")).toBeNull();
   });
 });
