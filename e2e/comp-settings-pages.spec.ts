@@ -84,7 +84,7 @@ test.afterAll(async ({ playwright }) => {
   await api.dispose();
 });
 
-test("a visitor is sent to the competition, signed out to sign in, and an unknown group 404s", async ({
+test("a visitor is sent to the competition, signed in or not, and an unknown group 404s", async ({
   page,
 }) => {
   // Before any admin test hides or reshapes the comp: a signed-in non-admin
@@ -95,11 +95,13 @@ test("a visitor is sent to the competition, signed out to sign in, and an unknow
   await expect(page).not.toHaveURL(/\/settings/);
   await expect(page.getByRole("textbox", { name: "Name" })).toHaveCount(0);
 
-  // Signed out, it is most likely an organiser in a browser not signed in:
-  // to sign in, with the way back.
+  // Signed out, the same — told to sign in if they are an organiser.
   await page.context().clearCookies();
   await page.goto(`/comp/${compId}/settings`);
-  await expect(page).toHaveURL(/\/signin\?next=%2Fcomp%2F[^&]*settings/, { timeout: 20_000 });
+  await expect(
+    page.getByText("That page is for the competition’s organisers. Sign in if you are one.")
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(page).not.toHaveURL(/\/settings/);
 
   // An unknown group is a dead URL, not an empty page.
   await devLogin(page, ADMIN_USER);

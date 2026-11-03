@@ -316,7 +316,7 @@ test("the draft survives a reload, on the waypoint's page and on the list", asyn
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Discard changes" }).click();
-  await expect(page).toHaveURL(new RegExp(`/comp/${compId}[^/]*$`));
+  await expect(page).toHaveURL(new RegExp(`/comp/[^/]*${compId}$`));
   // Coming back finds the saved set: the draft really is gone.
   await page.goto(`/comp/${compId}/waypoints`);
   await onEditorList(page, waypoints.length);

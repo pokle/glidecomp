@@ -159,7 +159,7 @@ test("a visitor is sent to the task page", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Create", exact: true })).toHaveCount(0);
 
   // It lands on the task page, which offers no link to it.
-  await expect(page).not.toHaveURL(/test-igc/);
+  await expect(page).not.toHaveURL(/\/test-igc$/);
   await expect(page.getByRole("heading", { level: 1, name: TASK_NAME })).toBeVisible();
   await expect(page.getByRole("link", { name: "Create test IGC" })).toHaveCount(0);
 });

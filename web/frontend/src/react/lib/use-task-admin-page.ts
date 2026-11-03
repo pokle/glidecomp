@@ -11,7 +11,7 @@
  * those editors seed their state from the loaded values in `useState`
  * initialisers. `loading` is true until both are here and the session is
  * known; a viewer who is not an organiser is then sent on
- * (components/OrganisersOnly.tsx).
+ * to the task's public page (components/OrganisersOnly.tsx).
  *
  * Seeds nothing: none of these pages is server-rendered (they are admin-only
  * noindex shells, `comp-routes.ts`), so there is never SSR data to start from.

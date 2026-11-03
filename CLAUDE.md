@@ -442,9 +442,9 @@ These are the standing imperatives. Each links to the reference that explains it
     (a reload, a bookmark). It is the only `navigate(-1)` for a page
     (`no-overlays.test.ts`); the pages had grown six names for that marker.
   - **An organiser's page sends anyone else on** (`components/OrganisersOnly.tsx`,
-    owner decision 2026-11-03): signed out, to sign in and back; signed in,
-    to the public page it belongs to, with a line saying why — never a page
-    that only says they cannot be there.
+    owner decision 2026-11-03) to the public page it belongs to, signed in or
+    not, with a line saying why (and, signed out, to sign in if they are an
+    organiser) — never a page that only says they cannot be there.
   - **Focus follows the page** (`lib/route-focus.ts`, in the Shell): arriving
     on a page focuses its `<h1>` unless the page focused something itself,
     and Back returns focus to the control it was left from — what a dialog

@@ -113,7 +113,9 @@ test("the manage list never scrolls sideways, and Add manual flight is in reach"
   const add = row.getByRole("link", { name: "Add manual flight" });
   const before = await add.boundingBox();
   expect(before!.x).toBeGreaterThanOrEqual(0);
-  expect(before!.x + before!.width).toBeLessThanOrEqual(page_.innerWidth);
+  expect(before!.x + before!.width).toBeLessThanOrEqual(
+    await page.evaluate(() => window.innerWidth)
+  );
   await add.scrollIntoViewIfNeeded();
   await expect(add).toBeInViewport({ ratio: 1 });
   expect(await page.evaluate(() => window.scrollX)).toBe(0);

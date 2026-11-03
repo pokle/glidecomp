@@ -6,7 +6,7 @@
  * Those pages are the editor's own — one waypoint, Add waypoint, the map at
  * full size, the altitude review — so a visitor is sent to the list, which is
  * the read-only view of the same waypoints, rather than shown an editor they
- * cannot use (components/OrganisersOnly.tsx; signed out, to sign in first).
+ * cannot use (components/OrganisersOnly.tsx).
  * That matches the list itself, where a visitor's rows open nothing.
  */
 import type { ReactElement } from "react";

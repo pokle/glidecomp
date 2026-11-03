@@ -3,7 +3,7 @@
  * show anything (#812): the task not found, still loading (the comp, the
  * task, the session, the draft), and a viewer who is not one of the
  * competition's organisers — who is sent to the task page, where the route
- * is to read (components/OrganisersOnly.tsx; signed out, to sign in first).
+ * is to read (components/OrganisersOnly.tsx).
  *
  * The editor must not render until all of it has arrived: it edits a draft
  * started from the saved route, so a render with the task still loading
