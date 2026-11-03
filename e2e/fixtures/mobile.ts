@@ -90,6 +90,10 @@ export const MOBILE_SPEC_FILES = [
   // text field, which is the keyboard trouble the overlays rule is about. Now
   // a form on the page, with the new key shown in place.
   "settings-api-keys.spec.ts",
+  // The profile on Settings, saved through the kit form (#808): a refusal
+  // under its field and a dropped connection beside Save, where a phone's
+  // keyboard and height decide whether either is seen.
+  "settings-profile-form.spec.ts",
   // A metric's chart at full size (#815), a page where it was a full-screen
   // overlay. A phone is where the inline chart is too small to read, so it is
   // the width this page exists for.

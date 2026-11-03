@@ -174,8 +174,10 @@ describe("PATCH /api/comp/pilot keeps the account's display name in step", () =>
     // which is half of the onboarding gate.
     const res = await patchProfile({ name: "   " }, { sync: true });
     expect(res.status).toBe(400);
+    // `field` puts the refusal under Display name on Settings (rac/form.tsx).
     expect((await res.json()) as { error: string }).toEqual({
       error: "Display name is required",
+      field: "name",
     });
     expect(await profileName()).toBe(ORIGINAL_NAME);
   });
