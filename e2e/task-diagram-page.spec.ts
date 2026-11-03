@@ -128,9 +128,11 @@ test("the glyph links to the page, and Back returns to the same scroll", async (
   // On the way back the scores load again, above the list. The offset is
   // restored as soon as the page is tall enough (lib/scroll-restoration.ts),
   // which can be before they land: "Loading scores…" is a line shorter than
-  // what replaces it, and the browser's scroll anchoring then keeps the screen
-  // where the restore put it — a line off where the reader left. CI's runners
-  // land either side of that race, so it is made to happen every time.
+  // what replaces it. The restore then holds the offset while they do —
+  // before #846 the browser's scroll anchoring kept the screen where the
+  // restore had put it instead, a line or more off where the reader left.
+  // CI's runners land either side of that race, so it is made to happen
+  // every time.
   await page.route("**/api/comp/*/scores", async (route) => {
     await new Promise((r) => setTimeout(r, 800));
     await route.continue();
@@ -148,14 +150,17 @@ test("the glyph links to the page, and Back returns to the same scroll", async (
   await expect(page).toHaveURL(compUrl(compId));
   await expect(compHeading(page)).toBeVisible();
   await expect(page.getByText("Loading scores…")).toHaveCount(0);
-  // Where it was left, give or take a line or two: the glyph back on the
-  // screen, and the page scrolled about as far. Not pixel-exact — that line,
-  // and on a phone whatever else above it settles late (22 to 74 px seen in
-  // CI), move it. A restore that failed would leave the page at the top, and
-  // the glyph hundreds of pixels below the fold.
-  await expect(link).toBeInViewport();
-  expect(Math.abs((await link.boundingBox())!.y - leftAt)).toBeLessThan(150);
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled / 2);
+  // Where it was left, to within a few pixels: the glyph at the same height
+  // on the screen, and the page scrolled as far — and still so once anything
+  // else that settles late has landed (#846). The tolerance was 150 px while
+  // the late scores could push the reader off (22 to 74 px seen in CI).
+  const glyphOffBy = async () => Math.abs((await link.boundingBox())!.y - leftAt);
+  const scrollOffBy = async () =>
+    Math.abs((await page.evaluate(() => window.scrollY)) - scrolled);
+  await expect.poll(glyphOffBy).toBeLessThanOrEqual(3);
+  await page.waitForTimeout(1000);
+  expect(await glyphOffBy()).toBeLessThanOrEqual(3);
+  expect(await scrollOffBy()).toBeLessThanOrEqual(3);
 });
 
 test("a reload keeps the page, and Back still leaves it", async ({ page }) => {

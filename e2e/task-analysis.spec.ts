@@ -562,3 +562,52 @@ test("the pilot picker pins a highlight page-wide, through the URL", async () =>
   await expect(page).not.toHaveURL(/[?&]pilot=/);
   await expect(reloadedRow).not.toHaveClass(/bg-accent/);
 });
+
+/**
+ * Issue #845. Side by side, a list's default selection is written into the
+ * query, so the row matching the pane is lit. On a fresh load of a bare-id
+ * URL the page also replaces its address with the canonical one, in the same
+ * commit as the seed — and that replace used to put back the query it had
+ * rendered with, wiping the seed for good. Every load here is a fresh one of
+ * a bare-id URL, at the default width the race was seen at and a wider one.
+ */
+test("side by side, a fresh load names its default selection in the URL and lights its row", async () => {
+  const cases = [
+    {
+      path: `${analysisPath}/strategies`,
+      param: "metric",
+      list: ranking,
+      pane: detailPane,
+    },
+    {
+      path: `${thermalsPath}/thermals`,
+      param: "thermal",
+      list: census,
+      pane: thermalPane,
+    },
+  ];
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1600, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const { path, param, list, pane } of cases) {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await list().waitFor();
+      await expect(pane()).toBeVisible();
+      // Settled on the canonical `${slug}-${id}` segments…
+      await expect
+        .poll(() => new URL(page.url()).pathname)
+        .toMatch(/^\/comp\/[^/]+-[^/]+\/task\/[^/]+-[^/]+\//);
+      // …with the default still in the query, and its row lit.
+      await expect.poll(() => new URL(page.url()).searchParams.get(param)).toBeTruthy();
+      const lit = list().locator("tbody tr[aria-selected='true']");
+      await expect(lit).toHaveCount(1);
+      // The lit row is the pane's subject.
+      const name = (await lit.locator("th, td").first().innerText()).split("\n")[0].trim();
+      await expect(pane().locator("h3").first()).toContainText(name);
+    }
+  }
+  // Nothing after this test reuses the page's section.
+  openSlug = null;
+});
