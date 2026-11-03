@@ -46,4 +46,20 @@ describe("readRefusal", () => {
     });
     expect(await readRefusal(response(500, ""))).toEqual({ message: "Save failed (500)." });
   });
+
+  it("never shows a JSON body in another shape, and uses the caller's words when given", async () => {
+    // Better Auth's plugin routes: words for a developer, not the reader.
+    const betterAuth = JSON.stringify({ code: "KEY_NOT_FOUND", message: "API Key not found" });
+    expect(await readRefusal(response(404, betterAuth))).toEqual({ message: "Save failed (404)." });
+    expect(await readRefusal(response(404, betterAuth), "Failed to revoke key.")).toEqual({
+      message: "Failed to revoke key.",
+    });
+    expect(await readRefusal(response(500, ""), "Failed to revoke key.")).toEqual({
+      message: "Failed to revoke key.",
+    });
+    // The server's own words still come first.
+    expect(
+      await readRefusal(response(401, JSON.stringify({ error: "Not authenticated" })), "Fallback.")
+    ).toEqual({ message: "Not authenticated", field: undefined });
+  });
 });

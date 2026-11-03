@@ -6,15 +6,15 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Alert, AlertDescription } from "@/react/rac/alert";
 import { Button, LinkButton } from "@/react/rac/button";
 import { Card, CardGrid, CardHeader } from "@/react/rac/card";
 import { FieldGroup, TextField } from "@/react/rac/field";
 import {
+  ActionErrorBanner,
   Form,
   FormErrorBanner,
   SubmitButton,
-  UNREACHABLE,
+  useAction,
   useFormState,
   type SubmitResponse,
 } from "@/react/rac/form";
@@ -72,29 +72,6 @@ function SavedFlash({ nonce }: { nonce: number }) {
   );
 }
 
-/** Why a button's action failed. A new object for every failure, even the same words twice. */
-type ActionFailure = { message: string } | null;
-
-/**
- * The failure of an action that is a button rather than a form — Revoke,
- * Disconnect, Delete account — shown in its card, beside what was pressed,
- * the way the kit form shows an error about no field (rac/form.tsx): focused
- * and scrolled into view, so it is read out as well as seen. Never a toast.
- */
-function ActionError({ failure }: { failure: ActionFailure }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!failure || !ref.current) return;
-    ref.current.scrollIntoView({ block: "center" });
-    ref.current.focus({ preventScroll: true });
-  }, [failure]);
-  if (!failure) return null;
-  return (
-    <Alert ref={ref} variant="destructive" tabIndex={-1} className="outline-none">
-      <AlertDescription>{failure.message}</AlertDescription>
-    </Alert>
-  );
-}
 
 export function Settings() {
   const { user, loading, isSuperAdmin, previewRole } = useUser();
@@ -568,7 +545,8 @@ function ApiKeysSection() {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
-  const [revokeFailure, setRevokeFailure] = useState<ActionFailure>(null);
+  // Revoke's refusal, beside the list it was pressed in (rac/form.tsx).
+  const revoke = useAction();
   const createdHeadingRef = useRef<HTMLHeadingElement>(null);
   // Done hands focus back to Label: the button it was on is about to go.
   const formRef = useRef<HTMLDivElement>(null);
@@ -607,21 +585,20 @@ function ApiKeysSection() {
     });
     if (!confirmed) return;
     setRevokingId(keyId);
-    setRevokeFailure(null);
     try {
-      const res = await fetch("/api/auth/api-key/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ keyId }),
-      });
-      if (!res.ok) {
-        setRevokeFailure({ message: "Failed to revoke key. Please try again." });
-        return;
-      }
-      await loadKeys();
-    } catch {
-      setRevokeFailure({ message: UNREACHABLE });
+      // Better Auth's api-key plugin refuses in `{ code, message }`, words for
+      // a developer, so the refusal is in this page's own words.
+      const res = await revoke.run(
+        () =>
+          fetch("/api/auth/api-key/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ keyId }),
+          }),
+        { fallback: "Failed to revoke key. Please try again." }
+      );
+      if (res) await loadKeys();
     } finally {
       setRevokingId(null);
     }
@@ -733,7 +710,7 @@ function ApiKeysSection() {
         </section>
       ) : null}
 
-      <ActionError failure={revokeFailure} />
+      <ActionErrorBanner action={revoke} />
       <div>
         {loadError ? (
           <p role="alert">{loadError}</p>
@@ -828,7 +805,8 @@ function ConnectedAssistantsSection() {
   const [assistants, setAssistants] = useState<ConnectedAssistant[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
-  const [disconnectFailure, setDisconnectFailure] = useState<ActionFailure>(null);
+  // Disconnect's refusal, beside the list it was pressed in (rac/form.tsx).
+  const disconnect = useAction();
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -851,19 +829,19 @@ function ConnectedAssistantsSection() {
 
   async function handleDisconnect(clientId: string) {
     setDisconnectingId(clientId);
-    setDisconnectFailure(null);
     try {
-      const res = await fetch(`/api/auth/connected-assistants/${encodeURIComponent(clientId)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok && res.status !== 404) {
-        setDisconnectFailure({ message: "Failed to disconnect. Please try again." });
-        return;
-      }
-      await load();
-    } catch {
-      setDisconnectFailure({ message: UNREACHABLE });
+      const res = await disconnect.run(
+        async () => {
+          const res = await fetch(
+            `/api/auth/connected-assistants/${encodeURIComponent(clientId)}`,
+            { method: "DELETE", credentials: "include" }
+          );
+          // "Not connected": already gone, which is what was asked for.
+          return res.status === 404 ? new Response(null, { status: 204 }) : res;
+        },
+        { fallback: "Failed to disconnect. Please try again." }
+      );
+      if (res) await load();
     } finally {
       setDisconnectingId(null);
     }
@@ -877,7 +855,7 @@ function ConnectedAssistantsSection() {
         title="Connected AI Assistants"
         description="Assistants you've let act as you. Disconnecting one stops it straight away."
       />
-      <ActionError failure={disconnectFailure} />
+      <ActionErrorBanner action={disconnect} />
       <div>
         {loadError ? (
           <p role="alert">{loadError}</p>
@@ -966,8 +944,12 @@ function SuperadminSection() {
 
 function DangerZoneSection() {
   const confirm = useConfirm();
-  const [deleting, setDeleting] = useState(false);
-  const [failure, setFailure] = useState<ActionFailure>(null);
+  // The refusal beside Delete account: the server's own words where it has
+  // some, this page's where it has none (rac/form.tsx).
+  const action = useAction();
+  // Set once the account is gone, so the button stays busy until the page
+  // leaves rather than flicker back for a moment.
+  const [leaving, setLeaving] = useState(false);
 
   async function handleDeleteAccount() {
     const confirmed = await confirm({
@@ -978,22 +960,15 @@ function DangerZoneSection() {
       destructive: true,
     });
     if (!confirmed) return;
-    setDeleting(true);
-    setFailure(null);
-    const result = await deleteAccount();
-    if (result.success) {
-      localStorage.clear();
-      storage.close();
-      indexedDB.deleteDatabase("glidecomp");
-      window.location.href = "/";
-    } else {
-      setDeleting(false);
-      setFailure({
-        message: result.unreachable
-          ? UNREACHABLE
-          : result.error || "Failed to delete account. Please try again.",
-      });
-    }
+    const res = await action.run(deleteAccount, {
+      fallback: "Failed to delete account. Please try again.",
+    });
+    if (!res) return;
+    setLeaving(true);
+    localStorage.clear();
+    storage.close();
+    indexedDB.deleteDatabase("glidecomp");
+    window.location.href = "/";
   }
 
   return (
@@ -1004,7 +979,7 @@ function DangerZoneSection() {
         action={
           <Button
             variant="destructive"
-            isPending={deleting}
+            isPending={action.pending || leaving}
             pendingLabel="Deleting your account"
             onPress={() => void handleDeleteAccount()}
           >
@@ -1012,7 +987,7 @@ function DangerZoneSection() {
           </Button>
         }
       />
-      <ActionError failure={failure} />
+      <ActionErrorBanner action={action} />
     </Card>
   );
 }

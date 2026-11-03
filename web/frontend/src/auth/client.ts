@@ -173,26 +173,18 @@ if (typeof window !== "undefined") {
   if (ssr && "user" in ssr) seedCurrentUser(ssr.user ?? null);
 }
 
-export async function deleteAccount(): Promise<{
-  success: boolean;
-  error?: string;
-  /** The request never got an answer — the caller words that one itself. */
-  unreachable?: boolean;
-}> {
-  try {
-    const res = await fetch("/api/auth/delete-account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { success: false, error: (data as { error?: string }).error || "Failed to delete account" };
-    }
-    return { success: true };
-  } catch {
-    return { success: false, error: "Network error", unreachable: true };
-  }
+/**
+ * Delete the signed-in account. The response as it came, and a throw when no
+ * answer came at all: Settings reads both through the kit's `useAction`
+ * (rac/form.tsx), which words a refusal and a dropped connection the same way
+ * every action does.
+ */
+export function deleteAccount(): Promise<Response> {
+  return fetch("/api/auth/delete-account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
 }
 
 /**

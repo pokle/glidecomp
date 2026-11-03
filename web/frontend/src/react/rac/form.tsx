@@ -83,11 +83,18 @@ export interface Refusal {
  * (the bulk route), or plain text. A validation message arrives as
  * "field: message"; under the field itself the prefix only repeats the label,
  * so it is dropped.
+ *
+ * A body with none of those has no words for a person, and gets `fallback`:
+ * a JSON object in some other shape (Better Auth's plugin routes answer
+ * `{ code, message }`, written for a developer) is never shown as raw JSON.
  */
-export async function readRefusal(res: {
-  status: number;
-  text(): Promise<string>;
-}): Promise<Refusal> {
+export async function readRefusal(
+  res: {
+    status: number;
+    text(): Promise<string>;
+  },
+  fallback = `Save failed (${res.status}).`
+): Promise<Refusal> {
   const text = await res.text().catch(() => "");
   try {
     const body = JSON.parse(text) as {
@@ -109,11 +116,12 @@ export async function readRefusal(res: {
         .filter(Boolean);
       if (messages.length > 0) return { message: messages.join(" ") };
     }
+    if (typeof body === "object") return { message: fallback };
   } catch {
     // Not JSON: fall through to the text, if it is something a person can read.
   }
   const readable = text.trim() !== "" && text.length < 300 && !text.trimStart().startsWith("<");
-  return { message: readable ? text.trim() : `Save failed (${res.status}).` };
+  return { message: readable ? text.trim() : fallback };
 }
 
 interface FormState {
@@ -399,8 +407,10 @@ export function FormErrorBanner({ className }: { className?: string }) {
  * next press clears it.
  *
  * `run` hands back the response when the server said yes, and null when it
- * did not (the refusal is already showing). `refuse` is for a check made
- * before anything is sent — a file that is not an IGC.
+ * did not (the refusal is already showing). Its `fallback` is the action's
+ * own words for a refusal that carries none a person can read (see
+ * {@link readRefusal}). `refuse` is for a check made before anything is
+ * sent — a file that is not an IGC.
  */
 export interface ActionState {
   pending: boolean;
@@ -408,7 +418,10 @@ export interface ActionState {
   /** Bumped on every refusal, so the banner takes focus again for the same words. */
   refused: number;
   refuse: (message: string) => void;
-  run: (send: () => Promise<SubmitResponse>) => Promise<SubmitResponse | null>;
+  run: (
+    send: () => Promise<SubmitResponse>,
+    options?: { fallback?: string }
+  ) => Promise<SubmitResponse | null>;
 }
 
 export function useAction(): ActionState {
@@ -422,7 +435,10 @@ export function useAction(): ActionState {
     setRefused((n) => n + 1);
   };
 
-  async function run(send: () => Promise<SubmitResponse>): Promise<SubmitResponse | null> {
+  async function run(
+    send: () => Promise<SubmitResponse>,
+    options?: { fallback?: string }
+  ): Promise<SubmitResponse | null> {
     if (inFlight.current) return null;
     inFlight.current = true;
     setPending(true);
@@ -430,7 +446,7 @@ export function useAction(): ActionState {
     try {
       const res = await send();
       if (!res.ok) {
-        refuse((await readRefusal(res)).message);
+        refuse((await readRefusal(res, options?.fallback)).message);
         return null;
       }
       return res;
@@ -463,14 +479,22 @@ export function ActionErrorBanner({
     if (action.refused === 0) return;
     let frame = 0;
     let settled = 0;
+    let frames = 0;
+    let focused = document.activeElement;
     // An action pressed from a popover (a row's status menu) can be refused
     // while that popover is still animating shut, and a popover gives focus
     // back to its trigger as it goes — taking it straight off the refusal.
-    // So wait until nothing is closing, and a frame after, then move focus.
+    // A confirm dialog does the same a frame after it unmounts, and when its
+    // trigger sits in a table row (Settings' Revoke), the table then moves
+    // focus again, onto the row. So wait until nothing is closing and focus
+    // has stopped moving, for two frames, then move it. A second at most:
+    // past that, nothing is settling and the refusal has waited long enough.
     const show = () => {
-      if (document.querySelector("[data-exiting]")) settled = 0;
+      const moved = document.activeElement !== focused;
+      focused = document.activeElement;
+      if (document.querySelector("[data-exiting]") || moved) settled = 0;
       else settled++;
-      if (settled < 2) {
+      if (settled < 2 && ++frames < 60) {
         frame = requestAnimationFrame(show);
         return;
       }
