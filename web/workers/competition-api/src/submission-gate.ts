@@ -48,6 +48,27 @@ export function maskEmail(email: string | null): string | null {
   return `${local.slice(0, 1)}***@${domain}`;
 }
 
+/**
+ * The submit form's field names, sent as `field` on a refusal that one step of
+ * the form can fix, so the kit form (`rac/form.tsx`) shows the message under
+ * that step's field and focuses it.
+ *
+ * Shared by the three upload routes (self, on-behalf, anonymous). A refusal no
+ * field can fix — a sign-in, a closed comp, a duplicated roster row, a spent
+ * budget — carries no `field`, and is shown beside Submit instead.
+ * `docs/track-submission.md`, "Errors are repairable".
+ */
+export const SUBMIT_FIELD = {
+  /** Which task did you fly? Also a comp that cannot be found. */
+  task: "task",
+  /** The identifier an anonymous pilot typed. */
+  identifier: "identifier",
+  /** The registration a signed-in pilot claimed. */
+  registration: "registration",
+  /** The IGC file. */
+  file: "file",
+} as const;
+
 export interface Organiser {
   name: string;
   email: string;

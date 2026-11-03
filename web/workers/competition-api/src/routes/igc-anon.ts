@@ -55,6 +55,7 @@ import {
   isCompClosed,
   organisersOf,
   submissionsClosedBody,
+  SUBMIT_FIELD,
 } from "../submission-gate";
 
 /**
@@ -188,6 +189,7 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
           {
             error: identifier.problem,
             code: "bad_identifier" satisfies AnonSubmitCode,
+            field: SUBMIT_FIELD.identifier,
             accepted_kinds: Object.keys(PILOT_IDENTIFIER_LABELS),
           },
           400
@@ -216,6 +218,7 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
           {
             error: "We could not find that competition.",
             code: "comp_not_found" satisfies AnonSubmitCode,
+            field: SUBMIT_FIELD.task,
           },
           404
         )
@@ -263,6 +266,7 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
           {
             error: `That task is not part of ${comp.name}.`,
             code: "task_not_found" satisfies AnonSubmitCode,
+            field: SUBMIT_FIELD.task,
             comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
           },
           404
@@ -273,7 +277,12 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
     // A hard stop here: this route has no admin concept to bypass with, and an
     // anonymous caller is exactly who the organiser meant to stop.
     if (task.submissions_closed) {
-      return futile(c.json(await submissionsClosedBody(db, compId, taskId), 403));
+      return futile(
+        c.json(
+          { ...(await submissionsClosedBody(db, compId, taskId)), field: SUBMIT_FIELD.task },
+          403
+        )
+      );
     }
 
     // Now that the competition is known to be real, open and running, its
@@ -304,6 +313,7 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
           {
             error: `No pilot with that ${label} is registered for ${comp.name}.`,
             code: "no_pilot_match" satisfies AnonSubmitCode,
+            field: SUBMIT_FIELD.identifier,
             comp: { comp_id: encodeId(alphabet, compId), name: comp.name },
             identifier_kind: identifier.kind,
             identifier_label: label,
@@ -379,6 +389,7 @@ export const igcAnonRoutes = new Hono<AnonEnv>().post(
               {
                 error: rejection.message,
                 code: "invalid_file" satisfies AnonSubmitCode,
+                field: SUBMIT_FIELD.file,
                 reason: rejection.reason,
               },
               400
