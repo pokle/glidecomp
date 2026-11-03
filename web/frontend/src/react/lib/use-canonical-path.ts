@@ -28,9 +28,49 @@
  * and this is where the rule above bites: until the page has read the comp
  * under that key, the comp it holds carries the OLD one, and canonicalising
  * from it put the dead link back in the address bar (run 41430947899).
+ *
+ * ## The query is read when the replace happens, not at render
+ *
+ * The replace keeps the query and hash, and they have to be the ones the
+ * address bar holds NOW. `location` is what this render saw, and it can be a
+ * step behind: another effect in the same commit may already have written a
+ * parameter (children's effects run before their parent's, so a list seeding
+ * its default selection — `useMasterDetailSelection` — writes first), and
+ * react-router renders every navigation as a transition, so a commit can run
+ * its effects under a location the address bar has already left. Building the
+ * replacement from that stale `location.search` put the old query back and
+ * dropped the new one: the task analysis's default `?metric=` / `?thermal=`
+ * was lost on most fresh loads of a bare-id URL, and its row never lit
+ * (issue #845).
+ *
+ * So the replacement carries {@link liveQueryAndHash}. If the address bar has
+ * moved to another page since this render, the hook does nothing: the router
+ * will render that page, and this effect runs again if it is still on screen.
  */
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, type Location } from "react-router-dom";
+
+/**
+ * The query and hash the address bar holds right now, while it is still on
+ * the page `location` rendered — null once it has moved to a different page.
+ *
+ * The app runs under BrowserRouter, whose history IS the window's, so the
+ * window is the up-to-date copy of what `location` will say on the next
+ * render. Under a router that is not the window's (a MemoryRouter in a unit
+ * test) the two never agree, and `location` stands in for itself.
+ */
+export function liveQueryAndHash(
+  location: Pick<Location, "pathname" | "search" | "hash">
+): string | null {
+  const rendered = location.search + location.hash;
+  if (typeof window === "undefined") return rendered;
+  const live = window.location;
+  if (live.pathname === location.pathname) return live.search + live.hash;
+  // react-router's browser history stamps every entry it writes with an
+  // `idx`. Without one, the window's address is not the router's at all.
+  const state = window.history.state as { idx?: unknown } | null;
+  return typeof state?.idx === "number" ? null : rendered;
+}
 
 export function useCanonicalPath(canonicalPath: string | null): void {
   const location = useLocation();
@@ -39,7 +79,10 @@ export function useCanonicalPath(canonicalPath: string | null): void {
   useEffect(() => {
     if (!canonicalPath) return;
     if (location.pathname === canonicalPath) return;
-    navigate(canonicalPath + location.search + location.hash, {
+    const queryAndHash = liveQueryAndHash(location);
+    // The address bar has gone to another page since this render.
+    if (queryAndHash === null) return;
+    navigate(canonicalPath + queryAndHash, {
       replace: true,
       // Same page, corrected address: scroll restoration must not treat this
       // as arriving somewhere new. The names this waits on can land seconds

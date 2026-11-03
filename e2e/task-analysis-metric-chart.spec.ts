@@ -11,7 +11,10 @@
  *   grows the viewBox past the scatter's own 316 units, which is the whole
  *   reason the big chart exists — and never narrower than the inline one;
  * - Back returns to the strategies page exactly as it was left: the same
- *   metric chosen (`?metric=`), at the same scroll;
+ *   metric chosen (`?metric=`), at the same scroll — from far down the page
+ *   too, where the restore has to wait for the page to load again (#844);
+ * - side by side, the metric the pane shows is in the URL and lit in the
+ *   ranking from the first load of a bare-id URL (#845);
  * - a reload and a shared link rebuild the page from nothing — the report is
  *   fetched by the page, never handed over in memory;
  * - a metric no report carries is a not-found.
@@ -98,6 +101,17 @@ function scatter(page: Page) {
   return page.locator('svg[role="group"]').first();
 }
 
+/**
+ * Back has put the page within a few pixels of `y`, and it stays there once
+ * whatever loads late has landed (#844, #846).
+ */
+async function expectScrollRestoredTo(page: Page, y: number) {
+  const offBy = async () => Math.abs((await page.evaluate(() => window.scrollY)) - y);
+  await expect.poll(offBy).toBeLessThanOrEqual(3);
+  await page.waitForTimeout(1000);
+  expect(await offBy()).toBeLessThanOrEqual(3);
+}
+
 test("the full-size chart is a page: a link in, reload, and Back out", async ({ page }) => {
   await page.goto(`/comp/${compId}/task/${taskId}/analysis/strategies`, {
     waitUntil: "domcontentloaded",
@@ -107,7 +121,8 @@ test("the full-size chart is a page: a link in, reload, and Back out", async ({ 
 
   // Side by side (desktop) the chart is on screen from the start; stacked (a
   // phone) it is behind a row of the ranking.
-  if (!(await expandLink(page).isVisible())) {
+  const sideBySide = await expandLink(page).isVisible();
+  if (!sideBySide) {
     await ranking(page).locator("tbody tr").first().locator("th, td").first().click();
   }
   const link = expandLink(page);
@@ -115,6 +130,12 @@ test("the full-size chart is a page: a link in, reload, and Back out", async ({ 
   // Settled before anything is captured from it: the strategies page has
   // moved onto its canonical URL.
   await expect.poll(() => new URL(page.url()).pathname).toContain("-");
+  if (sideBySide) {
+    // The pane's metric is named in the URL and lit in the ranking — on this
+    // bare-id URL too, whose canonical replace used to wipe the seed (#845).
+    await expect.poll(() => new URL(page.url()).searchParams.get("metric")).toBeTruthy();
+    await expect(ranking(page).locator('tr[aria-selected="true"]')).toHaveCount(1);
+  }
   const label = (await link.getAttribute("aria-label"))!.replace(/^Show (.+) full size$/, "$1");
   const inline = (await scatter(page).boundingBox())!;
 
@@ -162,10 +183,7 @@ test("the full-size chart is a page: a link in, reload, and Back out", async ({ 
   // The same metric beside the ranking (stacked, named by `?metric=`: the
   // detail is still the view rather than the list).
   await expect(expandLink(page)).toHaveAttribute("aria-label", `Show ${label} full size`);
-  await expect
-    .poll(() => page.evaluate(() => window.scrollY))
-    .toBeGreaterThanOrEqual(scrollFrom - 2);
-  expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(scrollFrom + 2);
+  await expectScrollRestoredTo(page, scrollFrom);
 
   // Forward, then a reload: the page rebuilds itself from the URL alone.
   await page.goForward();
@@ -179,6 +197,45 @@ test("the full-size chart is a page: a link in, reload, and Back out", async ({ 
   await page.goBack();
   await expect(page.getByRole("heading", { name: RANKING_HEADING })).toBeVisible();
   expect(byIds(page.url())).toBe(byIds(from));
+});
+
+test("Back to the strategies page from far down it lands where the reader was", async ({
+  page,
+}) => {
+  // Far down, the offset is one the page only reaches once everything below
+  // the ranking has loaded again — so the restore has to wait for it, and
+  // anything the page does to its own URL meanwhile (writing its default
+  // metric, settling its canonical slug) must not cancel the wait (#844).
+  await page.goto(`/comp/${compId}/task/${taskId}/analysis/strategies`, {
+    waitUntil: "domcontentloaded",
+  });
+  await ranking(page).waitFor();
+  await expect.poll(() => new URL(page.url()).pathname).toContain("-");
+
+  // The ranking's last row at the bottom of the screen.
+  const sideBySide = await expandLink(page).isVisible();
+  const last = ranking(page).locator("tbody tr").last();
+  await last.evaluate((el) => el.scrollIntoView({ block: "end" }));
+  const leftAt = await page.evaluate(() => window.scrollY);
+  expect(leftAt, "the strategies page should have scrolled").toBeGreaterThan(0);
+  if (sideBySide) {
+    // Side by side the chart sticks beside the ranking, so its full-size
+    // link is still on screen down here.
+    await expect(expandLink(page)).toBeInViewport();
+    await expandLink(page).click();
+    await expect.poll(() => byIds(page.url())).toContain("/analysis/metrics/");
+    await expect(scatter(page)).toBeVisible();
+  } else {
+    // Stacked, the ranking IS the page, and choosing a behaviour is a
+    // navigation to its chart — whose Back is the same restore.
+    await last.locator("th, td").first().click();
+    await expect(expandLink(page)).toBeVisible();
+    await expect(ranking(page)).toBeHidden();
+  }
+
+  await page.goBack();
+  await expect(ranking(page)).toBeVisible();
+  await expectScrollRestoredTo(page, leftAt);
 });
 
 test("a shared link opens the chart, and an unknown metric is not found", async ({ page }) => {
