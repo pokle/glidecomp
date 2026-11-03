@@ -19,6 +19,7 @@ import { TextField } from "@/react/rac/field";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/react/vendor/input-otp";
 import { Card } from "@/react/rac/card";
 import { Badge } from "@/react/rac/badge";
+import { UNREACHABLE } from "@/react/rac/form";
 import {
   sendSignInOtp,
   signInWithGoogle,
@@ -51,6 +52,26 @@ function LastUsedPill() {
       Last used
     </Badge>
   );
+}
+
+/** A request that never got an answer, as opposed to a refusal. */
+const UNREACHED = Symbol("unreached");
+
+/**
+ * Run a Better Auth client call and return its error, if any. Its client
+ * answers a refusal with `{ error }` but lets a dropped connection THROW out
+ * of `fetch` — which used to escape both handlers here, leaving the button
+ * busy with no message at all. That is `UNREACHED`: not the address's fault,
+ * not the code's, so the page says the kit's standard sentence instead.
+ */
+async function settle<E>(
+  call: () => Promise<{ error: E | null }>
+): Promise<E | typeof UNREACHED | null> {
+  try {
+    return (await call()).error;
+  } catch {
+    return UNREACHED;
+  }
 }
 
 function parseOtpHash(hash: string): { otp: string; email: string } | null {
@@ -104,13 +125,15 @@ export function SignIn() {
     setBusy(true);
     setError(null);
     setStatus("Checking code…");
-    const { error: err } = await signInWithOtp(targetEmail, otp);
+    const err = await settle(() => signInWithOtp(targetEmail, otp));
     if (err) {
       setBusy(false);
       setCode("");
       setStatus(null);
       setError(
-        err.code === "OTP_EXPIRED"
+        err === UNREACHED
+          ? UNREACHABLE
+          : err.code === "OTP_EXPIRED"
           ? "That code has expired. Send yourself a new one."
           : err.code === "TOO_MANY_ATTEMPTS"
             ? "Too many attempts with that code. Send yourself a new one."
@@ -129,13 +152,15 @@ export function SignIn() {
   async function send(targetEmail: string, isResend: boolean) {
     setBusy(true);
     setError(null);
-    const { error: err } = await sendSignInOtp(targetEmail);
+    const err = await settle(() => sendSignInOtp(targetEmail));
     setBusy(false);
     if (err) {
       setError(
-        err.status === 429
-          ? "Too many codes requested. Wait a minute, then try again."
-          : "Could not send the code. Check the address and try again."
+        err === UNREACHED
+          ? UNREACHABLE
+          : err.status === 429
+            ? "Too many codes requested. Wait a minute, then try again."
+            : "Could not send the code. Check the address and try again."
       );
       return;
     }
